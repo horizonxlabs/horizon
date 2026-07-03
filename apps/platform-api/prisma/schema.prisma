@@ -77,6 +77,10 @@ model PlatformUser {
   ticketsSubmitted SupportTicket[] @relation("SupportTicketSubmittedBy")
   ticketsAssigned SupportTicket[] @relation("SupportTicketAssignedTo")
   ticketTimelineEntries SupportTicketTimelineEntry[] @relation("SupportTicketTimelineActor")
+  prdChangeRequests PrdChangeRequest[] @relation("PrdChangeRequestedBy")
+  prdChangeDecisions PrdChangeDecision[] @relation("PrdChangeDecisionBy")
+  domainRequests DomainRequest[] @relation("DomainRequestRequestedBy")
+  domainRequestDecisions DomainRequest[] @relation("DomainRequestDecidedBy")
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -158,6 +162,10 @@ model Project {
   deploymentRecords DeploymentRecord[]
   appStoreRegistryEntries AppStoreRegistryEntry[]
   supportTickets SupportTicket[]
+  prdChangeRequests PrdChangeRequest[]
+  domainSetting DomainSetting?
+  domainRequests DomainRequest[]
+  deploymentTraceRecords DeploymentTraceRecord[]
   notifications InAppNotification[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -371,6 +379,7 @@ model PrdVersion {
   currentFor      PrdDocument[] @relation("PrdCurrentVersion")
   baselineFor     PrdDocument[] @relation("PrdBaselineVersion")
   sections        PrdSection[]
+  approvedChangeRequests PrdChangeRequest[] @relation("PrdChangeApprovedVersion")
   createdAt       DateTime      @default(now()) @map("created_at")
 
   @@index([documentId])
@@ -702,6 +711,7 @@ model SupportTicket {
   submittedBy       PlatformUser @relation("SupportTicketSubmittedBy", fields: [submittedByUserId], references: [id])
   assignedTo        PlatformUser @relation("SupportTicketAssignedTo", fields: [assignedToUserId], references: [id])
   timeline          SupportTicketTimelineEntry[]
+  prdChangeRequests PrdChangeRequest[]
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -738,4 +748,100 @@ model InAppNotification {
 
   @@index([userId, read])
   @@map("in_app_notifications")
+}
+
+model PrdChangeRequest {
+  id                   String   @id
+  projectId            String   @map("project_id")
+  sourceType           String   @map("source_type")
+  sourceTicketId       String?  @map("source_ticket_id")
+  title                String
+  proposedRequirement  String   @map("proposed_requirement")
+  affectedSections     String[] @map("affected_sections")
+  acceptanceCriteria   String[] @map("acceptance_criteria")
+  riskLevel            String   @map("risk_level")
+  status               String
+  requestedByUserId    String   @map("requested_by_user_id")
+  approvedPrdVersionId String?  @map("approved_prd_version_id")
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceTicket         SupportTicket? @relation(fields: [sourceTicketId], references: [id])
+  requestedBy          PlatformUser @relation("PrdChangeRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedPrdVersion   PrdVersion? @relation("PrdChangeApprovedVersion", fields: [approvedPrdVersionId], references: [id])
+  decisions            PrdChangeDecision[]
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@unique([sourceTicketId])
+  @@map("prd_change_requests")
+}
+
+model PrdChangeDecision {
+  id              String   @id
+  changeRequestId String   @map("change_request_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  changeRequest   PrdChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("PrdChangeDecisionBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([changeRequestId, decidedAt])
+  @@map("prd_change_decisions")
+}
+
+model DomainSetting {
+  id           String   @id
+  projectId    String   @unique @map("project_id")
+  internalPath String   @map("internal_path")
+  customDomain String?  @map("custom_domain")
+  publicDomain String?  @map("public_domain")
+  mode         String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  traceRecords DeploymentTraceRecord[]
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("domain_settings")
+}
+
+model DomainRequest {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  domain             String
+  reason             String
+  intendedAudience   String   @map("intended_audience")
+  dataClassification String   @map("data_classification")
+  externalUserPolicy String   @map("external_user_policy")
+  checklistAccepted  Boolean  @map("checklist_accepted")
+  status             String
+  requestedByUserId  String   @map("requested_by_user_id")
+  decidedByUserId    String?  @map("decided_by_user_id")
+  decisionNote       String?  @map("decision_note")
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy        PlatformUser @relation("DomainRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  decidedBy          PlatformUser? @relation("DomainRequestDecidedBy", fields: [decidedByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+  decidedAt          DateTime? @map("decided_at")
+
+  @@index([projectId, status])
+  @@map("domain_requests")
+}
+
+model DeploymentTraceRecord {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  ticketId           String   @map("ticket_id")
+  prdChangeRequestId String   @map("prd_change_request_id")
+  prdVersionId       String   @map("prd_version_id")
+  frontendCheckpointId String @map("frontend_checkpoint_id")
+  appManifestId      String   @map("app_manifest_id")
+  deploymentRecordId String   @map("deployment_record_id")
+  domainSettingId    String   @map("domain_setting_id")
+  auditEventIds      String[] @map("audit_event_ids")
+  project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domainSetting      DomainSetting @relation(fields: [domainSettingId], references: [id])
+  generatedAt        DateTime @default(now()) @map("generated_at")
+
+  @@index([projectId])
+  @@map("deployment_trace_records")
 }

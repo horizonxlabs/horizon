@@ -49,6 +49,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `PageHeader` + `MetricCard` เพื่อสรุป state ล่าสุด
 - ใช้ `WorkflowRail` เมื่อหน้ามี process/context ที่ต้องเห็นตลอด
 - ใช้ `SectionCard` + `DataTable` สำหรับ provider, route, quota, guardrail และ event log
+- ใช้ `admin-monitoring-shell` สำหรับ MVP Monitoring ที่ต้องรวม Service Health, Ticket Counts, Domain Requests และ Audit Filters ในหน้าเดียว
 - ห้ามแสดง plaintext secret; ใช้ masked value หรือ fingerprint เท่านั้น
 
 ### Creator
@@ -61,6 +62,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ workspace layout แบบ data-dense สำหรับ Prompt Composer, Task Progress, Live Preview, Token Remaining และ Usage Log โดยไม่ซ่อน guardrail/token state ออกจากหน้าหลัก
 - ใช้ database/restore layout แบบ split view: table rail + schema/sample/migration detail + checkpoint side panel พร้อม boundary copy ว่า restore กระทบเฉพาะ frontend
 - ใช้ app users/publish layout แบบ split operational view: users/members/invites/access requests/roles เป็น main panel และ manifest/readiness/deployment เป็น side panel เพื่อให้ publish decision เห็น access state ใน context เดียวกัน
+- ใช้ `sprint8-shell` สำหรับ feedback/domain hardening ที่ต้องเห็น Ticket-to-PRD, PRD Change Requests, Domain Settings, Deployment Traceability และ MVP Demo Checklist ใน context เดียวกัน
 
 ### App Store PWA
 
@@ -85,3 +87,18 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - Add a new primitive only when at least two surfaces or sprint screens can reuse it.
 - New hardcoded color, spacing, radius, or shadow should become a token first.
 - New primitive must include CSS class under `ds-*`, props in `packages/ui/src/index.tsx`, and a test in `tests/unit/ui-design-system.test.mjs`.
+
+## Component Library Decision
+
+EVCP uses `@evcp/ui` as the product design system and component library. The project should not adopt a large opinionated visual framework as the main UI layer because Admin, Creator and App Store need one enterprise product language.
+
+Allowed supporting libraries for future work:
+
+| Library Type | Preferred Choice | Use For |
+| --- | --- | --- |
+| Icons | `lucide-react` | Action and status icons inside buttons, cards and dashboards |
+| Headless accessibility primitives | Radix UI or equivalent | Dialog, dropdown, tooltip, select, popover, tabs when native controls are not enough |
+| Complex tables | TanStack Table or equivalent | Sorting, filtering, pagination and column state for large enterprise tables |
+| Forms and validation | React Hook Form + Zod or equivalent | Provider config, domain requests, guardrail policy and invite forms |
+
+Visual styling remains owned by `@evcp/ui` tokens, CSS and reusable primitives.

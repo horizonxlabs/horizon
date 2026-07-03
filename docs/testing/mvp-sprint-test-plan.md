@@ -21,7 +21,7 @@ Related strategy: `docs/testing/mvp-test-strategy.md`
 | Sprint 5 | Database view, frontend checkpoint, restore boundary | UI screenshot, restore diff, audit record, boundary assertion |
 | Sprint 6 | App roles, members, invites, manifest, publish registry | API/UI tests, manifest contract test, deployment record |
 | Sprint 7 | App Store PWA, access request, ticket, creator inbox | PWA screenshot, API/UI tests, ticket record |
-| Sprint 8 | Ticket-to-PRD, domain request, traceability, monitoring/audit, full demo | Full E2E evidence, traceability record, demo checklist |
+| Sprint 8 | Ticket-to-PRD, domain request, traceability, monitoring/audit, full demo | Full E2E evidence, traceability record, demo checklist, screenshots |
 
 ## 3. Sprint 0 Tests
 
@@ -132,6 +132,15 @@ Related strategy: `docs/testing/mvp-test-strategy.md`
 | S8-T007 | Audit filters return correct event slices | API/UI | API response |
 | S8-T008 | Full MVP demo flow passes | E2E/manual | Demo checklist result |
 
+Accepted evidence on 2026-07-04:
+
+- Unit: 39 passed, 0 failed.
+- Integration: 28 passed, 0 failed.
+- E2E/API/UI smoke: 27 passed, 0 failed.
+- Full `pnpm verify:sprint8`: passed lint, typecheck, build, unit, integration and E2E.
+- Database counts: `prd_change_requests=1`, `prd_change_decisions=1`, `domain_settings=1`, `domain_requests=1`, `deployment_trace_records=1`.
+- Screenshot evidence: `docs/assets/screenshots/sprint8-creator-feedback-domain.png`, `docs/assets/screenshots/sprint8-admin-monitoring-audit.png`.
+
 ## 12. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
@@ -156,4 +165,3 @@ A sprint is not accepted if:
 - Audit is missing for a security-sensitive action.
 - UI acceptance criteria for the sprint's primary screens have no screenshot/manual evidence.
 - Regression from a previous accepted sprint breaks without documented exception.
-

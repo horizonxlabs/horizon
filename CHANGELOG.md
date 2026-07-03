@@ -4,6 +4,7 @@
 
 ### Added
 
+- Sprint 8 Ticket-to-PRD, Domain and MVP Hardening with PRD change requests, approval decisions, linked PRD v1.1 creation, public domain approval, deployment traceability, monitoring dashboard, audit filters, Prisma migration, Creator/Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 7 End User App Store PWA and Ticket Loop with storefront access state, app detail, request access, support ticket APIs, ticket status, Creator ticket inbox, Prisma migration, PWA manifest/offline fallback and unit/integration/E2E coverage.
 - Sprint 6 App User Management and Publish Registry with app roles, members, invitations, access requests, manifest contract, readiness checklist, deployment record, App Store registry state, Prisma migration, Creator UI evidence and unit/integration/E2E coverage.
 - Sprint 5 Creator database view and frontend-only restore with read-only schema/sample/migration metadata, frontend checkpoints, restore audit event, Prisma migration, Creator UI evidence and unit/integration/E2E coverage.

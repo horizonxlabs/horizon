@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 7 End User App Store PWA and Ticket Loop are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 8 Ticket-to-PRD, Domain and MVP Hardening are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -21,6 +21,7 @@ pnpm verify:sprint4
 pnpm verify:sprint5
 pnpm verify:sprint6
 pnpm verify:sprint7
+pnpm verify:sprint8
 ```
 
 Start frontend shells:
@@ -123,3 +124,15 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Submitter-scoped ticket status view and Creator project ticket inbox
 - Creator Ticket Inbox UI with Convert to PRD Change, Convert to AI Prompt and Resolve actions
 - Prisma migration and seed data for support tickets, timeline entries and in-app notifications
+
+## Sprint 8 Scope
+
+- Ticket-to-PRD change request API with duplicate conversion protection
+- PRD change approval/rejection with linked PRD version creation
+- Domain settings and public domain request approval flow
+- Deployment traceability linking ticket, PRD change, PRD version, frontend checkpoint, manifest, deployment, domain and audit evidence
+- MVP Monitoring dashboard with service health, ticket counts, domain requests, provider calls, guardrail events and recent audit data
+- Audit log filters by actor, action, project/app, severity and date
+- Creator UI for Ticket-to-PRD, PRD Change Requests, Domain Settings, Deployment Traceability and MVP Demo Checklist
+- Admin UI for MVP Monitoring, Service Health, Ticket Counts, Domain Requests and Audit Filters
+- Prisma migration and seed data for PRD change, domain and traceability records

@@ -989,6 +989,163 @@ async function main() {
       createdAt: new Date("2026-08-18T09:12:00.000Z")
     }
   });
+
+  const mvpDemoChecklist = [
+    "Admin configures AI provider, quota and guardrail",
+    "Creator creates Leave Management and confirms PRD baseline",
+    "Creator prompts WFH leave change and publishes",
+    "End User submits ticket TKT-0001",
+    "Creator converts ticket to PRD change",
+    "Creator approves PRD change and reviews traceability",
+    "Admin approves public domain request",
+    "Admin reviews MVP Monitoring and Audit Filters"
+  ];
+
+  await prisma.prdVersion.upsert({
+    where: { id: "prdver_prj_leave_management_change_01" },
+    update: {
+      status: "baseline",
+      isBaseline: false,
+      sourcePrompt: "Approved PRD change prdchg_leave_management_001",
+      changeSummary: "Add WFH leave visibility requirement",
+      generatedBy: { scenario: "requirement_analysis", providerId: "human_approval", model: "creator_review" },
+      createdByUserId: "usr_creator"
+    },
+    create: {
+      id: "prdver_prj_leave_management_change_01",
+      documentId: "prddoc_prj_leave_management",
+      version: "1.1",
+      status: "baseline",
+      isBaseline: false,
+      sourcePrompt: "Approved PRD change prdchg_leave_management_001",
+      changeSummary: "Add WFH leave visibility requirement",
+      generatedBy: { scenario: "requirement_analysis", providerId: "human_approval", model: "creator_review" },
+      createdByUserId: "usr_creator"
+    }
+  });
+
+  await prisma.prdChangeRequest.upsert({
+    where: { id: "prdchg_leave_management_001" },
+    update: {
+      sourceTicketId: "ticket_leave_management_bug_001",
+      title: "Add WFH leave visibility requirement",
+      proposedRequirement: "WFH leave type must be visible on the mobile request form.",
+      affectedSections: ["core_flows", "acceptance_criteria"],
+      acceptanceCriteria: ["WFH option appears on mobile", "Manager approval remains unchanged"],
+      riskLevel: "medium",
+      status: "approved",
+      approvedPrdVersionId: "prdver_prj_leave_management_change_01"
+    },
+    create: {
+      id: "prdchg_leave_management_001",
+      projectId: "prj_leave_management",
+      sourceType: "ticket",
+      sourceTicketId: "ticket_leave_management_bug_001",
+      title: "Add WFH leave visibility requirement",
+      proposedRequirement: "WFH leave type must be visible on the mobile request form.",
+      affectedSections: ["core_flows", "acceptance_criteria"],
+      acceptanceCriteria: ["WFH option appears on mobile", "Manager approval remains unchanged"],
+      riskLevel: "medium",
+      status: "approved",
+      requestedByUserId: "usr_creator",
+      approvedPrdVersionId: "prdver_prj_leave_management_change_01"
+    }
+  });
+
+  await prisma.prdChangeDecision.upsert({
+    where: { id: "prdchgdec_leave_management_001" },
+    update: {
+      changeRequestId: "prdchg_leave_management_001",
+      decision: "approved",
+      note: "Approved for MVP Demo Checklist",
+      decidedByUserId: "usr_creator",
+      decidedAt: new Date("2026-08-18T10:00:00.000Z")
+    },
+    create: {
+      id: "prdchgdec_leave_management_001",
+      changeRequestId: "prdchg_leave_management_001",
+      decision: "approved",
+      note: "Approved for MVP Demo Checklist",
+      decidedByUserId: "usr_creator",
+      decidedAt: new Date("2026-08-18T10:00:00.000Z")
+    }
+  });
+
+  await prisma.domainSetting.upsert({
+    where: { projectId: "prj_leave_management" },
+    update: {
+      internalPath: "/apps/leave-management",
+      customDomain: null,
+      publicDomain: "leave.company.example",
+      mode: "public"
+    },
+    create: {
+      id: "domain_leave_management",
+      projectId: "prj_leave_management",
+      internalPath: "/apps/leave-management",
+      customDomain: null,
+      publicDomain: "leave.company.example",
+      mode: "public"
+    }
+  });
+
+  await prisma.domainRequest.upsert({
+    where: { id: "domainreq_leave_management_public_001" },
+    update: {
+      domain: "leave.company.example",
+      reason: "Pilot group needs a memorable URL",
+      intendedAudience: "HR pilot users",
+      dataClassification: "internal",
+      externalUserPolicy: "approved_users",
+      checklistAccepted: true,
+      status: "approved",
+      requestedByUserId: "usr_creator",
+      decidedByUserId: "usr_admin",
+      decisionNote: "Approved for private MVP pilot",
+      decidedAt: new Date("2026-08-18T10:15:00.000Z")
+    },
+    create: {
+      id: "domainreq_leave_management_public_001",
+      projectId: "prj_leave_management",
+      domain: "leave.company.example",
+      reason: "Pilot group needs a memorable URL",
+      intendedAudience: "HR pilot users",
+      dataClassification: "internal",
+      externalUserPolicy: "approved_users",
+      checklistAccepted: true,
+      status: "approved",
+      requestedByUserId: "usr_creator",
+      decidedByUserId: "usr_admin",
+      decisionNote: "Approved for private MVP pilot",
+      decidedAt: new Date("2026-08-18T10:15:00.000Z")
+    }
+  });
+
+  await prisma.deploymentTraceRecord.upsert({
+    where: { id: "trace_leave_management_mvp_001" },
+    update: {
+      ticketId: "ticket_leave_management_bug_001",
+      prdChangeRequestId: "prdchg_leave_management_001",
+      prdVersionId: "prdver_prj_leave_management_change_01",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      appManifestId: "manifest_app_leave_management_v1",
+      deploymentRecordId: "dep_leave_management_001",
+      domainSettingId: "domain_leave_management",
+      auditEventIds: ["aud_ticket_to_prd", "aud_prd_change_approved", "aud_domain_approved"]
+    },
+    create: {
+      id: "trace_leave_management_mvp_001",
+      projectId: "prj_leave_management",
+      ticketId: "ticket_leave_management_bug_001",
+      prdChangeRequestId: "prdchg_leave_management_001",
+      prdVersionId: "prdver_prj_leave_management_change_01",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      appManifestId: "manifest_app_leave_management_v1",
+      deploymentRecordId: "dep_leave_management_001",
+      domainSettingId: "domain_leave_management",
+      auditEventIds: ["aud_ticket_to_prd", "aud_prd_change_approved", "aud_domain_approved"]
+    }
+  });
 }
 
 main()
