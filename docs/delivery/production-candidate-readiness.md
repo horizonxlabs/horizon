@@ -2,7 +2,7 @@
 
 Issue: #23  
 Current PR: #22  
-Status: Implementation evidence verified on the stacked Sprint 0-14 branch chain; all open stacked PRs are ready for review with clean merge state; external maintainer approval and merge are still required.
+Status: Implementation evidence verified on the stacked Sprint 0-14 branch chain; all open stacked PRs are ready for review with clean merge state; external maintainer review has been requested; external approval and merge are still required.
 
 ## Summary
 
@@ -56,7 +56,7 @@ flowchart LR
 
 ## Open External Actions
 
-The implementation evidence is green, but the work is not merged. Merge requires external maintainer approval because GitHub rejects self-approval.
+The implementation evidence is green, but the work is not merged. Review has been requested from `bananacollab`; merge still requires external maintainer approval because GitHub rejects self-approval.
 
 All open stacked PRs are marked ready for review and currently report clean merge state. Recommended merge order:
 
