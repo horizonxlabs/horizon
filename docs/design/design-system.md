@@ -58,6 +58,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `WorkflowRail` สำหรับ flow ที่ต้องเห็นลำดับชัด เช่น project input -> governed generation -> draft -> baseline
 - ใช้ `DecisionPanel` สำหรับ PRD governance readiness, baseline immutability, publish readiness, validation และ failed generation
 - ใช้ `DataTable` สำหรับ PRD Version History, frontend checkpoints และ restore history
+- ใช้ workspace layout แบบ data-dense สำหรับ Prompt Composer, Task Progress, Live Preview, Token Remaining และ Usage Log โดยไม่ซ่อน guardrail/token state ออกจากหน้าหลัก
 
 ### App Store PWA
 

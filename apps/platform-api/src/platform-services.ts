@@ -82,6 +82,73 @@ export interface PrdDocument {
   updatedAt: string;
 }
 
+export type WorkspaceStepStatus = "pending" | "running" | "done" | "warning" | "failed";
+export type WorkspaceTaskStatus = "ready" | "running" | "blocked" | "failed";
+
+export interface WorkspaceTaskStep {
+  id: string;
+  label: string;
+  status: WorkspaceStepStatus;
+  order: number;
+}
+
+export interface WorkspaceTask {
+  id: string;
+  projectId: string;
+  prompt: string;
+  status: WorkspaceTaskStatus;
+  guardrailDecision: GuardrailDecision;
+  guardrailEventId: string;
+  steps: WorkspaceTaskStep[];
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface PreviewVersion {
+  id: string;
+  projectId: string;
+  version: string;
+  summary: string;
+  device: "desktop" | "tablet" | "mobile";
+  screenTitle: string;
+  highlights: string[];
+  createdAt: string;
+}
+
+export interface AiUsageLog {
+  id: string;
+  projectId: string;
+  taskId: string;
+  actorId: string;
+  scenario: AiScenario;
+  providerId: string;
+  model: string;
+  prompt: string;
+  tokensUsed: number;
+  occurredAt: string;
+}
+
+export interface WorkspacePromptResult {
+  guardrail: GuardrailResult;
+  task: WorkspaceTask;
+  preview: PreviewVersion;
+  usage?: AiUsageLog;
+  tokenBudget: {
+    remainingToday: number;
+    remainingMonth: number;
+    requestEstimate: number;
+  };
+}
+
+export interface WorkspaceSnapshot {
+  project: PlatformProject;
+  baseline: PrdVersion;
+  preview: PreviewVersion;
+  tasks: WorkspaceTask[];
+  usage: AiUsageLog[];
+  tokenBudget: WorkspacePromptResult["tokenBudget"];
+}
+
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
@@ -882,6 +949,214 @@ export class PrdService {
   }
 }
 
+export class WorkspaceService {
+  private readonly tasks: WorkspaceTask[] = [];
+  private readonly previews: PreviewVersion[] = [];
+  private readonly usageLogs: AiUsageLog[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly prds: PrdService,
+    private readonly aiGovernance: AiGovernanceService,
+    private readonly guardrails: GuardrailService
+  ) {}
+
+  getWorkspace(actor: PlatformUser, projectId: string): WorkspaceSnapshot {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const baseline = this.requireBaseline(actor, projectId);
+
+    return {
+      project,
+      baseline,
+      preview: this.latestPreview(project.id),
+      tasks: this.tasks.filter((task) => task.projectId === project.id),
+      usage: this.listUsage(actor, project.id),
+      tokenBudget: this.buildTokenBudget(0)
+    };
+  }
+
+  submitPrompt(actor: PlatformUser, projectId: string, input: { prompt: string }): WorkspacePromptResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    this.requireBaseline(actor, project.id);
+    const prompt = input.prompt.trim();
+    if (!prompt) throw new ValidationError("Prompt is required");
+
+    const guardrail = this.guardrails.evaluatePrompt(actor, {
+      prompt,
+      scenario: "frontend_coding"
+    });
+    const now = new Date().toISOString();
+
+    if (guardrail.decision === "block") {
+      const blockedTask = this.createTask(project.id, actor.id, prompt, "blocked", guardrail, now, "failed");
+      this.tasks.push(blockedTask);
+      this.audit.record({
+        actorId: actor.id,
+        action: "workspace.prompt.blocked",
+        resourceType: "workspace_task",
+        resourceId: blockedTask.id,
+        severity: "warning",
+        metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
+      });
+      return {
+        guardrail,
+        task: blockedTask,
+        preview: this.latestPreview(project.id),
+        tokenBudget: this.buildTokenBudget(0)
+      };
+    }
+
+    const route = this.aiGovernance.resolveRoute("frontend_coding");
+    const requestEstimate = 120;
+    const quota = this.aiGovernance.checkQuota("creator", requestEstimate);
+    if (!quota.allowed) {
+      throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
+    }
+
+    this.aiGovernance.recordProviderCall();
+    const task = this.createTask(project.id, actor.id, prompt, "ready", guardrail, now, "done");
+    const preview = this.createPreview(project.id, prompt, now);
+    const usage: AiUsageLog = {
+      id: `ailog_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
+      projectId: project.id,
+      taskId: task.id,
+      actorId: actor.id,
+      scenario: "frontend_coding",
+      providerId: route.primary.providerId,
+      model: route.primary.model,
+      prompt,
+      tokensUsed: requestEstimate,
+      occurredAt: now
+    };
+
+    this.tasks.push(task);
+    this.previews.push(preview);
+    this.usageLogs.push(usage);
+    this.audit.record({
+      actorId: actor.id,
+      action: "workspace.prompt.accepted",
+      resourceType: "workspace_task",
+      resourceId: task.id,
+      metadata: { projectId: project.id, previewVersion: preview.version, tokensUsed: usage.tokensUsed }
+    });
+
+    return {
+      guardrail,
+      task,
+      preview,
+      usage,
+      tokenBudget: this.buildTokenBudget(requestEstimate)
+    };
+  }
+
+  refreshPreview(actor: PlatformUser, projectId: string): PreviewVersion {
+    this.projects.getProjectForActor(actor, projectId);
+    this.requireBaseline(actor, projectId);
+    return this.latestPreview(projectId);
+  }
+
+  listUsage(actor: PlatformUser, projectId: string): AiUsageLog[] {
+    this.projects.getProjectForActor(actor, projectId);
+    return this.usageLogs.filter((event) => event.projectId === projectId);
+  }
+
+  private requireBaseline(actor: PlatformUser, projectId: string): PrdVersion {
+    let versions: PrdVersion[];
+    try {
+      versions = this.prds.listVersions(actor, projectId);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw new ValidationError(`PRD baseline is required before opening workspace for project ${projectId}`);
+      }
+      throw error;
+    }
+    const baseline = versions.find((version) => version.isBaseline);
+    if (!baseline) throw new ValidationError(`PRD baseline is required before opening workspace for project ${projectId}`);
+    return baseline;
+  }
+
+  private createTask(
+    projectId: string,
+    actorId: string,
+    prompt: string,
+    status: WorkspaceTaskStatus,
+    guardrail: GuardrailResult,
+    createdAt: string,
+    terminalStepStatus: WorkspaceStepStatus
+  ): WorkspaceTask {
+    const id = `wst_${String(this.tasks.length + 1).padStart(4, "0")}`;
+    const labels = [
+      "Understanding request",
+      "Loading PRD baseline",
+      "Guardrail pre-check",
+      "Selecting skill",
+      "Generating frontend",
+      "Applying auth/role rules",
+      "Building preview",
+      "Running checks",
+      "Ready"
+    ];
+
+    return {
+      id,
+      projectId,
+      prompt,
+      status,
+      guardrailDecision: guardrail.decision,
+      guardrailEventId: guardrail.eventId,
+      steps: labels.map((label, index) => ({
+        id: `${id}_step_${index + 1}`,
+        label,
+        status: status === "blocked" && index >= 3 ? "pending" : terminalStepStatus,
+        order: index + 1
+      })),
+      createdByUserId: actorId,
+      createdAt
+    };
+  }
+
+  private createPreview(projectId: string, prompt: string, createdAt: string): PreviewVersion {
+    const versionNumber = this.previews.filter((preview) => preview.projectId === projectId && preview.version !== "preview-0000").length + 1;
+    return {
+      id: `preview_${projectId}_${String(versionNumber).padStart(4, "0")}`,
+      projectId,
+      version: `preview-${String(versionNumber).padStart(4, "0")}`,
+      summary: `Mock preview updated: ${prompt}`,
+      device: "desktop",
+      screenTitle: "Leave Management",
+      highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"],
+      createdAt
+    };
+  }
+
+  private latestPreview(projectId: string): PreviewVersion {
+    const preview = [...this.previews].reverse().find((candidate) => candidate.projectId === projectId);
+    if (preview) return preview;
+
+    return {
+      id: `preview_${projectId}_empty`,
+      projectId,
+      version: "preview-0000",
+      summary: "No generated preview yet",
+      device: "desktop",
+      screenTitle: "Leave Management",
+      highlights: ["Baseline PRD loaded", "Prompt required", "No generated changes"],
+      createdAt: new Date("2026-07-03T00:00:00.000Z").toISOString()
+    };
+  }
+
+  private buildTokenBudget(tokensUsed: number): WorkspacePromptResult["tokenBudget"] {
+    return {
+      remainingToday: Math.max(1000 - tokensUsed, 0),
+      remainingMonth: Math.max(5000 - tokensUsed, 0),
+      requestEstimate: 120
+    };
+  }
+}
+
 export interface PlatformApiServices {
   identity: IdentityService;
   auth: MockAuthService;
@@ -890,6 +1165,7 @@ export interface PlatformApiServices {
   aiGovernance: AiGovernanceService;
   guardrails: GuardrailService;
   prds: PrdService;
+  workspace: WorkspaceService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -906,6 +1182,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const aiGovernance = new AiGovernanceService(auth, audit);
   const guardrails = new GuardrailService(auth, audit);
   const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
+  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails);
 
   return {
     identity,
@@ -915,6 +1192,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     aiGovernance,
     guardrails,
     prds,
+    workspace,
     envelope: { success, failure }
   };
 }

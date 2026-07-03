@@ -1,7 +1,19 @@
 import { navigation } from "@evcp/config";
 import { mockUsers, projects } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
-import { CheckCircle2, FileText, GitBranch, LayoutDashboard, LockKeyhole, Sparkles, WandSparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  FileText,
+  GitBranch,
+  LayoutDashboard,
+  LockKeyhole,
+  Monitor,
+  RefreshCw,
+  Send,
+  Sparkles,
+  Tablet,
+  WandSparkles
+} from "lucide-react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -39,14 +51,35 @@ const versionRows = [
   }
 ];
 
+const taskSteps = [
+  "Understanding request",
+  "Loading PRD baseline",
+  "Guardrail pre-check",
+  "Selecting skill",
+  "Generating frontend",
+  "Applying auth/role rules",
+  "Building preview",
+  "Running checks",
+  "Ready"
+].map((label, index) => ({ label, status: index < 9 ? "done" : "pending", order: String(index + 1) }));
+
+const usageRows = [
+  {
+    prompt: "Add WFH leave type",
+    scenario: "frontend_coding",
+    tokens: "120",
+    result: "preview-0001"
+  }
+];
+
 function CreatorApp() {
   return (
     <AppShell title="Creator App" navItems={navigation.creator} userName={mockUsers.creator.name}>
       <PageHeader
         tone="surface"
-        eyebrow="Creator Workflow"
-        title="โปรเจกต์ของฉัน"
-        description="เลือกหรือสร้าง project แล้วทำ PRD ให้เป็น baseline ก่อนเริ่ม generate app"
+        eyebrow="Creator Workspace"
+        title="Workspace: Leave Management"
+        description="Prompt, AI task progress, token remaining และ live preview อยู่ในหน้าทำงานเดียว"
         actions={
           <>
             <button type="button" className="secondary-button">
@@ -61,8 +94,141 @@ function CreatorApp() {
         }
       />
 
+      <section className="workspace-topbar">
+        {[
+          ["Project", selectedProject.name],
+          ["PRD", "Baseline v1.0"],
+          ["Frontend", "preview-0001"],
+          ["Token Remaining", "880 today / 4,880 month"],
+          ["Publish", "not ready"]
+        ].map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </section>
+
+      <section className="workspace-shell">
+        <div className="workspace-left-panel">
+          <SectionCard eyebrow="Prompt Composer" title="Chat + AI Plan">
+            <div className="prompt-thread">
+              <div className="prompt-message user">
+                <strong>Creator</strong>
+                <p>Add WFH leave type</p>
+              </div>
+              <div className="prompt-message system">
+                <strong>Guardrail pre-check</strong>
+                <p>Decision: allow · event gre_0002</p>
+              </div>
+              <div className="prompt-message ai">
+                <strong>AI Task</strong>
+                <p>Updating Leave Management preview with WFH leave type and manager approval visibility.</p>
+              </div>
+            </div>
+            <div className="prompt-composer">
+              <label>
+                Prompt จะถูกตรวจตาม Guardrail ก่อนส่ง AI
+                <input defaultValue="Add WFH leave type" />
+              </label>
+              <button type="button">
+                <Send size={16} />
+                Send
+              </button>
+            </div>
+          </SectionCard>
+
+          <SectionCard eyebrow="Task Progress" title="Deterministic AI Steps">
+            <div className="workspace-progress-list">
+              {taskSteps.map((step) => (
+                <div key={step.label}>
+                  <CheckCircle2 size={15} />
+                  <span>{step.order}</span>
+                  <strong>{step.label}</strong>
+                  <ToneBadge tone="success">{step.status}</ToneBadge>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+
+        <SectionCard
+          eyebrow="Live Preview"
+          title="Leave Management Preview"
+          action={<button type="button" className="ghost-button"><RefreshCw size={15} /> Refresh</button>}
+        >
+          <div className="preview-toolbar">
+            <button type="button"><Monitor size={15} /> Desktop</button>
+            <button type="button" className="ghost-button"><Tablet size={15} /> Tablet</button>
+            <button type="button" className="ghost-button">Mobile</button>
+            <ToneBadge tone="info">preview-0001</ToneBadge>
+          </div>
+          <div className="live-preview-frame">
+            <header>
+              <div>
+                <span>Leave Management</span>
+                <strong>Manager approval workspace</strong>
+              </div>
+              <ToneBadge tone="success">Healthy</ToneBadge>
+            </header>
+            <section className="preview-status-strip" aria-label="Preview status">
+              <div><span>Requests</span><strong>24</strong><small>+ WFH option</small></div>
+              <div><span>Approval SLA</span><strong>1.8d</strong><small>manager queue</small></div>
+              <div><span>Policy</span><strong>Ready</strong><small>shown before submit</small></div>
+            </section>
+            <section className="preview-board">
+              <article>
+                <span>New Type</span>
+                <strong>Work from home leave</strong>
+                <p>Employee can select WFH in the same request flow.</p>
+              </article>
+              <article>
+                <span>Approval Queue</span>
+                <strong>Manager review lane</strong>
+                <p>Pending approvals are grouped by team and due date.</p>
+              </article>
+              <article>
+                <span>Governance</span>
+                <strong>HR policy note</strong>
+                <p>Policy reminder appears before final submission.</p>
+              </article>
+            </section>
+          </div>
+        </SectionCard>
+
+        <aside className="workspace-context-panel">
+          <SectionCard eyebrow="Token Remaining" title="Quota">
+            <DefinitionGrid
+              items={[
+                { label: "Today", value: "880 tokens" },
+                { label: "Month", value: "4,880 tokens" },
+                { label: "Estimate", value: "120 tokens" },
+                { label: "Reset", value: "tomorrow" }
+              ]}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Usage Log" title="Logs">
+            <DataTable
+              columns={[
+                { key: "prompt", label: "Prompt" },
+                { key: "scenario", label: "Scenario" },
+                { key: "tokens", label: "Tokens" },
+                { key: "result", label: "Result" }
+              ]}
+              rows={usageRows}
+            />
+          </SectionCard>
+          <DecisionPanel
+            tone="success"
+            badge="Allowed"
+            title="Guardrail result recorded before generation"
+            lines={["No provider secret visible", "Usage log persisted", "Preview refreshed from latest task"]}
+          />
+        </aside>
+      </section>
+
       <section className="creator-summary-grid">
-        <SectionCard eyebrow="Project Picker" title={selectedProject.name}>
+        <SectionCard eyebrow="Project Picker · โปรเจกต์ของฉัน" title={selectedProject.name}>
           <div className="creator-project-card">
             <div className="ds-summary-icon"><LayoutDashboard size={22} /></div>
             <div>

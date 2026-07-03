@@ -2,8 +2,9 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 4 implementation
+Status: Implemented with screenshot evidence
 Related plan: `docs/planning/sprint-4-plan.md`
+Evidence: `docs/assets/screenshots/sprint4-creator-workspace.png`
 
 ## 1. Design Objective
 
@@ -126,4 +127,3 @@ Creator must never see provider secret or system-wide model config.
 - [ ] Live preview updates after accepted prompt.
 - [ ] Desktop workspace supports prompt, preview and right context simultaneously.
 - [ ] Guardrail block and token exhausted states are explicit and testable.
-

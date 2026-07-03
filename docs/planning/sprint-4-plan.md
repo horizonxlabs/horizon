@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Status: Implemented and accepted
 Sprint dates: 2026-08-03 to 2026-08-07
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
@@ -63,12 +63,12 @@ This sprint maps directly to the source MVP plan:
 
 ## 6. Definition of Done
 
-- [ ] Creator sends prompt from workspace.
-- [ ] Guardrail checks prompt before AI/mock generation.
-- [ ] Token remaining decreases for accepted prompt.
-- [ ] AI task progress displays.
-- [ ] Preview updates after generation.
-- [ ] Sprint 5 can use preview/version output for frontend restore.
+- [x] Creator sends prompt from workspace.
+- [x] Guardrail checks prompt before AI/mock generation.
+- [x] Token remaining decreases for accepted prompt.
+- [x] AI task progress displays.
+- [x] Preview updates after generation.
+- [x] Sprint 5 can use preview/version output for frontend restore.
 
 ## 7. Demo Script
 

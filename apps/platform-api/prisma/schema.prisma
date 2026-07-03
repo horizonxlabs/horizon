@@ -133,6 +133,9 @@ model Project {
   members     ProjectMember[]
   apps        App[]
   prdDocument PrdDocument?
+  workspaceTasks WorkspaceTask[]
+  previewVersions PreviewVersion[]
+  aiUsageLogs AiUsageLog[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -355,4 +358,67 @@ model PrdSection {
 
   @@unique([versionId, key])
   @@map("prd_sections")
+}
+
+model WorkspaceTask {
+  id                String              @id
+  projectId         String              @map("project_id")
+  prompt            String
+  status            String
+  guardrailDecision String              @map("guardrail_decision")
+  guardrailEventId  String              @map("guardrail_event_id")
+  createdByUserId   String              @map("created_by_user_id")
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  steps             WorkspaceTaskStep[]
+  usageLogs         AiUsageLog[]
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("workspace_tasks")
+}
+
+model WorkspaceTaskStep {
+  id      String        @id
+  taskId  String        @map("task_id")
+  label   String
+  status  String
+  order   Int
+  task    WorkspaceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, order])
+  @@map("workspace_task_steps")
+}
+
+model PreviewVersion {
+  id          String   @id
+  projectId   String   @map("project_id")
+  version     String
+  summary     String
+  device      String
+  screenTitle String   @map("screen_title")
+  highlights  String[]
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, version])
+  @@map("preview_versions")
+}
+
+model AiUsageLog {
+  id         String        @id
+  projectId  String        @map("project_id")
+  taskId     String        @map("task_id")
+  actorUserId String       @map("actor_user_id")
+  scenario   String
+  providerId String        @map("provider_id")
+  model      String
+  prompt     String
+  tokensUsed Int           @map("tokens_used")
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task       WorkspaceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  occurredAt DateTime      @default(now()) @map("occurred_at")
+
+  @@index([projectId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("ai_usage_logs")
 }
