@@ -85,3 +85,16 @@ Each sprint must produce a delivery note under `docs/delivery/` with:
 - Product Owner checklist result.
 - Known exceptions, if any.
 
+## 8. PR Review and Merge Maintenance Rule
+
+No sprint PR may be merged only because local verification is green. Merge readiness requires both technical evidence and an independent review gate.
+
+| Merge Gate | Required Evidence |
+| --- | --- |
+| Review approval | GitHub PR has an approving review from a non-author maintainer or Principal Reviewer |
+| Review scope | Reviewer covers correctness, security, maintainability, architecture fit and test sufficiency |
+| Fresh verification | Latest head commit has passing unit, integration and E2E evidence in the PR or delivery note |
+| Stack order | Stacked sprint PRs merge from earliest dependency to latest sprint |
+| Re-review trigger | Any code, schema, security, test or UI change after approval requires another review |
+
+Product Owner may maintain PR state, request reviews, verify mergeability and document the merge order, but must not merge without the required review evidence. If GitHub blocks self-approval, the PR remains pending until an external maintainer approves it.

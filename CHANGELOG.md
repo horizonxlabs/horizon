@@ -5,6 +5,7 @@
 ### Added
 
 - Production candidate readiness audit mapping the final roadmap criteria to Sprint 0-14 integrated evidence and the stacked PR merge order.
+- PR merge maintenance governance requiring non-author code review approval, fresh verification evidence and stacked merge order before any sprint PR is merged.
 - Sprint 14 Security Release Readiness with TLS/session policy overview, secret redaction evidence, upload validation/quarantine, public/external release checklist, sensitive log redaction preview, Prisma security release tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 13 Observability and License with production health dashboard, telemetry export contract, upgrade compatibility and rollback reports, signed license validation, offline cache, license enforcement, Prisma production/license tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 12 Installer Backup Restore with installer preflight reports, setup wizard config redaction, backup policy/run metadata, PostgreSQL PITR, restore drill reports, Prisma operations tables, Admin UI evidence and unit/integration/E2E coverage.
