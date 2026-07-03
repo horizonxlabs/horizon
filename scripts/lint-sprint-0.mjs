@@ -1,0 +1,66 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const requiredFiles = [
+  "package.json",
+  "pnpm-workspace.yaml",
+  "apps/admin-web/src/main.tsx",
+  "apps/creator-web/src/main.tsx",
+  "apps/app-store-pwa/src/main.tsx",
+  "packages/ui/src/index.tsx",
+  "packages/ui/styles.css",
+  "packages/auth-sdk/src/index.ts",
+  "packages/api-client/src/index.ts",
+  "packages/mock-data/src/index.ts",
+  "docs/delivery/sprint-0-product-owner-acceptance.md",
+  "docs/delivery/sprint-delivery-governance.md",
+  "docker/.gitkeep",
+  "generated-apps/.gitkeep"
+];
+
+const disallowedPatterns = [
+  /sk-[A-Za-z0-9]{20,}/,
+  /OPENAI_API_KEY\s*=/,
+  /ANTHROPIC_API_KEY\s*=/,
+  /password\s*=\s*["'][^"']+["']/i
+];
+
+function walk(dir) {
+  const entries = [];
+  for (const name of readdirSync(dir)) {
+    if ([".git", "node_modules", ".pnpm-store", "dist", "coverage", "playwright-report", "test-results"].includes(name)) {
+      continue;
+    }
+    const path = join(dir, name);
+    const stat = statSync(path);
+    if (stat.isDirectory()) entries.push(...walk(path));
+    else entries.push(path);
+  }
+  return entries;
+}
+
+const failures = [];
+
+for (const file of requiredFiles) {
+  try {
+    statSync(file);
+  } catch {
+    failures.push(`Missing required file: ${file}`);
+  }
+}
+
+for (const file of walk(".")) {
+  const text = readFileSync(file, "utf8");
+  for (const pattern of disallowedPatterns) {
+    if (pattern.test(text)) {
+      failures.push(`Potential secret pattern in ${file}: ${pattern}`);
+    }
+  }
+}
+
+if (failures.length > 0) {
+  console.error(failures.join("\n"));
+  process.exit(1);
+}
+
+console.log("Sprint 0 lint checks passed");
