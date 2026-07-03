@@ -10,7 +10,7 @@ export const navigation: Record<Surface, NavItem[]> = {
   admin: [
     { label: "Dashboard", route: "/admin" },
     { label: "Services", route: "/admin/services" },
-    { label: "AI Keys", route: "/admin/ai-keys" },
+    { label: "AI Providers", route: "/admin/ai-providers" },
     { label: "Guardrails", route: "/admin/guardrails" },
     { label: "Audit Logs", route: "/admin/audit-logs" }
   ],

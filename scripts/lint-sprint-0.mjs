@@ -6,6 +6,7 @@ const requiredFiles = [
   "pnpm-workspace.yaml",
   "CHANGELOG.md",
   "apps/admin-web/src/main.tsx",
+  "apps/admin-web/public/favicon.svg",
   "apps/creator-web/src/main.tsx",
   "apps/app-store-pwa/src/main.tsx",
   "apps/platform-api/src/app-factory.ts",
@@ -13,6 +14,7 @@ const requiredFiles = [
   "apps/platform-api/src/platform-services.ts",
   "apps/platform-api/prisma/schema.prisma",
   "apps/platform-api/prisma/migrations/20260703000000_sprint1_foundation/migration.sql",
+  "apps/platform-api/prisma/migrations/20260703000001_sprint2_ai_governance/migration.sql",
   "apps/platform-api/prisma/seed.ts",
   "packages/ui/src/index.tsx",
   "packages/ui/styles.css",
@@ -22,7 +24,10 @@ const requiredFiles = [
   "docs/delivery/sprint-0-product-owner-acceptance.md",
   "docs/delivery/sprint-1-delivery-note.md",
   "docs/delivery/sprint-1-product-owner-acceptance.md",
+  "docs/delivery/sprint-2-delivery-note.md",
+  "docs/delivery/sprint-2-product-owner-acceptance.md",
   "docs/delivery/sprint-delivery-governance.md",
+  "docs/assets/screenshots/sprint2-admin-governance.png",
   "docker/docker-compose.yml",
   "docker/.gitkeep",
   "generated-apps/.gitkeep"
@@ -44,7 +49,7 @@ function walk(dir) {
     const path = join(dir, name);
     const stat = statSync(path);
     if (stat.isDirectory()) entries.push(...walk(path));
-    else entries.push(path);
+    else if (!/\.(png|jpg|jpeg|webp|ico)$/i.test(path)) entries.push(path);
   }
   return entries;
 }
@@ -73,4 +78,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log("Sprint 0 lint checks passed");
+console.log("Sprint lint checks passed");

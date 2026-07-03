@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation and Sprint 1 Platform API foundation are implemented on top of the validated requirements baseline.
+Sprint 0 foundation, Sprint 1 Platform API foundation and Sprint 2 Admin AI governance are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -15,6 +15,7 @@ pnpm build
 pnpm test
 pnpm verify:sprint0
 pnpm verify:sprint1
+pnpm verify:sprint2
 ```
 
 Start frontend shells:
@@ -62,3 +63,14 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Prisma PostgreSQL schema and first migration
 - Idempotent seed users, roles, Leave Management project/app and audit event
 - Docker Compose PostgreSQL verification path
+
+## Sprint 2 Scope
+
+- Admin AI Providers and API Keys governance screen
+- External provider adapter configuration contract
+- Masked API key response with encryption-ready storage fields
+- Scenario routing and fallback configuration
+- Token quota hard-stop checks before provider calls
+- Guardrail keyword/policy prompt test with allow, warn and block decisions
+- Guardrail event log and audit records
+- Prisma migration and seed data for AI governance tables

@@ -34,6 +34,31 @@ enum AuditSeverity {
   critical
 }
 
+enum AiProviderStatus {
+  active
+  disabled
+  warning
+  error
+}
+
+enum AiUsageMode {
+  production
+  development
+  fallback
+}
+
+enum GuardrailDecision {
+  allow
+  warn
+  block
+}
+
+enum GuardrailRuleType {
+  keyword
+  regex
+  policy
+}
+
 model PlatformUser {
   id          String              @id
   email       String              @unique
@@ -45,6 +70,7 @@ model PlatformUser {
   memberships ProjectMember[]
   appMembers  AppMember[]
   auditLogs   AuditLog[]
+  guardrailEvents GuardrailEvent[]
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
@@ -176,4 +202,102 @@ model AuditLog {
   @@index([actorUserId, occurredAt])
   @@index([resourceType, resourceId])
   @@map("audit_logs")
+}
+
+model AiProvider {
+  id        String           @id
+  name      String
+  adapter   String
+  baseUrl   String           @map("base_url")
+  models    String[]
+  status    AiProviderStatus @default(active)
+  apiKeys   AiApiKey[]
+  routes    AiScenarioRoute[]
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@map("ai_providers")
+}
+
+model AiApiKey {
+  id                 String       @id
+  providerId         String       @map("provider_id")
+  name               String
+  usageMode          AiUsageMode  @map("usage_mode")
+  quotaTokens        Int          @map("quota_tokens")
+  fallbackPriority   Int          @map("fallback_priority")
+  fingerprint        String
+  maskedValue        String       @map("masked_value")
+  secretCiphertext   String       @map("secret_ciphertext")
+  keyVersion         Int          @default(1) @map("key_version")
+  encryptionProvider String       @map("encryption_provider")
+  status             String       @default("active")
+  lastUsedAt         DateTime?    @map("last_used_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  provider           AiProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@map("ai_api_keys")
+}
+
+model AiScenarioRoute {
+  id                 String     @id
+  scenario           String     @unique
+  primaryProviderId  String     @map("primary_provider_id")
+  primaryModel       String     @map("primary_model")
+  fallbackProviderId String?    @map("fallback_provider_id")
+  fallbackModel      String?    @map("fallback_model")
+  provider           AiProvider @relation(fields: [primaryProviderId], references: [id])
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  @@map("ai_scenario_routes")
+}
+
+model AiQuota {
+  id               String   @id
+  scope            String   @unique
+  dailyLimit       Int      @map("daily_limit")
+  monthlyLimit     Int      @map("monthly_limit")
+  warningThreshold Int      @map("warning_threshold")
+  hardStop         Boolean  @default(true) @map("hard_stop")
+  usedToday        Int      @default(0) @map("used_today")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_quotas")
+}
+
+model GuardrailRule {
+  id        String            @id
+  name      String
+  type      GuardrailRuleType
+  pattern   String
+  severity  AuditSeverity
+  action    GuardrailDecision
+  scope     String
+  status    String            @default("active")
+  events    GuardrailEvent[]
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@map("guardrail_rules")
+}
+
+model GuardrailEvent {
+  id              String            @id
+  actorUserId     String            @map("actor_user_id")
+  prompt          String
+  scenario        String
+  decision        GuardrailDecision
+  matchedRuleId   String?           @map("matched_rule_id")
+  matchedRuleName String?           @map("matched_rule_name")
+  severity        AuditSeverity
+  occurredAt      DateTime          @default(now()) @map("occurred_at")
+  actor           PlatformUser      @relation(fields: [actorUserId], references: [id])
+  matchedRule     GuardrailRule?    @relation(fields: [matchedRuleId], references: [id])
+
+  @@index([actorUserId, occurredAt])
+  @@index([decision])
+  @@map("guardrail_events")
 }

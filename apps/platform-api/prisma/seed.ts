@@ -125,6 +125,136 @@ async function main() {
       metadata: { source: "apps/platform-api/prisma/seed.ts" }
     }
   });
+
+  await prisma.aiProvider.upsert({
+    where: { id: "aip_openai_production" },
+    update: {
+      name: "OpenAI Production",
+      adapter: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4.1", "gpt-4.1-mini"],
+      status: "active"
+    },
+    create: {
+      id: "aip_openai_production",
+      name: "OpenAI Production",
+      adapter: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4.1", "gpt-4.1-mini"],
+      status: "active"
+    }
+  });
+
+  await prisma.aiApiKey.upsert({
+    where: { id: "aik_openai_primary" },
+    update: {
+      name: "Primary Production Key",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1,
+      fingerprint: "fp_seed_demo_001",
+      maskedValue: "sk-...demo",
+      secretCiphertext: "local-envelope:c2VlZC1kZW1vLWtleQ==",
+      keyVersion: 1,
+      encryptionProvider: "local-envelope",
+      status: "active"
+    },
+    create: {
+      id: "aik_openai_primary",
+      providerId: "aip_openai_production",
+      name: "Primary Production Key",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1,
+      fingerprint: "fp_seed_demo_001",
+      maskedValue: "sk-...demo",
+      secretCiphertext: "local-envelope:c2VlZC1kZW1vLWtleQ==",
+      keyVersion: 1,
+      encryptionProvider: "local-envelope",
+      status: "active"
+    }
+  });
+
+  await prisma.aiScenarioRoute.upsert({
+    where: { scenario: "prd_generation" },
+    update: {
+      primaryProviderId: "aip_openai_production",
+      primaryModel: "gpt-4.1",
+      fallbackProviderId: null,
+      fallbackModel: null
+    },
+    create: {
+      id: "air_prd_generation",
+      scenario: "prd_generation",
+      primaryProviderId: "aip_openai_production",
+      primaryModel: "gpt-4.1"
+    }
+  });
+
+  await prisma.aiQuota.upsert({
+    where: { scope: "organization" },
+    update: {
+      dailyLimit: 1000,
+      monthlyLimit: 5000,
+      warningThreshold: 800,
+      hardStop: true,
+      usedToday: 0
+    },
+    create: {
+      id: "aiq_organization",
+      scope: "organization",
+      dailyLimit: 1000,
+      monthlyLimit: 5000,
+      warningThreshold: 800,
+      hardStop: true,
+      usedToday: 0
+    }
+  });
+
+  await prisma.guardrailRule.upsert({
+    where: { id: "grd_block_payroll_export" },
+    update: {
+      name: "Block payroll export",
+      type: "keyword",
+      pattern: "payroll export",
+      severity: "high",
+      action: "block",
+      scope: "organization",
+      status: "active"
+    },
+    create: {
+      id: "grd_block_payroll_export",
+      name: "Block payroll export",
+      type: "keyword",
+      pattern: "payroll export",
+      severity: "high",
+      action: "block",
+      scope: "organization",
+      status: "active"
+    }
+  });
+
+  await prisma.guardrailEvent.upsert({
+    where: { id: "gre_seed_blocked_prompt" },
+    update: {
+      prompt: "Generate payroll export report",
+      scenario: "prd_generation",
+      decision: "block",
+      matchedRuleId: "grd_block_payroll_export",
+      matchedRuleName: "Block payroll export",
+      severity: "high"
+    },
+    create: {
+      id: "gre_seed_blocked_prompt",
+      actorUserId: "usr_admin",
+      prompt: "Generate payroll export report",
+      scenario: "prd_generation",
+      decision: "block",
+      matchedRuleId: "grd_block_payroll_export",
+      matchedRuleName: "Block payroll export",
+      severity: "high"
+    }
+  });
 }
 
 main()
