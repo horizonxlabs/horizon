@@ -120,6 +120,58 @@ NG7. Creator ไม่สามารถใช้ raw SQL editor หรือ by
 
 ต้องเป็น Progressive Web App สำหรับ End User ใช้ค้นหาและเปิด app ตามสิทธิ์, request access, view app detail, submit ticket, track ticket status, receive notification และติดตั้งเป็น PWA ได้
 
+### 7.4 Product Surface and Runtime Overview
+
+```mermaid
+flowchart LR
+  subgraph Users["Enterprise Users"]
+    Admin["IT / System Admin"]
+    Security["Security / AI Admin"]
+    Creator["Creator / Developer"]
+    EndUser["End User / External User"]
+  end
+
+  subgraph Surfaces["Product Surfaces"]
+    AdminWeb["Admin Console"]
+    CreatorWeb["Creator App"]
+    StorePWA["End User App Store PWA"]
+  end
+
+  subgraph Platform["Platform Core"]
+    PlatformAPI["Platform API"]
+    Auth["Platform Auth / Keycloak / External IdP"]
+    AIGateway["AI Gateway"]
+    Policy["Policy / Approval Engine"]
+    Audit["Audit / Notification"]
+    Knowledge["Knowledge + Skill Registry"]
+  end
+
+  subgraph Runtime["Generated App Runtime"]
+    AppContainer["Generated App Container"]
+    AppSchema["PostgreSQL Schema per App"]
+    AppRoute["Caddy Route / Domain"]
+  end
+
+  Admin --> AdminWeb
+  Security --> AdminWeb
+  Creator --> CreatorWeb
+  EndUser --> StorePWA
+
+  AdminWeb --> PlatformAPI
+  CreatorWeb --> PlatformAPI
+  StorePWA --> PlatformAPI
+
+  PlatformAPI --> Auth
+  PlatformAPI --> AIGateway
+  PlatformAPI --> Policy
+  PlatformAPI --> Audit
+  PlatformAPI --> Knowledge
+  PlatformAPI --> AppContainer
+  AppContainer --> AppSchema
+  AppRoute --> AppContainer
+  StorePWA --> AppRoute
+```
+
 ## 8. Functional Requirements
 
 ### 8.1 Installation, Setup, Upgrade
@@ -350,6 +402,40 @@ US-END-004: As an External User, I want to access approved apps through controll
 15. Creator converts ticket into PRD change request.
 16. Approved change updates PRD, app version, deployment traceability, and audit log.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Admin as IT/System Admin
+  actor Creator as Creator/Developer
+  actor Reviewer as Policy Reviewers
+  actor User as End User
+  participant Platform as Platform API
+  participant AI as AI Gateway
+  participant Runtime as Generated App Runtime
+  participant Store as App Store PWA
+  participant Audit as Audit/Notification
+
+  Admin->>Platform: Install and configure platform
+  Platform->>Audit: Record setup, auth, AI, backup, license events
+  Creator->>Platform: Create project with data classification
+  Platform->>AI: Generate PRD draft using approved knowledge/skills
+  AI-->>Platform: PRD draft and generation metadata
+  Creator->>Platform: Confirm PRD baseline
+  Creator->>Platform: Prompt AI to generate or change app
+  Platform->>AI: Guarded request through provider adapter
+  AI-->>Platform: Generated plan/artifacts
+  Creator->>Platform: Submit publish request
+  Platform->>Reviewer: Route approval by policy
+  Reviewer-->>Platform: Approve or request changes
+  Platform->>Runtime: Build, migrate, deploy app container
+  Runtime-->>Platform: Health and readiness status
+  User->>Store: Discover visible app
+  User->>Runtime: Open app or submit ticket
+  Runtime->>Platform: Ticket / app activity event
+  Creator->>Platform: Convert ticket to PRD change request
+  Platform->>Audit: Link ticket, PRD change, deployment trace
+```
+
 ## 12. Traceability Matrix
 
 | Goal | Related Requirements | Validation |
@@ -498,6 +584,38 @@ US-END-004: As an External User, I want to access approved apps through controll
 | AI skill/knowledge dependency changed since last publish | App Owner + relevant Skill/Knowledge approver | Dependency version approved |
 | License limit exceeded | Platform Admin | Publish blocked until license state resolves |
 
+```mermaid
+flowchart TD
+  Request["Publish Request Submitted"] --> Evaluate["Evaluate Policy Inputs"]
+  Evaluate --> Inputs["Classification + Access Mode + Domain + Code Change + Migration + License"]
+  Inputs --> LowRisk{"Low-risk internal frontend-only?"}
+  Inputs --> Sensitive{"Confidential or Restricted data?"}
+  Inputs --> External{"Public or external access?"}
+  Inputs --> Backend{"Backend, auth, permission, or schema change?"}
+  Inputs --> License{"License limit exceeded?"}
+
+  LowRisk -->|Yes| AppOwner["Require App Owner"]
+  Sensitive -->|Yes| DataOwner["Require Data Owner"]
+  Sensitive -->|Restricted| SecurityA["Require Security Admin"]
+  External -->|Yes| SecurityB["Require Security Admin"]
+  External -->|Custom domain| ITAdmin["Require IT Admin"]
+  Backend -->|Code change| DevReview["Require Developer Reviewer"]
+  Backend -->|Destructive migration| ITData["Require IT Admin + Data Owner"]
+  License -->|Yes| Blocked["Block until license resolved"]
+
+  AppOwner --> Decision["Approval Decision"]
+  DataOwner --> Decision
+  SecurityA --> Decision
+  SecurityB --> Decision
+  ITAdmin --> Decision
+  DevReview --> Decision
+  ITData --> Decision
+  Blocked --> Decision
+  Decision --> Approved{"All required approvals passed?"}
+  Approved -->|Yes| Build["Queue build and deployment checks"]
+  Approved -->|No| Changes["Rejected or changes requested"]
+```
+
 #### 16.2.2 Approval Status Lifecycle
 
 | Status | Meaning | Allowed Transitions |
@@ -517,6 +635,41 @@ US-END-004: As an External User, I want to access approved apps through controll
 | deployment_failed | Deployment failed | submitted, rollback_requested |
 | rollback_requested | Rollback requires policy evaluation if data-impacting | in_review, rolling_back |
 | rolling_back | Rollback job running | rolled_back, rollback_failed |
+
+```mermaid
+stateDiagram-v2
+  [*] --> draft
+  draft --> submitted
+  draft --> cancelled
+  submitted --> in_review
+  submitted --> rejected
+  in_review --> changes_requested
+  in_review --> approved
+  in_review --> rejected
+  changes_requested --> submitted
+  changes_requested --> cancelled
+  approved --> queued_for_build
+  queued_for_build --> building
+  queued_for_build --> cancelled
+  building --> build_failed
+  building --> ready_to_deploy
+  build_failed --> submitted
+  build_failed --> cancelled
+  ready_to_deploy --> deploying
+  ready_to_deploy --> cancelled
+  deploying --> deployed
+  deploying --> deployment_failed
+  deployment_failed --> submitted
+  deployment_failed --> rollback_requested
+  deployed --> rollback_requested
+  rollback_requested --> in_review
+  rollback_requested --> rolling_back
+  rolling_back --> rolled_back
+  rolling_back --> rollback_failed
+  cancelled --> [*]
+  rejected --> [*]
+  rolled_back --> [*]
+```
 
 #### 16.2.3 Approval Audit Requirements
 
@@ -569,6 +722,41 @@ US-END-004: As an External User, I want to access approved apps through controll
 - ApprovalRequest must reference a target resource type and id, policy version, required reviewer roles, and final decision.
 - KnowledgeVersion and SkillVersion used by an AI task must be referenced by AI task/audit metadata.
 
+```mermaid
+erDiagram
+  PlatformUser ||--o{ ProjectMember : has
+  PlatformUser ||--o{ AppMember : has
+  PlatformUser ||--o{ SupportTicket : submits
+  PlatformUser ||--o{ AuditLog : causes
+
+  Project ||--|| ProjectPRD : owns
+  ProjectPRD ||--o{ PRDVersion : versions
+  Project ||--o{ PRDChangeRequest : receives
+  Project ||--o{ GeneratedApp : produces
+  Project ||--o{ Deployment : deploys
+
+  GeneratedApp ||--o{ AppRole : defines
+  GeneratedApp ||--o{ AppMember : grants
+  GeneratedApp ||--o{ AppInvitation : invites
+  GeneratedApp ||--o{ AppAccessRequest : receives
+  GeneratedApp ||--o{ DomainRequest : requests
+  GeneratedApp ||--o{ SupportTicket : receives
+  GeneratedApp ||--o{ Deployment : has
+  GeneratedApp ||--o{ AppManifest : versions
+
+  SupportTicket ||--o{ PRDChangeRequest : converts_to
+  ApprovalRequest }o--|| GeneratedApp : targets
+  ApprovalRequest }o--|| PRDChangeRequest : targets
+  Deployment }o--|| PRDVersion : references
+  Deployment }o--|| AppManifest : references
+
+  AIProvider ||--o{ AIModel : exposes
+  AIProvider ||--o{ AIAPIKey : secures
+  AIAPIKey ||--o{ AIUsageLog : records
+  KnowledgeItem ||--o{ KnowledgeVersion : versions
+  Skill ||--o{ SkillVersion : versions
+```
+
 #### 16.3.3 Required Status Enum Constraints
 
 - No destructive action may delete immutable history entities: PRDVersion, Deployment, AuditLog, ApprovalRequest decision snapshots, AIUsageLog.
@@ -606,6 +794,49 @@ packages/api-client/
 packages/ui/
 packages/types/
 packages/config/
+```
+
+```mermaid
+flowchart TB
+  subgraph Monorepo["EnterpriseVibeCodingPlatform Monorepo"]
+    PlatformApps["apps/admin-web + creator-web + app-store-pwa + platform-api"]
+    Packages["packages/auth-sdk + api-client + ui + types + config"]
+    Generated["generated-apps/{app-slug}"]
+  end
+
+  subgraph GeneratedApp["generated-apps/{app-slug}"]
+    Manifest["app.manifest.json"]
+    Frontend["frontend"]
+    Backend["backend"]
+    Prisma["prisma migrations"]
+    OpenAPI["openapi spec"]
+    Tests["tests"]
+  end
+
+  subgraph RuntimeContract["Runtime Contract"]
+    Container["App Container"]
+    Health["/health + /ready"]
+    Logs["Structured Logs"]
+    Metrics["Metrics Endpoint"]
+    Schema["Assigned PostgreSQL Schema"]
+    Route["Caddy Route / Domain"]
+  end
+
+  PlatformApps --> Packages
+  Generated --> Manifest
+  Generated --> Frontend
+  Generated --> Backend
+  Generated --> Prisma
+  Generated --> OpenAPI
+  Generated --> Tests
+  Backend --> Packages
+  Frontend --> Packages
+  Manifest --> Container
+  Container --> Health
+  Container --> Logs
+  Container --> Metrics
+  Container --> Schema
+  Route --> Container
 ```
 
 #### 16.4.2 App Manifest Required Fields
@@ -784,6 +1015,34 @@ Events must be named with `domain.action` and include `eventId`, `occurredAt`, `
 | AIGW-008 | Guardrail must run before and after AI call | P0 | Prompt checked before provider; response checked before user/app consumes output |
 | AIGW-009 | Provider errors must map to platform errors | P0 | timeout, rate_limited, quota_exceeded, auth_failed, provider_unavailable, policy_blocked are distinguishable |
 | AIGW-010 | Sensitive prompt policy must be enforceable | P0 | Confidential/Restricted prompts can require approval or block external model based on policy |
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Creator as Creator/Developer
+  participant API as Platform API
+  participant Guardrail as Guardrail Engine
+  participant Quota as Quota / License
+  participant Router as Scenario Router
+  participant Adapter as Provider Adapter
+  participant Provider as External AI Provider
+  participant Audit as Audit / Usage Log
+
+  Creator->>API: Submit prompt with project and scenario
+  API->>Guardrail: Check prompt and data policy
+  Guardrail-->>API: allow, warn, block, or require approval
+  API->>Quota: Check user/project/scenario/key quota
+  Quota-->>API: quota allowed or exceeded
+  API->>Router: Resolve provider, model, key, fallback, fail policy
+  Router-->>API: Deterministic route decision
+  API->>Adapter: Normalize AI request
+  Adapter->>Provider: Send external provider call
+  Provider-->>Adapter: Response, usage, or provider error
+  Adapter-->>API: Normalized result or mapped error
+  API->>Guardrail: Check AI response policy
+  API->>Audit: Record route, usage, decision, and errors
+  API-->>Creator: Task result or actionable error
+```
 
 ### 16.8 Operational Requirements
 
