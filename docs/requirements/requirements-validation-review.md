@@ -37,6 +37,7 @@ Scope: Requirement engineering completeness check before implementation
 | Operational requirements | `docs/requirements/production-blueprint-requirements.md` sections 8.1, 8.15, 16.8, 16.9 | Complete with explicit open decisions | Installer, backup, restore, upgrade, rollback, observability and license controls |
 | Traceability and test basis | `docs/requirements/requirements-traceability-matrix.md` | Complete | Requirement groups mapped to test cases and residual blocking decisions |
 | UX/UI requirements | `docs/design/ux-ui-requirements.md` and `docs/design/sprint-0-ui-spec.md` through `docs/design/sprint-8-ui-spec.md` | Complete for MVP design baseline | User flows, information architecture, screen inventory, layout rules, component requirements, responsive behavior, sprint-level UI specs and UI acceptance criteria |
+| Test strategy and sprint test plan | `docs/testing/mvp-test-strategy.md` and `docs/testing/mvp-sprint-test-plan.md` | Complete for MVP test baseline | Test levels, quality gates, critical journeys, evidence model, sprint-by-sprint test scope and regression growth |
 | Architectural decisions | `docs/architecture/ADR-001` through `ADR-005` | Complete for pre-implementation baseline | Deployment, provider adapter, generated runtime isolation, publish governance, auth broker strategy |
 | Implementation backlog | `docs/planning/production-implementation-backlog.md` | Complete | Phase backlog, P0/P1/P2 convention, MVP-aligned sprint recommendation |
 | MVP sprint plans | `docs/planning/sprint-0-plan.md` through `docs/planning/sprint-8-plan.md` | Complete | Each sprint has source alignment, backlog mapping, tests, DoD and demo script |
@@ -105,6 +106,7 @@ Requirement engineering is complete enough to start MVP implementation because:
 
 - The source PRD and MVP backlog are represented in requirement, architecture, backlog, roadmap and sprint artifacts.
 - UX/UI requirements have been added for the three surfaces and connected to Sprint 0-8 delivery.
+- Test strategy and sprint-level test planning have been added for Sprint 0-8.
 - MVP Sprint 0-8 preserves the source sprint order, source tasks and acceptance intent.
 - Production-only capabilities are not mixed into MVP P0 delivery; they are tracked as Sprint 9-14 extension work.
 - Every MVP must-have has requirement coverage, sprint coverage and test/DoD evidence.
