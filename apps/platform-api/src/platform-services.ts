@@ -2133,6 +2133,9 @@ export class KnowledgeGovernanceService {
     }
   ): KnowledgeRetrievalResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
+    if (actor.role === "creator" && !input.projectId) {
+      throw new ValidationError("Creator knowledge retrieval requires project context");
+    }
     const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
     const department = input.department ?? project?.targetDepartment;
     const appId = input.appId ?? project?.appId;
@@ -2445,6 +2448,9 @@ export class SkillGovernanceService {
     }
   ): SkillResolveResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
+    if (actor.role === "creator" && !input.projectId) {
+      throw new ValidationError("Creator skill resolution requires project context");
+    }
     const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
     const department = input.department ?? project?.targetDepartment;
     const appId = input.appId ?? project?.appId;

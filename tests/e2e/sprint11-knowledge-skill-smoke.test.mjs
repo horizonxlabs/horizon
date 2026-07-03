@@ -137,6 +137,20 @@ test("Sprint 11 API supports knowledge approval and scoped retrieval", () => {
   });
   assert.equal(retrieval.status, 200);
   assert.deepEqual(retrieval.body.data.matchedVersionIds, [version.body.data.id]);
+
+  const missingProjectContext = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/admin/knowledge/retrieve",
+    headers: creatorHeaders,
+    body: {
+      department: "HR Department",
+      agentRole: "frontend_developer",
+      scenario: "frontend_coding",
+      query: "WFH leave"
+    }
+  });
+  assert.equal(missingProjectContext.status, 422);
+  assert.equal(missingProjectContext.body.error.code, "VALIDATION_ERROR");
 });
 
 test("Sprint 11 API supports skill approval assignment resolution and protected admin routes", () => {
@@ -215,6 +229,19 @@ test("Sprint 11 API supports skill approval assignment resolution and protected 
   });
   assert.equal(resolved.status, 200);
   assert.equal(resolved.body.data.skillVersionId, version.body.data.id);
+
+  const missingProjectContext = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/admin/skills/resolve",
+    headers: creatorHeaders,
+    body: {
+      department: "HR Department",
+      agentRole: "frontend_developer",
+      scenario: "frontend_coding"
+    }
+  });
+  assert.equal(missingProjectContext.status, 422);
+  assert.equal(missingProjectContext.body.error.code, "VALIDATION_ERROR");
 });
 
 test("Sprint 11 workspace prompt returns governed knowledge and skill metadata", () => {

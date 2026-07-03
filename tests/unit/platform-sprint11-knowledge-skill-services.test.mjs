@@ -167,6 +167,17 @@ test("Sprint 11 knowledge library approves immutable versions and retrieves only
 
   assert.throws(
     () =>
+      services.knowledge.retrieve(creator, {
+        department: "Finance Department",
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding",
+        query: "payroll export"
+      }),
+    /Creator knowledge retrieval requires project context/
+  );
+
+  assert.throws(
+    () =>
       services.knowledge.retrieve(endUser, {
         projectId: project.id,
         appId: project.appId,
@@ -209,6 +220,16 @@ test("Sprint 11 skill library approves version contracts, resolves assignments a
         scenario: "frontend_coding"
       }),
     /No approved active skill/
+  );
+
+  assert.throws(
+    () =>
+      services.skills.resolve(creator, {
+        department: "HR Department",
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding"
+      }),
+    /Creator skill resolution requires project context/
   );
 });
 
