@@ -424,7 +424,434 @@ US-END-004: As an External User, I want to access approved apps through controll
 - [ ] Ticket-to-PRD flow is traceable.
 - [ ] Non-goals explicitly exclude multi-tenant SaaS, Local LLM requirement, Kubernetes v1, SLA, and multi-stack v1.
 
-## 16. Recommended Next Artifacts
+## 16. Implementation-Grade Requirement Addendum
+
+ส่วนนี้เติมรายละเอียดที่ต้องใช้ก่อนแตก architecture, backlog, test cases และ implementation tasks จริง โดยยังคงยึด baseline decisions ใน section 2
+
+### 16.1 Permission Matrix
+
+#### 16.1.1 Platform-Level Permissions
+
+| Action / Resource | Platform Admin | AI Admin | Security Admin | Developer | Creator | App Owner | Data Owner | End User |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| View system health | Allow | Allow | Allow | Deny | Deny | Deny | Deny | Deny |
+| Configure installer/setup | Allow | Deny | Deny | Deny | Deny | Deny | Deny | Deny |
+| Configure backup/restore | Allow | Deny | Deny | Deny | Deny | Deny | Deny | Deny |
+| Run restore drill | Allow | Deny | Deny | Deny | Deny | Deny | Deny | Deny |
+| Configure OIDC/SAML | Allow | Deny | Allow read-only | Deny | Deny | Deny | Deny | Deny |
+| Manage platform users/groups | Allow | Deny | Allow read-only | Deny | Deny | Deny | Deny | Deny |
+| Manage AI providers/models/API keys | Allow | Allow | Allow read-only | Deny | Deny | Deny | Deny | Deny |
+| View API key secret after save | Deny | Deny | Deny | Deny | Deny | Deny | Deny | Deny |
+| Rotate/revoke AI key | Allow | Allow | Allow if security incident | Deny | Deny | Deny | Deny | Deny |
+| Configure guardrail policy | Allow | Allow for AI policy | Allow | Deny | Deny | Deny | Allow read-only for data policies | Deny |
+| View audit logs | Allow | Allow scoped AI logs | Allow | Allow own project events | Allow own project events | Allow own app events | Allow data-scope events | Allow own events |
+| Configure license | Allow | Deny | Deny | Deny | Deny | Deny | Deny | Deny |
+| Configure global domains | Allow | Deny | Allow security review | Deny | Deny | Deny | Deny | Deny |
+
+#### 16.1.2 Project and App Permissions
+
+| Action / Resource | Project Owner | Project Editor | Project Reviewer | Project Viewer | Developer | App Owner | End User | External User |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| View project | Allow | Allow | Allow | Allow | Allow if assigned | Allow if linked app | Deny | Deny |
+| Create project | Allow if Creator | Allow if Creator | Deny | Deny | Allow if Creator/Developer | Deny | Deny | Deny |
+| Edit project settings | Allow | Allow limited | Deny | Deny | Allow technical settings if assigned | Allow app settings | Deny | Deny |
+| Generate PRD draft | Allow | Allow | Deny | Deny | Allow | Deny | Deny | Deny |
+| Confirm PRD baseline | Allow | Deny unless delegated | Allow approve/reject | Deny | Deny unless delegated | Allow if App Owner | Deny | Deny |
+| Create PRD change request | Allow | Allow | Allow comment | Deny | Allow | Allow from ticket | Deny | Deny |
+| Prompt AI | Allow | Allow | Deny | Deny | Allow | Deny | Deny | Deny |
+| View live preview | Allow | Allow | Allow | Allow | Allow | Allow | Deny | Deny |
+| View database schema/table | Allow | Allow | Allow read-only | Allow read-only | Allow | Allow read-only | Deny | Deny |
+| Run raw SQL | Deny | Deny | Deny | Deny | Deny by default | Deny | Deny | Deny |
+| Edit generated code | Deny unless Developer | Deny unless Developer | Deny | Deny | Allow if assigned | Deny unless Developer | Deny | Deny |
+| Restore frontend version | Allow | Allow if delegated | Review only | Deny | Allow if assigned | Allow if delegated | Deny | Deny |
+| Manage app roles | Allow if App Owner | Deny | Deny | Deny | Deny | Allow | Deny | Deny |
+| Invite internal user | Allow if App Owner | Deny | Deny | Deny | Deny | Allow | Deny | Deny |
+| Invite external user | Requires policy approval | Deny | Deny | Deny | Deny | Requires policy approval | Deny | Deny |
+| Submit publish request | Allow | Allow if delegated | Deny | Deny | Allow if assigned | Allow | Deny | Deny |
+| Approve publish request | Policy-based | Deny | Allow review | Deny | Developer review only | Policy-based | Deny | Deny |
+| Open published app | If member | If member | If member | If member | If member | If member | Allow if member/visible | Allow if approved |
+| Submit ticket | Allow if app user | Allow if app user | Allow if app user | Allow if app user | Allow if app user | Allow if app user | Allow | Allow if approved |
+
+#### 16.1.3 Permission Enforcement Rules
+
+- Backend permission guard is mandatory for every protected API route; frontend guards are only UX hints.
+- All deny decisions for protected resources must be auditable when the attempted action is security-sensitive.
+- A user may hold multiple roles; effective permission is the union of allows minus explicit policy blocks.
+- Data classification policy can override role permissions. Example: App Owner cannot approve Restricted external access without Security Admin and Data Owner.
+- Break-glass admin permissions are logged with elevated severity and require a reason field.
+
+### 16.2 Policy-Based Approval Rules
+
+#### 16.2.1 Publish Approval Decision Table
+
+| Condition | Required Reviewers | Minimum Outcome |
+| --- | --- | --- |
+| Internal app, Internal data, frontend-only change, no public domain | App Owner | App Owner approval |
+| Internal app, Confidential data | App Owner + Data Owner | Both approve |
+| Restricted data | App Owner + Data Owner + Security Admin | All approve |
+| Public or external access enabled | App Owner + Security Admin | Both approve |
+| Public/custom domain requested | IT Admin + Security Admin | Both approve after DNS/TLS/security checks |
+| Backend code change | Developer Reviewer + App Owner | Code review passes and App Owner approves |
+| Auth/permission code change | Developer Reviewer + Security Admin | Security review passes |
+| Database schema additive migration | Developer Reviewer + App Owner | Migration dry-run passes |
+| Database destructive migration | Developer Reviewer + IT Admin + Data Owner | Backup verified, migration dry-run passes, all approve |
+| AI skill/knowledge dependency changed since last publish | App Owner + relevant Skill/Knowledge approver | Dependency version approved |
+| License limit exceeded | Platform Admin | Publish blocked until license state resolves |
+
+#### 16.2.2 Approval Status Lifecycle
+
+| Status | Meaning | Allowed Transitions |
+| --- | --- | --- |
+| draft | Request is being prepared | submitted, cancelled |
+| submitted | Request awaits policy evaluation | in_review, rejected |
+| in_review | One or more reviewers must decide | changes_requested, approved, rejected |
+| changes_requested | Requester must revise and resubmit | submitted, cancelled |
+| approved | All required reviewers approved | queued_for_build, cancelled |
+| rejected | Request cannot proceed without new request | none |
+| queued_for_build | Build/deployment job waiting | building, cancelled |
+| building | Build/checks are running | build_failed, ready_to_deploy |
+| build_failed | Build/checks failed | submitted, cancelled |
+| ready_to_deploy | Deployment can start | deploying, cancelled |
+| deploying | Deployment job running | deployed, deployment_failed |
+| deployed | Production deployment completed | rollback_requested |
+| deployment_failed | Deployment failed | submitted, rollback_requested |
+| rollback_requested | Rollback requires policy evaluation if data-impacting | in_review, rolling_back |
+| rolling_back | Rollback job running | rolled_back, rollback_failed |
+
+#### 16.2.3 Approval Audit Requirements
+
+- Every approval decision must store reviewer, role, decision, reason/comment, timestamp, policy version, and request snapshot.
+- Policy evaluation output must be stored with the request so later policy changes do not rewrite historical decisions.
+- Changes requested must identify required fix categories: PRD, code, data, security, deployment, domain, license, or documentation.
+
+### 16.3 Domain Model and Data Dictionary
+
+#### 16.3.1 Core Entities
+
+| Entity | Purpose | Owner | Key Status Values | Retention |
+| --- | --- | --- | --- | --- |
+| PlatformUser | Central user identity mapped from local/SSO | Platform Admin | active, inactive, invited, suspended | Account lifetime + audit retention |
+| PlatformGroup | Group from local/SSO mapping | Platform Admin | active, inactive | Account lifetime |
+| PlatformRole | Global platform capability role | Platform Admin | active, deprecated | Account lifetime |
+| Project | Creator workspace and app source-of-truth boundary | Project Owner | draft, active, published, archived | Project lifetime |
+| ProjectMember | User role within a project | Project Owner | active, removed | Project lifetime + audit retention |
+| ProjectPRD | PRD container for a project | Project Owner | draft, baseline, active, archived | Project lifetime |
+| PRDVersion | Immutable PRD version snapshot | Project Owner | draft, baseline, approved, rejected | Project lifetime |
+| PRDChangeRequest | Proposed requirement change from prompt/ticket/manual input | Project Owner | draft, pending, approved, rejected, implemented | Project lifetime |
+| GeneratedApp | Published or draft app linked to project | App Owner | draft, published, disabled, archived | App lifetime |
+| AppManifest | Versioned app runtime/access/deployment descriptor | Platform | active, superseded | App lifetime |
+| AppRole | App-specific role | App Owner | active, disabled | App lifetime |
+| AppMember | User membership in app | App Owner | active, suspended, expired | App lifetime + audit retention |
+| AppInvitation | Invite to internal/external user or group | App Owner | pending, accepted, expired, revoked | 2 years default |
+| AppAccessRequest | Request from End User for app access | App Owner | pending, approved, rejected, cancelled | 2 years default |
+| Deployment | Build/deploy record for app version | IT Admin | pending, running, success, failed, rolled_back | App lifetime |
+| DomainRequest | Request for internal/custom/public app domain | IT Admin | pending, approved, rejected, active, disabled, failed | App lifetime |
+| SupportTicket | End User feedback/bug/access/feature request | App Owner | open, in_review, planned, in_progress, resolved, closed, rejected | App lifetime or configured retention |
+| ApprovalRequest | Governance approval workflow record | Policy Engine | draft, submitted, in_review, approved, rejected, cancelled | Audit retention minimum |
+| AuditLog | Immutable security/operation event | Platform Admin | recorded | Configurable, default 1 year |
+| KnowledgeItem | Knowledge source container | Knowledge Owner | draft, active, deprecated, archived | Configurable |
+| KnowledgeVersion | Immutable indexed knowledge version | Knowledge Owner | pending, approved, rejected, active, superseded | Configurable |
+| Skill | Agent skill container | AI Admin | draft, active, disabled, deprecated | Configurable |
+| SkillVersion | Immutable skill instruction/schema version | AI Admin | pending, approved, rejected, active, superseded | Configurable |
+| AIProvider | External provider configuration | AI Admin | active, disabled, error | Platform lifetime |
+| AIModel | Model exposed by provider | AI Admin | active, disabled, deprecated | Platform lifetime |
+| AIAPIKey | Encrypted provider credential metadata | AI Admin | active, disabled, revoked, expired | Platform lifetime + audit |
+| AIUsageLog | AI request usage record | AI Admin | success, failed, blocked | Configurable |
+| License | Installed license state | Platform Admin | active, warning, grace, expired, suspended | License lifetime + audit |
+| Notification | In-app/email notification record | Platform | unread, read, archived | Configurable |
+
+#### 16.3.2 Required Relationships
+
+- PlatformUser has many ProjectMembers, AppMembers, AppInvitations, SupportTickets, AuditLogs.
+- Project has one current ProjectPRD and many PRDVersions, PRDChangeRequests, Deployments, FrontendCheckpoints, GeneratedApps.
+- GeneratedApp belongs to one Project and has many AppRoles, AppMembers, AppInvitations, AppAccessRequests, DomainRequests, Deployments, SupportTickets.
+- Deployment must reference GeneratedApp, Project, PRDVersion, AppManifest version, frontend checkpoint, git commit or artifact reference, database migration version.
+- ApprovalRequest must reference a target resource type and id, policy version, required reviewer roles, and final decision.
+- KnowledgeVersion and SkillVersion used by an AI task must be referenced by AI task/audit metadata.
+
+#### 16.3.3 Required Status Enum Constraints
+
+- No destructive action may delete immutable history entities: PRDVersion, Deployment, AuditLog, ApprovalRequest decision snapshots, AIUsageLog.
+- Archived Project/App must be read-only except restore operations by authorized role.
+- Disabled App must not be launchable from App Store but its data and audit remain retained.
+- Revoked/expired AIAPIKey must never be selected by routing.
+
+### 16.4 Generated App Contract
+
+#### 16.4.1 Monorepo Layout Contract
+
+Every generated app must have a deterministic boundary:
+
+```text
+generated-apps/{app-slug}/
+  app.manifest.json
+  package.json
+  frontend/
+  backend/
+  prisma/
+  openapi/
+  tests/
+  README.md
+```
+
+The platform packages remain outside generated app folders:
+
+```text
+apps/admin-web/
+apps/creator-web/
+apps/app-store-pwa/
+apps/platform-api/
+packages/auth-sdk/
+packages/api-client/
+packages/ui/
+packages/types/
+packages/config/
+```
+
+#### 16.4.2 App Manifest Required Fields
+
+| Field | Requirement |
+| --- | --- |
+| appId | Stable unique id generated by platform |
+| projectId | Source project id |
+| slug | Unique route-safe slug |
+| name | Human-readable app name |
+| ownerUserId | App owner |
+| creatorUserId | Original creator |
+| dataClassification | Public, Internal, Confidential, Restricted |
+| accessMode | private, organization, group_restricted, public, external_shared |
+| roles | App-level roles |
+| permissions | App-level permission keys |
+| auth.provider | Must be `platform` for v1 generated apps |
+| auth.ssoRequired | Boolean policy result |
+| domain.internalPath | Default route under `/apps/{slug}` |
+| domain.customDomains | Approved custom domains |
+| prd.currentVersionId | Current PRD version |
+| frontend.currentCheckpointId | Current frontend checkpoint |
+| backend.apiBasePath | App API base path |
+| database.schemaName | PostgreSQL schema assigned to app |
+| deployment.currentDeploymentId | Current deployment |
+| generatedStack | React/Vite/TypeScript + NestJS/Prisma |
+| manifestVersion | Incrementing manifest version |
+
+#### 16.4.3 Container Runtime Contract
+
+| Interface | Requirement |
+| --- | --- |
+| Health endpoint | Every app container exposes `/health` returning status, appId, version, dependencies |
+| Readiness endpoint | Every app container exposes `/ready` and returns ready only after migrations/config loaded |
+| Metrics endpoint | Every app exposes metrics in platform-compatible format when enabled |
+| Logs | Logs must be structured JSON with appId, deploymentId, requestId, severity |
+| Environment variables | Secrets injected by platform; app must not persist secrets in code |
+| Auth | App validates platform session/token using Platform Auth SDK |
+| Permissions | App enforces app permission keys server-side |
+| Database | App connects only to assigned schema with least-privilege DB user |
+| OpenAPI | Backend must publish OpenAPI spec for generated APIs |
+| Migrations | Migrations must be versioned, dry-runnable, and linked to deployment |
+
+#### 16.4.4 Generated Artifact Requirements
+
+- Frontend pages, backend APIs, Prisma schema, migrations, app manifest, role/permission matrix, OpenAPI spec, README, tests, deployment config, and PRD link must be generated or maintained for every app.
+- Generated code must not create independent user/password tables.
+- Generated code must not call external AI providers directly; AI calls go through platform AI Gateway.
+- Generated app tests must include auth required, permission denied, happy path, and at least one app-specific workflow test.
+
+### 16.5 API and Event Contract Requirements
+
+#### 16.5.1 API Response Contract
+
+All platform APIs must use a consistent response envelope:
+
+```json
+{
+  "success": true,
+  "data": {},
+  "message": "OK",
+  "meta": {}
+}
+```
+
+Error response:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "You do not have permission",
+    "details": {}
+  }
+}
+```
+
+#### 16.5.2 API Groups Required for v1
+
+| API Group | Required Scope |
+| --- | --- |
+| Auth | session, current user, logout, role/permission claims |
+| Admin System | health, services, installer report, backup, restore, upgrade, license |
+| Admin AI | providers, models, API keys, scenario routes, quotas, usage logs |
+| Admin Guardrail | rules, AI policies, test prompt, events |
+| Admin Identity | users, groups, platform roles, group mapping |
+| Admin Domain | platform domains, app domain requests, DNS/TLS checks |
+| Knowledge | items, versions, approvals, indexing, search |
+| Skills | skills, versions, approvals, assignments, test |
+| Creator Projects | project CRUD, members, settings, archive/restore |
+| Creator PRD | PRD generate, versions, change requests, approvals, export |
+| Creator AI Workspace | prompt, task progress, preview, refresh, token usage |
+| Creator Database | schema, tables, records, relationships, migrations |
+| Creator Frontend Versions | checkpoints, compare, restore |
+| Creator App Users | roles, members, invitations, access requests |
+| Creator Publish | publish requests, approval status, deployments, rollback |
+| Store Apps | visible apps, app detail, open app, favorites |
+| Store Access | request access, status tracking |
+| Store Tickets | tickets, comments, attachments, status |
+| Notifications | list, mark read, delivery preferences |
+| Audit | query audit logs with role-based filters |
+
+#### 16.5.3 Event Taxonomy
+
+Events must be named with `domain.action` and include `eventId`, `occurredAt`, `actorUserId`, `resourceType`, `resourceId`, `severity`, `metadata`, and `requestId`.
+
+| Event | Severity Default | Trigger |
+| --- | --- | --- |
+| auth.login_succeeded | info | User logs in |
+| auth.login_failed | warning | Login fails |
+| auth.break_glass_used | critical | Local emergency admin login |
+| user.role_changed | high | Platform/project/app role changes |
+| ai.provider_created | high | AI provider added |
+| ai.api_key_created | critical | API key created |
+| ai.api_key_rotated | critical | API key rotated |
+| ai.request_started | info | Prompt accepted for AI call |
+| ai.request_failed | warning | Provider call fails |
+| ai.quota_exceeded | warning | Quota blocks request |
+| guardrail.prompt_blocked | high | Guardrail blocks prompt |
+| guardrail.policy_changed | high | Guardrail rule/policy changes |
+| project.created | info | Project created |
+| prd.baseline_confirmed | high | PRD baseline confirmed |
+| prd.change_requested | info | PRD change request created |
+| prd.change_approved | high | PRD change approved |
+| app.generated | info | App artifacts generated |
+| app.invitation_sent | info | App invite sent |
+| app.access_requested | info | Access request submitted |
+| app.access_approved | high | Access approved |
+| app.published | high | App published |
+| app.disabled | high | App disabled |
+| deployment.started | info | Deployment starts |
+| deployment.succeeded | info | Deployment succeeds |
+| deployment.failed | high | Deployment fails |
+| deployment.rollback_started | high | Rollback starts |
+| domain.requested | info | Domain requested |
+| domain.approved | high | Domain approved |
+| ticket.created | info | Ticket submitted |
+| ticket.status_changed | info | Ticket status updated |
+| ticket.converted_to_prd_change | high | Ticket linked to PRD change |
+| backup.started | info | Backup starts |
+| backup.failed | critical | Backup fails |
+| restore.started | critical | Restore starts |
+| restore.succeeded | critical | Restore succeeds |
+| license.warning | warning | License near limit/expiry |
+| license.enforcement_applied | high | License blocks or restricts action |
+
+### 16.6 Security and Privacy Requirements
+
+| ID | Requirement | Priority | Acceptance Criteria |
+| --- | --- | --- | --- |
+| SEC-001 | All web traffic must use TLS in production | P0 | HTTP routes redirect or are blocked except local setup endpoint when explicitly enabled |
+| SEC-002 | Secrets must be encrypted at rest | P0 | AI keys, SSO secrets, SMTP credentials, storage keys, license secrets are encrypted |
+| SEC-003 | Secrets must be redacted from logs and UI | P0 | Logs/UI never show full secret; only masked fingerprint or last 4 characters |
+| SEC-004 | API keys must support rotation and revoke | P0 | Active key can be rotated without exposing old secret; revoked key cannot be routed |
+| SEC-005 | Audit logs must be tamper-evident | P1 | Audit record includes hash chain or equivalent integrity mechanism |
+| SEC-006 | Session policy must be configurable | P0 | Admin configures idle timeout, absolute timeout, remember-me policy, forced logout |
+| SEC-007 | Break-glass login must require reason | P0 | Local admin fallback requires reason and generates critical audit event |
+| SEC-008 | Backup encryption key handling must be defined | P0 | Backup encryption uses configured key source and restore requires authorized access |
+| SEC-009 | File uploads must be scanned/validated | P0 | Knowledge/ticket attachments enforce size/type policy and malware scan hook or quarantine workflow |
+| SEC-010 | Public/external apps must pass security checklist | P0 | Publish cannot proceed until auth, permissions, domain, TLS, data classification, and audit checks pass |
+| SEC-011 | Logs must avoid sensitive data leakage | P0 | Prompt excerpts, ticket text, and request payload logs are redacted according to data classification |
+| SEC-012 | Admin actions must require CSRF/session protection | P0 | Browser-based state changes protected with secure session strategy |
+
+### 16.7 AI Gateway Behavior Requirements
+
+| ID | Requirement | Priority | Acceptance Criteria |
+| --- | --- | --- | --- |
+| AIGW-001 | Provider adapter contract must be stable | P0 | Each adapter implements model list, completion request, streaming optional, usage parsing, error mapping |
+| AIGW-002 | Scenario routing must be deterministic | P0 | Same scenario/policy input resolves to logged provider/model/key route |
+| AIGW-003 | Fallback must respect fail policy | P0 | fail_closed blocks when all routes fail; fail_open only allowed for explicitly safe scenarios |
+| AIGW-004 | Quota must be checked before provider call | P0 | User/project/scenario/key quota exhaustion blocks call before external request |
+| AIGW-005 | Token/cost usage must be recorded after call | P0 | Input/output/total tokens and estimated cost are stored when provider returns usage |
+| AIGW-006 | Rate limit and timeout must be configurable | P0 | Per provider/key/scenario rate limits and timeouts can be set |
+| AIGW-007 | Retry policy must avoid duplicate unsafe actions | P0 | Requirement/planning calls may retry idempotently; action execution requires idempotency key |
+| AIGW-008 | Guardrail must run before and after AI call | P0 | Prompt checked before provider; response checked before user/app consumes output |
+| AIGW-009 | Provider errors must map to platform errors | P0 | timeout, rate_limited, quota_exceeded, auth_failed, provider_unavailable, policy_blocked are distinguishable |
+| AIGW-010 | Sensitive prompt policy must be enforceable | P0 | Confidential/Restricted prompts can require approval or block external model based on policy |
+
+### 16.8 Operational Requirements
+
+| ID | Requirement | Priority | Acceptance Criteria |
+| --- | --- | --- | --- |
+| OPS-001 | Minimum supported hardware profile must be published | P0 | Installer validates CPU, RAM, disk, OS, Docker, Compose versions against supported profile |
+| OPS-002 | RPO/RTO must be defined per deployment | P0 | Default RPO <= 24h for full backup and PITR according to WAL retention; default RTO target documented |
+| OPS-003 | Restore drill frequency must be configurable | P0 | Admin can schedule or manually run restore drill and store result report |
+| OPS-004 | Log retention must be configurable | P0 | Platform logs, app logs, audit logs, AI usage logs have explicit retention settings |
+| OPS-005 | Upgrade compatibility checks must run before upgrade | P0 | Check database migration compatibility, disk space, license validity, backup success, service health |
+| OPS-006 | Rollback window must be documented per release | P0 | Upgrade report states whether rollback is supported and until when |
+| OPS-007 | Generated app health must be monitored separately | P0 | Admin can see per-app container health, last deployment, route status, error state |
+| OPS-008 | Queue/backpressure state must be visible | P1 | Build, AI task, deployment, indexing, notification queues expose depth and failure count |
+| OPS-009 | Offline behavior for online private server must be graceful | P0 | If internet/provider unavailable, system preserves data and shows actionable degraded status |
+| OPS-010 | Storage abstraction must support MinIO and S3-compatible storage | P0 | Same API supports backup, attachments, screenshots, knowledge files, generated artifacts |
+
+### 16.9 License Enforcement Requirements
+
+| License Condition | User Experience | Enforcement |
+| --- | --- | --- |
+| License valid | Normal operation | No restrictions |
+| Expiry within warning window | Admin warning and notification | No restriction |
+| License expired within grace period | Admin warning, creator warning | Existing apps continue; new app creation/publish may be restricted by policy |
+| License expired after grace period | Admin critical warning | Existing apps continue read/run; block new publish, AI generation, new external invites unless policy allows |
+| Seat limit reached | Admin/Creator warning | Block inviting/activating additional users beyond entitlement |
+| App limit reached | Admin/Creator warning | Block new app creation or publish beyond entitlement |
+| AI usage entitlement exceeded | Creator/Admin warning | Block or throttle AI calls according to license policy |
+| Online validation unavailable | Admin warning | Use signed offline license cache until offline validity window expires |
+| License tamper detected | Admin critical warning | Block privileged creation/publish/AI actions, preserve app runtime and data |
+
+License enforcement must never delete projects, apps, generated code, databases, audit logs, tickets, knowledge, skills, or backups.
+
+### 16.10 QA Acceptance Scenario Set
+
+These scenarios are required before a production release candidate can be accepted.
+
+#### 16.10.1 Governance and Permission
+
+- Given a Creator attempts to view AI API key secrets, when the Creator opens Admin AI settings or calls the API, then access is denied and no secret material is returned.
+- Given a Developer edits backend permission code, when publish is requested, then Developer Reviewer and Security Admin approval are required.
+- Given an App Owner requests external access for a Restricted app, when policy is evaluated, then App Owner, Data Owner, and Security Admin approvals are required.
+- Given an End User has no app membership, group access, organization access, invite, or pending request, when opening App Store, then the app is not visible.
+
+#### 16.10.2 AI and Guardrail
+
+- Given a prompt matches a banned keyword rule, when Creator submits prompt, then the prompt is blocked before provider call and `guardrail.prompt_blocked` is logged.
+- Given the primary AI provider times out and fallback exists, when scenario policy allows fallback, then fallback provider is used and routing decision is logged.
+- Given user quota is exhausted, when Creator submits prompt, then AI call is blocked before external provider request.
+
+#### 16.10.3 Generated App Runtime
+
+- Given a published app is deployed, when health dashboard loads, then the app container health, route, deployment id, PRD version, manifest version, and schema name are visible.
+- Given App A database credentials are used, when attempting to access App B schema, then access is denied.
+- Given generated app receives a request without valid platform auth, when protected API route is called, then request is denied server-side.
+
+#### 16.10.4 PRD and Feedback Loop
+
+- Given an End User submits a bug ticket, when Creator converts it to PRD change request, then the ticket links to the change request and audit event is recorded.
+- Given PRD change is approved, when deployment is created, then deployment references the new PRD version and app manifest version.
+
+#### 16.10.5 Operations
+
+- Given backup schedule is configured, when backup job runs, then backup artifact is encrypted, stored in configured object storage, and result is logged.
+- Given restore drill is run, when validation completes, then report shows pass/fail and restored dataset timestamp.
+- Given upgrade fails health check, when rollback command is executed, then previous version is restored and audit event records rollback.
+- Given license expires beyond grace period, when Creator attempts new publish, then publish is blocked while existing published apps remain accessible.
+
+## 17. Recommended Next Artifacts
 
 1. Architecture Decision Record set:
    - ADR-001 Single Enterprise Private Server Deployment
