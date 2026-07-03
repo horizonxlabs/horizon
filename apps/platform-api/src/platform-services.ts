@@ -645,6 +645,95 @@ export interface AuditFilterInput {
   dateTo?: string;
 }
 
+export type AuthProviderType = "oidc" | "saml" | "keycloak";
+export type AuthProviderStatus = "draft" | "ready" | "active" | "disabled";
+export type PolicyClassification = PlatformProject["dataSensitivity"];
+
+export interface AuthProviderConfig {
+  id: string;
+  type: AuthProviderType;
+  name: string;
+  status: AuthProviderStatus;
+  issuerUrl?: string;
+  entityId?: string;
+  ssoUrl?: string;
+  clientId?: string;
+  clientSecretMasked?: string;
+  clientSecretFingerprint?: string;
+  certificateFingerprint?: string;
+  scopes?: string[];
+  groupRoleMapping: Record<string, PlatformRole[]>;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface KeycloakClientDefault {
+  clientId: string;
+  purpose: string;
+  redirectUris: string[];
+}
+
+export interface KeycloakDefaults {
+  strategy: "keycloak_broker_default";
+  realm: string;
+  baseUrl: string;
+  clients: KeycloakClientDefault[];
+  defaultGroups: Array<{ group: string; platformRoles: PlatformRole[] }>;
+}
+
+export interface DirectIdpConstraints {
+  allowed: boolean;
+  requiresSecurityReview: boolean;
+  boundary: string;
+  constraints: string[];
+}
+
+export interface PlatformAuthClaims {
+  subject: string;
+  email: string;
+  name: string;
+  groups: string[];
+  platformRoles: PlatformRole[];
+  appRoles: Record<string, string[]>;
+}
+
+export interface PlatformAuthSession {
+  id: string;
+  providerId: string;
+  providerType: AuthProviderType;
+  token: string;
+  claims: PlatformAuthClaims;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface GeneratedAppSessionValidation {
+  allowed: boolean;
+  reason?: "invalid_session" | "missing_app_role";
+  claims?: PlatformAuthClaims;
+}
+
+export interface BreakGlassSession {
+  id: string;
+  userId: string;
+  reason: string;
+  ticketRef?: string;
+  token: string;
+  ttlMinutes: number;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface PolicyTemplate {
+  id: string;
+  classification: PolicyClassification;
+  label: string;
+  requiredReviewers: string[];
+  requiredChecks: string[];
+  publishAllowed: boolean;
+  externalExposureAllowed: boolean;
+}
+
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
@@ -876,6 +965,332 @@ export class MockAuthService {
     if (!roles.includes(user.role)) {
       throw new PermissionError(`Role ${user.role} cannot access this resource`);
     }
+  }
+}
+
+export class PlatformAuthSsoService {
+  private readonly providers: AuthProviderConfig[] = [];
+  private readonly sessions: PlatformAuthSession[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService
+  ) {}
+
+  createOidcProvider(
+    actor: PlatformUser,
+    input: {
+      name: string;
+      issuerUrl: string;
+      clientId: string;
+      clientSecret: string;
+      scopes: string[];
+      groupRoleMapping: Record<string, PlatformRole[]>;
+    }
+  ): AuthProviderConfig {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.name.trim()) throw new ValidationError("OIDC provider name is required");
+    if (!input.issuerUrl.trim()) throw new ValidationError("OIDC issuer URL is required");
+    if (!input.clientId.trim()) throw new ValidationError("OIDC client ID is required");
+    if (!input.clientSecret.trim()) throw new ValidationError("OIDC client secret is required");
+
+    const provider: AuthProviderConfig = {
+      id: `authprov_oidc_${String(this.providers.filter((candidate) => candidate.type === "oidc").length + 1).padStart(3, "0")}`,
+      type: "oidc",
+      name: input.name.trim(),
+      status: "ready",
+      issuerUrl: input.issuerUrl.trim(),
+      clientId: input.clientId.trim(),
+      clientSecretMasked: this.maskAuthSecret(input.clientSecret),
+      clientSecretFingerprint: fingerprintSecret(input.clientSecret),
+      scopes: [...input.scopes],
+      groupRoleMapping: this.normalizeMapping(input.groupRoleMapping),
+      createdByUserId: actor.id,
+      createdAt: new Date().toISOString()
+    };
+
+    this.providers.push(provider);
+    this.audit.record({
+      actorId: actor.id,
+      action: "auth.oidc_provider.created",
+      resourceType: "auth_provider_config",
+      resourceId: provider.id,
+      severity: "high",
+      metadata: { providerType: provider.type, issuerUrl: provider.issuerUrl, fingerprint: provider.clientSecretFingerprint }
+    });
+    return provider;
+  }
+
+  createSamlProvider(
+    actor: PlatformUser,
+    input: {
+      name: string;
+      entityId: string;
+      ssoUrl: string;
+      certificate: string;
+      groupRoleMapping: Record<string, PlatformRole[]>;
+    }
+  ): AuthProviderConfig {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.name.trim()) throw new ValidationError("SAML provider name is required");
+    if (!input.entityId.trim()) throw new ValidationError("SAML entity ID is required");
+    if (!input.ssoUrl.trim()) throw new ValidationError("SAML SSO URL is required");
+    if (!input.certificate.trim()) throw new ValidationError("SAML certificate is required");
+
+    const provider: AuthProviderConfig = {
+      id: `authprov_saml_${String(this.providers.filter((candidate) => candidate.type === "saml").length + 1).padStart(3, "0")}`,
+      type: "saml",
+      name: input.name.trim(),
+      status: "ready",
+      entityId: input.entityId.trim(),
+      ssoUrl: input.ssoUrl.trim(),
+      certificateFingerprint: fingerprintSecret(input.certificate),
+      groupRoleMapping: this.normalizeMapping(input.groupRoleMapping),
+      createdByUserId: actor.id,
+      createdAt: new Date().toISOString()
+    };
+
+    this.providers.push(provider);
+    this.audit.record({
+      actorId: actor.id,
+      action: "auth.saml_provider.created",
+      resourceType: "auth_provider_config",
+      resourceId: provider.id,
+      severity: "high",
+      metadata: { providerType: provider.type, entityId: provider.entityId, fingerprint: provider.certificateFingerprint }
+    });
+    return provider;
+  }
+
+  listProviders(actor: PlatformUser): AuthProviderConfig[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [this.keycloakProvider(actor.id), ...this.providers];
+  }
+
+  getKeycloakDefaults(actor: PlatformUser): KeycloakDefaults {
+    this.auth.requireRole(actor, ["admin"]);
+    return {
+      strategy: "keycloak_broker_default",
+      realm: "evcp",
+      baseUrl: "http://keycloak:8080/realms/evcp",
+      clients: [
+        { clientId: "evcp-platform-api", purpose: "Platform API token validation", redirectUris: ["http://127.0.0.1:4100/*"] },
+        { clientId: "evcp-admin-web", purpose: "Admin Console login", redirectUris: ["http://127.0.0.1:4100/*"] },
+        { clientId: "evcp-creator-web", purpose: "Creator Workspace login", redirectUris: ["http://127.0.0.1:4101/*"] },
+        { clientId: "evcp-generated-app", purpose: "Generated app Platform Auth SDK", redirectUris: ["/apps/*"] }
+      ],
+      defaultGroups: [
+        { group: "evcp-admins", platformRoles: ["admin"] },
+        { group: "evcp-creators", platformRoles: ["creator"] },
+        { group: "evcp-users", platformRoles: ["end_user"] }
+      ]
+    };
+  }
+
+  getDirectIdpConstraints(actor: PlatformUser): DirectIdpConstraints {
+    this.auth.requireRole(actor, ["admin"]);
+    return {
+      allowed: true,
+      requiresSecurityReview: true,
+      boundary: "Direct IdP integrations must still terminate into the Platform Auth session and claims contract.",
+      constraints: [
+        "Generated apps must never integrate directly with external IdP.",
+        "OIDC/SAML claim mapping must match Keycloak-backed Platform Auth claims.",
+        "Secrets and certificates must be masked and fingerprinted in API/UI responses.",
+        "Security Admin review is required before activating direct IdP mode."
+      ]
+    };
+  }
+
+  simulateLogin(
+    actor: PlatformUser,
+    input: {
+      providerId: string;
+      subject: string;
+      email: string;
+      name: string;
+      groups: string[];
+      appRoles?: Record<string, string[]>;
+    }
+  ): PlatformAuthSession {
+    this.auth.requireRole(actor, ["admin"]);
+    const provider = this.requireProvider(input.providerId);
+    if (!input.subject.trim()) throw new ValidationError("Auth subject is required");
+    if (!input.email.trim()) throw new ValidationError("Auth email is required");
+
+    const issuedAt = new Date();
+    const claims: PlatformAuthClaims = {
+      subject: input.subject.trim(),
+      email: input.email.trim(),
+      name: input.name.trim() || input.email.trim(),
+      groups: [...input.groups],
+      platformRoles: this.mapPlatformRoles(provider.groupRoleMapping, input.groups),
+      appRoles: input.appRoles ?? {}
+    };
+    const session: PlatformAuthSession = {
+      id: `psess_${String(this.sessions.length + 1).padStart(4, "0")}`,
+      providerId: provider.id,
+      providerType: provider.type,
+      token: `psess_${fingerprintSecret(`${provider.id}:${claims.subject}:${this.sessions.length + 1}`).slice(3)}`,
+      claims,
+      issuedAt: issuedAt.toISOString(),
+      expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString()
+    };
+
+    this.sessions.push(session);
+    this.audit.record({
+      actorId: actor.id,
+      action: "auth.sso_login.succeeded",
+      resourceType: "platform_auth_session",
+      resourceId: session.id,
+      metadata: { providerId: provider.id, providerType: provider.type, email: claims.email, platformRoles: claims.platformRoles }
+    });
+    return session;
+  }
+
+  validateGeneratedAppSession(token: string, input: { appSlug: string; requiredRole?: string }): GeneratedAppSessionValidation {
+    const session = this.sessions.find((candidate) => candidate.token === token);
+    if (!session) return { allowed: false, reason: "invalid_session" };
+    const roles = session.claims.appRoles[input.appSlug] ?? [];
+    if (input.requiredRole && !roles.includes(input.requiredRole)) {
+      return { allowed: false, reason: "missing_app_role", claims: session.claims };
+    }
+    return { allowed: true, claims: session.claims };
+  }
+
+  private keycloakProvider(createdByUserId = "system"): AuthProviderConfig {
+    return {
+      id: "authprov_keycloak_default_001",
+      type: "keycloak",
+      name: "Bundled Keycloak Default",
+      status: "active",
+      issuerUrl: "http://keycloak:8080/realms/evcp",
+      groupRoleMapping: {
+        "evcp-admins": ["admin"],
+        "evcp-creators": ["creator"],
+        "evcp-users": ["end_user"]
+      },
+      createdByUserId,
+      createdAt: new Date("2026-09-07T00:00:00.000Z").toISOString()
+    };
+  }
+
+  private requireProvider(providerId: string): AuthProviderConfig {
+    if (providerId === "authprov_keycloak_default_001") return this.keycloakProvider();
+    const provider = this.providers.find((candidate) => candidate.id === providerId);
+    if (!provider) throw new ValidationError(`Unknown auth provider: ${providerId}`);
+    return provider;
+  }
+
+  private mapPlatformRoles(mapping: Record<string, PlatformRole[]>, groups: string[]): PlatformRole[] {
+    const roles = groups.flatMap((group) => mapping[group] ?? []);
+    return [...new Set(roles)];
+  }
+
+  private normalizeMapping(mapping: Record<string, PlatformRole[]>): Record<string, PlatformRole[]> {
+    return Object.fromEntries(Object.entries(mapping).map(([group, roles]) => [group, [...new Set(roles)]]));
+  }
+
+  private maskAuthSecret(secret: string): string {
+    return `************${secret.slice(-4)}`;
+  }
+}
+
+export class BreakGlassService {
+  private readonly sessions: BreakGlassSession[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService
+  ) {}
+
+  login(actor: PlatformUser, input: { reason: string; ticketRef?: string }): BreakGlassSession {
+    this.auth.requireRole(actor, ["admin"]);
+    const reason = input.reason.trim();
+    if (!reason) throw new ValidationError("Break-glass reason is required");
+
+    const issuedAt = new Date();
+    const session: BreakGlassSession = {
+      id: `breakglass_${String(this.sessions.length + 1).padStart(4, "0")}`,
+      userId: actor.id,
+      reason,
+      ticketRef: input.ticketRef?.trim() || undefined,
+      token: `breakglass_${fingerprintSecret(`${actor.id}:${reason}:${this.sessions.length + 1}`).slice(3)}`,
+      ttlMinutes: 15,
+      issuedAt: issuedAt.toISOString(),
+      expiresAt: new Date(issuedAt.getTime() + 15 * 60 * 1000).toISOString()
+    };
+
+    this.sessions.push(session);
+    this.audit.record({
+      actorId: actor.id,
+      action: "auth.break_glass_used",
+      resourceType: "break_glass_session",
+      resourceId: session.id,
+      severity: "critical",
+      metadata: { reason, ticketRef: session.ticketRef, ttlMinutes: session.ttlMinutes }
+    });
+    return session;
+  }
+
+  listSessions(actor: PlatformUser): BreakGlassSession[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [...this.sessions];
+  }
+}
+
+export class PolicyTemplateService {
+  private readonly templates: PolicyTemplate[] = [
+    {
+      id: "policy_public_default",
+      classification: "public",
+      label: "Public",
+      requiredReviewers: [],
+      requiredChecks: ["auth_session_required"],
+      publishAllowed: true,
+      externalExposureAllowed: true
+    },
+    {
+      id: "policy_internal_default",
+      classification: "internal",
+      label: "Internal",
+      requiredReviewers: ["Project Owner"],
+      requiredChecks: ["auth_session_required", "app_role_required"],
+      publishAllowed: true,
+      externalExposureAllowed: true
+    },
+    {
+      id: "policy_confidential_default",
+      classification: "confidential",
+      label: "Confidential",
+      requiredReviewers: ["Project Owner", "Security Admin"],
+      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity"],
+      publishAllowed: true,
+      externalExposureAllowed: false
+    },
+    {
+      id: "policy_restricted_default",
+      classification: "restricted",
+      label: "Restricted",
+      requiredReviewers: ["Project Owner", "Security Admin", "Platform Admin"],
+      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity", "break_glass_disabled"],
+      publishAllowed: false,
+      externalExposureAllowed: false
+    }
+  ];
+
+  constructor(private readonly auth: MockAuthService) {}
+
+  listTemplates(actor: PlatformUser): PolicyTemplate[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [...this.templates];
+  }
+
+  evaluate(actor: PlatformUser, input: { classification: PolicyClassification; action: string }): PolicyTemplate {
+    this.auth.requireRole(actor, ["admin"]);
+    const template = this.templates.find((candidate) => candidate.classification === input.classification);
+    if (!template) throw new ValidationError(`Unknown policy classification: ${input.classification}`);
+    return template;
   }
 }
 
@@ -3352,6 +3767,9 @@ export interface PlatformApiServices {
   domains: DomainService;
   traceability: TraceabilityService;
   monitoring: MonitoringService;
+  authSso: PlatformAuthSsoService;
+  breakGlass: BreakGlassService;
+  policyTemplates: PolicyTemplateService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -3378,6 +3796,9 @@ export function createPlatformApiServices(): PlatformApiServices {
   const domains = new DomainService(auth, audit, projects);
   const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
   const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, aiGovernance, guardrails);
+  const authSso = new PlatformAuthSsoService(auth, audit);
+  const breakGlass = new BreakGlassService(auth, audit);
+  const policyTemplates = new PolicyTemplateService(auth);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
 
   return {
@@ -3399,6 +3820,9 @@ export function createPlatformApiServices(): PlatformApiServices {
     domains,
     traceability,
     monitoring,
+    authSso,
+    breakGlass,
+    policyTemplates,
     envelope: { success, failure }
   };
 }

@@ -50,6 +50,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `WorkflowRail` เมื่อหน้ามี process/context ที่ต้องเห็นตลอด
 - ใช้ `SectionCard` + `DataTable` สำหรับ provider, route, quota, guardrail และ event log
 - ใช้ `admin-monitoring-shell` สำหรับ MVP Monitoring ที่ต้องรวม Service Health, Ticket Counts, Domain Requests และ Audit Filters ในหน้าเดียว
+- ใช้ `auth-policy-shell` สำหรับ Auth/SSO production readiness ที่ต้องแสดง provider registry, role mapping, Platform Auth session evidence, break-glass และ policy templates ใน context เดียวกัน
 - ห้ามแสดง plaintext secret; ใช้ masked value หรือ fingerprint เท่านั้น
 
 ### Creator
@@ -102,3 +103,5 @@ Allowed supporting libraries for future work:
 | Forms and validation | React Hook Form + Zod or equivalent | Provider config, domain requests, guardrail policy and invite forms |
 
 Visual styling remains owned by `@evcp/ui` tokens, CSS and reusable primitives.
+
+Decision for Sprint 9 onward: use `@evcp/ui` as the internal component library, add Radix/shadcn-style headless primitives only where interaction complexity requires them, and keep enterprise visual styling in EVCP tokens rather than adopting a large opinionated dashboard framework.

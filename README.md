@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 8 Ticket-to-PRD, Domain and MVP Hardening are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 9 Auth SSO and Policy Hardening are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -22,6 +22,7 @@ pnpm verify:sprint5
 pnpm verify:sprint6
 pnpm verify:sprint7
 pnpm verify:sprint8
+pnpm verify:sprint9
 ```
 
 Start frontend shells:
@@ -136,3 +137,16 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Creator UI for Ticket-to-PRD, PRD Change Requests, Domain Settings, Deployment Traceability and MVP Demo Checklist
 - Admin UI for MVP Monitoring, Service Health, Ticket Counts, Domain Requests and Audit Filters
 - Prisma migration and seed data for PRD change, domain and traceability records
+
+## Sprint 9 Scope
+
+- OIDC provider configuration API with masked client secret, secret fingerprint and audit event
+- SAML provider configuration API with certificate fingerprint and audit event
+- Bundled Keycloak default broker contract for realm, clients, redirect URIs and platform groups
+- Direct external IdP constraints that preserve the Platform Auth session and claims boundary
+- Simulated SSO login producing normalized Platform Auth claims with platform roles and app roles
+- Generated app session validation that denies invalid tokens and missing app roles
+- Local break-glass admin session with required reason, 15-minute TTL and critical audit event
+- Public/Internal/Confidential/Restricted policy templates for reviewers, checks and exposure defaults
+- Admin Auth / SSO Production Readiness UI
+- Prisma migration and seed data for auth provider config, auth sessions, break-glass sessions and policy templates

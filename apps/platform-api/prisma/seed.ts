@@ -1146,6 +1146,204 @@ async function main() {
       auditEventIds: ["aud_ticket_to_prd", "aud_prd_change_approved", "aud_domain_approved"]
     }
   });
+
+  await prisma.authProviderConfig.upsert({
+    where: { id: "authprov_keycloak_default_001" },
+    update: {
+      providerType: "keycloak",
+      name: "Bundled Keycloak Default",
+      status: "active",
+      issuerUrl: "http://keycloak:8080/realms/evcp",
+      groupRoleMapping: {
+        "evcp-admins": ["admin"],
+        "evcp-creators": ["creator"],
+        "evcp-users": ["end_user"]
+      }
+    },
+    create: {
+      id: "authprov_keycloak_default_001",
+      providerType: "keycloak",
+      name: "Bundled Keycloak Default",
+      status: "active",
+      issuerUrl: "http://keycloak:8080/realms/evcp",
+      scopes: ["openid", "profile", "email"],
+      groupRoleMapping: {
+        "evcp-admins": ["admin"],
+        "evcp-creators": ["creator"],
+        "evcp-users": ["end_user"]
+      },
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.authProviderConfig.upsert({
+    where: { id: "authprov_oidc_azure_ad_001" },
+    update: {
+      providerType: "oidc",
+      name: "Azure AD Production",
+      status: "ready",
+      issuerUrl: "https://login.microsoftonline.com/company/v2.0",
+      clientId: "evcp-platform",
+      clientSecretFingerprint: "fp_oidc_sprint9",
+      groupRoleMapping: {
+        "evcp-admins": ["admin"],
+        "hr-creators": ["creator"]
+      }
+    },
+    create: {
+      id: "authprov_oidc_azure_ad_001",
+      providerType: "oidc",
+      name: "Azure AD Production",
+      status: "ready",
+      issuerUrl: "https://login.microsoftonline.com/company/v2.0",
+      clientId: "evcp-platform",
+      clientSecretFingerprint: "fp_oidc_sprint9",
+      scopes: ["openid", "profile", "email"],
+      groupRoleMapping: {
+        "evcp-admins": ["admin"],
+        "hr-creators": ["creator"]
+      },
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.authProviderConfig.upsert({
+    where: { id: "authprov_saml_okta_001" },
+    update: {
+      providerType: "saml",
+      name: "Okta Workforce",
+      status: "ready",
+      entityId: "http://www.okta.com/company",
+      ssoUrl: "https://company.okta.com/app/sso/saml",
+      certificateFingerprint: "fp_saml_sprint9",
+      groupRoleMapping: {
+        "IT Admins": ["admin"],
+        "HR Creators": ["creator"]
+      }
+    },
+    create: {
+      id: "authprov_saml_okta_001",
+      providerType: "saml",
+      name: "Okta Workforce",
+      status: "ready",
+      entityId: "http://www.okta.com/company",
+      ssoUrl: "https://company.okta.com/app/sso/saml",
+      certificateFingerprint: "fp_saml_sprint9",
+      scopes: [],
+      groupRoleMapping: {
+        "IT Admins": ["admin"],
+        "HR Creators": ["creator"]
+      },
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.platformAuthSession.upsert({
+    where: { id: "psess_sprint9_oidc_001" },
+    update: {
+      providerConfigId: "authprov_oidc_azure_ad_001",
+      userId: "usr_creator",
+      sessionTokenHash: "hash_psess_sprint9_oidc_001",
+      claims: {
+        subject: "oidc-user-001",
+        email: "pilot.creator@company.com",
+        name: "Pilot Creator",
+        groups: ["hr-creators"],
+        platformRoles: ["creator"],
+        appRoles: { "leave-management": ["Employee", "Manager"] }
+      },
+      expiresAt: new Date("2026-09-07T10:00:00.000Z")
+    },
+    create: {
+      id: "psess_sprint9_oidc_001",
+      providerConfigId: "authprov_oidc_azure_ad_001",
+      userId: "usr_creator",
+      sessionTokenHash: "hash_psess_sprint9_oidc_001",
+      claims: {
+        subject: "oidc-user-001",
+        email: "pilot.creator@company.com",
+        name: "Pilot Creator",
+        groups: ["hr-creators"],
+        platformRoles: ["creator"],
+        appRoles: { "leave-management": ["Employee", "Manager"] }
+      },
+      issuedAt: new Date("2026-09-07T09:00:00.000Z"),
+      expiresAt: new Date("2026-09-07T10:00:00.000Z")
+    }
+  });
+
+  await prisma.breakGlassSession.upsert({
+    where: { id: "breakglass_sprint9_001" },
+    update: {
+      userId: "usr_admin",
+      reason: "Primary IdP outage during pilot",
+      ticketRef: "INC-1001",
+      sessionTokenHash: "hash_breakglass_sprint9_001",
+      ttlMinutes: 15,
+      expiresAt: new Date("2026-09-07T09:15:00.000Z")
+    },
+    create: {
+      id: "breakglass_sprint9_001",
+      userId: "usr_admin",
+      reason: "Primary IdP outage during pilot",
+      ticketRef: "INC-1001",
+      sessionTokenHash: "hash_breakglass_sprint9_001",
+      ttlMinutes: 15,
+      issuedAt: new Date("2026-09-07T09:00:00.000Z"),
+      expiresAt: new Date("2026-09-07T09:15:00.000Z")
+    }
+  });
+
+  const policyTemplates = [
+    {
+      id: "policy_public_default",
+      classification: "public",
+      label: "Public",
+      requiredReviewers: [],
+      requiredChecks: ["auth_session_required"],
+      publishAllowed: true,
+      externalExposureAllowed: true,
+      createdByUserId: "usr_admin"
+    },
+    {
+      id: "policy_internal_default",
+      classification: "internal",
+      label: "Internal",
+      requiredReviewers: ["Project Owner"],
+      requiredChecks: ["auth_session_required", "app_role_required"],
+      publishAllowed: true,
+      externalExposureAllowed: true,
+      createdByUserId: "usr_admin"
+    },
+    {
+      id: "policy_confidential_default",
+      classification: "confidential",
+      label: "Confidential",
+      requiredReviewers: ["Project Owner", "Security Admin"],
+      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity"],
+      publishAllowed: true,
+      externalExposureAllowed: false,
+      createdByUserId: "usr_admin"
+    },
+    {
+      id: "policy_restricted_default",
+      classification: "restricted",
+      label: "Restricted",
+      requiredReviewers: ["Project Owner", "Security Admin", "Platform Admin"],
+      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity", "break_glass_disabled"],
+      publishAllowed: false,
+      externalExposureAllowed: false,
+      createdByUserId: "usr_admin"
+    }
+  ];
+
+  for (const policyTemplate of policyTemplates) {
+    await prisma.policyTemplate.upsert({
+      where: { id: policyTemplate.id },
+      update: policyTemplate,
+      create: policyTemplate
+    });
+  }
 }
 
 main()

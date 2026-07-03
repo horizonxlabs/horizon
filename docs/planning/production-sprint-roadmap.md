@@ -83,6 +83,7 @@ Individual sprint plan files:
 | Sprint 6 | `docs/planning/sprint-6-plan.md` |
 | Sprint 7 | `docs/planning/sprint-7-plan.md` |
 | Sprint 8 | `docs/planning/sprint-8-plan.md` |
+| Sprint 9 | `docs/planning/sprint-9-plan.md` |
 
 ### Sprint 0 - Foundation and Design System
 
@@ -312,6 +313,8 @@ Individual sprint plan files:
 | Break-glass admin hardening | P1-AUTH-005 | Reason + critical audit |
 | Policy templates | P1-POL-001, ADR-004 | Public/Internal/Confidential/Restricted policies defined |
 | Direct IdP constraints | ADR-005 | Architecture decision updated |
+
+Detailed plan: `docs/planning/sprint-9-plan.md`
 
 ### Sprint 10 - Generated App Runtime Hardening
 

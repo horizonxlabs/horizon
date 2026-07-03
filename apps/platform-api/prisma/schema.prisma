@@ -81,6 +81,10 @@ model PlatformUser {
   prdChangeDecisions PrdChangeDecision[] @relation("PrdChangeDecisionBy")
   domainRequests DomainRequest[] @relation("DomainRequestRequestedBy")
   domainRequestDecisions DomainRequest[] @relation("DomainRequestDecidedBy")
+  authProviderConfigs AuthProviderConfig[] @relation("AuthProviderCreatedBy")
+  platformAuthSessions PlatformAuthSession[] @relation("PlatformAuthSessionUser")
+  breakGlassSessions BreakGlassSession[] @relation("BreakGlassSessionUser")
+  policyTemplates PolicyTemplate[] @relation("PolicyTemplateCreatedBy")
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -844,4 +848,73 @@ model DeploymentTraceRecord {
 
   @@index([projectId])
   @@map("deployment_trace_records")
+}
+
+model AuthProviderConfig {
+  id                      String   @id
+  providerType            String   @map("provider_type")
+  name                    String
+  status                  String
+  issuerUrl               String?  @map("issuer_url")
+  entityId                String?  @map("entity_id")
+  ssoUrl                  String?  @map("sso_url")
+  clientId                String?  @map("client_id")
+  clientSecretFingerprint String?  @map("client_secret_fingerprint")
+  certificateFingerprint  String?  @map("certificate_fingerprint")
+  scopes                  String[]
+  groupRoleMapping        Json     @map("group_role_mapping")
+  createdByUserId         String   @map("created_by_user_id")
+  createdBy               PlatformUser @relation("AuthProviderCreatedBy", fields: [createdByUserId], references: [id])
+  sessions                PlatformAuthSession[]
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@index([providerType, status])
+  @@map("auth_provider_configs")
+}
+
+model PlatformAuthSession {
+  id               String   @id
+  providerConfigId String   @map("provider_config_id")
+  userId           String   @map("user_id")
+  sessionTokenHash String   @map("session_token_hash")
+  claims           Json
+  provider         AuthProviderConfig @relation(fields: [providerConfigId], references: [id])
+  user             PlatformUser @relation("PlatformAuthSessionUser", fields: [userId], references: [id])
+  issuedAt         DateTime @default(now()) @map("issued_at")
+  expiresAt        DateTime @map("expires_at")
+
+  @@index([userId, expiresAt])
+  @@map("platform_auth_sessions")
+}
+
+model BreakGlassSession {
+  id               String   @id
+  userId           String   @map("user_id")
+  reason           String
+  ticketRef        String?  @map("ticket_ref")
+  sessionTokenHash String   @map("session_token_hash")
+  ttlMinutes       Int      @map("ttl_minutes")
+  user             PlatformUser @relation("BreakGlassSessionUser", fields: [userId], references: [id])
+  issuedAt         DateTime @default(now()) @map("issued_at")
+  expiresAt        DateTime @map("expires_at")
+
+  @@index([userId, issuedAt])
+  @@map("break_glass_sessions")
+}
+
+model PolicyTemplate {
+  id                      String   @id
+  classification          String   @unique
+  label                   String
+  requiredReviewers       String[] @map("required_reviewers")
+  requiredChecks          String[] @map("required_checks")
+  publishAllowed          Boolean  @map("publish_allowed")
+  externalExposureAllowed Boolean  @map("external_exposure_allowed")
+  createdByUserId         String   @map("created_by_user_id")
+  createdBy               PlatformUser @relation("PolicyTemplateCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("policy_templates")
 }
