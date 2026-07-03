@@ -2,7 +2,7 @@
 
 Issue: #23  
 Current PR: #22  
-Status: Implementation evidence verified on the stacked Sprint 0-14 branch chain; external maintainer approval and merge are still required.
+Status: Implementation evidence verified on the stacked Sprint 0-14 branch chain; all open stacked PRs are ready for review with clean merge state; external maintainer approval and merge are still required.
 
 ## Summary
 
@@ -58,7 +58,7 @@ flowchart LR
 
 The implementation evidence is green, but the work is not merged. Merge requires external maintainer approval because GitHub rejects self-approval.
 
-Recommended merge order for the open stacked PR chain:
+All open stacked PRs are marked ready for review and currently report clean merge state. Recommended merge order:
 
 1. PR #1 Sprint 3
 2. PR #2 Sprint 4
