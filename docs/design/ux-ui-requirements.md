@@ -96,6 +96,20 @@ flowchart TD
 
 ## 5. Screen Inventory
 
+Detailed sprint-level UI specs are tracked in:
+
+| Sprint | UI Spec |
+| --- | --- |
+| Sprint 0 | `docs/design/sprint-0-ui-spec.md` |
+| Sprint 1 | `docs/design/sprint-1-ui-spec.md` |
+| Sprint 2 | `docs/design/sprint-2-ui-spec.md` |
+| Sprint 3 | `docs/design/sprint-3-ui-spec.md` |
+| Sprint 4 | `docs/design/sprint-4-ui-spec.md` |
+| Sprint 5 | `docs/design/sprint-5-ui-spec.md` |
+| Sprint 6 | `docs/design/sprint-6-ui-spec.md` |
+| Sprint 7 | `docs/design/sprint-7-ui-spec.md` |
+| Sprint 8 | `docs/design/sprint-8-ui-spec.md` |
+
 ### 5.1 Sprint 0 MVP Shell Screens
 
 | Surface | Required Shell Screens | Sprint 0 Acceptance |

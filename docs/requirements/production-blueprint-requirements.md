@@ -1120,6 +1120,7 @@ The requirement engineering baseline now consists of:
 | Requirements traceability matrix | `docs/requirements/requirements-traceability-matrix.md` |
 | Requirements validation review | `docs/requirements/requirements-validation-review.md` |
 | UX/UI requirements | `docs/design/ux-ui-requirements.md` |
+| MVP sprint UI design index | `docs/design/mvp-sprint-ui-design-index.md` |
 | Architecture decision records | `docs/architecture/ADR-001-single-enterprise-private-server-deployment.md` through `docs/architecture/ADR-005-auth-broker-and-external-idp-strategy.md` |
 | Production implementation backlog | `docs/planning/production-implementation-backlog.md` |
 | MVP-aligned sprint roadmap | `docs/planning/production-sprint-roadmap.md` |
