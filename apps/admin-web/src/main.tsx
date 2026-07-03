@@ -19,7 +19,7 @@ import {
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -203,7 +203,50 @@ const skillAssignmentRows = [
   { role: "Requirement Analyst", scenario: "Requirement Analysis", scope: "department", selected: "PRD Analyst v5", knowledge: "HR Handbook v3" }
 ];
 
+const operationsRecoveryKpis = [
+  { label: "Preflight Report", value: "passed", detail: "9/9 private-server checks", icon: ServerCog, tone: "success" },
+  { label: "Setup Wizard", value: "complete", detail: "secrets masked", icon: LockKeyhole, tone: "success" },
+  { label: "Backup Schedule", value: "enabled", detail: "daily 02:00 / 30d retention", icon: Database, tone: "info" },
+  { label: "Restore Drill", value: "passed", detail: "RPO 60m / RTO 120m", icon: CheckCircle2, tone: "success" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const preflightRows = [
+  { check: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
+  { check: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
+  { check: "Docker", required: "installed", observed: "26.1.0", status: "pass", action: "-" },
+  { check: "Ports", required: "80/443/5432/6379/9000", observed: "all available", status: "pass", action: "-" }
+];
+
+const composeReadinessRows = [
+  { service: "platform-api", status: "healthy", signal: "health endpoint ready" },
+  { service: "admin-web", status: "healthy", signal: "admin bundle ready" },
+  { service: "creator-web", status: "healthy", signal: "creator bundle ready" },
+  { service: "app-store-pwa", status: "healthy", signal: "PWA bundle ready" },
+  { service: "PostgreSQL / Keycloak / MinIO / Redis / Caddy", status: "healthy", signal: "compose readiness contract" }
+];
+
+const backupRunRows = [
+  { run: "bckrun_nightly_postgres_001", status: "succeeded", artifact: "minio://evcp-backups/bckrun_nightly_postgres_001/evcp.dump.enc", checksum: "sha256:seed-backup-run-001", size: "2.4 GB" },
+  { run: "bckrun_manual_s3_002", status: "succeeded", artifact: "s3://evcp-prod-backups/bckrun_manual_s3_002/evcp.dump.enc", checksum: "sha256:storage-neutral", size: "2.4 GB" }
+];
+
+const restoreValidationRows = [
+  { check: "checksum", status: "pass", evidence: "artifact checksum verified" },
+  { check: "schema", status: "pass", evidence: "Prisma schema current" },
+  { check: "seed-records", status: "pass", evidence: "demo records restored" },
+  { check: "audit-events", status: "pass", evidence: "critical restore audit retained" }
+];
+
 function AdminApp() {
+  useEffect(() => {
+    if (!window.location.hash) {
+      return;
+    }
+
+    const target = document.getElementById(window.location.hash.slice(1));
+    target?.scrollIntoView({ block: "start" });
+  }, []);
+
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
       <PageHeader
@@ -922,6 +965,178 @@ function AdminApp() {
                 />
               </SectionCard>
             </section>
+          </section>
+
+          <section id="operations-recovery" className="operations-recovery-shell" aria-label="Installer Backup Restore">
+            <div className="operations-recovery-header">
+              <div>
+                <span className="eyebrow">Operations Recovery</span>
+                <h2>Installer, Backup and Restore</h2>
+                <p>Private-server readiness evidence for installer preflight, setup wizard, encrypted backups, PostgreSQL PITR and restore drills.</p>
+              </div>
+              <div className="ds-page-actions">
+                <button type="button" className="secondary-button"><ServerCog size={16} /> Run Preflight</button>
+                <button type="button"><CheckCircle2 size={16} /> Run Restore Drill</button>
+              </div>
+            </div>
+
+            <section className="operations-recovery-kpi-grid">
+              {operationsRecoveryKpis.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <MetricCard
+                    key={item.label}
+                    label={item.label}
+                    value={item.value}
+                    detail={item.detail}
+                    icon={<Icon size={18} />}
+                    tone={item.tone}
+                  />
+                );
+              })}
+            </section>
+
+            <section className="operations-recovery-layout">
+              <WorkflowRail
+                title="Recovery Path"
+                steps={[
+                  { label: "installer preflight", icon: <ServerCog size={16} /> },
+                  { label: "setup wizard", icon: <LockKeyhole size={16} /> },
+                  { label: "compose readiness", icon: <Route size={16} /> },
+                  { label: "backup schedule", icon: <Database size={16} /> },
+                  { label: "backup run", icon: <ShieldCheck size={16} /> },
+                  { label: "PostgreSQL PITR", icon: <Gauge size={16} /> },
+                  { label: "restore drill", icon: <CheckCircle2 size={16} /> }
+                ]}
+                alert={{
+                  icon: <AlertTriangle size={18} />,
+                  title: "Failed checks block install",
+                  description: "Restore drill failure never marks recovery as successful.",
+                  tone: "warning"
+                }}
+              />
+
+              <div className="operations-recovery-grid">
+                <SectionCard eyebrow="Installer" title="Preflight Report">
+                  <div className="operations-desktop-table">
+                    <DataTable
+                      columns={[
+                        { key: "check", label: "Check" },
+                        { key: "required", label: "Required" },
+                        { key: "observed", label: "Observed" },
+                        { key: "status", label: "Status", tone: () => "success" },
+                        { key: "action", label: "Action" }
+                      ]}
+                      rows={preflightRows}
+                    />
+                  </div>
+                  <div className="backup-restore-mobile-list">
+                    {preflightRows.map((row) => (
+                      <article key={row.check}>
+                        <strong>{row.check}</strong>
+                        <span>Required: {row.required}</span>
+                        <span>Observed: {row.observed}</span>
+                        <ToneBadge tone="success">{row.status}</ToneBadge>
+                      </article>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
+                  <DefinitionGrid
+                    items={[
+                      { label: "Domain", value: "platform.company.test" },
+                      { label: "Database", value: "postgresql://evcp:***@postgres:5432/evcp" },
+                      { label: "Storage", value: "MinIO / S3-compatible contract" },
+                      { label: "Auth", value: "Keycloak broker ready" },
+                      { label: "AI + Guardrail", value: "external provider route + enterprise policy" },
+                      { label: "First Admin", value: "admin@company.com" }
+                    ]}
+                  />
+                  <DecisionPanel
+                    tone="success"
+                    badge="masked"
+                    title="Setup Wizard completed without exposing secrets"
+                    lines={["Database password masked", "Storage and backup encryption use key references only"]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Compose" title="Docker Compose Readiness">
+                  <DataTable
+                    columns={[
+                      { key: "service", label: "Service" },
+                      { key: "status", label: "Status", tone: () => "success" },
+                      { key: "signal", label: "Signal" }
+                    ]}
+                    rows={composeReadinessRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Backup Schedule" title="Encrypted backup policy">
+                  <DefinitionGrid
+                    items={[
+                      { label: "Target", value: "minio://evcp-backups" },
+                      { label: "Retention", value: "30 days" },
+                      { label: "Schedule", value: "0 2 * * *" },
+                      { label: "Encryption", value: "kms://evcp/backup" },
+                      { label: "State", value: <ToneBadge tone="success">enabled</ToneBadge> }
+                    ]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Backup Runs" title="Artifact evidence">
+                  <DataTable
+                    columns={[
+                      { key: "run", label: "Run" },
+                      { key: "status", label: "Status", tone: () => "success" },
+                      { key: "artifact", label: "Artifact" },
+                      { key: "checksum", label: "Checksum" },
+                      { key: "size", label: "Size" }
+                    ]}
+                    rows={backupRunRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="PostgreSQL PITR" title="Point-in-time recovery">
+                  <DefinitionGrid
+                    items={[
+                      { label: "WAL retention", value: "72 hours" },
+                      { label: "Base backup", value: "bckrun_nightly_postgres_001" },
+                      { label: "Target timestamp", value: "2026-09-15T02:03:00.000Z" },
+                      { label: "RPO / RTO", value: "60m / 120m" },
+                      { label: "Status", value: <ToneBadge tone="success">ready</ToneBadge> }
+                    ]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Restore Drill" title="Recovery Evidence">
+                  <DecisionPanel
+                    tone="success"
+                    badge="passed"
+                    title="Restore Drill verified selected backup and PITR metadata"
+                    lines={["Report: restore_drill_001", "Critical failure path is audited when validation fails"]}
+                  />
+                  <DataTable
+                    columns={[
+                      { key: "check", label: "Validation" },
+                      { key: "status", label: "Status", tone: () => "success" },
+                      { key: "evidence", label: "Evidence" }
+                    ]}
+                    rows={restoreValidationRows}
+                  />
+                </SectionCard>
+              </div>
+            </section>
+
+            <ServiceStrip
+              services={[
+                { name: "Installer Report", detail: "Preflight and compose readiness retained", status: "healthy" },
+                { name: "Setup Audit", detail: "Secrets masked and audited", status: "healthy" },
+                { name: "Storage Contract", detail: "MinIO and S3-compatible targets", status: "healthy" },
+                { name: "PITR Metadata", detail: "WAL retention and target timestamp recorded", status: "healthy" },
+                { name: "Admin-only APIs", detail: "Creator and End User denied", status: "healthy" }
+              ]}
+            />
           </section>
 
           <ServiceStrip

@@ -1742,6 +1742,200 @@ async function main() {
       status: "active"
     }
   });
+
+  await prisma.installerReport.upsert({
+    where: { id: "instrep_private_server_ready" },
+    update: {
+      status: "passed",
+      installBlocked: false,
+      reportPath: "reports/install/private-server-install-report.json",
+      checks: [
+        { name: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
+        { name: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
+        { name: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
+        { name: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" }
+      ],
+      actionableFailures: [],
+      composeServices: [
+        { name: "platform-api", status: "healthy", endpoint: "platform-api" },
+        { name: "admin-web", status: "healthy", endpoint: "admin-web" },
+        { name: "creator-web", status: "healthy", endpoint: "creator-web" },
+        { name: "app-store-pwa", status: "healthy", endpoint: "app-store-pwa" },
+        { name: "postgres", status: "healthy", endpoint: "postgres" },
+        { name: "keycloak", status: "healthy", endpoint: "keycloak" },
+        { name: "minio", status: "healthy", endpoint: "minio" },
+        { name: "redis", status: "healthy", endpoint: "redis" },
+        { name: "caddy", status: "healthy", endpoint: ":443" }
+      ],
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "instrep_private_server_ready",
+      status: "passed",
+      installBlocked: false,
+      reportPath: "reports/install/private-server-install-report.json",
+      checks: [
+        { name: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
+        { name: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
+        { name: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
+        { name: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" }
+      ],
+      actionableFailures: [],
+      composeServices: [
+        { name: "platform-api", status: "healthy", endpoint: "platform-api" },
+        { name: "admin-web", status: "healthy", endpoint: "admin-web" },
+        { name: "creator-web", status: "healthy", endpoint: "creator-web" },
+        { name: "app-store-pwa", status: "healthy", endpoint: "app-store-pwa" },
+        { name: "postgres", status: "healthy", endpoint: "postgres" },
+        { name: "keycloak", status: "healthy", endpoint: "keycloak" },
+        { name: "minio", status: "healthy", endpoint: "minio" },
+        { name: "redis", status: "healthy", endpoint: "redis" },
+        { name: "caddy", status: "healthy", endpoint: ":443" }
+      ],
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.setupConfiguration.upsert({
+    where: { id: "setup_private_server_001" },
+    update: {
+      status: "completed",
+      domain: "platform.company.test",
+      databaseUrlMasked: "postgresql://evcp:***@postgres:5432/evcp",
+      storageConfig: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-backups" },
+      authConfig: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
+      aiConfig: { providerId: "aip_openai_production", model: "gpt-4.1" },
+      guardrailConfig: { defaultPolicy: "enterprise-default", blockHighRisk: true },
+      backupConfig: { schedule: "0 2 * * *", retentionDays: 30, encryptionMode: "kms", encryptionKeyRef: "kms://evcp/backup" },
+      firstAdminConfig: { email: "admin@company.com", displayName: "Platform Admin" },
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "setup_private_server_001",
+      status: "completed",
+      domain: "platform.company.test",
+      databaseUrlMasked: "postgresql://evcp:***@postgres:5432/evcp",
+      storageConfig: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-backups" },
+      authConfig: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
+      aiConfig: { providerId: "aip_openai_production", model: "gpt-4.1" },
+      guardrailConfig: { defaultPolicy: "enterprise-default", blockHighRisk: true },
+      backupConfig: { schedule: "0 2 * * *", retentionDays: 30, encryptionMode: "kms", encryptionKeyRef: "kms://evcp/backup" },
+      firstAdminConfig: { email: "admin@company.com", displayName: "Platform Admin" },
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.backupPolicy.upsert({
+    where: { id: "bckpol_nightly_postgres" },
+    update: {
+      name: "Nightly PostgreSQL Backup",
+      schedule: "0 2 * * *",
+      retentionDays: 30,
+      storageProvider: "minio",
+      storageConfig: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-backups" },
+      encryptionMode: "kms",
+      encryptionKeyRef: "kms://evcp/backup",
+      enabled: true,
+      status: "active",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "bckpol_nightly_postgres",
+      name: "Nightly PostgreSQL Backup",
+      schedule: "0 2 * * *",
+      retentionDays: 30,
+      storageProvider: "minio",
+      storageConfig: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-backups" },
+      encryptionMode: "kms",
+      encryptionKeyRef: "kms://evcp/backup",
+      enabled: true,
+      status: "active",
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.backupRun.upsert({
+    where: { id: "bckrun_nightly_postgres_001" },
+    update: {
+      policyId: "bckpol_nightly_postgres",
+      trigger: "scheduled",
+      databaseName: "evcp",
+      status: "succeeded",
+      encrypted: true,
+      artifactUri: "minio://evcp-backups/bckrun_nightly_postgres_001/evcp.dump.enc",
+      checksum: "sha256:seed-backup-run-001",
+      sizeBytes: BigInt("2415919104"),
+      startedAt: new Date("2026-09-15T02:00:00.000Z"),
+      finishedAt: new Date("2026-09-15T02:05:00.000Z"),
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "bckrun_nightly_postgres_001",
+      policyId: "bckpol_nightly_postgres",
+      trigger: "scheduled",
+      databaseName: "evcp",
+      status: "succeeded",
+      encrypted: true,
+      artifactUri: "minio://evcp-backups/bckrun_nightly_postgres_001/evcp.dump.enc",
+      checksum: "sha256:seed-backup-run-001",
+      sizeBytes: BigInt("2415919104"),
+      startedAt: new Date("2026-09-15T02:00:00.000Z"),
+      finishedAt: new Date("2026-09-15T02:05:00.000Z"),
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.pitrConfiguration.upsert({
+    where: { id: "pitr_evcp_ready_001" },
+    update: {
+      databaseName: "evcp",
+      walRetentionHours: 72,
+      baseBackupRunId: "bckrun_nightly_postgres_001",
+      targetTimestamp: new Date("2026-09-15T02:03:00.000Z"),
+      rpoMinutes: 60,
+      rtoMinutes: 120,
+      status: "ready",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "pitr_evcp_ready_001",
+      databaseName: "evcp",
+      walRetentionHours: 72,
+      baseBackupRunId: "bckrun_nightly_postgres_001",
+      targetTimestamp: new Date("2026-09-15T02:03:00.000Z"),
+      rpoMinutes: 60,
+      rtoMinutes: 120,
+      status: "ready",
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.restoreDrillReport.upsert({
+    where: { id: "restore_drill_001" },
+    update: {
+      backupRunId: "bckrun_nightly_postgres_001",
+      pitrConfigId: "pitr_evcp_ready_001",
+      targetTimestamp: new Date("2026-09-15T02:03:00.000Z"),
+      validationChecks: ["checksum", "schema", "seed-records", "audit-events"],
+      failedChecks: [],
+      status: "passed",
+      recoveryVerified: true,
+      reportPath: "reports/restore/passed-restore-drill-report.json",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "restore_drill_001",
+      backupRunId: "bckrun_nightly_postgres_001",
+      pitrConfigId: "pitr_evcp_ready_001",
+      targetTimestamp: new Date("2026-09-15T02:03:00.000Z"),
+      validationChecks: ["checksum", "schema", "seed-records", "audit-events"],
+      failedChecks: [],
+      status: "passed",
+      recoveryVerified: true,
+      reportPath: "reports/restore/passed-restore-drill-report.json",
+      createdByUserId: "usr_admin"
+    }
+  });
 }
 
 main()

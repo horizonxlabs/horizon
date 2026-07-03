@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 11 Knowledge and Skill Governance are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 12 Installer Backup Restore are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -25,6 +25,7 @@ pnpm verify:sprint8
 pnpm verify:sprint9
 pnpm verify:sprint10
 pnpm verify:sprint11
+pnpm verify:sprint12
 ```
 
 Start frontend shells:
@@ -172,6 +173,17 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Workspace prompt metadata with selected `skillVersionId` and `knowledgeVersionIds`
 - Admin Knowledge and Skill Governance UI
 - Prisma migration and seed data for knowledge/skill governance records
-- Migration dry-run contract that blocks destructive changes without Developer Reviewer and Data Owner approvals
-- Admin Generated App Runtime Hardening UI
-- Prisma migration and seed data for runtime, schema grant, health, log, metric, OpenAPI and migration report records
+
+## Sprint 12 Scope
+
+- Installer preflight service with CPU, RAM, disk, OS, Docker, Compose, ports, DNS/TLS and network checks
+- Install report with actionable failed checks and Docker Compose readiness contract
+- Local Web Setup Wizard config capture for domain, database, storage, auth, AI, guardrail, backup and first admin
+- Secret redaction for setup responses and audit metadata
+- Backup policy configuration with storage target, retention, encryption mode/key reference, schedule and enabled state
+- Backup run artifact metadata with encrypted artifact URI, checksum, size and timestamps
+- Storage-neutral MinIO and S3-compatible backup artifact contract
+- PostgreSQL PITR metadata with WAL retention, base backup, target timestamp and RPO/RTO
+- Restore drill report with pass/fail validation checks and critical audit on failed recovery
+- Admin Installer, Backup and Restore UI
+- Prisma migration and seed data for installer, setup, backup, PITR and restore drill evidence

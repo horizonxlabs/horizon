@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Complete for MVP Sprint 0-8 design planning and production extension Sprint 9-11 start
+Status: Complete for MVP Sprint 0-8 design planning and production extension Sprint 9-12 start
 
 ## 1. Purpose
 
@@ -24,6 +24,7 @@ Status: Complete for MVP Sprint 0-8 design planning and production extension Spr
 | Sprint 9 | `docs/design/sprint-9-ui-spec.md` | `docs/planning/sprint-9-plan.md` | Auth/SSO production readiness, Platform Auth boundary, break-glass, policy templates |
 | Sprint 10 | `docs/design/sprint-10-ui-spec.md` | `docs/planning/sprint-10-plan.md` | Generated app runtime hardening, container contract, schema isolation, OpenAPI and migration dry-run |
 | Sprint 11 | `docs/design/sprint-11-ui-spec.md` | `docs/planning/sprint-11-plan.md` | Knowledge and skill governance, scoped retrieval, skill assignment, workspace context metadata |
+| Sprint 12 | `docs/design/sprint-12-ui-spec.md` | `docs/planning/sprint-12-plan.md` | Installer preflight, setup wizard, backup schedule/runs, PostgreSQL PITR and restore drill evidence |
 
 ## 3. How to Use
 
@@ -46,7 +47,7 @@ For each sprint:
 | Area | Status |
 | --- | --- |
 | Sprint 0-8 screen-level UX/UI specs | Complete |
-| Sprint 9-11 production extension UI specs | Complete |
+| Sprint 9-12 production extension UI specs | Complete |
 | Shared component baseline | Complete for MVP |
 | User flows | Complete for MVP |
 | Responsive rules | Complete for MVP |

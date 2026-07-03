@@ -92,6 +92,12 @@ model PlatformUser {
   skillDefinitions SkillDefinition[] @relation("SkillDefinitionOwner")
   skillVersions SkillVersion[] @relation("SkillVersionCreatedBy")
   skillApprovals SkillApproval[] @relation("SkillApprovalDecidedBy")
+  installerReports InstallerReport[] @relation("InstallerReportCreatedBy")
+  setupConfigurations SetupConfiguration[] @relation("SetupConfigurationCreatedBy")
+  backupPolicies BackupPolicy[] @relation("BackupPolicyCreatedBy")
+  backupRuns BackupRun[] @relation("BackupRunCreatedBy")
+  pitrConfigurations PitrConfiguration[] @relation("PitrConfigurationCreatedBy")
+  restoreDrillReports RestoreDrillReport[] @relation("RestoreDrillCreatedBy")
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -1248,4 +1254,120 @@ model SkillAssignment {
 
   @@index([agentRole, scenario, scopeType, scopeId, status])
   @@map("skill_assignments")
+}
+
+model InstallerReport {
+  id                 String   @id
+  status             String
+  installBlocked     Boolean  @map("install_blocked")
+  reportPath         String   @map("report_path")
+  checks             Json
+  actionableFailures String[] @default([]) @map("actionable_failures")
+  composeServices    Json     @map("compose_services")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("InstallerReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("installer_reports")
+}
+
+model SetupConfiguration {
+  id                String   @id
+  status            String
+  domain            String
+  databaseUrlMasked String   @map("database_url_masked")
+  storageConfig     Json     @map("storage_config")
+  authConfig        Json     @map("auth_config")
+  aiConfig          Json     @map("ai_config")
+  guardrailConfig   Json     @map("guardrail_config")
+  backupConfig      Json     @map("backup_config")
+  firstAdminConfig  Json     @map("first_admin_config")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("SetupConfigurationCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([domain, status])
+  @@map("setup_configurations")
+}
+
+model BackupPolicy {
+  id               String   @id
+  name             String
+  schedule         String
+  retentionDays    Int      @map("retention_days")
+  storageProvider  String   @map("storage_provider")
+  storageConfig    Json     @map("storage_config")
+  encryptionMode   String   @map("encryption_mode")
+  encryptionKeyRef String   @map("encryption_key_ref")
+  enabled          Boolean  @default(true)
+  status           String   @default("active")
+  createdByUserId  String   @map("created_by_user_id")
+  createdBy        PlatformUser @relation("BackupPolicyCreatedBy", fields: [createdByUserId], references: [id])
+  runs             BackupRun[]
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([status, enabled])
+  @@map("backup_policies")
+}
+
+model BackupRun {
+  id           String   @id
+  policyId     String   @map("policy_id")
+  trigger      String
+  databaseName String   @map("database_name")
+  status       String
+  encrypted    Boolean
+  artifactUri  String   @map("artifact_uri")
+  checksum     String
+  sizeBytes    BigInt   @map("size_bytes")
+  startedAt    DateTime @map("started_at")
+  finishedAt   DateTime @map("finished_at")
+  createdByUserId String @map("created_by_user_id")
+  policy       BackupPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdBy    PlatformUser @relation("BackupRunCreatedBy", fields: [createdByUserId], references: [id])
+  pitrConfigurations PitrConfiguration[]
+  restoreDrillReports RestoreDrillReport[]
+
+  @@index([policyId, status, startedAt])
+  @@map("backup_runs")
+}
+
+model PitrConfiguration {
+  id                String   @id
+  databaseName      String   @map("database_name")
+  walRetentionHours Int      @map("wal_retention_hours")
+  baseBackupRunId   String   @map("base_backup_run_id")
+  targetTimestamp   DateTime @map("target_timestamp")
+  rpoMinutes        Int      @map("rpo_minutes")
+  rtoMinutes        Int      @map("rto_minutes")
+  status            String   @default("ready")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("PitrConfigurationCreatedBy", fields: [createdByUserId], references: [id])
+  baseBackupRun     BackupRun @relation(fields: [baseBackupRunId], references: [id])
+  restoreDrillReports RestoreDrillReport[]
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([databaseName, status])
+  @@map("pitr_configurations")
+}
+
+model RestoreDrillReport {
+  id                String   @id
+  backupRunId       String   @map("backup_run_id")
+  pitrConfigId      String   @map("pitr_config_id")
+  targetTimestamp   DateTime @map("target_timestamp")
+  validationChecks  String[] @default([]) @map("validation_checks")
+  failedChecks      String[] @default([]) @map("failed_checks")
+  status            String
+  recoveryVerified  Boolean  @map("recovery_verified")
+  reportPath        String   @map("report_path")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("RestoreDrillCreatedBy", fields: [createdByUserId], references: [id])
+  backupRun         BackupRun @relation(fields: [backupRunId], references: [id])
+  pitrConfig        PitrConfiguration @relation(fields: [pitrConfigId], references: [id])
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("restore_drill_reports")
 }
