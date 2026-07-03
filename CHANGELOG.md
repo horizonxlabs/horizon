@@ -4,6 +4,7 @@
 
 ### Added
 
+- Sprint 10 Generated App Runtime Hardening with runtime overview service, Admin runtime API routes, schema isolation checks, migration dry-run gate, Prisma runtime evidence tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 9 Auth SSO and Policy Hardening with OIDC/SAML provider contracts, Keycloak defaults, direct IdP constraints, Platform Auth session validation, break-glass admin, policy templates, Prisma migration, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 8 Ticket-to-PRD, Domain and MVP Hardening with PRD change requests, approval decisions, linked PRD v1.1 creation, public domain approval, deployment traceability, monitoring dashboard, audit filters, Prisma migration, Creator/Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 7 End User App Store PWA and Ticket Loop with storefront access state, app detail, request access, support ticket APIs, ticket status, Creator ticket inbox, Prisma migration, PWA manifest/offline fallback and unit/integration/E2E coverage.

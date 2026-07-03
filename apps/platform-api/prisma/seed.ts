@@ -914,6 +914,158 @@ async function main() {
     }
   });
 
+  await prisma.generatedAppRuntime.upsert({
+    where: { id: "garun_leave_management_001" },
+    update: {
+      artifactRoot: "generated-apps/leave-management",
+      requiredPaths: ["app.manifest.json", "package.json", "frontend/", "backend/", "prisma/", "openapi/", "tests/", "README.md"],
+      containerName: "evcp-app-leave-management-dep_leave_management_001",
+      imageTag: "leave-management:1",
+      route: "/apps/leave-management",
+      healthEndpoint: "/apps/leave-management/health",
+      readyEndpoint: "/apps/leave-management/ready",
+      metricsEndpoint: "/apps/leave-management/metrics",
+      status: "running"
+    },
+    create: {
+      id: "garun_leave_management_001",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      deploymentRecordId: "dep_leave_management_001",
+      artifactRoot: "generated-apps/leave-management",
+      requiredPaths: ["app.manifest.json", "package.json", "frontend/", "backend/", "prisma/", "openapi/", "tests/", "README.md"],
+      containerName: "evcp-app-leave-management-dep_leave_management_001",
+      imageTag: "leave-management:1",
+      route: "/apps/leave-management",
+      healthEndpoint: "/apps/leave-management/health",
+      readyEndpoint: "/apps/leave-management/ready",
+      metricsEndpoint: "/apps/leave-management/metrics",
+      status: "running"
+    }
+  });
+
+  await prisma.generatedAppSchemaGrant.upsert({
+    where: { id: "gaschema_leave_management_001" },
+    update: {
+      schemaName: "app_leave_management",
+      dbUser: "app_user_leave_management",
+      allowedSchemas: ["app_leave_management"],
+      deniedSchemas: ["public", "platform", "app_payroll"],
+      status: "active"
+    },
+    create: {
+      id: "gaschema_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      schemaName: "app_leave_management",
+      dbUser: "app_user_leave_management",
+      allowedSchemas: ["app_leave_management"],
+      deniedSchemas: ["public", "platform", "app_payroll"],
+      status: "active"
+    }
+  });
+
+  await prisma.generatedAppHealthCheck.upsert({
+    where: { id: "gahealth_leave_management_001" },
+    update: {
+      healthStatus: "healthy",
+      readinessStatus: "ready",
+      dependencies: { database: "healthy", platformAuth: "ready", route: "ready" },
+      readinessGates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"],
+      checkedAt: new Date("2026-08-17T11:05:00.000Z")
+    },
+    create: {
+      id: "gahealth_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      healthStatus: "healthy",
+      readinessStatus: "ready",
+      dependencies: { database: "healthy", platformAuth: "ready", route: "ready" },
+      readinessGates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"],
+      checkedAt: new Date("2026-08-17T11:05:00.000Z")
+    }
+  });
+
+  await prisma.generatedAppRuntimeLog.upsert({
+    where: { id: "galog_leave_management_001" },
+    update: {
+      appId: "app_leave_management",
+      deploymentId: "dep_leave_management_001",
+      requestId: "req_leave_management_001",
+      severity: "info",
+      message: "Generated app runtime accepted authenticated request",
+      metadata: { path: "/api/leave-requests", method: "GET" },
+      occurredAt: new Date("2026-08-17T11:06:00.000Z")
+    },
+    create: {
+      id: "galog_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      appId: "app_leave_management",
+      deploymentId: "dep_leave_management_001",
+      requestId: "req_leave_management_001",
+      severity: "info",
+      message: "Generated app runtime accepted authenticated request",
+      metadata: { path: "/api/leave-requests", method: "GET" },
+      occurredAt: new Date("2026-08-17T11:06:00.000Z")
+    }
+  });
+
+  await prisma.generatedAppRuntimeMetric.upsert({
+    where: { id: "gametric_leave_management_001" },
+    update: {
+      requestCount: 128,
+      errorCount: 0,
+      latencyP95Ms: 42,
+      window: "last_15m",
+      measuredAt: new Date("2026-08-17T11:07:00.000Z")
+    },
+    create: {
+      id: "gametric_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      requestCount: 128,
+      errorCount: 0,
+      latencyP95Ms: 42,
+      window: "last_15m",
+      measuredAt: new Date("2026-08-17T11:07:00.000Z")
+    }
+  });
+
+  await prisma.generatedAppOpenApiContract.upsert({
+    where: { runtimeId: "garun_leave_management_001" },
+    update: {
+      version: "1.0.0",
+      openapiPath: "generated-apps/leave-management/openapi/openapi.json",
+      paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+      pathCount: 4
+    },
+    create: {
+      id: "gaopenapi_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      version: "1.0.0",
+      openapiPath: "generated-apps/leave-management/openapi/openapi.json",
+      paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+      pathCount: 4
+    }
+  });
+
+  await prisma.generatedAppMigrationReport.upsert({
+    where: { id: "gamigration_leave_management_001" },
+    update: {
+      deploymentRecordId: "dep_leave_management_001",
+      migrationId: "mig_leave_management_baseline",
+      dryRunStatus: "passed",
+      destructiveChanges: [],
+      requiredApprovals: []
+    },
+    create: {
+      id: "gamigration_leave_management_001",
+      runtimeId: "garun_leave_management_001",
+      deploymentRecordId: "dep_leave_management_001",
+      migrationId: "mig_leave_management_baseline",
+      dryRunStatus: "passed",
+      destructiveChanges: [],
+      requiredApprovals: []
+    }
+  });
+
   await prisma.supportTicket.upsert({
     where: { id: "ticket_leave_management_bug_001" },
     update: {

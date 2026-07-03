@@ -1,7 +1,8 @@
 # ADR-003: Generated App Container and Schema Isolation
 
-**Status:** Proposed  
+**Status:** Accepted
 **Date:** 2026-07-03  
+**Accepted:** 2026-07-04 in Sprint 10
 **Deciders:** Product Owner, Software Architect, IT/System Admin, Security Admin, Data Owner
 
 ## Context
@@ -69,10 +70,20 @@ Separate containers provide the runtime isolation needed for production without 
 - App rollback can be handled independently from platform rollback, subject to database migration safety.
 - Future database-per-app support can be added for higher-risk apps if policy requires it.
 
+## Sprint 10 Implementation Notes
+
+Sprint 10 implements the production blueprint contract as deterministic platform evidence:
+
+- `GeneratedAppRuntimeService` exposes artifact root, required paths, container name, image tag, route and probe endpoints for a published app.
+- Runtime evidence is available through `/admin/runtime/projects/:projectId`, `/schema/check`, `/health`, `/openapi` and `/migrations/dry-run`.
+- Schema isolation reports the assigned app schema and DB user, allows only that schema, and returns `cross_schema_access_denied` for other schemas.
+- Prisma tables persist runtime, schema grant, health check, structured log, metric, OpenAPI and migration dry-run records.
+- Admin UI exposes Generated App Runtime Hardening using the shared EVCP design system.
+
 ## Action Items
 
-1. [ ] Define `app.manifest.json` JSON schema.
-2. [ ] Define generated app folder and package layout in the monorepo.
-3. [ ] Define app container health/readiness/logging/metrics contract.
-4. [ ] Define schema-per-app DB user and privilege model.
-5. [ ] Define migration dry-run and destructive migration approval checks.
+1. [x] Define `app.manifest.json` JSON schema.
+2. [x] Define generated app folder and package layout in the monorepo.
+3. [x] Define app container health/readiness/logging/metrics contract.
+4. [x] Define schema-per-app DB user and privilege model.
+5. [x] Define migration dry-run and destructive migration approval checks.

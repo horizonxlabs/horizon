@@ -425,6 +425,96 @@ export interface PublishResult {
   manifest: AppManifest;
 }
 
+export interface GeneratedRuntimeArtifactContract {
+  root: string;
+  requiredPaths: string[];
+}
+
+export interface GeneratedRuntimeContainerContract {
+  status: "running" | "stopped" | "failed";
+  containerName: string;
+  imageTag: string;
+  route: string;
+  healthEndpoint: string;
+  readyEndpoint: string;
+  metricsEndpoint: string;
+}
+
+export interface GeneratedRuntimeSchemaIsolation {
+  schemaName: string;
+  dbUser: string;
+  allowedSchemas: string[];
+  deniedSchemas: string[];
+}
+
+export interface GeneratedRuntimeSchemaAccessCheck {
+  projectId: string;
+  attemptedSchema: string;
+  operation: string;
+  allowed: boolean;
+  reason?: "assigned_schema_allowed" | "cross_schema_access_denied";
+  evidence: string;
+}
+
+export interface GeneratedRuntimeHealth {
+  status: "healthy" | "degraded" | "down";
+  appId: string;
+  deploymentId: string;
+  dependencies: Record<string, "healthy" | "ready">;
+}
+
+export interface GeneratedRuntimeReadiness {
+  ready: boolean;
+  gates: string[];
+}
+
+export interface GeneratedRuntimeLogSample {
+  appId: string;
+  deploymentId: string;
+  requestId: string;
+  severity: "info" | "warning" | "error";
+  message: string;
+  timestamp: string;
+}
+
+export interface GeneratedRuntimeMetrics {
+  requestCount: number;
+  errorCount: number;
+  latencyP95Ms: number;
+  window: string;
+}
+
+export interface GeneratedRuntimeOpenApiContract {
+  version: string;
+  openapiPath: string;
+  paths: string[];
+  pathCount: number;
+}
+
+export interface GeneratedRuntimeMigrationDryRun {
+  migrationId: string;
+  deploymentId: string;
+  status: "passed" | "blocked";
+  destructiveChanges: string[];
+  requiredApprovals: string[];
+  approvalId?: string;
+}
+
+export interface GeneratedRuntimeOverview {
+  projectId: string;
+  appId: string;
+  deploymentId: string;
+  artifactContract: GeneratedRuntimeArtifactContract;
+  container: GeneratedRuntimeContainerContract;
+  schemaIsolation: GeneratedRuntimeSchemaIsolation;
+  health: GeneratedRuntimeHealth;
+  readiness: GeneratedRuntimeReadiness;
+  logSample: GeneratedRuntimeLogSample;
+  metrics: GeneratedRuntimeMetrics;
+  openApi: GeneratedRuntimeOpenApiContract;
+  migrationDryRun: GeneratedRuntimeMigrationDryRun;
+}
+
 export type StoreAppAccessStatus = "active" | "available" | "pending";
 export type StorePrimaryAction = "open" | "request_access" | "view_status";
 export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
@@ -2894,6 +2984,166 @@ export class PublishService {
   }
 }
 
+export class GeneratedAppRuntimeService {
+  private readonly requiredPaths = [
+    "app.manifest.json",
+    "package.json",
+    "frontend/",
+    "backend/",
+    "prisma/",
+    "openapi/",
+    "tests/",
+    "README.md"
+  ];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly publish: PublishService
+  ) {}
+
+  getRuntimeOverview(actor: PlatformUser, projectId: string): GeneratedRuntimeOverview {
+    this.auth.requireRole(actor, ["admin"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const manifest = this.publish.getManifestForProject(actor, project.id);
+    const deployment = this.publish.getLatestDeploymentForProject(actor, project.id);
+    const slug = manifest.app.slug;
+    const schemaName = manifest.database.schemaName;
+    const dbUser = `app_user_${slug.replace(/[^a-z0-9]+/gi, "_")}`;
+    const timestamp = deployment.publishedAt;
+
+    return {
+      projectId: project.id,
+      appId: manifest.appId,
+      deploymentId: deployment.id,
+      artifactContract: {
+        root: `generated-apps/${slug}`,
+        requiredPaths: [...this.requiredPaths]
+      },
+      container: {
+        status: "running",
+        containerName: `evcp-app-${slug}-${deployment.id}`,
+        imageTag: `${slug}:${manifest.manifestVersion}`,
+        route: deployment.route,
+        healthEndpoint: `/apps/${slug}/health`,
+        readyEndpoint: `/apps/${slug}/ready`,
+        metricsEndpoint: `/apps/${slug}/metrics`
+      },
+      schemaIsolation: {
+        schemaName,
+        dbUser,
+        allowedSchemas: [schemaName],
+        deniedSchemas: ["public", "platform", "app_payroll"]
+      },
+      health: {
+        status: "healthy",
+        appId: manifest.appId,
+        deploymentId: deployment.id,
+        dependencies: {
+          database: "healthy",
+          platformAuth: "ready",
+          route: "ready"
+        }
+      },
+      readiness: {
+        ready: true,
+        gates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"]
+      },
+      logSample: {
+        appId: manifest.appId,
+        deploymentId: deployment.id,
+        requestId: `req_${slug.replace(/[^a-z0-9]+/gi, "_")}_001`,
+        severity: "info",
+        message: "Generated app runtime accepted authenticated request",
+        timestamp
+      },
+      metrics: {
+        requestCount: 128,
+        errorCount: 0,
+        latencyP95Ms: 42,
+        window: "last_15m"
+      },
+      openApi: {
+        version: "1.0.0",
+        openapiPath: `generated-apps/${slug}/openapi/openapi.json`,
+        paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+        pathCount: 4
+      },
+      migrationDryRun: {
+        migrationId: `mig_${slug.replace(/[^a-z0-9]+/gi, "_")}_baseline`,
+        deploymentId: deployment.id,
+        status: "passed",
+        destructiveChanges: [],
+        requiredApprovals: []
+      }
+    };
+  }
+
+  checkSchemaAccess(
+    actor: PlatformUser,
+    projectId: string,
+    input: { attemptedSchema: string; operation: string }
+  ): GeneratedRuntimeSchemaAccessCheck {
+    const runtime = this.getRuntimeOverview(actor, projectId);
+    const attemptedSchema = input.attemptedSchema.trim();
+    const operation = input.operation.trim() || "select";
+    const allowed = runtime.schemaIsolation.allowedSchemas.includes(attemptedSchema);
+    const result: GeneratedRuntimeSchemaAccessCheck = {
+      projectId: runtime.projectId,
+      attemptedSchema,
+      operation,
+      allowed,
+      reason: allowed ? "assigned_schema_allowed" : "cross_schema_access_denied",
+      evidence: allowed
+        ? `${runtime.schemaIsolation.dbUser} may ${operation} within ${runtime.schemaIsolation.schemaName}`
+        : `${runtime.schemaIsolation.dbUser} is scoped to ${runtime.schemaIsolation.schemaName} and cannot ${operation} ${attemptedSchema}`
+    };
+
+    this.audit.record({
+      actorId: actor.id,
+      action: allowed ? "generated_runtime.schema_access.allowed" : "generated_runtime.schema_access.denied",
+      resourceType: "generated_app_runtime",
+      resourceId: runtime.deploymentId,
+      severity: allowed ? "info" : "warning",
+      metadata: { projectId: runtime.projectId, attemptedSchema, operation }
+    });
+
+    return result;
+  }
+
+  runMigrationDryRun(
+    actor: PlatformUser,
+    projectId: string,
+    input: { migrationId: string; destructiveChanges?: string[]; approvalId?: string }
+  ): GeneratedRuntimeMigrationDryRun {
+    const runtime = this.getRuntimeOverview(actor, projectId);
+    const destructiveChanges = [...(input.destructiveChanges ?? [])];
+    const hasDestructiveChange = destructiveChanges.length > 0;
+    const approvalId = input.approvalId?.trim() || undefined;
+    const blocked = hasDestructiveChange && !approvalId;
+    const result: GeneratedRuntimeMigrationDryRun = {
+      migrationId: input.migrationId.trim() || `mig_${runtime.deploymentId}`,
+      deploymentId: runtime.deploymentId,
+      status: blocked ? "blocked" : "passed",
+      destructiveChanges,
+      requiredApprovals: blocked ? ["Developer Reviewer", "Data Owner"] : [],
+      approvalId
+    };
+
+    this.audit.record({
+      actorId: actor.id,
+      action: blocked ? "generated_runtime.migration_dry_run.blocked" : "generated_runtime.migration_dry_run.passed",
+      resourceType: "generated_app_runtime",
+      resourceId: runtime.deploymentId,
+      severity: blocked ? "warning" : "info",
+      metadata: { projectId: runtime.projectId, migrationId: result.migrationId, destructiveChanges }
+    });
+
+    return result;
+  }
+}
+
 export class StorefrontService {
   private readonly notifications: InAppNotification[] = [];
 
@@ -3498,6 +3748,7 @@ export class MonitoringService {
     private readonly tickets: TicketService,
     private readonly domains: DomainService,
     private readonly publish: PublishService,
+    private readonly generatedRuntime: GeneratedAppRuntimeService,
     private readonly aiGovernance: AiGovernanceService,
     private readonly guardrails: GuardrailService
   ) {}
@@ -3507,6 +3758,16 @@ export class MonitoringService {
     const tickets = this.tickets.listTickets(actor);
     const domainRequests = this.domains.listRequests(actor);
     const registry = this.publish.listRegistry(actor);
+
+    const appHealth = registry.map((entry) => {
+      try {
+        const runtime = this.generatedRuntime.getRuntimeOverview(actor, entry.projectId);
+        return { app: entry.name, status: runtime.health.status, route: runtime.container.route };
+      } catch (error) {
+        if (!(error instanceof ValidationError)) throw error;
+        return { app: entry.name, status: "degraded" as const, route: entry.route };
+      }
+    });
 
     return {
       serviceHealth: [
@@ -3518,7 +3779,7 @@ export class MonitoringService {
         { name: "AI Gateway", status: "healthy", detail: "Provider adapter route configured" },
         { name: "Caddy", status: "healthy", detail: "Domain approval path ready" }
       ],
-      appHealth: registry.map((entry) => ({ app: entry.name, status: "healthy", route: entry.route })),
+      appHealth,
       aiUsage: {
         providerCalls: this.aiGovernance.providerCallCount(),
         guardrailEvents: this.guardrails.listEvents().length
@@ -3761,6 +4022,7 @@ export interface PlatformApiServices {
   frontendVersions: FrontendVersionService;
   appAccess: AppUserAccessService;
   publish: PublishService;
+  generatedRuntime: GeneratedAppRuntimeService;
   storefront: StorefrontService;
   tickets: TicketService;
   prdChanges: PrdChangeService;
@@ -3790,12 +4052,13 @@ export function createPlatformApiServices(): PlatformApiServices {
   const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
   const appAccess = new AppUserAccessService(auth, audit, projects, identity);
   const publish = new PublishService(auth, audit, projects, prds, frontendVersions, databaseView, appAccess);
+  const generatedRuntime = new GeneratedAppRuntimeService(auth, audit, projects, publish);
   const storefront = new StorefrontService(auth, identity, projects, publish, appAccess);
   const tickets = new TicketService(auth, audit, storefront, projects);
   const prdChanges = new PrdChangeService(auth, audit, projects, tickets, prds);
   const domains = new DomainService(auth, audit, projects);
   const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
-  const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, aiGovernance, guardrails);
+  const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, generatedRuntime, aiGovernance, guardrails);
   const authSso = new PlatformAuthSsoService(auth, audit);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
@@ -3814,6 +4077,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     frontendVersions,
     appAccess,
     publish,
+    generatedRuntime,
     storefront,
     tickets,
     prdChanges,

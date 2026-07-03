@@ -84,6 +84,7 @@ Individual sprint plan files:
 | Sprint 7 | `docs/planning/sprint-7-plan.md` |
 | Sprint 8 | `docs/planning/sprint-8-plan.md` |
 | Sprint 9 | `docs/planning/sprint-9-plan.md` |
+| Sprint 10 | `docs/planning/sprint-10-plan.md` |
 
 ### Sprint 0 - Foundation and Design System
 
@@ -326,6 +327,8 @@ Detailed plan: `docs/planning/sprint-9-plan.md`
 | Schema-per-app DB user | P4-DB-001 | Cross-schema access denied |
 | Health/readiness/log/metrics | P4-DEP-002 | Runtime contract visible |
 | OpenAPI and migration contract | P4-GEN-001, P4-MIG-001 | Spec and migration linked to deployment |
+
+Detailed plan: `docs/planning/sprint-10-plan.md`
 
 ### Sprint 11 - Knowledge and Skill Governance
 

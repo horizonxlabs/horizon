@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 0-8 planning
+Status: Ready for Sprint 0-8 planning and production extension Sprint 9-10 verification
 Related strategy: `docs/testing/mvp-test-strategy.md`
 
 ## 1. Purpose
@@ -23,6 +23,7 @@ Related strategy: `docs/testing/mvp-test-strategy.md`
 | Sprint 7 | App Store PWA, access request, ticket, creator inbox | PWA screenshot, API/UI tests, ticket record |
 | Sprint 8 | Ticket-to-PRD, domain request, traceability, monitoring/audit, full demo | Full E2E evidence, traceability record, demo checklist, screenshots |
 | Sprint 9 | Auth SSO, Keycloak/direct IdP strategy, break-glass, policy templates | Unit/integration/E2E API/UI evidence, auth/policy DB records, screenshot |
+| Sprint 10 | Generated app runtime, schema isolation, health/readiness/log/metrics, OpenAPI, migration dry-run | Unit/integration/E2E API/UI evidence, runtime DB records, screenshots |
 
 ## 3. Sprint 0 Tests
 
@@ -167,7 +168,30 @@ Accepted evidence on 2026-07-04:
 - Screenshot evidence: `docs/assets/screenshots/sprint9-auth-policy.png`, `docs/assets/screenshots/sprint9-auth-policy-mobile.png`.
 - Console evidence: `docs/assets/screenshots/sprint9-console-warnings.txt` recorded 0 errors or warnings.
 
-## 13. Regression Suite Growth
+## 13. Production Extension Sprint 10 Tests
+
+| Test ID | Test | Type | Evidence |
+| --- | --- | --- | --- |
+| S10-T001 | Runtime overview exposes artifact root, required paths, app ID and deployment ID | Contract/unit/API | Runtime overview response |
+| S10-T002 | Container contract exposes status, container name, image tag, route and probe endpoints | Contract/unit/API | Runtime overview response |
+| S10-T003 | Schema isolation allows assigned schema and denies cross-schema access | Security/unit/API | Allow/deny response and audit event |
+| S10-T004 | Health/readiness/log/metrics evidence is visible | Runtime/API/UI | Health endpoint response and Admin UI |
+| S10-T005 | OpenAPI contract is linked to generated API paths | Contract/API/UI | OpenAPI response and UI section |
+| S10-T006 | Migration dry-run blocks destructive changes without approval | Security/API/unit | Blocked report with required approvers |
+| S10-T007 | Prisma migration and seed create Sprint 10 runtime records | Integration/DB | Migrate/seed output and DB counts |
+| S10-T008 | Admin Runtime Hardening UI renders all required sections | UI/E2E | Screenshot and console capture |
+
+Accepted evidence on 2026-07-04:
+
+- Unit: 50 passed, 0 failed.
+- Integration: 34 passed, 0 failed.
+- E2E/API/UI smoke: 35 passed, 0 failed.
+- Full `pnpm verify:sprint10`: passed lint, typecheck, build, unit, integration and E2E.
+- Database counts: `generated_app_runtimes=1`, `generated_app_schema_grants=1`, `generated_app_health_checks=1`, `generated_app_runtime_logs=1`, `generated_app_runtime_metrics=1`, `generated_app_openapi_contracts=1`, `generated_app_migration_reports=1`.
+- Screenshot evidence: `docs/assets/screenshots/sprint10-runtime-hardening.png`, `docs/assets/screenshots/sprint10-runtime-hardening-mobile.png`.
+- Console evidence: `docs/assets/screenshots/sprint10-console-warnings.txt` recorded 0 errors or warnings.
+
+## 14. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
 | --- | --- |
@@ -181,8 +205,9 @@ Accepted evidence on 2026-07-04:
 | Sprint 7 | Sprint 6 + App Store PWA, ticket, creator inbox |
 | Sprint 8 | Full MVP E2E demo and traceability |
 | Sprint 9 | Sprint 8 + auth provider config, Platform Auth session validation, break-glass, policy templates |
+| Sprint 10 | Sprint 9 + runtime overview, schema isolation, health/OpenAPI and migration dry-run |
 
-## 14. Exit Rule
+## 15. Exit Rule
 
 A sprint is not accepted if:
 

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
+  Database,
   Fingerprint,
   Gauge,
   Globe2,
@@ -146,6 +147,36 @@ const policyRows = [
   { classification: "Internal", reviewers: "Project Owner", checks: "auth + app role", exposure: "approved users" },
   { classification: "Confidential", reviewers: "Security Admin", checks: "audit high severity", exposure: "blocked" },
   { classification: "Restricted", reviewers: "Security + Platform Admin", checks: "break-glass disabled", exposure: "blocked" }
+];
+
+const runtimeKpis = [
+  { label: "Runtime Status", value: "running", detail: "separate generated app container", icon: ServerCog, tone: "success" },
+  { label: "Schema Grant", value: "isolated", detail: "app_leave_management only", icon: Database, tone: "success" },
+  { label: "Readiness", value: "5/5", detail: "auth, route, migration gates pass", icon: CheckCircle2, tone: "success" },
+  { label: "Migration Dry Run", value: "passed", detail: "destructive changes require approval", icon: ShieldCheck, tone: "info" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const runtimeContractRows = [
+  { area: "Artifact Root", contract: "generated-apps/leave-management", evidence: "app.manifest.json + README.md" },
+  { area: "Container", contract: "evcp-app-leave-management-dep_001", evidence: "image leave-management:1" },
+  { area: "Route", contract: "/apps/leave-management", evidence: "Caddy route registered" }
+];
+
+const runtimeEndpointRows = [
+  { endpoint: "/apps/leave-management/health", signal: "healthy", owner: "Platform API" },
+  { endpoint: "/apps/leave-management/ready", signal: "ready", owner: "Runtime gate" },
+  { endpoint: "/apps/leave-management/metrics", signal: "p95 42ms", owner: "Metrics scraper" }
+];
+
+const runtimeLogRows = [
+  { request: "req_leave_management_001", severity: "info", message: "Platform Auth session accepted" },
+  { request: "req_leave_management_002", severity: "info", message: "Schema grant enforced for leave request query" }
+];
+
+const runtimeMetricRows = [
+  { metric: "Requests", value: "128", window: "last 15m" },
+  { metric: "Errors", value: "0", window: "last 15m" },
+  { metric: "P95 Latency", value: "42ms", window: "last 15m" }
 ];
 
 function AdminApp() {
@@ -319,6 +350,168 @@ function AdminApp() {
               ))}
             </div>
           </SectionCard>
+        </section>
+      </section>
+
+      <section className="runtime-hardening-shell" aria-label="Generated App Runtime Hardening">
+        <div className="admin-monitoring-header">
+          <div>
+            <span className="eyebrow">Sprint 10</span>
+            <h2>Generated App Runtime Hardening</h2>
+            <p>หลักฐาน runtime สำหรับแอปที่ publish แล้ว: container แยก, schema-per-app, health/readiness, logs, metrics, OpenAPI และ migration dry-run.</p>
+          </div>
+          <ToneBadge tone="success">production contract</ToneBadge>
+        </div>
+
+        <section className="runtime-kpi-grid">
+          {runtimeKpis.map((item) => {
+            const Icon = item.icon;
+            return (
+              <MetricCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                detail={item.detail}
+                icon={<Icon size={18} />}
+                tone={item.tone}
+              />
+            );
+          })}
+        </section>
+
+        <section className="runtime-hardening-layout">
+          <WorkflowRail
+            eyebrow="Runtime Path"
+            title="Publish to isolated app runtime"
+            steps={[
+              { label: "manifest contract", icon: <CheckCircle2 size={16} /> },
+              { label: "container start", icon: <ServerCog size={16} /> },
+              { label: "schema grant", icon: <Database size={16} /> },
+              { label: "health and OpenAPI linked", icon: <Route size={16} /> }
+            ]}
+            alert={{
+              icon: <ShieldCheck size={18} />,
+              title: "Cross-schema access denied",
+              description: "app_user_leave_management อ่านได้เฉพาะ schema ของแอปตัวเอง",
+              tone: "warning"
+            }}
+          />
+
+          <section className="runtime-hardening-grid">
+            <SectionCard eyebrow="Artifact + Image" title="Container Contract">
+              <div className="runtime-desktop-table">
+                <DataTable
+                  columns={[
+                    { key: "area", label: "Area" },
+                    { key: "contract", label: "Contract" },
+                    { key: "evidence", label: "Evidence" }
+                  ]}
+                  rows={runtimeContractRows}
+                />
+              </div>
+              <div className="runtime-mobile-list">
+                {runtimeContractRows.map((row) => (
+                  <article key={row.area}>
+                    <strong>{row.area}</strong>
+                    <span className="runtime-endpoint-text">{row.contract}</span>
+                    <small>{row.evidence}</small>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Database Boundary" title="Schema Isolation">
+              <DefinitionGrid
+                items={[
+                  { label: "Schema", value: "app_leave_management" },
+                  { label: "DB User", value: "app_user_leave_management" },
+                  { label: "Allowed", value: <ToneBadge tone="success">app schema only</ToneBadge> },
+                  { label: "Denied", value: "public, platform, app_payroll" }
+                ]}
+              />
+              <DecisionPanel
+                tone="success"
+                badge="Enforced"
+                title="Runtime query cannot cross into another app schema"
+                lines={["Schema grant evidence is linked to deployment", "Denied checks are auditable by project and operation"]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Runtime Probes" title="Health / Readiness">
+              <div className="runtime-desktop-table">
+                <DataTable
+                  columns={[
+                    { key: "endpoint", label: "Endpoint" },
+                    { key: "signal", label: "Signal", tone: (value) => (value === "healthy" || value === "ready" ? "success" : "info") },
+                    { key: "owner", label: "Owner" }
+                  ]}
+                  rows={runtimeEndpointRows}
+                />
+              </div>
+              <div className="runtime-mobile-list">
+                {runtimeEndpointRows.map((row) => (
+                  <article key={row.endpoint}>
+                    <strong className="runtime-endpoint-text">{row.endpoint}</strong>
+                    <ToneBadge tone={row.signal === "healthy" || row.signal === "ready" ? "success" : "info"}>{row.signal}</ToneBadge>
+                    <small>{row.owner}</small>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Structured Evidence" title="Structured Logs">
+              <div className="runtime-desktop-table">
+                <DataTable
+                  columns={[
+                    { key: "request", label: "Request" },
+                    { key: "severity", label: "Severity", tone: () => "success" },
+                    { key: "message", label: "Message" }
+                  ]}
+                  rows={runtimeLogRows}
+                />
+              </div>
+              <div className="runtime-mobile-list">
+                {runtimeLogRows.map((row) => (
+                  <article key={row.request}>
+                    <strong className="runtime-endpoint-text">{row.request}</strong>
+                    <ToneBadge tone="success">{row.severity}</ToneBadge>
+                    <small>{row.message}</small>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Operational Signals" title="Metrics">
+              <DataTable
+                columns={[
+                  { key: "metric", label: "Metric" },
+                  { key: "value", label: "Value", tone: (value) => (value === "0" ? "success" : "info") },
+                  { key: "window", label: "Window" }
+                ]}
+                rows={runtimeMetricRows}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="API + Migration" title="OpenAPI Contract">
+              <DefinitionGrid
+                items={[
+                  { label: "Spec", value: "generated-apps/leave-management/openapi/openapi.json" },
+                  { label: "Version", value: "1.0.0" },
+                  { label: "Paths", value: "/api/leave-requests, /api/approval-steps" },
+                  { label: "Linked Deployment", value: "dep_leave_management_001" }
+                ]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Database Change Gate" title="Migration Dry Run">
+              <DecisionPanel
+                tone="warning"
+                badge="Approval Gate"
+                title="Destructive migrations are blocked without reviewer and data owner approval"
+                lines={["Non-destructive dry-run passes before deployment", "Drop column/table changes require Developer Reviewer and Data Owner"]}
+              />
+            </SectionCard>
+          </section>
         </section>
       </section>
 
