@@ -1,8 +1,8 @@
 # Enterprise Vibe Coding Platform - Production Blueprint Requirements
 
-Version: 0.1  
+Version: 0.2
 Date: 2026-07-03  
-Status: Requirements Baseline Draft  
+Status: Validated Requirements Baseline Draft
 Language: Thai primary with English technical terms  
 Scope: Production Blueprint for Single Enterprise / Private Server
 
@@ -1110,15 +1110,18 @@ These scenarios are required before a production release candidate can be accept
 - Given upgrade fails health check, when rollback command is executed, then previous version is restored and audit event records rollback.
 - Given license expires beyond grace period, when Creator attempts new publish, then publish is blocked while existing published apps remain accessible.
 
-## 17. Recommended Next Artifacts
+## 17. Artifact Index and Next Execution Step
 
-1. Architecture Decision Record set:
-   - ADR-001 Single Enterprise Private Server Deployment
-   - ADR-002 AI Provider Adapter Architecture
-   - ADR-003 Generated App Container and Schema Isolation
-   - ADR-004 Policy-Based Publish Governance
-2. Requirements Traceability Matrix with test case IDs.
-3. Domain model and data dictionary.
-4. Security model and permission matrix.
-5. Production rollout phase plan.
-6. Implementation backlog split by surface and platform service.
+The requirement engineering baseline now consists of:
+
+| Artifact | Path |
+| --- | --- |
+| Requirements baseline | `docs/requirements/production-blueprint-requirements.md` |
+| Requirements traceability matrix | `docs/requirements/requirements-traceability-matrix.md` |
+| Requirements validation review | `docs/requirements/requirements-validation-review.md` |
+| Architecture decision records | `docs/architecture/ADR-001-single-enterprise-private-server-deployment.md` through `docs/architecture/ADR-005-auth-broker-and-external-idp-strategy.md` |
+| Production implementation backlog | `docs/planning/production-implementation-backlog.md` |
+| MVP-aligned sprint roadmap | `docs/planning/production-sprint-roadmap.md` |
+| MVP sprint execution plans | `docs/planning/sprint-0-plan.md` through `docs/planning/sprint-8-plan.md` |
+
+Next execution step: start Sprint 0 implementation from `docs/planning/sprint-0-plan.md`, then keep RTM and validation review updated when delivered behavior changes requirement scope.

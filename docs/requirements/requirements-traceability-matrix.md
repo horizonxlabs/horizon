@@ -264,20 +264,16 @@ flowchart LR
 
 ## 6. Validation Sign-Off Checklist
 
-- [ ] Every P0 requirement has at least one test case.
-- [ ] Every product goal maps to requirement groups and test suites.
-- [ ] Governance/security requirements include negative tests.
-- [ ] Generated app runtime requirements include deployment and isolation tests.
-- [ ] Ticket-to-PRD feedback loop has end-to-end traceability.
-- [ ] Operational requirements include backup, restore, upgrade, rollback and license tests.
-- [ ] Blocking gaps are accepted as ADR/backlog inputs before implementation.
+| Check | Status | Evidence |
+| --- | --- | --- |
+| Every P0 requirement has at least one test case | Pass for baseline | Section 4 maps each requirement group to RTM test cases; implementation must instantiate these as automated/manual tests per sprint |
+| Every product goal maps to requirement groups and test suites | Pass | Section 3 maps goals to requirement and test groups |
+| Governance/security requirements include negative tests | Pass | TC-AUTH-003, TC-ACCESS-003, TC-AI-003, TC-GRD-001, TC-DATA-002, TC-PUB-003, TC-STORE-003, TC-SEC-001 |
+| Generated app runtime requirements include deployment and isolation tests | Pass | TC-GEN-001 to TC-GEN-003, TC-DEP-001, TC-DEP-002, TC-DOM-001 |
+| Ticket-to-PRD feedback loop has end-to-end traceability | Pass | TC-TKT-001 to TC-TKT-003 and TC-PRD-003 |
+| Operational requirements include backup, restore, upgrade, rollback and license tests | Pass | TC-BCK-001 to TC-BCK-003, TC-UPG-001, TC-UPG-002, TC-LIC-001, TC-LIC-002 |
+| Blocking gaps are accepted as ADR/backlog inputs before implementation | Pass with residual decisions | Section 5 and `docs/planning/production-implementation-backlog.md` section 14 |
 
-## 7. Recommended Next Step
+## 7. Current Artifact Status
 
-After this RTM is reviewed, create the first ADR set:
-
-1. ADR-001 Single Enterprise Private Server Deployment
-2. ADR-002 AI Provider Adapter Architecture
-3. ADR-003 Generated App Container and Schema Isolation
-4. ADR-004 Policy-Based Publish Governance
-5. ADR-005 Auth Broker and External IdP Strategy
+The ADR set, implementation backlog, MVP-aligned sprint roadmap and Sprint 0-8 plans have been created. Use `docs/requirements/requirements-validation-review.md` for the current completeness review and use `docs/planning/sprint-0-plan.md` as the first implementation execution plan.
