@@ -54,8 +54,10 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 ### Creator
 
 - ใช้ `PageHeader tone="surface"` เพื่อไม่แข่งกับ canvas/live preview
-- ใช้ `SectionCard` สำหรับ PRD editor, database schema, version/remix controls
-- ใช้ `DecisionPanel` สำหรับ publish readiness, validation, failed generation
+- ใช้ `SectionCard` สำหรับ Project Picker, Create Project Wizard, PRD Viewer, database schema, version/remix controls
+- ใช้ `WorkflowRail` สำหรับ flow ที่ต้องเห็นลำดับชัด เช่น project input -> governed generation -> draft -> baseline
+- ใช้ `DecisionPanel` สำหรับ PRD governance readiness, baseline immutability, publish readiness, validation และ failed generation
+- ใช้ `DataTable` สำหรับ PRD Version History, frontend checkpoints และ restore history
 
 ### App Store PWA
 

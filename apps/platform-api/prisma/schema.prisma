@@ -124,9 +124,15 @@ model Project {
   name        String
   status      ProjectStatus   @default(draft)
   ownerUserId String          @map("owner_user_id")
+  appType     String?         @map("app_type")
+  businessProblem String?     @map("business_problem")
+  targetDepartment String?    @map("target_department")
+  intendedUsers String[]      @default([]) @map("intended_users")
+  dataSensitivity String?     @map("data_sensitivity")
   owner       PlatformUser    @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   members     ProjectMember[]
   apps        App[]
+  prdDocument PrdDocument?
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -300,4 +306,53 @@ model GuardrailEvent {
   @@index([actorUserId, occurredAt])
   @@index([decision])
   @@map("guardrail_events")
+}
+
+model PrdDocument {
+  id                String       @id
+  projectId         String       @unique @map("project_id")
+  status            String       @default("draft")
+  currentVersionId  String?      @map("current_version_id")
+  baselineVersionId String?      @map("baseline_version_id")
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions          PrdVersion[] @relation("PrdDocumentVersions")
+  currentVersion    PrdVersion?  @relation("PrdCurrentVersion", fields: [currentVersionId], references: [id])
+  baselineVersion   PrdVersion?  @relation("PrdBaselineVersion", fields: [baselineVersionId], references: [id])
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@map("prd_documents")
+}
+
+model PrdVersion {
+  id              String        @id
+  documentId      String        @map("document_id")
+  version         String
+  status          String
+  isBaseline      Boolean       @default(false) @map("is_baseline")
+  sourcePrompt    String        @map("source_prompt")
+  changeSummary   String        @map("change_summary")
+  generatedBy     Json          @default("{}") @map("generated_by")
+  createdByUserId String        @map("created_by_user_id")
+  document        PrdDocument   @relation("PrdDocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentFor      PrdDocument[] @relation("PrdCurrentVersion")
+  baselineFor     PrdDocument[] @relation("PrdBaselineVersion")
+  sections        PrdSection[]
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@index([documentId])
+  @@map("prd_versions")
+}
+
+model PrdSection {
+  id        String     @id
+  versionId String     @map("version_id")
+  key       String
+  title     String
+  body      String
+  order     Int
+  version   PrdVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, key])
+  @@map("prd_sections")
 }

@@ -2,8 +2,9 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 3 implementation
+Status: Implemented with screenshot evidence
 Related plan: `docs/planning/sprint-3-plan.md`
+Evidence: `docs/assets/screenshots/sprint3-creator-prd.png`
 
 ## 1. Design Objective
 
@@ -103,4 +104,3 @@ Layout:
 - [ ] PRD Viewer supports structured review and section navigation.
 - [ ] Confirm Baseline clearly explains baseline immutability.
 - [ ] Confirmed project has visible PRD v1.0 baseline state.
-

@@ -19,7 +19,8 @@
     "test:e2e": "node --import tsx --test tests/e2e/*.test.mjs",
     "verify:sprint0": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint1": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
-    "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
+    "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint3": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
