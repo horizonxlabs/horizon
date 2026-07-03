@@ -1,388 +1,414 @@
-# Enterprise Vibe Coding Platform - Full Production Sprint Roadmap
+# Enterprise Vibe Coding Platform - MVP-Aligned Production Sprint Roadmap
 
-Version: 0.1  
-Date: 2026-07-03  
-Status: Draft for Roadmap Review  
-Planning horizon: Sprint 1 to Sprint 14  
-Sprint cadence: 2 weeks  
-Source backlog: `docs/planning/production-implementation-backlog.md`
+Version: 0.2
+Date: 2026-07-03
+Status: Draft for Roadmap Review
+Planning horizon: MVP Sprint 0 to Sprint 8, then Production Hardening Sprint 9 to Sprint 14
+Sprint cadence: MVP baseline uses 1-week sprints as defined in the source backlog
+Source backlog: `docs/planning/production-implementation-backlog.md` and attached MVP sprint plan
 
 ## 1. Purpose
 
-เอกสารนี้เขียนแผน sprint ให้ครบตลอด production delivery path จาก foundation ไปจนถึง production hardening เพื่อให้ทีมเห็นลำดับการทำงาน, dependencies, exit criteria และ demo outcome ของแต่ละ sprint ก่อนเริ่ม implementation
+เอกสารนี้ปรับ sprint roadmap ให้สอดคล้องกับ MVP sprint plan ในเอกสารตั้งต้น โดยรักษา Sprint 0-8 ตามลำดับเดิม แล้วต่อด้วย production hardening sprints สำหรับ capability ที่เกิน MVP แต่จำเป็นต่อ Production Blueprint
 
-## 2. Planning Assumptions
+## 2. Source MVP Sprint Structure
 
-| Assumption | Value |
+เอกสารตั้งต้นกำหนด sprint assumptions ดังนี้:
+
+| Item | Source Baseline |
 | --- | --- |
-| Sprint length | 2 weeks |
-| First sprint | 2026-07-06 to 2026-07-17 |
-| Team model | Small AI-assisted engineering team |
-| Capacity model | Story points, recalibrate after Sprint 1 |
-| Delivery model | Foundation-first with vertical-slice validation |
-| Release style | Internal demo at end of every sprint |
-| Scope policy | P0 items are committed; P1 items are stretch or fast follow |
+| Sprint length | 1 week |
+| Team size | 1-3 developers + AI coding assistant |
+| Working style | AI-assisted pair development |
+| MVP target | Usable MVP in 8 sprints after Sprint 0 foundation |
+| Development style | Spec-first, template-first, small-task-first, testable-output-first, human-review-gated |
 
 ## 3. Roadmap Overview
 
 ```mermaid
 gantt
-  title Production Sprint Roadmap
+  title MVP-Aligned Sprint Roadmap
   dateFormat  YYYY-MM-DD
-  section Foundation
-  Sprint 1 Monorepo and API Foundation       :s1, 2026-07-06, 10d
-  Sprint 2 Auth, RBAC, Audit Foundation      :s2, 2026-07-20, 10d
-  section Governance and AI
-  Sprint 3 Policy, Identity, Security        :s3, 2026-08-03, 10d
-  Sprint 4 AI Gateway and Guardrail          :s4, 2026-08-17, 10d
-  Sprint 5 Knowledge and Skill Registry      :s5, 2026-08-31, 10d
-  section Creator
-  Sprint 6 Creator Project and PRD           :s6, 2026-09-14, 10d
-  Sprint 7 Creator Workspace and Preview     :s7, 2026-09-28, 10d
-  section Runtime
-  Sprint 8 Generated App Contract            :s8, 2026-10-12, 10d
-  Sprint 9 Publish Governance and Runtime    :s9, 2026-10-26, 10d
-  section Store and Feedback
-  Sprint 10 App Store and Access             :s10, 2026-11-09, 10d
-  Sprint 11 Ticket and PRD Feedback Loop     :s11, 2026-11-23, 10d
-  section Operations
-  Sprint 12 Installer, Backup, Restore       :s12, 2026-12-07, 10d
-  Sprint 13 Observability and License        :s13, 2026-12-21, 10d
-  Sprint 14 Security Hardening and Release   :s14, 2027-01-04, 10d
+  section MVP Baseline
+  Sprint 0 Foundation and Design System          :s0, 2026-07-06, 5d
+  Sprint 1 Platform API Foundation               :s1, 2026-07-13, 5d
+  Sprint 2 Admin AI Keys and Guardrails          :s2, 2026-07-20, 5d
+  Sprint 3 Creator Project Picker and PRD        :s3, 2026-07-27, 5d
+  Sprint 4 Creator Workspace and Live Preview    :s4, 2026-08-03, 5d
+  Sprint 5 Database View and Frontend Restore    :s5, 2026-08-10, 5d
+  Sprint 6 App User Management and Publish       :s6, 2026-08-17, 5d
+  Sprint 7 App Store PWA and Ticket              :s7, 2026-08-24, 5d
+  Sprint 8 Ticket-to-PRD, Domain, Hardening      :s8, 2026-08-31, 5d
+  section Production Blueprint Extension
+  Sprint 9 Auth SSO and Policy Hardening         :s9, 2026-09-07, 5d
+  Sprint 10 Generated App Runtime Hardening      :s10, 2026-09-14, 5d
+  Sprint 11 Knowledge and Skill Governance       :s11, 2026-09-21, 5d
+  Sprint 12 Installer, Backup, Restore           :s12, 2026-09-28, 5d
+  Sprint 13 Observability and License            :s13, 2026-10-05, 5d
+  Sprint 14 Security Release Readiness           :s14, 2026-10-12, 5d
 ```
 
 ## 4. Sprint Summary
 
-| Sprint | Dates | Theme | Primary Outcome |
+| Sprint | Theme | Must Match Source MVP? | Primary Outcome |
 | --- | --- | --- | --- |
-| Sprint 1 | 2026-07-06 to 2026-07-17 | Monorepo and API Foundation | Repo builds/tests and minimal Platform API health endpoint works |
-| Sprint 2 | 2026-07-20 to 2026-07-31 | Auth, RBAC, Audit Foundation | Platform Auth contract, Keycloak login, break-glass admin, audit skeleton |
-| Sprint 3 | 2026-08-03 to 2026-08-14 | Policy, Identity, Security | OIDC/SAML config, permission guard, policy engine skeleton |
-| Sprint 4 | 2026-08-17 to 2026-08-28 | AI Gateway and Guardrail | External AI provider adapter, routing, quota, usage log, guardrail |
-| Sprint 5 | 2026-08-31 to 2026-09-11 | Knowledge and Skill Registry | Knowledge/skill library with versioning, approval and scoped retrieval |
-| Sprint 6 | 2026-09-14 to 2026-09-25 | Creator Project and PRD | Creator can create project, generate PRD draft and confirm baseline |
-| Sprint 7 | 2026-09-28 to 2026-10-09 | Creator Workspace and Preview | Prompt workspace, task progress, live preview, DB view, frontend restore |
-| Sprint 8 | 2026-10-12 to 2026-10-23 | Generated App Contract | Generated app template, manifest, auth SDK integration and schema provisioning |
-| Sprint 9 | 2026-10-26 to 2026-11-06 | Publish Governance and Runtime | Separate app container deploys through policy approval and Caddy route |
-| Sprint 10 | 2026-11-09 to 2026-11-20 | App Store and Access | PWA App Store, visibility, access requests, external access policy |
-| Sprint 11 | 2026-11-23 to 2026-12-04 | Ticket and PRD Feedback Loop | Ticket routing, status timeline, notifications, ticket-to-PRD change |
-| Sprint 12 | 2026-12-07 to 2026-12-18 | Installer, Backup, Restore | CLI installer, setup wizard, backup schedule, PITR, restore drill |
-| Sprint 13 | 2026-12-21 to 2027-01-01 | Observability and License | Health dashboard, telemetry export, signed license and enforcement |
-| Sprint 14 | 2027-01-04 to 2027-01-15 | Security Hardening and Release | TLS, secrets, upload validation, public checklist, release readiness |
+| Sprint 0 | Foundation and Design System | Yes | Monorepo, shared UI, app shells, mock auth, API client, fixtures |
+| Sprint 1 | Platform API Foundation | Yes | NestJS API, Prisma base schema, users/groups/roles, projects/apps, audit, seed data |
+| Sprint 2 | Admin Console - AI Keys and Guardrails | Yes | Admin can manage providers/API keys/scenario routing/quota/guardrails |
+| Sprint 3 | Creator Project Picker + PRD Generation | Yes | Creator creates project, PRD draft, PRD baseline |
+| Sprint 4 | Creator Workspace - Prompt + Live Preview | Yes | Prompt, AI task progress, token UI, live preview, guardrail check |
+| Sprint 5 | Database View + Frontend Version Restore | Yes | Schema/table/migration views and frontend-only restore |
+| Sprint 6 | App User Management + Publish | Yes | App roles, members, invites, access requests, manifest, publish |
+| Sprint 7 | End User App Store PWA + Ticket | Yes | PWA app store, app detail, request access, ticket, creator inbox |
+| Sprint 8 | Ticket-to-PRD + Domain + Hardening | Yes | Ticket converts to PRD change, domain flow, traceability, full MVP demo |
+| Sprint 9 | Auth SSO and Policy Hardening | Production extension | OIDC/SAML, Keycloak/direct IdP strategy, break-glass, policy templates |
+| Sprint 10 | Generated App Runtime Hardening | Production extension | Separate app container, schema isolation, app health/log/OpenAPI/migrations |
+| Sprint 11 | Knowledge and Skill Governance | Production extension | Versioning, approval, permission-filtered retrieval, assignment |
+| Sprint 12 | Installer, Backup, Restore | Production extension | CLI installer, setup wizard, backup schedule, PITR, restore drill |
+| Sprint 13 | Observability and License | Production extension | Health dashboard, telemetry export, signed license, enforcement |
+| Sprint 14 | Security Release Readiness | Production extension | TLS, secrets, upload validation, release checklist, RTM regression |
 
-## 5. Detailed Sprint Plans
+## 5. MVP Sprint Details
 
-### Sprint 1 - Monorepo and API Foundation
+Individual sprint plan files:
 
-**Dates:** 2026-07-06 to 2026-07-17  
-**Goal:** Establish runnable repository foundation and platform API skeleton.
+| Sprint | Plan |
+| --- | --- |
+| Sprint 0 | `docs/planning/sprint-0-plan.md` |
+| Sprint 1 | `docs/planning/sprint-1-plan.md` |
+| Sprint 2 | `docs/planning/sprint-2-plan.md` |
+| Sprint 3 | `docs/planning/sprint-3-plan.md` |
+| Sprint 4 | `docs/planning/sprint-4-plan.md` |
+| Sprint 5 | `docs/planning/sprint-5-plan.md` |
+| Sprint 6 | `docs/planning/sprint-6-plan.md` |
+| Sprint 7 | `docs/planning/sprint-7-plan.md` |
+| Sprint 8 | `docs/planning/sprint-8-plan.md` |
 
-| Priority | Backlog Items | Owner Role |
+### Sprint 0 - Foundation and Design System
+
+**Goal:** เตรียม monorepo, design system, mock data, auth skeleton
+
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P0-FND-001, P0-FND-002, P0-FND-003, P0-FND-005, P1-CORE-001 | Platform + Frontend |
-| P1 | P0-FND-004, P0-FND-006, P0-FND-007 | Platform + QA/Product |
+| S0.1 Generate monorepo structure | P0-FND-001 | Workspace folders for apps/packages/generated-apps/docker/docs |
+| S0.2 Create shared UI package | P0-FND-003 | Shared UI package and base components |
+| S0.3 Create app shell for Admin / Creator / Store | P0-FND-003 | Admin, Creator and PWA shells |
+| S0.4 Create mock auth provider | P1-AUTH-001 early mock | Mock login and role context |
+| S0.5 Create shared API client | P0-FND-003, P0-FND-005 | API client with response envelope |
+| S0.6 Create mock data fixtures | P0-FND-003 | Seed fixtures for admin, creator, end user |
+| S0.7 Create base layout components | P0-FND-003 | Sidebar, topbar, cards, tables, tabs basics |
 
 **Exit Criteria:**
-- Root install/build/test/lint/typecheck commands run.
-- Minimal `platform-api` starts and `/health` returns standard success envelope.
-- Shared packages expose response/error contracts.
-- Workspace layout matches ADR-003 boundaries.
+- Admin app shell, Creator app shell and App Store PWA shell run.
+- Shared UI package is imported by all three frontend shells.
+- Mock login supports admin, creator and end_user roles.
+- Role-based routing works at shell level.
 
-**Demo:** Show repo structure, run quality commands, start API, call `/health`, walk docs index if stretch completes.
+**Demo:** Switch mock roles and show Admin, Creator and App Store shell access.
 
-### Sprint 2 - Auth, RBAC, Audit Foundation
+### Sprint 1 - Platform API Foundation
 
-**Dates:** 2026-07-20 to 2026-07-31  
-**Goal:** Create the security boundary before feature work.
+**Goal:** สร้าง backend core, database schema เริ่มต้น, auth mock/guard, seed data
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P1-CORE-002, P1-AUTH-001, P1-AUTH-002, P1-AUTH-005, P1-RBAC-001, P1-AUD-001 | Platform + Security |
-| P1 | P1-POL-001 | Platform |
+| S1.1 Create NestJS platform-api | P1-CORE-001 | Platform API service running |
+| S1.2 Setup Prisma schema base | P1-CORE-002 | Prisma schema and first migration |
+| S1.3 Add users/groups/roles tables | P1-CORE-002 | Identity core data model |
+| S1.4 Add projects/apps basic tables | P1-CORE-002 | Project/app data model |
+| S1.5 Add audit log service | P1-AUD-001 | Audit event persistence |
+| S1.6 Add seed users: admin, creator, end user | P1-CORE-002 | Seed data |
+| S1.7 Add auth guard mock | P1-RBAC-001 | Mock auth guard and `GET /auth/me` |
 
 **Exit Criteria:**
-- Core schema covers users, groups, roles, projects, apps and audit logs.
-- Platform Auth can resolve current user and role claims.
-- Bundled Keycloak login works.
-- Break-glass admin requires reason and emits critical audit event.
-- Backend permission guard denies unauthorized protected API access.
+- Platform API runs and connects to PostgreSQL.
+- Prisma migration applies cleanly.
+- Seed users exist for admin, creator and end user.
+- `GET /auth/me` returns current user and permissions.
+- Basic audit log records key events.
 
-**Demo:** Login through Keycloak, call current-user endpoint, trigger denied API access, show audit events including break-glass test.
+**Demo:** Start API, run migrations/seed, call `/auth/me`, show audit log record.
 
-### Sprint 3 - Policy, Identity, Security
+### Sprint 2 - Admin Console: AI Keys and Guardrails
 
-**Dates:** 2026-08-03 to 2026-08-14  
-**Goal:** Complete identity provider configuration and first policy evaluation flow.
+**Goal:** Admin ตั้งค่า AI provider/API key และ guardrail ได้
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P1-AUTH-003, P1-AUTH-004, P1-POL-001 | Platform + Security |
-| P0 | Policy template draft for Public/Internal/Confidential/Restricted | Product + Security |
-| P1 | Direct external IdP constraints decision | Architecture |
+| S2.1 Build AI provider UI | P2-AI-002 | Provider list/create UI |
+| S2.2 Build API key UI | P2-AI-002 | Masked API key management UI |
+| S2.3 Build scenario routing UI | P2-AI-003 | Scenario route UI |
+| S2.4 Build quota UI | P2-AI-004 | Quota config UI |
+| S2.5 Implement AI provider APIs | P2-AI-002 | Provider/model APIs |
+| S2.6 Implement API key APIs with encryption-ready storage | P2-AI-002, SEC-002 | Encrypted key persistence |
+| S2.7 Build guardrail UI | P2-GRD-001 | Guardrail rule UI |
+| S2.8 Implement rule-based guardrail APIs | P2-GRD-001 | Keyword/regex guardrail APIs |
+| S2.9 Implement AI policy guardrail mock classifier | P2-GRD-002 | Mock policy classifier |
+| S2.10 Add guardrail event log | P2-GRD-003, P1-AUD-001 | Guardrail event log |
 
 **Exit Criteria:**
-- Admin can configure OIDC provider.
-- Admin can configure SAML provider.
-- Policy engine accepts publish/access inputs and returns required reviewer roles.
-- First default data classification policy template exists.
+- Admin can add AI provider/API key without exposing secret after save.
+- Admin can configure usage mode/scenario/fallback/quota.
+- Admin can create banned keyword and AI policy rules.
+- Test prompt returns allow/warn/block.
 
-**Demo:** Configure OIDC/SAML in admin flow, run policy evaluation examples for Internal, Confidential and Restricted apps.
+**Demo:** Add provider/key, configure route/quota, test blocked prompt, show event log.
 
-### Sprint 4 - AI Gateway and Guardrail
+### Sprint 3 - Creator Project Picker + PRD Generation
 
-**Dates:** 2026-08-17 to 2026-08-28  
-**Goal:** Route AI prompts through governed external provider flow.
+**Goal:** Creator สร้าง project และ PRD baseline ได้
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P2-AI-001, P2-AI-002, P2-AI-003, P2-AI-004, P2-AI-005, P2-GRD-001 | Platform + AI |
-| P1 | P2-GRD-002, P2-GRD-003 | AI + Security |
+| S3.1 Creator project picker UI | P3-CRE-001 | Project picker |
+| S3.2 Create project wizard | P3-CRE-001 | Project creation form |
+| S3.3 Project APIs | P3-CRE-001, P1-CORE-002 | Project CRUD APIs |
+| S3.4 PRD data model | P3-PRD-001, P3-PRD-002 | PRD schema |
+| S3.5 PRD generation mock service | P3-PRD-001 | Deterministic PRD generator |
+| S3.6 PRD viewer UI | P3-PRD-002 | PRD viewer |
+| S3.7 PRD version history | P3-PRD-002 | Version history |
+| S3.8 Confirm PRD baseline | P3-PRD-002 | Baseline confirmation |
 
 **Exit Criteria:**
-- `AIProviderAdapter` contract exists and has tests.
-- First OpenAI-compatible adapter works with configured provider/key.
-- Scenario routing and fallback decisions are deterministic and logged.
-- Quota check blocks before external provider call.
-- Rule-based guardrail can block unsafe prompt before provider call.
-- AI usage log records tokens/cost/latency/status when available.
+- Creator sees own projects.
+- Creator creates Leave Management project.
+- System generates PRD draft.
+- Creator confirms PRD v1.0 baseline.
 
-**Demo:** Add provider/key, send safe prompt, show usage log, trigger quota block, trigger guardrail block.
+**Demo:** Create Leave Management project and confirm PRD baseline.
 
-### Sprint 5 - Knowledge and Skill Registry
+### Sprint 4 - Creator Workspace: Prompt + Live Preview
 
-**Dates:** 2026-08-31 to 2026-09-11  
-**Goal:** Build the enterprise brain foundation for AI context and approved workflows.
+**Goal:** สร้าง Lovable-like workspace พร้อม mock AI task และ live preview
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P2-KNW-001, P2-KNW-002, P2-SKL-001 | Platform + AI |
-| P1 | P2-GRD-002, P2-GRD-003 carryover if needed | AI + Security |
+| S4.1 Workspace layout | P3-WS-001 | Three-panel workspace |
+| S4.2 Chat/prompt panel | P3-WS-001 | Prompt UI |
+| S4.3 AI task progress component | P3-WS-001 | Task progress |
+| S4.4 Token remaining UI | P2-AI-005, P3-WS-001 | Token usage display |
+| S4.5 Live preview panel | P3-WS-002 | Preview panel |
+| S4.6 Mock app generator | P4-GEN-002 early mock | Mock Leave app preview |
+| S4.7 Preview refresh API | P3-WS-002 | Preview refresh |
+| S4.8 Prompt API with guardrail check | P2-GRD-003, P3-WS-001 | Guarded prompt API |
+| S4.9 AI usage log | P2-AI-005 | Usage log |
 
 **Exit Criteria:**
-- Authorized user can upload supported knowledge source metadata.
-- Knowledge item has scope and version.
-- Approved knowledge version is retrievable by scoped AI task.
-- Skill library supports versioning, approval and assignment by role/scenario/scope.
-- AI task metadata references selected knowledge and skill versions.
+- Creator sends prompt.
+- Guardrail checks prompt.
+- Token remaining decreases.
+- AI task progress displays.
+- Preview updates.
 
-**Demo:** Upload knowledge, approve version, create skill, assign skill to scenario, run AI task showing selected context metadata.
+**Demo:** Prompt “Add WFH leave type”, show progress and updated preview.
 
-### Sprint 6 - Creator Project and PRD
+### Sprint 5 - Database View + Frontend Version Restore
 
-**Dates:** 2026-09-14 to 2026-09-25  
-**Goal:** Let Creator create a governed project with PRD source of truth.
+**Goal:** Creator ดู database และ restore frontend เฉพาะ UI ได้
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P3-CRE-001, P3-PRD-001, P3-PRD-002, P3-PRD-003 | Frontend + Platform |
-| P1 | P3-DEV-001 spike | Product + Engineering + Security |
+| S5.1 Database schema view UI | P3-DB-001 | Schema view |
+| S5.2 Table view UI | P3-DB-001 | Table view |
+| S5.3 Sample records API | P3-DB-001 | Sample records API |
+| S5.4 Migration history UI | P3-DB-001 | Migration timeline |
+| S5.5 Frontend checkpoint data model | P3-FE-001 | Checkpoint model |
+| S5.6 Frontend version timeline UI | P3-FE-001 | Version timeline |
+| S5.7 Compare/preview old version mock | P3-FE-001 | Version preview/compare |
+| S5.8 Restore frontend API | P3-FE-001 | Frontend restore API |
+| S5.9 Restore audit log | P1-AUD-001, P3-FE-001 | Restore audit event |
 
 **Exit Criteria:**
-- Creator App shell and project picker exist.
-- Creator can create project with app name, business problem, app type, users and sensitivity.
-- PRD draft generation template flow creates PRD.
-- Creator can confirm immutable PRD baseline.
-- Prompt/manual change can create PRD change request.
+- Creator sees schema/table/sample data/migration history.
+- Creator sees frontend versions.
+- Creator restores frontend version.
+- Backend/database/auth/app roles are not affected.
 
-**Demo:** Create Leave Management project, generate PRD draft, confirm v1.0 baseline, create change request.
+**Demo:** Open DB view, preview old version, restore frontend-only checkpoint, show audit log.
 
-### Sprint 7 - Creator Workspace and Preview
+### Sprint 6 - App User Management + Publish
 
-**Dates:** 2026-09-28 to 2026-10-09  
-**Goal:** Give Creator the first Lovable-like workspace for prompt, preview and app metadata inspection.
+**Goal:** Creator invite user, assign app role และ publish app ไป App Store ได้
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P3-WS-001, P3-WS-002, P3-DB-001, P3-FE-001 | Frontend + Platform |
-| P1 | Developer code editor workflow ADR/backlog from P3-DEV-001 | Architecture |
+| S6.1 App roles UI | P4-GEN-004 | App roles UI |
+| S6.2 App members UI | P5-ACCESS-001 | Members UI |
+| S6.3 Invite user modal | P5-ACCESS-001 | Invite modal |
+| S6.4 Invitations APIs | P5-ACCESS-001 | Invitation APIs |
+| S6.5 Access requests APIs | P5-ACCESS-001 | Access request APIs |
+| S6.6 App manifest generation | P4-GEN-001 | App manifest |
+| S6.7 Publish API | P4-PUB-001 | Publish API |
+| S6.8 Deployment record | P4-PUB-002, P4-DEP-001 | Deployment record |
+| S6.9 App registry update | P5-STORE-002 | App appears in store registry |
 
 **Exit Criteria:**
-- Creator sees prompt builder and AI task progress.
-- Live preview supports desktop/tablet/mobile modes.
-- Database view shows schema/table/relationships/migrations without raw SQL.
-- Frontend checkpoint and restore model exists and preserves backend/database/auth/roles.
+- Creator invites user.
+- Creator assigns app role.
+- Creator publishes app.
+- Published app appears in App Store registry.
 
-**Demo:** Prompt a change, show task progress, refresh preview, inspect database view, restore prior frontend checkpoint.
+**Demo:** Invite End User as Employee and publish Leave Management to App Store.
 
-### Sprint 8 - Generated App Contract
+### Sprint 7 - End User App Store PWA + Ticket
 
-**Dates:** 2026-10-12 to 2026-10-23  
-**Goal:** Define and generate the standard production app boundary.
+**Goal:** End User ใช้ App Store แบบ PWA และส่ง ticket ได้
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P4-GEN-001, P4-GEN-002, P4-GEN-003, P4-GEN-004, P4-DB-001 | Platform + Full-stack |
-| P1 | Generated app tests for first workflow template | QA + Full-stack |
+| S7.1 PWA manifest | P5-STORE-001 | PWA manifest |
+| S7.2 Mobile-first App Store home | P5-STORE-001 | Mobile home |
+| S7.3 My Apps / Available Apps | P5-STORE-002 | App visibility |
+| S7.4 App detail page | P5-STORE-002 | App detail |
+| S7.5 Request access flow | P5-ACCESS-001 | Access request |
+| S7.6 Submit ticket UI | P5-TKT-001 | Ticket form |
+| S7.7 Ticket APIs | P5-TKT-001 | Ticket APIs |
+| S7.8 Ticket status page | P5-TKT-002 | Ticket status |
+| S7.9 Creator ticket inbox | P5-TKT-002 | Creator inbox |
 
 **Exit Criteria:**
-- Generated app template has required folder layout and manifest JSON schema.
-- Generated app builds with React/Vite/TypeScript and NestJS/Prisma.
-- Generated app protected API denies unauthenticated requests through Platform Auth SDK.
-- App permission guard enforces app-level roles.
-- Schema-per-app provisioning and least-privilege DB user prevent cross-schema access.
+- End User sees accessible apps.
+- End User requests access.
+- End User submits ticket.
+- Creator sees ticket.
 
-**Demo:** Generate app skeleton, inspect manifest, run tests, call protected endpoint unauthenticated, verify schema isolation.
+**Demo:** End User opens App Store, views Leave Management, submits bug ticket, Creator sees it.
 
-### Sprint 9 - Publish Governance and Runtime
+### Sprint 8 - Ticket-to-PRD + Domain + Hardening
 
-**Dates:** 2026-10-26 to 2026-11-06  
-**Goal:** Publish a generated app through policy and run it as a separate container.
+**Goal:** ปิด loop feedback -> PRD change และเตรียม demo pilot
 
-| Priority | Backlog Items | Owner Role |
+| Source Task | Backlog Mapping | Deliverable |
 | --- | --- | --- |
-| P0 | P4-DEP-001, P4-DEP-002, P4-DOM-001, P4-PUB-001, P4-PUB-002, P4-MIG-001 | Platform + DevOps |
-| P1 | Internal/custom domain admin UI polish | Frontend |
+| S8.1 Convert ticket to PRD change request | P5-TKT-003 | Ticket-to-PRD conversion |
+| S8.2 PRD change request approval flow | P3-PRD-003, P4-PUB-002 | PRD approval |
+| S8.3 Domain settings UI | P4-DOM-001 | Domain settings |
+| S8.4 Public domain request UI | P4-DOM-001 | Public domain request UI |
+| S8.5 Domain approval API | P4-DOM-001, P4-PUB-001 | Domain approval API |
+| S8.6 Deployment traceability view | P4-PUB-002 | Traceability view |
+| S8.7 Monitoring dashboard | P6-OBS-001 early MVP | Monitoring dashboard |
+| S8.8 Full audit log filter | P1-AUD-001 | Audit filters |
+| S8.9 Demo data cleanup | Demo readiness | Clean demo fixtures |
+| S8.10 End-to-end demo script | Demo readiness | Full MVP script |
 
 **Exit Criteria:**
-- Publish request evaluates policy and creates required approval workflow.
-- Approval lifecycle persists states and immutable decision snapshots.
-- App builds and deploys as separate container.
-- App exposes health/readiness/log/metrics contract.
-- Caddy route `/apps/{slug}` reaches app container with TLS-ready route configuration.
-- Migration dry-run and destructive migration approval checks exist.
+- Ticket converts to PRD change.
+- Domain request flow works.
+- Deployment links PRD/frontend version.
+- Full MVP demo is ready.
 
-**Demo:** Submit publish request for Leave Management app, approve by policy, deploy container, open app route, show app health and deployment record.
+**Demo:** Full flow: Admin setup, Creator create/publish, End User ticket, Creator converts ticket to PRD change.
 
-### Sprint 10 - App Store and Access
+## 6. Production Blueprint Extension Sprints
 
-**Dates:** 2026-11-09 to 2026-11-20  
-**Goal:** Let End Users discover and request access to apps through PWA.
+### Sprint 9 - Auth SSO and Policy Hardening
 
-| Priority | Backlog Items | Owner Role |
+**Goal:** Harden MVP auth and policy into Production Blueprint readiness.
+
+| Focus | Backlog Mapping | Exit Criteria |
 | --- | --- | --- |
-| P0 | P5-STORE-001, P5-STORE-002, P5-ACCESS-001, P5-ACCESS-002, P5-OPEN-001 | Frontend + Platform |
-| P1 | Favorite/recently-used app shortcuts | Frontend |
+| OIDC provider config | P1-AUTH-003 | OIDC login works |
+| SAML provider config | P1-AUTH-004 | SAML login works |
+| Break-glass admin hardening | P1-AUTH-005 | Reason + critical audit |
+| Policy templates | P1-POL-001, ADR-004 | Public/Internal/Confidential/Restricted policies defined |
+| Direct IdP constraints | ADR-005 | Architecture decision updated |
 
-**Exit Criteria:**
-- App Store PWA has manifest, responsive shell and offline fallback.
-- My Apps and Available Apps reflect app visibility policy.
-- End User can submit access request with reason and requested role.
-- App Owner can approve/reject access request.
-- External user invite/access policy is enforced and audited.
-- Authorized launch succeeds and unauthorized launch is denied.
+### Sprint 10 - Generated App Runtime Hardening
 
-**Demo:** Open App Store on mobile viewport, show visible apps, request access, approve access, open app, show audit event.
+**Goal:** Move from MVP mock/runtime to production-grade generated app contract.
 
-### Sprint 11 - Ticket and PRD Feedback Loop
-
-**Dates:** 2026-11-23 to 2026-12-04  
-**Goal:** Complete the user feedback loop from App Store ticket to PRD change.
-
-| Priority | Backlog Items | Owner Role |
+| Focus | Backlog Mapping | Exit Criteria |
 | --- | --- | --- |
-| P0 | P5-TKT-001, P5-TKT-002, P5-TKT-003, P5-NOTI-001, P5-NOTI-002 | Frontend + Platform |
-| P1 | Ticket attachment storage hardening | Platform + Security |
+| Separate app container | P4-DEP-001 | App runs in its own container |
+| Schema-per-app DB user | P4-DB-001 | Cross-schema access denied |
+| Health/readiness/log/metrics | P4-DEP-002 | Runtime contract visible |
+| OpenAPI and migration contract | P4-GEN-001, P4-MIG-001 | Spec and migration linked to deployment |
 
-**Exit Criteria:**
-- End User submits ticket with type, priority, description and device info.
-- Ticket routes to Creator/App Owner or Security Admin by type.
-- Ticket status timeline and comments persist.
-- End User can track ticket status.
-- Creator converts ticket to PRD change request.
-- In-app and email notifications are sent or delivery failure is logged.
+### Sprint 11 - Knowledge and Skill Governance
 
-**Demo:** End User submits bug ticket, Creator sees routed ticket, updates status, converts to PRD change request, notification appears.
+**Goal:** Make knowledge and skill management governed, versioned and permission-aware.
+
+| Focus | Backlog Mapping | Exit Criteria |
+| --- | --- | --- |
+| Knowledge library | P2-KNW-001 | Sources uploaded and scoped |
+| Knowledge indexing/versioning/approval | P2-KNW-002 | Approved version retrieved by AI |
+| Skill library/versioning/assignment | P2-SKL-001 | Skill selected by role/scenario/scope |
 
 ### Sprint 12 - Installer, Backup, Restore
 
-**Dates:** 2026-12-07 to 2026-12-18  
-**Goal:** Make the private-server deployment operable with install and recovery workflows.
+**Goal:** Make private-server deployment installable and recoverable.
 
-| Priority | Backlog Items | Owner Role |
+| Focus | Backlog Mapping | Exit Criteria |
 | --- | --- | --- |
-| P0 | P6-INST-001, P6-INST-002, P6-BCK-001, P6-BCK-002, P6-BCK-003 | DevOps + Platform |
-| P1 | Hardware profile tuning from early install tests | DevOps |
-
-**Exit Criteria:**
-- CLI installer runs preflight and creates install report.
-- Local Web Setup Wizard completes setup.
-- Configurable encrypted backup schedule stores artifacts in configured storage.
-- PostgreSQL PITR restores to point in time within retention.
-- Restore drill creates pass/fail verification report.
-
-**Demo:** Run installer flow in test environment, configure backup, execute restore drill, show report.
+| CLI installer | P6-INST-001 | Preflight and install report |
+| Local Web Setup Wizard | P6-INST-002 | Browser setup completes |
+| Backup schedule | P6-BCK-001 | Encrypted backups stored |
+| PostgreSQL PITR | P6-BCK-002 | Restore to point in time |
+| Restore drill | P6-BCK-003 | Pass/fail report |
 
 ### Sprint 13 - Observability and License
 
-**Dates:** 2026-12-21 to 2027-01-01  
-**Goal:** Add production monitoring and commercial control without data loss risk.
+**Goal:** Add production monitoring and commercial control.
 
-| Priority | Backlog Items | Owner Role |
+| Focus | Backlog Mapping | Exit Criteria |
 | --- | --- | --- |
-| P0 | P6-UPG-001, P6-UPG-002, P6-OBS-001, P6-LIC-001, P6-LIC-002 | Platform + DevOps |
-| P1 | P6-OBS-002 | DevOps |
+| Upgrade checks | P6-UPG-001 | Upgrade blocks unsafe state |
+| Rollback command | P6-UPG-002 | Rollback audited |
+| Health/log/audit dashboard | P6-OBS-001 | Core/app health visible |
+| License validation | P6-LIC-001 | Signed license and offline cache |
+| License enforcement | P6-LIC-002 | Limits block without data loss |
 
-**Exit Criteria:**
-- Upgrade checks block on missing backup, unhealthy services, disk issue or invalid license.
-- Rollback command restores previous version and audits result.
-- Admin health/log/audit dashboard shows core services and generated app health.
-- Signed license validation and offline cache work.
-- Expired/over-limit license blocks configured create/publish/AI actions without deleting data.
-- Telemetry export works if P1 completes.
+### Sprint 14 - Security Release Readiness
 
-**Demo:** Show health dashboard, run upgrade check, simulate rollback, install warning/expired license and show enforcement behavior.
+**Goal:** Close security hardening and validate release candidate.
 
-### Sprint 14 - Security Hardening and Release Readiness
-
-**Dates:** 2027-01-04 to 2027-01-15  
-**Goal:** Close production security controls and validate release readiness against RTM.
-
-| Priority | Backlog Items | Owner Role |
+| Focus | Backlog Mapping | Exit Criteria |
 | --- | --- | --- |
-| P0 | P6-SEC-001, P6-SEC-002 | Security + Platform |
-| P0 | Full RTM regression and release candidate validation | QA + Product |
-| P1 | Security review fixes and documentation polish | Security + Docs |
+| TLS/secrets/session/redaction | P6-SEC-001 | Security tests pass |
+| Upload validation | P6-SEC-002 | Unsafe uploads blocked/quarantined |
+| Public/external security checklist | P6-SEC-002 | Publish blocks until checklist passes |
+| RTM regression | RTM | P0 tests pass or exceptions approved |
 
-**Exit Criteria:**
-- TLS, secret encryption, redaction and session policy pass security tests.
-- File upload validation blocks unsafe uploads or quarantines according to policy.
-- Public/external publish security checklist blocks incomplete release.
-- RTM P0 tests pass or have approved release exceptions.
-- Release notes and operation docs are complete enough for pilot handoff.
-
-**Demo:** Run security checklist, show secret redaction, test unsafe upload rejection, run RTM regression summary, present release readiness report.
-
-## 6. Cross-Sprint Milestones
+## 7. MVP to Production Milestones
 
 | Milestone | Target Sprint | Evidence |
 | --- | --- | --- |
-| M1 Foundation Ready | Sprint 1 | Repo builds/tests and Platform API health works |
-| M2 Security Boundary Ready | Sprint 3 | Auth, RBAC, audit and policy skeleton are usable |
-| M3 Governed AI Ready | Sprint 5 | AI provider, guardrail, knowledge and skills can drive Creator workflows |
-| M4 Creator Vertical Slice Ready | Sprint 7 | Creator creates PRD, prompts AI, previews and restores frontend |
-| M5 Generated Runtime Ready | Sprint 9 | App deploys as separate container with policy approval |
-| M6 App Store Feedback Ready | Sprint 11 | End User can open app, submit ticket and trigger PRD change |
-| M7 Operable Private Server Ready | Sprint 13 | Install, backup, restore, upgrade, rollback, health and license work |
-| M8 Production Release Candidate | Sprint 14 | RTM validation and hardening pass |
+| M0 Foundation shells ready | Sprint 0 | Admin, Creator, Store shells with mock auth |
+| M1 API foundation ready | Sprint 1 | API, Prisma, seed data, `/auth/me`, audit |
+| M2 Admin governance MVP ready | Sprint 2 | AI provider/key and guardrail setup |
+| M3 Creator PRD baseline ready | Sprint 3 | Project + PRD v1.0 |
+| M4 Creator workspace ready | Sprint 4 | Prompt + task progress + preview |
+| M5 Creator restore/data view ready | Sprint 5 | DB view + frontend restore |
+| M6 Publish to App Store ready | Sprint 6 | Invite, app role, publish, app registry |
+| M7 End User feedback ready | Sprint 7 | PWA + ticket |
+| M8 Full MVP demo ready | Sprint 8 | Ticket-to-PRD + domain + traceability |
+| M9 Production hardening ready | Sprint 14 | RTM P0 validation and release readiness |
 
-## 7. Dependencies and Sequencing Rules
+## 8. Sequencing Rules
 
-- Phase 1 Auth/RBAC work must not start until response envelope and Platform API health endpoint are stable.
-- AI Gateway must not call external providers before guardrail pre-check and quota pre-check are implemented.
-- Creator publish flow must not ship before policy engine and approval snapshots exist.
-- Generated app runtime must not ship before Platform Auth SDK and app permission guard exist.
-- App Store visibility must not ship before app membership and access policy enforcement exist.
-- Ticket-to-PRD conversion must not ship before PRD change request model exists.
-- Production installer must not be treated as complete until backup, restore drill and upgrade checks work.
-
-## 8. Roadmap-Level Risks
-
-| Risk | Likely Sprint | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Auth broker/direct IdP ambiguity | Sprint 2-3 | Delays auth architecture | Resolve ADR-005 implementation constraints before Sprint 2 starts |
-| License policy thresholds missing | Sprint 13 | Blocks enforcement behavior | Product/Legal decision by Sprint 10 |
-| Hardware profile undefined | Sprint 12 | Blocks installer validation | Engineering/Ops decision by Sprint 8 |
-| Policy templates incomplete | Sprint 3 and Sprint 9 | Approval flow unclear | Product/Security templates by Sprint 3 |
-| Code editor workflow unresolved | Sprint 6-7 | Developer role scope unclear | Spike in Sprint 6, ADR update before implementation |
-| Generated app runtime too large | Sprint 8-9 | Delays vertical slice | Keep first app template narrow and prove Leave Management path |
+- Do not move Sprint 2 before Sprint 1 API foundation, because Admin AI APIs need auth, seed users and audit.
+- Do not move Sprint 4 before Sprint 3 PRD baseline, because prompt/live preview must load PRD context.
+- Do not move Sprint 6 before Sprint 4/5, because publish depends on generated app preview, manifest and version context.
+- Do not move Sprint 7 before Sprint 6, because App Store needs published app registry.
+- Do not move Sprint 8 before Sprint 7, because ticket-to-PRD requires submitted tickets.
+- Production extension sprints can be pulled earlier only if they do not break MVP sequence.
 
 ## 9. Release Readiness Criteria
 
-Production release candidate is ready only when:
+MVP pilot is ready after Sprint 8 when:
 
-- [ ] All Sprint 14 P0 exit criteria pass.
+- [ ] Admin can configure AI provider/API key and guardrail.
+- [ ] Creator can create Leave Management project and confirm PRD baseline.
+- [ ] Creator can prompt, preview, inspect database and restore frontend.
+- [ ] Creator can invite user, assign app role and publish.
+- [ ] End User can open App Store PWA, see app and submit ticket.
+- [ ] Creator can convert ticket to PRD change.
+- [ ] Deployment traceability and audit are visible.
+
+Production candidate is ready after Sprint 14 when:
+
+- [ ] MVP pilot criteria still pass.
 - [ ] RTM P0 tests pass or have approved exceptions.
-- [ ] Requirements baseline, RTM, ADRs and backlog are updated to match delivered behavior.
-- [ ] Installer, backup, restore, upgrade and rollback have run in a clean private-server test environment.
-- [ ] Security review covers auth, RBAC, AI keys, guardrails, generated app permissions, file uploads and public/external access.
-- [ ] Demo flow works end to end: Admin setup, Creator create/generate/publish, End User open/ticket, Creator convert ticket to PRD change.
+- [ ] OIDC/SAML, break-glass, policy templates and app isolation are production-hardened.
+- [ ] Installer, backup, restore, upgrade, rollback, observability and license controls pass acceptance tests.
+- [ ] Security hardening covers TLS, secrets, upload validation, public/external app checklist and log redaction.

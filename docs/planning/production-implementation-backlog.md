@@ -165,45 +165,81 @@ flowchart LR
 | P6-SEC-001 | Hardening | P0 | Implement TLS, secret encryption, redaction, session policy | SEC-001 to SEC-006 | Security controls pass RTM tests |
 | P6-SEC-002 | Hardening | P0 | Implement file upload validation and security checklist | SEC-009, SEC-010 | Unsafe uploads and public/external publishes are blocked |
 
-## 12. First Four Sprint Recommendation
+## 12. MVP-Aligned Sprint Recommendation
 
-Assumption: 2-week sprint, small AI-assisted engineering team. Estimates should be recalibrated once team size is known.
+Assumption from source MVP plan: 1-week sprint, 1-3 developers + AI coding assistant. The first delivery plan must preserve the source sprint order.
 
-### Sprint 1 - Monorepo and API Foundation
+### Sprint 0 - Foundation and Design System
 
-**Goal:** Establish runnable repository foundation and platform API skeleton.
+**Goal:** Prepare monorepo, design system, mock data and auth skeleton.
 
-| Priority | Backlog Items |
+| Source Scope | Backlog Items |
 | --- | --- |
-| P0 | P0-FND-001, P0-FND-002, P0-FND-003, P0-FND-005, P1-CORE-001 |
-| P1 | P0-FND-004, P0-FND-006, P0-FND-007 |
+| Monorepo, shared UI, app shells, mock auth, shared API client, fixtures, base layouts | P0-FND-001, P0-FND-002, P0-FND-003, P0-FND-005, P0-FND-007, early P1-AUTH-001 mock |
 
-### Sprint 2 - Auth, RBAC, Audit Skeleton
+### Sprint 1 - Platform API Foundation
 
-**Goal:** Create the security boundary before feature work.
+**Goal:** Create backend core, initial database schema, mock auth guard and seed data.
 
-| Priority | Backlog Items |
+| Source Scope | Backlog Items |
 | --- | --- |
-| P0 | P1-CORE-002, P1-AUTH-001, P1-AUTH-002, P1-AUTH-005, P1-RBAC-001, P1-AUD-001 |
-| P1 | P1-POL-001 |
+| NestJS API, Prisma base, users/groups/roles, projects/apps, audit, seed users, `GET /auth/me` | P1-CORE-001, P1-CORE-002, P1-RBAC-001, P1-AUD-001 |
 
-### Sprint 3 - AI Gateway and Guardrail Skeleton
+### Sprint 2 - Admin Console: AI Keys and Guardrails
 
-**Goal:** Route AI prompts through governed provider adapter flow.
+**Goal:** Admin can configure AI providers/API keys and guardrails.
 
-| Priority | Backlog Items |
+| Source Scope | Backlog Items |
 | --- | --- |
-| P0 | P2-AI-001, P2-AI-002, P2-AI-003, P2-AI-004, P2-AI-005, P2-GRD-001 |
-| P1 | P2-GRD-002, P2-GRD-003 |
+| AI provider UI/API, API key UI/API, routing, quota, guardrail UI/API, mock AI policy classifier, event log | P2-AI-001, P2-AI-002, P2-AI-003, P2-AI-004, P2-AI-005, P2-GRD-001, P2-GRD-002, P2-GRD-003 |
 
-### Sprint 4 - Creator Project and PRD Baseline
+### Sprint 3 - Creator Project Picker + PRD Generation
 
-**Goal:** Let Creator create a project, generate a PRD draft and confirm baseline.
+**Goal:** Creator can create project and confirm PRD baseline.
 
-| Priority | Backlog Items |
+| Source Scope | Backlog Items |
 | --- | --- |
-| P0 | P3-CRE-001, P3-PRD-001, P3-PRD-002, P3-PRD-003 |
-| P1 | P3-WS-001, P3-DEV-001 |
+| Project picker, project wizard, project APIs, PRD model, mock PRD generator, PRD viewer/version history, baseline confirmation | P3-CRE-001, P3-PRD-001, P3-PRD-002, P3-PRD-003 |
+
+### Sprint 4 - Creator Workspace: Prompt + Live Preview
+
+**Goal:** Lovable-like workspace with mock AI task and live preview.
+
+| Source Scope | Backlog Items |
+| --- | --- |
+| Workspace layout, chat/prompt, progress, token UI, preview, mock app generator, preview refresh, guarded prompt, usage log | P3-WS-001, P3-WS-002, P2-GRD-003, P2-AI-005, early P4-GEN-002 |
+
+### Sprint 5 - Database View + Frontend Version Restore
+
+**Goal:** Creator can inspect database and restore frontend only.
+
+| Source Scope | Backlog Items |
+| --- | --- |
+| Schema/table/sample records/migration views, frontend checkpoints, version timeline, compare/preview, restore API, restore audit | P3-DB-001, P3-FE-001, P1-AUD-001 |
+
+### Sprint 6 - App User Management + Publish
+
+**Goal:** Creator can invite user, assign app role and publish app to App Store.
+
+| Source Scope | Backlog Items |
+| --- | --- |
+| App roles, members, invites, access requests, manifest, publish API, deployment record, app registry update | P4-GEN-001, P4-GEN-004, P4-PUB-001, P4-PUB-002, P5-ACCESS-001, P5-STORE-002 |
+
+### Sprint 7 - End User App Store PWA + Ticket
+
+**Goal:** End User can use PWA App Store and submit ticket.
+
+| Source Scope | Backlog Items |
+| --- | --- |
+| PWA manifest, mobile home, My/Available Apps, app detail, request access, ticket UI/API/status, Creator inbox | P5-STORE-001, P5-STORE-002, P5-ACCESS-001, P5-TKT-001, P5-TKT-002 |
+
+### Sprint 8 - Ticket-to-PRD + Domain + Hardening
+
+**Goal:** Close feedback loop and prepare pilot demo.
+
+| Source Scope | Backlog Items |
+| --- | --- |
+| Convert ticket to PRD change, PRD approval, domain settings/request/approval, deployment traceability, monitoring, audit filters, demo cleanup/script | P5-TKT-003, P3-PRD-003, P4-DOM-001, P4-PUB-002, P6-OBS-001, P1-AUD-001 |
 
 ## 13. Cross-Cutting Definition of Done
 
@@ -228,13 +264,19 @@ Every implementation item is done only when:
 | Code Editor | Branch/review mechanics for Developer role | Product / Engineering / Security |
 | Email | SMTP-only vs email provider adapter v1 | Engineering / IT |
 
-## 15. Next Artifact
+## 15. Sprint Planning Artifacts
 
-After this backlog is reviewed, create `docs/planning/sprint-1-plan.md` with:
+MVP sprint planning is tracked in these implementation-ready artifacts:
 
-- Sprint goal
-- Capacity assumption
-- Selected backlog items
-- Task breakdown
-- Test plan
-- Definition of done
+- `docs/planning/production-sprint-roadmap.md`
+- `docs/planning/sprint-0-plan.md`
+- `docs/planning/sprint-1-plan.md`
+- `docs/planning/sprint-2-plan.md`
+- `docs/planning/sprint-3-plan.md`
+- `docs/planning/sprint-4-plan.md`
+- `docs/planning/sprint-5-plan.md`
+- `docs/planning/sprint-6-plan.md`
+- `docs/planning/sprint-7-plan.md`
+- `docs/planning/sprint-8-plan.md`
+
+Production extension sprints 9-14 remain summarized in `docs/planning/production-sprint-roadmap.md` until the MVP baseline is reviewed and accepted.
