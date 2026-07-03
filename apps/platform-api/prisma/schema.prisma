@@ -69,6 +69,11 @@ model PlatformUser {
   projects    Project[]           @relation("ProjectOwner")
   memberships ProjectMember[]
   appMembers  AppMember[]
+  appInvitationsSent AppInvitation[] @relation("AppInvitationInvitedBy")
+  appAccessDecisions AppAccessRequest[] @relation("AppAccessRequestDecidedBy")
+  publishRequests PublishRequest[] @relation("PublishRequestRequestedBy")
+  deploymentRecords DeploymentRecord[] @relation("DeploymentRecordPublishedBy")
+  ownedRegistryEntries AppStoreRegistryEntry[] @relation("AppStoreRegistryOwner")
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
   createdAt   DateTime            @default(now()) @map("created_at")
@@ -142,6 +147,12 @@ model Project {
   appDatabaseSampleRecords AppDatabaseSampleRecord[]
   appDatabaseMigrations AppDatabaseMigration[]
   frontendCheckpoints FrontendCheckpoint[]
+  appInvitations AppInvitation[]
+  appAccessRequests AppAccessRequest[]
+  appManifests AppManifest[]
+  publishRequests PublishRequest[]
+  deploymentRecords DeploymentRecord[]
+  appStoreRegistryEntries AppStoreRegistryEntry[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -169,6 +180,12 @@ model App {
   project            Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   roles              AppRole[]
   members            AppMember[]
+  invitations        AppInvitation[]
+  accessRequests     AppAccessRequest[]
+  manifest           AppManifest?
+  publishRequests    PublishRequest[]
+  deploymentRecords  DeploymentRecord[]
+  registryEntry      AppStoreRegistryEntry?
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
@@ -524,4 +541,135 @@ model FrontendCheckpoint {
   @@unique([projectId, version])
   @@index([projectId, status])
   @@map("frontend_checkpoints")
+}
+
+model AppInvitation {
+  id              String   @id
+  appId           String   @map("app_id")
+  projectId       String   @map("project_id")
+  email           String
+  userType        String   @map("user_type")
+  roleKey         String   @map("role_key")
+  invitedByUserId String   @map("invited_by_user_id")
+  status          String
+  policyWarning   String?  @map("policy_warning")
+  expiresAt       DateTime? @map("expires_at")
+  note            String?
+  app             App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy       PlatformUser @relation("AppInvitationInvitedBy", fields: [invitedByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("app_invitations")
+}
+
+model AppAccessRequest {
+  id               String   @id
+  appId            String   @map("app_id")
+  projectId        String   @map("project_id")
+  requesterEmail   String   @map("requester_email")
+  requestedRoleKey String   @map("requested_role_key")
+  reason           String
+  status           String
+  decidedByUserId  String?  @map("decided_by_user_id")
+  decidedAt        DateTime? @map("decided_at")
+  app              App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decidedBy        PlatformUser? @relation("AppAccessRequestDecidedBy", fields: [decidedByUserId], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("app_access_requests")
+}
+
+model AppManifest {
+  id                   String   @id
+  appId                String   @unique @map("app_id")
+  projectId            String   @map("project_id")
+  manifestVersion      String   @map("manifest_version")
+  prdVersionId         String   @map("prd_version_id")
+  prdVersion           String   @map("prd_version")
+  frontendCheckpointId String   @map("frontend_checkpoint_id")
+  route                String
+  authMode             String   @map("auth_mode")
+  roleSnapshot         Json     @map("role_snapshot")
+  databaseSnapshot     Json     @map("database_snapshot")
+  manifest             Json
+  app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generatedAt          DateTime @default(now()) @map("generated_at")
+
+  @@index([projectId])
+  @@map("app_manifests")
+}
+
+model PublishRequest {
+  id              String   @id
+  appId           String   @map("app_id")
+  projectId       String   @map("project_id")
+  status          String
+  requestedByUserId String @map("requested_by_user_id")
+  manifestVersion String  @map("manifest_version")
+  blockingItems   Json    @default("[]") @map("blocking_items")
+  app             App     @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy     PlatformUser @relation("PublishRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  deploymentRecord DeploymentRecord?
+  createdAt       DateTime @default(now()) @map("created_at")
+  publishedAt     DateTime? @map("published_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("publish_requests")
+}
+
+model DeploymentRecord {
+  id                   String   @id
+  appId                String   @map("app_id")
+  projectId            String   @map("project_id")
+  publishRequestId     String   @unique @map("publish_request_id")
+  status               String
+  environment          String
+  route                String
+  manifestVersion      String   @map("manifest_version")
+  prdVersion           String   @map("prd_version")
+  frontendCheckpointId String   @map("frontend_checkpoint_id")
+  publishedByUserId    String   @map("published_by_user_id")
+  app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  publishRequest       PublishRequest @relation(fields: [publishRequestId], references: [id], onDelete: Cascade)
+  publishedBy          PlatformUser @relation("DeploymentRecordPublishedBy", fields: [publishedByUserId], references: [id])
+  registryEntry        AppStoreRegistryEntry?
+  publishedAt          DateTime @default(now()) @map("published_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("deployment_records")
+}
+
+model AppStoreRegistryEntry {
+  id                 String   @id
+  appId              String   @unique @map("app_id")
+  projectId          String   @map("project_id")
+  deploymentRecordId String   @unique @map("deployment_record_id")
+  slug               String   @unique
+  name               String
+  route              String
+  status             String
+  visibility         String
+  accessMode         String   @map("access_mode")
+  roleKeys           String[] @map("role_keys")
+  ownerUserId        String   @map("owner_user_id")
+  manifestVersion    String   @map("manifest_version")
+  app                App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deploymentRecord   DeploymentRecord @relation(fields: [deploymentRecordId], references: [id], onDelete: Cascade)
+  owner              PlatformUser @relation("AppStoreRegistryOwner", fields: [ownerUserId], references: [id])
+  publishedAt        DateTime @default(now()) @map("published_at")
+
+  @@index([status])
+  @@map("app_store_registry_entries")
 }

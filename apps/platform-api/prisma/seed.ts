@@ -106,6 +106,30 @@ async function main() {
     }
   });
 
+  await prisma.appRole.upsert({
+    where: { appId_key: { appId: "app_leave_management", key: "manager" } },
+    update: { name: "Manager", permissions: ["leave:approve", "leave:view-team"] },
+    create: {
+      id: "app_role_leave_manager",
+      appId: "app_leave_management",
+      key: "manager",
+      name: "Manager",
+      permissions: ["leave:approve", "leave:view-team"]
+    }
+  });
+
+  await prisma.appRole.upsert({
+    where: { appId_key: { appId: "app_leave_management", key: "hr_admin" } },
+    update: { name: "HR Admin", permissions: ["leave:admin", "leave:report"] },
+    create: {
+      id: "app_role_leave_hr_admin",
+      appId: "app_leave_management",
+      key: "hr_admin",
+      name: "HR Admin",
+      permissions: ["leave:admin", "leave:report"]
+    }
+  });
+
   await prisma.appMember.upsert({
     where: {
       appId_userId_roleId: {
@@ -119,6 +143,22 @@ async function main() {
       appId: "app_leave_management",
       userId: "usr_end_user",
       roleId: "app_role_leave_employee"
+    }
+  });
+
+  await prisma.appMember.upsert({
+    where: {
+      appId_userId_roleId: {
+        appId: "app_leave_management",
+        userId: "usr_creator",
+        roleId: "app_role_leave_hr_admin"
+      }
+    },
+    update: {},
+    create: {
+      appId: "app_leave_management",
+      userId: "usr_creator",
+      roleId: "app_role_leave_hr_admin"
     }
   });
 
@@ -671,6 +711,206 @@ async function main() {
   await prisma.project.update({
     where: { id: "prj_leave_management" },
     data: { activeFrontendCheckpointId: "fechk_leave_management_0001" }
+  });
+
+  await prisma.appInvitation.upsert({
+    where: { id: "appinv_leave_management_internal_manager" },
+    update: {
+      email: "manager@company.com",
+      userType: "internal",
+      roleKey: "manager",
+      status: "pending",
+      note: "Join manager approval queue"
+    },
+    create: {
+      id: "appinv_leave_management_internal_manager",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      email: "manager@company.com",
+      userType: "internal",
+      roleKey: "manager",
+      invitedByUserId: "usr_creator",
+      status: "pending",
+      note: "Join manager approval queue"
+    }
+  });
+
+  await prisma.appInvitation.upsert({
+    where: { id: "appinv_leave_management_external_vendor" },
+    update: {
+      email: "vendor@example.com",
+      userType: "external",
+      roleKey: "employee",
+      status: "approval_required",
+      policyWarning: "External invite requires approval before app access is activated.",
+      expiresAt: new Date("2026-09-01T00:00:00.000Z")
+    },
+    create: {
+      id: "appinv_leave_management_external_vendor",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      email: "vendor@example.com",
+      userType: "external",
+      roleKey: "employee",
+      invitedByUserId: "usr_creator",
+      status: "approval_required",
+      policyWarning: "External invite requires approval before app access is activated.",
+      expiresAt: new Date("2026-09-01T00:00:00.000Z"),
+      note: "External vendor read access request"
+    }
+  });
+
+  await prisma.appAccessRequest.upsert({
+    where: { id: "appreq_leave_management_manager" },
+    update: {
+      requesterEmail: "manager@company.com",
+      requestedRoleKey: "manager",
+      reason: "Needs approval queue access",
+      status: "pending"
+    },
+    create: {
+      id: "appreq_leave_management_manager",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      requesterEmail: "manager@company.com",
+      requestedRoleKey: "manager",
+      reason: "Needs approval queue access",
+      status: "pending"
+    }
+  });
+
+  const leaveManifest = {
+    app: {
+      id: "app_leave_management",
+      slug: "leave-management",
+      name: "Leave Management",
+      route: "/apps/leave-management"
+    },
+    prd: {
+      versionId: "prdver_prj_leave_management_baseline_v1_0",
+      version: "1.0"
+    },
+    frontend: {
+      checkpointId: "fechk_leave_management_0001",
+      version: "fe-0001"
+    },
+    auth: {
+      mode: "platform_auth_sdk",
+      accessMode: "restricted"
+    },
+    roles: ["employee", "manager", "hr_admin"]
+  };
+
+  await prisma.appManifest.upsert({
+    where: { appId: "app_leave_management" },
+    update: {
+      manifestVersion: "1",
+      prdVersionId: "prdver_prj_leave_management_baseline_v1_0",
+      prdVersion: "1.0",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      route: "/apps/leave-management",
+      authMode: "platform_auth_sdk",
+      roleSnapshot: leaveManifest.roles,
+      databaseSnapshot: { schemaName: "app_leave_management", tables: ["employees", "leave_requests", "approval_steps"] },
+      manifest: leaveManifest
+    },
+    create: {
+      id: "manifest_leave_management_v1",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      manifestVersion: "1",
+      prdVersionId: "prdver_prj_leave_management_baseline_v1_0",
+      prdVersion: "1.0",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      route: "/apps/leave-management",
+      authMode: "platform_auth_sdk",
+      roleSnapshot: leaveManifest.roles,
+      databaseSnapshot: { schemaName: "app_leave_management", tables: ["employees", "leave_requests", "approval_steps"] },
+      manifest: leaveManifest
+    }
+  });
+
+  await prisma.publishRequest.upsert({
+    where: { id: "pubreq_leave_management_001" },
+    update: {
+      status: "published",
+      requestedByUserId: "usr_creator",
+      manifestVersion: "1",
+      blockingItems: [],
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    },
+    create: {
+      id: "pubreq_leave_management_001",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      status: "published",
+      requestedByUserId: "usr_creator",
+      manifestVersion: "1",
+      blockingItems: [],
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    }
+  });
+
+  await prisma.deploymentRecord.upsert({
+    where: { id: "dep_leave_management_001" },
+    update: {
+      publishRequestId: "pubreq_leave_management_001",
+      status: "published",
+      environment: "app_store",
+      route: "/apps/leave-management",
+      manifestVersion: "1",
+      prdVersion: "1.0",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      publishedByUserId: "usr_creator",
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    },
+    create: {
+      id: "dep_leave_management_001",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      publishRequestId: "pubreq_leave_management_001",
+      status: "published",
+      environment: "app_store",
+      route: "/apps/leave-management",
+      manifestVersion: "1",
+      prdVersion: "1.0",
+      frontendCheckpointId: "fechk_leave_management_0001",
+      publishedByUserId: "usr_creator",
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    }
+  });
+
+  await prisma.appStoreRegistryEntry.upsert({
+    where: { appId: "app_leave_management" },
+    update: {
+      deploymentRecordId: "dep_leave_management_001",
+      slug: "leave-management",
+      name: "Leave Management",
+      route: "/apps/leave-management",
+      status: "published",
+      visibility: "restricted",
+      accessMode: "membership_or_invite",
+      roleKeys: ["employee", "manager", "hr_admin"],
+      ownerUserId: "usr_creator",
+      manifestVersion: "1",
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    },
+    create: {
+      id: "store_leave_management",
+      appId: "app_leave_management",
+      projectId: "prj_leave_management",
+      deploymentRecordId: "dep_leave_management_001",
+      slug: "leave-management",
+      name: "Leave Management",
+      route: "/apps/leave-management",
+      status: "published",
+      visibility: "restricted",
+      accessMode: "membership_or_invite",
+      roleKeys: ["employee", "manager", "hr_admin"],
+      ownerUserId: "usr_creator",
+      manifestVersion: "1",
+      publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    }
   });
 }
 

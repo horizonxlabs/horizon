@@ -60,6 +60,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `DataTable` สำหรับ PRD Version History, frontend checkpoints และ restore history
 - ใช้ workspace layout แบบ data-dense สำหรับ Prompt Composer, Task Progress, Live Preview, Token Remaining และ Usage Log โดยไม่ซ่อน guardrail/token state ออกจากหน้าหลัก
 - ใช้ database/restore layout แบบ split view: table rail + schema/sample/migration detail + checkpoint side panel พร้อม boundary copy ว่า restore กระทบเฉพาะ frontend
+- ใช้ app users/publish layout แบบ split operational view: users/members/invites/access requests/roles เป็น main panel และ manifest/readiness/deployment เป็น side panel เพื่อให้ publish decision เห็น access state ใน context เดียวกัน
 
 ### App Store PWA
 

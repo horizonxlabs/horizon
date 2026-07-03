@@ -50,7 +50,15 @@ export interface PlatformRequest {
     | `/projects/${string}/database/sql`
     | `/projects/${string}/frontend/checkpoints`
     | `/projects/${string}/frontend/compare`
-    | `/projects/${string}/frontend/restore`;
+    | `/projects/${string}/frontend/restore`
+    | `/projects/${string}/app/users`
+    | `/projects/${string}/app/roles`
+    | `/projects/${string}/app/invitations`
+    | `/projects/${string}/app/access-requests`
+    | `/projects/${string}/app/access-requests/decision`
+    | `/projects/${string}/publish/review`
+    | `/projects/${string}/publish`
+    | "/app-store/registry";
   headers?: HeaderBag;
   body?: Record<string, unknown>;
 }
@@ -234,6 +242,76 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
         status: HttpStatus.OK,
         body: success(services.frontendVersions.restoreFrontend(user, frontendRestoreMatch[1], String(request.body?.checkpointId ?? "")))
       };
+    }
+
+    const appUsersMatch = request.path.match(/^\/projects\/([^/]+)\/app\/users$/);
+    if (request.method === "GET" && appUsersMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.appAccess.getSnapshot(user, appUsersMatch[1])) };
+    }
+
+    const appRolesMatch = request.path.match(/^\/projects\/([^/]+)\/app\/roles$/);
+    if (request.method === "POST" && appRolesMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const role = services.appAccess.createRole(user, appRolesMatch[1], {
+        key: String(request.body?.key ?? ""),
+        name: String(request.body?.name ?? ""),
+        description: request.body?.description ? String(request.body.description) : undefined,
+        permissions: Array.isArray(request.body?.permissions) ? request.body.permissions.map(String) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(role) };
+    }
+
+    const appInvitationsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/invitations$/);
+    if (request.method === "POST" && appInvitationsMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const invitation = services.appAccess.createInvitation(user, appInvitationsMatch[1], {
+        email: String(request.body?.email ?? ""),
+        roleKey: String(request.body?.roleKey ?? ""),
+        userType: String(request.body?.userType ?? "internal") as never,
+        expiresAt: request.body?.expiresAt ? String(request.body.expiresAt) : undefined,
+        note: request.body?.note ? String(request.body.note) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(invitation) };
+    }
+
+    const appAccessRequestsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests$/);
+    if (request.method === "POST" && appAccessRequestsMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const accessRequest = services.appAccess.createAccessRequest(user, appAccessRequestsMatch[1], {
+        requesterEmail: String(request.body?.requesterEmail ?? ""),
+        requestedRoleKey: String(request.body?.requestedRoleKey ?? ""),
+        reason: String(request.body?.reason ?? "")
+      });
+      return { status: HttpStatus.CREATED, body: success(accessRequest) };
+    }
+
+    const appAccessDecisionMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests\/decision$/);
+    if (request.method === "POST" && appAccessDecisionMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const accessRequest = services.appAccess.decideAccessRequest(user, appAccessDecisionMatch[1], {
+        requestId: String(request.body?.requestId ?? ""),
+        decision: String(request.body?.decision ?? "approved") as never,
+        decidedByUserId: request.body?.decidedByUserId ? String(request.body.decidedByUserId) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(accessRequest) };
+    }
+
+    const publishReviewMatch = request.path.match(/^\/projects\/([^/]+)\/publish\/review$/);
+    if (request.method === "GET" && publishReviewMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.publish.getReview(user, publishReviewMatch[1])) };
+    }
+
+    const publishMatch = request.path.match(/^\/projects\/([^/]+)\/publish$/);
+    if (request.method === "POST" && publishMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.CREATED, body: success(services.publish.publishApp(user, publishMatch[1])) };
+    }
+
+    if (request.method === "GET" && request.path === "/app-store/registry") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.publish.listRegistry(user)) };
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
@@ -484,6 +562,84 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
         body: request.body
       })
     )
+  );
+  routes.get("/projects/:projectId/app/users", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/app/users`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/app/roles", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/app/roles`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/app/invitations", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/app/invitations`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/app/access-requests", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/app/access-requests`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/app/access-requests/decision", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/app/access-requests/decision`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/projects/:projectId/publish/review", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/publish/review`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/publish", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/publish`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/app-store/registry", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
   );
   routes.get("/ai/providers", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/ai/providers", headers: request.headers }))

@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 5 Creator database view and frontend-only restore are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 6 App User Management and Publish Registry are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -19,6 +19,7 @@ pnpm verify:sprint2
 pnpm verify:sprint3
 pnpm verify:sprint4
 pnpm verify:sprint5
+pnpm verify:sprint6
 ```
 
 Start frontend shells:
@@ -101,3 +102,13 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Frontend checkpoint timeline, compare and restore API
 - Frontend-only restore boundary with audit event
 - Prisma migration and seed data for database metadata and frontend checkpoints
+
+## Sprint 6 Scope
+
+- Creator App Users, App Roles, Pending Invites and Access Requests workspace
+- App invitation API with external approval-required policy warning
+- Access request API with approve/reject decision and membership update
+- App manifest generation from PRD baseline, active frontend checkpoint, auth, roles and database metadata
+- Publish readiness checklist with blocked publish explanation
+- Publish API creating deployment record and App Store registry entry
+- Prisma migration and seed data for app access, manifest, publish, deployment and registry records

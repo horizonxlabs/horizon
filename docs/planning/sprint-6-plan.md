@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Status: Implemented for Product Owner Acceptance
 Sprint dates: 2026-08-17 to 2026-08-21
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
@@ -64,13 +64,13 @@ This sprint maps directly to the source MVP plan:
 
 ## 6. Definition of Done
 
-- [ ] Creator invites user.
-- [ ] Creator assigns app role.
-- [ ] App manifest is generated.
-- [ ] Creator publishes app.
-- [ ] Deployment record is created.
-- [ ] Published app appears in App Store registry.
-- [ ] Sprint 7 End User App Store can consume registry and access state.
+- [x] Creator invites user.
+- [x] Creator assigns app role.
+- [x] App manifest is generated.
+- [x] Creator publishes app.
+- [x] Deployment record is created.
+- [x] Published app appears in App Store registry.
+- [x] Sprint 7 End User App Store can consume registry and access state.
 
 ## 7. Demo Script
 
