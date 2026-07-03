@@ -42,6 +42,13 @@ export interface PlatformRequest {
     | "/admin/backup/pitr"
     | "/admin/backup/restore-drills"
     | "/admin/backup/overview"
+    | "/admin/production/observability"
+    | "/admin/production/upgrade-checks"
+    | "/admin/production/rollback"
+    | "/admin/production/overview"
+    | "/admin/license/install"
+    | "/admin/license/validate"
+    | "/license/enforce"
     | "/admin/knowledge/sources"
     | `/admin/knowledge/sources/${string}/versions`
     | `/admin/knowledge/versions/${string}/approve`
@@ -662,6 +669,69 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(services.operations.getOverview(user)) };
     }
 
+    if (request.method === "GET" && request.path === "/admin/production/observability") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.production.getObservabilityDashboard(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/production/upgrade-checks") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.production.runUpgradeCheck(user, {
+        targetVersion: String(request.body?.targetVersion ?? ""),
+        diskFreeGb: Number(request.body?.diskFreeGb ?? 0),
+        lastBackupStatus: String(request.body?.lastBackupStatus ?? "missing") as never,
+        serviceHealth: String(request.body?.serviceHealth ?? "failed") as never,
+        licenseStatus: String(request.body?.licenseStatus ?? "expired") as never
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/production/rollback") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.production.runRollback(user, {
+        fromVersion: String(request.body?.fromVersion ?? ""),
+        toVersion: String(request.body?.toVersion ?? ""),
+        reason: String(request.body?.reason ?? ""),
+        rollbackWindowEndsAt: String(request.body?.rollbackWindowEndsAt ?? "")
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/production/overview") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.production.getOverview(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/license/install") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.production.installLicense(user, {
+        licenseKey: String(request.body?.licenseKey ?? ""),
+        signedPayload: (request.body?.signedPayload ?? {}) as never
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/license/validate") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.production.validateLicense(user, {
+        onlineAvailable: Boolean(request.body?.onlineAvailable),
+        checkedAt: String(request.body?.checkedAt ?? new Date().toISOString())
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/license/enforce") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.production.evaluateLicenseAction(user, {
+        action: String(request.body?.action ?? "run_existing_app") as never,
+        currentSeats: Number(request.body?.currentSeats ?? 0),
+        currentApps: Number(request.body?.currentApps ?? 0),
+        monthlyAiTokensUsed: Number(request.body?.monthlyAiTokensUsed ?? 0),
+        checkedAt: String(request.body?.checkedAt ?? new Date().toISOString())
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
@@ -1174,6 +1244,30 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
         body: request.body
       })
     )
+  );
+  routes.get("/admin/production/observability", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/production/observability", headers: request.headers }))
+  );
+  routes.post("/admin/production/upgrade-checks", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/production/upgrade-checks", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/production/rollback", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/production/rollback", headers: request.headers, body: request.body }))
+  );
+  routes.get("/admin/production/overview", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/production/overview", headers: request.headers }))
+  );
+  routes.post("/admin/license/install", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/license/install", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/license/validate", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/license/validate", headers: request.headers, body: request.body }))
+  );
+  routes.post("/license/enforce", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/license/enforce", headers: request.headers, body: request.body }))
   );
   routes.post("/projects/:projectId/prd/generate", (request, response) =>
     sendPlatformResponse(

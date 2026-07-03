@@ -4,6 +4,7 @@
 
 ### Added
 
+- Sprint 13 Observability and License with production health dashboard, telemetry export contract, upgrade compatibility and rollback reports, signed license validation, offline cache, license enforcement, Prisma production/license tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 12 Installer Backup Restore with installer preflight reports, setup wizard config redaction, backup policy/run metadata, PostgreSQL PITR, restore drill reports, Prisma operations tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 11 Knowledge and Skill Governance with knowledge source/version approval, scoped retrieval, skill version contracts, role/scenario/scope assignment, workspace context metadata, Prisma governance tables, Admin UI evidence and unit/integration/E2E coverage.
 - Sprint 10 Generated App Runtime Hardening with runtime overview service, Admin runtime API routes, schema isolation checks, migration dry-run gate, Prisma runtime evidence tables, Admin UI evidence and unit/integration/E2E coverage.

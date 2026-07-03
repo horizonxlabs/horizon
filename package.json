@@ -29,7 +29,8 @@
     "verify:sprint9": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint10": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint11": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
-    "verify:sprint12": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
+    "verify:sprint12": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint13": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

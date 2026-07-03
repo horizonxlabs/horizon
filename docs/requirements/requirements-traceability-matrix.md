@@ -245,6 +245,14 @@ Sprint 11 implementation evidence:
 | FR-KNW-001 to FR-KNW-005 / TC-KNW-001 to TC-KNW-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
 | FR-SKL-001 to FR-SKL-005 / TC-SKL-001 to TC-SKL-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
 
+Sprint 13 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-OBS-001, FR-OBS-002, OPS-007, OPS-008 / TC-OBS-001 to TC-OBS-003 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+| FR-INST-005, OPS-005, OPS-006 / TC-INST-005, TC-INST-006 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+| FR-LIC-001 to FR-LIC-003 / TC-LIC-001 to TC-LIC-005 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+
 | TC-AUD-001 | Security-sensitive event occurs | Event is emitted | Audit log stores event with actor, resource, severity, requestId and metadata | Audit log |
 | TC-AUD-002 | Audit retention policy is configured | Retention job runs | Logs are retained or archived according to policy | Retention report |
 | TC-OBS-001 | Admin opens health dashboard | Services are running/degraded | Dashboard shows PostgreSQL, Keycloak, MinIO, Redis, AI Gateway, Caddy, queues and app containers | UI screenshot |
@@ -270,7 +278,7 @@ Sprint 11 implementation evidence:
 
 | Gap | Related Requirements | Owner | Blocks Development? | Notes |
 | --- | --- | --- | --- | --- |
-| Exact license enforcement thresholds and grace duration | FR-LIC, TC-LIC | Product / Legal | Blocks license module details | Matrix defines behavior categories but not numeric policy |
+| Exact commercial pricing/contract thresholds | FR-LIC, TC-LIC | Product / Legal | Does not block Sprint 13 foundation | Sprint 13 stores thresholds from signed payload/config and seeds deterministic demo limits; commercial values remain Legal/Product-owned |
 | Minimum hardware profile | OPS-001, TC-INST-004 | Engineering / Ops | Blocks installer release | Needed before final preflight implementation |
 | Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Unblocked in Sprint 9 | ADR-005 accepted: Keycloak default broker, direct IdP optional through Platform Auth boundary |
 | Compliance templates for data classification | FR-DATA, SEC, policy approval | Security / Product | Blocks policy defaults | Need default rules per Public/Internal/Confidential/Restricted |
@@ -291,4 +299,4 @@ Sprint 11 implementation evidence:
 
 ## 7. Current Artifact Status
 
-The ADR set, implementation backlog, MVP-aligned sprint roadmap and Sprint 0-8 plans have been created. Use `docs/requirements/requirements-validation-review.md` for the current completeness review and use `docs/planning/sprint-0-plan.md` as the first implementation execution plan.
+The ADR set, implementation backlog, MVP-aligned sprint roadmap and Sprint 0-13 plans have been created. Use `docs/requirements/requirements-validation-review.md` for the current completeness review and use sprint plans in `docs/planning/` as implementation execution plans.

@@ -54,7 +54,9 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `runtime-hardening-shell` สำหรับ generated app runtime evidence ที่ต้องแสดง container contract, schema isolation, health/readiness, structured logs, metrics, OpenAPI และ migration dry-run ใน context เดียวกัน
 - ใช้ `knowledge-skill-governance-shell` สำหรับ governance dashboard ที่ต้องแสดง Knowledge Library, Version Approval, Scoped Retrieval, Skill Library, Skill Versioning, Skill Assignment และ Workspace Context ใน context เดียวกัน
 - ใช้ `operations-recovery-shell` สำหรับ operations dashboard ที่ต้องแสดง Installer Preflight, Setup Wizard, Backup Schedule, Backup Runs, PostgreSQL PITR และ Restore Drill ใน context เดียวกัน
+- ใช้ `observability-license-shell` สำหรับ production control dashboard ที่ต้องแสดง Service Health, Generated App Health, Queue Backpressure, Telemetry Export, Upgrade Compatibility, Rollback Report, License Validation และ License Enforcement ใน context เดียวกัน
 - ใช้ `backup-restore-mobile-list` สำหรับ mobile replacement ของตาราง backup/run/check ที่มี artifact URI, checksum, audit id หรือ timestamp ยาว ๆ
+- ใช้ `license-enforcement-mobile-list` สำหรับ mobile replacement ของตาราง license enforcement ที่มี action, decision, reason และ data-continuity copy ยาว ๆ
 - ใช้ `scope-filter-bar` สำหรับ filter ชุด actor/project/app/department/agent/scenario ใน retrieval simulator และ workflow governance tools
 - ใช้ `governance-mobile-list` แทน dense tables บน mobile โดยต้องคง label/status text และไม่ truncate audit/version identifiers
 - ห้ามแสดง plaintext secret; ใช้ masked value หรือ fingerprint เท่านั้น
