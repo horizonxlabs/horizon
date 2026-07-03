@@ -51,4 +51,4 @@ Screenshot evidence:
 
 ## Product Owner Note
 
-Sprint 14 is ready for screenshot capture and final PO acceptance comment. Code, API, persistence, seed data and automated regression gates are green.
+Sprint 14 is ready for external maintainer review and stacked merge. Code, API, persistence, seed data, UI screenshots and automated regression gates are green; formal GitHub approval is still required from a non-author maintainer.
