@@ -404,6 +404,7 @@ export interface DeploymentRecord {
 export interface AppStoreRegistryEntry {
   id: string;
   appId: string;
+  projectId: string;
   slug: string;
   name: string;
   route: string;
@@ -422,6 +423,108 @@ export interface PublishResult {
   deployment: DeploymentRecord;
   registryEntry: AppStoreRegistryEntry;
   manifest: AppManifest;
+}
+
+export type StoreAppAccessStatus = "active" | "available" | "pending";
+export type StorePrimaryAction = "open" | "request_access" | "view_status";
+export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
+export type TicketPriority = "low" | "medium" | "high" | "critical";
+export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
+
+export interface StorefrontAppCard {
+  id: string;
+  appId: string;
+  projectId: string;
+  slug: string;
+  name: string;
+  description: string;
+  ownerName: string;
+  route: string;
+  accessStatus: StoreAppAccessStatus;
+  myRole?: string;
+  health: Status;
+  version: string;
+  lastUpdated: string;
+  primaryAction: StorePrimaryAction;
+}
+
+export interface StorefrontHome {
+  profile: {
+    userName: string;
+    email: string;
+  };
+  myApps: StorefrontAppCard[];
+  availableApps: StorefrontAppCard[];
+  notifications: InAppNotification[];
+}
+
+export interface StorefrontAppDetail extends StorefrontAppCard {
+  ownerUserId: string;
+  department: string;
+  accessMode: AppStoreRegistryEntry["accessMode"];
+  releaseNotes: string[];
+  supportContact: string;
+  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+}
+
+export interface StoreAccessRequestResult {
+  id: string;
+  appSlug: string;
+  requestedRoleKey: string;
+  requesterEmail: string;
+  status: "pending";
+  reason: string;
+  department?: string;
+  createdAt: string;
+}
+
+export interface SupportTicketTimelineEntry {
+  id: string;
+  ticketId: string;
+  status: TicketStatus;
+  label: string;
+  actorId: string;
+  occurredAt: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  ticketNumber: string;
+  appId: string;
+  appSlug: string;
+  projectId: string;
+  submittedByUserId: string;
+  submittedByEmail: string;
+  type: TicketType;
+  priority: TicketPriority;
+  title: string;
+  description: string;
+  deviceInfo: string;
+  screenshotUrl?: string;
+  status: TicketStatus;
+  assignedToUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  timeline: SupportTicketTimelineEntry[];
+}
+
+export interface TicketStatusView extends SupportTicket {
+  appName: string;
+}
+
+export interface CreatorTicketInboxItem extends SupportTicket {
+  appName: string;
+  actions: Array<"reply" | "convert_to_prd_change" | "convert_to_ai_prompt" | "resolve">;
+}
+
+export interface InAppNotification {
+  id: string;
+  userId: string;
+  type: "app_published" | "access_request" | "ticket_update";
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
 }
 
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
@@ -713,6 +816,12 @@ export class ProjectService {
     if (actor.role !== "admin" && project.ownerUserId !== actor.id) {
       throw new PermissionError(`User ${actor.email} cannot access project ${projectId}`);
     }
+    return project;
+  }
+
+  getProjectById(projectId: string): PlatformProject {
+    const project = this.projects.find((candidate) => candidate.id === projectId);
+    if (!project) throw new ValidationError(`Unknown project: ${projectId}`);
     return project;
   }
 }
@@ -1543,6 +1652,10 @@ export class AppUserAccessService {
 
   getSnapshot(actor: PlatformUser, projectId: string): AppAccessSnapshot {
     const project = this.projects.getProjectForActor(actor, projectId);
+    return this.getSnapshotForProject(project);
+  }
+
+  getSnapshotForProject(project: PlatformProject): AppAccessSnapshot {
     const app = this.ensureApp(project);
     this.ensureDefaults(project, app);
 
@@ -1729,6 +1842,81 @@ export class AppUserAccessService {
 
   membersForProject(actor: PlatformUser, projectId: string): AppMemberRecord[] {
     return this.getSnapshot(actor, projectId).members;
+  }
+
+  getMemberForEmail(project: PlatformProject, email: string): AppMemberRecord | undefined {
+    const snapshot = this.getSnapshotForProject(project);
+    return snapshot.members.find((member) => member.email === email && member.status === "active");
+  }
+
+  getPendingRequestForEmail(project: PlatformProject, email: string, roleKey?: string): AppAccessRequest | undefined {
+    const snapshot = this.getSnapshotForProject(project);
+    return snapshot.accessRequests.find(
+      (request) =>
+        request.requesterEmail === email &&
+        request.status === "pending" &&
+        (!roleKey || request.requestedRoleKey === roleKey)
+    );
+  }
+
+  createStoreAccessRequest(
+    actor: PlatformUser,
+    project: PlatformProject,
+    input: {
+      requestedRoleKey: string;
+      reason: string;
+      department?: string;
+    }
+  ): StoreAccessRequestResult {
+    this.auth.requireRole(actor, ["end_user"]);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+    this.requireRoleKey(app.id, input.requestedRoleKey);
+
+    const existing = this.getPendingRequestForEmail(project, actor.email, input.requestedRoleKey);
+    if (existing) {
+      return {
+        id: existing.id,
+        appSlug: project.slug,
+        requestedRoleKey: existing.requestedRoleKey,
+        requesterEmail: existing.requesterEmail,
+        status: "pending",
+        reason: existing.reason,
+        department: typeof existing.reason === "string" && input.department ? input.department : undefined,
+        createdAt: existing.createdAt
+      };
+    }
+
+    const accessRequest: AppAccessRequest = {
+      id: `appreq_${app.id}_${String(this.accessRequests.length + 1).padStart(4, "0")}`,
+      appId: app.id,
+      projectId: project.id,
+      requesterEmail: actor.email,
+      requestedRoleKey: input.requestedRoleKey,
+      reason: input.reason.trim() || "Access requested from App Store",
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
+
+    this.accessRequests.push(accessRequest);
+    this.audit.record({
+      actorId: actor.id,
+      action: "store.access_request.created",
+      resourceType: "app_access_request",
+      resourceId: accessRequest.id,
+      metadata: { projectId: project.id, requestedRoleKey: input.requestedRoleKey, department: input.department }
+    });
+
+    return {
+      id: accessRequest.id,
+      appSlug: project.slug,
+      requestedRoleKey: accessRequest.requestedRoleKey,
+      requesterEmail: accessRequest.requesterEmail,
+      status: "pending",
+      reason: accessRequest.reason,
+      department: input.department,
+      createdAt: accessRequest.createdAt
+    };
   }
 
   private ensureApp(project: PlatformProject): ManagedApp {
@@ -1940,6 +2128,7 @@ export class PublishService {
     const registryEntry: AppStoreRegistryEntry = {
       id: `store_${review.manifest.app.slug}`,
       appId: review.manifest.appId,
+      projectId: review.project.id,
       slug: review.manifest.app.slug,
       name: review.manifest.app.name,
       route: review.manifest.app.route,
@@ -2083,6 +2272,229 @@ export class PublishService {
     if (existingIndex >= 0) this.registry[existingIndex] = entry;
     else this.registry.push(entry);
   }
+}
+
+export class StorefrontService {
+  private readonly notifications: InAppNotification[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly identity: IdentityService,
+    private readonly projects: ProjectService,
+    private readonly publish: PublishService,
+    private readonly appAccess: AppUserAccessService
+  ) {}
+
+  listApps(actor: PlatformUser): StorefrontHome {
+    this.auth.requireRole(actor, ["end_user"]);
+    const cards = this.publish.listRegistry(actor).map((entry) => this.toCard(actor, entry));
+    const notifications = this.ensureNotifications(actor, cards);
+
+    return {
+      profile: {
+        userName: actor.name,
+        email: actor.email
+      },
+      myApps: cards.filter((card) => card.accessStatus === "active"),
+      availableApps: cards.filter((card) => card.accessStatus !== "active"),
+      notifications
+    };
+  }
+
+  getAppDetail(actor: PlatformUser, appSlug: string): StorefrontAppDetail {
+    this.auth.requireRole(actor, ["end_user"]);
+    const entry = this.requireRegistryEntry(actor, appSlug);
+    const project = this.projects.getProjectById(entry.projectId);
+    const card = this.toCard(actor, entry);
+    const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
+    const active = card.accessStatus === "active";
+
+    return {
+      ...card,
+      ownerUserId: entry.ownerUserId,
+      ownerName: owner?.name ?? entry.ownerUserId,
+      department: project.targetDepartment,
+      accessMode: entry.accessMode,
+      releaseNotes: ["Published from Sprint 6 manifest", "WFH leave type and manager approval preview are available"],
+      supportContact: "Creator User",
+      actions: active ? ["open", "submit_ticket", "send_feedback"] : ["request_access", "view_status"]
+    };
+  }
+
+  requestAccess(
+    actor: PlatformUser,
+    appSlug: string,
+    input: {
+      requestedRoleKey: string;
+      reason: string;
+      department?: string;
+    }
+  ): StoreAccessRequestResult {
+    this.auth.requireRole(actor, ["end_user"]);
+    const entry = this.requireRegistryEntry(actor, appSlug);
+    const project = this.projects.getProjectById(entry.projectId);
+    return this.appAccess.createStoreAccessRequest(actor, project, input);
+  }
+
+  canSubmitTicket(actor: PlatformUser, appSlug: string): StorefrontAppDetail {
+    const detail = this.getAppDetail(actor, appSlug);
+    if (detail.accessStatus !== "active") {
+      throw new PermissionError(`App ${appSlug} is not visible for ticket submission`);
+    }
+    return detail;
+  }
+
+  private requireRegistryEntry(actor: PlatformUser, appSlug: string): AppStoreRegistryEntry {
+    const entry = this.publish.listRegistry(actor).find((candidate) => candidate.slug === appSlug);
+    if (!entry) throw new PermissionError(`Unknown app or app is not visible: ${appSlug}`);
+    return entry;
+  }
+
+  private toCard(actor: PlatformUser, entry: AppStoreRegistryEntry): StorefrontAppCard {
+    const project = this.projects.getProjectById(entry.projectId);
+    const member = this.appAccess.getMemberForEmail(project, actor.email);
+    const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
+    const accessStatus: StoreAppAccessStatus = member ? "active" : pending ? "pending" : "available";
+    const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
+
+    return {
+      id: entry.id,
+      appId: entry.appId,
+      projectId: entry.projectId,
+      slug: entry.slug,
+      name: entry.name,
+      description: `${project.appType} for ${project.targetDepartment}`,
+      ownerName: owner?.name ?? entry.ownerUserId,
+      route: entry.route,
+      accessStatus,
+      myRole: member?.roleName,
+      health: "healthy",
+      version: `manifest v${entry.manifestVersion}`,
+      lastUpdated: entry.publishedAt,
+      primaryAction: accessStatus === "active" ? "open" : accessStatus === "pending" ? "view_status" : "request_access"
+    };
+  }
+
+  private ensureNotifications(actor: PlatformUser, cards: StorefrontAppCard[]): InAppNotification[] {
+    if (!this.notifications.some((notification) => notification.userId === actor.id)) {
+      for (const card of cards) {
+        this.notifications.push({
+          id: `noti_${actor.id}_${card.slug}`,
+          userId: actor.id,
+          type: "app_published",
+          title: `${card.name} is available`,
+          body: card.accessStatus === "active" ? "You can open this app from My Apps." : "Request access from the app detail page.",
+          read: false,
+          createdAt: card.lastUpdated
+        });
+      }
+    }
+
+    return this.notifications.filter((notification) => notification.userId === actor.id);
+  }
+}
+
+export class TicketService {
+  private readonly tickets: SupportTicket[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly storefront: StorefrontService,
+    private readonly projects: ProjectService
+  ) {}
+
+  createTicket(
+    actor: PlatformUser,
+    appSlug: string,
+    input: {
+      type: TicketType;
+      priority: TicketPriority;
+      title: string;
+      description: string;
+      deviceInfo: string;
+      screenshotUrl?: string;
+    }
+  ): SupportTicket {
+    this.auth.requireRole(actor, ["end_user"]);
+    const detail = this.storefront.canSubmitTicket(actor, appSlug);
+    if (!input.title.trim()) throw new ValidationError("Ticket title is required");
+    if (!input.description.trim()) throw new ValidationError("Ticket description is required");
+
+    const now = new Date().toISOString();
+    const id = `ticket_${String(this.tickets.length + 1).padStart(4, "0")}`;
+    const ticket: SupportTicket = {
+      id,
+      ticketNumber: `TKT-${String(this.tickets.length + 1).padStart(4, "0")}`,
+      appId: detail.appId,
+      appSlug,
+      projectId: detail.projectId,
+      submittedByUserId: actor.id,
+      submittedByEmail: actor.email,
+      type: input.type,
+      priority: input.priority,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      deviceInfo: input.deviceInfo.trim() || "Unknown device",
+      screenshotUrl: input.screenshotUrl,
+      status: "submitted",
+      assignedToUserId: detail.ownerUserId,
+      createdAt: now,
+      updatedAt: now,
+      timeline: [
+        {
+          id: `${id}_tl_001`,
+          ticketId: id,
+          status: "submitted",
+          label: "Ticket submitted",
+          actorId: actor.id,
+          occurredAt: now
+        }
+      ]
+    };
+
+    this.tickets.push(ticket);
+    this.audit.record({
+      actorId: actor.id,
+      action: "ticket.created",
+      resourceType: "support_ticket",
+      resourceId: ticket.id,
+      metadata: { appSlug, type: ticket.type, priority: ticket.priority, assignedToUserId: ticket.assignedToUserId }
+    });
+
+    return ticket;
+  }
+
+  getTicketStatus(actor: PlatformUser, ticketId: string): TicketStatusView {
+    const ticket = this.requireTicket(ticketId);
+    if (actor.role !== "creator" && actor.role !== "admin" && ticket.submittedByUserId !== actor.id) {
+      throw new PermissionError(`User ${actor.email} cannot access ticket ${ticketId}`);
+    }
+    const detail = this.storefront.getAppDetail(
+      actor.role === "end_user" ? actor : { ...actor, role: "end_user", email: ticket.submittedByEmail },
+      ticket.appSlug
+    );
+    return { ...ticket, appName: detail.name };
+  }
+
+  listCreatorInbox(actor: PlatformUser, projectId: string): CreatorTicketInboxItem[] {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    return this.tickets
+      .filter((ticket) => ticket.projectId === projectId)
+      .map((ticket) => ({
+        ...ticket,
+        appName: this.storefront.getAppDetail({ ...actor, role: "end_user", email: ticket.submittedByEmail }, ticket.appSlug).name,
+        actions: ["reply", "convert_to_prd_change", "convert_to_ai_prompt", "resolve"]
+      }));
+  }
+
+  private requireTicket(ticketId: string): SupportTicket {
+    const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
+    if (!ticket) throw new ValidationError(`Unknown ticket: ${ticketId}`);
+    return ticket;
+  }
+
 }
 
 export class WorkspaceService {
@@ -2308,6 +2720,8 @@ export interface PlatformApiServices {
   frontendVersions: FrontendVersionService;
   appAccess: AppUserAccessService;
   publish: PublishService;
+  storefront: StorefrontService;
+  tickets: TicketService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -2328,6 +2742,8 @@ export function createPlatformApiServices(): PlatformApiServices {
   const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
   const appAccess = new AppUserAccessService(auth, audit, projects, identity);
   const publish = new PublishService(auth, audit, projects, prds, frontendVersions, databaseView, appAccess);
+  const storefront = new StorefrontService(auth, identity, projects, publish, appAccess);
+  const tickets = new TicketService(auth, audit, storefront, projects);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
 
   return {
@@ -2343,6 +2759,8 @@ export function createPlatformApiServices(): PlatformApiServices {
     frontendVersions,
     appAccess,
     publish,
+    storefront,
+    tickets,
     envelope: { success, failure }
   };
 }

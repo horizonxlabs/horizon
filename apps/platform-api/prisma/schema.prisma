@@ -74,6 +74,10 @@ model PlatformUser {
   publishRequests PublishRequest[] @relation("PublishRequestRequestedBy")
   deploymentRecords DeploymentRecord[] @relation("DeploymentRecordPublishedBy")
   ownedRegistryEntries AppStoreRegistryEntry[] @relation("AppStoreRegistryOwner")
+  ticketsSubmitted SupportTicket[] @relation("SupportTicketSubmittedBy")
+  ticketsAssigned SupportTicket[] @relation("SupportTicketAssignedTo")
+  ticketTimelineEntries SupportTicketTimelineEntry[] @relation("SupportTicketTimelineActor")
+  notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
   createdAt   DateTime            @default(now()) @map("created_at")
@@ -153,6 +157,8 @@ model Project {
   publishRequests PublishRequest[]
   deploymentRecords DeploymentRecord[]
   appStoreRegistryEntries AppStoreRegistryEntry[]
+  supportTickets SupportTicket[]
+  notifications InAppNotification[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -186,6 +192,7 @@ model App {
   publishRequests    PublishRequest[]
   deploymentRecords  DeploymentRecord[]
   registryEntry      AppStoreRegistryEntry?
+  supportTickets     SupportTicket[]
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
@@ -672,4 +679,63 @@ model AppStoreRegistryEntry {
 
   @@index([status])
   @@map("app_store_registry_entries")
+}
+
+model SupportTicket {
+  id                String   @id
+  ticketNumber      String   @unique @map("ticket_number")
+  appId             String   @map("app_id")
+  appSlug           String   @map("app_slug")
+  projectId         String   @map("project_id")
+  submittedByUserId String   @map("submitted_by_user_id")
+  submittedByEmail  String   @map("submitted_by_email")
+  type              String
+  priority          String
+  title             String
+  description       String
+  deviceInfo        String   @map("device_info")
+  screenshotUrl     String?  @map("screenshot_url")
+  status            String
+  assignedToUserId  String   @map("assigned_to_user_id")
+  app               App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submittedBy       PlatformUser @relation("SupportTicketSubmittedBy", fields: [submittedByUserId], references: [id])
+  assignedTo        PlatformUser @relation("SupportTicketAssignedTo", fields: [assignedToUserId], references: [id])
+  timeline          SupportTicketTimelineEntry[]
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@index([submittedByUserId, createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketTimelineEntry {
+  id         String   @id
+  ticketId   String   @map("ticket_id")
+  status     String
+  label      String
+  actorUserId String @map("actor_user_id")
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor      PlatformUser @relation("SupportTicketTimelineActor", fields: [actorUserId], references: [id])
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([ticketId, occurredAt])
+  @@map("support_ticket_timeline_entries")
+}
+
+model InAppNotification {
+  id        String   @id
+  userId    String   @map("user_id")
+  projectId String?  @map("project_id")
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  user      PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read])
+  @@map("in_app_notifications")
 }

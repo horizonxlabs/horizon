@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 7 implementation
+Status: Implemented and accepted
 Related plan: `docs/planning/sprint-7-plan.md`
 
 ## 1. Design Objective
@@ -130,10 +130,9 @@ Creator inbox must show:
 
 ## 11. Acceptance Criteria
 
-- [ ] App Store Home is usable on mobile width.
-- [ ] My Apps and Available Apps reflect permission/access state.
-- [ ] End User can request access and see pending status.
-- [ ] End User can submit ticket with required fields.
-- [ ] Ticket submitted state shows ticket id and status link.
-- [ ] Creator can see routed ticket in inbox.
-
+- [x] App Store Home is usable on mobile width.
+- [x] My Apps and Available Apps reflect permission/access state.
+- [x] End User can request access and see pending status.
+- [x] End User can submit ticket with required fields.
+- [x] Ticket submitted state shows ticket id and status link.
+- [x] Creator can see routed ticket in inbox.
