@@ -253,6 +253,14 @@ Sprint 13 implementation evidence:
 | FR-INST-005, OPS-005, OPS-006 / TC-INST-005, TC-INST-006 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
 | FR-LIC-001 to FR-LIC-003 / TC-LIC-001 to TC-LIC-005 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
 
+Sprint 14 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| SEC-001 to SEC-006, SEC-011, SEC-012 / TC-SEC-001 to TC-SEC-003, TC-SEC-006 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+| SEC-009 / TC-SEC-004 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+| SEC-010 / TC-SEC-005 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+
 | TC-AUD-001 | Security-sensitive event occurs | Event is emitted | Audit log stores event with actor, resource, severity, requestId and metadata | Audit log |
 | TC-AUD-002 | Audit retention policy is configured | Retention job runs | Logs are retained or archived according to policy | Retention report |
 | TC-OBS-001 | Admin opens health dashboard | Services are running/degraded | Dashboard shows PostgreSQL, Keycloak, MinIO, Redis, AI Gateway, Caddy, queues and app containers | UI screenshot |

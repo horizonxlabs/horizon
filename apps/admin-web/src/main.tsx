@@ -284,6 +284,49 @@ const licenseEnforcementRows = [
   { action: "run_existing_app", decision: "allowed", reason: "existing app continuity", data: "preserved" }
 ];
 
+const securityReleaseKpis = [
+  { label: "TLS Enforcement", value: "enforced", detail: "production HTTP blocked", icon: LockKeyhole, tone: "success" },
+  { label: "Session Policy", value: "30m / 480m", detail: "no remember-me sessions", icon: ShieldCheck, tone: "success" },
+  { label: "Secret Redaction", value: "passed", detail: "API, UI, log, audit, export", icon: KeyRound, tone: "success" },
+  { label: "RTM Regression", value: "42/42", detail: "P0 requirements covered", icon: CheckCircle2, tone: "success" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const tlsSessionRows = [
+  { policy: "TLS Enforcement", required: "HTTPS in production", observed: "Caddy TLS route required", status: "pass" },
+  { policy: "Local Setup HTTP", required: "allowed only for setup", observed: "localhost exception", status: "pass" },
+  { policy: "Idle Timeout", required: "<= 30 minutes", observed: "30 minutes", status: "pass" },
+  { policy: "Absolute Timeout", required: "<= 480 minutes", observed: "480 minutes", status: "pass" }
+];
+
+const secretRedactionRows = [
+  { surface: "API", rule: "secret_key", evidence: "fingerprint or masked value only", status: "pass" },
+  { surface: "UI", rule: "masked_value", evidence: "admin console never renders raw key", status: "pass" },
+  { surface: "Log", rule: "structured_log_redaction", evidence: "prompt/ticket/request payload redacted", status: "pass" },
+  { surface: "Audit", rule: "classification_filter", evidence: "rule names retained without secret values", status: "pass" }
+];
+
+const uploadValidationRows = [
+  { file: "policy.pdf", mime: "application/pdf", scan: "clean", decision: "allowed" },
+  { file: "payload.exe", mime: "application/x-msdownload", scan: "clean", decision: "blocked" },
+  { file: "pending.docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", scan: "pending", decision: "quarantined" },
+  { file: "huge.pdf", mime: "application/pdf", scan: "clean", decision: "blocked" }
+];
+
+const releaseChecklistRows = [
+  { check: "auth", public: "pass", external: "pass", blocker: "-" },
+  { check: "permissions", public: "pass", external: "pass", blocker: "-" },
+  { check: "domain", public: "pass", external: "pass", blocker: "-" },
+  { check: "tls", public: "blocked", external: "pass", blocker: "TLS required before public exposure" },
+  { check: "data_classification", public: "blocked", external: "pass", blocker: "Confidential data cannot be public" },
+  { check: "audit", public: "pass", external: "pass", blocker: "-" }
+];
+
+const rtmRegressionRows = [
+  { suite: "unit", scope: "security release service", result: "pass", evidence: "Sprint 14 service tests" },
+  { suite: "integration", scope: "Prisma schema and seed contract", result: "pass", evidence: "security readiness tables" },
+  { suite: "e2e", scope: "admin API + UI smoke", result: "pass", evidence: "admin readiness dashboard" }
+];
+
 function AdminApp() {
   useEffect(() => {
     if (!window.location.hash) {
@@ -1363,6 +1406,158 @@ function AdminApp() {
                 { name: "Upgrade Gate", detail: "Unsafe upgrade blocked", status: "degraded" },
                 { name: "License Guard", detail: "Signed payload and offline cache enforced", status: "healthy" },
                 { name: "Data Continuity", detail: "Existing apps remain available", status: "healthy" }
+              ]}
+            />
+          </section>
+
+          <section id="security-release" className="security-release-shell" aria-label="Security Release Readiness">
+            <div className="security-release-header">
+              <div>
+                <span className="eyebrow">Security Release Gate</span>
+                <h2>Security Release Readiness</h2>
+                <p>Admin-only readiness for TLS, session controls, secret redaction, upload quarantine, public/external exposure checks, sensitive log redaction and RTM regression evidence.</p>
+              </div>
+              <div className="ds-page-actions">
+                <button type="button" className="secondary-button"><ListFilter size={16} /> Export Evidence</button>
+                <button type="button"><ShieldCheck size={16} /> Run Checklist</button>
+              </div>
+            </div>
+
+            <section className="security-release-kpi-grid">
+              {securityReleaseKpis.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <MetricCard
+                    key={item.label}
+                    label={item.label}
+                    value={item.value}
+                    detail={item.detail}
+                    icon={<Icon size={18} />}
+                    tone={item.tone}
+                  />
+                );
+              })}
+            </section>
+
+            <section className="security-release-layout">
+              <WorkflowRail
+                title="Release Gate"
+                steps={[
+                  { label: "TLS Enforcement", icon: <LockKeyhole size={16} /> },
+                  { label: "Session Policy", icon: <ShieldCheck size={16} /> },
+                  { label: "Secret Redaction", icon: <KeyRound size={16} /> },
+                  { label: "Upload Validation", icon: <Database size={16} /> },
+                  { label: "Public / External Checklist", icon: <Globe2 size={16} /> },
+                  { label: "Sensitive Log Redaction", icon: <Fingerprint size={16} /> },
+                  { label: "RTM Regression", icon: <CheckCircle2 size={16} /> }
+                ]}
+                alert={{
+                  icon: <AlertTriangle size={18} />,
+                  title: "Public release is blocked",
+                  description: "Public exposure waits for TLS plus data classification approval; external release remains available when all checks pass.",
+                  tone: "warning"
+                }}
+              />
+
+              <div className="security-release-grid">
+                <SectionCard eyebrow="Transport + Auth" title="TLS Enforcement and Session Policy">
+                  <DataTable
+                    columns={[
+                      { key: "policy", label: "Policy" },
+                      { key: "required", label: "Required" },
+                      { key: "observed", label: "Observed" },
+                      { key: "status", label: "Status", tone: () => "success" }
+                    ]}
+                    rows={tlsSessionRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Secrets" title="Secret Redaction">
+                  <DataTable
+                    columns={[
+                      { key: "surface", label: "Surface" },
+                      { key: "rule", label: "Rule" },
+                      { key: "evidence", label: "Evidence" },
+                      { key: "status", label: "Status", tone: () => "success" }
+                    ]}
+                    rows={secretRedactionRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Uploads" title="Upload Validation">
+                  <DataTable
+                    columns={[
+                      { key: "file", label: "File" },
+                      { key: "mime", label: "MIME" },
+                      { key: "scan", label: "Scan" },
+                      { key: "decision", label: "Decision", tone: (value) => (value === "allowed" ? "success" : value === "quarantined" ? "warning" : "danger") }
+                    ]}
+                    rows={uploadValidationRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Exposure" title="Public / External Checklist">
+                  <div className="security-release-desktop-table">
+                    <DataTable
+                      columns={[
+                        { key: "check", label: "Check" },
+                        { key: "public", label: "Public", tone: (value) => (value === "blocked" ? "danger" : "success") },
+                        { key: "external", label: "External", tone: (value) => (value === "blocked" ? "danger" : "success") },
+                        { key: "blocker", label: "Blocker" }
+                      ]}
+                      rows={releaseChecklistRows}
+                    />
+                  </div>
+                  <div className="security-release-mobile-list">
+                    {releaseChecklistRows.map((row) => (
+                      <article key={row.check}>
+                        <strong>{row.check}</strong>
+                        <ToneBadge tone={row.public === "blocked" ? "danger" : "success"}>Public: {row.public}</ToneBadge>
+                        <ToneBadge tone={row.external === "blocked" ? "danger" : "success"}>External: {row.external}</ToneBadge>
+                        <small>{row.blocker}</small>
+                      </article>
+                    ))}
+                  </div>
+                  <DecisionPanel
+                    tone="warning"
+                    badge="blocked"
+                    title="Sensitive public release waits for security approval"
+                    lines={["TLS must be enforced before public exposure", "Confidential data cannot move to public without an approved exception"]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Logging" title="Sensitive Log Redaction">
+                  <DefinitionGrid
+                    items={[
+                      { label: "Prompt", value: "secret keys and national IDs redacted" },
+                      { label: "Ticket", value: "passwords and card numbers redacted" },
+                      { label: "Request Payload", value: "apiKey/clientSecret values replaced" },
+                      { label: "Audit", value: "classification and rule names only" }
+                    ]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Traceability" title="RTM Regression">
+                  <DataTable
+                    columns={[
+                      { key: "suite", label: "Suite" },
+                      { key: "scope", label: "Scope" },
+                      { key: "result", label: "Result", tone: () => "success" },
+                      { key: "evidence", label: "Evidence" }
+                    ]}
+                    rows={rtmRegressionRows}
+                  />
+                </SectionCard>
+              </div>
+            </section>
+
+            <ServiceStrip
+              services={[
+                { name: "Admin-only APIs", detail: "Readiness, upload, release and redaction endpoints guarded", status: "healthy" },
+                { name: "Upload Quarantine", detail: "Unsupported, oversize and unsafe scan states handled", status: "healthy" },
+                { name: "Public Gate", detail: "TLS and data classification block unsafe exposure", status: "degraded" },
+                { name: "Redaction Evidence", detail: "Sensitive values removed before response or audit", status: "healthy" },
+                { name: "RTM Regression", detail: "P0 traceability ready for PO acceptance", status: "healthy" }
               ]}
             />
           </section>
