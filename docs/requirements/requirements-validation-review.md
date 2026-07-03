@@ -36,6 +36,7 @@ Scope: Requirement engineering completeness check before implementation
 | AI gateway requirements | `docs/requirements/production-blueprint-requirements.md` section 16.7 and ADR-002 | Complete | Provider adapter, routing, fallback, quota, usage log and guardrail behavior |
 | Operational requirements | `docs/requirements/production-blueprint-requirements.md` sections 8.1, 8.15, 16.8, 16.9 | Complete with explicit open decisions | Installer, backup, restore, upgrade, rollback, observability and license controls |
 | Traceability and test basis | `docs/requirements/requirements-traceability-matrix.md` | Complete | Requirement groups mapped to test cases and residual blocking decisions |
+| UX/UI requirements | `docs/design/ux-ui-requirements.md` | Complete for MVP design baseline | User flows, information architecture, screen inventory, layout rules, component requirements, responsive behavior and UI acceptance criteria |
 | Architectural decisions | `docs/architecture/ADR-001` through `ADR-005` | Complete for pre-implementation baseline | Deployment, provider adapter, generated runtime isolation, publish governance, auth broker strategy |
 | Implementation backlog | `docs/planning/production-implementation-backlog.md` | Complete | Phase backlog, P0/P1/P2 convention, MVP-aligned sprint recommendation |
 | MVP sprint plans | `docs/planning/sprint-0-plan.md` through `docs/planning/sprint-8-plan.md` | Complete | Each sprint has source alignment, backlog mapping, tests, DoD and demo script |
@@ -52,7 +53,7 @@ Scope: Requirement engineering completeness check before implementation
 | Epic 3 End User App Store PWA | FR-STORE, FR-ACCESS, FR-TKT, FR-NOTI | Sprint 7 and Sprint 8 | Covered |
 | Epic 4 Generated App Runtime | FR-GEN, FR-DEP, FR-DOM, app manifest contract | Sprint 4 mock generator, Sprint 6 publish, Sprint 10 runtime hardening | Covered with MVP vs production split |
 | Epic 5 Monitoring and Audit | FR-OPS, event taxonomy, audit requirements | Sprint 1 audit, Sprint 8 MVP dashboard, Sprint 13 production observability | Covered |
-| Wireframes for 3 surfaces | Product surface requirements and user stories | Sprint plans preserve required screens and demo flows | Covered at requirement level; UI specs will be refined during implementation |
+| Wireframes for 3 surfaces | Product surface requirements, user stories and `docs/design/ux-ui-requirements.md` | Sprint plans preserve required screens and demo flows | Covered for MVP design baseline; high-fidelity mockups remain optional before production pilot |
 | Database schema | Domain model/data dictionary and entity relationships | Sprint 1 schema base, Sprint 3 PRD model, Sprint 5 DB view, Sprint 6 access/publish, Sprint 7 ticket | Covered at requirement level; Prisma schema implementation remains sprint work |
 | API spec | API groups, response envelope, event taxonomy and RTM tests | Sprint 1 API foundation through Sprint 8 feature APIs | Covered at requirement level; OpenAPI files remain implementation deliverables |
 | AI-optimized sprint plan | Roadmap and sprint-0 through sprint-8 files | Individual sprint plans use source tasks S0.x-S8.x | Covered |
@@ -103,6 +104,7 @@ These are not requirement engineering gaps; they are implementation decisions th
 Requirement engineering is complete enough to start MVP implementation because:
 
 - The source PRD and MVP backlog are represented in requirement, architecture, backlog, roadmap and sprint artifacts.
+- UX/UI requirements have been added for the three surfaces and connected to Sprint 0-8 delivery.
 - MVP Sprint 0-8 preserves the source sprint order, source tasks and acceptance intent.
 - Production-only capabilities are not mixed into MVP P0 delivery; they are tracked as Sprint 9-14 extension work.
 - Every MVP must-have has requirement coverage, sprint coverage and test/DoD evidence.
