@@ -21,6 +21,7 @@ export interface PlatformProject {
   intendedUsers: string[];
   dataSensitivity: "public" | "internal" | "confidential" | "restricted";
   appId?: string;
+  activeFrontendCheckpointId?: string;
   createdAt: string;
 }
 
@@ -147,6 +148,107 @@ export interface WorkspaceSnapshot {
   tasks: WorkspaceTask[];
   usage: AiUsageLog[];
   tokenBudget: WorkspacePromptResult["tokenBudget"];
+}
+
+export interface AppDatabaseColumn {
+  id: string;
+  tableKey: string;
+  name: string;
+  dataType: string;
+  required: boolean;
+  defaultValue?: string;
+  source: "generated" | "manual";
+}
+
+export interface AppDatabaseTable {
+  id: string;
+  projectId: string;
+  key: string;
+  displayName: string;
+  description: string;
+  columns: AppDatabaseColumn[];
+  source: "generated" | "manual";
+}
+
+export interface AppDatabaseRelationship {
+  id: string;
+  projectId: string;
+  sourceTable: string;
+  sourceColumn: string;
+  targetTable: string;
+  targetColumn: string;
+  cardinality: "one_to_one" | "one_to_many" | "many_to_many";
+}
+
+export interface AppDatabaseSampleRecord {
+  id: string;
+  projectId: string;
+  tableKey: string;
+  ordinal: number;
+  data: Record<string, string | number | boolean | null>;
+}
+
+export interface AppDatabaseMigration {
+  id: string;
+  projectId: string;
+  migrationId: string;
+  status: "planned" | "applied" | "failed";
+  createdByUserId: string;
+  linkedPrdVersion: string;
+  linkedFrontendCheckpoint?: string;
+  appliedAt: string;
+}
+
+export interface DatabaseViewSnapshot {
+  project: PlatformProject;
+  schemaName: string;
+  readOnly: true;
+  restrictions: string[];
+  tables: AppDatabaseTable[];
+  relationships: AppDatabaseRelationship[];
+  migrations: AppDatabaseMigration[];
+  sampleRecords: AppDatabaseSampleRecord[];
+}
+
+export interface FrontendCheckpoint {
+  id: string;
+  projectId: string;
+  version: string;
+  sourcePreviewVersion: string;
+  sourceTaskId?: string;
+  status: "current" | "previous" | "restored";
+  checksum: string;
+  fileManifest: string[];
+  routeSnapshot: string[];
+  changeSummary: string;
+  changedAreas: string[];
+  createdByUserId: string;
+  restoreSourceCheckpointId?: string;
+  createdAt: string;
+}
+
+export interface FrontendCheckpointTimeline {
+  project: PlatformProject;
+  activeCheckpoint: FrontendCheckpoint;
+  checkpoints: FrontendCheckpoint[];
+}
+
+export interface FrontendCompareResult {
+  from: FrontendCheckpoint;
+  to: FrontendCheckpoint;
+  changedAreas: string[];
+  filesChanged: string[];
+  previewSummary: string;
+}
+
+export interface FrontendRestoreResult {
+  checkpoint: FrontendCheckpoint;
+  restoredFrom: FrontendCheckpoint;
+  boundary: {
+    frontendChanged: true;
+    unchanged: Array<"backend" | "database" | "auth" | "app_roles" | "membership" | "domain" | "prd_baseline">;
+  };
+  auditEventId: string;
 }
 
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
@@ -949,6 +1051,310 @@ export class PrdService {
   }
 }
 
+export class DatabaseViewService {
+  private readonly tables: AppDatabaseTable[] = [];
+  private readonly relationships: AppDatabaseRelationship[] = [];
+  private readonly sampleRecords: AppDatabaseSampleRecord[] = [];
+  private readonly migrations: AppDatabaseMigration[] = [];
+
+  constructor(
+    private readonly projects: ProjectService
+  ) {}
+
+  getDatabaseView(actor: PlatformUser, projectId: string): DatabaseViewSnapshot {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    this.ensureMetadata(project);
+
+    return {
+      project,
+      schemaName: `app_${project.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+      readOnly: true,
+      restrictions: [
+        "No raw SQL editor",
+        "No drop table action",
+        "No production data deletion",
+        "Schema changes must go through AI migration flow"
+      ],
+      tables: this.tables.filter((table) => table.projectId === project.id),
+      relationships: this.relationships.filter((relationship) => relationship.projectId === project.id),
+      migrations: this.migrations.filter((migration) => migration.projectId === project.id),
+      sampleRecords: this.sampleRecords.filter((record) => record.projectId === project.id)
+    };
+  }
+
+  listSampleRecords(actor: PlatformUser, projectId: string, tableKey: string): AppDatabaseSampleRecord[] {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    this.ensureMetadata(project);
+    return this.sampleRecords.filter((record) => record.projectId === project.id && record.tableKey === tableKey);
+  }
+
+  executeRawSql(actor: PlatformUser, projectId: string, _sql: string): never {
+    this.projects.getProjectForActor(actor, projectId);
+    throw new PermissionError("Raw SQL is not available in Creator database view");
+  }
+
+  boundaryDigest(actor: PlatformUser, projectId: string): Record<string, unknown> {
+    const view = this.getDatabaseView(actor, projectId);
+    return {
+      schemaName: view.schemaName,
+      tables: view.tables.map((table) => ({
+        key: table.key,
+        columns: table.columns.map((column) => `${column.name}:${column.dataType}:${column.required}`)
+      })),
+      relationships: view.relationships.map((relationship) => `${relationship.sourceTable}.${relationship.sourceColumn}->${relationship.targetTable}.${relationship.targetColumn}`),
+      migrations: view.migrations.map((migration) => `${migration.migrationId}:${migration.status}`)
+    };
+  }
+
+  private ensureMetadata(project: PlatformProject): void {
+    if (this.tables.some((table) => table.projectId === project.id)) return;
+
+    const tableDefinitions: Array<Omit<AppDatabaseTable, "id" | "projectId" | "source">> = [
+      {
+        key: "employees",
+        displayName: "Employees",
+        description: "Employee directory fields used by Leave Management.",
+        columns: [
+          { id: "", tableKey: "employees", name: "id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "employees", name: "full_name", dataType: "text", required: true, source: "generated" },
+          { id: "", tableKey: "employees", name: "manager_id", dataType: "uuid", required: false, source: "generated" }
+        ]
+      },
+      {
+        key: "leave_requests",
+        displayName: "Leave Requests",
+        description: "Employee leave requests including WFH leave type from Sprint 4 prompt.",
+        columns: [
+          { id: "", tableKey: "leave_requests", name: "id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "leave_requests", name: "employee_id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "leave_requests", name: "leave_type", dataType: "text", required: true, defaultValue: "annual", source: "generated" },
+          { id: "", tableKey: "leave_requests", name: "status", dataType: "text", required: true, defaultValue: "pending", source: "generated" }
+        ]
+      },
+      {
+        key: "approval_steps",
+        displayName: "Approval Steps",
+        description: "Manager approval queue entries linked to leave requests.",
+        columns: [
+          { id: "", tableKey: "approval_steps", name: "id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "approval_steps", name: "leave_request_id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "approval_steps", name: "approver_id", dataType: "uuid", required: true, source: "generated" },
+          { id: "", tableKey: "approval_steps", name: "decision", dataType: "text", required: false, source: "generated" }
+        ]
+      }
+    ];
+
+    for (const table of tableDefinitions) {
+      const storedTable: AppDatabaseTable = {
+        id: `dbtbl_${project.id}_${table.key}`,
+        projectId: project.id,
+        key: table.key,
+        displayName: table.displayName,
+        description: table.description,
+        source: "generated",
+        columns: table.columns.map((column, index) => ({
+          ...column,
+          id: `dbcol_${project.id}_${table.key}_${index + 1}`
+        }))
+      };
+      this.tables.push(storedTable);
+    }
+
+    this.relationships.push(
+      {
+        id: `dbrel_${project.id}_leave_employee`,
+        projectId: project.id,
+        sourceTable: "leave_requests",
+        sourceColumn: "employee_id",
+        targetTable: "employees",
+        targetColumn: "id",
+        cardinality: "one_to_many"
+      },
+      {
+        id: `dbrel_${project.id}_approval_leave`,
+        projectId: project.id,
+        sourceTable: "approval_steps",
+        sourceColumn: "leave_request_id",
+        targetTable: "leave_requests",
+        targetColumn: "id",
+        cardinality: "one_to_many"
+      }
+    );
+
+    this.sampleRecords.push(
+      {
+        id: `dbrec_${project.id}_leave_1`,
+        projectId: project.id,
+        tableKey: "leave_requests",
+        ordinal: 1,
+        data: { id: "lr_1001", employee_id: "emp_001", leave_type: "WFH", status: "pending" }
+      },
+      {
+        id: `dbrec_${project.id}_leave_2`,
+        projectId: project.id,
+        tableKey: "leave_requests",
+        ordinal: 2,
+        data: { id: "lr_1002", employee_id: "emp_002", leave_type: "annual", status: "approved" }
+      },
+      {
+        id: `dbrec_${project.id}_approval_1`,
+        projectId: project.id,
+        tableKey: "approval_steps",
+        ordinal: 1,
+        data: { id: "ap_9001", leave_request_id: "lr_1001", approver_id: "emp_mgr_01", decision: null }
+      }
+    );
+
+    this.migrations.push({
+      id: `dbmig_${project.id}_001`,
+      projectId: project.id,
+      migrationId: "2026081001_leave_management_base",
+      status: "applied",
+      createdByUserId: project.ownerUserId,
+      linkedPrdVersion: "1.0",
+      linkedFrontendCheckpoint: project.activeFrontendCheckpointId,
+      appliedAt: new Date("2026-08-10T09:00:00.000Z").toISOString()
+    });
+  }
+}
+
+export class FrontendVersionService {
+  private readonly checkpoints: FrontendCheckpoint[] = [];
+
+  constructor(
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly prds: PrdService,
+    private readonly databaseView: DatabaseViewService
+  ) {}
+
+  recordFromPreview(actor: PlatformUser, preview: PreviewVersion, task: WorkspaceTask): FrontendCheckpoint {
+    const project = this.projects.getProjectForActor(actor, preview.projectId);
+    for (const checkpoint of this.checkpoints.filter((candidate) => candidate.projectId === project.id && candidate.status === "current")) {
+      checkpoint.status = "previous";
+    }
+
+    const versionNumber = this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
+    const checkpoint: FrontendCheckpoint = {
+      id: `fechk_${project.id}_${String(versionNumber).padStart(4, "0")}`,
+      projectId: project.id,
+      version: `fe-${String(versionNumber).padStart(4, "0")}`,
+      sourcePreviewVersion: preview.version,
+      sourceTaskId: task.id,
+      status: "current",
+      checksum: `sha256:${createHash("sha256").update(`${project.id}:${preview.version}:${task.prompt}`).digest("hex").slice(0, 16)}`,
+      fileManifest: ["src/pages/LeaveRequest.tsx", "src/components/ApprovalQueue.tsx", "src/styles/leave-management.css"],
+      routeSnapshot: ["/leave-requests", "/manager/approvals", "/policy"],
+      changeSummary: preview.summary,
+      changedAreas: ["UI components", "Frontend routing", "CSS styles"],
+      createdByUserId: actor.id,
+      createdAt: preview.createdAt
+    };
+
+    this.checkpoints.push(checkpoint);
+    project.activeFrontendCheckpointId = checkpoint.id;
+    return checkpoint;
+  }
+
+  getTimeline(actor: PlatformUser, projectId: string): FrontendCheckpointTimeline {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const checkpoints = this.listCheckpoints(actor, project.id);
+    const activeCheckpoint = checkpoints.find((checkpoint) => checkpoint.status === "current");
+    if (!activeCheckpoint) throw new ValidationError(`No frontend checkpoints for project ${projectId}`);
+    return { project, activeCheckpoint, checkpoints };
+  }
+
+  listCheckpoints(actor: PlatformUser, projectId: string): FrontendCheckpoint[] {
+    this.projects.getProjectForActor(actor, projectId);
+    return this.checkpoints.filter((checkpoint) => checkpoint.projectId === projectId);
+  }
+
+  compareCheckpoints(actor: PlatformUser, projectId: string, input: { fromCheckpointId: string; toCheckpointId?: string }): FrontendCompareResult {
+    const checkpoints = this.listCheckpoints(actor, projectId);
+    const from = checkpoints.find((checkpoint) => checkpoint.id === input.fromCheckpointId);
+    const to = input.toCheckpointId
+      ? checkpoints.find((checkpoint) => checkpoint.id === input.toCheckpointId)
+      : checkpoints.find((checkpoint) => checkpoint.status === "current");
+
+    if (!from) throw new ValidationError(`Unknown frontend checkpoint: ${input.fromCheckpointId}`);
+    if (!to) throw new ValidationError(`Unknown target frontend checkpoint`);
+
+    return {
+      from,
+      to,
+      changedAreas: Array.from(new Set([...from.changedAreas, ...to.changedAreas])),
+      filesChanged: Array.from(new Set([...from.fileManifest, ...to.fileManifest])),
+      previewSummary: `Compare ${from.version} with ${to.version}: frontend files only`
+    };
+  }
+
+  restoreFrontend(actor: PlatformUser, projectId: string, checkpointId: string): FrontendRestoreResult {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const source = this.listCheckpoints(actor, project.id).find((checkpoint) => checkpoint.id === checkpointId);
+    if (!source) throw new ValidationError(`Unknown frontend checkpoint: ${checkpointId}`);
+
+    for (const checkpoint of this.checkpoints.filter((candidate) => candidate.projectId === project.id && candidate.status === "current")) {
+      checkpoint.status = "previous";
+    }
+
+    const now = new Date().toISOString();
+    const versionNumber = this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
+    const restored: FrontendCheckpoint = {
+      ...source,
+      id: `fechk_${project.id}_${String(versionNumber).padStart(4, "0")}`,
+      version: `fe-${String(versionNumber).padStart(4, "0")}`,
+      status: "current",
+      restoreSourceCheckpointId: source.id,
+      changeSummary: `Restored frontend only from ${source.version}`,
+      checksum: `sha256:${createHash("sha256").update(`${project.id}:restore:${source.id}:${versionNumber}`).digest("hex").slice(0, 16)}`,
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+
+    this.checkpoints.push(restored);
+    project.activeFrontendCheckpointId = restored.id;
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "frontend.restore.completed",
+      resourceType: "frontend_checkpoint",
+      resourceId: restored.id,
+      metadata: {
+        projectId: project.id,
+        restoredFromCheckpointId: source.id,
+        boundary: this.restoreBoundary().unchanged
+      }
+    });
+
+    return {
+      checkpoint: restored,
+      restoredFrom: source,
+      boundary: this.restoreBoundary(),
+      auditEventId: audit.id
+    };
+  }
+
+  captureBoundarySnapshot(actor: PlatformUser, projectId: string): Record<string, unknown> {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const baseline = this.prds.listVersions(actor, project.id).find((version) => version.isBaseline);
+    return {
+      backend: "platform-api:v1",
+      database: this.databaseView.boundaryDigest(actor, project.id),
+      auth: "mock-auth",
+      appRoles: ["employee", "manager", "hr_admin"],
+      membership: [project.ownerUserId],
+      domain: `/apps/${project.slug}`,
+      prdBaseline: baseline?.id
+    };
+  }
+
+  private restoreBoundary(): FrontendRestoreResult["boundary"] {
+    return {
+      frontendChanged: true,
+      unchanged: ["backend", "database", "auth", "app_roles", "membership", "domain", "prd_baseline"]
+    };
+  }
+}
+
 export class WorkspaceService {
   private readonly tasks: WorkspaceTask[] = [];
   private readonly previews: PreviewVersion[] = [];
@@ -960,7 +1366,8 @@ export class WorkspaceService {
     private readonly projects: ProjectService,
     private readonly prds: PrdService,
     private readonly aiGovernance: AiGovernanceService,
-    private readonly guardrails: GuardrailService
+    private readonly guardrails: GuardrailService,
+    private readonly frontendVersions: FrontendVersionService
   ) {}
 
   getWorkspace(actor: PlatformUser, projectId: string): WorkspaceSnapshot {
@@ -1019,6 +1426,7 @@ export class WorkspaceService {
     this.aiGovernance.recordProviderCall();
     const task = this.createTask(project.id, actor.id, prompt, "ready", guardrail, now, "done");
     const preview = this.createPreview(project.id, prompt, now);
+    this.frontendVersions.recordFromPreview(actor, preview, task);
     const usage: AiUsageLog = {
       id: `ailog_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
       projectId: project.id,
@@ -1166,6 +1574,8 @@ export interface PlatformApiServices {
   guardrails: GuardrailService;
   prds: PrdService;
   workspace: WorkspaceService;
+  databaseView: DatabaseViewService;
+  frontendVersions: FrontendVersionService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -1182,7 +1592,9 @@ export function createPlatformApiServices(): PlatformApiServices {
   const aiGovernance = new AiGovernanceService(auth, audit);
   const guardrails = new GuardrailService(auth, audit);
   const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
-  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails);
+  const databaseView = new DatabaseViewService(projects);
+  const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
+  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
 
   return {
     identity,
@@ -1193,6 +1605,8 @@ export function createPlatformApiServices(): PlatformApiServices {
     guardrails,
     prds,
     workspace,
+    databaseView,
+    frontendVersions,
     envelope: { success, failure }
   };
 }

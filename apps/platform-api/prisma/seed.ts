@@ -470,6 +470,208 @@ async function main() {
       tokensUsed: 120
     }
   });
+
+  const databaseTables = [
+    {
+      id: "dbtbl_leave_employees",
+      key: "employees",
+      displayName: "Employees",
+      description: "Employee directory fields used by Leave Management.",
+      columns: [
+        ["dbcol_leave_employees_1", "id", "uuid", true, null],
+        ["dbcol_leave_employees_2", "full_name", "text", true, null],
+        ["dbcol_leave_employees_3", "manager_id", "uuid", false, null]
+      ]
+    },
+    {
+      id: "dbtbl_leave_requests",
+      key: "leave_requests",
+      displayName: "Leave Requests",
+      description: "Employee leave requests including WFH leave type.",
+      columns: [
+        ["dbcol_leave_requests_1", "id", "uuid", true, null],
+        ["dbcol_leave_requests_2", "employee_id", "uuid", true, null],
+        ["dbcol_leave_requests_3", "leave_type", "text", true, "annual"],
+        ["dbcol_leave_requests_4", "status", "text", true, "pending"]
+      ]
+    },
+    {
+      id: "dbtbl_leave_approval_steps",
+      key: "approval_steps",
+      displayName: "Approval Steps",
+      description: "Manager approval queue entries linked to leave requests.",
+      columns: [
+        ["dbcol_leave_approval_steps_1", "id", "uuid", true, null],
+        ["dbcol_leave_approval_steps_2", "leave_request_id", "uuid", true, null],
+        ["dbcol_leave_approval_steps_3", "approver_id", "uuid", true, null],
+        ["dbcol_leave_approval_steps_4", "decision", "text", false, null]
+      ]
+    }
+  ];
+
+  for (const table of databaseTables) {
+    await prisma.appDatabaseTable.upsert({
+      where: { projectId_key: { projectId: "prj_leave_management", key: table.key } },
+      update: {
+        displayName: table.displayName,
+        description: table.description,
+        source: "generated"
+      },
+      create: {
+        id: table.id,
+        projectId: "prj_leave_management",
+        key: table.key,
+        displayName: table.displayName,
+        description: table.description,
+        source: "generated"
+      }
+    });
+
+    for (const [index, column] of table.columns.entries()) {
+      const [id, name, dataType, required, defaultValue] = column;
+      await prisma.appDatabaseColumn.upsert({
+        where: { tableId_name: { tableId: table.id, name: String(name) } },
+        update: {
+          dataType: String(dataType),
+          required: Boolean(required),
+          defaultValue: defaultValue ? String(defaultValue) : null,
+          source: "generated",
+          order: index + 1
+        },
+        create: {
+          id: String(id),
+          tableId: table.id,
+          name: String(name),
+          dataType: String(dataType),
+          required: Boolean(required),
+          defaultValue: defaultValue ? String(defaultValue) : null,
+          source: "generated",
+          order: index + 1
+        }
+      });
+    }
+  }
+
+  await prisma.appDatabaseRelationship.upsert({
+    where: { id: "dbrel_leave_request_employee" },
+    update: {
+      sourceTable: "leave_requests",
+      sourceColumn: "employee_id",
+      targetTable: "employees",
+      targetColumn: "id",
+      cardinality: "one_to_many"
+    },
+    create: {
+      id: "dbrel_leave_request_employee",
+      projectId: "prj_leave_management",
+      sourceTable: "leave_requests",
+      sourceColumn: "employee_id",
+      targetTable: "employees",
+      targetColumn: "id",
+      cardinality: "one_to_many"
+    }
+  });
+
+  await prisma.appDatabaseRelationship.upsert({
+    where: { id: "dbrel_approval_leave_request" },
+    update: {
+      sourceTable: "approval_steps",
+      sourceColumn: "leave_request_id",
+      targetTable: "leave_requests",
+      targetColumn: "id",
+      cardinality: "one_to_many"
+    },
+    create: {
+      id: "dbrel_approval_leave_request",
+      projectId: "prj_leave_management",
+      sourceTable: "approval_steps",
+      sourceColumn: "leave_request_id",
+      targetTable: "leave_requests",
+      targetColumn: "id",
+      cardinality: "one_to_many"
+    }
+  });
+
+  await prisma.appDatabaseSampleRecord.upsert({
+    where: { tableId_ordinal: { tableId: "dbtbl_leave_requests", ordinal: 1 } },
+    update: { data: { id: "lr_1001", employee_id: "emp_001", leave_type: "WFH", status: "pending" } },
+    create: {
+      id: "dbrec_leave_request_1",
+      projectId: "prj_leave_management",
+      tableId: "dbtbl_leave_requests",
+      tableKey: "leave_requests",
+      ordinal: 1,
+      data: { id: "lr_1001", employee_id: "emp_001", leave_type: "WFH", status: "pending" }
+    }
+  });
+
+  await prisma.appDatabaseSampleRecord.upsert({
+    where: { tableId_ordinal: { tableId: "dbtbl_leave_requests", ordinal: 2 } },
+    update: { data: { id: "lr_1002", employee_id: "emp_002", leave_type: "annual", status: "approved" } },
+    create: {
+      id: "dbrec_leave_request_2",
+      projectId: "prj_leave_management",
+      tableId: "dbtbl_leave_requests",
+      tableKey: "leave_requests",
+      ordinal: 2,
+      data: { id: "lr_1002", employee_id: "emp_002", leave_type: "annual", status: "approved" }
+    }
+  });
+
+  await prisma.appDatabaseMigration.upsert({
+    where: { projectId_migrationId: { projectId: "prj_leave_management", migrationId: "2026081001_leave_management_base" } },
+    update: {
+      status: "applied",
+      linkedPrdVersion: "1.0",
+      linkedFrontendCheckpoint: "fe-0001",
+      appliedAt: new Date("2026-08-10T09:00:00.000Z")
+    },
+    create: {
+      id: "dbmig_leave_management_001",
+      projectId: "prj_leave_management",
+      migrationId: "2026081001_leave_management_base",
+      status: "applied",
+      createdByUserId: "usr_creator",
+      linkedPrdVersion: "1.0",
+      linkedFrontendCheckpoint: "fe-0001",
+      appliedAt: new Date("2026-08-10T09:00:00.000Z")
+    }
+  });
+
+  await prisma.frontendCheckpoint.upsert({
+    where: { projectId_version: { projectId: "prj_leave_management", version: "fe-0001" } },
+    update: {
+      sourcePreviewVersion: "preview-0001",
+      sourceTaskId: "wst_seed_leave_wfh",
+      status: "current",
+      checksum: "sha256:seedfe0001",
+      fileManifest: ["src/pages/LeaveRequest.tsx", "src/components/ApprovalQueue.tsx"],
+      routeSnapshot: ["/leave-requests", "/manager/approvals"],
+      changeSummary: "Initial frontend checkpoint from WFH leave prompt",
+      changedAreas: ["UI components", "Frontend routing", "CSS styles"],
+      createdByUserId: "usr_creator",
+      restoreSourceCheckpointId: null
+    },
+    create: {
+      id: "fechk_leave_management_0001",
+      projectId: "prj_leave_management",
+      version: "fe-0001",
+      sourcePreviewVersion: "preview-0001",
+      sourceTaskId: "wst_seed_leave_wfh",
+      status: "current",
+      checksum: "sha256:seedfe0001",
+      fileManifest: ["src/pages/LeaveRequest.tsx", "src/components/ApprovalQueue.tsx"],
+      routeSnapshot: ["/leave-requests", "/manager/approvals"],
+      changeSummary: "Initial frontend checkpoint from WFH leave prompt",
+      changedAreas: ["UI components", "Frontend routing", "CSS styles"],
+      createdByUserId: "usr_creator"
+    }
+  });
+
+  await prisma.project.update({
+    where: { id: "prj_leave_management" },
+    data: { activeFrontendCheckpointId: "fechk_leave_management_0001" }
+  });
 }
 
 main()

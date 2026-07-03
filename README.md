@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation, Sprint 1 Platform API foundation and Sprint 2 Admin AI governance are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 5 Creator database view and frontend-only restore are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -16,6 +16,9 @@ pnpm test
 pnpm verify:sprint0
 pnpm verify:sprint1
 pnpm verify:sprint2
+pnpm verify:sprint3
+pnpm verify:sprint4
+pnpm verify:sprint5
 ```
 
 Start frontend shells:
@@ -74,3 +77,27 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Guardrail keyword/policy prompt test with allow, warn and block decisions
 - Guardrail event log and audit records
 - Prisma migration and seed data for AI governance tables
+
+## Sprint 3 Scope
+
+- Creator project wizard and PRD generation flow
+- Governed PRD generation through AI route, quota and guardrail checks
+- Immutable PRD Baseline v1.0 confirmation
+- PRD version history and baseline audit event
+- Prisma migration and seed data for PRD documents, versions and sections
+
+## Sprint 4 Scope
+
+- Creator Workspace with prompt composer, task progress, token remaining and live preview
+- Guarded prompt API that checks PRD baseline and guardrails before generation
+- Workspace tasks, task steps, preview versions and AI usage logs
+- Frontend checkpoint creation source for later restore
+- Prisma migration and seed data for workspace/preview/usage tables
+
+## Sprint 5 Scope
+
+- Read-only Creator Database View with schema, tables, relationships, sample records and migration history
+- Raw SQL/destructive database action denial
+- Frontend checkpoint timeline, compare and restore API
+- Frontend-only restore boundary with audit event
+- Prisma migration and seed data for database metadata and frontend checkpoints

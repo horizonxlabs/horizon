@@ -129,6 +129,7 @@ model Project {
   targetDepartment String?    @map("target_department")
   intendedUsers String[]      @default([]) @map("intended_users")
   dataSensitivity String?     @map("data_sensitivity")
+  activeFrontendCheckpointId String? @map("active_frontend_checkpoint_id")
   owner       PlatformUser    @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   members     ProjectMember[]
   apps        App[]
@@ -136,6 +137,11 @@ model Project {
   workspaceTasks WorkspaceTask[]
   previewVersions PreviewVersion[]
   aiUsageLogs AiUsageLog[]
+  appDatabaseTables AppDatabaseTable[]
+  appDatabaseRelationships AppDatabaseRelationship[]
+  appDatabaseSampleRecords AppDatabaseSampleRecord[]
+  appDatabaseMigrations AppDatabaseMigration[]
+  frontendCheckpoints FrontendCheckpoint[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -421,4 +427,101 @@ model AiUsageLog {
   @@index([projectId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("ai_usage_logs")
+}
+
+model AppDatabaseTable {
+  id          String              @id
+  projectId   String              @map("project_id")
+  key         String
+  displayName String              @map("display_name")
+  description String
+  source      String              @default("generated")
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns     AppDatabaseColumn[]
+  sampleRecords AppDatabaseSampleRecord[]
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@unique([projectId, key])
+  @@map("app_database_tables")
+}
+
+model AppDatabaseColumn {
+  id           String           @id
+  tableId      String           @map("table_id")
+  name         String
+  dataType     String           @map("data_type")
+  required     Boolean          @default(false)
+  defaultValue String?          @map("default_value")
+  source       String           @default("generated")
+  order        Int
+  table        AppDatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, name])
+  @@map("app_database_columns")
+}
+
+model AppDatabaseRelationship {
+  id           String   @id
+  projectId    String   @map("project_id")
+  sourceTable  String   @map("source_table")
+  sourceColumn String   @map("source_column")
+  targetTable  String   @map("target_table")
+  targetColumn String   @map("target_column")
+  cardinality  String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("app_database_relationships")
+}
+
+model AppDatabaseSampleRecord {
+  id        String           @id
+  projectId String           @map("project_id")
+  tableId   String           @map("table_id")
+  tableKey  String           @map("table_key")
+  ordinal   Int
+  data      Json
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  table     AppDatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, ordinal])
+  @@index([projectId])
+  @@map("app_database_sample_records")
+}
+
+model AppDatabaseMigration {
+  id                         String   @id
+  projectId                  String   @map("project_id")
+  migrationId                String   @map("migration_id")
+  status                     String
+  createdByUserId            String   @map("created_by_user_id")
+  linkedPrdVersion           String   @map("linked_prd_version")
+  linkedFrontendCheckpoint   String?  @map("linked_frontend_checkpoint")
+  appliedAt                  DateTime @map("applied_at")
+  project                    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, migrationId])
+  @@map("app_database_migrations")
+}
+
+model FrontendCheckpoint {
+  id                        String   @id
+  projectId                 String   @map("project_id")
+  version                   String
+  sourcePreviewVersion      String   @map("source_preview_version")
+  sourceTaskId              String?  @map("source_task_id")
+  status                    String
+  checksum                  String
+  fileManifest              Json     @map("file_manifest")
+  routeSnapshot             Json     @map("route_snapshot")
+  changeSummary             String   @map("change_summary")
+  changedAreas              String[] @default([]) @map("changed_areas")
+  createdByUserId           String   @map("created_by_user_id")
+  restoreSourceCheckpointId String?  @map("restore_source_checkpoint_id")
+  project                   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, version])
+  @@index([projectId, status])
+  @@map("frontend_checkpoints")
 }

@@ -45,7 +45,12 @@ export interface PlatformRequest {
     | `/projects/${string}/prd/versions`
     | `/projects/${string}/workspace`
     | `/projects/${string}/workspace/prompts`
-    | `/projects/${string}/workspace/preview/refresh`;
+    | `/projects/${string}/workspace/preview/refresh`
+    | `/projects/${string}/database`
+    | `/projects/${string}/database/sql`
+    | `/projects/${string}/frontend/checkpoints`
+    | `/projects/${string}/frontend/compare`
+    | `/projects/${string}/frontend/restore`;
   headers?: HeaderBag;
   body?: Record<string, unknown>;
 }
@@ -188,6 +193,47 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     if (request.method === "GET" && workspaceMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.workspace.getWorkspace(user, workspaceMatch[1])) };
+    }
+
+    const databaseMatch = request.path.match(/^\/projects\/([^/]+)\/database$/);
+    if (request.method === "GET" && databaseMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.databaseView.getDatabaseView(user, databaseMatch[1])) };
+    }
+
+    const databaseSqlMatch = request.path.match(/^\/projects\/([^/]+)\/database\/sql$/);
+    if (request.method === "POST" && databaseSqlMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      services.databaseView.executeRawSql(user, databaseSqlMatch[1], String(request.body?.sql ?? ""));
+    }
+
+    const frontendCheckpointsMatch = request.path.match(/^\/projects\/([^/]+)\/frontend\/checkpoints$/);
+    if (request.method === "GET" && frontendCheckpointsMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.frontendVersions.getTimeline(user, frontendCheckpointsMatch[1])) };
+    }
+
+    const frontendCompareMatch = request.path.match(/^\/projects\/([^/]+)\/frontend\/compare$/);
+    if (request.method === "POST" && frontendCompareMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(
+          services.frontendVersions.compareCheckpoints(user, frontendCompareMatch[1], {
+            fromCheckpointId: String(request.body?.fromCheckpointId ?? ""),
+            toCheckpointId: request.body?.toCheckpointId ? String(request.body.toCheckpointId) : undefined
+          })
+        )
+      };
+    }
+
+    const frontendRestoreMatch = request.path.match(/^\/projects\/([^/]+)\/frontend\/restore$/);
+    if (request.method === "POST" && frontendRestoreMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(services.frontendVersions.restoreFrontend(user, frontendRestoreMatch[1], String(request.body?.checkpointId ?? "")))
+      };
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
@@ -381,6 +427,59 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
       executePlatformApiRequest(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace/preview/refresh`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/projects/:projectId/database", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/database`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/database/sql", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/database/sql`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/projects/:projectId/frontend/checkpoints", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/frontend/checkpoints`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/frontend/compare", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/frontend/compare`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/frontend/restore", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/frontend/restore`,
         headers: request.headers,
         body: request.body
       })
