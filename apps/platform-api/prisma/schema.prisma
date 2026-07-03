@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  inactive
+  invited
+  suspended
+}
+
+enum ProjectStatus {
+  draft
+  active
+  archived
+}
+
+enum AppStatus {
+  draft
+  published
+  disabled
+  archived
+}
+
+enum AuditSeverity {
+  info
+  warning
+  high
+  critical
+}
+
+model PlatformUser {
+  id          String              @id
+  email       String              @unique
+  name        String
+  status      UserStatus          @default(active)
+  groups      PlatformUserGroup[]
+  roles       PlatformUserRole[]
+  projects    Project[]           @relation("ProjectOwner")
+  memberships ProjectMember[]
+  appMembers  AppMember[]
+  auditLogs   AuditLog[]
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  @@map("platform_users")
+}
+
+model PlatformGroup {
+  id        String              @id
+  key       String              @unique
+  name      String
+  users     PlatformUserGroup[]
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  @@map("platform_groups")
+}
+
+model PlatformRole {
+  id          String             @id
+  key         String             @unique
+  name        String
+  permissions String[]
+  users       PlatformUserRole[]
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  @@map("platform_roles")
+}
+
+model PlatformUserGroup {
+  userId  String        @map("user_id")
+  groupId String        @map("group_id")
+  user    PlatformUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   PlatformGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@map("platform_user_groups")
+}
+
+model PlatformUserRole {
+  userId String       @map("user_id")
+  roleId String       @map("role_id")
+  user   PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   PlatformRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("platform_user_roles")
+}
+
+model Project {
+  id          String          @id
+  slug        String          @unique
+  name        String
+  status      ProjectStatus   @default(draft)
+  ownerUserId String          @map("owner_user_id")
+  owner       PlatformUser    @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  members     ProjectMember[]
+  apps        App[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId String       @map("project_id")
+  userId    String       @map("user_id")
+  role      String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@map("project_members")
+}
+
+model App {
+  id                 String      @id
+  slug               String      @unique
+  name               String
+  status             AppStatus   @default(draft)
+  projectId          String      @map("project_id")
+  databaseSchemaName String?     @unique @map("database_schema_name")
+  project            Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roles              AppRole[]
+  members            AppMember[]
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  @@map("apps")
+}
+
+model AppRole {
+  id          String      @id
+  appId       String      @map("app_id")
+  key         String
+  name        String
+  permissions String[]
+  app         App         @relation(fields: [appId], references: [id], onDelete: Cascade)
+  members     AppMember[]
+
+  @@unique([appId, key])
+  @@map("app_roles")
+}
+
+model AppMember {
+  appId  String       @map("app_id")
+  userId String       @map("user_id")
+  roleId String       @map("role_id")
+  app    App          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user   PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   AppRole      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([appId, userId, roleId])
+  @@map("app_members")
+}
+
+model AuditLog {
+  id           String        @id
+  actorUserId  String        @map("actor_user_id")
+  action       String
+  resourceType String        @map("resource_type")
+  resourceId   String        @map("resource_id")
+  severity     AuditSeverity @default(info)
+  metadata     Json          @default("{}")
+  requestId    String?       @map("request_id")
+  previousHash String?       @map("previous_hash")
+  recordHash   String?       @map("record_hash")
+  occurredAt   DateTime      @default(now()) @map("occurred_at")
+  actor        PlatformUser  @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId, occurredAt])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}
