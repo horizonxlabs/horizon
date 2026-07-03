@@ -24,11 +24,17 @@ Status: Complete for MVP Sprint 0-8 design planning
 
 ## 3. How to Use
 
+Baseline system:
+
+- Design system: `docs/design/design-system.md`
+- Shared implementation: `packages/ui/src/index.tsx`
+- Shared tokens/styles: `packages/ui/styles.css`
+
 For each sprint:
 
 1. Read the sprint plan for scope and acceptance.
 2. Read the matching UI spec for screens, states and components.
-3. Implement shared components before feature-specific screens when possible.
+3. Reuse `@evcp/ui` components and tokens before creating feature-specific UI.
 4. Capture screenshot evidence for the acceptance criteria.
 5. Update the UI spec if implementation changes behavior.
 
@@ -42,5 +48,4 @@ For each sprint:
 | Responsive rules | Complete for MVP |
 | Accessibility requirements | Complete for MVP |
 | High-fidelity visual mockups | Not required for MVP start; optional before pilot |
-| Pixel-perfect design tokens | Open decision for Sprint 0 implementation |
-
+| Design tokens and reusable UI primitives | Implemented in `@evcp/ui` |

@@ -13,6 +13,7 @@ Scope: Admin AI Providers, API Keys, routing, quota, guardrails, prompt test and
 - Added Platform API routes for AI providers, API keys, routes, quotas, guardrail rules, prompt test and guardrail events.
 - Added Prisma migration and seed data for Sprint 2 governance tables.
 - Added Admin UI governance dashboard with provider/key/routing/quota/guardrail/event sections.
+- Added shared design system tokens, reusable `@evcp/ui` primitives and documentation for Admin, Creator and App Store implementation reuse.
 - Added unit, integration and E2E/API/UI smoke coverage for Sprint 2 while keeping Sprint 0 and Sprint 1 regression checks.
 
 ## Verification
@@ -28,7 +29,7 @@ Result:
 - Lint/static checks: passed.
 - Typecheck: passed across packages and apps.
 - Build: passed for Platform API and all frontend apps.
-- Unit tests: 11 passed.
+- Unit tests: 14 passed.
 - Integration tests: 10 passed.
 - E2E/API/UI smoke tests: 7 passed.
 
@@ -55,6 +56,7 @@ Database record counts after seed:
 UI evidence:
 
 - `docs/assets/screenshots/sprint2-admin-governance.png`
+- `docs/design/design-system.md`
 - Playwright console contained only the React DevTools informational message after favicon fix.
 
 ## Product Owner Decision

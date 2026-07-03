@@ -22,6 +22,7 @@ Sprint 2 is accepted only if Admin governance works across API, service logic, s
 | Prisma schema/migration includes governance tables | Integration test and migration output | Passed |
 | Seed includes provider/key/route/quota/rule/event demo data | Integration test and DB query output | Passed |
 | Admin UI shows providers, keys, routing, quota, rules, prompt test and events | Screenshot and E2E source smoke | Passed |
+| Shared UI design system exists for later sprints | `docs/design/design-system.md` and unit source contract test | Passed |
 
 ## 3. Product Owner Checklist
 
@@ -35,6 +36,7 @@ Sprint 2 is accepted only if Admin governance works across API, service logic, s
 - [x] Prompt test returns allow, warn and block states.
 - [x] Guardrail event log records blocked prompt with actor/context.
 - [x] Admin UI exposes Sprint 2 governance screen.
+- [x] Shared design system tokens and primitives are available for future sprint UI work.
 - [x] Sprint 0 and Sprint 1 regression tests remain green.
 
 ## 4. Verification Evidence
@@ -56,13 +58,14 @@ Results:
 - Lint/static governance: passed.
 - TypeScript typecheck: passed for packages and apps.
 - Production build: passed for Platform API and all three frontends.
-- Unit tests: 11 passed, 0 failed.
+- Unit tests: 14 passed, 0 failed.
 - Integration tests: 10 passed, 0 failed.
 - E2E/API/UI smoke tests: 7 passed, 0 failed.
 - Prisma Client generation: passed.
 - PostgreSQL migration: 2 migrations applied successfully.
 - Governance seed verification query: `ai_providers=1`, `ai_api_keys=1`, `ai_scenario_routes=1`, `ai_quotas=1`, `guardrail_rules=1`, `guardrail_events=1`.
 - UI screenshot evidence: `docs/assets/screenshots/sprint2-admin-governance.png`.
+- Design system evidence: `docs/design/design-system.md`.
 
 ## 5. Rejection Rules
 
@@ -74,6 +77,7 @@ Reject Sprint 2 if:
 - Guardrail blocked prompt does not create a guardrail event.
 - Scenario route cannot resolve a provider/model for PRD generation.
 - Admin UI does not expose provider, key, route, quota, prompt test and event evidence.
+- Future UI screens cannot reuse shared EVCP tokens/components.
 - Sprint 0 or Sprint 1 regression tests fail.
 
 ## 6. Product Owner Decision

@@ -27,6 +27,7 @@ const requiredFiles = [
   "docs/delivery/sprint-2-delivery-note.md",
   "docs/delivery/sprint-2-product-owner-acceptance.md",
   "docs/delivery/sprint-delivery-governance.md",
+  "docs/design/design-system.md",
   "docs/assets/screenshots/sprint2-admin-governance.png",
   "docker/docker-compose.yml",
   "docker/.gitkeep",

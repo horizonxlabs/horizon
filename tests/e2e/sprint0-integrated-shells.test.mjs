@@ -9,7 +9,9 @@ const navigation = readFileSync("packages/config/src/index.ts", "utf8");
 
 test("admin creator and store shells expose the expected sprint 0 user journeys", () => {
   assert.match(adminApp, /AI Providers & API Keys/);
-  assert.match(adminApp, /ServiceStatusList/);
+  assert.match(adminApp, /AppShell/);
+  assert.match(adminApp, /PageHeader/);
+  assert.match(adminApp, /ServiceStrip/);
   assert.match(creatorApp, /Project Picker/);
   assert.match(creatorApp, /ProjectCard/);
   assert.match(storeApp, /My Apps/);

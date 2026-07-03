@@ -127,7 +127,7 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
     "Scenario Routing",
     "Token Quota",
     "Guardrail Rules",
-    "Test Prompt",
+    "Prompt Test",
     "Guardrail Events",
     "Fingerprint"
   ]) {

@@ -1,37 +1,36 @@
 import { navigation } from "@evcp/config";
 import { mockUsers } from "@evcp/mock-data";
-import { AppShell, MetricCard, ServiceStatusList } from "@evcp/ui";
+import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
+import { Activity, AlertTriangle, BrainCircuit, CheckCircle2, Fingerprint, KeyRound, LockKeyhole, Route, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
+
+type BadgeTone = "success" | "warning" | "danger" | "neutral" | "info";
+
+const kpis = [
+  { label: "Provider พร้อมใช้งาน", value: "2", detail: "OpenAI + Anthropic fallback", icon: BrainCircuit, tone: "success" },
+  { label: "API Key ที่ active", value: "1", detail: "fingerprint only", icon: KeyRound, tone: "success" },
+  { label: "Route สำหรับ PRD", value: "Ready", detail: "primary + fallback", icon: Route, tone: "info" },
+  { label: "Guardrail blocks", value: "1", detail: "24h ล่าสุด", icon: ShieldCheck, tone: "warning" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
 
 const providerRows = [
   {
     provider: "OpenAI Production",
     adapter: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    status: "active",
+    endpoint: "api.openai.com/v1",
     models: "gpt-4.1, gpt-4.1-mini",
-    checked: "Just now"
+    status: "active",
+    checked: "ล่าสุด"
   },
   {
     provider: "Anthropic Fallback",
     adapter: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    status: "active",
+    endpoint: "api.anthropic.com",
     models: "claude-3-5-sonnet",
-    checked: "Just now"
-  }
-];
-
-const apiKeyRows = [
-  {
-    name: "Primary Production Key",
-    provider: "OpenAI Production",
-    usageMode: "production",
-    quota: "100k tokens/day",
-    fallback: "Priority 1",
-    fingerprint: "fp_9f2a4c01d881",
-    status: "active"
+    status: "active",
+    checked: "ล่าสุด"
   }
 ];
 
@@ -39,182 +38,201 @@ const routeRows = [
   {
     scenario: "Requirement Analysis",
     primary: "OpenAI Production / gpt-4.1",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet"
+    fallback: "Anthropic Fallback / claude-3-5-sonnet",
+    guard: "quota + guardrail"
   },
   {
     scenario: "Frontend Coding",
     primary: "OpenAI Production / gpt-4.1-mini",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet"
+    fallback: "Anthropic Fallback / claude-3-5-sonnet",
+    guard: "quota + guardrail"
   }
 ];
 
-const guardrailRules = [
-  {
-    rule: "Block payroll export",
-    severity: "high",
-    action: "block",
-    scope: "organization",
-    status: "active"
-  },
-  {
-    rule: "Warn confidential data",
-    severity: "warning",
-    action: "warn",
-    scope: "organization",
-    status: "active"
-  }
+const guardrailRows = [
+  { rule: "Block payroll export", severity: "high", action: "block", scope: "organization", status: "active" },
+  { rule: "Warn confidential data", severity: "warning", action: "warn", scope: "organization", status: "active" }
 ];
 
-const guardrailEvents = [
+const eventRows = [
   {
-    eventId: "gre_0001",
+    event: "gre_0001",
     decision: "Blocked",
-    prompt: "Generate payroll export report",
-    matchedRule: "Block payroll export",
-    actor: "Admin User"
+    rule: "Block payroll export",
+    actor: "Admin User",
+    time: "ล่าสุด"
   }
 ];
-
-function DataTable({
-  columns,
-  rows
-}: {
-  columns: string[];
-  rows: Array<Record<string, string>>;
-}) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={`${row[columns[0]]}-${index}`}>
-              {columns.map((column) => (
-                <td key={column}>{row[column] ?? row[column.charAt(0).toLowerCase() + column.slice(1)]}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 function AdminApp() {
   return (
-    <AppShell title="Admin Console" navItems={navigation.admin} userName={mockUsers.admin.name}>
-      <section className="page-header">
-        <div>
-          <h1>AI Providers & API Keys</h1>
-          <p>Configure external providers, masked secrets, routing, quota, fallback and guardrails.</p>
-        </div>
-        <button type="button">เพิ่ม Provider</button>
-      </section>
-
-      <div className="grid metrics-grid">
-        <MetricCard label="Health" value="3/4 Healthy" />
-        <MetricCard label="Active Providers" value="2" />
-        <MetricCard label="Active Keys" value="1" />
-        <MetricCard label="Guardrail Blocks" value="1" />
-      </div>
-
-      <nav className="tabs" aria-label="AI governance sections">
-        {["Providers", "Models", "API Keys", "Routing", "Quota", "Log"].map((tab) => (
-          <a href={`/admin/ai-providers/${tab.toLowerCase().replaceAll(" ", "-")}`} key={tab}>
-            {tab}
-          </a>
-        ))}
-      </nav>
-
-      <section className="split-grid">
-        <article className="card">
-          <div className="section-heading">
-            <h2>Providers</h2>
-            <button type="button">Add API Key</button>
-          </div>
-          <DataTable columns={["provider", "adapter", "baseUrl", "status", "models", "checked"]} rows={providerRows} />
-        </article>
-
-        <article className="card">
-          <div className="section-heading">
-            <h2>API Keys</h2>
-            <span className="status status-success">Secret saved. Only fingerprint is visible.</span>
-          </div>
-          <DataTable columns={["name", "provider", "usageMode", "quota", "fallback", "fingerprint", "status"]} rows={apiKeyRows} />
-        </article>
-      </section>
-
-      <section className="split-grid">
-        <article className="card">
-          <div className="section-heading">
-            <h2>Scenario Routing</h2>
-            <button type="button">Configure Routing</button>
-          </div>
-          <DataTable columns={["scenario", "primary", "fallback"]} rows={routeRows} />
-        </article>
-
-        <article className="card quota-panel">
-          <div className="section-heading">
-            <h2>Token Quota</h2>
-            <span className="status status-warning">800 warning threshold</span>
-          </div>
-          <div className="quota-list">
-            <p><strong>Organization</strong><span>1,000 daily / 5,000 monthly</span></p>
-            <p><strong>Creator</strong><span>500 daily / 2,000 monthly</span></p>
-            <p><strong>Project</strong><span>300 daily / 1,500 monthly</span></p>
-            <p><strong>App</strong><span>100 daily / 500 monthly</span></p>
-          </div>
-        </article>
-      </section>
-
-      <section className="split-grid">
-        <article className="card">
-          <div className="section-heading">
-            <h2>Guardrail Rules</h2>
-            <button type="button">Add Guardrail Rule</button>
-          </div>
-          <DataTable columns={["rule", "severity", "action", "scope", "status"]} rows={guardrailRules} />
-        </article>
-
-        <article className="card">
-          <div className="section-heading">
-            <h2>Test Prompt</h2>
-            <span className="status status-danger">Blocked</span>
-          </div>
-          <label>
-            Prompt
-            <input defaultValue="Generate payroll export report" />
-          </label>
-          <div className="result-panel">
-            <strong>Decision: block</strong>
-            <span>Matched rule: Block payroll export</span>
-            <span>Event id: gre_0001</span>
-          </div>
-        </article>
-      </section>
-
-      <section className="card">
-        <div className="section-heading">
-          <h2>Guardrail Events</h2>
-          <span className="status status-warning">Filterable event log</span>
-        </div>
-        <DataTable columns={["eventId", "decision", "prompt", "matchedRule", "actor"]} rows={guardrailEvents} />
-      </section>
-
-      <ServiceStatusList
-        services={[
-          { name: "Provider Adapter Registry", status: "healthy", detail: "Mock and external adapter contracts ready" },
-          { name: "Secret Storage", status: "healthy", detail: "Fingerprint only visible after save" },
-          { name: "Quota Guard", status: "healthy", detail: "Hard stop before provider call" },
-          { name: "Guardrail Event Log", status: "healthy", detail: "Blocked prompts recorded" }
-        ]}
+    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
+      <PageHeader
+        eyebrow="AI Governance"
+        title="ศูนย์ควบคุม AI Providers & API Keys"
+        description="ควบคุม provider, secret, routing, quota และ guardrail ของทุก AI call ก่อนใช้งานจริงในองค์กร"
+        actions={
+          <>
+          <button type="button" className="secondary-button">
+            <SlidersHorizontal size={16} />
+            ตั้งค่า Route
+          </button>
+          <button type="button">
+            <KeyRound size={16} />
+            เพิ่ม Provider
+          </button>
+          </>
+        }
       />
+
+      <section className="ds-metric-grid">
+        {kpis.map((item) => {
+          const Icon = item.icon;
+          return (
+            <MetricCard
+              key={item.label}
+              label={item.label}
+              value={item.value}
+              detail={item.detail}
+              icon={<Icon size={18} />}
+              tone={item.tone}
+            />
+          );
+        })}
+      </section>
+
+      <section className="ds-workbench">
+        <WorkflowRail
+          eyebrow="Current Path"
+          title="PRD Generation"
+          steps={[
+            { label: "quota pre-check", icon: <CheckCircle2 size={16} /> },
+            { label: "guardrail evaluate", icon: <CheckCircle2 size={16} /> },
+            { label: "route primary/fallback", icon: <CheckCircle2 size={16} /> },
+            { label: "audit event", icon: <CheckCircle2 size={16} /> }
+          ]}
+          alert={{
+            icon: <AlertTriangle size={18} />,
+            title: "Secret exposure: 0",
+            description: "API ส่งกลับเฉพาะ fingerprint และ masked value",
+            tone: "warning"
+          }}
+        />
+
+        <div className="ds-main-stack">
+          <SectionCard eyebrow="Provider Registry" title="External AI Providers" action={<button type="button" className="ghost-button">Add API Key</button>}>
+            <DataTable
+              columns={[
+                { key: "provider", label: "Provider" },
+                { key: "adapter", label: "Adapter" },
+                { key: "endpoint", label: "Endpoint" },
+                { key: "models", label: "Models" },
+                { key: "status", label: "Status", tone: () => "success" },
+                { key: "checked", label: "Checked" }
+              ]}
+              rows={providerRows}
+            />
+          </SectionCard>
+
+          <section className="ds-grid-2">
+            <SectionCard eyebrow="Secret Control" title="API Key Management">
+              <div className="ds-summary-row">
+                <div className="ds-summary-icon"><LockKeyhole size={22} /></div>
+                <div>
+                  <strong>Primary Production Key</strong>
+                  <span>Secret saved. Only fingerprint is visible.</span>
+                </div>
+                <ToneBadge tone="success">active</ToneBadge>
+              </div>
+              <DefinitionGrid
+                items={[
+                  { label: "Provider", value: "OpenAI Production" },
+                  { label: "Usage", value: "production" },
+                  { label: "Quota", value: "100k tokens/day" },
+                  { label: "Fingerprint", value: <><Fingerprint size={14} /> fp_9f2a4c01d881</> }
+                ]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Prompt Test" title="Guardrail Decision">
+              <label>
+                Prompt
+                <input defaultValue="Generate payroll export report" />
+              </label>
+              <DecisionPanel
+                tone="danger"
+                badge="Blocked"
+                title="Decision: block"
+                lines={["Matched rule: Block payroll export", "Event id: gre_0001"]}
+              />
+            </SectionCard>
+          </section>
+
+          <section className="ds-grid-2">
+            <SectionCard eyebrow="Routing Matrix" title="Scenario Routing" action={<button type="button" className="ghost-button">Configure Routing</button>}>
+              <DataTable
+                columns={[
+                  { key: "scenario", label: "Scenario" },
+                  { key: "primary", label: "Primary" },
+                  { key: "fallback", label: "Fallback" },
+                  { key: "guard", label: "Guard" }
+                ]}
+                rows={routeRows}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
+              <div className="ds-quota-meter">
+                <div><span>Used today</span><strong>999 / 1,000</strong></div>
+                <div className="ds-meter-track"><span style={{ width: "99%" }} /></div>
+                <small>Hard stop blocks before provider call.</small>
+              </div>
+              <div className="ds-stack-list">
+                {["Organization 1,000 daily", "Creator 500 daily", "Project 300 daily", "App 100 daily"].map((item) => (
+                  <p key={item}><Activity size={14} /> {item}</p>
+                ))}
+              </div>
+            </SectionCard>
+          </section>
+
+          <section className="ds-grid-2">
+            <SectionCard eyebrow="Security Rules" title="Guardrail Rules" action={<button type="button" className="ghost-button">Add Rule</button>}>
+              <DataTable
+                columns={[
+                  { key: "rule", label: "Rule" },
+                  { key: "severity", label: "Severity", tone: (value) => (value === "high" ? "danger" : "warning") },
+                  { key: "action", label: "Action", tone: (value) => (value === "block" ? "danger" : "warning") },
+                  { key: "scope", label: "Scope" },
+                  { key: "status", label: "Status", tone: () => "success" }
+                ]}
+                rows={guardrailRows}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Event Log" title="Guardrail Events">
+              <DataTable
+                columns={[
+                  { key: "event", label: "Event" },
+                  { key: "decision", label: "Decision", tone: () => "danger" },
+                  { key: "rule", label: "Matched Rule" },
+                  { key: "actor", label: "Actor" },
+                  { key: "time", label: "Time" }
+                ]}
+                rows={eventRows}
+              />
+            </SectionCard>
+          </section>
+
+          <ServiceStrip
+            services={[
+              { name: "Provider Adapter Registry", detail: "Mock and external adapter contracts ready", status: "healthy" },
+              { name: "Secret Storage", detail: "Fingerprint only visible after save", status: "healthy" },
+              { name: "Quota Guard", detail: "Hard stop before provider call", status: "healthy" },
+              { name: "Guardrail Event Log", detail: "Blocked prompts recorded", status: "healthy" }
+            ]}
+          />
+        </div>
+      </section>
     </AppShell>
   );
 }
