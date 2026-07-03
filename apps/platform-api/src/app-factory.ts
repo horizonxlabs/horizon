@@ -34,6 +34,17 @@ export interface PlatformRequest {
     | "/audit-logs"
     | "/audit-logs/filter"
     | "/admin/monitoring"
+    | "/admin/knowledge/sources"
+    | `/admin/knowledge/sources/${string}/versions`
+    | `/admin/knowledge/versions/${string}/approve`
+    | "/admin/knowledge/retrieve"
+    | "/admin/knowledge/retrieval-logs"
+    | "/admin/skills"
+    | `/admin/skills/${string}/versions`
+    | `/admin/skills/${string}/disable`
+    | `/admin/skills/versions/${string}/approve`
+    | "/admin/skills/assignments"
+    | "/admin/skills/resolve"
     | `/admin/runtime/projects/${string}`
     | `/admin/runtime/projects/${string}/schema/check`
     | `/admin/runtime/projects/${string}/health`
@@ -417,6 +428,141 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       };
     }
 
+    if (request.method === "GET" && request.path === "/admin/knowledge/sources") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.knowledge.listSources(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/knowledge/sources") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const source = services.knowledge.createSource(user, {
+        title: String(request.body?.title ?? ""),
+        sourceType: String(request.body?.sourceType ?? "text") as never,
+        ownerUserId: String(request.body?.ownerUserId ?? user.id),
+        scope: (request.body?.scope ?? { visibility: "global" }) as never,
+        uploadStatus: request.body?.uploadStatus ? (String(request.body.uploadStatus) as never) : undefined,
+        indexStatus: request.body?.indexStatus ? (String(request.body.indexStatus) as never) : undefined,
+        tags: Array.isArray(request.body?.tags) ? request.body.tags.map(String) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(source) };
+    }
+
+    const knowledgeVersionMatch = request.path.match(/^\/admin\/knowledge\/sources\/([^/]+)\/versions$/);
+    if (request.method === "POST" && knowledgeVersionMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const version = services.knowledge.submitVersion(user, knowledgeVersionMatch[1], {
+        version: request.body?.version ? String(request.body.version) : undefined,
+        contentHash: String(request.body?.contentHash ?? ""),
+        changelog: String(request.body?.changelog ?? ""),
+        chunkCount: Number(request.body?.chunkCount ?? 0),
+        excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(version) };
+    }
+
+    const knowledgeApproveMatch = request.path.match(/^\/admin\/knowledge\/versions\/([^/]+)\/approve$/);
+    if (request.method === "POST" && knowledgeApproveMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.knowledge.approveVersion(user, {
+        versionId: knowledgeApproveMatch[1],
+        decision: String(request.body?.decision ?? "approved") as never,
+        note: request.body?.note ? String(request.body.note) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/knowledge/retrieve") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.knowledge.retrieve(user, {
+        projectId: request.body?.projectId ? String(request.body.projectId) : undefined,
+        appId: request.body?.appId ? String(request.body.appId) : undefined,
+        department: request.body?.department ? String(request.body.department) : undefined,
+        agentRole: String(request.body?.agentRole ?? "frontend_developer") as never,
+        scenario: String(request.body?.scenario ?? "frontend_coding") as never,
+        query: request.body?.query ? String(request.body.query) : undefined,
+        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds) ? request.body.requiredKnowledgeSourceIds.map(String) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/knowledge/retrieval-logs") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.knowledge.listRetrievalLogs(user)) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/skills") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.skills.listSkills(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/skills") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const skill = services.skills.createSkill(user, {
+        key: String(request.body?.key ?? ""),
+        name: String(request.body?.name ?? ""),
+        description: request.body?.description ? String(request.body.description) : undefined,
+        ownerUserId: String(request.body?.ownerUserId ?? user.id)
+      });
+      return { status: HttpStatus.CREATED, body: success(skill) };
+    }
+
+    const skillVersionMatch = request.path.match(/^\/admin\/skills\/([^/]+)\/versions$/);
+    if (request.method === "POST" && skillVersionMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const version = services.skills.submitVersion(user, skillVersionMatch[1], {
+        version: request.body?.version ? String(request.body.version) : undefined,
+        instruction: String(request.body?.instruction ?? ""),
+        inputSchema: (request.body?.inputSchema ?? {}) as Record<string, unknown>,
+        outputSchema: (request.body?.outputSchema ?? {}) as Record<string, unknown>,
+        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds) ? request.body.requiredKnowledgeSourceIds.map(String) : undefined,
+        allowedTools: Array.isArray(request.body?.allowedTools) ? request.body.allowedTools.map(String) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(version) };
+    }
+
+    const skillApproveMatch = request.path.match(/^\/admin\/skills\/versions\/([^/]+)\/approve$/);
+    if (request.method === "POST" && skillApproveMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.skills.approveVersion(user, {
+        versionId: skillApproveMatch[1],
+        decision: String(request.body?.decision ?? "approved") as never,
+        note: request.body?.note ? String(request.body.note) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    const skillDisableMatch = request.path.match(/^\/admin\/skills\/([^/]+)\/disable$/);
+    if (request.method === "POST" && skillDisableMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const skill = services.skills.disableSkill(user, skillDisableMatch[1], String(request.body?.reason ?? ""));
+      return { status: HttpStatus.OK, body: success(skill) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/skills/assignments") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const assignment = services.skills.assign(user, {
+        skillVersionId: String(request.body?.skillVersionId ?? ""),
+        agentRole: String(request.body?.agentRole ?? "frontend_developer") as never,
+        scenario: String(request.body?.scenario ?? "frontend_coding") as never,
+        scopeType: String(request.body?.scopeType ?? "global") as never,
+        scopeId: String(request.body?.scopeId ?? "global"),
+        priority: Number(request.body?.priority ?? 0)
+      });
+      return { status: HttpStatus.CREATED, body: success(assignment) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/skills/resolve") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.skills.resolve(user, {
+        projectId: request.body?.projectId ? String(request.body.projectId) : undefined,
+        appId: request.body?.appId ? String(request.body.appId) : undefined,
+        department: request.body?.department ? String(request.body.department) : undefined,
+        agentRole: String(request.body?.agentRole ?? "frontend_developer") as never,
+        scenario: String(request.body?.scenario ?? "frontend_coding") as never
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
@@ -756,6 +902,94 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
       response,
       executePlatformApiRequest(services, { method: "POST", path: "/audit-logs/filter", headers: request.headers, body: request.body })
     )
+  );
+  routes.get("/admin/knowledge/sources", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/sources", headers: request.headers }))
+  );
+  routes.post("/admin/knowledge/sources", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/knowledge/sources", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/knowledge/sources/:sourceId/versions", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/knowledge/sources/${String(request.params?.sourceId ?? "")}/versions`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/knowledge/versions/:versionId/approve", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/knowledge/versions/${String(request.params?.versionId ?? "")}/approve`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/knowledge/retrieve", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/knowledge/retrieve", headers: request.headers, body: request.body })
+    )
+  );
+  routes.get("/admin/knowledge/retrieval-logs", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/retrieval-logs", headers: request.headers }))
+  );
+  routes.get("/admin/skills", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/skills", headers: request.headers }))
+  );
+  routes.post("/admin/skills", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/skills", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/skills/:skillId/versions", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/skills/${String(request.params?.skillId ?? "")}/versions`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/skills/versions/:versionId/approve", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/skills/versions/${String(request.params?.versionId ?? "")}/approve`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/skills/:skillId/disable", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/skills/${String(request.params?.skillId ?? "")}/disable`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/skills/assignments", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/skills/assignments", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/skills/resolve", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/skills/resolve", headers: request.headers, body: request.body }))
   );
   routes.get("/admin/monitoring", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/monitoring", headers: request.headers }))

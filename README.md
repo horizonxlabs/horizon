@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 10 Generated App Runtime Hardening are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 11 Knowledge and Skill Governance are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -24,6 +24,7 @@ pnpm verify:sprint7
 pnpm verify:sprint8
 pnpm verify:sprint9
 pnpm verify:sprint10
+pnpm verify:sprint11
 ```
 
 Start frontend shells:
@@ -158,6 +159,19 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Admin runtime API routes for overview, schema access check, health/readiness/metrics/log evidence, OpenAPI and migration dry-run
 - Separate generated app container contract with artifact root, required paths, container name, image tag, route and probe endpoints
 - Schema-per-app isolation evidence with assigned DB user, allowed schema and cross-schema denial reason
+- Health/readiness/log/metrics, OpenAPI and migration dry-run evidence for published generated apps
+
+## Sprint 11 Scope
+
+- Knowledge source metadata with owner, source type, scope, upload and index status
+- Immutable knowledge versions with changelog, approval status, active/superseded lifecycle and retrieval logs
+- Permission-filtered knowledge retrieval by actor, project, app, department, agent role and AI scenario
+- Skill library with draft, active and disabled lifecycle
+- Skill versions with instruction, input/output schema, required knowledge and allowed tools
+- Skill approval and assignment by role, scenario, project/app/department scope
+- Workspace prompt metadata with selected `skillVersionId` and `knowledgeVersionIds`
+- Admin Knowledge and Skill Governance UI
+- Prisma migration and seed data for knowledge/skill governance records
 - Migration dry-run contract that blocks destructive changes without Developer Reviewer and Data Owner approvals
 - Admin Generated App Runtime Hardening UI
 - Prisma migration and seed data for runtime, schema grant, health, log, metric, OpenAPI and migration report records

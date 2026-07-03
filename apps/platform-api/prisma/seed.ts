@@ -1496,6 +1496,252 @@ async function main() {
       create: policyTemplate
     });
   }
+
+  await prisma.knowledgeSource.upsert({
+    where: { id: "knsrc_leave_policy_001" },
+    update: {
+      title: "HR Leave Policy Handbook",
+      sourceType: "markdown",
+      ownerUserId: "usr_admin",
+      scopeType: "project",
+      scopeValue: {
+        visibility: "project",
+        department: "HR Department",
+        projectIds: ["prj_leave_management"],
+        appIds: ["app_leave_management"],
+        agentRoles: ["frontend_developer"],
+        scenarios: ["frontend_coding"]
+      },
+      projectId: "prj_leave_management",
+      appId: "app_leave_management",
+      department: "HR Department",
+      agentRole: "frontend_developer",
+      scenarios: ["frontend_coding"],
+      uploadStatus: "uploaded",
+      indexStatus: "indexed",
+      status: "active",
+      tags: ["leave", "policy", "sprint11"]
+    },
+    create: {
+      id: "knsrc_leave_policy_001",
+      title: "HR Leave Policy Handbook",
+      sourceType: "markdown",
+      ownerUserId: "usr_admin",
+      scopeType: "project",
+      scopeValue: {
+        visibility: "project",
+        department: "HR Department",
+        projectIds: ["prj_leave_management"],
+        appIds: ["app_leave_management"],
+        agentRoles: ["frontend_developer"],
+        scenarios: ["frontend_coding"]
+      },
+      projectId: "prj_leave_management",
+      appId: "app_leave_management",
+      department: "HR Department",
+      agentRole: "frontend_developer",
+      scenarios: ["frontend_coding"],
+      uploadStatus: "uploaded",
+      indexStatus: "indexed",
+      status: "active",
+      tags: ["leave", "policy", "sprint11"]
+    }
+  });
+
+  await prisma.knowledgeVersion.upsert({
+    where: { id: "knver_leave_policy_v1" },
+    update: {
+      contentHash: "sha256:seed-leave-policy-v1",
+      changelog: "Initial approved HR leave policy for governed workspace prompts.",
+      chunkCount: 2,
+      excerpts: ["WFH leave requires manager approval.", "HR admins can review policy exceptions."],
+      approvalStatus: "approved",
+      lifecycleStatus: "active",
+      isActive: true,
+      approvedByUserId: "usr_admin",
+      approvedAt: new Date("2026-09-08T09:00:00.000Z")
+    },
+    create: {
+      id: "knver_leave_policy_v1",
+      sourceId: "knsrc_leave_policy_001",
+      version: "v1",
+      contentHash: "sha256:seed-leave-policy-v1",
+      changelog: "Initial approved HR leave policy for governed workspace prompts.",
+      chunkCount: 2,
+      excerpts: ["WFH leave requires manager approval.", "HR admins can review policy exceptions."],
+      approvalStatus: "approved",
+      lifecycleStatus: "active",
+      isActive: true,
+      approvedByUserId: "usr_admin",
+      approvedAt: new Date("2026-09-08T09:00:00.000Z"),
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.knowledgeApproval.upsert({
+    where: { id: "knapp_leave_policy_v1" },
+    update: {
+      decision: "approved",
+      note: "Approved as Sprint 11 governed knowledge fixture.",
+      decidedByUserId: "usr_admin"
+    },
+    create: {
+      id: "knapp_leave_policy_v1",
+      sourceId: "knsrc_leave_policy_001",
+      versionId: "knver_leave_policy_v1",
+      decision: "approved",
+      note: "Approved as Sprint 11 governed knowledge fixture.",
+      decidedByUserId: "usr_admin",
+      decidedAt: new Date("2026-09-08T09:01:00.000Z")
+    }
+  });
+
+  await prisma.knowledgeIndexChunk.upsert({
+    where: { versionId_chunkKey: { versionId: "knver_leave_policy_v1", chunkKey: "leave-policy-001" } },
+    update: {
+      heading: "WFH Leave Approval",
+      excerpt: "WFH leave requires manager approval and HR visibility.",
+      tokens: 32,
+      status: "indexed"
+    },
+    create: {
+      id: "knchunk_leave_policy_001",
+      versionId: "knver_leave_policy_v1",
+      chunkKey: "leave-policy-001",
+      heading: "WFH Leave Approval",
+      excerpt: "WFH leave requires manager approval and HR visibility.",
+      tokens: 32,
+      embeddingRef: "mock-embedding:leave-policy-001",
+      status: "indexed"
+    }
+  });
+
+  await prisma.knowledgeRetrievalLog.upsert({
+    where: { id: "knret_leave_policy_001" },
+    update: {
+      matchedVersionIds: ["knver_leave_policy_v1"],
+      deniedVersionIds: [],
+      retrievalContext: {
+        query: "Add WFH leave type",
+        requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"]
+      }
+    },
+    create: {
+      id: "knret_leave_policy_001",
+      actorUserId: "usr_creator",
+      projectId: "prj_leave_management",
+      appId: "app_leave_management",
+      department: "HR Department",
+      scenario: "frontend_coding",
+      agentRole: "frontend_developer",
+      matchedVersionIds: ["knver_leave_policy_v1"],
+      deniedVersionIds: [],
+      retrievalContext: {
+        query: "Add WFH leave type",
+        requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"]
+      }
+    }
+  });
+
+  await prisma.skillDefinition.upsert({
+    where: { key: "frontend-developer-leave" },
+    update: {
+      name: "Frontend Developer Leave Skill",
+      description: "Generate governed leave management frontend changes.",
+      ownerUserId: "usr_admin",
+      status: "active"
+    },
+    create: {
+      id: "skdef_frontend_developer_leave",
+      key: "frontend-developer-leave",
+      name: "Frontend Developer Leave Skill",
+      description: "Generate governed leave management frontend changes.",
+      ownerUserId: "usr_admin",
+      status: "active"
+    }
+  });
+
+  await prisma.skillVersion.upsert({
+    where: { id: "skver_frontend_developer_leave_v1" },
+    update: {
+      instruction: "Use approved leave policy knowledge before generating frontend changes.",
+      inputSchema: { type: "object", required: ["prompt"] },
+      outputSchema: { type: "object", required: ["preview"] },
+      requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"],
+      allowedTools: ["prd_reader", "ui_generator", "policy_checker"],
+      approvalStatus: "approved",
+      lifecycleStatus: "active",
+      isActive: true,
+      approvedByUserId: "usr_admin",
+      approvedAt: new Date("2026-09-08T09:10:00.000Z")
+    },
+    create: {
+      id: "skver_frontend_developer_leave_v1",
+      skillId: "skdef_frontend_developer_leave",
+      version: "v1",
+      instruction: "Use approved leave policy knowledge before generating frontend changes.",
+      inputSchema: { type: "object", required: ["prompt"] },
+      outputSchema: { type: "object", required: ["preview"] },
+      requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"],
+      allowedTools: ["prd_reader", "ui_generator", "policy_checker"],
+      contentHash: "sha256:seed-skill-frontend-leave-v1",
+      approvalStatus: "approved",
+      lifecycleStatus: "active",
+      isActive: true,
+      approvedByUserId: "usr_admin",
+      approvedAt: new Date("2026-09-08T09:10:00.000Z"),
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.skillApproval.upsert({
+    where: { id: "skapp_frontend_developer_leave_v1" },
+    update: {
+      decision: "approved",
+      note: "Approved Sprint 11 active skill contract.",
+      decidedByUserId: "usr_admin"
+    },
+    create: {
+      id: "skapp_frontend_developer_leave_v1",
+      skillId: "skdef_frontend_developer_leave",
+      versionId: "skver_frontend_developer_leave_v1",
+      decision: "approved",
+      note: "Approved Sprint 11 active skill contract.",
+      decidedByUserId: "usr_admin",
+      decidedAt: new Date("2026-09-08T09:11:00.000Z")
+    }
+  });
+
+  await prisma.skillAssignment.upsert({
+    where: { id: "skassign_frontend_leave_project" },
+    update: {
+      skillId: "skdef_frontend_developer_leave",
+      skillVersionId: "skver_frontend_developer_leave_v1",
+      agentRole: "frontend_developer",
+      scenario: "frontend_coding",
+      scopeType: "project",
+      scopeId: "prj_leave_management",
+      projectId: "prj_leave_management",
+      appId: "app_leave_management",
+      department: "HR Department",
+      priority: 20,
+      status: "active"
+    },
+    create: {
+      id: "skassign_frontend_leave_project",
+      skillId: "skdef_frontend_developer_leave",
+      skillVersionId: "skver_frontend_developer_leave_v1",
+      agentRole: "frontend_developer",
+      scenario: "frontend_coding",
+      scopeType: "project",
+      scopeId: "prj_leave_management",
+      projectId: "prj_leave_management",
+      appId: "app_leave_management",
+      department: "HR Department",
+      priority: 20,
+      status: "active"
+    }
+  });
 }
 
 main()

@@ -230,6 +230,14 @@ flowchart LR
 | TC-SKL-003 | Skill is assigned to scenario | AI task starts | Correct skill version is selected by agent role/scenario/scope | AI task metadata |
 | TC-SKL-004 | Skill update requires approval | Approver approves | Skill version becomes active | Approval/audit |
 | TC-SKL-005 | Skill is disabled | AI task resolves skills | Disabled skill is not selected | AI task metadata |
+
+Sprint 11 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-KNW-001 to FR-KNW-005 / TC-KNW-001 to TC-KNW-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
+| FR-SKL-001 to FR-SKL-005 / TC-SKL-001 to TC-SKL-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
+
 | TC-AUD-001 | Security-sensitive event occurs | Event is emitted | Audit log stores event with actor, resource, severity, requestId and metadata | Audit log |
 | TC-AUD-002 | Audit retention policy is configured | Retention job runs | Logs are retained or archived according to policy | Retention report |
 | TC-OBS-001 | Admin opens health dashboard | Services are running/degraded | Dashboard shows PostgreSQL, Keycloak, MinIO, Redis, AI Gateway, Caddy, queues and app containers | UI screenshot |

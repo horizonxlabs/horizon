@@ -85,6 +85,13 @@ model PlatformUser {
   platformAuthSessions PlatformAuthSession[] @relation("PlatformAuthSessionUser")
   breakGlassSessions BreakGlassSession[] @relation("BreakGlassSessionUser")
   policyTemplates PolicyTemplate[] @relation("PolicyTemplateCreatedBy")
+  knowledgeSources KnowledgeSource[] @relation("KnowledgeSourceOwner")
+  knowledgeVersions KnowledgeVersion[] @relation("KnowledgeVersionCreatedBy")
+  knowledgeApprovals KnowledgeApproval[] @relation("KnowledgeApprovalDecidedBy")
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[] @relation("KnowledgeRetrievalActor")
+  skillDefinitions SkillDefinition[] @relation("SkillDefinitionOwner")
+  skillVersions SkillVersion[] @relation("SkillVersionCreatedBy")
+  skillApprovals SkillApproval[] @relation("SkillApprovalDecidedBy")
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -171,6 +178,9 @@ model Project {
   domainSetting DomainSetting?
   domainRequests DomainRequest[]
   deploymentTraceRecords DeploymentTraceRecord[]
+  knowledgeSources KnowledgeSource[]
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[]
+  skillAssignments SkillAssignment[]
   notifications InAppNotification[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -207,6 +217,9 @@ model App {
   registryEntry      AppStoreRegistryEntry?
   generatedAppRuntimes GeneratedAppRuntime[]
   supportTickets     SupportTicket[]
+  knowledgeSources   KnowledgeSource[]
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[]
+  skillAssignments   SkillAssignment[]
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
@@ -412,6 +425,8 @@ model WorkspaceTask {
   status            String
   guardrailDecision String              @map("guardrail_decision")
   guardrailEventId  String              @map("guardrail_event_id")
+  knowledgeVersionIds String[]          @default([]) @map("knowledge_version_ids")
+  skillVersionId    String?             @map("skill_version_id")
   createdByUserId   String              @map("created_by_user_id")
   project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   steps             WorkspaceTaskStep[]
@@ -459,6 +474,8 @@ model AiUsageLog {
   model      String
   prompt     String
   tokensUsed Int           @map("tokens_used")
+  knowledgeVersionIds String[] @default([]) @map("knowledge_version_ids")
+  skillVersionId String? @map("skill_version_id")
   project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task       WorkspaceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
   occurredAt DateTime      @default(now()) @map("occurred_at")
@@ -1040,4 +1057,195 @@ model PolicyTemplate {
   updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@map("policy_templates")
+}
+
+model KnowledgeSource {
+  id           String   @id
+  title        String
+  sourceType   String   @map("source_type")
+  ownerUserId  String   @map("owner_user_id")
+  scopeType    String   @map("scope_type")
+  scopeValue   Json     @map("scope_value")
+  projectId    String?  @map("project_id")
+  appId        String?  @map("app_id")
+  department   String?
+  agentRole    String?  @map("agent_role")
+  scenarios    String[]
+  uploadStatus String   @default("pending") @map("upload_status")
+  indexStatus  String   @default("pending") @map("index_status")
+  status       String   @default("draft")
+  tags         String[] @default([])
+  owner        PlatformUser @relation("KnowledgeSourceOwner", fields: [ownerUserId], references: [id])
+  project      Project? @relation(fields: [projectId], references: [id])
+  app          App? @relation(fields: [appId], references: [id])
+  versions     KnowledgeVersion[]
+  approvals    KnowledgeApproval[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerUserId, status])
+  @@index([projectId, appId])
+  @@map("knowledge_sources")
+}
+
+model KnowledgeVersion {
+  id              String   @id
+  sourceId        String   @map("source_id")
+  version         String
+  contentHash     String   @map("content_hash")
+  changelog       String
+  chunkCount      Int      @map("chunk_count")
+  excerpts        String[] @default([])
+  approvalStatus  String   @default("pending") @map("approval_status")
+  lifecycleStatus String   @default("pending") @map("lifecycle_status")
+  isActive        Boolean  @default(false) @map("is_active")
+  approvedByUserId String? @map("approved_by_user_id")
+  approvedAt      DateTime? @map("approved_at")
+  createdByUserId String   @map("created_by_user_id")
+  source          KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  createdBy       PlatformUser @relation("KnowledgeVersionCreatedBy", fields: [createdByUserId], references: [id])
+  indexChunks     KnowledgeIndexChunk[]
+  approvals       KnowledgeApproval[]
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([sourceId, version])
+  @@index([sourceId, approvalStatus, lifecycleStatus, isActive])
+  @@map("knowledge_versions")
+}
+
+model KnowledgeApproval {
+  id              String   @id
+  sourceId        String   @map("source_id")
+  versionId       String   @map("version_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  source          KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  version         KnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("KnowledgeApprovalDecidedBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([versionId, decidedAt])
+  @@map("knowledge_approvals")
+}
+
+model KnowledgeIndexChunk {
+  id           String   @id
+  versionId    String   @map("version_id")
+  chunkKey     String   @map("chunk_key")
+  heading      String
+  excerpt      String
+  tokens       Int
+  embeddingRef String?  @map("embedding_ref")
+  status       String   @default("indexed")
+  version      KnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([versionId, chunkKey])
+  @@map("knowledge_index_chunks")
+}
+
+model KnowledgeRetrievalLog {
+  id              String   @id
+  actorUserId     String   @map("actor_user_id")
+  projectId       String?  @map("project_id")
+  appId           String?  @map("app_id")
+  department      String?
+  scenario        String
+  agentRole       String   @map("agent_role")
+  matchedVersionIds String[] @default([]) @map("matched_version_ids")
+  deniedVersionIds  String[] @default([]) @map("denied_version_ids")
+  retrievalContext  Json     @map("retrieval_context")
+  actor           PlatformUser @relation("KnowledgeRetrievalActor", fields: [actorUserId], references: [id])
+  project         Project? @relation(fields: [projectId], references: [id])
+  app             App? @relation(fields: [appId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, scenario, agentRole])
+  @@index([actorUserId, createdAt])
+  @@map("knowledge_retrieval_logs")
+}
+
+model SkillDefinition {
+  id           String   @id
+  key          String   @unique
+  name         String
+  description  String
+  ownerUserId  String   @map("owner_user_id")
+  status       String   @default("draft")
+  owner        PlatformUser @relation("SkillDefinitionOwner", fields: [ownerUserId], references: [id])
+  versions     SkillVersion[]
+  approvals    SkillApproval[]
+  assignments  SkillAssignment[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerUserId, status])
+  @@map("skill_definitions")
+}
+
+model SkillVersion {
+  id                         String   @id
+  skillId                    String   @map("skill_id")
+  version                    String
+  instruction                String
+  inputSchema                Json     @map("input_schema")
+  outputSchema               Json     @map("output_schema")
+  requiredKnowledgeSourceIds String[] @default([]) @map("required_knowledge_source_ids")
+  allowedTools               String[] @default([]) @map("allowed_tools")
+  contentHash                String   @map("content_hash")
+  approvalStatus             String   @default("pending") @map("approval_status")
+  lifecycleStatus            String   @default("pending") @map("lifecycle_status")
+  isActive                   Boolean  @default(false) @map("is_active")
+  approvedByUserId           String?  @map("approved_by_user_id")
+  approvedAt                 DateTime? @map("approved_at")
+  createdByUserId            String   @map("created_by_user_id")
+  skill                      SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  createdBy                  PlatformUser @relation("SkillVersionCreatedBy", fields: [createdByUserId], references: [id])
+  approvals                  SkillApproval[]
+  assignments                SkillAssignment[]
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  @@unique([skillId, version])
+  @@index([skillId, approvalStatus, lifecycleStatus, isActive])
+  @@map("skill_versions")
+}
+
+model SkillApproval {
+  id              String   @id
+  skillId         String   @map("skill_id")
+  versionId       String   @map("version_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  skill           SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version         SkillVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("SkillApprovalDecidedBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([versionId, decidedAt])
+  @@map("skill_approvals")
+}
+
+model SkillAssignment {
+  id             String   @id
+  skillId        String   @map("skill_id")
+  skillVersionId String   @map("skill_version_id")
+  agentRole      String   @map("agent_role")
+  scenario       String
+  scopeType      String   @map("scope_type")
+  scopeId        String   @map("scope_id")
+  projectId      String?  @map("project_id")
+  appId          String?  @map("app_id")
+  department     String?
+  priority       Int      @default(0)
+  status         String   @default("active")
+  skill          SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version        SkillVersion @relation(fields: [skillVersionId], references: [id], onDelete: Cascade)
+  project        Project? @relation(fields: [projectId], references: [id])
+  app            App? @relation(fields: [appId], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([agentRole, scenario, scopeType, scopeId, status])
+  @@map("skill_assignments")
 }

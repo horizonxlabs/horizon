@@ -619,6 +619,18 @@ button {
   gap: 10px;
 }
 
+.ds-rail-alert > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ds-rail-alert strong,
+.ds-rail-alert span {
+  display: block;
+  min-width: 0;
+}
+
 .ds-flow-list svg {
   color: #16a34a;
 }
@@ -1556,6 +1568,59 @@ button {
   line-height: 1.35;
 }
 
+.knowledge-skill-governance-shell {
+  display: grid;
+  gap: var(--evcp-space-4);
+  margin-top: var(--evcp-space-5);
+}
+
+.knowledge-skill-kpi-grid,
+.knowledge-skill-layout,
+.knowledge-skill-grid {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.knowledge-skill-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.knowledge-skill-layout {
+  align-items: start;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+}
+
+.knowledge-skill-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.knowledge-skill-grid > .ds-section-card:first-child,
+.knowledge-skill-grid > .ds-section-card:nth-child(6) {
+  grid-column: 1 / -1;
+}
+
+.knowledge-skill-governance-shell .ds-definition-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.knowledge-skill-governance-shell .ds-definition-grid dd,
+.knowledge-skill-governance-shell .ds-data-table td,
+.knowledge-skill-governance-shell .ds-rail-alert span,
+.scope-filter-bar button {
+  overflow-wrap: anywhere;
+}
+
+.scope-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+  margin-bottom: var(--evcp-space-3);
+}
+
+.governance-mobile-list {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1587,12 +1652,15 @@ button {
   .ds-service-strip,
   .admin-monitoring-kpis,
   .admin-monitoring-grid,
-  .auth-kpi-grid,
-  .auth-policy-grid,
-  .runtime-kpi-grid,
-  .runtime-hardening-layout,
-  .runtime-hardening-grid,
-  .creator-summary-grid,
+    .auth-kpi-grid,
+    .auth-policy-grid,
+    .runtime-kpi-grid,
+    .runtime-hardening-layout,
+    .runtime-hardening-grid,
+    .knowledge-skill-kpi-grid,
+    .knowledge-skill-layout,
+    .knowledge-skill-grid,
+    .creator-summary-grid,
   .creator-prd-layout,
   .creator-prd-workbench,
   .workspace-topbar,
@@ -1636,19 +1704,27 @@ button {
     grid-column: auto;
   }
 
+  .knowledge-skill-grid > .ds-section-card:first-child,
+  .knowledge-skill-grid > .ds-section-card:nth-child(6) {
+    grid-column: auto;
+  }
+
   .auth-desktop-table,
-  .runtime-desktop-table {
+  .runtime-desktop-table,
+  .governance-desktop-table {
     display: none;
   }
 
   .auth-mobile-list,
-  .runtime-mobile-list {
+  .runtime-mobile-list,
+  .governance-mobile-list {
     display: grid;
     gap: var(--evcp-space-2);
   }
 
   .auth-mobile-list article,
-  .runtime-mobile-list article {
+  .runtime-mobile-list article,
+  .governance-mobile-list article {
     background: var(--evcp-color-surface-muted);
     border: 1px solid var(--evcp-color-border-soft);
     border-radius: var(--evcp-radius-card);
@@ -1666,7 +1742,10 @@ button {
   .auth-mobile-list small,
   .runtime-mobile-list strong,
   .runtime-mobile-list span,
-  .runtime-mobile-list small {
+  .runtime-mobile-list small,
+  .governance-mobile-list strong,
+  .governance-mobile-list span,
+  .governance-mobile-list small {
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -1674,7 +1753,9 @@ button {
   .auth-mobile-list span,
   .auth-mobile-list small,
   .runtime-mobile-list span,
-  .runtime-mobile-list small {
+  .runtime-mobile-list small,
+  .governance-mobile-list span,
+  .governance-mobile-list small {
     color: var(--evcp-color-muted);
   }
 

@@ -340,6 +340,8 @@ Detailed plan: `docs/planning/sprint-10-plan.md`
 | Knowledge indexing/versioning/approval | P2-KNW-002 | Approved version retrieved by AI |
 | Skill library/versioning/assignment | P2-SKL-001 | Skill selected by role/scenario/scope |
 
+Detailed plan: `docs/planning/sprint-11-plan.md`
+
 ### Sprint 12 - Installer, Backup, Restore
 
 **Goal:** Make private-server deployment installable and recoverable.
