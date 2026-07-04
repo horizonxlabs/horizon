@@ -74,6 +74,12 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
+## Phase 2 Real MVP AI Provider Adapter
+
+The Platform API now routes PRD generation through an AI Gateway adapter contract. The first adapter is OpenAI-compatible and supports deterministic dry-run execution for CI, guardrail and quota pre-checks, fallback policy and usage logging without exposing API key material.
+
+See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees and remaining live-worker work.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:
