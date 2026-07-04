@@ -100,6 +100,8 @@ export interface WorkspaceTask {
   status: WorkspaceTaskStatus;
   guardrailDecision: GuardrailDecision;
   guardrailEventId: string;
+  knowledgeVersionIds?: string[];
+  skillVersionId?: string;
   steps: WorkspaceTaskStep[];
   createdByUserId: string;
   createdAt: string;
@@ -134,6 +136,8 @@ export interface WorkspacePromptResult {
   task: WorkspaceTask;
   preview: PreviewVersion;
   usage?: AiUsageLog;
+  knowledgeRetrieval?: KnowledgeRetrievalResult;
+  skillSelection?: SkillResolveResult;
   tokenBudget: {
     remainingToday: number;
     remainingMonth: number;
@@ -828,8 +832,169 @@ export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_opena
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
 export type AiScenario = "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
+export type AgentRoleKey = "requirement_analyst" | "database_designer" | "frontend_developer" | "backend_developer" | "security_reviewer" | "technical_writer";
 export type GuardrailDecision = "allow" | "warn" | "block";
 export type GuardrailRuleType = "keyword" | "regex" | "policy";
+
+export type KnowledgeSourceType = "pdf" | "markdown" | "text" | "word" | "excel" | "openapi_json";
+export type KnowledgeSourceStatus = "draft" | "active" | "deprecated" | "archived";
+export type KnowledgeUploadStatus = "pending" | "uploaded" | "failed";
+export type KnowledgeIndexStatus = "pending" | "indexed" | "failed";
+export type GovernanceApprovalDecision = "approved" | "rejected";
+export type VersionApprovalStatus = "pending" | "approved" | "rejected";
+export type VersionLifecycleStatus = "pending" | "active" | "superseded" | "rejected";
+
+export interface GovernanceScope {
+  visibility: "global" | "department" | "project" | "app" | "agent";
+  department?: string;
+  projectIds?: string[];
+  appIds?: string[];
+  agentRoles?: AgentRoleKey[];
+  scenarios?: AiScenario[];
+}
+
+export interface KnowledgeSource {
+  id: string;
+  title: string;
+  sourceType: KnowledgeSourceType;
+  ownerUserId: string;
+  scope: GovernanceScope;
+  uploadStatus: KnowledgeUploadStatus;
+  indexStatus: KnowledgeIndexStatus;
+  status: KnowledgeSourceStatus;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeVersion {
+  id: string;
+  sourceId: string;
+  version: string;
+  contentHash: string;
+  changelog: string;
+  chunkCount: number;
+  excerpts: string[];
+  approvalStatus: VersionApprovalStatus;
+  lifecycleStatus: VersionLifecycleStatus;
+  isActive: boolean;
+  approvedByUserId?: string;
+  approvedAt?: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface KnowledgeApproval {
+  id: string;
+  sourceId: string;
+  versionId: string;
+  decision: GovernanceApprovalDecision;
+  note: string;
+  decidedByUserId: string;
+  decidedAt: string;
+}
+
+export interface KnowledgeRetrievalLog {
+  id: string;
+  actorUserId: string;
+  projectId?: string;
+  appId?: string;
+  department?: string;
+  agentRole: AgentRoleKey;
+  scenario: AiScenario;
+  matchedVersionIds: string[];
+  deniedVersionIds: string[];
+  retrievalContext: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface KnowledgeRetrievalSource {
+  sourceId: string;
+  versionId: string;
+  title: string;
+  sourceType: KnowledgeSourceType;
+  scope: GovernanceScope;
+  excerpts: string[];
+}
+
+export interface KnowledgeRetrievalResult {
+  scenario: AiScenario;
+  agentRole: AgentRoleKey;
+  matchedVersionIds: string[];
+  deniedVersionIds: string[];
+  deniedReasons: string[];
+  sources: KnowledgeRetrievalSource[];
+  retrievalLogId: string;
+}
+
+export type SkillStatus = "draft" | "active" | "disabled" | "deprecated";
+
+export interface SkillDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  ownerUserId: string;
+  status: SkillStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SkillVersion {
+  id: string;
+  skillId: string;
+  version: string;
+  instruction: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  requiredKnowledgeSourceIds: string[];
+  allowedTools: string[];
+  contentHash: string;
+  approvalStatus: VersionApprovalStatus;
+  lifecycleStatus: VersionLifecycleStatus;
+  isActive: boolean;
+  approvedByUserId?: string;
+  approvedAt?: string;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface SkillApproval {
+  id: string;
+  skillId: string;
+  versionId: string;
+  decision: GovernanceApprovalDecision;
+  note: string;
+  decidedByUserId: string;
+  decidedAt: string;
+}
+
+export interface SkillAssignment {
+  id: string;
+  skillId: string;
+  skillVersionId: string;
+  agentRole: AgentRoleKey;
+  scenario: AiScenario;
+  scopeType: GovernanceScope["visibility"];
+  scopeId: string;
+  priority: number;
+  status: "active" | "disabled";
+  createdAt: string;
+}
+
+export interface SkillResolveResult {
+  skillId: string;
+  skillVersionId: string;
+  assignmentId: string;
+  skill?: SkillDefinition;
+  version?: SkillVersion;
+  assignment?: SkillAssignment;
+  agentRole: AgentRoleKey;
+  scenario: AiScenario;
+  allowedTools: string[];
+  requiredKnowledgeSourceIds: string[];
+  reason?: string;
+}
 
 export interface AiProvider {
   id: string;
@@ -1790,6 +1955,586 @@ export class GuardrailService {
     }
 
     return { decision: "allow", severity: "info" };
+  }
+}
+
+export class KnowledgeGovernanceService {
+  private readonly sources: KnowledgeSource[] = [];
+  private readonly versions: KnowledgeVersion[] = [];
+  private readonly approvals: KnowledgeApproval[] = [];
+  private readonly retrievalLogs: KnowledgeRetrievalLog[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService
+  ) {}
+
+  createSource(
+    actor: PlatformUser,
+    input: {
+      title: string;
+      sourceType: KnowledgeSourceType;
+      ownerUserId: string;
+      scope: GovernanceScope;
+      uploadStatus?: KnowledgeUploadStatus;
+      indexStatus?: KnowledgeIndexStatus;
+      tags?: string[];
+    }
+  ): KnowledgeSource {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.title.trim()) throw new ValidationError("Knowledge source title is required");
+
+    const now = new Date().toISOString();
+    const source: KnowledgeSource = {
+      id: slugId("knsrc", input.title),
+      title: input.title,
+      sourceType: input.sourceType,
+      ownerUserId: input.ownerUserId,
+      scope: {
+        ...input.scope,
+        projectIds: [...(input.scope.projectIds ?? [])],
+        appIds: [...(input.scope.appIds ?? [])],
+        agentRoles: [...(input.scope.agentRoles ?? [])],
+        scenarios: [...(input.scope.scenarios ?? [])]
+      },
+      uploadStatus: input.uploadStatus ?? "pending",
+      indexStatus: input.indexStatus ?? "pending",
+      status: "draft",
+      tags: [...(input.tags ?? [])],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const existing = this.sources.findIndex((candidate) => candidate.id === source.id);
+    if (existing >= 0) this.sources[existing] = source;
+    else this.sources.push(source);
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "knowledge.source.created",
+      resourceType: "knowledge_source",
+      resourceId: source.id,
+      metadata: { sourceType: source.sourceType, scope: source.scope }
+    });
+
+    return source;
+  }
+
+  listSources(actor: PlatformUser): KnowledgeSource[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [...this.sources];
+  }
+
+  submitVersion(
+    actor: PlatformUser,
+    sourceId: string,
+    input: {
+      version?: string;
+      contentHash: string;
+      changelog: string;
+      chunkCount: number;
+      excerpts?: string[];
+    }
+  ): KnowledgeVersion {
+    this.auth.requireRole(actor, ["admin"]);
+    const source = this.requireSource(sourceId);
+    if (!input.contentHash.trim()) throw new ValidationError("Knowledge version content hash is required");
+    if (!input.changelog.trim()) throw new ValidationError("Knowledge version changelog is required");
+
+    const versionNumber = this.versions.filter((candidate) => candidate.sourceId === sourceId).length + 1;
+    const version: KnowledgeVersion = {
+      id: `${sourceId}_${input.version ?? `v${versionNumber}`}`,
+      sourceId,
+      version: input.version ?? `v${versionNumber}`,
+      contentHash: input.contentHash,
+      changelog: input.changelog,
+      chunkCount: input.chunkCount,
+      excerpts: [...(input.excerpts ?? [])],
+      approvalStatus: "pending",
+      lifecycleStatus: "pending",
+      isActive: false,
+      createdByUserId: actor.id,
+      createdAt: new Date().toISOString()
+    };
+
+    this.versions.push(version);
+    source.updatedAt = version.createdAt;
+    this.audit.record({
+      actorId: actor.id,
+      action: "knowledge.version.submitted",
+      resourceType: "knowledge_version",
+      resourceId: version.id,
+      metadata: { sourceId, contentHash: version.contentHash }
+    });
+
+    return version;
+  }
+
+  approveVersion(
+    actor: PlatformUser,
+    input: { versionId: string; decision: GovernanceApprovalDecision; note?: string }
+  ): { version: KnowledgeVersion; approval: KnowledgeApproval; auditEventId: string } {
+    this.auth.requireRole(actor, ["admin"]);
+    const version = this.requireVersion(input.versionId);
+    const source = this.requireSource(version.sourceId);
+    const decidedAt = new Date().toISOString();
+
+    if (input.decision === "approved") {
+      for (const candidate of this.versions.filter((item) => item.sourceId === version.sourceId && item.isActive)) {
+        candidate.isActive = false;
+        candidate.lifecycleStatus = "superseded";
+      }
+      version.approvalStatus = "approved";
+      version.lifecycleStatus = "active";
+      version.isActive = true;
+      version.approvedByUserId = actor.id;
+      version.approvedAt = decidedAt;
+      source.status = "active";
+      source.updatedAt = decidedAt;
+    } else {
+      version.approvalStatus = "rejected";
+      version.lifecycleStatus = "rejected";
+      version.isActive = false;
+    }
+
+    const approval: KnowledgeApproval = {
+      id: `knapp_${String(this.approvals.length + 1).padStart(4, "0")}`,
+      sourceId: source.id,
+      versionId: version.id,
+      decision: input.decision,
+      note: input.note ?? "",
+      decidedByUserId: actor.id,
+      decidedAt
+    };
+    this.approvals.push(approval);
+
+    const auditEvent = this.audit.record({
+      actorId: actor.id,
+      action: `knowledge.version.${input.decision}`,
+      resourceType: "knowledge_version",
+      resourceId: version.id,
+      metadata: { sourceId: source.id, note: approval.note, lifecycleStatus: version.lifecycleStatus }
+    });
+
+    return { version, approval, auditEventId: auditEvent.id };
+  }
+
+  retrieve(
+    actor: PlatformUser,
+    input: {
+      projectId?: string;
+      appId?: string;
+      department?: string;
+      agentRole: AgentRoleKey;
+      scenario: AiScenario;
+      query?: string;
+      requiredKnowledgeSourceIds?: string[];
+    }
+  ): KnowledgeRetrievalResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    if (actor.role === "creator" && !input.projectId) {
+      throw new ValidationError("Creator knowledge retrieval requires project context");
+    }
+    const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
+    const department = input.department ?? project?.targetDepartment;
+    const appId = input.appId ?? project?.appId;
+    const required = new Set(input.requiredKnowledgeSourceIds ?? []);
+    const matched: KnowledgeRetrievalSource[] = [];
+    const deniedVersionIds: string[] = [];
+    const deniedReasons: string[] = [];
+
+    for (const version of this.versions.filter((candidate) => candidate.approvalStatus === "approved" && candidate.lifecycleStatus === "active" && candidate.isActive)) {
+      const source = this.requireSource(version.sourceId);
+      if (source.status !== "active" || source.indexStatus !== "indexed") continue;
+      if (required.size > 0 && !required.has(source.id)) continue;
+      const mismatch = this.scopeMismatch(source.scope, {
+        projectId: input.projectId,
+        appId,
+        department,
+        agentRole: input.agentRole,
+        scenario: input.scenario
+      });
+      if (mismatch) {
+        deniedVersionIds.push(version.id);
+        deniedReasons.push(`${source.title}: ${mismatch}`);
+        continue;
+      }
+      matched.push({
+        sourceId: source.id,
+        versionId: version.id,
+        title: source.title,
+        sourceType: source.sourceType,
+        scope: source.scope,
+        excerpts: version.excerpts
+      });
+    }
+
+    const log: KnowledgeRetrievalLog = {
+      id: `knret_${String(this.retrievalLogs.length + 1).padStart(4, "0")}`,
+      actorUserId: actor.id,
+      projectId: input.projectId,
+      appId,
+      department,
+      agentRole: input.agentRole,
+      scenario: input.scenario,
+      matchedVersionIds: matched.map((source) => source.versionId),
+      deniedVersionIds,
+      retrievalContext: {
+        query: input.query ?? "",
+        requiredKnowledgeSourceIds: [...required]
+      },
+      createdAt: new Date().toISOString()
+    };
+    this.retrievalLogs.push(log);
+    this.audit.record({
+      actorId: actor.id,
+      action: matched.length > 0 ? "knowledge.retrieved" : "knowledge.retrieval.denied",
+      resourceType: "knowledge_retrieval_log",
+      resourceId: log.id,
+      severity: matched.length > 0 ? "info" : "warning",
+      metadata: {
+        projectId: input.projectId,
+        appId,
+        matchedVersionIds: log.matchedVersionIds,
+        deniedVersionIds,
+        deniedReasons
+      }
+    });
+
+    return {
+      scenario: input.scenario,
+      agentRole: input.agentRole,
+      matchedVersionIds: log.matchedVersionIds,
+      deniedVersionIds,
+      deniedReasons,
+      sources: matched,
+      retrievalLogId: log.id
+    };
+  }
+
+  listRetrievalLogs(actor: PlatformUser): KnowledgeRetrievalLog[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [...this.retrievalLogs];
+  }
+
+  private scopeMismatch(
+    scope: GovernanceScope,
+    input: { projectId?: string; appId?: string; department?: string; agentRole: AgentRoleKey; scenario: AiScenario }
+  ): string | undefined {
+    if (scope.scenarios?.length && !scope.scenarios.includes(input.scenario)) return `scenario mismatch: ${input.scenario}`;
+    if (scope.agentRoles?.length && !scope.agentRoles.includes(input.agentRole)) return `agent role mismatch: ${input.agentRole}`;
+    if (scope.visibility === "department" || scope.department) {
+      if (scope.department && scope.department !== input.department) return `department mismatch: ${input.department ?? "unknown"}`;
+    }
+    if (scope.visibility === "project" || scope.projectIds?.length) {
+      if (scope.projectIds?.length && (!input.projectId || !scope.projectIds.includes(input.projectId))) return `project mismatch: ${input.projectId ?? "unknown"}`;
+    }
+    if (scope.visibility === "app" || scope.appIds?.length) {
+      if (scope.appIds?.length && (!input.appId || !scope.appIds.includes(input.appId))) return `app mismatch: ${input.appId ?? "unknown"}`;
+    }
+    return undefined;
+  }
+
+  private requireSource(sourceId: string): KnowledgeSource {
+    const source = this.sources.find((candidate) => candidate.id === sourceId);
+    if (!source) throw new ValidationError(`Unknown knowledge source: ${sourceId}`);
+    return source;
+  }
+
+  private requireVersion(versionId: string): KnowledgeVersion {
+    const version = this.versions.find((candidate) => candidate.id === versionId);
+    if (!version) throw new ValidationError(`Unknown knowledge version: ${versionId}`);
+    return version;
+  }
+}
+
+export class SkillGovernanceService {
+  private readonly skills: SkillDefinition[] = [];
+  private readonly versions: SkillVersion[] = [];
+  private readonly approvals: SkillApproval[] = [];
+  private readonly assignments: SkillAssignment[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService
+  ) {}
+
+  createSkill(actor: PlatformUser, input: { key: string; name: string; description?: string; ownerUserId: string }): SkillDefinition {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.key.trim()) throw new ValidationError("Skill key is required");
+    if (!input.name.trim()) throw new ValidationError("Skill name is required");
+
+    const now = new Date().toISOString();
+    const skill: SkillDefinition = {
+      id: slugId("skdef", input.key),
+      key: input.key,
+      name: input.name,
+      description: input.description ?? "",
+      ownerUserId: input.ownerUserId,
+      status: "draft",
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const existing = this.skills.findIndex((candidate) => candidate.id === skill.id);
+    if (existing >= 0) this.skills[existing] = skill;
+    else this.skills.push(skill);
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "skill.created",
+      resourceType: "skill_definition",
+      resourceId: skill.id,
+      metadata: { key: skill.key }
+    });
+
+    return skill;
+  }
+
+  listSkills(actor: PlatformUser): SkillDefinition[] {
+    this.auth.requireRole(actor, ["admin"]);
+    return [...this.skills];
+  }
+
+  submitVersion(
+    actor: PlatformUser,
+    skillId: string,
+    input: {
+      version?: string;
+      instruction: string;
+      inputSchema: Record<string, unknown>;
+      outputSchema: Record<string, unknown>;
+      requiredKnowledgeSourceIds?: string[];
+      allowedTools?: string[];
+    }
+  ): SkillVersion {
+    this.auth.requireRole(actor, ["admin"]);
+    const skill = this.requireSkill(skillId);
+    if (!input.instruction.trim()) throw new ValidationError("Skill instruction is required");
+
+    const versionNumber = this.versions.filter((candidate) => candidate.skillId === skillId).length + 1;
+    const versionName = input.version ?? `v${versionNumber}`;
+    const contentHash = createHash("sha256")
+      .update(JSON.stringify({ instruction: input.instruction, inputSchema: input.inputSchema, outputSchema: input.outputSchema }))
+      .digest("hex");
+    const version: SkillVersion = {
+      id: `${skill.id}_${versionName}`,
+      skillId,
+      version: versionName,
+      instruction: input.instruction,
+      inputSchema: { ...input.inputSchema },
+      outputSchema: { ...input.outputSchema },
+      requiredKnowledgeSourceIds: [...(input.requiredKnowledgeSourceIds ?? [])],
+      allowedTools: [...(input.allowedTools ?? [])],
+      contentHash: `sha256:${contentHash}`,
+      approvalStatus: "pending",
+      lifecycleStatus: "pending",
+      isActive: false,
+      createdByUserId: actor.id,
+      createdAt: new Date().toISOString()
+    };
+
+    this.versions.push(version);
+    skill.updatedAt = version.createdAt;
+    this.audit.record({
+      actorId: actor.id,
+      action: "skill.version.submitted",
+      resourceType: "skill_version",
+      resourceId: version.id,
+      metadata: { skillId, contentHash: version.contentHash }
+    });
+
+    return version;
+  }
+
+  approveVersion(
+    actor: PlatformUser,
+    input: { versionId: string; decision: GovernanceApprovalDecision; note?: string }
+  ): { version: SkillVersion; approval: SkillApproval; auditEventId: string } {
+    this.auth.requireRole(actor, ["admin"]);
+    const version = this.requireVersion(input.versionId);
+    const skill = this.requireSkill(version.skillId);
+    const decidedAt = new Date().toISOString();
+
+    if (input.decision === "approved") {
+      for (const candidate of this.versions.filter((item) => item.skillId === version.skillId && item.isActive)) {
+        candidate.isActive = false;
+        candidate.lifecycleStatus = "superseded";
+      }
+      version.approvalStatus = "approved";
+      version.lifecycleStatus = "active";
+      version.isActive = true;
+      version.approvedByUserId = actor.id;
+      version.approvedAt = decidedAt;
+      skill.status = "active";
+      skill.updatedAt = decidedAt;
+    } else {
+      version.approvalStatus = "rejected";
+      version.lifecycleStatus = "rejected";
+      version.isActive = false;
+    }
+
+    const approval: SkillApproval = {
+      id: `skapp_${String(this.approvals.length + 1).padStart(4, "0")}`,
+      skillId: skill.id,
+      versionId: version.id,
+      decision: input.decision,
+      note: input.note ?? "",
+      decidedByUserId: actor.id,
+      decidedAt
+    };
+    this.approvals.push(approval);
+    const auditEvent = this.audit.record({
+      actorId: actor.id,
+      action: `skill.version.${input.decision}`,
+      resourceType: "skill_version",
+      resourceId: version.id,
+      metadata: { skillId: skill.id, note: approval.note, lifecycleStatus: version.lifecycleStatus }
+    });
+
+    return { version, approval, auditEventId: auditEvent.id };
+  }
+
+  assign(
+    actor: PlatformUser,
+    input: {
+      skillVersionId: string;
+      agentRole: AgentRoleKey;
+      scenario: AiScenario;
+      scopeType: GovernanceScope["visibility"];
+      scopeId: string;
+      priority?: number;
+    }
+  ): SkillAssignment {
+    this.auth.requireRole(actor, ["admin"]);
+    const version = this.requireVersion(input.skillVersionId);
+    if (version.approvalStatus !== "approved" || version.lifecycleStatus !== "active") {
+      throw new ValidationError(`Skill version ${version.id} is not approved active`);
+    }
+
+    const assignment: SkillAssignment = {
+      id: `skassign_${String(this.assignments.length + 1).padStart(4, "0")}`,
+      skillId: version.skillId,
+      skillVersionId: version.id,
+      agentRole: input.agentRole,
+      scenario: input.scenario,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      priority: input.priority ?? 0,
+      status: "active",
+      createdAt: new Date().toISOString()
+    };
+    this.assignments.push(assignment);
+    this.audit.record({
+      actorId: actor.id,
+      action: "skill.assignment.created",
+      resourceType: "skill_assignment",
+      resourceId: assignment.id,
+      metadata: { skillId: assignment.skillId, skillVersionId: assignment.skillVersionId, scopeType: assignment.scopeType, scopeId: assignment.scopeId }
+    });
+    return assignment;
+  }
+
+  resolve(
+    actor: PlatformUser,
+    input: {
+      projectId?: string;
+      appId?: string;
+      department?: string;
+      agentRole: AgentRoleKey;
+      scenario: AiScenario;
+    }
+  ): SkillResolveResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    if (actor.role === "creator" && !input.projectId) {
+      throw new ValidationError("Creator skill resolution requires project context");
+    }
+    const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
+    const department = input.department ?? project?.targetDepartment;
+    const appId = input.appId ?? project?.appId;
+
+    const candidates = this.assignments
+      .filter((assignment) => assignment.status === "active" && assignment.agentRole === input.agentRole && assignment.scenario === input.scenario)
+      .filter((assignment) => this.assignmentMatches(assignment, { projectId: input.projectId, appId, department }))
+      .map((assignment) => {
+        const version = this.versions.find((candidate) => candidate.id === assignment.skillVersionId);
+        const skill = version ? this.skills.find((candidate) => candidate.id === version.skillId) : undefined;
+        return { assignment, version, skill };
+      })
+      .filter(({ version, skill }) => skill?.status === "active" && version?.approvalStatus === "approved" && version.lifecycleStatus === "active" && version.isActive)
+      .sort((left, right) => right.assignment.priority - left.assignment.priority);
+
+    const selected = candidates[0];
+    if (!selected?.version || !selected.skill) {
+      this.audit.record({
+        actorId: actor.id,
+        action: "skill.resolve.denied",
+        resourceType: "skill_assignment",
+        resourceId: `${input.agentRole}:${input.scenario}`,
+        severity: "warning",
+        metadata: { projectId: input.projectId, appId, department }
+      });
+      throw new ValidationError(`No approved active skill for ${input.agentRole} / ${input.scenario}`);
+    }
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "skill.resolved",
+      resourceType: "skill_assignment",
+      resourceId: selected.assignment.id,
+      metadata: { projectId: input.projectId, skillVersionId: selected.version.id }
+    });
+
+    return {
+      skillId: selected.skill.id,
+      skillVersionId: selected.version.id,
+      assignmentId: selected.assignment.id,
+      skill: selected.skill,
+      version: selected.version,
+      assignment: selected.assignment,
+      agentRole: input.agentRole,
+      scenario: input.scenario,
+      allowedTools: selected.version.allowedTools,
+      requiredKnowledgeSourceIds: selected.version.requiredKnowledgeSourceIds
+    };
+  }
+
+  disableSkill(actor: PlatformUser, skillId: string, reason = ""): SkillDefinition {
+    this.auth.requireRole(actor, ["admin"]);
+    const skill = this.requireSkill(skillId);
+    skill.status = "disabled";
+    skill.updatedAt = new Date().toISOString();
+    this.audit.record({
+      actorId: actor.id,
+      action: "skill.disabled",
+      resourceType: "skill_definition",
+      resourceId: skill.id,
+      severity: "warning",
+      metadata: { reason }
+    });
+    return skill;
+  }
+
+  private assignmentMatches(assignment: SkillAssignment, input: { projectId?: string; appId?: string; department?: string }): boolean {
+    if (assignment.scopeType === "global") return true;
+    if (assignment.scopeType === "project") return assignment.scopeId === input.projectId;
+    if (assignment.scopeType === "app") return assignment.scopeId === input.appId;
+    if (assignment.scopeType === "department") return assignment.scopeId === input.department;
+    return true;
+  }
+
+  private requireSkill(skillId: string): SkillDefinition {
+    const skill = this.skills.find((candidate) => candidate.id === skillId);
+    if (!skill) throw new ValidationError(`Unknown skill: ${skillId}`);
+    return skill;
+  }
+
+  private requireVersion(versionId: string): SkillVersion {
+    const version = this.versions.find((candidate) => candidate.id === versionId);
+    if (!version) throw new ValidationError(`Unknown skill version: ${versionId}`);
+    return version;
   }
 }
 
@@ -3811,7 +4556,9 @@ export class WorkspaceService {
     private readonly prds: PrdService,
     private readonly aiGovernance: AiGovernanceService,
     private readonly guardrails: GuardrailService,
-    private readonly frontendVersions: FrontendVersionService
+    private readonly frontendVersions: FrontendVersionService,
+    private readonly knowledge: KnowledgeGovernanceService,
+    private readonly skills: SkillGovernanceService
   ) {}
 
   getWorkspace(actor: PlatformUser, projectId: string): WorkspaceSnapshot {
@@ -3860,6 +4607,16 @@ export class WorkspaceService {
       };
     }
 
+    const skillSelection = this.resolveWorkspaceSkill(actor, project);
+    const knowledgeRetrieval = this.knowledge.retrieve(actor, {
+      projectId: project.id,
+      appId: project.appId,
+      department: project.targetDepartment,
+      agentRole: "frontend_developer",
+      scenario: "frontend_coding",
+      query: prompt,
+      requiredKnowledgeSourceIds: skillSelection.requiredKnowledgeSourceIds
+    });
     const route = this.aiGovernance.resolveRoute("frontend_coding");
     const requestEstimate = 120;
     const quota = this.aiGovernance.checkQuota("creator", requestEstimate);
@@ -3868,7 +4625,10 @@ export class WorkspaceService {
     }
 
     this.aiGovernance.recordProviderCall();
-    const task = this.createTask(project.id, actor.id, prompt, "ready", guardrail, now, "done");
+    const task = this.createTask(project.id, actor.id, prompt, "ready", guardrail, now, "done", {
+      knowledgeVersionIds: knowledgeRetrieval.matchedVersionIds,
+      skillVersionId: skillSelection.skillVersionId === "none" ? undefined : skillSelection.skillVersionId
+    });
     const preview = this.createPreview(project.id, prompt, now);
     this.frontendVersions.recordFromPreview(actor, preview, task);
     const usage: AiUsageLog = {
@@ -3892,7 +4652,26 @@ export class WorkspaceService {
       action: "workspace.prompt.accepted",
       resourceType: "workspace_task",
       resourceId: task.id,
-      metadata: { projectId: project.id, previewVersion: preview.version, tokensUsed: usage.tokensUsed }
+      metadata: {
+        projectId: project.id,
+        previewVersion: preview.version,
+        tokensUsed: usage.tokensUsed,
+        skillVersionId: task.skillVersionId,
+        knowledgeVersionIds: task.knowledgeVersionIds,
+        retrievalLogId: knowledgeRetrieval.retrievalLogId
+      }
+    });
+    this.audit.record({
+      actorId: actor.id,
+      action: "workspace.context.resolved",
+      resourceType: "workspace_task",
+      resourceId: task.id,
+      metadata: {
+        projectId: project.id,
+        skillVersionId: task.skillVersionId,
+        knowledgeVersionIds: task.knowledgeVersionIds,
+        retrievalLogId: knowledgeRetrieval.retrievalLogId
+      }
     });
 
     return {
@@ -3900,6 +4679,8 @@ export class WorkspaceService {
       task,
       preview,
       usage,
+      knowledgeRetrieval,
+      skillSelection,
       tokenBudget: this.buildTokenBudget(requestEstimate)
     };
   }
@@ -3937,7 +4718,8 @@ export class WorkspaceService {
     status: WorkspaceTaskStatus,
     guardrail: GuardrailResult,
     createdAt: string,
-    terminalStepStatus: WorkspaceStepStatus
+    terminalStepStatus: WorkspaceStepStatus,
+    context?: { knowledgeVersionIds?: string[]; skillVersionId?: string }
   ): WorkspaceTask {
     const id = `wst_${String(this.tasks.length + 1).padStart(4, "0")}`;
     const labels = [
@@ -3959,6 +4741,8 @@ export class WorkspaceService {
       status,
       guardrailDecision: guardrail.decision,
       guardrailEventId: guardrail.eventId,
+      knowledgeVersionIds: context?.knowledgeVersionIds,
+      skillVersionId: context?.skillVersionId,
       steps: labels.map((label, index) => ({
         id: `${id}_step_${index + 1}`,
         label,
@@ -4007,6 +4791,30 @@ export class WorkspaceService {
       requestEstimate: 120
     };
   }
+
+  private resolveWorkspaceSkill(actor: PlatformUser, project: PlatformProject): SkillResolveResult {
+    try {
+      return this.skills.resolve(actor, {
+        projectId: project.id,
+        appId: project.appId,
+        department: project.targetDepartment,
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding"
+      });
+    } catch (error) {
+      if (!(error instanceof ValidationError)) throw error;
+      return {
+        skillId: "none",
+        skillVersionId: "none",
+        assignmentId: "none",
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding",
+        allowedTools: [],
+        requiredKnowledgeSourceIds: [],
+        reason: error.message
+      };
+    }
+  }
 }
 
 export interface PlatformApiServices {
@@ -4016,6 +4824,8 @@ export interface PlatformApiServices {
   projects: ProjectService;
   aiGovernance: AiGovernanceService;
   guardrails: GuardrailService;
+  knowledge: KnowledgeGovernanceService;
+  skills: SkillGovernanceService;
   prds: PrdService;
   workspace: WorkspaceService;
   databaseView: DatabaseViewService;
@@ -4047,6 +4857,8 @@ export function createPlatformApiServices(): PlatformApiServices {
   const projects = new ProjectService(auth, audit);
   const aiGovernance = new AiGovernanceService(auth, audit);
   const guardrails = new GuardrailService(auth, audit);
+  const knowledge = new KnowledgeGovernanceService(auth, audit, projects);
+  const skills = new SkillGovernanceService(auth, audit, projects);
   const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
   const databaseView = new DatabaseViewService(projects);
   const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
@@ -4062,7 +4874,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const authSso = new PlatformAuthSsoService(auth, audit);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
-  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
+  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
 
   return {
     identity,
@@ -4071,6 +4883,8 @@ export function createPlatformApiServices(): PlatformApiServices {
     projects,
     aiGovernance,
     guardrails,
+    knowledge,
+    skills,
     prds,
     workspace,
     databaseView,

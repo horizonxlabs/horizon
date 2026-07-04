@@ -191,7 +191,34 @@ Accepted evidence on 2026-07-04:
 - Screenshot evidence: `docs/assets/screenshots/sprint10-runtime-hardening.png`, `docs/assets/screenshots/sprint10-runtime-hardening-mobile.png`.
 - Console evidence: `docs/assets/screenshots/sprint10-console-warnings.txt` recorded 0 errors or warnings.
 
-## 14. Regression Suite Growth
+## 14. Production Extension Sprint 11 Tests
+
+| Test ID | Test | Type | Evidence |
+| --- | --- | --- | --- |
+| S11-T001 | Knowledge source/version/approval lifecycle works | Governance/unit/API | Source, version, approval and audit response |
+| S11-T002 | Knowledge retrieval filters by actor, project, app, department, role and scenario | Security/unit/API | Retrieval response and denied reasons |
+| S11-T003 | Skill lifecycle stores version contract and approval | Governance/unit/API | Skill, version, schema/tool contract and approval |
+| S11-T004 | Skill assignment resolves approved active version by role/scenario/scope | Governance/unit/API | Skill resolve metadata |
+| S11-T005 | Disabled skills and pending versions are excluded | Security/unit/API | Validation/no-match response |
+| S11-T006 | Workspace prompt returns governed knowledge and skill metadata | Workflow/unit/E2E | Prompt result task metadata |
+| S11-T007 | Prisma migration and seed create Sprint 11 governance records | Integration/DB | Migrate/seed output and DB counts |
+| S11-T008 | Admin Knowledge and Skill Governance UI renders required sections | UI/E2E | Screenshot and console capture |
+
+Current evidence on 2026-07-04:
+
+- Focused Unit: 3 passed, 0 failed.
+- Focused Integration: 4 passed, 0 failed.
+- Focused E2E/API/UI smoke: 4 passed, 0 failed.
+- Typecheck: 10 workspace projects passed.
+- Platform API build: passed.
+- Admin Web build: passed.
+- Prisma validate/generate: passed.
+- Full `pnpm verify:sprint11`: passed lint, typecheck, build, unit 53/53, integration 38/38, E2E/API/UI 39/39.
+- Database counts: `knowledge_sources=1`, `knowledge_versions=1`, `knowledge_approvals=1`, `knowledge_index_chunks=1`, `knowledge_retrieval_logs=1`, `skill_definitions=1`, `skill_versions=1`, `skill_approvals=1`, `skill_assignments=1`.
+- Screenshot evidence: `docs/assets/screenshots/sprint11-knowledge-skill-governance.png`, `docs/assets/screenshots/sprint11-knowledge-skill-governance-mobile.png`.
+- Console evidence: `docs/assets/screenshots/sprint11-console-warnings.txt` recorded 0 errors or warnings.
+
+## 15. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
 | --- | --- |
@@ -206,8 +233,9 @@ Accepted evidence on 2026-07-04:
 | Sprint 8 | Full MVP E2E demo and traceability |
 | Sprint 9 | Sprint 8 + auth provider config, Platform Auth session validation, break-glass, policy templates |
 | Sprint 10 | Sprint 9 + runtime overview, schema isolation, health/OpenAPI and migration dry-run |
+| Sprint 11 | Sprint 10 + knowledge retrieval, skill resolution, workspace context metadata and governance UI |
 
-## 15. Exit Rule
+## 16. Exit Rule
 
 A sprint is not accepted if:
 

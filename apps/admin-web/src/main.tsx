@@ -179,6 +179,30 @@ const runtimeMetricRows = [
   { metric: "P95 Latency", value: "42ms", window: "last 15m" }
 ];
 
+const knowledgeSkillKpis = [
+  { label: "Knowledge active", value: "12", detail: "indexed and approved", icon: Database, tone: "success" },
+  { label: "Pending approvals", value: "3", detail: "knowledge + skills", icon: AlertTriangle, tone: "warning" },
+  { label: "Retrieval pass", value: "18/20", detail: "permission filtered", icon: Route, tone: "info" },
+  { label: "Active skills", value: "9", detail: "role/scenario scoped", icon: BrainCircuit, tone: "success" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const knowledgeSourceRows = [
+  { source: "HR Leave Policy Handbook", type: "Markdown", owner: "HR Owner", scope: "project:leave / dept:HR", index: "indexed", active: "v1" },
+  { source: "Leave API Spec", type: "OpenAPI", owner: "App Owner", scope: "app:leave-management", index: "indexed", active: "v2" },
+  { source: "Payroll Export Rules", type: "PDF", owner: "Finance", scope: "dept:Finance", index: "denied", active: "none" }
+];
+
+const skillLibraryRows = [
+  { skill: "Frontend Developer Leave Skill", role: "Frontend Developer", scenario: "frontend_coding", status: "active" },
+  { skill: "PRD Analyst Enterprise", role: "Requirement Analyst", scenario: "requirement_analysis", status: "active" },
+  { skill: "Payroll Exporter", role: "Any role", scenario: "frontend_coding", status: "disabled" }
+];
+
+const skillAssignmentRows = [
+  { role: "Frontend Developer", scenario: "Frontend Coding", scope: "project", selected: "Frontend Leave v1", knowledge: "HR Leave Policy v1" },
+  { role: "Requirement Analyst", scenario: "Requirement Analysis", scope: "department", selected: "PRD Analyst v5", knowledge: "HR Handbook v3" }
+];
+
 function AdminApp() {
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
@@ -513,6 +537,183 @@ function AdminApp() {
             </SectionCard>
           </section>
         </section>
+      </section>
+
+      <section className="knowledge-skill-governance-shell" aria-label="Knowledge and Skill Governance">
+        <div className="admin-monitoring-header">
+          <div>
+            <span className="eyebrow">Sprint 11</span>
+            <h2>Knowledge and Skill Governance</h2>
+            <p>Govern approved knowledge retrieval and active skill selection for Creator AI workflows with immutable version and audit evidence.</p>
+          </div>
+          <div className="ds-page-actions">
+            <button type="button" className="secondary-button">
+              <ListFilter size={16} />
+              Simulate
+            </button>
+            <button type="button">
+              <Database size={16} />
+              Add Source
+            </button>
+          </div>
+        </div>
+
+        <section className="knowledge-skill-kpi-grid">
+          {knowledgeSkillKpis.map((item) => {
+            const Icon = item.icon;
+            return (
+              <MetricCard
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                detail={item.detail}
+                icon={<Icon size={18} />}
+                tone={item.tone}
+              />
+            );
+          })}
+        </section>
+
+        <section className="knowledge-skill-layout">
+          <WorkflowRail
+            eyebrow="Governance Path"
+            title="Knowledge to workspace context"
+            steps={[
+              { label: "upload source", icon: <Database size={16} /> },
+              { label: "index version", icon: <CheckCircle2 size={16} /> },
+              { label: "approve active", icon: <ShieldCheck size={16} /> },
+              { label: "scoped retrieval", icon: <Route size={16} /> },
+              { label: "select skill", icon: <BrainCircuit size={16} /> }
+            ]}
+            alert={{
+              icon: <AlertTriangle size={18} />,
+              title: "Pending versions are excluded",
+              description: "Only approved active knowledge and skills can enter AI task metadata.",
+              tone: "warning"
+            }}
+          />
+
+          <section className="knowledge-skill-grid">
+            <SectionCard eyebrow="Knowledge Library" title="Knowledge Source Library">
+              <div className="governance-desktop-table">
+                <DataTable
+                  columns={[
+                    { key: "source", label: "Source" },
+                    { key: "type", label: "Type" },
+                    { key: "owner", label: "Owner" },
+                    { key: "scope", label: "Scope" },
+                    { key: "index", label: "Index", tone: (value) => (value === "indexed" ? "success" : "danger") },
+                    { key: "active", label: "Active" }
+                  ]}
+                  rows={knowledgeSourceRows}
+                />
+              </div>
+              <div className="governance-mobile-list">
+                {knowledgeSourceRows.map((row) => (
+                  <article key={row.source}>
+                    <strong>{row.source}</strong>
+                    <span>{row.type} / {row.owner}</span>
+                    <small>{row.scope}</small>
+                    <ToneBadge tone={row.index === "indexed" ? "success" : "danger"}>{row.index}</ToneBadge>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Version Approval" title="Knowledge Version Approval">
+              <DefinitionGrid
+                items={[
+                  { label: "Version", value: "HR Leave Policy Handbook v1" },
+                  { label: "Immutable Hash", value: "sha256:seed-leave-policy-v1" },
+                  { label: "Changelog", value: "Initial approved HR leave policy" },
+                  { label: "Previous Active", value: "superseded safely" },
+                  { label: "Approval", value: <ToneBadge tone="success">approved active</ToneBadge> },
+                  { label: "Audit", value: "knowledge.version.approved" }
+                ]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Scoped Retrieval" title="Retrieval Simulator">
+              <div className="scope-filter-bar" aria-label="Knowledge retrieval filters">
+                {["actor: creator@company.com", "project: Leave", "app: Leave Mgmt", "dept: HR", "agent: Frontend", "scenario: Frontend Coding"].map((filter) => (
+                  <button key={filter} type="button" className="secondary-button">
+                    <ListFilter size={14} />
+                    {filter}
+                  </button>
+                ))}
+              </div>
+              <DecisionPanel
+                tone="success"
+                badge="ALLOW"
+                title="Workspace Context resolves approved scoped knowledge"
+                lines={["Matched: HR Leave Policy v1", "Excluded: Payroll Export Rules because department mismatch", "Retrieval log: knret_leave_policy_001"]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Skill Library" title="Skill Versioning">
+              <div className="governance-desktop-table">
+                <DataTable
+                  columns={[
+                    { key: "skill", label: "Skill" },
+                    { key: "role", label: "Role" },
+                    { key: "scenario", label: "Scenario" },
+                    { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "neutral") }
+                  ]}
+                  rows={skillLibraryRows}
+                />
+              </div>
+              <div className="governance-mobile-list">
+                {skillLibraryRows.map((row) => (
+                  <article key={row.skill}>
+                    <strong>{row.skill}</strong>
+                    <span>{row.role}</span>
+                    <small>{row.scenario}</small>
+                    <ToneBadge tone={row.status === "active" ? "success" : "neutral"}>{row.status}</ToneBadge>
+                  </article>
+                ))}
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Skill Contract" title="Skill Assignment">
+              <DataTable
+                columns={[
+                  { key: "role", label: "Role" },
+                  { key: "scenario", label: "Scenario" },
+                  { key: "scope", label: "Scope" },
+                  { key: "selected", label: "Selected skill" },
+                  { key: "knowledge", label: "Knowledge set" }
+                ]}
+                rows={skillAssignmentRows}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Workspace Context" title="AI Task Metadata Evidence">
+              <DefinitionGrid
+                items={[
+                  { label: "Skill Version", value: "skver_frontend_developer_leave_v1" },
+                  { label: "Knowledge Versions", value: "knver_leave_policy_v1" },
+                  { label: "Allowed Tools", value: "prd_reader, ui_generator, policy_checker" },
+                  { label: "Task Evidence", value: "workspace.prompt.accepted" }
+                ]}
+              />
+              <DecisionPanel
+                tone="info"
+                badge="Metadata"
+                title="Creator prompts carry reproducible governance context"
+                lines={["Task stores selected skillVersionId", "Task stores retrieved knowledgeVersionIds", "Provider calls remain deterministic in Sprint 11 tests"]}
+              />
+            </SectionCard>
+          </section>
+        </section>
+
+        <ServiceStrip
+          services={[
+            { name: "Indexer", detail: "Approved versions indexed", status: "healthy" },
+            { name: "Approval Policy", detail: "Pending and disabled versions excluded", status: "healthy" },
+            { name: "Retrieval Logs", detail: "Actor, project, app and scenario retained", status: "healthy" },
+            { name: "Audit Export", detail: "Knowledge and skill decisions traceable", status: "healthy" }
+          ]}
+        />
       </section>
 
       <section className="ds-workbench">

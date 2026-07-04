@@ -52,6 +52,9 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `admin-monitoring-shell` สำหรับ MVP Monitoring ที่ต้องรวม Service Health, Ticket Counts, Domain Requests และ Audit Filters ในหน้าเดียว
 - ใช้ `auth-policy-shell` สำหรับ Auth/SSO production readiness ที่ต้องแสดง provider registry, role mapping, Platform Auth session evidence, break-glass และ policy templates ใน context เดียวกัน
 - ใช้ `runtime-hardening-shell` สำหรับ generated app runtime evidence ที่ต้องแสดง container contract, schema isolation, health/readiness, structured logs, metrics, OpenAPI และ migration dry-run ใน context เดียวกัน
+- ใช้ `knowledge-skill-governance-shell` สำหรับ governance dashboard ที่ต้องแสดง Knowledge Library, Version Approval, Scoped Retrieval, Skill Library, Skill Versioning, Skill Assignment และ Workspace Context ใน context เดียวกัน
+- ใช้ `scope-filter-bar` สำหรับ filter ชุด actor/project/app/department/agent/scenario ใน retrieval simulator และ workflow governance tools
+- ใช้ `governance-mobile-list` แทน dense tables บน mobile โดยต้องคง label/status text และไม่ truncate audit/version identifiers
 - ห้ามแสดง plaintext secret; ใช้ masked value หรือ fingerprint เท่านั้น
 
 ### Creator
@@ -105,4 +108,4 @@ Allowed supporting libraries for future work:
 
 Visual styling remains owned by `@evcp/ui` tokens, CSS and reusable primitives.
 
-Decision for Sprint 9 onward: use `@evcp/ui` as the internal component library, add Radix/shadcn-style headless primitives only where interaction complexity requires them, and keep enterprise visual styling in EVCP tokens rather than adopting a large opinionated dashboard framework. Sprint 10 confirms this approach for runtime dashboards: use EVCP shells, metrics, tables, definition grids and decision panels instead of importing a large visual UI framework.
+Decision for Sprint 9 onward: use `@evcp/ui` as the internal component library, add Radix/shadcn-style headless primitives only where interaction complexity requires them, and keep enterprise visual styling in EVCP tokens rather than adopting a large opinionated dashboard framework. Sprint 10 confirms this approach for runtime dashboards: use EVCP shells, metrics, tables, definition grids and decision panels instead of importing a large visual UI framework. Sprint 11 extends the same approach for knowledge/skill governance with `knowledge-skill-governance-shell`, `scope-filter-bar` and `governance-mobile-list`.
