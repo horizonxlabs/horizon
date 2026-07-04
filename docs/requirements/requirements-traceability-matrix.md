@@ -65,6 +65,13 @@ flowchart LR
 | TC-INST-006 | Upgrade health check fails | Admin runs rollback | Previous version is restored and rollback is audited | Rollback report, audit event |
 | TC-ARCH-001 | Architecture review is performed | Reviewer inspects service configuration | Business logic does not depend on Compose-only names or local paths | Architecture review note |
 
+Sprint 12 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-INST-001 to FR-INST-004 / TC-INST-001 to TC-INST-004 | `tests/unit/platform-sprint12-installer-backup-services.test.mjs`, `tests/e2e/sprint12-installer-backup-smoke.test.mjs`, `tests/integration/platform-sprint12-installer-backup-schema.test.mjs` | Focused tests passing |
+| FR-BCK-001 to FR-BCK-003 / TC-BCK-001 to TC-BCK-004 | `tests/unit/platform-sprint12-installer-backup-services.test.mjs`, `tests/e2e/sprint12-installer-backup-smoke.test.mjs`, `tests/integration/platform-sprint12-installer-backup-schema.test.mjs` | Focused tests passing |
+
 ### 4.2 Authentication, Identity, and Access Control
 
 | Requirement | User Story | Acceptance Focus | Test Cases | Priority |
@@ -81,12 +88,12 @@ flowchart LR
 
 | Test Case | Given | When | Then | Evidence |
 | --- | --- | --- | --- | --- |
-| TC-AUTH-001 | OIDC provider is configured | User logs in via OIDC | Platform creates/links user and applies mapped roles/groups | User profile, auth audit |
-| TC-AUTH-002 | SAML provider metadata is configured | User logs in via SAML | Platform creates/links user and applies mapped roles/groups | User profile, auth audit |
-| TC-AUTH-003 | SSO is unavailable | Break-glass admin logs in with reason | Login succeeds, reason is required, critical audit event is created | Audit event `auth.break_glass_used` |
-| TC-AUTH-004 | Bundled Keycloak is selected | Setup completes | Platform authenticates through Keycloak broker | Keycloak realm config, login test |
-| TC-AUTH-005 | External IdP/direct integration is selected | Admin configures external IdP | Login works without requiring bundled Keycloak as active broker | Login test, config |
-| TC-AUTH-006 | Generated app protected endpoint exists | Request lacks valid platform session/token | Backend denies access server-side | 401/403 response, audit if sensitive |
+| TC-AUTH-001 | OIDC provider is configured | User logs in via OIDC | Platform creates/links user and applies mapped roles/groups | Sprint 9 unit/E2E API: OIDC provider + simulated login |
+| TC-AUTH-002 | SAML provider metadata is configured | User logs in via SAML | Platform creates/links user and applies mapped roles/groups | Sprint 9 unit/E2E API: SAML provider + simulated login |
+| TC-AUTH-003 | SSO is unavailable | Break-glass admin logs in with reason | Login succeeds, reason is required, critical audit event is created | Sprint 9 unit/E2E API: `auth.break_glass_used` |
+| TC-AUTH-004 | Bundled Keycloak is selected | Setup completes | Platform authenticates through Keycloak broker | Sprint 9 API/UI: Keycloak realm/client/group defaults |
+| TC-AUTH-005 | External IdP/direct integration is selected | Admin configures external IdP | Login works without requiring bundled Keycloak as active broker | Sprint 9 ADR/API: direct IdP constraints preserve Platform Auth boundary |
+| TC-AUTH-006 | Generated app protected endpoint exists | Request lacks valid platform session/token | Backend denies access server-side | Sprint 9 unit/E2E API: generated app session validation |
 | TC-ACCESS-001 | Creator account is active | Creator calls Admin AI key API | Access is denied and no secret material returns | API response, audit event |
 | TC-ACCESS-002 | End User has no membership/group/org access/invite/request | User opens App Store | Restricted app is not visible | App Store response |
 | TC-ACCESS-003 | End User has pending invite | User opens App Store | App is visible with pending invite state | App Store response |
@@ -163,16 +170,16 @@ flowchart LR
 
 | Test Case | Given | When | Then | Evidence |
 | --- | --- | --- | --- | --- |
-| TC-RUN-001 | Publish is approved | Deployment runs | App is deployed as its own container/process with health/logs/deployment record | Container status, deployment record |
+| TC-RUN-001 | Publish is approved | Deployment runs | App is deployed as its own container/process with health/logs/deployment record | Sprint 10 unit/E2E API: runtime overview container status and deployment ID |
 | TC-RUN-002 | Platform domain is configured | User opens `/admin`, `/creator`, `/store`, `/apps/{slug}` | Caddy routes traffic with TLS to correct service/app | Route test, TLS check |
 | TC-RUN-003 | App Owner requests internal/custom domain | IT Admin approves | Domain becomes active after DNS/TLS checks | Domain request, route status |
 | TC-RUN-004 | App requests public domain | Policy evaluates request | IT Admin and Security Admin approvals are required | Approval request |
-| TC-RUN-005 | Publish request includes Restricted data and destructive migration | Policy evaluates request | Developer Reviewer, IT Admin and Data Owner are required | Approval request |
-| TC-RUN-006 | Generated app folder exists | Artifact check runs | Required manifest, frontend, backend, prisma, openapi, tests and README exist | Repository scan |
-| TC-RUN-007 | App container starts | Health and readiness endpoints are called | `/health` and `/ready` return correct app/dependency status | HTTP response |
-| TC-RUN-008 | App handles request | Logs are emitted | Structured JSON logs include appId, deploymentId, requestId and severity | Log sample |
-| TC-RUN-009 | App backend exposes API | OpenAPI spec is requested | Spec exists and matches generated API surface | OpenAPI validation |
-| TC-RUN-010 | Migration is included in deployment | Dry-run runs | Migration is versioned, dry-runnable and linked to deployment | Migration report |
+| TC-RUN-005 | Publish request includes Restricted data and destructive migration | Policy evaluates request | Developer Reviewer, IT Admin and Data Owner are required | Sprint 10 unit/E2E API: migration dry-run blocked without required approvals |
+| TC-RUN-006 | Generated app folder exists | Artifact check runs | Required manifest, frontend, backend, prisma, openapi, tests and README exist | Sprint 10 unit/API: `artifactContract.requiredPaths` |
+| TC-RUN-007 | App container starts | Health and readiness endpoints are called | `/health` and `/ready` return correct app/dependency status | Sprint 10 E2E API: `/admin/runtime/projects/:projectId/health` |
+| TC-RUN-008 | App handles request | Logs are emitted | Structured JSON logs include appId, deploymentId, requestId and severity | Sprint 10 unit/API: `logSample` with appId/deploymentId/requestId |
+| TC-RUN-009 | App backend exposes API | OpenAPI spec is requested | Spec exists and matches generated API surface | Sprint 10 E2E API/UI: OpenAPI contract paths |
+| TC-RUN-010 | Migration is included in deployment | Dry-run runs | Migration is versioned, dry-runnable and linked to deployment | Sprint 10 unit/E2E API: migration report linked to deployment |
 
 ### 4.6 App Store, Tickets, Notifications
 
@@ -230,6 +237,30 @@ flowchart LR
 | TC-SKL-003 | Skill is assigned to scenario | AI task starts | Correct skill version is selected by agent role/scenario/scope | AI task metadata |
 | TC-SKL-004 | Skill update requires approval | Approver approves | Skill version becomes active | Approval/audit |
 | TC-SKL-005 | Skill is disabled | AI task resolves skills | Disabled skill is not selected | AI task metadata |
+
+Sprint 11 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-KNW-001 to FR-KNW-005 / TC-KNW-001 to TC-KNW-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
+| FR-SKL-001 to FR-SKL-005 / TC-SKL-001 to TC-SKL-005 | `tests/unit/platform-sprint11-knowledge-skill-services.test.mjs`, `tests/e2e/sprint11-knowledge-skill-smoke.test.mjs`, `tests/integration/platform-sprint11-knowledge-skill-schema.test.mjs` | Passed in `pnpm verify:sprint11` |
+
+Sprint 13 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-OBS-001, FR-OBS-002, OPS-007, OPS-008 / TC-OBS-001 to TC-OBS-003 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+| FR-INST-005, OPS-005, OPS-006 / TC-INST-005, TC-INST-006 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+| FR-LIC-001 to FR-LIC-003 / TC-LIC-001 to TC-LIC-005 | `tests/unit/platform-sprint13-observability-license-services.test.mjs`, `tests/e2e/sprint13-observability-license-smoke.test.mjs`, `tests/integration/platform-sprint13-observability-license-schema.test.mjs` | Passed in `pnpm verify:sprint13` |
+
+Sprint 14 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| SEC-001 to SEC-006, SEC-011, SEC-012 / TC-SEC-001 to TC-SEC-003, TC-SEC-006 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+| SEC-009 / TC-SEC-004 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+| SEC-010 / TC-SEC-005 | `tests/unit/platform-sprint14-security-release-services.test.mjs`, `tests/e2e/sprint14-security-release-smoke.test.mjs`, `tests/integration/platform-sprint14-security-release-schema.test.mjs` | Passed in `pnpm verify:sprint14` |
+
 | TC-AUD-001 | Security-sensitive event occurs | Event is emitted | Audit log stores event with actor, resource, severity, requestId and metadata | Audit log |
 | TC-AUD-002 | Audit retention policy is configured | Retention job runs | Logs are retained or archived according to policy | Retention report |
 | TC-OBS-001 | Admin opens health dashboard | Services are running/degraded | Dashboard shows PostgreSQL, Keycloak, MinIO, Redis, AI Gateway, Caddy, queues and app containers | UI screenshot |
@@ -255,9 +286,9 @@ flowchart LR
 
 | Gap | Related Requirements | Owner | Blocks Development? | Notes |
 | --- | --- | --- | --- | --- |
-| Exact license enforcement thresholds and grace duration | FR-LIC, TC-LIC | Product / Legal | Blocks license module details | Matrix defines behavior categories but not numeric policy |
+| Exact commercial pricing/contract thresholds | FR-LIC, TC-LIC | Product / Legal | Does not block Sprint 13 foundation | Sprint 13 stores thresholds from signed payload/config and seeds deterministic demo limits; commercial values remain Legal/Product-owned |
 | Minimum hardware profile | OPS-001, TC-INST-004 | Engineering / Ops | Blocks installer release | Needed before final preflight implementation |
-| Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Blocks auth architecture | Baseline supports both; ADR must choose default flow |
+| Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Unblocked in Sprint 9 | ADR-005 accepted: Keycloak default broker, direct IdP optional through Platform Auth boundary |
 | Compliance templates for data classification | FR-DATA, SEC, policy approval | Security / Product | Blocks policy defaults | Need default rules per Public/Internal/Confidential/Restricted |
 | Developer code workflow detail | FR-CRE-006, TC-CRE-006 | Product / Engineering / Security | Blocks code editor implementation | Need final decision on branch/review mechanics |
 | Email provider default | FR-NOTI-003, TC-NOTI-002 | Engineering / IT | Does not block core platform | SMTP-only may be enough for v1 |
@@ -276,4 +307,4 @@ flowchart LR
 
 ## 7. Current Artifact Status
 
-The ADR set, implementation backlog, MVP-aligned sprint roadmap and Sprint 0-8 plans have been created. Use `docs/requirements/requirements-validation-review.md` for the current completeness review and use `docs/planning/sprint-0-plan.md` as the first implementation execution plan.
+The ADR set, implementation backlog, MVP-aligned sprint roadmap and Sprint 0-13 plans have been created. Use `docs/requirements/requirements-validation-review.md` for the current completeness review and use sprint plans in `docs/planning/` as implementation execution plans.

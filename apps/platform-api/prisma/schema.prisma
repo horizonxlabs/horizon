@@ -69,6 +69,48 @@ model PlatformUser {
   projects    Project[]           @relation("ProjectOwner")
   memberships ProjectMember[]
   appMembers  AppMember[]
+  appInvitationsSent AppInvitation[] @relation("AppInvitationInvitedBy")
+  appAccessDecisions AppAccessRequest[] @relation("AppAccessRequestDecidedBy")
+  publishRequests PublishRequest[] @relation("PublishRequestRequestedBy")
+  deploymentRecords DeploymentRecord[] @relation("DeploymentRecordPublishedBy")
+  ownedRegistryEntries AppStoreRegistryEntry[] @relation("AppStoreRegistryOwner")
+  ticketsSubmitted SupportTicket[] @relation("SupportTicketSubmittedBy")
+  ticketsAssigned SupportTicket[] @relation("SupportTicketAssignedTo")
+  ticketTimelineEntries SupportTicketTimelineEntry[] @relation("SupportTicketTimelineActor")
+  prdChangeRequests PrdChangeRequest[] @relation("PrdChangeRequestedBy")
+  prdChangeDecisions PrdChangeDecision[] @relation("PrdChangeDecisionBy")
+  domainRequests DomainRequest[] @relation("DomainRequestRequestedBy")
+  domainRequestDecisions DomainRequest[] @relation("DomainRequestDecidedBy")
+  authProviderConfigs AuthProviderConfig[] @relation("AuthProviderCreatedBy")
+  platformAuthSessions PlatformAuthSession[] @relation("PlatformAuthSessionUser")
+  breakGlassSessions BreakGlassSession[] @relation("BreakGlassSessionUser")
+  policyTemplates PolicyTemplate[] @relation("PolicyTemplateCreatedBy")
+  knowledgeSources KnowledgeSource[] @relation("KnowledgeSourceOwner")
+  knowledgeVersions KnowledgeVersion[] @relation("KnowledgeVersionCreatedBy")
+  knowledgeApprovals KnowledgeApproval[] @relation("KnowledgeApprovalDecidedBy")
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[] @relation("KnowledgeRetrievalActor")
+  skillDefinitions SkillDefinition[] @relation("SkillDefinitionOwner")
+  skillVersions SkillVersion[] @relation("SkillVersionCreatedBy")
+  skillApprovals SkillApproval[] @relation("SkillApprovalDecidedBy")
+  installerReports InstallerReport[] @relation("InstallerReportCreatedBy")
+  setupConfigurations SetupConfiguration[] @relation("SetupConfigurationCreatedBy")
+  backupPolicies BackupPolicy[] @relation("BackupPolicyCreatedBy")
+  backupRuns BackupRun[] @relation("BackupRunCreatedBy")
+  pitrConfigurations PitrConfiguration[] @relation("PitrConfigurationCreatedBy")
+  restoreDrillReports RestoreDrillReport[] @relation("RestoreDrillCreatedBy")
+  serviceHealthSnapshots ServiceHealthSnapshot[] @relation("ServiceHealthSnapshotCreatedBy")
+  telemetryExportConfigs TelemetryExportConfig[] @relation("TelemetryExportConfigCreatedBy")
+  upgradeCompatibilityReports UpgradeCompatibilityReport[] @relation("UpgradeCompatibilityReportCreatedBy")
+  rollbackReports RollbackReport[] @relation("RollbackReportCreatedBy")
+  licenseRecords LicenseRecord[] @relation("LicenseRecordCreatedBy")
+  licenseValidationLogs LicenseValidationLog[] @relation("LicenseValidationLogCreatedBy")
+  licenseEnforcementEvents LicenseEnforcementEvent[] @relation("LicenseEnforcementActor")
+  securityReadinessReports SecurityReadinessReport[]
+  securityReadinessChecks SecurityReadinessCheck[]
+  uploadScanEvents UploadScanEvent[]
+  releaseChecklistReports ReleaseChecklistReport[]
+  sensitiveRedactionEvidence SensitiveRedactionEvidence[]
+  notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
   createdAt   DateTime            @default(now()) @map("created_at")
@@ -129,10 +171,35 @@ model Project {
   targetDepartment String?    @map("target_department")
   intendedUsers String[]      @default([]) @map("intended_users")
   dataSensitivity String?     @map("data_sensitivity")
+  activeFrontendCheckpointId String? @map("active_frontend_checkpoint_id")
   owner       PlatformUser    @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   members     ProjectMember[]
   apps        App[]
   prdDocument PrdDocument?
+  workspaceTasks WorkspaceTask[]
+  previewVersions PreviewVersion[]
+  aiUsageLogs AiUsageLog[]
+  appDatabaseTables AppDatabaseTable[]
+  appDatabaseRelationships AppDatabaseRelationship[]
+  appDatabaseSampleRecords AppDatabaseSampleRecord[]
+  appDatabaseMigrations AppDatabaseMigration[]
+  frontendCheckpoints FrontendCheckpoint[]
+  appInvitations AppInvitation[]
+  appAccessRequests AppAccessRequest[]
+  appManifests AppManifest[]
+  publishRequests PublishRequest[]
+  deploymentRecords DeploymentRecord[]
+  appStoreRegistryEntries AppStoreRegistryEntry[]
+  generatedAppRuntimes GeneratedAppRuntime[]
+  supportTickets SupportTicket[]
+  prdChangeRequests PrdChangeRequest[]
+  domainSetting DomainSetting?
+  domainRequests DomainRequest[]
+  deploymentTraceRecords DeploymentTraceRecord[]
+  knowledgeSources KnowledgeSource[]
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[]
+  skillAssignments SkillAssignment[]
+  notifications InAppNotification[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -160,6 +227,17 @@ model App {
   project            Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   roles              AppRole[]
   members            AppMember[]
+  invitations        AppInvitation[]
+  accessRequests     AppAccessRequest[]
+  manifest           AppManifest?
+  publishRequests    PublishRequest[]
+  deploymentRecords  DeploymentRecord[]
+  registryEntry      AppStoreRegistryEntry?
+  generatedAppRuntimes GeneratedAppRuntime[]
+  supportTickets     SupportTicket[]
+  knowledgeSources   KnowledgeSource[]
+  knowledgeRetrievalLogs KnowledgeRetrievalLog[]
+  skillAssignments   SkillAssignment[]
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
@@ -338,6 +416,7 @@ model PrdVersion {
   currentFor      PrdDocument[] @relation("PrdCurrentVersion")
   baselineFor     PrdDocument[] @relation("PrdBaselineVersion")
   sections        PrdSection[]
+  approvedChangeRequests PrdChangeRequest[] @relation("PrdChangeApprovedVersion")
   createdAt       DateTime      @default(now()) @map("created_at")
 
   @@index([documentId])
@@ -355,4 +434,1162 @@ model PrdSection {
 
   @@unique([versionId, key])
   @@map("prd_sections")
+}
+
+model WorkspaceTask {
+  id                String              @id
+  projectId         String              @map("project_id")
+  prompt            String
+  status            String
+  guardrailDecision String              @map("guardrail_decision")
+  guardrailEventId  String              @map("guardrail_event_id")
+  knowledgeVersionIds String[]          @default([]) @map("knowledge_version_ids")
+  skillVersionId    String?             @map("skill_version_id")
+  createdByUserId   String              @map("created_by_user_id")
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  steps             WorkspaceTaskStep[]
+  usageLogs         AiUsageLog[]
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("workspace_tasks")
+}
+
+model WorkspaceTaskStep {
+  id      String        @id
+  taskId  String        @map("task_id")
+  label   String
+  status  String
+  order   Int
+  task    WorkspaceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, order])
+  @@map("workspace_task_steps")
+}
+
+model PreviewVersion {
+  id          String   @id
+  projectId   String   @map("project_id")
+  version     String
+  summary     String
+  device      String
+  screenTitle String   @map("screen_title")
+  highlights  String[]
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, version])
+  @@map("preview_versions")
+}
+
+model AiUsageLog {
+  id         String        @id
+  projectId  String        @map("project_id")
+  taskId     String        @map("task_id")
+  actorUserId String       @map("actor_user_id")
+  scenario   String
+  providerId String        @map("provider_id")
+  model      String
+  prompt     String
+  tokensUsed Int           @map("tokens_used")
+  knowledgeVersionIds String[] @default([]) @map("knowledge_version_ids")
+  skillVersionId String? @map("skill_version_id")
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task       WorkspaceTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  occurredAt DateTime      @default(now()) @map("occurred_at")
+
+  @@index([projectId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("ai_usage_logs")
+}
+
+model AppDatabaseTable {
+  id          String              @id
+  projectId   String              @map("project_id")
+  key         String
+  displayName String              @map("display_name")
+  description String
+  source      String              @default("generated")
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns     AppDatabaseColumn[]
+  sampleRecords AppDatabaseSampleRecord[]
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  @@unique([projectId, key])
+  @@map("app_database_tables")
+}
+
+model AppDatabaseColumn {
+  id           String           @id
+  tableId      String           @map("table_id")
+  name         String
+  dataType     String           @map("data_type")
+  required     Boolean          @default(false)
+  defaultValue String?          @map("default_value")
+  source       String           @default("generated")
+  order        Int
+  table        AppDatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, name])
+  @@map("app_database_columns")
+}
+
+model AppDatabaseRelationship {
+  id           String   @id
+  projectId    String   @map("project_id")
+  sourceTable  String   @map("source_table")
+  sourceColumn String   @map("source_column")
+  targetTable  String   @map("target_table")
+  targetColumn String   @map("target_column")
+  cardinality  String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("app_database_relationships")
+}
+
+model AppDatabaseSampleRecord {
+  id        String           @id
+  projectId String           @map("project_id")
+  tableId   String           @map("table_id")
+  tableKey  String           @map("table_key")
+  ordinal   Int
+  data      Json
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  table     AppDatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, ordinal])
+  @@index([projectId])
+  @@map("app_database_sample_records")
+}
+
+model AppDatabaseMigration {
+  id                         String   @id
+  projectId                  String   @map("project_id")
+  migrationId                String   @map("migration_id")
+  status                     String
+  createdByUserId            String   @map("created_by_user_id")
+  linkedPrdVersion           String   @map("linked_prd_version")
+  linkedFrontendCheckpoint   String?  @map("linked_frontend_checkpoint")
+  appliedAt                  DateTime @map("applied_at")
+  project                    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, migrationId])
+  @@map("app_database_migrations")
+}
+
+model FrontendCheckpoint {
+  id                        String   @id
+  projectId                 String   @map("project_id")
+  version                   String
+  sourcePreviewVersion      String   @map("source_preview_version")
+  sourceTaskId              String?  @map("source_task_id")
+  status                    String
+  checksum                  String
+  fileManifest              Json     @map("file_manifest")
+  routeSnapshot             Json     @map("route_snapshot")
+  changeSummary             String   @map("change_summary")
+  changedAreas              String[] @default([]) @map("changed_areas")
+  createdByUserId           String   @map("created_by_user_id")
+  restoreSourceCheckpointId String?  @map("restore_source_checkpoint_id")
+  project                   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, version])
+  @@index([projectId, status])
+  @@map("frontend_checkpoints")
+}
+
+model AppInvitation {
+  id              String   @id
+  appId           String   @map("app_id")
+  projectId       String   @map("project_id")
+  email           String
+  userType        String   @map("user_type")
+  roleKey         String   @map("role_key")
+  invitedByUserId String   @map("invited_by_user_id")
+  status          String
+  policyWarning   String?  @map("policy_warning")
+  expiresAt       DateTime? @map("expires_at")
+  note            String?
+  app             App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy       PlatformUser @relation("AppInvitationInvitedBy", fields: [invitedByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("app_invitations")
+}
+
+model AppAccessRequest {
+  id               String   @id
+  appId            String   @map("app_id")
+  projectId        String   @map("project_id")
+  requesterEmail   String   @map("requester_email")
+  requestedRoleKey String   @map("requested_role_key")
+  reason           String
+  status           String
+  decidedByUserId  String?  @map("decided_by_user_id")
+  decidedAt        DateTime? @map("decided_at")
+  app              App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decidedBy        PlatformUser? @relation("AppAccessRequestDecidedBy", fields: [decidedByUserId], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("app_access_requests")
+}
+
+model AppManifest {
+  id                   String   @id
+  appId                String   @unique @map("app_id")
+  projectId            String   @map("project_id")
+  manifestVersion      String   @map("manifest_version")
+  prdVersionId         String   @map("prd_version_id")
+  prdVersion           String   @map("prd_version")
+  frontendCheckpointId String   @map("frontend_checkpoint_id")
+  route                String
+  authMode             String   @map("auth_mode")
+  roleSnapshot         Json     @map("role_snapshot")
+  databaseSnapshot     Json     @map("database_snapshot")
+  manifest             Json
+  app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generatedAt          DateTime @default(now()) @map("generated_at")
+
+  @@index([projectId])
+  @@map("app_manifests")
+}
+
+model PublishRequest {
+  id              String   @id
+  appId           String   @map("app_id")
+  projectId       String   @map("project_id")
+  status          String
+  requestedByUserId String @map("requested_by_user_id")
+  manifestVersion String  @map("manifest_version")
+  blockingItems   Json    @default("[]") @map("blocking_items")
+  app             App     @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy     PlatformUser @relation("PublishRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  deploymentRecord DeploymentRecord?
+  createdAt       DateTime @default(now()) @map("created_at")
+  publishedAt     DateTime? @map("published_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("publish_requests")
+}
+
+model DeploymentRecord {
+  id                   String   @id
+  appId                String   @map("app_id")
+  projectId            String   @map("project_id")
+  publishRequestId     String   @unique @map("publish_request_id")
+  status               String
+  environment          String
+  route                String
+  manifestVersion      String   @map("manifest_version")
+  prdVersion           String   @map("prd_version")
+  frontendCheckpointId String   @map("frontend_checkpoint_id")
+  publishedByUserId    String   @map("published_by_user_id")
+  app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  publishRequest       PublishRequest @relation(fields: [publishRequestId], references: [id], onDelete: Cascade)
+  publishedBy          PlatformUser @relation("DeploymentRecordPublishedBy", fields: [publishedByUserId], references: [id])
+  registryEntry        AppStoreRegistryEntry?
+  generatedAppRuntime  GeneratedAppRuntime?
+  publishedAt          DateTime @default(now()) @map("published_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("deployment_records")
+}
+
+model GeneratedAppRuntime {
+  id                 String   @id
+  appId              String   @map("app_id")
+  projectId          String   @map("project_id")
+  deploymentRecordId String   @unique @map("deployment_record_id")
+  artifactRoot       String   @map("artifact_root")
+  requiredPaths      String[] @default([]) @map("required_paths")
+  containerName      String   @map("container_name")
+  imageTag           String   @map("image_tag")
+  route              String
+  healthEndpoint     String   @map("health_endpoint")
+  readyEndpoint      String   @map("ready_endpoint")
+  metricsEndpoint    String   @map("metrics_endpoint")
+  status             String
+  app                App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deploymentRecord   DeploymentRecord @relation(fields: [deploymentRecordId], references: [id], onDelete: Cascade)
+  schemaGrants       GeneratedAppSchemaGrant[]
+  healthChecks       GeneratedAppHealthCheck[]
+  runtimeLogs        GeneratedAppRuntimeLog[]
+  runtimeMetrics     GeneratedAppRuntimeMetric[]
+  openApiContract    GeneratedAppOpenApiContract?
+  migrationReports   GeneratedAppMigrationReport[]
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("generated_app_runtimes")
+}
+
+model GeneratedAppSchemaGrant {
+  id             String   @id
+  runtimeId      String   @map("runtime_id")
+  schemaName     String   @map("schema_name")
+  dbUser         String   @map("db_user")
+  allowedSchemas String[] @default([]) @map("allowed_schemas")
+  deniedSchemas  String[] @default([]) @map("denied_schemas")
+  status         String
+  runtime        GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([schemaName, dbUser])
+  @@map("generated_app_schema_grants")
+}
+
+model GeneratedAppHealthCheck {
+  id              String   @id
+  runtimeId       String   @map("runtime_id")
+  healthStatus    String   @map("health_status")
+  readinessStatus String   @map("readiness_status")
+  dependencies    Json
+  readinessGates  String[] @default([]) @map("readiness_gates")
+  runtime         GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  checkedAt       DateTime @default(now()) @map("checked_at")
+
+  @@index([runtimeId, checkedAt])
+  @@map("generated_app_health_checks")
+}
+
+model GeneratedAppRuntimeLog {
+  id           String   @id
+  runtimeId    String   @map("runtime_id")
+  appId        String   @map("app_id")
+  deploymentId String   @map("deployment_id")
+  requestId    String   @map("request_id")
+  severity     String
+  message      String
+  metadata     Json
+  runtime      GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+
+  @@index([appId, deploymentId])
+  @@index([runtimeId, occurredAt])
+  @@map("generated_app_runtime_logs")
+}
+
+model GeneratedAppRuntimeMetric {
+  id            String   @id
+  runtimeId     String   @map("runtime_id")
+  requestCount  Int      @map("request_count")
+  errorCount    Int      @map("error_count")
+  latencyP95Ms  Int      @map("latency_p95_ms")
+  window        String
+  runtime       GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  measuredAt    DateTime @default(now()) @map("measured_at")
+
+  @@index([runtimeId, measuredAt])
+  @@map("generated_app_runtime_metrics")
+}
+
+model GeneratedAppOpenApiContract {
+  id          String   @id
+  runtimeId   String   @unique @map("runtime_id")
+  version     String
+  openapiPath String   @map("openapi_path")
+  paths       String[] @default([])
+  pathCount   Int      @map("path_count")
+  runtime     GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("generated_app_openapi_contracts")
+}
+
+model GeneratedAppMigrationReport {
+  id                 String   @id
+  runtimeId          String   @map("runtime_id")
+  deploymentRecordId String   @map("deployment_record_id")
+  migrationId        String   @map("migration_id")
+  dryRunStatus       String   @map("dry_run_status")
+  destructiveChanges String[] @default([]) @map("destructive_changes")
+  requiredApprovals  String[] @default([]) @map("required_approvals")
+  approvalId         String?  @map("approval_id")
+  runtime            GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([deploymentRecordId, dryRunStatus])
+  @@map("generated_app_migration_reports")
+}
+
+model AppStoreRegistryEntry {
+  id                 String   @id
+  appId              String   @unique @map("app_id")
+  projectId          String   @map("project_id")
+  deploymentRecordId String   @unique @map("deployment_record_id")
+  slug               String   @unique
+  name               String
+  route              String
+  status             String
+  visibility         String
+  accessMode         String   @map("access_mode")
+  roleKeys           String[] @map("role_keys")
+  ownerUserId        String   @map("owner_user_id")
+  manifestVersion    String   @map("manifest_version")
+  app                App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deploymentRecord   DeploymentRecord @relation(fields: [deploymentRecordId], references: [id], onDelete: Cascade)
+  owner              PlatformUser @relation("AppStoreRegistryOwner", fields: [ownerUserId], references: [id])
+  publishedAt        DateTime @default(now()) @map("published_at")
+
+  @@index([status])
+  @@map("app_store_registry_entries")
+}
+
+model SupportTicket {
+  id                String   @id
+  ticketNumber      String   @unique @map("ticket_number")
+  appId             String   @map("app_id")
+  appSlug           String   @map("app_slug")
+  projectId         String   @map("project_id")
+  submittedByUserId String   @map("submitted_by_user_id")
+  submittedByEmail  String   @map("submitted_by_email")
+  type              String
+  priority          String
+  title             String
+  description       String
+  deviceInfo        String   @map("device_info")
+  screenshotUrl     String?  @map("screenshot_url")
+  status            String
+  assignedToUserId  String   @map("assigned_to_user_id")
+  app               App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submittedBy       PlatformUser @relation("SupportTicketSubmittedBy", fields: [submittedByUserId], references: [id])
+  assignedTo        PlatformUser @relation("SupportTicketAssignedTo", fields: [assignedToUserId], references: [id])
+  timeline          SupportTicketTimelineEntry[]
+  prdChangeRequests PrdChangeRequest[]
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@index([submittedByUserId, createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketTimelineEntry {
+  id         String   @id
+  ticketId   String   @map("ticket_id")
+  status     String
+  label      String
+  actorUserId String @map("actor_user_id")
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor      PlatformUser @relation("SupportTicketTimelineActor", fields: [actorUserId], references: [id])
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  @@index([ticketId, occurredAt])
+  @@map("support_ticket_timeline_entries")
+}
+
+model InAppNotification {
+  id        String   @id
+  userId    String   @map("user_id")
+  projectId String?  @map("project_id")
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  user      PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read])
+  @@map("in_app_notifications")
+}
+
+model PrdChangeRequest {
+  id                   String   @id
+  projectId            String   @map("project_id")
+  sourceType           String   @map("source_type")
+  sourceTicketId       String?  @map("source_ticket_id")
+  title                String
+  proposedRequirement  String   @map("proposed_requirement")
+  affectedSections     String[] @map("affected_sections")
+  acceptanceCriteria   String[] @map("acceptance_criteria")
+  riskLevel            String   @map("risk_level")
+  status               String
+  requestedByUserId    String   @map("requested_by_user_id")
+  approvedPrdVersionId String?  @map("approved_prd_version_id")
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceTicket         SupportTicket? @relation(fields: [sourceTicketId], references: [id])
+  requestedBy          PlatformUser @relation("PrdChangeRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedPrdVersion   PrdVersion? @relation("PrdChangeApprovedVersion", fields: [approvedPrdVersionId], references: [id])
+  decisions            PrdChangeDecision[]
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, status])
+  @@unique([sourceTicketId])
+  @@map("prd_change_requests")
+}
+
+model PrdChangeDecision {
+  id              String   @id
+  changeRequestId String   @map("change_request_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  changeRequest   PrdChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("PrdChangeDecisionBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([changeRequestId, decidedAt])
+  @@map("prd_change_decisions")
+}
+
+model DomainSetting {
+  id           String   @id
+  projectId    String   @unique @map("project_id")
+  internalPath String   @map("internal_path")
+  customDomain String?  @map("custom_domain")
+  publicDomain String?  @map("public_domain")
+  mode         String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  traceRecords DeploymentTraceRecord[]
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("domain_settings")
+}
+
+model DomainRequest {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  domain             String
+  reason             String
+  intendedAudience   String   @map("intended_audience")
+  dataClassification String   @map("data_classification")
+  externalUserPolicy String   @map("external_user_policy")
+  checklistAccepted  Boolean  @map("checklist_accepted")
+  status             String
+  requestedByUserId  String   @map("requested_by_user_id")
+  decidedByUserId    String?  @map("decided_by_user_id")
+  decisionNote       String?  @map("decision_note")
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy        PlatformUser @relation("DomainRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  decidedBy          PlatformUser? @relation("DomainRequestDecidedBy", fields: [decidedByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+  decidedAt          DateTime? @map("decided_at")
+
+  @@index([projectId, status])
+  @@map("domain_requests")
+}
+
+model DeploymentTraceRecord {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  ticketId           String   @map("ticket_id")
+  prdChangeRequestId String   @map("prd_change_request_id")
+  prdVersionId       String   @map("prd_version_id")
+  frontendCheckpointId String @map("frontend_checkpoint_id")
+  appManifestId      String   @map("app_manifest_id")
+  deploymentRecordId String   @map("deployment_record_id")
+  domainSettingId    String   @map("domain_setting_id")
+  auditEventIds      String[] @map("audit_event_ids")
+  project            Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domainSetting      DomainSetting @relation(fields: [domainSettingId], references: [id])
+  generatedAt        DateTime @default(now()) @map("generated_at")
+
+  @@index([projectId])
+  @@map("deployment_trace_records")
+}
+
+model AuthProviderConfig {
+  id                      String   @id
+  providerType            String   @map("provider_type")
+  name                    String
+  status                  String
+  issuerUrl               String?  @map("issuer_url")
+  entityId                String?  @map("entity_id")
+  ssoUrl                  String?  @map("sso_url")
+  clientId                String?  @map("client_id")
+  clientSecretFingerprint String?  @map("client_secret_fingerprint")
+  certificateFingerprint  String?  @map("certificate_fingerprint")
+  scopes                  String[]
+  groupRoleMapping        Json     @map("group_role_mapping")
+  createdByUserId         String   @map("created_by_user_id")
+  createdBy               PlatformUser @relation("AuthProviderCreatedBy", fields: [createdByUserId], references: [id])
+  sessions                PlatformAuthSession[]
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@index([providerType, status])
+  @@map("auth_provider_configs")
+}
+
+model PlatformAuthSession {
+  id               String   @id
+  providerConfigId String   @map("provider_config_id")
+  userId           String   @map("user_id")
+  sessionTokenHash String   @map("session_token_hash")
+  claims           Json
+  provider         AuthProviderConfig @relation(fields: [providerConfigId], references: [id])
+  user             PlatformUser @relation("PlatformAuthSessionUser", fields: [userId], references: [id])
+  issuedAt         DateTime @default(now()) @map("issued_at")
+  expiresAt        DateTime @map("expires_at")
+
+  @@index([userId, expiresAt])
+  @@map("platform_auth_sessions")
+}
+
+model BreakGlassSession {
+  id               String   @id
+  userId           String   @map("user_id")
+  reason           String
+  ticketRef        String?  @map("ticket_ref")
+  sessionTokenHash String   @map("session_token_hash")
+  ttlMinutes       Int      @map("ttl_minutes")
+  user             PlatformUser @relation("BreakGlassSessionUser", fields: [userId], references: [id])
+  issuedAt         DateTime @default(now()) @map("issued_at")
+  expiresAt        DateTime @map("expires_at")
+
+  @@index([userId, issuedAt])
+  @@map("break_glass_sessions")
+}
+
+model PolicyTemplate {
+  id                      String   @id
+  classification          String   @unique
+  label                   String
+  requiredReviewers       String[] @map("required_reviewers")
+  requiredChecks          String[] @map("required_checks")
+  publishAllowed          Boolean  @map("publish_allowed")
+  externalExposureAllowed Boolean  @map("external_exposure_allowed")
+  createdByUserId         String   @map("created_by_user_id")
+  createdBy               PlatformUser @relation("PolicyTemplateCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("policy_templates")
+}
+
+model KnowledgeSource {
+  id           String   @id
+  title        String
+  sourceType   String   @map("source_type")
+  ownerUserId  String   @map("owner_user_id")
+  scopeType    String   @map("scope_type")
+  scopeValue   Json     @map("scope_value")
+  projectId    String?  @map("project_id")
+  appId        String?  @map("app_id")
+  department   String?
+  agentRole    String?  @map("agent_role")
+  scenarios    String[]
+  uploadStatus String   @default("pending") @map("upload_status")
+  indexStatus  String   @default("pending") @map("index_status")
+  status       String   @default("draft")
+  tags         String[] @default([])
+  owner        PlatformUser @relation("KnowledgeSourceOwner", fields: [ownerUserId], references: [id])
+  project      Project? @relation(fields: [projectId], references: [id])
+  app          App? @relation(fields: [appId], references: [id])
+  versions     KnowledgeVersion[]
+  approvals    KnowledgeApproval[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerUserId, status])
+  @@index([projectId, appId])
+  @@map("knowledge_sources")
+}
+
+model KnowledgeVersion {
+  id              String   @id
+  sourceId        String   @map("source_id")
+  version         String
+  contentHash     String   @map("content_hash")
+  changelog       String
+  chunkCount      Int      @map("chunk_count")
+  excerpts        String[] @default([])
+  approvalStatus  String   @default("pending") @map("approval_status")
+  lifecycleStatus String   @default("pending") @map("lifecycle_status")
+  isActive        Boolean  @default(false) @map("is_active")
+  approvedByUserId String? @map("approved_by_user_id")
+  approvedAt      DateTime? @map("approved_at")
+  createdByUserId String   @map("created_by_user_id")
+  source          KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  createdBy       PlatformUser @relation("KnowledgeVersionCreatedBy", fields: [createdByUserId], references: [id])
+  indexChunks     KnowledgeIndexChunk[]
+  approvals       KnowledgeApproval[]
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([sourceId, version])
+  @@index([sourceId, approvalStatus, lifecycleStatus, isActive])
+  @@map("knowledge_versions")
+}
+
+model KnowledgeApproval {
+  id              String   @id
+  sourceId        String   @map("source_id")
+  versionId       String   @map("version_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  source          KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  version         KnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("KnowledgeApprovalDecidedBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([versionId, decidedAt])
+  @@map("knowledge_approvals")
+}
+
+model KnowledgeIndexChunk {
+  id           String   @id
+  versionId    String   @map("version_id")
+  chunkKey     String   @map("chunk_key")
+  heading      String
+  excerpt      String
+  tokens       Int
+  embeddingRef String?  @map("embedding_ref")
+  status       String   @default("indexed")
+  version      KnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([versionId, chunkKey])
+  @@map("knowledge_index_chunks")
+}
+
+model KnowledgeRetrievalLog {
+  id              String   @id
+  actorUserId     String   @map("actor_user_id")
+  projectId       String?  @map("project_id")
+  appId           String?  @map("app_id")
+  department      String?
+  scenario        String
+  agentRole       String   @map("agent_role")
+  matchedVersionIds String[] @default([]) @map("matched_version_ids")
+  deniedVersionIds  String[] @default([]) @map("denied_version_ids")
+  retrievalContext  Json     @map("retrieval_context")
+  actor           PlatformUser @relation("KnowledgeRetrievalActor", fields: [actorUserId], references: [id])
+  project         Project? @relation(fields: [projectId], references: [id])
+  app             App? @relation(fields: [appId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, scenario, agentRole])
+  @@index([actorUserId, createdAt])
+  @@map("knowledge_retrieval_logs")
+}
+
+model SkillDefinition {
+  id           String   @id
+  key          String   @unique
+  name         String
+  description  String
+  ownerUserId  String   @map("owner_user_id")
+  status       String   @default("draft")
+  owner        PlatformUser @relation("SkillDefinitionOwner", fields: [ownerUserId], references: [id])
+  versions     SkillVersion[]
+  approvals    SkillApproval[]
+  assignments  SkillAssignment[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerUserId, status])
+  @@map("skill_definitions")
+}
+
+model SkillVersion {
+  id                         String   @id
+  skillId                    String   @map("skill_id")
+  version                    String
+  instruction                String
+  inputSchema                Json     @map("input_schema")
+  outputSchema               Json     @map("output_schema")
+  requiredKnowledgeSourceIds String[] @default([]) @map("required_knowledge_source_ids")
+  allowedTools               String[] @default([]) @map("allowed_tools")
+  contentHash                String   @map("content_hash")
+  approvalStatus             String   @default("pending") @map("approval_status")
+  lifecycleStatus            String   @default("pending") @map("lifecycle_status")
+  isActive                   Boolean  @default(false) @map("is_active")
+  approvedByUserId           String?  @map("approved_by_user_id")
+  approvedAt                 DateTime? @map("approved_at")
+  createdByUserId            String   @map("created_by_user_id")
+  skill                      SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  createdBy                  PlatformUser @relation("SkillVersionCreatedBy", fields: [createdByUserId], references: [id])
+  approvals                  SkillApproval[]
+  assignments                SkillAssignment[]
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  @@unique([skillId, version])
+  @@index([skillId, approvalStatus, lifecycleStatus, isActive])
+  @@map("skill_versions")
+}
+
+model SkillApproval {
+  id              String   @id
+  skillId         String   @map("skill_id")
+  versionId       String   @map("version_id")
+  decision        String
+  note            String
+  decidedByUserId String   @map("decided_by_user_id")
+  skill           SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version         SkillVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  decidedBy       PlatformUser @relation("SkillApprovalDecidedBy", fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime @default(now()) @map("decided_at")
+
+  @@index([versionId, decidedAt])
+  @@map("skill_approvals")
+}
+
+model SkillAssignment {
+  id             String   @id
+  skillId        String   @map("skill_id")
+  skillVersionId String   @map("skill_version_id")
+  agentRole      String   @map("agent_role")
+  scenario       String
+  scopeType      String   @map("scope_type")
+  scopeId        String   @map("scope_id")
+  projectId      String?  @map("project_id")
+  appId          String?  @map("app_id")
+  department     String?
+  priority       Int      @default(0)
+  status         String   @default("active")
+  skill          SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  version        SkillVersion @relation(fields: [skillVersionId], references: [id], onDelete: Cascade)
+  project        Project? @relation(fields: [projectId], references: [id])
+  app            App? @relation(fields: [appId], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([agentRole, scenario, scopeType, scopeId, status])
+  @@map("skill_assignments")
+}
+
+model InstallerReport {
+  id                 String   @id
+  status             String
+  installBlocked     Boolean  @map("install_blocked")
+  reportPath         String   @map("report_path")
+  checks             Json
+  actionableFailures String[] @default([]) @map("actionable_failures")
+  composeServices    Json     @map("compose_services")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("InstallerReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("installer_reports")
+}
+
+model SetupConfiguration {
+  id                String   @id
+  status            String
+  domain            String
+  databaseUrlMasked String   @map("database_url_masked")
+  storageConfig     Json     @map("storage_config")
+  authConfig        Json     @map("auth_config")
+  aiConfig          Json     @map("ai_config")
+  guardrailConfig   Json     @map("guardrail_config")
+  backupConfig      Json     @map("backup_config")
+  firstAdminConfig  Json     @map("first_admin_config")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("SetupConfigurationCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([domain, status])
+  @@map("setup_configurations")
+}
+
+model BackupPolicy {
+  id               String   @id
+  name             String
+  schedule         String
+  retentionDays    Int      @map("retention_days")
+  storageProvider  String   @map("storage_provider")
+  storageConfig    Json     @map("storage_config")
+  encryptionMode   String   @map("encryption_mode")
+  encryptionKeyRef String   @map("encryption_key_ref")
+  enabled          Boolean  @default(true)
+  status           String   @default("active")
+  createdByUserId  String   @map("created_by_user_id")
+  createdBy        PlatformUser @relation("BackupPolicyCreatedBy", fields: [createdByUserId], references: [id])
+  runs             BackupRun[]
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([status, enabled])
+  @@map("backup_policies")
+}
+
+model BackupRun {
+  id           String   @id
+  policyId     String   @map("policy_id")
+  trigger      String
+  databaseName String   @map("database_name")
+  status       String
+  encrypted    Boolean
+  artifactUri  String   @map("artifact_uri")
+  checksum     String
+  sizeBytes    BigInt   @map("size_bytes")
+  startedAt    DateTime @map("started_at")
+  finishedAt   DateTime @map("finished_at")
+  createdByUserId String @map("created_by_user_id")
+  policy       BackupPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdBy    PlatformUser @relation("BackupRunCreatedBy", fields: [createdByUserId], references: [id])
+  pitrConfigurations PitrConfiguration[]
+  restoreDrillReports RestoreDrillReport[]
+
+  @@index([policyId, status, startedAt])
+  @@map("backup_runs")
+}
+
+model PitrConfiguration {
+  id                String   @id
+  databaseName      String   @map("database_name")
+  walRetentionHours Int      @map("wal_retention_hours")
+  baseBackupRunId   String   @map("base_backup_run_id")
+  targetTimestamp   DateTime @map("target_timestamp")
+  rpoMinutes        Int      @map("rpo_minutes")
+  rtoMinutes        Int      @map("rto_minutes")
+  status            String   @default("ready")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("PitrConfigurationCreatedBy", fields: [createdByUserId], references: [id])
+  baseBackupRun     BackupRun @relation(fields: [baseBackupRunId], references: [id])
+  restoreDrillReports RestoreDrillReport[]
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([databaseName, status])
+  @@map("pitr_configurations")
+}
+
+model RestoreDrillReport {
+  id                String   @id
+  backupRunId       String   @map("backup_run_id")
+  pitrConfigId      String   @map("pitr_config_id")
+  targetTimestamp   DateTime @map("target_timestamp")
+  validationChecks  String[] @default([]) @map("validation_checks")
+  failedChecks      String[] @default([]) @map("failed_checks")
+  status            String
+  recoveryVerified  Boolean  @map("recovery_verified")
+  reportPath        String   @map("report_path")
+  createdByUserId   String   @map("created_by_user_id")
+  createdBy         PlatformUser @relation("RestoreDrillCreatedBy", fields: [createdByUserId], references: [id])
+  backupRun         BackupRun @relation(fields: [backupRunId], references: [id])
+  pitrConfig        PitrConfiguration @relation(fields: [pitrConfigId], references: [id])
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("restore_drill_reports")
+}
+
+model ServiceHealthSnapshot {
+  id                 String   @id
+  serviceName        String   @map("service_name")
+  serviceType        String   @map("service_type")
+  status             String
+  p95LatencyMs       Int?     @map("p95_latency_ms")
+  queueDepth         Int?     @map("queue_depth")
+  errorRate          Float?   @map("error_rate")
+  auditRetentionDays Int      @map("audit_retention_days")
+  signal             Json     @default("{}")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("ServiceHealthSnapshotCreatedBy", fields: [createdByUserId], references: [id])
+  capturedAt         DateTime @default(now()) @map("captured_at")
+
+  @@index([serviceType, status, capturedAt])
+  @@map("service_health_snapshots")
+}
+
+model TelemetryExportConfig {
+  id                 String   @id
+  name               String
+  endpoint           String
+  protocol           String
+  signals            String[]
+  status             String
+  auditRetentionDays Int      @map("audit_retention_days")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("TelemetryExportConfigCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([status, protocol])
+  @@map("telemetry_export_configs")
+}
+
+model UpgradeCompatibilityReport {
+  id              String   @id
+  sourceVersion   String   @map("source_version")
+  targetVersion   String   @map("target_version")
+  status          String
+  upgradeBlocked  Boolean  @map("upgrade_blocked")
+  checks          Json
+  blockingReasons String[] @default([]) @map("blocking_reasons")
+  createdByUserId String   @map("created_by_user_id")
+  createdBy       PlatformUser @relation("UpgradeCompatibilityReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([targetVersion, status, createdAt])
+  @@map("upgrade_compatibility_reports")
+}
+
+model RollbackReport {
+  id                   String   @id
+  fromVersion          String   @map("from_version")
+  toVersion            String   @map("to_version")
+  status               String
+  reason               String
+  rollbackWindowEndsAt DateTime @map("rollback_window_ends_at")
+  reportPath           String   @map("report_path")
+  createdByUserId      String   @map("created_by_user_id")
+  createdBy            PlatformUser @relation("RollbackReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("rollback_reports")
+}
+
+model LicenseRecord {
+  id                         String   @id
+  licenseKeyFingerprint      String   @map("license_key_fingerprint")
+  signedPayloadFingerprint   String   @map("signed_payload_fingerprint")
+  issuer                     String
+  subject                    String
+  edition                    String
+  seatLimit                  Int      @map("seat_limit")
+  appLimit                   Int      @map("app_limit")
+  aiUsageMonthlyTokens       Int      @map("ai_usage_monthly_tokens")
+  expiresAt                  DateTime @map("expires_at")
+  warningStartsAt            DateTime @map("warning_starts_at")
+  graceEndsAt                DateTime @map("grace_ends_at")
+  offlineValidUntil          DateTime @map("offline_valid_until")
+  status                     String
+  restrictedActions          String[] @default([]) @map("restricted_actions")
+  createdByUserId            String   @map("created_by_user_id")
+  createdBy                  PlatformUser @relation("LicenseRecordCreatedBy", fields: [createdByUserId], references: [id])
+  validationLogs             LicenseValidationLog[]
+  enforcementEvents          LicenseEnforcementEvent[]
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  @@index([status, expiresAt])
+  @@map("license_records")
+}
+
+model LicenseValidationLog {
+  id                 String   @id
+  licenseId          String   @map("license_id")
+  source             String
+  status             String
+  offlineCacheUsed   Boolean  @map("offline_cache_used")
+  offlineValidUntil  DateTime @map("offline_valid_until")
+  checkedAt          DateTime @map("checked_at")
+  createdByUserId    String   @map("created_by_user_id")
+  license            LicenseRecord @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  createdBy          PlatformUser @relation("LicenseValidationLogCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([licenseId, checkedAt])
+  @@map("license_validation_logs")
+}
+
+model LicenseEnforcementEvent {
+  id                   String   @id
+  licenseId            String   @map("license_id")
+  actorUserId          String   @map("actor_user_id")
+  action               String
+  allowed              Boolean
+  status               String
+  reasons              String[] @default([])
+  restrictedActions    String[] @default([]) @map("restricted_actions")
+  preserveExistingData Boolean  @map("preserve_existing_data")
+  checkedAt            DateTime @map("checked_at")
+  license              LicenseRecord @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  actor                PlatformUser @relation("LicenseEnforcementActor", fields: [actorUserId], references: [id])
+
+  @@index([action, allowed, checkedAt])
+  @@map("license_enforcement_events")
+}
+
+model SecurityReadinessReport {
+  id                    String   @id
+  status                String
+  tlsEnforced           Boolean  @map("tls_enforced")
+  sessionPolicy         Json     @map("session_policy")
+  secretRedactionPassed Boolean  @map("secret_redaction_passed")
+  uploadPolicy          Json     @map("upload_policy")
+  releaseChecklist      Json     @map("release_checklist")
+  rtmRegression         Json     @map("rtm_regression")
+  createdByUserId       String   @map("created_by_user_id")
+  createdBy             PlatformUser @relation(fields: [createdByUserId], references: [id])
+  checks                SecurityReadinessCheck[]
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("security_readiness_reports")
+}
+
+model SecurityReadinessCheck {
+  id              String   @id
+  reportId        String?  @map("report_id")
+  category        String
+  name            String
+  required        String
+  observed        String
+  status          String
+  action          String
+  createdByUserId String   @map("created_by_user_id")
+  report          SecurityReadinessReport? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdBy       PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([category, status])
+  @@map("security_readiness_checks")
+}
+
+model UploadScanEvent {
+  id               String   @id
+  fileName         String   @map("file_name")
+  mimeType         String   @map("mime_type")
+  sizeBytes        BigInt   @map("size_bytes")
+  source           String
+  scanStatus       String   @map("scan_status")
+  decision         String
+  quarantineReason String?  @map("quarantine_reason")
+  reasons          String[] @default([])
+  createdByUserId  String   @map("created_by_user_id")
+  createdBy        PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([decision, scanStatus, createdAt])
+  @@map("upload_scan_events")
+}
+
+model ReleaseChecklistReport {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  exposure           String
+  releaseBlocked     Boolean  @map("release_blocked")
+  requiredChecks     Json     @map("required_checks")
+  blockingReasons    String[] @default([]) @map("blocking_reasons")
+  dataClassification String   @map("data_classification")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([exposure, releaseBlocked, createdAt])
+  @@map("release_checklist_reports")
+}
+
+model SensitiveRedactionEvidence {
+  id                    String   @id
+  classification        String
+  surface               String
+  redactionRulesApplied String[] @default([]) @map("redaction_rules_applied")
+  redactedPayload       Json     @map("redacted_payload")
+  createdByUserId       String   @map("created_by_user_id")
+  createdBy             PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([classification, surface, createdAt])
+  @@map("sensitive_redaction_evidence")
 }

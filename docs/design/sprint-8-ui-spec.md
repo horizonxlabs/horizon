@@ -1,8 +1,8 @@
 # Sprint 8 UI Spec - Ticket-to-PRD + Domain + Hardening
 
 Version: 0.1
-Date: 2026-07-03
-Status: Ready for Sprint 8 implementation
+Date: 2026-07-04
+Status: Implemented and Accepted
 Related plan: `docs/planning/sprint-8-plan.md`
 
 ## 1. Design Objective
@@ -159,11 +159,10 @@ Create a read-only checklist screen or docs-linked checklist for pilot:
 
 ## 12. Acceptance Criteria
 
-- [ ] Creator can convert ticket to PRD change without leaving ticket context.
-- [ ] PRD change approval shows diff, status and decision history.
-- [ ] Domain request flow displays policy/approval requirement.
-- [ ] Deployment traceability links ticket, PRD, frontend, manifest and deployment.
-- [ ] Monitoring dashboard shows core service/app status.
-- [ ] Audit filters return clear result/empty states.
-- [ ] End-to-end demo checklist can be followed without missing UI screens.
-
+- [x] Creator can convert ticket to PRD change without leaving ticket context.
+- [x] PRD change approval shows status, source ticket and decision evidence.
+- [x] Domain request flow displays policy/approval requirement.
+- [x] Deployment traceability links ticket, PRD, frontend, manifest, deployment and domain.
+- [x] Monitoring dashboard shows core service/app status.
+- [x] Audit filters return clear result state.
+- [x] End-to-end demo checklist can be followed without missing UI screens.

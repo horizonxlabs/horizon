@@ -1,0 +1,18 @@
+{
+  "name": "Enterprise App Store",
+  "short_name": "EVCP Store",
+  "description": "Private enterprise app store for published internal AI-built applications.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef3f8",
+  "theme_color": "#0f2f68",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
