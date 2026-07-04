@@ -1413,7 +1413,8 @@ button {
   grid-template-columns: 1fr;
 }
 
-.admin-monitoring-shell {
+.admin-monitoring-shell,
+.auth-policy-shell {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-card);
@@ -1467,6 +1468,47 @@ button {
   margin-bottom: var(--evcp-space-3);
 }
 
+.auth-kpi-grid,
+.auth-policy-grid {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.auth-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.auth-kpi-grid div {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: 5px;
+  min-height: 116px;
+  padding: 14px;
+}
+
+.auth-kpi-grid svg {
+  color: var(--evcp-color-primary);
+}
+
+.auth-kpi-grid span,
+.auth-kpi-grid small {
+  color: var(--evcp-color-muted);
+}
+
+.auth-policy-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.auth-policy-grid > .ds-section-card:last-child {
+  grid-column: 1 / -1;
+}
+
+.auth-mobile-list {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1498,6 +1540,8 @@ button {
   .ds-service-strip,
   .admin-monitoring-kpis,
   .admin-monitoring-grid,
+  .auth-kpi-grid,
+  .auth-policy-grid,
   .creator-summary-grid,
   .creator-prd-layout,
   .creator-prd-workbench,
@@ -1520,6 +1564,48 @@ button {
 
   .admin-monitoring-header {
     display: grid;
+  }
+
+  .auth-policy-shell .ds-definition-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-policy-shell .ds-definition-grid dd {
+    overflow-wrap: anywhere;
+  }
+
+  .auth-desktop-table {
+    display: none;
+  }
+
+  .auth-mobile-list {
+    display: grid;
+    gap: var(--evcp-space-2);
+  }
+
+  .auth-mobile-list article {
+    background: var(--evcp-color-surface-muted);
+    border: 1px solid var(--evcp-color-border-soft);
+    border-radius: var(--evcp-radius-card);
+    display: grid;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .auth-mobile-list strong,
+  .auth-mobile-list span,
+  .auth-mobile-list small {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .auth-mobile-list span,
+  .auth-mobile-list small {
+    color: var(--evcp-color-muted);
+  }
+
+  .auth-policy-mobile-list .tone-badge {
+    justify-self: start;
   }
 
   .creator-card-actions,

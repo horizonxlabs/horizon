@@ -22,6 +22,7 @@ Related strategy: `docs/testing/mvp-test-strategy.md`
 | Sprint 6 | App roles, members, invites, manifest, publish registry | API/UI tests, manifest contract test, deployment record |
 | Sprint 7 | App Store PWA, access request, ticket, creator inbox | PWA screenshot, API/UI tests, ticket record |
 | Sprint 8 | Ticket-to-PRD, domain request, traceability, monitoring/audit, full demo | Full E2E evidence, traceability record, demo checklist, screenshots |
+| Sprint 9 | Auth SSO, Keycloak/direct IdP strategy, break-glass, policy templates | Unit/integration/E2E API/UI evidence, auth/policy DB records, screenshot |
 
 ## 3. Sprint 0 Tests
 
@@ -141,7 +142,32 @@ Accepted evidence on 2026-07-04:
 - Database counts: `prd_change_requests=1`, `prd_change_decisions=1`, `domain_settings=1`, `domain_requests=1`, `deployment_trace_records=1`.
 - Screenshot evidence: `docs/assets/screenshots/sprint8-creator-feedback-domain.png`, `docs/assets/screenshots/sprint8-admin-monitoring-audit.png`.
 
-## 12. Regression Suite Growth
+## 12. Production Extension Sprint 9 Tests
+
+| Test ID | Test | Type | Evidence |
+| --- | --- | --- | --- |
+| S9-T001 | OIDC provider config masks client secret and records fingerprint | Security/API/unit | Provider response, audit event |
+| S9-T002 | SAML provider config fingerprints certificate and hides raw cert | Security/API/unit | Provider response, audit event |
+| S9-T003 | Keycloak defaults expose realm, clients and group mappings | Contract/API | API response |
+| S9-T004 | Direct IdP constraints require Platform Auth boundary and security review | Architecture/API | ADR-005 and API response |
+| S9-T005 | SSO login normalizes claims and platform/app roles | Unit/API | Auth session response |
+| S9-T006 | Generated app session validation denies invalid token and missing app role | Security/API | Deny response reason |
+| S9-T007 | Break-glass requires reason, TTL is 15 minutes and audit severity is critical | Security/API/unit | Error response and audit event |
+| S9-T008 | Policy templates cover Public/Internal/Confidential/Restricted | Contract/integration/API | Template records and API response |
+| S9-T009 | Admin Auth/SSO production readiness UI renders all required sections | UI/E2E | Screenshot and console capture |
+| S9-T010 | Prisma migration and seed create Sprint 9 auth/policy records | Integration/DB | Migrate/seed output and DB counts |
+
+Accepted evidence on 2026-07-04:
+
+- Unit: 46 passed, 0 failed.
+- Integration: 31 passed, 0 failed.
+- E2E/API/UI smoke: 31 passed, 0 failed.
+- Full `pnpm verify:sprint9`: passed lint, typecheck, build, unit, integration and E2E.
+- Database counts: `auth_provider_configs=3`, `platform_auth_sessions=1`, `break_glass_sessions=1`, `policy_templates=4`.
+- Screenshot evidence: `docs/assets/screenshots/sprint9-auth-policy.png`, `docs/assets/screenshots/sprint9-auth-policy-mobile.png`.
+- Console evidence: `docs/assets/screenshots/sprint9-console-warnings.txt` recorded 0 errors or warnings.
+
+## 13. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
 | --- | --- |
@@ -154,8 +180,9 @@ Accepted evidence on 2026-07-04:
 | Sprint 6 | Sprint 5 + invite, role, manifest, publish registry |
 | Sprint 7 | Sprint 6 + App Store PWA, ticket, creator inbox |
 | Sprint 8 | Full MVP E2E demo and traceability |
+| Sprint 9 | Sprint 8 + auth provider config, Platform Auth session validation, break-glass, policy templates |
 
-## 13. Exit Rule
+## 14. Exit Rule
 
 A sprint is not accepted if:
 

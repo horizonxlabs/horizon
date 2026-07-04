@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Complete for MVP Sprint 0-8 design planning
+Status: Complete for MVP Sprint 0-8 design planning and production extension Sprint 9 start
 
 ## 1. Purpose
 
@@ -21,6 +21,7 @@ Status: Complete for MVP Sprint 0-8 design planning
 | Sprint 6 | `docs/design/sprint-6-ui-spec.md` | `docs/planning/sprint-6-plan.md` | App users, roles, invite, manifest, publish |
 | Sprint 7 | `docs/design/sprint-7-ui-spec.md` | `docs/planning/sprint-7-plan.md` | End User App Store PWA, request access, ticket |
 | Sprint 8 | `docs/design/sprint-8-ui-spec.md` | `docs/planning/sprint-8-plan.md` | Ticket-to-PRD, domain flow, traceability, monitoring/audit |
+| Sprint 9 | `docs/design/sprint-9-ui-spec.md` | `docs/planning/sprint-9-plan.md` | Auth/SSO production readiness, Platform Auth boundary, break-glass, policy templates |
 
 ## 3. How to Use
 
@@ -43,6 +44,7 @@ For each sprint:
 | Area | Status |
 | --- | --- |
 | Sprint 0-8 screen-level UX/UI specs | Complete |
+| Sprint 9 production extension UI spec | Complete |
 | Shared component baseline | Complete for MVP |
 | User flows | Complete for MVP |
 | Responsive rules | Complete for MVP |

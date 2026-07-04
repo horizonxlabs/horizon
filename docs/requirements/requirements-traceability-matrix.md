@@ -81,12 +81,12 @@ flowchart LR
 
 | Test Case | Given | When | Then | Evidence |
 | --- | --- | --- | --- | --- |
-| TC-AUTH-001 | OIDC provider is configured | User logs in via OIDC | Platform creates/links user and applies mapped roles/groups | User profile, auth audit |
-| TC-AUTH-002 | SAML provider metadata is configured | User logs in via SAML | Platform creates/links user and applies mapped roles/groups | User profile, auth audit |
-| TC-AUTH-003 | SSO is unavailable | Break-glass admin logs in with reason | Login succeeds, reason is required, critical audit event is created | Audit event `auth.break_glass_used` |
-| TC-AUTH-004 | Bundled Keycloak is selected | Setup completes | Platform authenticates through Keycloak broker | Keycloak realm config, login test |
-| TC-AUTH-005 | External IdP/direct integration is selected | Admin configures external IdP | Login works without requiring bundled Keycloak as active broker | Login test, config |
-| TC-AUTH-006 | Generated app protected endpoint exists | Request lacks valid platform session/token | Backend denies access server-side | 401/403 response, audit if sensitive |
+| TC-AUTH-001 | OIDC provider is configured | User logs in via OIDC | Platform creates/links user and applies mapped roles/groups | Sprint 9 unit/E2E API: OIDC provider + simulated login |
+| TC-AUTH-002 | SAML provider metadata is configured | User logs in via SAML | Platform creates/links user and applies mapped roles/groups | Sprint 9 unit/E2E API: SAML provider + simulated login |
+| TC-AUTH-003 | SSO is unavailable | Break-glass admin logs in with reason | Login succeeds, reason is required, critical audit event is created | Sprint 9 unit/E2E API: `auth.break_glass_used` |
+| TC-AUTH-004 | Bundled Keycloak is selected | Setup completes | Platform authenticates through Keycloak broker | Sprint 9 API/UI: Keycloak realm/client/group defaults |
+| TC-AUTH-005 | External IdP/direct integration is selected | Admin configures external IdP | Login works without requiring bundled Keycloak as active broker | Sprint 9 ADR/API: direct IdP constraints preserve Platform Auth boundary |
+| TC-AUTH-006 | Generated app protected endpoint exists | Request lacks valid platform session/token | Backend denies access server-side | Sprint 9 unit/E2E API: generated app session validation |
 | TC-ACCESS-001 | Creator account is active | Creator calls Admin AI key API | Access is denied and no secret material returns | API response, audit event |
 | TC-ACCESS-002 | End User has no membership/group/org access/invite/request | User opens App Store | Restricted app is not visible | App Store response |
 | TC-ACCESS-003 | End User has pending invite | User opens App Store | App is visible with pending invite state | App Store response |
@@ -257,7 +257,7 @@ flowchart LR
 | --- | --- | --- | --- | --- |
 | Exact license enforcement thresholds and grace duration | FR-LIC, TC-LIC | Product / Legal | Blocks license module details | Matrix defines behavior categories but not numeric policy |
 | Minimum hardware profile | OPS-001, TC-INST-004 | Engineering / Ops | Blocks installer release | Needed before final preflight implementation |
-| Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Blocks auth architecture | Baseline supports both; ADR must choose default flow |
+| Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Unblocked in Sprint 9 | ADR-005 accepted: Keycloak default broker, direct IdP optional through Platform Auth boundary |
 | Compliance templates for data classification | FR-DATA, SEC, policy approval | Security / Product | Blocks policy defaults | Need default rules per Public/Internal/Confidential/Restricted |
 | Developer code workflow detail | FR-CRE-006, TC-CRE-006 | Product / Engineering / Security | Blocks code editor implementation | Need final decision on branch/review mechanics |
 | Email provider default | FR-NOTI-003, TC-NOTI-002 | Engineering / IT | Does not block core platform | SMTP-only may be enough for v1 |

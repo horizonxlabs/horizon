@@ -34,6 +34,16 @@ export interface PlatformRequest {
     | "/audit-logs"
     | "/audit-logs/filter"
     | "/admin/monitoring"
+    | "/admin/auth/providers"
+    | "/admin/auth/providers/oidc"
+    | "/admin/auth/providers/saml"
+    | "/admin/auth/keycloak-defaults"
+    | "/admin/auth/direct-idp-constraints"
+    | "/admin/auth/simulate-login"
+    | "/admin/auth/generated-app/validate-session"
+    | "/admin/auth/break-glass"
+    | "/admin/policy-templates"
+    | "/admin/policy-templates/evaluate"
     | "/ai/providers"
     | "/ai/api-keys"
     | "/ai/routes"
@@ -405,6 +415,96 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/auth/providers") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.authSso.listProviders(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/auth/providers/oidc") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const provider = services.authSso.createOidcProvider(user, {
+        name: String(request.body?.name ?? ""),
+        issuerUrl: String(request.body?.issuerUrl ?? ""),
+        clientId: String(request.body?.clientId ?? ""),
+        clientSecret: String(request.body?.clientSecret ?? ""),
+        scopes: Array.isArray(request.body?.scopes) ? request.body.scopes.map(String) : [],
+        groupRoleMapping: (request.body?.groupRoleMapping ?? {}) as never
+      });
+      return { status: HttpStatus.CREATED, body: success(provider) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/auth/providers/saml") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const provider = services.authSso.createSamlProvider(user, {
+        name: String(request.body?.name ?? ""),
+        entityId: String(request.body?.entityId ?? ""),
+        ssoUrl: String(request.body?.ssoUrl ?? ""),
+        certificate: String(request.body?.certificate ?? ""),
+        groupRoleMapping: (request.body?.groupRoleMapping ?? {}) as never
+      });
+      return { status: HttpStatus.CREATED, body: success(provider) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/auth/keycloak-defaults") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.authSso.getKeycloakDefaults(user)) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/auth/direct-idp-constraints") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.authSso.getDirectIdpConstraints(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/auth/simulate-login") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const session = services.authSso.simulateLogin(user, {
+        providerId: String(request.body?.providerId ?? ""),
+        subject: String(request.body?.subject ?? ""),
+        email: String(request.body?.email ?? ""),
+        name: String(request.body?.name ?? ""),
+        groups: Array.isArray(request.body?.groups) ? request.body.groups.map(String) : [],
+        appRoles: (request.body?.appRoles ?? {}) as never
+      });
+      return { status: HttpStatus.CREATED, body: success(session) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/auth/generated-app/validate-session") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      services.auth.requireRole(user, ["admin"]);
+      const result = services.authSso.validateGeneratedAppSession(String(request.body?.token ?? ""), {
+        appSlug: String(request.body?.appSlug ?? ""),
+        requiredRole: request.body?.requiredRole ? String(request.body.requiredRole) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/auth/break-glass") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const session = services.breakGlass.login(user, {
+        reason: String(request.body?.reason ?? ""),
+        ticketRef: request.body?.ticketRef ? String(request.body.ticketRef) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(session) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/policy-templates") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.policyTemplates.listTemplates(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/policy-templates/evaluate") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(
+          services.policyTemplates.evaluate(user, {
+            classification: String(request.body?.classification ?? "internal") as never,
+            action: String(request.body?.action ?? "")
+          })
+        )
+      };
     }
 
     const prdChangesMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes$/);
@@ -931,6 +1031,62 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
         path: `/creator/projects/${String(request.params?.projectId ?? "")}/tickets`,
         headers: request.headers
       })
+    )
+  );
+  routes.get("/admin/auth/providers", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/auth/providers", headers: request.headers }))
+  );
+  routes.post("/admin/auth/providers/oidc", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/auth/providers/oidc", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/auth/providers/saml", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/auth/providers/saml", headers: request.headers, body: request.body })
+    )
+  );
+  routes.get("/admin/auth/keycloak-defaults", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/auth/keycloak-defaults", headers: request.headers }))
+  );
+  routes.get("/admin/auth/direct-idp-constraints", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "GET", path: "/admin/auth/direct-idp-constraints", headers: request.headers })
+    )
+  );
+  routes.post("/admin/auth/simulate-login", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/auth/simulate-login", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/auth/generated-app/validate-session", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: "/admin/auth/generated-app/validate-session",
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/auth/break-glass", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/auth/break-glass", headers: request.headers, body: request.body })
+    )
+  );
+  routes.get("/admin/policy-templates", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/policy-templates", headers: request.headers }))
+  );
+  routes.post("/admin/policy-templates/evaluate", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/policy-templates/evaluate", headers: request.headers, body: request.body })
     )
   );
   routes.get("/ai/providers", (request, response) =>

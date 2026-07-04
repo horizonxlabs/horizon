@@ -129,6 +129,25 @@ const auditFilterRows = [
   }
 ];
 
+const authProviderRows = [
+  { provider: "Keycloak Default", type: "keycloak", status: "active", mapping: "evcp-admins -> admin" },
+  { provider: "Azure AD Production", type: "oidc", status: "ready", mapping: "hr-creators -> creator" },
+  { provider: "Okta Workforce", type: "saml", status: "ready", mapping: "IT Admins -> admin" }
+];
+
+const authMappingRows = [
+  { source: "evcp-admins", platform: "admin", project: "Project Owner", app: "HR Admin" },
+  { source: "hr-creators", platform: "creator", project: "Editor", app: "Manager" },
+  { source: "evcp-users", platform: "end_user", project: "Viewer", app: "Employee" }
+];
+
+const policyRows = [
+  { classification: "Public", reviewers: "none", checks: "auth session", exposure: "allowed" },
+  { classification: "Internal", reviewers: "Project Owner", checks: "auth + app role", exposure: "approved users" },
+  { classification: "Confidential", reviewers: "Security Admin", checks: "audit high severity", exposure: "blocked" },
+  { classification: "Restricted", reviewers: "Security + Platform Admin", checks: "break-glass disabled", exposure: "blocked" }
+];
+
 function AdminApp() {
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
@@ -164,6 +183,143 @@ function AdminApp() {
             />
           );
         })}
+      </section>
+
+      <section className="auth-policy-shell" aria-label="Auth SSO and Policy Hardening">
+        <div className="admin-monitoring-header">
+          <div>
+            <span className="eyebrow">Auth / SSO Production Readiness</span>
+            <h2>Platform Auth boundary and policy hardening</h2>
+            <p>Configure OIDC, SAML and bundled Keycloak while keeping generated apps behind Platform Auth sessions and app-role claims.</p>
+          </div>
+          <ToneBadge tone="warning">production extension</ToneBadge>
+        </div>
+
+        <section className="auth-kpi-grid">
+          {[
+            ["OIDC", "ready", "Azure AD config masked"],
+            ["SAML", "ready", "Okta certificate fingerprint"],
+            ["Keycloak Default", "active", "broker realm evcp"],
+            ["Direct IdP Constraints", "review", "Platform Auth boundary only"]
+          ].map(([label, value, detail]) => (
+            <div key={label}>
+              <ShieldCheck size={18} />
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <small>{detail}</small>
+            </div>
+          ))}
+        </section>
+
+        <section className="auth-policy-grid">
+          <SectionCard eyebrow="SSO Providers" title="Provider registry">
+            <div className="auth-desktop-table">
+              <DataTable
+                columns={[
+                  { key: "provider", label: "Provider" },
+                  { key: "type", label: "Type" },
+                  { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "info") },
+                  { key: "mapping", label: "Mapping" }
+                ]}
+                rows={authProviderRows}
+              />
+            </div>
+            <div className="auth-mobile-list">
+              {authProviderRows.map((row) => (
+                <article key={row.provider}>
+                  <strong>{row.provider}</strong>
+                  <span>{row.type}</span>
+                  <ToneBadge tone={row.status === "active" ? "success" : "info"}>{row.status}</ToneBadge>
+                  <small>{row.mapping}</small>
+                </article>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard eyebrow="Auth Session Evidence" title="Normalized Platform Auth claims">
+            <DefinitionGrid
+              items={[
+                { label: "Session", value: "psess_sprint9_oidc_001" },
+                { label: "Provider", value: "Azure AD Production" },
+                { label: "Platform Role", value: <ToneBadge tone="info">creator</ToneBadge> },
+                { label: "App Role", value: "Leave Management / Employee" },
+                { label: "Token", value: <><Fingerprint size={14} /> session hash only</> },
+                { label: "Generated App", value: "validates Platform Auth session" }
+              ]}
+            />
+            <DecisionPanel
+              tone="success"
+              badge="Boundary"
+              title="Generated apps never talk directly to enterprise IdP"
+              lines={["Platform Auth owns session, claims and app-role context", "Invalid or missing session is denied server-side"]}
+            />
+          </SectionCard>
+
+          <SectionCard eyebrow="Role / Group Mapping" title="Groups to platform, project and app roles">
+            <div className="auth-desktop-table">
+              <DataTable
+                columns={[
+                  { key: "source", label: "Source Group" },
+                  { key: "platform", label: "Platform" },
+                  { key: "project", label: "Project" },
+                  { key: "app", label: "App" }
+                ]}
+                rows={authMappingRows}
+              />
+            </div>
+            <div className="auth-mobile-list">
+              {authMappingRows.map((row) => (
+                <article key={row.source}>
+                  <strong>{row.source}</strong>
+                  <span>Platform: {row.platform}</span>
+                  <span>Project: {row.project}</span>
+                  <small>App: {row.app}</small>
+                </article>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard eyebrow="Break-glass Admin" title="Local fallback with critical audit">
+            <DefinitionGrid
+              items={[
+                { label: "Reason", value: "required" },
+                { label: "TTL", value: "15 minutes" },
+                { label: "Audit", value: <ToneBadge tone="danger">auth.break_glass_used</ToneBadge> },
+                { label: "Scope", value: "Platform Admin only" }
+              ]}
+            />
+            <DecisionPanel
+              tone="danger"
+              badge="Critical"
+              title="Fallback session is short-lived and reviewable"
+              lines={["No SSO dependency during outage", "Reason and ticket reference are retained for audit"]}
+            />
+          </SectionCard>
+
+          <SectionCard eyebrow="Policy Templates" title="Classification controls">
+            <div className="auth-desktop-table">
+              <DataTable
+                columns={[
+                  { key: "classification", label: "Classification" },
+                  { key: "reviewers", label: "Reviewers" },
+                  { key: "checks", label: "Required Checks" },
+                  { key: "exposure", label: "External Exposure", tone: (value) => (value === "blocked" ? "danger" : "info") }
+                ]}
+                rows={policyRows}
+              />
+            </div>
+            <div className="auth-mobile-list auth-policy-mobile-list">
+              {policyRows.map((row) => (
+                <article key={row.classification}>
+                  <strong>{row.classification}</strong>
+                  <span>Reviewers: {row.reviewers}</span>
+                  <span>Checks: {row.checks}</span>
+                  <ToneBadge tone={row.exposure === "blocked" ? "danger" : "info"}>{row.exposure}</ToneBadge>
+                </article>
+              ))}
+            </div>
+          </SectionCard>
+        </section>
       </section>
 
       <section className="ds-workbench">

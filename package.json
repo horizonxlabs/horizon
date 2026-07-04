@@ -25,7 +25,8 @@
     "verify:sprint5": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint6": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint7": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
-    "verify:sprint8": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
+    "verify:sprint8": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint9": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
