@@ -12,6 +12,7 @@ type HeaderBag = Record<string, string | string[] | undefined>;
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
+  params?: Record<string, string>;
 };
 
 type HttpResponse = {
@@ -37,7 +38,11 @@ export interface PlatformRequest {
     | "/ai/quotas"
     | "/guardrails/rules"
     | "/guardrails/test"
-    | "/guardrails/events";
+    | "/guardrails/events"
+    | `/projects/${string}/prd`
+    | `/projects/${string}/prd/generate`
+    | `/projects/${string}/prd/baseline`
+    | `/projects/${string}/prd/versions`;
   headers?: HeaderBag;
   body?: Record<string, unknown>;
 }
@@ -54,6 +59,18 @@ function errorResponse(error: unknown): PlatformResponse {
 
   if (error instanceof Error && error.name === "PermissionError") {
     return { status: HttpStatus.FORBIDDEN, body: failure("FORBIDDEN", error.message) };
+  }
+
+  if (error instanceof Error && error.name === "ValidationError") {
+    return { status: HttpStatus.UNPROCESSABLE_ENTITY, body: failure("VALIDATION_ERROR", error.message) };
+  }
+
+  if (error instanceof Error && error.name === "ConflictError") {
+    return { status: HttpStatus.CONFLICT, body: failure("CONFLICT", error.message) };
+  }
+
+  if (error instanceof Error && error.name === "QuotaExceededError") {
+    return { status: HttpStatus.TOO_MANY_REQUESTS, body: failure("QUOTA_EXCEEDED", error.message) };
   }
 
   return { status: HttpStatus.INTERNAL_SERVER_ERROR, body: failure("INTERNAL_ERROR", "Unexpected platform API error") };
@@ -101,7 +118,7 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     if (request.method === "GET" && request.path === "/projects") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       services.auth.requireRole(user, ["admin", "creator"]);
-      return { status: HttpStatus.OK, body: success(services.projects.listProjects()) };
+      return { status: HttpStatus.OK, body: success(services.projects.listProjects(user)) };
     }
 
     if (request.method === "POST" && request.path === "/projects") {
@@ -109,10 +126,41 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       const project = services.projects.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
-        slug: String(request.body?.slug ?? "untitled-project")
+        slug: String(request.body?.slug ?? "untitled-project"),
+        appType: request.body?.appType ? String(request.body.appType) : undefined,
+        businessProblem: request.body?.businessProblem ? String(request.body.businessProblem) : undefined,
+        targetDepartment: request.body?.targetDepartment ? String(request.body.targetDepartment) : undefined,
+        intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
+        dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
       });
 
       return { status: HttpStatus.CREATED, body: success(project) };
+    }
+
+    const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
+    if (request.method === "POST" && prdGenerateMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const draft = services.prds.generateDraft(user, prdGenerateMatch[1]);
+      return { status: HttpStatus.CREATED, body: success(draft) };
+    }
+
+    const prdBaselineMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/baseline$/);
+    if (request.method === "POST" && prdBaselineMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const baseline = services.prds.confirmBaseline(user, prdBaselineMatch[1], String(request.body?.versionId ?? ""));
+      return { status: HttpStatus.OK, body: success(baseline) };
+    }
+
+    const prdVersionsMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/versions$/);
+    if (request.method === "GET" && prdVersionsMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.prds.listVersions(user, prdVersionsMatch[1])) };
+    }
+
+    const prdCurrentMatch = request.path.match(/^\/projects\/([^/]+)\/prd$/);
+    if (request.method === "GET" && prdCurrentMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.prds.getCurrent(user, prdCurrentMatch[1])) };
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
@@ -236,6 +284,48 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
   routes.get("/audit-logs", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/audit-logs", headers: request.headers }))
+  );
+  routes.post("/projects/:projectId/prd/generate", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/prd/generate`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/prd/baseline", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/prd/baseline`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/projects/:projectId/prd/versions", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/prd/versions`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.get("/projects/:projectId/prd", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/prd`,
+        headers: request.headers
+      })
+    )
   );
   routes.get("/ai/providers", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/ai/providers", headers: request.headers }))

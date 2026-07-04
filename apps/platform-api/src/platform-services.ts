@@ -15,6 +15,11 @@ export interface PlatformProject {
   name: string;
   status: Status;
   ownerUserId: string;
+  appType: string;
+  businessProblem: string;
+  targetDepartment: string;
+  intendedUsers: string[];
+  dataSensitivity: "public" | "internal" | "confidential" | "restricted";
   appId?: string;
   createdAt: string;
 }
@@ -34,6 +39,47 @@ export interface CreateProjectInput {
   actor: PlatformUser;
   name: string;
   slug: string;
+  appType?: string;
+  businessProblem?: string;
+  targetDepartment?: string;
+  intendedUsers?: string[];
+  dataSensitivity?: PlatformProject["dataSensitivity"];
+}
+
+export interface PrdSection {
+  id: string;
+  key: string;
+  title: string;
+  body: string;
+  order: number;
+}
+
+export interface PrdVersion {
+  id: string;
+  projectId: string;
+  version: string;
+  status: "draft" | "baseline";
+  isBaseline: boolean;
+  sourcePrompt: string;
+  changeSummary: string;
+  generatedBy: {
+    scenario: AiScenario;
+    providerId: string;
+    model: string;
+  };
+  sections: PrdSection[];
+  createdByUserId: string;
+  createdAt: string;
+}
+
+export interface PrdDocument {
+  id: string;
+  projectId: string;
+  status: "draft" | "baseline_confirmed";
+  currentVersionId: string;
+  baselineVersionId?: string;
+  versions: PrdVersion[];
+  updatedAt: string;
 }
 
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
@@ -157,6 +203,33 @@ export class PermissionError extends Error {
   }
 }
 
+export class ValidationError extends Error {
+  readonly statusCode = 422;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+export class ConflictError extends Error {
+  readonly statusCode = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ConflictError";
+  }
+}
+
+export class QuotaExceededError extends Error {
+  readonly statusCode = 429;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "QuotaExceededError";
+  }
+}
+
 type HeaderBag = Record<string, string | string[] | undefined>;
 
 function toPlatformUser(user: MockUser): PlatformUser {
@@ -237,6 +310,11 @@ export class ProjectService {
     name: project.name,
     status: project.status,
     ownerUserId: mockUsers.creator.id,
+    appType: project.appType,
+    businessProblem: "Employees need a self-service leave request and manager approval workflow.",
+    targetDepartment: "HR Department",
+    intendedUsers: ["Employee", "Manager", "HR Admin"],
+    dataSensitivity: "internal",
     appId: appStoreItems.find((item) => item.slug === project.slug)?.id,
     createdAt: new Date("2026-07-03T00:00:00.000Z").toISOString()
   }));
@@ -246,12 +324,15 @@ export class ProjectService {
     private readonly audit: AuditService
   ) {}
 
-  listProjects(): PlatformProject[] {
-    return [...this.projects];
+  listProjects(actor?: PlatformUser): PlatformProject[] {
+    if (!actor || actor.role === "admin") return [...this.projects];
+    return this.projects.filter((project) => project.ownerUserId === actor.id);
   }
 
   createProject(input: CreateProjectInput): PlatformProject {
     this.auth.requireRole(input.actor, ["admin", "creator"]);
+    if (!input.name.trim()) throw new ValidationError("Project name is required");
+    if (!input.slug.trim()) throw new ValidationError("Project slug is required");
 
     const project: PlatformProject = {
       id: `prj_${input.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
@@ -259,6 +340,11 @@ export class ProjectService {
       name: input.name,
       status: "draft",
       ownerUserId: input.actor.id,
+      appType: input.appType ?? "Workflow App",
+      businessProblem: input.businessProblem ?? "Capture the business problem before PRD generation.",
+      targetDepartment: input.targetDepartment ?? "Business Team",
+      intendedUsers: input.intendedUsers ?? ["Business User"],
+      dataSensitivity: input.dataSensitivity ?? "internal",
       appId: `app_${input.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
       createdAt: new Date().toISOString()
     };
@@ -275,6 +361,16 @@ export class ProjectService {
       metadata: { slug: project.slug }
     });
 
+    return project;
+  }
+
+  getProjectForActor(actor: PlatformUser, projectId: string): PlatformProject {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.find((candidate) => candidate.id === projectId);
+    if (!project) throw new ValidationError(`Unknown project: ${projectId}`);
+    if (actor.role !== "admin" && project.ownerUserId !== actor.id) {
+      throw new PermissionError(`User ${actor.email} cannot access project ${projectId}`);
+    }
     return project;
   }
 }
@@ -467,6 +563,10 @@ export class AiGovernanceService {
     return this.providerCalls;
   }
 
+  recordProviderCall(): void {
+    this.providerCalls += 1;
+  }
+
   private requireAdmin(actor: PlatformUser, deniedAction: string, resourceType: string, resourceId: string): void {
     try {
       this.auth.requireRole(actor, ["admin"]);
@@ -540,6 +640,11 @@ export class GuardrailService {
 
   testPrompt(actor: PlatformUser, input: { prompt: string; scenario: string }): GuardrailResult {
     this.auth.requireRole(actor, ["admin"]);
+    return this.evaluatePrompt(actor, input);
+  }
+
+  evaluatePrompt(actor: PlatformUser, input: { prompt: string; scenario: string }): GuardrailResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
     const matchedRule = this.findMatchingRule(input.prompt);
     const classifierDecision = this.classifyPolicy(input.prompt);
     const decision = matchedRule?.action ?? classifierDecision.decision;
@@ -601,6 +706,182 @@ export class GuardrailService {
   }
 }
 
+export class PrdService {
+  private readonly documents: PrdDocument[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly aiGovernance: AiGovernanceService,
+    private readonly guardrails: GuardrailService
+  ) {}
+
+  generateDraft(actor: PlatformUser, projectId: string): PrdVersion {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const route = this.aiGovernance.resolveRoute("prd_generation");
+    const sourcePrompt = this.buildPrompt(project);
+    const guardrail = this.guardrails.evaluatePrompt(actor, {
+      prompt: sourcePrompt,
+      scenario: "prd_generation"
+    });
+
+    if (guardrail.decision === "block") {
+      throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
+    }
+
+    const quota = this.aiGovernance.checkQuota("creator", 300);
+    if (!quota.allowed) {
+      throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
+    }
+
+    this.aiGovernance.recordProviderCall();
+
+    const now = new Date().toISOString();
+    const document = this.ensureDocument(project.id, now);
+    const draft: PrdVersion = {
+      id: `prdver_${project.id}_${String(document.versions.filter((version) => version.status === "draft").length + 1).padStart(2, "0")}`,
+      projectId: project.id,
+      version: "0.1",
+      status: "draft",
+      isBaseline: false,
+      sourcePrompt,
+      changeSummary: `Generated initial PRD draft for ${project.name}`,
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: route.primary.providerId,
+        model: route.primary.model
+      },
+      sections: this.buildSections(project),
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+
+    document.status = "draft";
+    document.currentVersionId = draft.id;
+    document.versions.push(draft);
+    document.updatedAt = now;
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "prd.draft.generated",
+      resourceType: "prd_version",
+      resourceId: draft.id,
+      metadata: { projectId: project.id, route: route.primary, guardrailDecision: guardrail.decision }
+    });
+
+    return draft;
+  }
+
+  getCurrent(actor: PlatformUser, projectId: string): PrdVersion {
+    const document = this.getDocumentForActor(actor, projectId);
+    const version = document.versions.find((candidate) => candidate.id === document.currentVersionId);
+    if (!version) throw new ValidationError(`No current PRD version for project ${projectId}`);
+    return version;
+  }
+
+  listVersions(actor: PlatformUser, projectId: string): PrdVersion[] {
+    const document = this.getDocumentForActor(actor, projectId);
+    return [...document.versions];
+  }
+
+  confirmBaseline(actor: PlatformUser, projectId: string, versionId: string): PrdVersion {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const document = this.getDocumentForActor(actor, project.id);
+    if (document.baselineVersionId) {
+      throw new ConflictError(`PRD baseline already confirmed for project ${projectId}`);
+    }
+
+    const draft = document.versions.find((candidate) => candidate.id === versionId);
+    if (!draft) throw new ValidationError(`Unknown PRD version: ${versionId}`);
+
+    const now = new Date().toISOString();
+    const baseline: PrdVersion = {
+      ...draft,
+      id: `prdver_${project.id}_baseline_v1_0`,
+      version: "1.0",
+      status: "baseline",
+      isBaseline: true,
+      changeSummary: `Baseline v1.0 confirmed for ${project.name}`,
+      createdAt: now,
+      sections: draft.sections.map((section) => ({ ...section, id: section.id.replace(versionId, `prdver_${project.id}_baseline_v1_0`) }))
+    };
+
+    document.status = "baseline_confirmed";
+    document.currentVersionId = baseline.id;
+    document.baselineVersionId = baseline.id;
+    document.versions.push(baseline);
+    document.updatedAt = now;
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "prd.baseline.confirmed",
+      resourceType: "prd_version",
+      resourceId: baseline.id,
+      metadata: { projectId: project.id, sourceVersionId: draft.id }
+    });
+
+    return baseline;
+  }
+
+  private ensureDocument(projectId: string, now: string): PrdDocument {
+    const existing = this.documents.find((document) => document.projectId === projectId);
+    if (existing) return existing;
+
+    const document: PrdDocument = {
+      id: `prddoc_${projectId}`,
+      projectId,
+      status: "draft",
+      currentVersionId: "",
+      versions: [],
+      updatedAt: now
+    };
+    this.documents.push(document);
+    return document;
+  }
+
+  private getDocumentForActor(actor: PlatformUser, projectId: string): PrdDocument {
+    this.projects.getProjectForActor(actor, projectId);
+    const document = this.documents.find((candidate) => candidate.projectId === projectId);
+    if (!document) throw new ValidationError(`No PRD document for project ${projectId}`);
+    return document;
+  }
+
+  private buildPrompt(project: PlatformProject): string {
+    return [
+      `Create a PRD for ${project.name}.`,
+      `Problem: ${project.businessProblem}`,
+      `App type: ${project.appType}`,
+      `Department: ${project.targetDepartment}`,
+      `Users: ${project.intendedUsers.join(", ")}`,
+      `Data sensitivity: ${project.dataSensitivity}`
+    ].join("\n");
+  }
+
+  private buildSections(project: PlatformProject): PrdSection[] {
+    const sections = [
+      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.`],
+      ["business_objective", "Business Objective", project.businessProblem],
+      ["users_roles", "Users and Roles", `Primary users: ${project.intendedUsers.join(", ")}.`],
+      ["core_flows", "Core Flows", "Create request, manager review, HR visibility, status tracking and audit trail."],
+      ["data_model", "Data Model", "Employee, leave request, approval step, attachment, notification and audit event."],
+      ["permissions", "Permissions", "Employees manage own requests. Managers approve team requests. HR admins administer policy."],
+      ["nfr", "Non-Functional Requirements", `Data sensitivity is ${project.dataSensitivity}; all access must be authenticated and audited.`],
+      ["acceptance_criteria", "Acceptance Criteria", "Creator can generate, review and confirm PRD baseline before app generation."]
+    ];
+
+    return sections.map(([key, title, body], index) => ({
+      id: `prdsec_${project.id}_${key}`,
+      key,
+      title,
+      body,
+      order: index + 1
+    }));
+  }
+}
+
 export interface PlatformApiServices {
   identity: IdentityService;
   auth: MockAuthService;
@@ -608,6 +889,7 @@ export interface PlatformApiServices {
   projects: ProjectService;
   aiGovernance: AiGovernanceService;
   guardrails: GuardrailService;
+  prds: PrdService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -623,6 +905,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const projects = new ProjectService(auth, audit);
   const aiGovernance = new AiGovernanceService(auth, audit);
   const guardrails = new GuardrailService(auth, audit);
+  const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
 
   return {
     identity,
@@ -631,6 +914,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     projects,
     aiGovernance,
     guardrails,
+    prds,
     envelope: { success, failure }
   };
 }

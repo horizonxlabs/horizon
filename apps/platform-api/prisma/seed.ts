@@ -51,13 +51,27 @@ async function main() {
 
   await prisma.project.upsert({
     where: { slug: "leave-management" },
-    update: { name: "Leave Management", status: "draft", ownerUserId: "usr_creator" },
+    update: {
+      name: "Leave Management",
+      status: "draft",
+      ownerUserId: "usr_creator",
+      appType: "Workflow App",
+      businessProblem: "Employees need a self-service leave request and manager approval workflow.",
+      targetDepartment: "HR Department",
+      intendedUsers: ["Employee", "Manager", "HR Admin"],
+      dataSensitivity: "internal"
+    },
     create: {
       id: "prj_leave_management",
       slug: "leave-management",
       name: "Leave Management",
       status: "draft",
-      ownerUserId: "usr_creator"
+      ownerUserId: "usr_creator",
+      appType: "Workflow App",
+      businessProblem: "Employees need a self-service leave request and manager approval workflow.",
+      targetDepartment: "HR Department",
+      intendedUsers: ["Employee", "Manager", "HR Admin"],
+      dataSensitivity: "internal"
     }
   });
 
@@ -255,6 +269,104 @@ async function main() {
       severity: "high"
     }
   });
+
+  await prisma.prdDocument.upsert({
+    where: { projectId: "prj_leave_management" },
+    update: {
+      status: "baseline_confirmed"
+    },
+    create: {
+      id: "prddoc_prj_leave_management",
+      projectId: "prj_leave_management",
+      status: "baseline_confirmed"
+    }
+  });
+
+  await prisma.prdVersion.upsert({
+    where: { id: "prdver_prj_leave_management_draft_01" },
+    update: {
+      version: "0.1",
+      status: "draft",
+      isBaseline: false,
+      sourcePrompt: "Create a PRD for Leave Management.",
+      changeSummary: "Generated initial PRD draft for Leave Management",
+      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      createdByUserId: "usr_creator"
+    },
+    create: {
+      id: "prdver_prj_leave_management_draft_01",
+      documentId: "prddoc_prj_leave_management",
+      version: "0.1",
+      status: "draft",
+      isBaseline: false,
+      sourcePrompt: "Create a PRD for Leave Management.",
+      changeSummary: "Generated initial PRD draft for Leave Management",
+      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      createdByUserId: "usr_creator"
+    }
+  });
+
+  await prisma.prdVersion.upsert({
+    where: { id: "prdver_prj_leave_management_baseline_v1_0" },
+    update: {
+      version: "1.0",
+      status: "baseline",
+      isBaseline: true,
+      sourcePrompt: "Create a PRD for Leave Management.",
+      changeSummary: "Baseline v1.0 confirmed for Leave Management",
+      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      createdByUserId: "usr_creator"
+    },
+    create: {
+      id: "prdver_prj_leave_management_baseline_v1_0",
+      documentId: "prddoc_prj_leave_management",
+      version: "1.0",
+      status: "baseline",
+      isBaseline: true,
+      sourcePrompt: "Create a PRD for Leave Management.",
+      changeSummary: "Baseline v1.0 confirmed for Leave Management",
+      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      createdByUserId: "usr_creator"
+    }
+  });
+
+  await prisma.prdDocument.update({
+    where: { projectId: "prj_leave_management" },
+    data: {
+      currentVersionId: "prdver_prj_leave_management_baseline_v1_0",
+      baselineVersionId: "prdver_prj_leave_management_baseline_v1_0"
+    }
+  });
+
+  const prdSections = [
+    ["overview", "Overview", "Leave Management is a Workflow App for HR Department."],
+    ["business_objective", "Business Objective", "Employees need self-service leave requests with manager approval."],
+    ["users_roles", "Users and Roles", "Primary users are Employee, Manager and HR Admin."],
+    ["core_flows", "Core Flows", "Create request, manager review, HR visibility and status tracking."],
+    ["data_model", "Data Model", "Employee, leave request, approval step, notification and audit event."],
+    ["acceptance_criteria", "Acceptance Criteria", "Creator can generate, review and confirm Baseline v1.0 before app generation."]
+  ];
+
+  for (const [index, section] of prdSections.entries()) {
+    const [key, title, body] = section;
+    await prisma.prdSection.upsert({
+      where: {
+        versionId_key: {
+          versionId: "prdver_prj_leave_management_baseline_v1_0",
+          key
+        }
+      },
+      update: { title, body, order: index + 1 },
+      create: {
+        id: `prdsec_prj_leave_management_${key}`,
+        versionId: "prdver_prj_leave_management_baseline_v1_0",
+        key,
+        title,
+        body,
+        order: index + 1
+      }
+    });
+  }
 }
 
 main()

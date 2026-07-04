@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Status: Implemented and accepted
 Sprint dates: 2026-07-27 to 2026-07-31
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
