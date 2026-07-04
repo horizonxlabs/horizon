@@ -144,6 +144,38 @@ const creatorTickets = [
   }
 ];
 
+const prdChangeRows = [
+  {
+    change: "CR-0001",
+    source: "TKT-0001",
+    risk: "medium",
+    status: "approved",
+    requestedBy: "Creator User",
+    updated: "2026-08-18"
+  }
+];
+
+const traceRows = [
+  { link: "Ticket", value: "TKT-0001 · WFH leave type missing" },
+  { link: "PRD Change", value: "CR-0001 · approved" },
+  { link: "PRD Version", value: "1.1" },
+  { link: "Frontend", value: "fe-0001" },
+  { link: "Manifest", value: "manifest v1" },
+  { link: "Deployment", value: "dep_leave_management_001" },
+  { link: "Domain", value: "leave.company.example" }
+];
+
+const mvpDemoSteps = [
+  "Admin configures AI provider/key and guardrail",
+  "Creator creates Leave Management and confirms PRD",
+  "Creator prompts WFH leave change and publishes",
+  "End User submits ticket",
+  "Creator converts ticket to PRD change",
+  "Approve PRD Change and review traceability",
+  "Request and approve public domain",
+  "Review MVP Monitoring and Audit Filters"
+];
+
 function CreatorApp() {
   return (
     <AppShell title="Creator App" navItems={navigation.creator} userName={mockUsers.creator.name}>
@@ -593,6 +625,105 @@ function CreatorApp() {
             lines={["Ticket remains visible until resolved", "Converted PRD changes can be reviewed before becoming baseline work"]}
           />
         </SectionCard>
+      </section>
+
+      <section className="sprint8-shell" aria-label="Ticket-to-PRD Domain Traceability">
+        <div className="sprint8-main-panel">
+          <SectionCard
+            eyebrow="Ticket-to-PRD Change"
+            title="Convert ticket into requirement change"
+            action={<ToneBadge tone="success">TKT-0001 linked</ToneBadge>}
+          >
+            <div className="sprint8-conversion-grid">
+              <article>
+                <span className="eyebrow">Original Ticket</span>
+                <strong>TKT-0001 · WFH leave type missing</strong>
+                <p>End User reports that WFH is not visible on mobile after publish.</p>
+              </article>
+              <article>
+                <span className="eyebrow">AI Impact</span>
+                <strong>Affected sections</strong>
+                <p>core_flows and acceptance_criteria need an explicit mobile WFH visibility requirement.</p>
+              </article>
+              <article>
+                <span className="eyebrow">Risk</span>
+                <strong>medium · internal data</strong>
+                <p>No schema change. Approval flow remains unchanged.</p>
+              </article>
+            </div>
+            <div className="creator-ticket-actions">
+              <button type="button">Approve PRD Change</button>
+              <button type="button" className="secondary-button">Reject PRD Change</button>
+              <button type="button" className="ghost-button">Submit for Approval</button>
+            </div>
+          </SectionCard>
+
+          <section className="sprint8-subgrid">
+            <SectionCard eyebrow="PRD Change Requests" title="Approval queue">
+              <DataTable
+                columns={[
+                  { key: "change", label: "Change" },
+                  { key: "source", label: "Source" },
+                  { key: "risk", label: "Risk", tone: () => "warning" },
+                  { key: "status", label: "Status", tone: () => "success" },
+                  { key: "requestedBy", label: "Requested By" },
+                  { key: "updated", label: "Updated" }
+                ]}
+                rows={prdChangeRows}
+              />
+              <DecisionPanel
+                tone="success"
+                badge="Approved"
+                title="PRD version 1.1 created from ticket feedback"
+                lines={["Decision history retained", "Ticket remains linked for deployment traceability"]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Domain Settings" title="Internal / Custom / Public" className="domain-settings-card">
+              <DefinitionGrid
+                items={[
+                  { label: "Internal Path", value: "/apps/leave-management" },
+                  { label: "Custom Domain", value: "not set" },
+                  { label: "Public Domain Request", value: "leave.company.example" },
+                  { label: "Approval", value: <ToneBadge tone="success">approved</ToneBadge> }
+                ]}
+              />
+              <DecisionPanel
+                tone="warning"
+                badge="Policy"
+                title="Public Domain Request requires approval"
+                lines={["Data classification: internal", "External user policy: approved_users"]}
+              />
+            </SectionCard>
+          </section>
+
+          <SectionCard eyebrow="Deployment Traceability" title="Ticket -> PRD -> Deployment">
+            <DataTable
+              columns={[
+                { key: "link", label: "Link" },
+                { key: "value", label: "Evidence" }
+              ]}
+              rows={traceRows}
+            />
+          </SectionCard>
+        </div>
+
+        <aside className="sprint8-side-panel">
+          <SectionCard eyebrow="MVP Demo Checklist" title="Pilot readiness">
+            <div className="creator-step-list">
+              {mvpDemoSteps.map((step) => (
+                <div key={step}>
+                  <CheckCircle2 size={16} />
+                  <div>
+                    <strong>{step}</strong>
+                    <span>ready for demo evidence</span>
+                  </div>
+                  <ToneBadge tone="success">done</ToneBadge>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </aside>
       </section>
 
       <section className="creator-summary-grid">

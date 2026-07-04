@@ -527,6 +527,124 @@ export interface InAppNotification {
   createdAt: string;
 }
 
+export type PrdChangeSourceType = "ticket" | "prompt" | "manual";
+export type PrdChangeStatus = "draft" | "pending_approval" | "approved" | "rejected" | "changes_requested";
+export type PrdChangeRiskLevel = "low" | "medium" | "high" | "critical";
+export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
+
+export interface PrdChangeDecision {
+  id: string;
+  changeId: string;
+  decision: ApprovalDecision;
+  note: string;
+  decidedByUserId: string;
+  decidedAt: string;
+}
+
+export interface PrdChangeRequest {
+  id: string;
+  projectId: string;
+  sourceType: PrdChangeSourceType;
+  sourceTicketId?: string;
+  title: string;
+  proposedRequirement: string;
+  affectedSections: string[];
+  acceptanceCriteria: string[];
+  riskLevel: PrdChangeRiskLevel;
+  status: PrdChangeStatus;
+  requestedByUserId: string;
+  approvedPrdVersionId?: string;
+  createdAt: string;
+  updatedAt: string;
+  decisions: PrdChangeDecision[];
+}
+
+export interface PrdChangeDecisionResult {
+  change: PrdChangeRequest;
+  decision: PrdChangeDecision;
+  prdVersion?: PrdVersion;
+}
+
+export type DomainMode = "internal" | "custom" | "public";
+export type DomainRequestStatus = "pending_approval" | "approved" | "rejected";
+
+export interface DomainSetting {
+  id: string;
+  projectId: string;
+  internalPath: string;
+  customDomain?: string;
+  publicDomain?: string;
+  mode: DomainMode;
+  updatedAt: string;
+}
+
+export interface DomainRequest {
+  id: string;
+  projectId: string;
+  domain: string;
+  reason: string;
+  intendedAudience: string;
+  dataClassification: PlatformProject["dataSensitivity"];
+  externalUserPolicy: string;
+  checklistAccepted: boolean;
+  status: DomainRequestStatus;
+  requestedByUserId: string;
+  decidedByUserId?: string;
+  decisionNote?: string;
+  createdAt: string;
+  decidedAt?: string;
+}
+
+export interface DeploymentTraceRecord {
+  id: string;
+  projectId: string;
+  ticket: Pick<SupportTicket, "id" | "ticketNumber" | "title" | "status">;
+  prdChange: Pick<PrdChangeRequest, "id" | "title" | "status" | "riskLevel">;
+  prdVersion: Pick<PrdVersion, "id" | "version" | "changeSummary">;
+  frontend: Pick<FrontendCheckpoint, "id" | "version" | "status">;
+  manifest: Pick<AppManifest, "id" | "manifestVersion">;
+  deployment: {
+    deploymentId: string;
+    publishRequestId: string;
+    route: string;
+    manifestVersion: string;
+    publishedAt: string;
+  };
+  domain: Pick<DomainSetting, "internalPath" | "customDomain" | "publicDomain" | "mode">;
+  auditEventIds: string[];
+  generatedAt: string;
+}
+
+export interface MonitoringDashboard {
+  serviceHealth: Array<{ name: string; status: Status; detail: string }>;
+  appHealth: Array<{ app: string; status: Status; route: string }>;
+  aiUsage: {
+    providerCalls: number;
+    guardrailEvents: number;
+  };
+  ticketCounts: {
+    open: number;
+    inReview: number;
+    resolved: number;
+  };
+  domainRequests: {
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
+  recentAuditEvents: AuditEvent[];
+}
+
+export interface AuditFilterInput {
+  actorId?: string;
+  action?: string;
+  projectId?: string;
+  appId?: string;
+  severity?: AuditEvent["severity"];
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
@@ -729,6 +847,19 @@ export class AuditService {
 
   list(): AuditEvent[] {
     return [...this.events];
+  }
+
+  filter(input: AuditFilterInput): AuditEvent[] {
+    return this.events.filter((event) => {
+      if (input.actorId && event.actorId !== input.actorId) return false;
+      if (input.action && event.action !== input.action) return false;
+      if (input.severity && event.severity !== input.severity) return false;
+      if (input.projectId && event.metadata.projectId !== input.projectId) return false;
+      if (input.appId && event.metadata.appId !== input.appId) return false;
+      if (input.dateFrom && event.occurredAt < input.dateFrom) return false;
+      if (input.dateTo && event.occurredAt > input.dateTo) return false;
+      return true;
+    });
   }
 }
 
@@ -1275,6 +1406,56 @@ export class PrdService {
     });
 
     return baseline;
+  }
+
+  createVersionFromChange(actor: PlatformUser, projectId: string, change: PrdChangeRequest): PrdVersion {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const document = this.getDocumentForActor(actor, project.id);
+    const current = document.versions.find((candidate) => candidate.id === document.currentVersionId);
+    if (!current) throw new ValidationError(`No current PRD version for project ${projectId}`);
+
+    const now = new Date().toISOString();
+    const approvedCount = document.versions.filter((version) => version.version.startsWith("1.")).length;
+    const versionNumber = `1.${Math.max(approvedCount, 1)}`;
+    const version: PrdVersion = {
+      id: `prdver_${project.id}_change_${String(approvedCount).padStart(2, "0")}`,
+      projectId: project.id,
+      version: versionNumber,
+      status: "baseline",
+      isBaseline: false,
+      sourcePrompt: `Approved PRD change ${change.id}`,
+      changeSummary: change.title,
+      generatedBy: {
+        scenario: "requirement_analysis",
+        providerId: "human_approval",
+        model: "creator_review"
+      },
+      sections: current.sections.map((section) => ({
+        ...section,
+        id: `${section.id}_${change.id}`,
+        body: change.affectedSections.includes(section.key)
+          ? `${section.body}\n\nApproved change ${change.id}: ${change.proposedRequirement}`
+          : section.body
+      })),
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+
+    document.currentVersionId = version.id;
+    document.versions.push(version);
+    document.updatedAt = now;
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "prd.version.created_from_change",
+      resourceType: "prd_version",
+      resourceId: version.id,
+      severity: "high",
+      metadata: { projectId: project.id, prdChangeId: change.id }
+    });
+
+    return version;
   }
 
   private ensureDocument(projectId: string, now: string): PrdDocument {
@@ -2170,6 +2351,30 @@ export class PublishService {
     return [...this.registry];
   }
 
+  getLatestDeploymentForProject(actor: PlatformUser, projectId: string): DeploymentRecord {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    const deployment = [...this.deployments].reverse().find((candidate) => candidate.projectId === projectId);
+    if (!deployment) throw new ValidationError(`No deployment record for project ${projectId}`);
+    return deployment;
+  }
+
+  getManifestForProject(actor: PlatformUser, projectId: string): AppManifest {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    const manifest = [...this.manifests].reverse().find((candidate) => candidate.projectId === projectId);
+    if (!manifest) throw new ValidationError(`No app manifest for project ${projectId}`);
+    return manifest;
+  }
+
+  getRegistryEntryForProject(actor: PlatformUser, projectId: string): AppStoreRegistryEntry {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    const entry = this.registry.find((candidate) => candidate.projectId === projectId);
+    if (!entry) throw new ValidationError(`No App Store registry entry for project ${projectId}`);
+    return entry;
+  }
+
   private buildManifest(actor: PlatformUser, project: PlatformProject): AppManifest {
     const appAccess = this.appAccess.getSnapshot(actor, project.id);
     let baseline: PrdVersion | undefined;
@@ -2489,12 +2694,433 @@ export class TicketService {
       }));
   }
 
+  getTicketForProject(actor: PlatformUser, projectId: string, ticketId: string): SupportTicket {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    const ticket = this.requireTicket(ticketId);
+    if (ticket.projectId !== projectId) throw new PermissionError(`Ticket ${ticketId} does not belong to project ${projectId}`);
+    return ticket;
+  }
+
+  listTickets(actor?: PlatformUser): SupportTicket[] {
+    if (actor) this.auth.requireRole(actor, ["admin", "creator"]);
+    if (!actor || actor.role === "admin") return [...this.tickets];
+    return this.tickets.filter((ticket) => this.projects.getProjectById(ticket.projectId).ownerUserId === actor.id);
+  }
+
+  markTicketPlanned(ticketId: string): SupportTicket {
+    const ticket = this.requireTicket(ticketId);
+    ticket.status = "planned";
+    ticket.updatedAt = new Date().toISOString();
+    ticket.timeline.push({
+      id: `${ticket.id}_tl_${String(ticket.timeline.length + 1).padStart(3, "0")}`,
+      ticketId: ticket.id,
+      status: "planned",
+      label: "Converted to PRD change",
+      actorId: ticket.assignedToUserId,
+      occurredAt: ticket.updatedAt
+    });
+    return ticket;
+  }
+
   private requireTicket(ticketId: string): SupportTicket {
     const ticket = this.tickets.find((candidate) => candidate.id === ticketId);
     if (!ticket) throw new ValidationError(`Unknown ticket: ${ticketId}`);
     return ticket;
   }
 
+}
+
+export class PrdChangeService {
+  private readonly changes: PrdChangeRequest[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly tickets: TicketService,
+    private readonly prds: PrdService
+  ) {}
+
+  convertTicketToChange(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      ticketId: string;
+      title: string;
+      proposedRequirement: string;
+      affectedSections: string[];
+      acceptanceCriteria: string[];
+      riskLevel: PrdChangeRiskLevel;
+    }
+  ): PrdChangeRequest {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const ticket = this.tickets.getTicketForProject(actor, project.id, input.ticketId);
+    const existing = this.changes.find((change) => change.projectId === project.id && change.sourceTicketId === ticket.id);
+    if (existing) return existing;
+    if (!input.title.trim()) throw new ValidationError("PRD change title is required");
+    if (!input.proposedRequirement.trim()) throw new ValidationError("Proposed requirement is required");
+    if (input.affectedSections.length === 0) throw new ValidationError("At least one affected PRD section is required");
+    if (input.acceptanceCriteria.length === 0) throw new ValidationError("At least one acceptance criterion is required");
+
+    const now = new Date().toISOString();
+    const change: PrdChangeRequest = {
+      id: `prdchg_${project.slug}_${String(this.changes.length + 1).padStart(3, "0")}`,
+      projectId: project.id,
+      sourceType: "ticket",
+      sourceTicketId: ticket.id,
+      title: input.title.trim(),
+      proposedRequirement: input.proposedRequirement.trim(),
+      affectedSections: [...input.affectedSections],
+      acceptanceCriteria: [...input.acceptanceCriteria],
+      riskLevel: input.riskLevel,
+      status: "pending_approval",
+      requestedByUserId: actor.id,
+      createdAt: now,
+      updatedAt: now,
+      decisions: []
+    };
+
+    this.changes.push(change);
+    this.tickets.markTicketPlanned(ticket.id);
+    this.audit.record({
+      actorId: actor.id,
+      action: "ticket.converted_to_prd_change",
+      resourceType: "support_ticket",
+      resourceId: ticket.id,
+      severity: "high",
+      metadata: { projectId: project.id, prdChangeId: change.id, ticketNumber: ticket.ticketNumber }
+    });
+    this.audit.record({
+      actorId: actor.id,
+      action: "prd.change_requested",
+      resourceType: "prd_change_request",
+      resourceId: change.id,
+      metadata: { projectId: project.id, sourceTicketId: ticket.id, riskLevel: change.riskLevel }
+    });
+
+    return change;
+  }
+
+  listChanges(actor: PlatformUser, projectId: string): PrdChangeRequest[] {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    return this.changes.filter((change) => change.projectId === project.id);
+  }
+
+  decideChange(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      changeId: string;
+      decision: ApprovalDecision;
+      note: string;
+    }
+  ): PrdChangeDecisionResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const change = this.requireChange(project.id, input.changeId);
+    if (change.status === "approved" || change.status === "rejected") {
+      throw new ConflictError(`PRD change ${change.id} is already ${change.status}`);
+    }
+
+    const now = new Date().toISOString();
+    const decision: PrdChangeDecision = {
+      id: `prdchgdec_${change.id}_${String(change.decisions.length + 1).padStart(3, "0")}`,
+      changeId: change.id,
+      decision: input.decision,
+      note: input.note.trim() || input.decision,
+      decidedByUserId: actor.id,
+      decidedAt: now
+    };
+
+    change.decisions.push(decision);
+    change.status = input.decision;
+    change.updatedAt = now;
+
+    let prdVersion: PrdVersion | undefined;
+    if (input.decision === "approved") {
+      prdVersion = this.prds.createVersionFromChange(actor, project.id, change);
+      change.approvedPrdVersionId = prdVersion.id;
+    }
+
+    this.audit.record({
+      actorId: actor.id,
+      action: input.decision === "approved" ? "prd.change.approved" : `prd.change.${input.decision}`,
+      resourceType: "prd_change_request",
+      resourceId: change.id,
+      severity: input.decision === "approved" ? "high" : "warning",
+      metadata: { projectId: project.id, approvedPrdVersionId: change.approvedPrdVersionId, decision: input.decision }
+    });
+
+    return { change, decision, prdVersion };
+  }
+
+  getLatestApprovedChange(actor: PlatformUser, projectId: string): PrdChangeRequest {
+    const change = [...this.listChanges(actor, projectId)].reverse().find((candidate) => candidate.status === "approved");
+    if (!change) throw new ValidationError(`No approved PRD change for project ${projectId}`);
+    return change;
+  }
+
+  private requireChange(projectId: string, changeId: string): PrdChangeRequest {
+    const change = this.changes.find((candidate) => candidate.id === changeId && candidate.projectId === projectId);
+    if (!change) throw new ValidationError(`Unknown PRD change request: ${changeId}`);
+    return change;
+  }
+}
+
+export class DomainService {
+  private readonly settings: DomainSetting[] = [];
+  private readonly requests: DomainRequest[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService
+  ) {}
+
+  getSettings(actor: PlatformUser, projectId: string): DomainSetting {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    return this.ensureSetting(project);
+  }
+
+  requestPublicDomain(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      domain: string;
+      reason: string;
+      intendedAudience: string;
+      dataClassification: PlatformProject["dataSensitivity"];
+      externalUserPolicy: string;
+      checklistAccepted: boolean;
+    }
+  ): DomainRequest {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    this.ensureSetting(project);
+    const domain = input.domain.trim().toLowerCase();
+    if (!domain) throw new ValidationError("Domain is required");
+    if (!input.checklistAccepted) throw new ValidationError("Security checklist acknowledgement is required for public domain request");
+
+    const now = new Date().toISOString();
+    const request: DomainRequest = {
+      id: `domainreq_${project.slug}_public_${String(this.requests.length + 1).padStart(3, "0")}`,
+      projectId: project.id,
+      domain,
+      reason: input.reason.trim(),
+      intendedAudience: input.intendedAudience.trim(),
+      dataClassification: input.dataClassification,
+      externalUserPolicy: input.externalUserPolicy,
+      checklistAccepted: input.checklistAccepted,
+      status: "pending_approval",
+      requestedByUserId: actor.id,
+      createdAt: now
+    };
+
+    this.requests.push(request);
+    this.audit.record({
+      actorId: actor.id,
+      action: "domain.request.created",
+      resourceType: "domain_request",
+      resourceId: request.id,
+      severity: "warning",
+      metadata: { projectId: project.id, domain: request.domain, dataClassification: request.dataClassification }
+    });
+
+    return request;
+  }
+
+  decideDomainRequest(actor: PlatformUser, requestId: string, input: { decision: "approved" | "rejected"; note: string }): DomainRequest {
+    this.auth.requireRole(actor, ["admin"]);
+    const request = this.requireRequest(requestId);
+    if (request.status !== "pending_approval") throw new ConflictError(`Domain request ${requestId} is already ${request.status}`);
+    const setting = this.ensureSetting(this.projects.getProjectById(request.projectId));
+    request.status = input.decision;
+    request.decidedByUserId = actor.id;
+    request.decisionNote = input.note.trim() || input.decision;
+    request.decidedAt = new Date().toISOString();
+
+    if (input.decision === "approved") {
+      setting.mode = "public";
+      setting.publicDomain = request.domain;
+      setting.updatedAt = request.decidedAt;
+    }
+
+    this.audit.record({
+      actorId: actor.id,
+      action: input.decision === "approved" ? "domain.request.approved" : "domain.request.rejected",
+      resourceType: "domain_request",
+      resourceId: request.id,
+      severity: input.decision === "approved" ? "high" : "warning",
+      metadata: { projectId: request.projectId, domain: request.domain }
+    });
+
+    return request;
+  }
+
+  listRequests(actor: PlatformUser): DomainRequest[] {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    if (actor.role === "admin") return [...this.requests];
+    return this.requests.filter((request) => this.projects.getProjectById(request.projectId).ownerUserId === actor.id);
+  }
+
+  getLatestApprovedSetting(actor: PlatformUser, projectId: string): DomainSetting {
+    const setting = this.getSettings(actor, projectId);
+    if (!setting.publicDomain) return setting;
+    return setting;
+  }
+
+  private ensureSetting(project: PlatformProject): DomainSetting {
+    const existing = this.settings.find((setting) => setting.projectId === project.id);
+    if (existing) return existing;
+    const setting: DomainSetting = {
+      id: `domain_${project.slug}`,
+      projectId: project.id,
+      internalPath: `/apps/${project.slug}`,
+      mode: "internal",
+      updatedAt: new Date().toISOString()
+    };
+    this.settings.push(setting);
+    return setting;
+  }
+
+  private requireRequest(requestId: string): DomainRequest {
+    const request = this.requests.find((candidate) => candidate.id === requestId);
+    if (!request) throw new ValidationError(`Unknown domain request: ${requestId}`);
+    return request;
+  }
+}
+
+export class TraceabilityService {
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly tickets: TicketService,
+    private readonly prdChanges: PrdChangeService,
+    private readonly prds: PrdService,
+    private readonly frontendVersions: FrontendVersionService,
+    private readonly publish: PublishService,
+    private readonly domains: DomainService
+  ) {}
+
+  getProjectTrace(actor: PlatformUser, projectId: string): DeploymentTraceRecord {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const change = this.prdChanges.getLatestApprovedChange(actor, project.id);
+    if (!change.sourceTicketId) throw new ValidationError(`PRD change ${change.id} is not linked to a ticket`);
+    const ticket = this.tickets.getTicketForProject(actor, project.id, change.sourceTicketId);
+    const prdVersion = this.prds.listVersions(actor, project.id).find((version) => version.id === change.approvedPrdVersionId);
+    if (!prdVersion) throw new ValidationError(`No approved PRD version linked to change ${change.id}`);
+    const frontend = this.frontendVersions.getTimeline(actor, project.id).activeCheckpoint;
+    const manifest = this.publish.getManifestForProject(actor, project.id);
+    const deployment = this.publish.getLatestDeploymentForProject(actor, project.id);
+    const domain = this.domains.getLatestApprovedSetting(actor, project.id);
+    const auditEventIds = this.audit
+      .filter({ projectId: project.id })
+      .filter((event) =>
+        ["ticket.converted_to_prd_change", "prd.change.approved", "prd.version.created_from_change", "domain.request.approved", "app.publish.completed"].includes(
+          event.action
+        )
+      )
+      .map((event) => event.id);
+
+    return {
+      id: `trace_${project.slug}_mvp_001`,
+      projectId: project.id,
+      ticket: {
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        title: ticket.title,
+        status: ticket.status
+      },
+      prdChange: {
+        id: change.id,
+        title: change.title,
+        status: change.status,
+        riskLevel: change.riskLevel
+      },
+      prdVersion: {
+        id: prdVersion.id,
+        version: prdVersion.version,
+        changeSummary: prdVersion.changeSummary
+      },
+      frontend: {
+        id: frontend.id,
+        version: frontend.version,
+        status: frontend.status
+      },
+      manifest: {
+        id: manifest.id,
+        manifestVersion: manifest.manifestVersion
+      },
+      deployment: {
+        deploymentId: deployment.id,
+        publishRequestId: deployment.publishRequestId,
+        route: deployment.route,
+        manifestVersion: deployment.manifestVersion,
+        publishedAt: deployment.publishedAt
+      },
+      domain: {
+        internalPath: domain.internalPath,
+        customDomain: domain.customDomain,
+        publicDomain: domain.publicDomain,
+        mode: domain.mode
+      },
+      auditEventIds,
+      generatedAt: new Date().toISOString()
+    };
+  }
+}
+
+export class MonitoringService {
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly tickets: TicketService,
+    private readonly domains: DomainService,
+    private readonly publish: PublishService,
+    private readonly aiGovernance: AiGovernanceService,
+    private readonly guardrails: GuardrailService
+  ) {}
+
+  getDashboard(actor: PlatformUser): MonitoringDashboard {
+    this.auth.requireRole(actor, ["admin"]);
+    const tickets = this.tickets.listTickets(actor);
+    const domainRequests = this.domains.listRequests(actor);
+    const registry = this.publish.listRegistry(actor);
+
+    return {
+      serviceHealth: [
+        { name: "Platform API", status: "healthy", detail: "NestJS request handlers active" },
+        { name: "PostgreSQL", status: "healthy", detail: "Prisma schema validated" },
+        { name: "Keycloak", status: "healthy", detail: "Mock SSO path ready for adapter" },
+        { name: "MinIO", status: "healthy", detail: "Object storage placeholder ready" },
+        { name: "Redis", status: "healthy", detail: "Queue dependency declared" },
+        { name: "AI Gateway", status: "healthy", detail: "Provider adapter route configured" },
+        { name: "Caddy", status: "healthy", detail: "Domain approval path ready" }
+      ],
+      appHealth: registry.map((entry) => ({ app: entry.name, status: "healthy", route: entry.route })),
+      aiUsage: {
+        providerCalls: this.aiGovernance.providerCallCount(),
+        guardrailEvents: this.guardrails.listEvents().length
+      },
+      ticketCounts: {
+        open: tickets.filter((ticket) => ["submitted", "in_review", "planned"].includes(ticket.status)).length,
+        inReview: tickets.filter((ticket) => ticket.status === "in_review").length,
+        resolved: tickets.filter((ticket) => ["resolved", "closed"].includes(ticket.status)).length
+      },
+      domainRequests: {
+        pending: domainRequests.filter((request) => request.status === "pending_approval").length,
+        approved: domainRequests.filter((request) => request.status === "approved").length,
+        rejected: domainRequests.filter((request) => request.status === "rejected").length
+      },
+      recentAuditEvents: this.audit.list().slice(-10).reverse()
+    };
+  }
 }
 
 export class WorkspaceService {
@@ -2722,6 +3348,10 @@ export interface PlatformApiServices {
   publish: PublishService;
   storefront: StorefrontService;
   tickets: TicketService;
+  prdChanges: PrdChangeService;
+  domains: DomainService;
+  traceability: TraceabilityService;
+  monitoring: MonitoringService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -2744,6 +3374,10 @@ export function createPlatformApiServices(): PlatformApiServices {
   const publish = new PublishService(auth, audit, projects, prds, frontendVersions, databaseView, appAccess);
   const storefront = new StorefrontService(auth, identity, projects, publish, appAccess);
   const tickets = new TicketService(auth, audit, storefront, projects);
+  const prdChanges = new PrdChangeService(auth, audit, projects, tickets, prds);
+  const domains = new DomainService(auth, audit, projects);
+  const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
+  const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, aiGovernance, guardrails);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
 
   return {
@@ -2761,6 +3395,10 @@ export function createPlatformApiServices(): PlatformApiServices {
     publish,
     storefront,
     tickets,
+    prdChanges,
+    domains,
+    traceability,
+    monitoring,
     envelope: { success, failure }
   };
 }

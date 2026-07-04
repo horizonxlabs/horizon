@@ -1,7 +1,23 @@
 import { navigation } from "@evcp/config";
 import { mockUsers } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
-import { Activity, AlertTriangle, BrainCircuit, CheckCircle2, Fingerprint, KeyRound, LockKeyhole, Route, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BrainCircuit,
+  CheckCircle2,
+  Fingerprint,
+  Gauge,
+  Globe2,
+  KeyRound,
+  ListFilter,
+  LockKeyhole,
+  Route,
+  ServerCog,
+  ShieldCheck,
+  SlidersHorizontal,
+  TicketCheck
+} from "lucide-react";
 import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
@@ -61,6 +77,55 @@ const eventRows = [
     rule: "Block payroll export",
     actor: "Admin User",
     time: "ล่าสุด"
+  }
+];
+
+const monitoringKpis = [
+  { label: "Service Health", value: "5/5", detail: "API, DB, Queue, Storage, Proxy healthy", icon: ServerCog, tone: "success" },
+  { label: "Ticket Counts", value: "1 open", detail: "1 ticket converted to PRD change", icon: TicketCheck, tone: "warning" },
+  { label: "Domain Requests", value: "1 approved", detail: "leave.company.example", icon: Globe2, tone: "success" },
+  { label: "Audit Filters", value: "ready", detail: "actor, action, project, severity", icon: ListFilter, tone: "info" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const serviceHealthRows = [
+  { service: "Platform API", status: "healthy", signal: "p95 42ms", owner: "IT Admin" },
+  { service: "PostgreSQL", status: "healthy", signal: "migration current", owner: "System" },
+  { service: "Redis + BullMQ", status: "healthy", signal: "0 delayed jobs", owner: "System" },
+  { service: "MinIO", status: "healthy", signal: "screenshots retained", owner: "System" },
+  { service: "Caddy Proxy", status: "healthy", signal: "domain route active", owner: "IT Admin" }
+];
+
+const ticketCountRows = [
+  { metric: "Submitted", value: "1", trend: "from App Store feedback" },
+  { metric: "Planned", value: "1", trend: "converted to PRD change" },
+  { metric: "Resolved", value: "0", trend: "awaiting pilot validation" }
+];
+
+const domainRequestRows = [
+  {
+    request: "DOM-0001",
+    domain: "leave.company.example",
+    project: "Leave Management",
+    status: "approved",
+    policy: "internal data + approved users"
+  }
+];
+
+const auditFilterRows = [
+  {
+    action: "prd.change.approved",
+    actor: "creator@company.com",
+    severity: "high"
+  },
+  {
+    action: "domain.request.approved",
+    actor: "admin@company.com",
+    severity: "high"
+  },
+  {
+    action: "ticket.converted_to_prd_change",
+    actor: "creator@company.com",
+    severity: "high"
   }
 ];
 
@@ -221,6 +286,92 @@ function AdminApp() {
                 rows={eventRows}
               />
             </SectionCard>
+          </section>
+
+          <section className="admin-monitoring-shell" aria-label="MVP Monitoring">
+            <div className="admin-monitoring-header">
+              <div>
+                <span className="eyebrow">MVP Monitoring</span>
+                <h2>Production Pilot Control Room</h2>
+                <p>Operational view for ticket feedback, domain approvals, service health, and audit evidence before the MVP demo.</p>
+              </div>
+              <ToneBadge tone="success">demo ready</ToneBadge>
+            </div>
+
+            <section className="admin-monitoring-kpis">
+              {monitoringKpis.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <MetricCard
+                    key={item.label}
+                    label={item.label}
+                    value={item.value}
+                    detail={item.detail}
+                    icon={<Icon size={18} />}
+                    tone={item.tone}
+                  />
+                );
+              })}
+            </section>
+
+            <section className="admin-monitoring-grid">
+              <SectionCard eyebrow="Service Health" title="Runtime services">
+                <DataTable
+                  columns={[
+                    { key: "service", label: "Service" },
+                    { key: "status", label: "Status", tone: () => "success" },
+                    { key: "signal", label: "Signal" },
+                    { key: "owner", label: "Owner" }
+                  ]}
+                  rows={serviceHealthRows}
+                />
+              </SectionCard>
+
+              <SectionCard eyebrow="Ticket Counts" title="Feedback lifecycle">
+                <DataTable
+                  columns={[
+                    { key: "metric", label: "Metric" },
+                    { key: "value", label: "Count", tone: (value) => (value === "0" ? "neutral" : "warning") },
+                    { key: "trend", label: "Evidence" }
+                  ]}
+                  rows={ticketCountRows}
+                />
+                <DecisionPanel
+                  tone="success"
+                  badge="Traceable"
+                  title="Ticket feedback can become approved PRD scope"
+                  lines={["Converted ticket keeps source link", "PRD change approval writes high-severity audit event"]}
+                />
+              </SectionCard>
+
+              <SectionCard eyebrow="Domain Requests" title="Public domain approvals">
+                <DataTable
+                  columns={[
+                    { key: "request", label: "Request" },
+                    { key: "domain", label: "Domain" },
+                    { key: "status", label: "Status", tone: () => "success" },
+                    { key: "policy", label: "Policy" }
+                  ]}
+                  rows={domainRequestRows}
+                />
+              </SectionCard>
+
+              <SectionCard eyebrow="Audit Filters" title="Governance evidence search">
+                <div className="admin-filter-bar" aria-label="Audit filter controls">
+                  <button type="button"><ListFilter size={15} /> action</button>
+                  <button type="button" className="secondary-button"><Gauge size={15} /> severity</button>
+                  <button type="button" className="secondary-button"><Route size={15} /> project</button>
+                </div>
+                <DataTable
+                  columns={[
+                    { key: "action", label: "Action" },
+                    { key: "actor", label: "Actor" },
+                    { key: "severity", label: "Severity", tone: () => "danger" }
+                  ]}
+                  rows={auditFilterRows}
+                />
+              </SectionCard>
+            </section>
           </section>
 
           <ServiceStrip

@@ -32,6 +32,8 @@ export interface PlatformRequest {
     | "/auth/me"
     | "/projects"
     | "/audit-logs"
+    | "/audit-logs/filter"
+    | "/admin/monitoring"
     | "/ai/providers"
     | "/ai/api-keys"
     | "/ai/routes"
@@ -43,6 +45,13 @@ export interface PlatformRequest {
     | `/projects/${string}/prd/generate`
     | `/projects/${string}/prd/baseline`
     | `/projects/${string}/prd/versions`
+    | `/creator/projects/${string}/prd/changes`
+    | `/creator/projects/${string}/prd/changes/from-ticket`
+    | `/creator/projects/${string}/prd/changes/decision`
+    | `/creator/projects/${string}/domains`
+    | `/creator/projects/${string}/domains/requests`
+    | `/creator/projects/${string}/traceability`
+    | `/admin/domain-requests/${string}/decision`
     | `/projects/${string}/workspace`
     | `/projects/${string}/workspace/prompts`
     | `/projects/${string}/workspace/preview/refresh`
@@ -374,6 +383,97 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(services.audit.list()) };
     }
 
+    if (request.method === "POST" && request.path === "/audit-logs/filter") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      services.auth.requireRole(user, ["admin"]);
+      return {
+        status: HttpStatus.OK,
+        body: success(
+          services.audit.filter({
+            actorId: request.body?.actorId ? String(request.body.actorId) : undefined,
+            action: request.body?.action ? String(request.body.action) : undefined,
+            projectId: request.body?.projectId ? String(request.body.projectId) : undefined,
+            appId: request.body?.appId ? String(request.body.appId) : undefined,
+            severity: request.body?.severity ? (String(request.body.severity) as never) : undefined,
+            dateFrom: request.body?.dateFrom ? String(request.body.dateFrom) : undefined,
+            dateTo: request.body?.dateTo ? String(request.body.dateTo) : undefined
+          })
+        )
+      };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/monitoring") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
+    }
+
+    const prdChangesMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes$/);
+    if (request.method === "GET" && prdChangesMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.prdChanges.listChanges(user, prdChangesMatch[1])) };
+    }
+
+    const prdChangeFromTicketMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes\/from-ticket$/);
+    if (request.method === "POST" && prdChangeFromTicketMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const change = services.prdChanges.convertTicketToChange(user, prdChangeFromTicketMatch[1], {
+        ticketId: String(request.body?.ticketId ?? ""),
+        title: String(request.body?.title ?? ""),
+        proposedRequirement: String(request.body?.proposedRequirement ?? ""),
+        affectedSections: Array.isArray(request.body?.affectedSections) ? request.body.affectedSections.map(String) : [],
+        acceptanceCriteria: Array.isArray(request.body?.acceptanceCriteria) ? request.body.acceptanceCriteria.map(String) : [],
+        riskLevel: String(request.body?.riskLevel ?? "medium") as never
+      });
+      return { status: HttpStatus.CREATED, body: success(change) };
+    }
+
+    const prdChangeDecisionMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes\/decision$/);
+    if (request.method === "POST" && prdChangeDecisionMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const decision = services.prdChanges.decideChange(user, prdChangeDecisionMatch[1], {
+        changeId: String(request.body?.changeId ?? ""),
+        decision: String(request.body?.decision ?? "approved") as never,
+        note: String(request.body?.note ?? "")
+      });
+      return { status: HttpStatus.OK, body: success(decision) };
+    }
+
+    const domainSettingsMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/domains$/);
+    if (request.method === "GET" && domainSettingsMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.domains.getSettings(user, domainSettingsMatch[1])) };
+    }
+
+    const domainRequestMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/domains\/requests$/);
+    if (request.method === "POST" && domainRequestMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const requestRecord = services.domains.requestPublicDomain(user, domainRequestMatch[1], {
+        domain: String(request.body?.domain ?? ""),
+        reason: String(request.body?.reason ?? ""),
+        intendedAudience: String(request.body?.intendedAudience ?? ""),
+        dataClassification: String(request.body?.dataClassification ?? "internal") as never,
+        externalUserPolicy: String(request.body?.externalUserPolicy ?? ""),
+        checklistAccepted: Boolean(request.body?.checklistAccepted ?? false)
+      });
+      return { status: HttpStatus.CREATED, body: success(requestRecord) };
+    }
+
+    const domainDecisionMatch = request.path.match(/^\/admin\/domain-requests\/([^/]+)\/decision$/);
+    if (request.method === "POST" && domainDecisionMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const requestRecord = services.domains.decideDomainRequest(user, domainDecisionMatch[1], {
+        decision: String(request.body?.decision ?? "approved") as never,
+        note: String(request.body?.note ?? "")
+      });
+      return { status: HttpStatus.OK, body: success(requestRecord) };
+    }
+
+    const traceabilityMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/traceability$/);
+    if (request.method === "GET" && traceabilityMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.traceability.getProjectTrace(user, traceabilityMatch[1])) };
+    }
+
     if (request.method === "GET" && request.path === "/ai/providers") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       services.auth.requireRole(user, ["admin"]);
@@ -490,6 +590,15 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   routes.get("/audit-logs", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/audit-logs", headers: request.headers }))
   );
+  routes.post("/audit-logs/filter", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/audit-logs/filter", headers: request.headers, body: request.body })
+    )
+  );
+  routes.get("/admin/monitoring", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/monitoring", headers: request.headers }))
+  );
   routes.post("/projects/:projectId/prd/generate", (request, response) =>
     sendPlatformResponse(
       response,
@@ -528,6 +637,80 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
       executePlatformApiRequest(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.get("/creator/projects/:projectId/prd/changes", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/prd/changes`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/prd/changes/from-ticket", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/prd/changes/from-ticket`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/prd/changes/decision", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/prd/changes/decision`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/creator/projects/:projectId/domains", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/domains`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/domains/requests", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/domains/requests`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/admin/domain-requests/:requestId/decision", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/domain-requests/${String(request.params?.requestId ?? "")}/decision`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/creator/projects/:projectId/traceability", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/traceability`,
         headers: request.headers
       })
     )
