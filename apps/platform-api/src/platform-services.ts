@@ -2,11 +2,20 @@ import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-cl
 import { getMockPermissions } from "@evcp/auth-sdk";
 import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status } from "@evcp/types";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
   permissions: string[];
+}
+
+export type AuthMode = "platform_session" | "mock_header";
+
+export interface AuthResolution {
+  user: PlatformUser;
+  mode: AuthMode;
+  sessionId?: string;
+  expiresAt?: string;
 }
 
 export interface PlatformProject {
@@ -1537,7 +1546,7 @@ function toPlatformUser(user: MockUser): PlatformUser {
 function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
   const direct = headers[name];
   const lower = headers[name.toLowerCase()];
-  const value = direct ?? lower;
+  const value = direct ?? lower ?? Object.entries(headers).find(([headerName]) => headerName.toLowerCase() === name.toLowerCase())?.[1];
 
   if (Array.isArray(value)) return value[0];
   return value;
@@ -1554,6 +1563,30 @@ export class IdentityService {
     const user = this.users.find((candidate) => candidate.email === email);
     if (!user) throw new MockAuthError(`Unknown mock user: ${email}`);
     return user;
+  }
+
+  provisionSsoUser(input: { email: string; name: string; platformRoles: PlatformRole[] }): PlatformUser {
+    const email = input.email.trim().toLowerCase();
+    const existing = this.users.find((candidate) => candidate.email === email);
+    if (existing) return existing;
+
+    const role = this.primaryPlatformRole(input.platformRoles);
+    const user: PlatformUser = {
+      id: `usr_sso_${createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
+      name: input.name.trim() || email,
+      email,
+      role,
+      status: "active",
+      permissions: getMockPermissions(role)
+    };
+    this.users.push(user);
+    return user;
+  }
+
+  private primaryPlatformRole(roles: PlatformRole[]): PlatformRole {
+    if (roles.includes("admin")) return "admin";
+    if (roles.includes("creator")) return "creator";
+    return "end_user";
   }
 }
 
@@ -1595,17 +1628,111 @@ export class AuditService {
 }
 
 export class MockAuthService {
+  private readonly sessionSecret = process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production";
+  private readonly issuedSessions = new Map<string, { userId: string; email: string; expiresAt: string }>();
+
   constructor(private readonly identity: IdentityService) {}
 
-  resolveCurrentUser(headers: HeaderBag): PlatformUser {
-    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email) throw new MockAuthError("Missing x-mock-user-email header");
+  getUserByEmail(email: string): PlatformUser {
     return this.identity.getUserByEmail(email);
+  }
+
+  issuePlatformSession(user: PlatformUser, input: { sessionId: string; issuedAt?: Date; ttlSeconds?: number }): { token: string; expiresAt: string } {
+    const issuedAt = input.issuedAt ?? new Date();
+    const ttlSeconds = input.ttlSeconds ?? 60 * 60;
+    const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
+    const expiresAtSeconds = Math.floor(expiresAt.getTime() / 1000);
+    const expiresAtIso = new Date(expiresAtSeconds * 1000).toISOString();
+    const payload = {
+      typ: "evcp.platform.session",
+      sid: input.sessionId,
+      sub: user.id,
+      email: user.email,
+      iat: Math.floor(issuedAt.getTime() / 1000),
+      exp: expiresAtSeconds
+    };
+    const encodedPayload = this.encodeJson(payload);
+    const signature = this.sign(encodedPayload);
+    const token = `evcp_session.${encodedPayload}.${signature}`;
+    this.issuedSessions.set(input.sessionId, { userId: user.id, email: user.email, expiresAt: expiresAtIso });
+    return { token, expiresAt: expiresAtIso };
+  }
+
+  resolve(headers: HeaderBag): AuthResolution {
+    const bearer = this.extractBearer(headers);
+    if (bearer) {
+      const session = this.verifyPlatformSessionToken(bearer);
+      return {
+        user: this.identity.getUserByEmail(session.email),
+        mode: "platform_session",
+        sessionId: session.sessionId,
+        expiresAt: session.expiresAt
+      };
+    }
+
+    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email) throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    return { user: this.identity.getUserByEmail(email), mode: "mock_header" };
+  }
+
+  resolveCurrentUser(headers: HeaderBag): PlatformUser {
+    return this.resolve(headers).user;
   }
 
   requireRole(user: PlatformUser, roles: PlatformRole[]): void {
     if (!roles.includes(user.role)) {
       throw new PermissionError(`Role ${user.role} cannot access this resource`);
+    }
+  }
+
+  private extractBearer(headers: HeaderBag): string | undefined {
+    const authorization = normalizeHeader(headers, "authorization");
+    const match = authorization?.match(/^Bearer\s+(.+)$/i);
+    return match?.[1];
+  }
+
+  private verifyPlatformSessionToken(token: string): { sessionId: string; email: string; expiresAt: string } {
+    const parts = token.split(".");
+    if (parts.length !== 3 || parts[0] !== "evcp_session") {
+      throw new MockAuthError("Invalid platform session token");
+    }
+
+    const [, encodedPayload, signature] = parts;
+    if (this.sign(encodedPayload) !== signature) {
+      throw new MockAuthError("Invalid platform session token signature");
+    }
+
+    const payload = this.decodeJson(encodedPayload) as Partial<{ typ: string; sid: string; email: string; exp: number }>;
+    if (payload.typ !== "evcp.platform.session" || !payload.sid || !payload.email || !payload.exp) {
+      throw new MockAuthError("Invalid platform session token claims");
+    }
+
+    const expiresAtMs = payload.exp * 1000;
+    if (Date.now() >= expiresAtMs) {
+      throw new MockAuthError("Expired platform session token");
+    }
+
+    const issuedSession = this.issuedSessions.get(payload.sid);
+    if (issuedSession && issuedSession.email !== payload.email) {
+      throw new MockAuthError("Platform session token does not match registered session");
+    }
+
+    return { sessionId: payload.sid, email: payload.email, expiresAt: new Date(expiresAtMs).toISOString() };
+  }
+
+  private sign(encodedPayload: string): string {
+    return createHmac("sha256", this.sessionSecret).update(encodedPayload).digest("base64url");
+  }
+
+  private encodeJson(payload: Record<string, unknown>): string {
+    return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  }
+
+  private decodeJson(encodedPayload: string): unknown {
+    try {
+      return JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+    } catch {
+      throw new MockAuthError("Invalid platform session token payload");
     }
   }
 }
@@ -1947,7 +2074,8 @@ export class PlatformAuthSsoService {
 
   constructor(
     private readonly auth: MockAuthService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly identity: IdentityService
   ) {}
 
   createOidcProvider(
@@ -2104,11 +2232,23 @@ export class PlatformAuthSsoService {
       id: `psess_${String(this.sessions.length + 1).padStart(4, "0")}`,
       providerId: provider.id,
       providerType: provider.type,
-      token: `psess_${fingerprintSecret(`${provider.id}:${claims.subject}:${this.sessions.length + 1}`).slice(3)}`,
+      token: "",
       claims,
       issuedAt: issuedAt.toISOString(),
       expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString()
     };
+    const platformUser = this.identity.provisionSsoUser({
+      email: claims.email,
+      name: claims.name,
+      platformRoles: claims.platformRoles
+    });
+    const issuedToken = this.auth.issuePlatformSession(platformUser, {
+      sessionId: session.id,
+      issuedAt,
+      ttlSeconds: 60 * 60
+    });
+    session.token = issuedToken.token;
+    session.expiresAt = issuedToken.expiresAt;
 
     this.sessions.push(session);
     this.audit.record({
@@ -6188,7 +6328,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const domains = new DomainService(auth, audit, projects);
   const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
   const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, generatedRuntime, aiGovernance, guardrails);
-  const authSso = new PlatformAuthSsoService(auth, audit);
+  const authSso = new PlatformAuthSsoService(auth, audit, identity);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
   const operations = new OperationsRecoveryService(auth, audit);

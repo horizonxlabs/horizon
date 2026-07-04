@@ -5,7 +5,7 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
-import { createPlatformApiServices, type PlatformApiServices } from "./platform-services";
+import { createPlatformApiServices, type AuthResolution, type PlatformApiServices } from "./platform-services";
 import {
   createCoreRepositoryBackedService,
   createPrismaCorePersistence,
@@ -197,25 +197,23 @@ async function sendPlatformResponseAsync(response: HttpResponse, platformRespons
   sendPlatformResponse(response, await platformResponse);
 }
 
-function createMockAuthError(message: string): Error {
-  const error = new Error(message);
-  error.name = "MockAuthError";
-  return error;
-}
-
-function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
-  const direct = headers[name];
-  const lower = headers[name.toLowerCase()];
-  const value = direct ?? lower;
-  if (Array.isArray(value)) return value[0];
-  return value;
-}
-
-async function resolvePersistenceCurrentUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
-  const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-  if (!email) throw createMockAuthError("Missing x-mock-user-email header");
+async function resolvePersistenceAuth(services: PersistenceAwarePlatformApiServices, headers: HeaderBag): Promise<AuthResolution> {
   if (!services.corePersistence) throw new Error("Core persistence service is not configured");
-  return services.corePersistence.getUserByEmail(email);
+  const resolution = services.auth.resolve(headers);
+  if (resolution.mode === "platform_session") return resolution;
+  return {
+    ...resolution,
+    user: await services.corePersistence.getUserByEmail(resolution.user.email)
+  };
+}
+
+function buildAuthEvidence(resolution: AuthResolution) {
+  return {
+    mode: resolution.mode,
+    sessionId: resolution.sessionId,
+    expiresAt: resolution.expiresAt,
+    legacyMockFallback: resolution.mode === "mock_header"
+  };
 }
 
 function buildAuditFilterInput(body: Record<string, unknown> | undefined) {
@@ -244,24 +242,26 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
 
   try {
     if (request.method === "GET" && request.path === "/auth/me") {
-      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const authResolution = await resolvePersistenceAuth(services, request.headers ?? {});
+      const user = authResolution.user;
       await services.corePersistence.recordAudit({
         actorId: user.id,
         action: "auth.me",
         resourceType: "platform_user",
-        resourceId: user.id
+        resourceId: user.id,
+        metadata: { authMode: authResolution.mode, sessionId: authResolution.sessionId }
       });
-      return { status: HttpStatus.OK, body: success({ user, permissions: user.permissions }) };
+      return { status: HttpStatus.OK, body: success({ user, permissions: user.permissions, auth: buildAuthEvidence(authResolution) }) };
     }
 
     if (request.method === "GET" && request.path === "/projects") {
-      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin", "creator"]);
       return { status: HttpStatus.OK, body: success(await services.corePersistence.listProjects(user)) };
     }
 
     if (request.method === "POST" && request.path === "/projects") {
-      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       const project = await services.corePersistence.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
@@ -283,13 +283,13 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
-      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
       return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit({})) };
     }
 
     if (request.method === "POST" && request.path === "/audit-logs/filter") {
-      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
       return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
     }
@@ -310,27 +310,30 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
           status: "healthy",
           dependencies: {
             database: "configured",
-            authMode: "mock"
+            authMode: "platform_session_with_mock_fallback"
           }
         })
       };
     }
 
     if (request.method === "GET" && request.path === "/auth/me") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const authResolution = services.auth.resolve(request.headers ?? {});
+      const user = authResolution.user;
 
       services.audit.record({
         actorId: user.id,
         action: "auth.me",
         resourceType: "platform_user",
-        resourceId: user.id
+        resourceId: user.id,
+        metadata: { authMode: authResolution.mode, sessionId: authResolution.sessionId }
       });
 
       return {
         status: HttpStatus.OK,
         body: success({
           user,
-          permissions: user.permissions
+          permissions: user.permissions,
+          auth: buildAuthEvidence(authResolution)
         })
       };
     }

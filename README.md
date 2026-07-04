@@ -100,6 +100,17 @@ The Platform API now has a first Prisma-shaped repository layer for users, proje
 
 This is an integration foundation. Existing sprint-specific services are still being migrated from mock/in-memory state to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
 
+## Phase 2 Real MVP Platform Auth Sessions
+
+Core Platform API routes now accept signed Platform Auth bearer sessions in addition to the legacy mock-header fallback:
+
+- Simulated SSO login issues `Authorization: Bearer evcp_session.<payload>.<signature>` tokens.
+- `/auth/me` returns auth evidence with `mode`, `sessionId`, `expiresAt` and `legacyMockFallback`.
+- Runtime persistence modes (`memory` and `prisma`) accept bearer sessions for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`.
+- Mock headers remain available only as a migration fallback until real Keycloak/OIDC browser login and frontend token storage are wired.
+
+See `docs/operations/real-mvp-auth-session.md`.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:
