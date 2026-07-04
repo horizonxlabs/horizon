@@ -5,7 +5,14 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
-import { createPlatformApiServices, type AuthResolution, type PlatformApiServices } from "./platform-services";
+import {
+  createPlatformApiServices,
+  PermissionError,
+  ValidationError,
+  type AuthResolution,
+  type PlatformApiServices,
+  type PlatformProject
+} from "./platform-services";
 import {
   createCoreRepositoryBackedService,
   createPrismaCorePersistence,
@@ -18,6 +25,12 @@ import {
   MemoryAiGovernancePersistenceClient,
   type AiGovernanceRepositoryBackedService
 } from "./persistence/ai-governance-repositories";
+import {
+  createPrdRepositoryBackedService,
+  createPrismaPrdPersistence,
+  MemoryPrdPersistenceClient,
+  type PrdRepositoryBackedService
+} from "./persistence/prd-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -40,6 +53,7 @@ type RouteRegistry = {
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
+  prdPersistence?: PrdRepositoryBackedService;
 };
 
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -163,16 +177,19 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
     return {
       ...services,
       corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient()),
-      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient())
+      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient()),
+      prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient())
     };
   }
 
   const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL);
+  const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
   return {
     ...services,
     corePersistence: service,
-    aiGovernancePersistence
+    aiGovernancePersistence,
+    prdPersistence
   };
 }
 
@@ -223,6 +240,13 @@ async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServi
   return services.auth.resolveCurrentUser(headers);
 }
 
+async function resolvePersistenceProject(services: PersistenceAwarePlatformApiServices, actor: Awaited<ReturnType<typeof resolvePersistenceUser>>, projectId: string): Promise<PlatformProject> {
+  if (!services.corePersistence) throw new Error("Core persistence service is not configured");
+  const project = (await services.corePersistence.listProjects(actor)).find((candidate) => candidate.id === projectId);
+  if (!project) throw new PermissionError(`Role ${actor.role} cannot access project ${projectId}`);
+  return project;
+}
+
 function buildAuthEvidence(resolution: AuthResolution) {
   return {
     mode: resolution.mode,
@@ -242,6 +266,21 @@ function buildAuditFilterInput(body: Record<string, unknown> | undefined) {
     dateFrom: body?.dateFrom ? String(body.dateFrom) : undefined,
     dateTo: body?.dateTo ? String(body.dateTo) : undefined
   };
+}
+
+function buildPersistencePrdPrompt(project: PlatformProject): string {
+  return [
+    `Create a PRD for ${project.name}.`,
+    `Problem: ${project.businessProblem}`,
+    `App type: ${project.appType}`,
+    `Department: ${project.targetDepartment}`,
+    `Users: ${project.intendedUsers.join(", ")}`,
+    `Sensitivity: ${project.dataSensitivity}`
+  ].join("\n");
+}
+
+function buildDeterministicPrdSummary(project: PlatformProject): string {
+  return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
 }
 
 function isPersistenceCoreRoute(request: PlatformRequest): boolean {
@@ -265,12 +304,23 @@ function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isPersistencePrdRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd$/.test(request.path)
+  );
+}
+
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
+  const prdPersistence = services.prdPersistence;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
   const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
-  if (!useCorePersistence && !useAiGovernancePersistence) return executePlatformApiRequest(services, request);
+  const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
+  if (!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence) return executePlatformApiRequest(services, request);
 
   try {
     if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
@@ -410,6 +460,84 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listGuardrailEvents(user)) };
+    }
+
+    const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
+    if (corePersistence && prdPersistence && request.method === "POST" && prdGenerateMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdGenerateMatch[1]);
+      const sourcePrompt = buildPersistencePrdPrompt(project);
+      const guardrail = services.guardrails.evaluatePrompt(user, {
+        prompt: sourcePrompt,
+        scenario: "prd_generation"
+      });
+      if (guardrail.decision === "block") {
+        throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
+      }
+      const completion = services.aiGovernance.invokeCompletion(user, {
+        projectId: project.id,
+        scenario: "prd_generation",
+        prompt: sourcePrompt,
+        requestedTokens: 300,
+        guardrailDecision: guardrail.decision,
+        dryRun: true,
+        allowDeterministicFallback: true,
+        deterministicFallbackText: buildDeterministicPrdSummary(project)
+      });
+      const draft = await prdPersistence.generateDraft(user, {
+        project,
+        sourcePrompt,
+        generatedBy: {
+          scenario: "prd_generation",
+          providerId: completion.providerId,
+          model: completion.model
+        },
+        aiSummary: completion.text
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "prd.draft.generated",
+        resourceType: "prd_version",
+        resourceId: draft.id,
+        metadata: {
+          projectId: project.id,
+          guardrailDecision: guardrail.decision,
+          aiUsageLogId: completion.usageLogId,
+          aiStatus: completion.status,
+          fallbackUsed: completion.fallbackUsed,
+          tokensUsed: completion.tokensUsed
+        }
+      });
+      return { status: HttpStatus.CREATED, body: success(draft) };
+    }
+
+    const prdBaselineMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/baseline$/);
+    if (corePersistence && prdPersistence && request.method === "POST" && prdBaselineMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdBaselineMatch[1]);
+      const baseline = await prdPersistence.confirmBaseline(user, project, String(request.body?.versionId ?? ""));
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "prd.baseline.confirmed",
+        resourceType: "prd_version",
+        resourceId: baseline.id,
+        metadata: { projectId: project.id, sourceVersionId: request.body?.versionId ? String(request.body.versionId) : "" }
+      });
+      return { status: HttpStatus.OK, body: success(baseline) };
+    }
+
+    const prdVersionsMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/versions$/);
+    if (prdPersistence && request.method === "GET" && prdVersionsMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdVersionsMatch[1]);
+      return { status: HttpStatus.OK, body: success(await prdPersistence.listVersions(user, project)) };
+    }
+
+    const prdCurrentMatch = request.path.match(/^\/projects\/([^/]+)\/prd$/);
+    if (prdPersistence && request.method === "GET" && prdCurrentMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdCurrentMatch[1]);
+      return { status: HttpStatus.OK, body: success(await prdPersistence.getCurrent(user, project)) };
     }
 
     return executePlatformApiRequest(services, request);
