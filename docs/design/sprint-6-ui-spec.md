@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 6 implementation
+Status: Implemented for Sprint 6 acceptance
 Related plan: `docs/planning/sprint-6-plan.md`
 
 ## 1. Design Objective
@@ -106,10 +106,9 @@ After publish, show:
 
 ## 10. Acceptance Criteria
 
-- [ ] Creator can view app members, pending invites, access requests and roles.
-- [ ] Creator can invite internal End User and assign role.
-- [ ] External invite shows policy warning.
-- [ ] Publish Review shows manifest and readiness checklist.
-- [ ] Blocked publish explains missing requirements.
-- [ ] Successful publish creates visible deployment record and App Store registry state.
-
+- [x] Creator can view app members, pending invites, access requests and roles.
+- [x] Creator can invite internal End User and assign role.
+- [x] External invite shows policy warning.
+- [x] Publish Review shows manifest and readiness checklist.
+- [x] Blocked publish explains missing requirements.
+- [x] Successful publish creates visible deployment record and App Store registry state.

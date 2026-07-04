@@ -83,6 +83,8 @@ Individual sprint plan files:
 | Sprint 6 | `docs/planning/sprint-6-plan.md` |
 | Sprint 7 | `docs/planning/sprint-7-plan.md` |
 | Sprint 8 | `docs/planning/sprint-8-plan.md` |
+| Sprint 9 | `docs/planning/sprint-9-plan.md` |
+| Sprint 10 | `docs/planning/sprint-10-plan.md` |
 
 ### Sprint 0 - Foundation and Design System
 
@@ -313,6 +315,8 @@ Individual sprint plan files:
 | Policy templates | P1-POL-001, ADR-004 | Public/Internal/Confidential/Restricted policies defined |
 | Direct IdP constraints | ADR-005 | Architecture decision updated |
 
+Detailed plan: `docs/planning/sprint-9-plan.md`
+
 ### Sprint 10 - Generated App Runtime Hardening
 
 **Goal:** Move from MVP mock/runtime to production-grade generated app contract.
@@ -324,6 +328,8 @@ Individual sprint plan files:
 | Health/readiness/log/metrics | P4-DEP-002 | Runtime contract visible |
 | OpenAPI and migration contract | P4-GEN-001, P4-MIG-001 | Spec and migration linked to deployment |
 
+Detailed plan: `docs/planning/sprint-10-plan.md`
+
 ### Sprint 11 - Knowledge and Skill Governance
 
 **Goal:** Make knowledge and skill management governed, versioned and permission-aware.
@@ -333,6 +339,8 @@ Individual sprint plan files:
 | Knowledge library | P2-KNW-001 | Sources uploaded and scoped |
 | Knowledge indexing/versioning/approval | P2-KNW-002 | Approved version retrieved by AI |
 | Skill library/versioning/assignment | P2-SKL-001 | Skill selected by role/scenario/scope |
+
+Detailed plan: `docs/planning/sprint-11-plan.md`
 
 ### Sprint 12 - Installer, Backup, Restore
 
@@ -397,18 +405,20 @@ Individual sprint plan files:
 
 MVP pilot is ready after Sprint 8 when:
 
-- [ ] Admin can configure AI provider/API key and guardrail.
-- [ ] Creator can create Leave Management project and confirm PRD baseline.
-- [ ] Creator can prompt, preview, inspect database and restore frontend.
-- [ ] Creator can invite user, assign app role and publish.
-- [ ] End User can open App Store PWA, see app and submit ticket.
-- [ ] Creator can convert ticket to PRD change.
-- [ ] Deployment traceability and audit are visible.
+- [x] Admin can configure AI provider/API key and guardrail. Evidence: Sprint 2 API/UI tests and `docs/delivery/sprint-2-product-owner-acceptance.md`.
+- [x] Creator can create Leave Management project and confirm PRD baseline. Evidence: Sprint 3 API/UI tests and `docs/delivery/sprint-3-product-owner-acceptance.md`.
+- [x] Creator can prompt, preview, inspect database and restore frontend. Evidence: Sprint 4-5 API/UI tests and delivery notes.
+- [x] Creator can invite user, assign app role and publish. Evidence: Sprint 6 API/UI tests and `docs/delivery/sprint-6-product-owner-acceptance.md`.
+- [x] End User can open App Store PWA, see app and submit ticket. Evidence: Sprint 7 API/UI tests and `docs/delivery/sprint-7-product-owner-acceptance.md`.
+- [x] Creator can convert ticket to PRD change. Evidence: Sprint 8 API/UI tests and `docs/delivery/sprint-8-product-owner-acceptance.md`.
+- [x] Deployment traceability and audit are visible. Evidence: Sprint 8 traceability/monitoring/audit tests and delivery notes.
 
 Production candidate is ready after Sprint 14 when:
 
-- [ ] MVP pilot criteria still pass.
-- [ ] RTM P0 tests pass or have approved exceptions.
-- [ ] OIDC/SAML, break-glass, policy templates and app isolation are production-hardened.
-- [ ] Installer, backup, restore, upgrade, rollback, observability and license controls pass acceptance tests.
-- [ ] Security hardening covers TLS, secrets, upload validation, public/external app checklist and log redaction.
+- [x] MVP pilot criteria still pass. Evidence: `pnpm verify:sprint14` passes Sprint 0-14 regression.
+- [x] RTM P0 tests pass or have approved exceptions. Evidence: `docs/requirements/requirements-traceability-matrix.md` and Sprint 14 release readiness evidence.
+- [x] OIDC/SAML, break-glass, policy templates and app isolation are production-hardened. Evidence: Sprint 9-10 delivery notes and tests.
+- [x] Installer, backup, restore, upgrade, rollback, observability and license controls pass acceptance tests. Evidence: Sprint 12-13 delivery notes and tests.
+- [x] Security hardening covers TLS, secrets, upload validation, public/external app checklist and log redaction. Evidence: Sprint 14 delivery note and tests.
+
+Current implementation evidence is captured in `docs/delivery/production-candidate-readiness.md`. External maintainer approval and merge of the stacked PRs are still required before the candidate is on the target branch.

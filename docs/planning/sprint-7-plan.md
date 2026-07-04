@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Status: Implemented and accepted
 Sprint dates: 2026-08-24 to 2026-08-28
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
@@ -64,13 +64,13 @@ This sprint maps directly to the source MVP plan:
 
 ## 6. Definition of Done
 
-- [ ] End User sees accessible apps.
-- [ ] End User sees available apps and request access flow.
-- [ ] End User opens app detail.
-- [ ] End User submits ticket.
-- [ ] End User can track ticket status.
-- [ ] Creator sees routed ticket in inbox.
-- [ ] Sprint 8 can convert ticket into PRD change request.
+- [x] End User sees accessible apps.
+- [x] End User sees available apps and request access flow.
+- [x] End User opens app detail.
+- [x] End User submits ticket.
+- [x] End User can track ticket status.
+- [x] Creator sees routed ticket in inbox.
+- [x] Sprint 8 can convert ticket into PRD change request.
 
 ## 7. Demo Script
 

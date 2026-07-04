@@ -1,8 +1,8 @@
 # Sprint 8 Plan - Ticket-to-PRD + Domain + Hardening
 
 Version: 0.1
-Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Date: 2026-07-04
+Status: Implemented and Accepted
 Sprint dates: 2026-08-31 to 2026-09-04
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
@@ -66,14 +66,14 @@ This sprint maps directly to the source MVP plan:
 
 ## 6. Definition of Done
 
-- [ ] Ticket converts to PRD change request.
-- [ ] PRD change request approval flow works.
-- [ ] Domain request and approval flow works.
-- [ ] Deployment links PRD, frontend version, publish and deployment.
-- [ ] Monitoring dashboard and audit filters are usable.
-- [ ] Demo data is stable.
-- [ ] Full MVP demo script passes.
-- [ ] Production extension Sprint 9 can start from a validated MVP baseline.
+- [x] Ticket converts to PRD change request.
+- [x] PRD change request approval flow works.
+- [x] Domain request and approval flow works.
+- [x] Deployment links PRD, frontend version, publish and deployment.
+- [x] Monitoring dashboard and audit filters are usable.
+- [x] Demo data is stable.
+- [x] Full MVP demo script is represented as a visible checklist and covered by API/UI smoke checks.
+- [x] Production extension Sprint 9 can start from a validated MVP baseline after final full verification passes.
 
 ## 7. Demo Script
 

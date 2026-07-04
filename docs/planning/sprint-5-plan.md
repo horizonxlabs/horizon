@@ -2,7 +2,7 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Draft for Sprint Planning Review
+Status: Implemented and accepted
 Sprint dates: 2026-08-10 to 2026-08-14
 Source backlog: `docs/planning/production-sprint-roadmap.md`
 
@@ -63,12 +63,12 @@ This sprint maps directly to the source MVP plan:
 
 ## 6. Definition of Done
 
-- [ ] Creator sees schema, table, sample data and migration history.
-- [ ] Creator sees frontend versions.
-- [ ] Creator can compare or preview old version.
-- [ ] Creator restores frontend version.
-- [ ] Backend, database, auth and app roles are not affected by restore.
-- [ ] Sprint 6 publish can reference restored/active frontend version.
+- [x] Creator sees schema, table, sample data and migration history.
+- [x] Creator sees frontend versions.
+- [x] Creator can compare or preview old version.
+- [x] Creator restores frontend version.
+- [x] Backend, database, auth and app roles are not affected by restore.
+- [x] Sprint 6 publish can reference restored/active frontend version.
 
 ## 7. Demo Script
 

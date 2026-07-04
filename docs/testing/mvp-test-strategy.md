@@ -38,7 +38,7 @@ Scope: Sprint 0-8 MVP plus production-extension readiness signals
 | Accessibility | Validate keyboard, labels, focus and status indicators | forms, modals, tabs, PWA ticket flow | Frontend/QA |
 | Visual/Screenshot | Validate shell/layout states | Admin dashboard, Creator workspace, Store PWA mobile | Frontend/QA |
 | Security | Validate deny paths and secret handling | no API key exposure, RBAC deny, guardrail block, app visibility | Security/Engineer |
-| Operational | Validate private-server operations | health, backup, restore, upgrade, rollback, license in later sprints | DevOps/Platform |
+| Operational | Validate private-server operations | health, backup, restore, upgrade, rollback, license and release readiness in Sprint 9-14 | DevOps/Platform |
 
 ## 4. MVP Quality Gates
 
@@ -67,6 +67,15 @@ Scope: Sprint 0-8 MVP plus production-extension readiness signals
 - [ ] Security deny-path tests pass for API keys, RBAC, guardrail and app visibility.
 - [ ] UX acceptance evidence exists for Admin, Creator and Store PWA critical screens.
 - [ ] Traceability evidence links ticket -> PRD change -> frontend/deployment state.
+
+### 4.4 Production Candidate After Sprint 14
+
+- [x] Full integrated regression passes. Evidence: `pnpm verify:sprint14` passed lint, typecheck, build, unit 65/65, integration 48/48 and E2E/API/UI 49/49.
+- [x] MVP release candidate criteria still pass. Evidence: Sprint 2-8 tests remain included in `pnpm verify:sprint14`.
+- [x] Production hardening tests pass. Evidence: Sprint 9-14 unit, integration and E2E/API/UI tests remain green.
+- [x] Security deny-path and secret redaction tests pass. Evidence: Sprint 2, Sprint 9, Sprint 12, Sprint 13 and Sprint 14 negative/security test coverage.
+- [x] UX acceptance evidence exists for production extension surfaces. Evidence: Sprint 9-14 screenshots and console-warning evidence in `docs/assets/screenshots/`.
+- [x] Release readiness evidence links roadmap criteria to tests, docs, DB counts, screenshots and PR state. Evidence: `docs/delivery/production-candidate-readiness.md`.
 
 ## 5. Critical Test Journeys
 
@@ -166,4 +175,3 @@ These are MVP targets, not final production guarantees.
 | Screenshot baseline storage policy | Sprint 0-2 |
 | Production backup/restore drill automation | Production extension Sprint 12 |
 | Load/performance targets as executable checks | Production hardening |
-
