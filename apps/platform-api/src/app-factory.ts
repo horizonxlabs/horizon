@@ -166,27 +166,35 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
           status: "healthy",
           dependencies: {
             database: "configured",
-            authMode: "mock"
+            authMode: "platform_session_with_mock_fallback"
           }
         })
       };
     }
 
     if (request.method === "GET" && request.path === "/auth/me") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const authResolution = services.auth.resolve(request.headers ?? {});
+      const user = authResolution.user;
 
       services.audit.record({
         actorId: user.id,
         action: "auth.me",
         resourceType: "platform_user",
-        resourceId: user.id
+        resourceId: user.id,
+        metadata: { authMode: authResolution.mode, sessionId: authResolution.sessionId }
       });
 
       return {
         status: HttpStatus.OK,
         body: success({
           user,
-          permissions: user.permissions
+          permissions: user.permissions,
+          auth: {
+            mode: authResolution.mode,
+            sessionId: authResolution.sessionId,
+            expiresAt: authResolution.expiresAt,
+            legacyMockFallback: authResolution.mode === "mock_header"
+          }
         })
       };
     }

@@ -133,7 +133,7 @@ test("Simulated OIDC and SAML login normalize claims into Platform Auth sessions
   assert.equal(oidcSession.providerType, "oidc");
   assert.deepEqual(oidcSession.claims.platformRoles, ["creator"]);
   assert.deepEqual(oidcSession.claims.appRoles["leave-management"], ["Employee", "Manager"]);
-  assert.ok(oidcSession.token.startsWith("psess_"));
+  assert.ok(oidcSession.token.startsWith("evcp_session."));
   assert.equal(samlSession.providerType, "saml");
   assert.deepEqual(samlSession.claims.platformRoles, ["admin"]);
   assert.ok(services.audit.list().some((event) => event.action === "auth.sso_login.succeeded" && event.resourceId === oidcSession.id));

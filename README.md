@@ -74,6 +74,12 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
+## Phase 2 Real MVP Auth Session Foundation
+
+The Platform API now supports signed `Authorization: Bearer evcp_session...` tokens for protected routes. `/auth/me` returns auth evidence (`platform_session` or legacy `mock_header`) so the transition away from Sprint 0-14 mock headers is explicit and testable.
+
+See `docs/operations/real-mvp-auth-session.md` for the current guarantees and remaining SSO persistence work.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:

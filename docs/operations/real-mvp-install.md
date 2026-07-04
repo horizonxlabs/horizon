@@ -70,10 +70,9 @@ pnpm verify:sprint14
 
 ## Remaining Mock-to-Real Work
 
-- Replace mock auth headers with Platform Auth sessions backed by Keycloak/OIDC.
+- Complete Platform Auth sessions with real Keycloak/OIDC callbacks and persisted sessions. The Phase 2 session foundation already accepts signed `Authorization: Bearer evcp_session...` tokens and labels `x-mock-user-email` as a legacy fallback.
 - Replace direct frontend mock-data imports with API clients.
 - Move service state from in-memory/demo records to Prisma-backed repositories.
 - Connect AI Provider Adapter to real external providers.
 - Replace mock generated app preview with real build/deploy/runtime flow.
 - Add E2E tests that use real login, database state and deployed generated app routes.
-
