@@ -8,7 +8,7 @@ Stacked after: #27 Real MVP private-server install foundation
 
 The production blueprint chooses external AI providers only and requires a Provider Adapter architecture. This phase adds the first backend AI Gateway contract so PRD generation no longer depends on a direct deterministic-only path.
 
-The current adapter runs in deterministic dry-run mode for CI and private-server verification. Live network execution is intentionally deferred to the worker/runtime hardening step so tests do not require real provider credentials.
+The adapter keeps deterministic dry-run mode for CI and private-server verification, and now supports a live OpenAI-compatible execution path when the Platform API runtime supplies a provider fetcher. Tests use an injected fetcher, so verification does not require real provider credentials or network access.
 
 ## Gateway Flow
 
@@ -26,7 +26,7 @@ sequenceDiagram
   Guardrail-->>API: allow / warn / block
   API->>Gateway: Invoke scenario route
   Gateway->>Gateway: Check creator quota
-  Gateway->>Adapter: Complete dry-run request
+  Gateway->>Adapter: Complete dry-run or live OpenAI-compatible request
   Adapter-->>Gateway: Normalized text, token estimate, latency
   Gateway->>Audit: AI usage and route evidence
   Gateway-->>API: Completion metadata
@@ -37,6 +37,9 @@ sequenceDiagram
 
 - Provider routing uses a stable adapter contract.
 - OpenAI-compatible and Azure OpenAI provider types map to the first adapter boundary.
+- Live `dryRun: false` execution posts to the provider `/chat/completions` path through an injected runtime fetcher.
+- Live responses normalize text, token usage and latency back into the shared AI Gateway response.
+- Provider HTTP errors are mapped to controlled validation errors and sanitized before usage/audit evidence is recorded.
 - Guardrail `block` decisions stop before adapter invocation.
 - Quota exhaustion stops before adapter invocation.
 - API keys are stored as local envelopes and responses expose only masked/fingerprint values.
@@ -46,7 +49,7 @@ sequenceDiagram
 
 ## Remaining Work
 
-- Move live external calls into a controlled worker/runtime with timeout, retry and provider-specific error mapping.
+- Add the production worker/runtime fetcher implementation with retry policy, circuit breaking and provider-specific timeout handling.
 - Persist AI providers, encrypted keys, routes, quotas and usage logs through Prisma repositories.
 - Add provider test-call API for Admin Console.
 - Route workspace/frontend/backend/review/documentation scenarios through the same gateway.

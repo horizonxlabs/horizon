@@ -144,6 +144,122 @@ test("AI gateway invokes OpenAI-compatible adapter in dry-run mode and records u
   assert.equal(JSON.stringify(usage).includes("sk-live-secret"), false);
 });
 
+test("AI gateway invokes live OpenAI-compatible transport without leaking secrets", () => {
+  const calls = [];
+  const services = createPlatformApiServices({
+    aiGateway: {
+      fetcher: (request) => {
+        calls.push(request);
+        return {
+          status: 200,
+          body: {
+            choices: [{ message: { content: "Live provider PRD response" } }],
+            usage: { total_tokens: 37 }
+          }
+        };
+      }
+    }
+  });
+  const actor = services.auth.resolveCurrentUser({ "x-mock-user-email": "admin@company.com" });
+  const provider = services.aiGovernance.createProvider(actor, {
+    name: "OpenAI Live Gateway",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  services.aiGovernance.createApiKey(actor, {
+    providerId: provider.id,
+    name: "Live Gateway Key",
+    secret: "sk-live-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+
+  const result = services.aiGovernance.invokeCompletion(actor, {
+    projectId: "prj_live",
+    scenario: "prd_generation",
+    prompt: "Create a governed leave management PRD",
+    requestedTokens: 20,
+    guardrailDecision: "allow",
+    dryRun: false
+  });
+  const usage = services.aiGovernance.listUsageLogs()[0];
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.openai.com/v1/chat/completions");
+  assert.equal(calls[0].headers.authorization, "Bearer sk-live-secret-that-must-not-leak");
+  assert.equal(result.text, "Live provider PRD response");
+  assert.equal(result.tokensUsed, 37);
+  assert.equal(result.status, "succeeded");
+  assert.equal(usage.tokensUsed, 37);
+  assert.equal(usage.reason, undefined);
+  assert.equal(JSON.stringify(result).includes("sk-live-secret"), false);
+  assert.equal(JSON.stringify(usage).includes("sk-live-secret"), false);
+  assert.equal(JSON.stringify(services.audit.list()).includes("sk-live-secret"), false);
+});
+
+test("AI gateway maps live provider errors without leaking request secrets", () => {
+  const services = createPlatformApiServices({
+    aiGateway: {
+      fetcher: () => ({
+        status: 429,
+        body: {
+          error: {
+            message: "rate limit exceeded for token sk-live-secret-that-must-not-leak",
+            type: "rate_limit_exceeded"
+          }
+        }
+      })
+    }
+  });
+  const actor = services.auth.resolveCurrentUser({ "x-mock-user-email": "admin@company.com" });
+  const provider = services.aiGovernance.createProvider(actor, {
+    name: "OpenAI Rate Limited",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  services.aiGovernance.createApiKey(actor, {
+    providerId: provider.id,
+    name: "Live Gateway Key",
+    secret: "sk-live-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+
+  assert.throws(
+    () =>
+      services.aiGovernance.invokeCompletion(actor, {
+        projectId: "prj_live",
+        scenario: "prd_generation",
+        prompt: "Create a governed leave management PRD",
+        guardrailDecision: "allow",
+        dryRun: false
+      }),
+    (error) => {
+      assert.match(error.message, /AI provider call failed/);
+      assert.match(error.message, /rate_limit_exceeded/);
+      assert.doesNotMatch(error.message, /sk-live-secret/);
+      return true;
+    }
+  );
+  const usage = services.aiGovernance.listUsageLogs()[0];
+  assert.equal(usage.status, "failed");
+  assert.doesNotMatch(usage.reason, /sk-live-secret/);
+});
+
 test("AI gateway blocks guardrail and quota before adapter call", () => {
   const { services, actor } = admin();
   const provider = services.aiGovernance.createProvider(actor, {
