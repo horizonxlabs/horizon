@@ -165,6 +165,7 @@ model Project {
   publishRequests PublishRequest[]
   deploymentRecords DeploymentRecord[]
   appStoreRegistryEntries AppStoreRegistryEntry[]
+  generatedAppRuntimes GeneratedAppRuntime[]
   supportTickets SupportTicket[]
   prdChangeRequests PrdChangeRequest[]
   domainSetting DomainSetting?
@@ -204,6 +205,7 @@ model App {
   publishRequests    PublishRequest[]
   deploymentRecords  DeploymentRecord[]
   registryEntry      AppStoreRegistryEntry?
+  generatedAppRuntimes GeneratedAppRuntime[]
   supportTickets     SupportTicket[]
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
@@ -663,11 +665,132 @@ model DeploymentRecord {
   publishRequest       PublishRequest @relation(fields: [publishRequestId], references: [id], onDelete: Cascade)
   publishedBy          PlatformUser @relation("DeploymentRecordPublishedBy", fields: [publishedByUserId], references: [id])
   registryEntry        AppStoreRegistryEntry?
+  generatedAppRuntime  GeneratedAppRuntime?
   publishedAt          DateTime @default(now()) @map("published_at")
 
   @@index([appId, status])
   @@index([projectId])
   @@map("deployment_records")
+}
+
+model GeneratedAppRuntime {
+  id                 String   @id
+  appId              String   @map("app_id")
+  projectId          String   @map("project_id")
+  deploymentRecordId String   @unique @map("deployment_record_id")
+  artifactRoot       String   @map("artifact_root")
+  requiredPaths      String[] @default([]) @map("required_paths")
+  containerName      String   @map("container_name")
+  imageTag           String   @map("image_tag")
+  route              String
+  healthEndpoint     String   @map("health_endpoint")
+  readyEndpoint      String   @map("ready_endpoint")
+  metricsEndpoint    String   @map("metrics_endpoint")
+  status             String
+  app                App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deploymentRecord   DeploymentRecord @relation(fields: [deploymentRecordId], references: [id], onDelete: Cascade)
+  schemaGrants       GeneratedAppSchemaGrant[]
+  healthChecks       GeneratedAppHealthCheck[]
+  runtimeLogs        GeneratedAppRuntimeLog[]
+  runtimeMetrics     GeneratedAppRuntimeMetric[]
+  openApiContract    GeneratedAppOpenApiContract?
+  migrationReports   GeneratedAppMigrationReport[]
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([appId, status])
+  @@index([projectId])
+  @@map("generated_app_runtimes")
+}
+
+model GeneratedAppSchemaGrant {
+  id             String   @id
+  runtimeId      String   @map("runtime_id")
+  schemaName     String   @map("schema_name")
+  dbUser         String   @map("db_user")
+  allowedSchemas String[] @default([]) @map("allowed_schemas")
+  deniedSchemas  String[] @default([]) @map("denied_schemas")
+  status         String
+  runtime        GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([schemaName, dbUser])
+  @@map("generated_app_schema_grants")
+}
+
+model GeneratedAppHealthCheck {
+  id              String   @id
+  runtimeId       String   @map("runtime_id")
+  healthStatus    String   @map("health_status")
+  readinessStatus String   @map("readiness_status")
+  dependencies    Json
+  readinessGates  String[] @default([]) @map("readiness_gates")
+  runtime         GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  checkedAt       DateTime @default(now()) @map("checked_at")
+
+  @@index([runtimeId, checkedAt])
+  @@map("generated_app_health_checks")
+}
+
+model GeneratedAppRuntimeLog {
+  id           String   @id
+  runtimeId    String   @map("runtime_id")
+  appId        String   @map("app_id")
+  deploymentId String   @map("deployment_id")
+  requestId    String   @map("request_id")
+  severity     String
+  message      String
+  metadata     Json
+  runtime      GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+
+  @@index([appId, deploymentId])
+  @@index([runtimeId, occurredAt])
+  @@map("generated_app_runtime_logs")
+}
+
+model GeneratedAppRuntimeMetric {
+  id            String   @id
+  runtimeId     String   @map("runtime_id")
+  requestCount  Int      @map("request_count")
+  errorCount    Int      @map("error_count")
+  latencyP95Ms  Int      @map("latency_p95_ms")
+  window        String
+  runtime       GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  measuredAt    DateTime @default(now()) @map("measured_at")
+
+  @@index([runtimeId, measuredAt])
+  @@map("generated_app_runtime_metrics")
+}
+
+model GeneratedAppOpenApiContract {
+  id          String   @id
+  runtimeId   String   @unique @map("runtime_id")
+  version     String
+  openapiPath String   @map("openapi_path")
+  paths       String[] @default([])
+  pathCount   Int      @map("path_count")
+  runtime     GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("generated_app_openapi_contracts")
+}
+
+model GeneratedAppMigrationReport {
+  id                 String   @id
+  runtimeId          String   @map("runtime_id")
+  deploymentRecordId String   @map("deployment_record_id")
+  migrationId        String   @map("migration_id")
+  dryRunStatus       String   @map("dry_run_status")
+  destructiveChanges String[] @default([]) @map("destructive_changes")
+  requiredApprovals  String[] @default([]) @map("required_approvals")
+  approvalId         String?  @map("approval_id")
+  runtime            GeneratedAppRuntime @relation(fields: [runtimeId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([deploymentRecordId, dryRunStatus])
+  @@map("generated_app_migration_reports")
 }
 
 model AppStoreRegistryEntry {

@@ -1414,7 +1414,8 @@ button {
 }
 
 .admin-monitoring-shell,
-.auth-policy-shell {
+.auth-policy-shell,
+.runtime-hardening-shell {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-card);
@@ -1509,6 +1510,52 @@ button {
   display: none;
 }
 
+.runtime-kpi-grid,
+.runtime-hardening-layout,
+.runtime-hardening-grid {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.runtime-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.runtime-hardening-layout {
+  align-items: start;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+}
+
+.runtime-hardening-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runtime-hardening-grid > .ds-section-card:first-child,
+.runtime-hardening-grid > .ds-section-card:nth-child(6),
+.runtime-hardening-grid > .ds-section-card:nth-child(7) {
+  grid-column: 1 / -1;
+}
+
+.runtime-hardening-shell .ds-definition-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runtime-hardening-shell .ds-definition-grid dd,
+.runtime-hardening-shell .ds-data-table td,
+.runtime-hardening-shell .ds-rail-alert span {
+  overflow-wrap: anywhere;
+}
+
+.runtime-mobile-list {
+  display: none;
+}
+
+.runtime-endpoint-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1542,6 +1589,9 @@ button {
   .admin-monitoring-grid,
   .auth-kpi-grid,
   .auth-policy-grid,
+  .runtime-kpi-grid,
+  .runtime-hardening-layout,
+  .runtime-hardening-grid,
   .creator-summary-grid,
   .creator-prd-layout,
   .creator-prd-workbench,
@@ -1566,24 +1616,39 @@ button {
     display: grid;
   }
 
-  .auth-policy-shell .ds-definition-grid {
+  .auth-policy-shell .ds-definition-grid,
+  .runtime-hardening-shell .ds-definition-grid {
     grid-template-columns: 1fr;
   }
 
-  .auth-policy-shell .ds-definition-grid dd {
+  .auth-policy-shell .ds-definition-grid dd,
+  .runtime-hardening-shell .ds-definition-grid dd {
     overflow-wrap: anywhere;
   }
 
-  .auth-desktop-table {
+  .runtime-hardening-shell {
+    padding: var(--evcp-space-3);
+  }
+
+  .runtime-hardening-grid > .ds-section-card:first-child,
+  .runtime-hardening-grid > .ds-section-card:nth-child(6),
+  .runtime-hardening-grid > .ds-section-card:nth-child(7) {
+    grid-column: auto;
+  }
+
+  .auth-desktop-table,
+  .runtime-desktop-table {
     display: none;
   }
 
-  .auth-mobile-list {
+  .auth-mobile-list,
+  .runtime-mobile-list {
     display: grid;
     gap: var(--evcp-space-2);
   }
 
-  .auth-mobile-list article {
+  .auth-mobile-list article,
+  .runtime-mobile-list article {
     background: var(--evcp-color-surface-muted);
     border: 1px solid var(--evcp-color-border-soft);
     border-radius: var(--evcp-radius-card);
@@ -1592,15 +1657,24 @@ button {
     padding: 12px;
   }
 
+  .runtime-mobile-list .tone-badge {
+    justify-self: start;
+  }
+
   .auth-mobile-list strong,
   .auth-mobile-list span,
-  .auth-mobile-list small {
+  .auth-mobile-list small,
+  .runtime-mobile-list strong,
+  .runtime-mobile-list span,
+  .runtime-mobile-list small {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
   .auth-mobile-list span,
-  .auth-mobile-list small {
+  .auth-mobile-list small,
+  .runtime-mobile-list span,
+  .runtime-mobile-list small {
     color: var(--evcp-color-muted);
   }
 

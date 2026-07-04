@@ -163,16 +163,16 @@ flowchart LR
 
 | Test Case | Given | When | Then | Evidence |
 | --- | --- | --- | --- | --- |
-| TC-RUN-001 | Publish is approved | Deployment runs | App is deployed as its own container/process with health/logs/deployment record | Container status, deployment record |
+| TC-RUN-001 | Publish is approved | Deployment runs | App is deployed as its own container/process with health/logs/deployment record | Sprint 10 unit/E2E API: runtime overview container status and deployment ID |
 | TC-RUN-002 | Platform domain is configured | User opens `/admin`, `/creator`, `/store`, `/apps/{slug}` | Caddy routes traffic with TLS to correct service/app | Route test, TLS check |
 | TC-RUN-003 | App Owner requests internal/custom domain | IT Admin approves | Domain becomes active after DNS/TLS checks | Domain request, route status |
 | TC-RUN-004 | App requests public domain | Policy evaluates request | IT Admin and Security Admin approvals are required | Approval request |
-| TC-RUN-005 | Publish request includes Restricted data and destructive migration | Policy evaluates request | Developer Reviewer, IT Admin and Data Owner are required | Approval request |
-| TC-RUN-006 | Generated app folder exists | Artifact check runs | Required manifest, frontend, backend, prisma, openapi, tests and README exist | Repository scan |
-| TC-RUN-007 | App container starts | Health and readiness endpoints are called | `/health` and `/ready` return correct app/dependency status | HTTP response |
-| TC-RUN-008 | App handles request | Logs are emitted | Structured JSON logs include appId, deploymentId, requestId and severity | Log sample |
-| TC-RUN-009 | App backend exposes API | OpenAPI spec is requested | Spec exists and matches generated API surface | OpenAPI validation |
-| TC-RUN-010 | Migration is included in deployment | Dry-run runs | Migration is versioned, dry-runnable and linked to deployment | Migration report |
+| TC-RUN-005 | Publish request includes Restricted data and destructive migration | Policy evaluates request | Developer Reviewer, IT Admin and Data Owner are required | Sprint 10 unit/E2E API: migration dry-run blocked without required approvals |
+| TC-RUN-006 | Generated app folder exists | Artifact check runs | Required manifest, frontend, backend, prisma, openapi, tests and README exist | Sprint 10 unit/API: `artifactContract.requiredPaths` |
+| TC-RUN-007 | App container starts | Health and readiness endpoints are called | `/health` and `/ready` return correct app/dependency status | Sprint 10 E2E API: `/admin/runtime/projects/:projectId/health` |
+| TC-RUN-008 | App handles request | Logs are emitted | Structured JSON logs include appId, deploymentId, requestId and severity | Sprint 10 unit/API: `logSample` with appId/deploymentId/requestId |
+| TC-RUN-009 | App backend exposes API | OpenAPI spec is requested | Spec exists and matches generated API surface | Sprint 10 E2E API/UI: OpenAPI contract paths |
+| TC-RUN-010 | Migration is included in deployment | Dry-run runs | Migration is versioned, dry-runnable and linked to deployment | Sprint 10 unit/E2E API: migration report linked to deployment |
 
 ### 4.6 App Store, Tickets, Notifications
 

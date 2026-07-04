@@ -34,6 +34,11 @@ export interface PlatformRequest {
     | "/audit-logs"
     | "/audit-logs/filter"
     | "/admin/monitoring"
+    | `/admin/runtime/projects/${string}`
+    | `/admin/runtime/projects/${string}/schema/check`
+    | `/admin/runtime/projects/${string}/health`
+    | `/admin/runtime/projects/${string}/openapi`
+    | `/admin/runtime/projects/${string}/migrations/dry-run`
     | "/admin/auth/providers"
     | "/admin/auth/providers/oidc"
     | "/admin/auth/providers/saml"
@@ -417,6 +422,62 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
     }
 
+    const runtimeOverviewMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)$/);
+    if (request.method === "GET" && runtimeOverviewMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.generatedRuntime.getRuntimeOverview(user, runtimeOverviewMatch[1])) };
+    }
+
+    const runtimeSchemaCheckMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/);
+    if (request.method === "POST" && runtimeSchemaCheckMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(
+          services.generatedRuntime.checkSchemaAccess(user, runtimeSchemaCheckMatch[1], {
+            attemptedSchema: String(request.body?.attemptedSchema ?? ""),
+            operation: String(request.body?.operation ?? "select")
+          })
+        )
+      };
+    }
+
+    const runtimeHealthMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/health$/);
+    if (request.method === "GET" && runtimeHealthMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const runtime = services.generatedRuntime.getRuntimeOverview(user, runtimeHealthMatch[1]);
+      return {
+        status: HttpStatus.OK,
+        body: success({
+          health: runtime.health,
+          readiness: runtime.readiness,
+          metrics: runtime.metrics,
+          logSample: runtime.logSample
+        })
+      };
+    }
+
+    const runtimeOpenApiMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/openapi$/);
+    if (request.method === "GET" && runtimeOpenApiMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.generatedRuntime.getRuntimeOverview(user, runtimeOpenApiMatch[1]).openApi) };
+    }
+
+    const runtimeMigrationDryRunMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/);
+    if (request.method === "POST" && runtimeMigrationDryRunMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(
+          services.generatedRuntime.runMigrationDryRun(user, runtimeMigrationDryRunMatch[1], {
+            migrationId: String(request.body?.migrationId ?? ""),
+            destructiveChanges: Array.isArray(request.body?.destructiveChanges) ? request.body.destructiveChanges.map(String) : [],
+            approvalId: request.body?.approvalId ? String(request.body.approvalId) : undefined
+          })
+        )
+      };
+    }
+
     if (request.method === "GET" && request.path === "/admin/auth/providers") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.authSso.listProviders(user)) };
@@ -698,6 +759,58 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
   routes.get("/admin/monitoring", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/monitoring", headers: request.headers }))
+  );
+  routes.get("/admin/runtime/projects/:projectId", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/admin/runtime/projects/${String(request.params?.projectId ?? "")}`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/admin/runtime/projects/:projectId/schema/check", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/runtime/projects/${String(request.params?.projectId ?? "")}/schema/check`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/admin/runtime/projects/:projectId/health", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/admin/runtime/projects/${String(request.params?.projectId ?? "")}/health`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.get("/admin/runtime/projects/:projectId/openapi", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/admin/runtime/projects/${String(request.params?.projectId ?? "")}/openapi`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/admin/runtime/projects/:projectId/migrations/dry-run", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/admin/runtime/projects/${String(request.params?.projectId ?? "")}/migrations/dry-run`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
   );
   routes.post("/projects/:projectId/prd/generate", (request, response) =>
     sendPlatformResponse(

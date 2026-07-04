@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 9 Auth SSO and Policy Hardening are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 10 Generated App Runtime Hardening are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -23,6 +23,7 @@ pnpm verify:sprint6
 pnpm verify:sprint7
 pnpm verify:sprint8
 pnpm verify:sprint9
+pnpm verify:sprint10
 ```
 
 Start frontend shells:
@@ -150,3 +151,13 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Public/Internal/Confidential/Restricted policy templates for reviewers, checks and exposure defaults
 - Admin Auth / SSO Production Readiness UI
 - Prisma migration and seed data for auth provider config, auth sessions, break-glass sessions and policy templates
+
+## Sprint 10 Scope
+
+- Generated app runtime overview service linked to published app manifest and deployment record
+- Admin runtime API routes for overview, schema access check, health/readiness/metrics/log evidence, OpenAPI and migration dry-run
+- Separate generated app container contract with artifact root, required paths, container name, image tag, route and probe endpoints
+- Schema-per-app isolation evidence with assigned DB user, allowed schema and cross-schema denial reason
+- Migration dry-run contract that blocks destructive changes without Developer Reviewer and Data Owner approvals
+- Admin Generated App Runtime Hardening UI
+- Prisma migration and seed data for runtime, schema grant, health, log, metric, OpenAPI and migration report records
