@@ -40,7 +40,7 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 - `MetricCard` for Preflight Report, Setup Wizard, Backup Schedule and Restore Drill.
 - `WorkflowRail` for first-run preflight -> setup config -> compose readiness -> migrate/seed -> verify health -> backup schedule -> backup run -> PITR -> restore drill.
 - `SectionCard` for each evidence group.
-- `install-wizard-panel` and `install-wizard-steps` for the first-run install stepper.
+- `install-wizard-panel`, `install-wizard-steps`, `install-wizard-action-row` and `install-setup-form` for the first-run install stepper, step controls and setup capture.
 - `DataTable` for preflight checks, compose services, backup runs and restore validation checks.
 - `DefinitionGrid` for setup summary, backup policy and PITR metadata.
 - `DecisionPanel` for setup redaction and restore drill outcome.
@@ -59,8 +59,9 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 | State | UI Behavior |
 | --- | --- |
 | Default | Shows pending first-run install wizard, latest setup, backup policy/run, PITR and restore drill evidence |
-| Passed preflight | Success decision, report path and setup review state; install can proceed after setup review |
+| Passed preflight | Success decision, report path and setup review state; wizard advances to editable setup config |
 | Failed preflight | Danger/warning decision, actionable failed checks, install not marked ready |
+| Saved setup | Shows masked database/storage/auth/AI/backup evidence, clears plaintext secret input and allows compose/migrate/health review |
 | Missing backup policy | Empty section remains visible with configure action |
 | Failed restore drill | Failed checks listed; recovery not marked successful; critical audit shown |
 | Access denied | Admin-only denial via standard API error envelope |
@@ -69,6 +70,7 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 
 - [x] Admin UI includes `Installer, Backup and Restore`.
 - [x] Admin UI includes a first-run install wizard with preflight, setup, compose, migrate/seed and health steps.
+- [x] Admin UI includes Back/Next step controls, per-step statuses and API-backed setup save.
 - [x] UI exposes `Preflight Report`, `Setup Wizard`, `Backup Schedule`, `Backup Runs`, `PostgreSQL PITR`, `Restore Drill` and `Recovery Evidence`.
 - [x] UI uses `operations-recovery-shell`, `install-wizard-panel`, `install-wizard-steps` and `backup-restore-mobile-list` patterns.
 - [x] Setup/backup evidence shows masked values or key references only.

@@ -1,4 +1,12 @@
-import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type SimulatedSsoLoginInput } from "@evcp/api-client";
+import {
+  createPlatformApiClient,
+  createPlatformSessionStore,
+  type CurrentUserResponse,
+  type InstallerPreflightInput,
+  type InstallerReportDto,
+  type InstallerSetupResponse,
+  type SimulatedSsoLoginInput
+} from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
@@ -19,7 +27,7 @@ import {
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ChangeEvent, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -239,17 +247,25 @@ const restoreValidationRows = [
 
 type InstallWizardStepId = "preflight" | "setup" | "compose" | "migrate_seed" | "verify_health";
 type InstallWizardDecision = "ready" | "blocked" | "not_run";
+type InstallWizardStepStatus = "current" | "complete" | "blocked" | "pending";
 type PreflightRow = { check: string; required: string; observed: string; status: string; action: string };
-
-type InstallerReportEnvelope = {
-  ok: boolean;
-  data?: {
-    status: "passed" | "failed";
-    installBlocked: boolean;
-    checks: Array<{ name: string; required: string; observed: string; status: string; action: string }>;
-    actionableFailures: string[];
-    reportPath: string;
-  };
+type InstallWizardSetupForm = {
+  domain: string;
+  databaseUrl: string;
+  storageProvider: string;
+  storageEndpoint: string;
+  storageBucket: string;
+  storageSecretAccessKey: string;
+  authMode: string;
+  authIssuerUrl: string;
+  aiProviderId: string;
+  aiModel: string;
+  guardrailPolicy: string;
+  backupSchedule: string;
+  backupRetentionDays: string;
+  backupEncryptionKeyRef: string;
+  firstAdminEmail: string;
+  firstAdminName: string;
 };
 
 type AdminBootstrapState = {
@@ -270,6 +286,25 @@ const adminSessionBridgeProfile: SimulatedSsoLoginInput = {
   appRoles: {}
 };
 
+const initialInstallerSetupForm: InstallWizardSetupForm = {
+  domain: "platform.company.test",
+  databaseUrl: "postgresql://evcp:REPLACE_ME@postgres:5432/evcp",
+  storageProvider: "minio",
+  storageEndpoint: "http://minio:9000",
+  storageBucket: "evcp-artifacts",
+  storageSecretAccessKey: "replace-me",
+  authMode: "keycloak",
+  authIssuerUrl: "http://keycloak:8080/realms/evcp",
+  aiProviderId: "aip_openai",
+  aiModel: "gpt-4.1",
+  guardrailPolicy: "enterprise-default",
+  backupSchedule: "0 2 * * *",
+  backupRetentionDays: "30",
+  backupEncryptionKeyRef: "kms://evcp/backup",
+  firstAdminEmail: "admin@company.com",
+  firstAdminName: "Platform Admin"
+};
+
 const installWizardSteps = [
   { id: "preflight", label: "1. Preflight", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
   { id: "setup", label: "2. Setup Config", detail: "domain, database, storage, auth, AI, backup, first admin" },
@@ -277,16 +312,6 @@ const installWizardSteps = [
   { id: "migrate_seed", label: "4. Migrate + Seed", detail: "Prisma migration and seed plan is ready" },
   { id: "verify_health", label: "5. Verify Health", detail: "Platform surfaces and dependencies report healthy" }
 ] satisfies Array<{ id: InstallWizardStepId; label: string; detail: string }>;
-
-const installWizardSetupItems = [
-  { label: "Domain", value: "platform.company.test" },
-  { label: "Database", value: "postgresql://evcp:***@postgres:5432/evcp" },
-  { label: "Storage", value: "MinIO bucket evcp-artifacts / key fingerprint only" },
-  { label: "Auth", value: "Bundled Keycloak realm evcp" },
-  { label: "AI Provider", value: "External provider route / API key fingerprint only" },
-  { label: "Backup", value: "daily 02:00 / 30d / kms://evcp/backup" },
-  { label: "First Admin", value: "admin@company.com" }
-];
 
 const installWizardPassingProfile = {
   cpuCores: 8,
@@ -336,10 +361,24 @@ const initialInstallWizardState = {
   activeStep: "preflight" as InstallWizardStepId,
   rows: installWizardReadyRows,
   actionableFailures: ["Run preflight before marking install ready"],
-  reportPath: "reports/install/pending-install-report.json"
+  reportPath: "reports/install/pending-install-report.json",
+  setupStatus: "pending" as "pending" | "saved"
 };
 
-function preflightRowsFromReport(report: InstallerReportEnvelope["data"] | undefined, fallback: PreflightRow[]): PreflightRow[] {
+function setupItemsFromConfig(form: InstallWizardSetupForm, savedSetup?: InstallerSetupResponse) {
+  const retentionDays = Number.parseInt(form.backupRetentionDays, 10) || 30;
+  return [
+    { label: "Domain", value: savedSetup?.domain ?? form.domain },
+    { label: "Database", value: savedSetup?.databaseUrlMasked ?? form.databaseUrl.replace(/:[^:@/]+@/, ":***@") },
+    { label: "Storage", value: `${savedSetup?.storage?.provider ?? form.storageProvider} bucket ${savedSetup?.storage?.bucket ?? form.storageBucket} / key fingerprint only` },
+    { label: "Auth", value: `${savedSetup?.auth?.mode ?? form.authMode} / ${savedSetup?.auth?.issuerUrl ?? form.authIssuerUrl}` },
+    { label: "AI Provider", value: `${savedSetup?.ai?.providerId ?? form.aiProviderId} / ${savedSetup?.ai?.model ?? form.aiModel}` },
+    { label: "Backup", value: `${form.backupSchedule} / ${retentionDays}d / ${form.backupEncryptionKeyRef}` },
+    { label: "First Admin", value: String(savedSetup?.firstAdmin?.email ?? form.firstAdminEmail) }
+  ];
+}
+
+function preflightRowsFromReport(report: InstallerReportDto | undefined, fallback: PreflightRow[]): PreflightRow[] {
   if (!report?.checks?.length) return fallback;
   return report.checks.map((check) => ({
     check: check.name,
@@ -360,14 +399,18 @@ function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
 }
 
-async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
+function createAdminPlatformClient() {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const client = createPlatformApiClient({
+  return createPlatformApiClient({
     baseUrl,
     sessionToken: platformSessionToken(),
     legacyUserEmail: "admin@company.com"
   });
+}
+
+async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
+  const client = createAdminPlatformClient();
   const currentUser: CurrentUserResponse = await client.getCurrentUser();
   return {
     userName: currentUser.user.name,
@@ -392,20 +435,61 @@ function clearAdminSessionBridge(): AdminBootstrapState {
   return initialAdminBootstrap;
 }
 
-async function runInstallerPreflight(profile: typeof installWizardPassingProfile): Promise<InstallerReportEnvelope["data"] | undefined> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Preflight API base URL is not configured for local dev");
-  const response = await fetch(`${baseUrl}/admin/installer/preflight`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-mock-user-email": "admin@company.com"
+async function runInstallerPreflight(profile: InstallerPreflightInput): Promise<InstallerReportDto> {
+  return createAdminPlatformClient().runInstallerPreflight(profile);
+}
+
+async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<InstallerSetupResponse> {
+  return createAdminPlatformClient().saveInstallerSetup({
+    domain: form.domain,
+    databaseUrl: form.databaseUrl,
+    storage: {
+      provider: form.storageProvider,
+      endpoint: form.storageEndpoint,
+      bucket: form.storageBucket,
+      secretAccessKey: form.storageSecretAccessKey
     },
-    body: JSON.stringify(profile)
+    auth: {
+      mode: form.authMode,
+      issuerUrl: form.authIssuerUrl
+    },
+    ai: {
+      providerId: form.aiProviderId,
+      model: form.aiModel
+    },
+    guardrail: {
+      defaultPolicy: form.guardrailPolicy,
+      blockHighRisk: true
+    },
+    backup: {
+      schedule: form.backupSchedule,
+      retentionDays: Number.parseInt(form.backupRetentionDays, 10) || 30,
+      encryptionMode: "kms",
+      encryptionKeyRef: form.backupEncryptionKeyRef
+    },
+    firstAdmin: {
+      email: form.firstAdminEmail,
+      displayName: form.firstAdminName
+    }
   });
-  const envelope = (await response.json()) as InstallerReportEnvelope;
-  if (!response.ok || !envelope.ok) throw new Error("Preflight API request failed");
-  return envelope.data;
+}
+
+async function listInstallerReports(): Promise<InstallerReportDto[]> {
+  return createAdminPlatformClient().listInstallerReports();
+}
+
+function installWizardStepIndex(stepId: InstallWizardStepId): number {
+  return installWizardSteps.findIndex((step) => step.id === stepId);
+}
+
+function installWizardStepStatus(activeStep: InstallWizardStepId, stepId: InstallWizardStepId, decision: InstallWizardDecision, setupSaved: boolean): InstallWizardStepStatus {
+  if (decision === "blocked" && stepId === "preflight") return "blocked";
+  if (stepId === "setup" && setupSaved) return "complete";
+  const activeIndex = installWizardStepIndex(activeStep);
+  const stepIndex = installWizardStepIndex(stepId);
+  if (stepId === activeStep) return "current";
+  if (decision === "ready" && stepIndex < activeIndex) return "complete";
+  return "pending";
 }
 
 const observabilityLicenseKpis = [
@@ -501,13 +585,21 @@ const rtmRegressionRows = [
 function AdminApp() {
   const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
+  const [installerSetupForm, setInstallerSetupForm] = useState(initialInstallerSetupForm);
+  const [savedInstallerSetup, setSavedInstallerSetup] = useState<InstallerSetupResponse | undefined>(undefined);
+  const [installerReports, setInstallerReports] = useState<InstallerReportDto[]>([]);
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
+  const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     loadAdminBootstrap()
       .then(setBootstrap)
       .catch(() => setBootstrap(initialAdminBootstrap));
+
+    listInstallerReports()
+      .then(setInstallerReports)
+      .catch(() => setInstallerReports([]));
   }, []);
 
   useEffect(() => {
@@ -524,26 +616,83 @@ function AdminApp() {
     const fallbackRows = kind === "ready" ? installWizardReadyRows : installWizardBlockedRows;
     try {
       const report = await runInstallerPreflight(kind === "ready" ? installWizardPassingProfile : installWizardBlockedProfile);
+      const reports = await listInstallerReports().catch(() => []);
+      setInstallerReports(reports);
       setInstallWizard({
         decision: report?.installBlocked ? "blocked" : "ready",
         source: "Platform API",
-        activeStep: report?.installBlocked ? "preflight" : "verify_health",
+        activeStep: report?.installBlocked ? "preflight" : "setup",
         rows: preflightRowsFromReport(report, fallbackRows),
         actionableFailures: report?.actionableFailures.length ? report.actionableFailures : ["All install checks passed"],
-        reportPath: report?.reportPath ?? "reports/install/private-server-install-report.json"
+        reportPath: report?.reportPath ?? "reports/install/private-server-install-report.json",
+        setupStatus: savedInstallerSetup ? "saved" : "pending"
       });
     } catch {
       setInstallWizard({
         decision: kind === "ready" ? "ready" : "blocked",
         source: "local fallback",
-        activeStep: kind === "ready" ? "verify_health" : "preflight",
+        activeStep: kind === "ready" ? "setup" : "preflight",
         rows: fallbackRows,
         actionableFailures: kind === "ready" ? ["All install checks passed"] : fallbackRows.filter((row) => row.status === "fail").map((row) => `${row.check}: ${row.action}`),
-        reportPath: `reports/install/${kind === "ready" ? "passed" : "failed"}-install-report.json`
+        reportPath: `reports/install/${kind === "ready" ? "passed" : "failed"}-install-report.json`,
+        setupStatus: savedInstallerSetup ? "saved" : "pending"
       });
     } finally {
       setIsRunningInstallCheck(false);
     }
+  }
+
+  async function handleSaveInstallerSetup() {
+    setIsSavingInstallerSetup(true);
+    try {
+      const setup = await saveInstallerSetup(installerSetupForm);
+      setSavedInstallerSetup(setup);
+      setInstallerSetupForm((current) => ({
+        ...current,
+        domain: setup.domain,
+        databaseUrl: setup.databaseUrlMasked,
+        storageSecretAccessKey: ""
+      }));
+      setInstallWizard((current) => ({
+        ...current,
+        source: "Platform API",
+        activeStep: current.decision === "blocked" ? "preflight" : "compose",
+        setupStatus: "saved",
+        actionableFailures: current.decision === "blocked" ? current.actionableFailures : ["Setup saved with masked secrets", "Compose readiness can be reviewed next"]
+      }));
+    } catch {
+      setInstallWizard((current) => ({
+        ...current,
+        activeStep: current.decision === "blocked" ? "preflight" : "setup",
+        setupStatus: "pending",
+        actionableFailures: ["Setup save failed; review API connectivity and required fields"]
+      }));
+    } finally {
+      setIsSavingInstallerSetup(false);
+    }
+  }
+
+  function handleWizardNext() {
+    setInstallWizard((current) => {
+      if (current.decision === "blocked") return current;
+      const nextStep = installWizardSteps[Math.min(installWizardStepIndex(current.activeStep) + 1, installWizardSteps.length - 1)]?.id ?? current.activeStep;
+      return {
+        ...current,
+        activeStep: nextStep,
+        decision: nextStep === "verify_health" && current.setupStatus === "saved" ? "ready" : current.decision
+      };
+    });
+  }
+
+  function handleWizardBack() {
+    setInstallWizard((current) => {
+      const previousStep = installWizardSteps[Math.max(installWizardStepIndex(current.activeStep) - 1, 0)]?.id ?? current.activeStep;
+      return { ...current, activeStep: previousStep };
+    });
+  }
+
+  function handleInstallerSetupField(field: keyof InstallWizardSetupForm, event: ChangeEvent<HTMLInputElement>) {
+    setInstallerSetupForm((current) => ({ ...current, [field]: event.target.value }));
   }
 
   async function handleSignInBridge() {
@@ -560,6 +709,9 @@ function AdminApp() {
   function handleLogoutBridge() {
     setBootstrap(clearAdminSessionBridge());
   }
+
+  const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
+  const latestInstallerReport = installerReports[installerReports.length - 1];
 
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
@@ -1350,12 +1502,16 @@ function AdminApp() {
                 <SectionCard eyebrow="First-run Install Wizard" title="Private-server install readiness">
                   <div className="install-wizard-panel" aria-label="First-run install wizard">
                     <ol className="install-wizard-steps">
-                      {installWizardSteps.map((step) => (
-                        <li key={step.id} className={installWizard.activeStep === step.id ? "active" : ""}>
-                          <span>{step.label}</span>
-                          <small>{step.detail}</small>
-                        </li>
-                      ))}
+                      {installWizardSteps.map((step) => {
+                        const status = installWizardStepStatus(installWizard.activeStep, step.id, installWizard.decision, Boolean(savedInstallerSetup));
+                        return (
+                          <li key={step.id} className={status === "current" ? "active" : `status-${status}`}>
+                            <span>{step.label}</span>
+                            <small>{step.detail}</small>
+                            <ToneBadge tone={status === "complete" ? "success" : status === "blocked" ? "danger" : status === "current" ? "info" : "neutral"}>{status}</ToneBadge>
+                          </li>
+                        );
+                      })}
                     </ol>
                     <DecisionPanel
                       tone={installWizard.decision === "ready" ? "success" : installWizard.decision === "blocked" ? "danger" : "warning"}
@@ -1367,18 +1523,72 @@ function AdminApp() {
                         ...installWizard.actionableFailures.slice(0, 3)
                       ]}
                     />
+                    <div className="install-wizard-action-row" aria-label="Install wizard step controls">
+                      <button type="button" className="secondary-button" onClick={handleWizardBack} disabled={installWizard.activeStep === "preflight"}>
+                        <Route size={16} /> Back
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleWizardNext} disabled={installWizard.decision === "blocked" || installWizard.activeStep === "verify_health"}>
+                        <CheckCircle2 size={16} /> Next Step
+                      </button>
+                      <ToneBadge tone={latestInstallerReport?.status === "failed" ? "danger" : latestInstallerReport ? "success" : "neutral"}>
+                        Latest report: {latestInstallerReport?.status ?? "none"}
+                      </ToneBadge>
+                    </div>
                   </div>
                 </SectionCard>
 
                 <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
+                  <div className="install-setup-form" aria-label="Installer setup configuration form">
+                    <label>
+                      Domain
+                      <input value={installerSetupForm.domain} onChange={(event) => handleInstallerSetupField("domain", event)} />
+                    </label>
+                    <label>
+                      Database URL
+                      <input value={installerSetupForm.databaseUrl} onChange={(event) => handleInstallerSetupField("databaseUrl", event)} />
+                    </label>
+                    <label>
+                      Storage Endpoint
+                      <input value={installerSetupForm.storageEndpoint} onChange={(event) => handleInstallerSetupField("storageEndpoint", event)} />
+                    </label>
+                    <label>
+                      Storage Bucket
+                      <input value={installerSetupForm.storageBucket} onChange={(event) => handleInstallerSetupField("storageBucket", event)} />
+                    </label>
+                    <label>
+                      Storage Secret
+                      <input type="password" value={installerSetupForm.storageSecretAccessKey} placeholder={savedInstallerSetup ? "saved as masked evidence" : "required before save"} onChange={(event) => handleInstallerSetupField("storageSecretAccessKey", event)} />
+                    </label>
+                    <label>
+                      Auth Issuer
+                      <input value={installerSetupForm.authIssuerUrl} onChange={(event) => handleInstallerSetupField("authIssuerUrl", event)} />
+                    </label>
+                    <label>
+                      AI Provider / Model
+                      <input value={`${installerSetupForm.aiProviderId} / ${installerSetupForm.aiModel}`} onChange={(event) => {
+                        const [providerId, model] = event.target.value.split("/").map((item) => item.trim());
+                        setInstallerSetupForm((current) => ({ ...current, aiProviderId: providerId || current.aiProviderId, aiModel: model || current.aiModel }));
+                      }} />
+                    </label>
+                    <label>
+                      First Admin Email
+                      <input value={installerSetupForm.firstAdminEmail} onChange={(event) => handleInstallerSetupField("firstAdminEmail", event)} />
+                    </label>
+                  </div>
+                  <div className="install-wizard-action-row">
+                    <button type="button" onClick={handleSaveInstallerSetup} disabled={isSavingInstallerSetup || installWizard.decision === "blocked"}>
+                      <LockKeyhole size={16} /> {isSavingInstallerSetup ? "Saving Setup" : "Save Setup"}
+                    </button>
+                    <ToneBadge tone={savedInstallerSetup ? "success" : "warning"}>{installWizard.setupStatus === "saved" ? "saved" : "pending save"}</ToneBadge>
+                  </div>
                   <DefinitionGrid
                     items={installWizardSetupItems}
                   />
                   <DecisionPanel
-                    tone="success"
-                    badge="masked"
-                    title="Setup evidence is ready without exposing secrets"
-                    lines={["Database password masked", "Storage, AI and backup keys use fingerprints or key references only", "First admin is visible for audit review"]}
+                    tone={savedInstallerSetup ? "success" : "warning"}
+                    badge={savedInstallerSetup ? "masked" : "draft"}
+                    title={savedInstallerSetup ? "Setup evidence is ready without exposing secrets" : "Save setup before compose verification"}
+                    lines={savedInstallerSetup ? ["Database password masked", "Storage, AI and backup keys use fingerprints or key references only", "First admin is visible for audit review"] : ["Draft values are editable", "Save setup through Platform API before treating install as configured"]}
                   />
                 </SectionCard>
 

@@ -13,11 +13,14 @@ test("Admin UI exposes first-run install wizard states and safe setup evidence",
     "Install blocked by failed preflight checks",
     "Install can proceed after setup review",
     "Setup evidence is ready without exposing secrets",
-    "postgresql://evcp:***@postgres:5432/evcp",
+    "Save Setup",
+    "Next Step",
+    "databaseUrlMasked",
     "install-wizard-panel",
-    "install-wizard-steps"
+    "install-wizard-steps",
+    "install-wizard-action-row",
+    "install-setup-form"
   ]) {
     assert.match(adminSource, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 });
-

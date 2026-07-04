@@ -39,7 +39,9 @@ sequenceDiagram
   - explicit `x-mock-user-email` only as a migration/dev fallback.
   - typed success/failure envelope parsing through `PlatformApiError`.
   - `/auth/me`, `/projects` and `/store/apps` bootstrap routes.
+  - installer operations for `/admin/installer/preflight`, `/admin/installer/setup` and `/admin/installer/reports`.
 - Admin Web loads current user from `/auth/me`.
+- Admin Web uses the shared client for the first-run install wizard preflight, setup save and installer report retrieval.
 - Creator Web loads current user and project list from `/auth/me` and `/projects`.
 - App Store PWA loads current user/store profile and apps from `/auth/me` and `/store/apps`.
 - Local Vite development falls back to deterministic local state when `VITE_PLATFORM_API_BASE_URL` is not configured.

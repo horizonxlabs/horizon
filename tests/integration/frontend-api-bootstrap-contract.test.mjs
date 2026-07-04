@@ -12,6 +12,9 @@ test("shared API client exposes frontend bootstrap routes and auth modes", () =>
   assert.match(apiClient, /getCurrentUser\(\)/);
   assert.match(apiClient, /listProjects\(\)/);
   assert.match(apiClient, /listStoreApps\(\)/);
+  assert.match(apiClient, /runInstallerPreflight\(/);
+  assert.match(apiClient, /saveInstallerSetup\(/);
+  assert.match(apiClient, /listInstallerReports\(/);
   assert.match(apiClient, /authorization/);
   assert.match(apiClient, /x-mock-user-email/);
   assert.match(apiClient, /PlatformApiError/);
@@ -41,4 +44,16 @@ test("frontend shells expose Platform Auth sign-in and logout bridge controls", 
   assert.match(adminSource, /adminSessionBridgeProfile/);
   assert.match(creatorSource, /creatorSessionBridgeProfile/);
   assert.match(storeSource, /storeSessionBridgeProfile/);
+});
+
+test("Admin install wizard is API-client backed and exposes step controls", () => {
+  assert.match(adminSource, /runInstallerPreflight/);
+  assert.match(adminSource, /saveInstallerSetup/);
+  assert.match(adminSource, /handleWizardNext/);
+  assert.match(adminSource, /handleWizardBack/);
+  assert.match(adminSource, /handleSaveInstallerSetup/);
+  assert.match(adminSource, /Save Setup/);
+  assert.match(adminSource, /Next Step/);
+  assert.match(adminSource, /Back/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/admin\/installer\/preflight`/);
 });

@@ -13,7 +13,7 @@ function sourceBlock(startToken, endToken) {
 }
 
 test("admin first-run install wizard defines complete ordered install steps", () => {
-  const steps = sourceBlock("const installWizardSteps", "const installWizardSetupItems");
+  const steps = sourceBlock("const installWizardSteps", "const installWizardPassingProfile");
 
   for (const token of ["preflight", "setup", "compose", "migrate_seed", "verify_health"]) {
     assert.match(steps, new RegExp(token));
@@ -27,11 +27,14 @@ test("admin first-run install wizard defines complete ordered install steps", ()
 });
 
 test("admin install wizard setup evidence is secret-safe", () => {
-  const setup = sourceBlock("const installWizardSetupItems", "const installWizardPassingProfile");
+  const setup = sourceBlock("function setupItemsFromConfig", "function preflightRowsFromReport");
+  const saveHandler = sourceBlock("async function handleSaveInstallerSetup", "function handleWizardNext");
 
-  assert.match(setup, /postgresql:\/\/evcp:\*\*\*@postgres:5432\/evcp/);
+  assert.match(setup, /databaseUrlMasked/);
+  assert.match(setup, /:\*\*\*@/);
   assert.match(setup, /fingerprint only/);
-  assert.match(setup, /kms:\/\/evcp\/backup/);
+  assert.match(saveHandler, /storageSecretAccessKey: ""/);
+  assert.match(saveHandler, /databaseUrl: setup\.databaseUrlMasked/);
   assert.doesNotMatch(setup, /postgresql:\/\/evcp:secret@/);
   assert.doesNotMatch(setup, /example-secret/);
 });
@@ -43,4 +46,3 @@ test("admin install wizard can show ready and blocked preflight states", () => {
   assert.match(adminSource, /Install blocked by failed preflight checks/);
   assert.match(adminSource, /Install can proceed after setup review/);
 });
-

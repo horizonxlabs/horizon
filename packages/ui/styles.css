@@ -1707,6 +1707,16 @@ button {
   border-color: var(--evcp-color-primary-strong);
 }
 
+.install-wizard-steps li.status-complete {
+  background: var(--evcp-color-success-bg);
+  border-color: #86efac;
+}
+
+.install-wizard-steps li.status-blocked {
+  background: var(--evcp-color-danger-bg);
+  border-color: #fca5a5;
+}
+
 .install-wizard-steps span {
   color: var(--evcp-color-text);
   font-size: 13px;
@@ -1716,6 +1726,34 @@ button {
 .install-wizard-steps small {
   color: var(--evcp-color-muted);
   line-height: 1.35;
+}
+
+.install-wizard-action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+}
+
+.install-setup-form {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.install-setup-form label {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+.install-setup-form input {
+  color: var(--evcp-color-text);
+  font-size: 14px;
+  min-width: 0;
+  width: 100%;
 }
 
 button:disabled {
@@ -2013,6 +2051,10 @@ button:disabled {
   }
 
   .install-wizard-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .install-setup-form {
     grid-template-columns: 1fr;
   }
 

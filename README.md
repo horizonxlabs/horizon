@@ -87,7 +87,7 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
-Admin Web also includes a first-run install wizard in the Installer, Backup and Restore surface. It can call the Platform API preflight route through `/api/admin/installer/preflight` in the private-server Caddy path, supports `VITE_PLATFORM_API_BASE_URL` for local integration, and keeps setup evidence masked.
+Admin Web also includes a first-run install wizard in the Installer, Backup and Restore surface. It uses the shared `@evcp/api-client` for installer preflight, setup save and report retrieval through the private-server `/api` Caddy path, supports `VITE_PLATFORM_API_BASE_URL` for local integration, exposes Back/Next step controls, and keeps saved setup evidence masked.
 
 ## Phase 2 Real MVP Core Persistence
 

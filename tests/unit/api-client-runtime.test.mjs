@@ -147,3 +147,115 @@ test("platform API client posts simulated SSO login payloads through the bridge 
   assert.deepEqual(observedBody.groups, ["evcp-creators"]);
   assert.equal(session.token, "evcp_session.payload.signature");
 });
+
+test("platform API client posts installer preflight profiles", async () => {
+  let observedUrl = "";
+  let observedBody = {};
+  let observedAdminHeader = "";
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observedUrl = String(url);
+      observedAdminHeader = init.headers.get("x-mock-user-email");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "instrep_0001",
+            status: "passed",
+            installBlocked: false,
+            checks: [],
+            actionableFailures: [],
+            reportPath: "reports/install/passed-install-report.json"
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const report = await client.runInstallerPreflight({
+    cpuCores: 8,
+    memoryGb: 32,
+    diskFreeGb: 500,
+    os: "ubuntu-22.04",
+    dockerVersion: "26.1.0",
+    composeVersion: "2.27.0",
+    portsAvailable: [80, 443, 5432, 6379, 9000],
+    dnsReady: true,
+    tlsReady: true,
+    networkReady: true
+  });
+
+  assert.equal(observedUrl, "https://platform.example/api/admin/installer/preflight");
+  assert.equal(observedAdminHeader, "admin@company.com");
+  assert.equal(observedBody.cpuCores, 8);
+  assert.equal(observedBody.tlsReady, true);
+  assert.equal(report.status, "passed");
+});
+
+test("platform API client saves installer setup and returns masked evidence", async () => {
+  let observedUrl = "";
+  let observedBody = {};
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    sessionToken: "evcp_session.payload.signature",
+    fetcher: async (url, init) => {
+      observedUrl = String(url);
+      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "setup_0001",
+            status: "completed",
+            domain: "platform.company.test",
+            databaseUrlMasked: "postgresql://evcp:***@postgres:5432/evcp",
+            storage: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-artifacts" },
+            auth: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
+            ai: { providerId: "aip_openai", model: "gpt-4.1" },
+            guardrail: { defaultPolicy: "enterprise-default" },
+            backup: { schedule: "0 2 * * *", retentionDays: 30 },
+            firstAdmin: { email: "admin@company.com" },
+            createdAt: "2026-07-04T01:00:00.000Z"
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const setup = await client.saveInstallerSetup({
+    domain: "platform.company.test",
+    databaseUrl: "postgresql://evcp:secret@postgres:5432/evcp",
+    storage: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-artifacts", secretAccessKey: "secret" },
+    auth: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
+    ai: { providerId: "aip_openai", model: "gpt-4.1" },
+    guardrail: { defaultPolicy: "enterprise-default", blockHighRisk: true },
+    backup: { schedule: "0 2 * * *", retentionDays: 30 },
+    firstAdmin: { email: "admin@company.com", displayName: "Platform Admin" }
+  });
+
+  assert.equal(observedUrl, "https://platform.example/api/admin/installer/setup");
+  assert.equal(observedBody.storage.secretAccessKey, "secret");
+  assert.match(setup.databaseUrlMasked, /\*\*\*/);
+  assert.equal(setup.storage.secretAccessKey, undefined);
+});
+
+test("platform API client retrieves installer reports", async () => {
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/admin/installer/reports");
+      assert.equal(init.headers.get("x-mock-user-email"), "admin@company.com");
+      return new Response(JSON.stringify(success([{ id: "instrep_0001", status: "passed", installBlocked: false }])), { status: 200 });
+    }
+  });
+
+  const reports = await client.listInstallerReports();
+
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].status, "passed");
+});
