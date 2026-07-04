@@ -42,7 +42,10 @@ export interface PlatformRequest {
     | `/projects/${string}/prd`
     | `/projects/${string}/prd/generate`
     | `/projects/${string}/prd/baseline`
-    | `/projects/${string}/prd/versions`;
+    | `/projects/${string}/prd/versions`
+    | `/projects/${string}/workspace`
+    | `/projects/${string}/workspace/prompts`
+    | `/projects/${string}/workspace/preview/refresh`;
   headers?: HeaderBag;
   body?: Record<string, unknown>;
 }
@@ -161,6 +164,30 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     if (request.method === "GET" && prdCurrentMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.prds.getCurrent(user, prdCurrentMatch[1])) };
+    }
+
+    const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
+    if (request.method === "POST" && workspacePromptMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.workspace.submitPrompt(user, workspacePromptMatch[1], {
+        prompt: String(request.body?.prompt ?? "")
+      });
+      return {
+        status: result.guardrail.decision === "block" ? HttpStatus.OK : HttpStatus.CREATED,
+        body: success(result)
+      };
+    }
+
+    const workspaceRefreshMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/preview\/refresh$/);
+    if (request.method === "POST" && workspaceRefreshMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.workspace.refreshPreview(user, workspaceRefreshMatch[1])) };
+    }
+
+    const workspaceMatch = request.path.match(/^\/projects\/([^/]+)\/workspace$/);
+    if (request.method === "GET" && workspaceMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.workspace.getWorkspace(user, workspaceMatch[1])) };
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
@@ -324,6 +351,38 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd`,
         headers: request.headers
+      })
+    )
+  );
+  routes.get("/projects/:projectId/workspace", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/workspace/prompts", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/prompts`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/projects/:projectId/workspace/preview/refresh", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/preview/refresh`,
+        headers: request.headers,
+        body: request.body
       })
     )
   );

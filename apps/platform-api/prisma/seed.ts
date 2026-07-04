@@ -205,6 +205,22 @@ async function main() {
     }
   });
 
+  await prisma.aiScenarioRoute.upsert({
+    where: { scenario: "frontend_coding" },
+    update: {
+      primaryProviderId: "aip_openai_production",
+      primaryModel: "gpt-4.1",
+      fallbackProviderId: null,
+      fallbackModel: null
+    },
+    create: {
+      id: "air_frontend_coding",
+      scenario: "frontend_coding",
+      primaryProviderId: "aip_openai_production",
+      primaryModel: "gpt-4.1"
+    }
+  });
+
   await prisma.aiQuota.upsert({
     where: { scope: "organization" },
     update: {
@@ -367,6 +383,93 @@ async function main() {
       }
     });
   }
+
+  await prisma.workspaceTask.upsert({
+    where: { id: "wst_seed_leave_wfh" },
+    update: {
+      prompt: "Add WFH leave type",
+      status: "ready",
+      guardrailDecision: "allow",
+      guardrailEventId: "gre_seed_workspace_allow",
+      createdByUserId: "usr_creator"
+    },
+    create: {
+      id: "wst_seed_leave_wfh",
+      projectId: "prj_leave_management",
+      prompt: "Add WFH leave type",
+      status: "ready",
+      guardrailDecision: "allow",
+      guardrailEventId: "gre_seed_workspace_allow",
+      createdByUserId: "usr_creator"
+    }
+  });
+
+  const workspaceSteps = [
+    "Understanding request",
+    "Loading PRD baseline",
+    "Guardrail pre-check",
+    "Selecting skill",
+    "Generating frontend",
+    "Applying auth/role rules",
+    "Building preview",
+    "Running checks",
+    "Ready"
+  ];
+
+  for (const [index, label] of workspaceSteps.entries()) {
+    await prisma.workspaceTaskStep.upsert({
+      where: { taskId_order: { taskId: "wst_seed_leave_wfh", order: index + 1 } },
+      update: { label, status: "done" },
+      create: {
+        id: `wst_seed_leave_wfh_step_${index + 1}`,
+        taskId: "wst_seed_leave_wfh",
+        label,
+        status: "done",
+        order: index + 1
+      }
+    });
+  }
+
+  await prisma.previewVersion.upsert({
+    where: { projectId_version: { projectId: "prj_leave_management", version: "preview-0001" } },
+    update: {
+      summary: "Mock preview updated: Add WFH leave type",
+      device: "desktop",
+      screenTitle: "Leave Management",
+      highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"]
+    },
+    create: {
+      id: "preview_prj_leave_management_0001",
+      projectId: "prj_leave_management",
+      version: "preview-0001",
+      summary: "Mock preview updated: Add WFH leave type",
+      device: "desktop",
+      screenTitle: "Leave Management",
+      highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"]
+    }
+  });
+
+  await prisma.aiUsageLog.upsert({
+    where: { id: "ailog_seed_leave_wfh" },
+    update: {
+      prompt: "Add WFH leave type",
+      scenario: "frontend_coding",
+      providerId: "aip_openai_production",
+      model: "gpt-4.1",
+      tokensUsed: 120
+    },
+    create: {
+      id: "ailog_seed_leave_wfh",
+      projectId: "prj_leave_management",
+      taskId: "wst_seed_leave_wfh",
+      actorUserId: "usr_creator",
+      scenario: "frontend_coding",
+      providerId: "aip_openai_production",
+      model: "gpt-4.1",
+      prompt: "Add WFH leave type",
+      tokensUsed: 120
+    }
+  });
 }
 
 main()

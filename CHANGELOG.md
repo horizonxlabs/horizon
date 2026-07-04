@@ -4,6 +4,7 @@
 
 ### Added
 
+- Sprint 4 Creator workspace with guarded prompt API, deterministic task progress, token usage log, live preview records, Prisma migration, Creator UI evidence and unit/integration/E2E coverage.
 - Sprint 3 Creator project/PRD workflow with governed PRD generation, immutable baseline v1.0, Prisma migration, Creator UI evidence and unit/integration/E2E coverage.
 - Shared EVCP design system tokens, reusable `@evcp/ui` primitives, documentation and source-contract tests for future sprint UI work.
 - Sprint 2 Admin AI governance with provider/key management, route/quota/guardrail services, Prisma migration, Admin UI evidence and unit/integration/E2E coverage.
