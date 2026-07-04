@@ -967,6 +967,136 @@ button {
   margin: 0;
 }
 
+.sprint5-shell {
+  align-items: start;
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: minmax(0, 1fr) 340px;
+  margin-bottom: var(--evcp-space-5);
+}
+
+.sprint5-main-panel,
+.sprint5-side-panel {
+  display: grid;
+  gap: var(--evcp-space-4);
+}
+
+.database-overview {
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: 230px minmax(0, 1fr);
+}
+
+.database-rail {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  padding: 12px;
+}
+
+.database-rail-header {
+  align-items: center;
+  color: var(--evcp-color-primary);
+  display: flex;
+  gap: var(--evcp-space-2);
+  margin-bottom: var(--evcp-space-1);
+}
+
+.database-rail button {
+  justify-content: flex-start;
+}
+
+.database-detail {
+  min-width: 0;
+}
+
+.database-detail-header {
+  align-items: start;
+  display: flex;
+  gap: var(--evcp-space-4);
+  justify-content: space-between;
+  margin-bottom: var(--evcp-space-3);
+}
+
+.database-detail-header h3,
+.database-detail-header p {
+  margin: 0;
+}
+
+.database-detail-header h3 {
+  font-size: 22px;
+  margin-top: 3px;
+}
+
+.database-detail-header p,
+.checkpoint-timeline span,
+.compare-summary p,
+.restore-boundary span {
+  color: var(--evcp-color-muted);
+}
+
+.sprint5-subgrid {
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.checkpoint-timeline,
+.restore-boundary {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.checkpoint-timeline > div {
+  align-items: center;
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: auto 1fr auto;
+  padding: 10px;
+}
+
+.checkpoint-timeline svg,
+.restore-boundary svg {
+  color: var(--evcp-color-primary);
+}
+
+.checkpoint-timeline > div > div,
+.restore-boundary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.compare-summary {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  padding: 12px;
+}
+
+.compare-summary p {
+  margin: 0;
+}
+
+.restore-boundary > div {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  grid-template-columns: auto 1fr;
+  padding: 12px;
+}
+
+.restore-boundary > div span {
+  grid-column: 2;
+  line-height: 1.45;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1002,7 +1132,10 @@ button {
   .workspace-topbar,
   .workspace-shell,
   .preview-status-strip,
-  .preview-board {
+  .preview-board,
+  .sprint5-shell,
+  .database-overview,
+  .sprint5-subgrid {
     grid-template-columns: 1fr;
   }
 

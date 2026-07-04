@@ -2,8 +2,9 @@
 
 Version: 0.1
 Date: 2026-07-03
-Status: Ready for Sprint 5 implementation
+Status: Implemented with screenshot evidence
 Related plan: `docs/planning/sprint-5-plan.md`
+Evidence: `docs/assets/screenshots/sprint5-database-restore.png`
 
 ## 1. Design Objective
 
@@ -110,4 +111,3 @@ Confirmation must explicitly state:
 - [ ] Compare/preview old version is available.
 - [ ] Restore confirmation clearly states frontend-only scope.
 - [ ] Restore creates new checkpoint and audit-visible result.
-

@@ -59,6 +59,7 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 - ใช้ `DecisionPanel` สำหรับ PRD governance readiness, baseline immutability, publish readiness, validation และ failed generation
 - ใช้ `DataTable` สำหรับ PRD Version History, frontend checkpoints และ restore history
 - ใช้ workspace layout แบบ data-dense สำหรับ Prompt Composer, Task Progress, Live Preview, Token Remaining และ Usage Log โดยไม่ซ่อน guardrail/token state ออกจากหน้าหลัก
+- ใช้ database/restore layout แบบ split view: table rail + schema/sample/migration detail + checkpoint side panel พร้อม boundary copy ว่า restore กระทบเฉพาะ frontend
 
 ### App Store PWA
 
