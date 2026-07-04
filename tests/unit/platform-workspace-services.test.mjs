@@ -13,6 +13,14 @@ function createBaselineWorkspaceFixture() {
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-4.1"]
   });
+  services.aiGovernance.createApiKey(admin, {
+    providerId: provider.id,
+    name: "Primary Production Key",
+    secret: "sk-test-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
 
   services.aiGovernance.configureRoute(admin, {
     scenario: "frontend_coding",
@@ -96,6 +104,14 @@ test("workspace requires confirmed PRD baseline before accepting prompts", () =>
     adapter: "openai",
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-4.1"]
+  });
+  services.aiGovernance.createApiKey(admin, {
+    providerId: provider.id,
+    name: "Primary Production Key",
+    secret: "sk-test-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
   });
   services.aiGovernance.configureRoute(admin, {
     scenario: "frontend_coding",

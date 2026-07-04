@@ -101,6 +101,159 @@ test("quota blocks before provider call and records no provider call", () => {
   assert.equal(services.aiGovernance.providerCallCount(), 0);
 });
 
+test("AI gateway invokes OpenAI-compatible adapter in dry-run mode and records usage", () => {
+  const { services, actor } = admin();
+  const provider = services.aiGovernance.createProvider(actor, {
+    name: "OpenAI Gateway",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  services.aiGovernance.createApiKey(actor, {
+    providerId: provider.id,
+    name: "Gateway Key",
+    secret: "sk-live-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+
+  const result = services.aiGovernance.invokeCompletion(actor, {
+    projectId: "prj_test",
+    scenario: "prd_generation",
+    prompt: "Create a governed leave management PRD",
+    requestedTokens: 20,
+    guardrailDecision: "allow",
+    dryRun: true
+  });
+  const usage = services.aiGovernance.listUsageLogs()[0];
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.providerId, provider.id);
+  assert.equal(result.adapter, "openai");
+  assert.match(result.text, /AI Gateway dry-run response/);
+  assert.equal(services.aiGovernance.providerCallCount(), 1);
+  assert.equal(usage.status, "succeeded");
+  assert.equal(usage.prompt.includes("leave management"), true);
+  assert.match(usage.promptFingerprint, /^fp_/);
+  assert.equal(JSON.stringify(usage).includes("sk-live-secret"), false);
+});
+
+test("AI gateway blocks guardrail and quota before adapter call", () => {
+  const { services, actor } = admin();
+  const provider = services.aiGovernance.createProvider(actor, {
+    name: "OpenAI Guarded",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  services.aiGovernance.createApiKey(actor, {
+    providerId: provider.id,
+    name: "Guarded Key",
+    secret: "sk-live-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+
+  assert.throws(
+    () =>
+      services.aiGovernance.invokeCompletion(actor, {
+        projectId: "prj_test",
+        scenario: "prd_generation",
+        prompt: "payroll export",
+        guardrailDecision: "block",
+        dryRun: true
+      }),
+    /blocked by guardrail/
+  );
+  assert.equal(services.aiGovernance.providerCallCount(), 0);
+
+  services.aiGovernance.configureQuota(actor, {
+    scope: "creator",
+    dailyLimit: 1,
+    monthlyLimit: 1,
+    warningThreshold: 1,
+    hardStop: true,
+    usedToday: 1
+  });
+
+  assert.throws(
+    () =>
+      services.aiGovernance.invokeCompletion(actor, {
+        projectId: "prj_test",
+        scenario: "prd_generation",
+        prompt: "Create a PRD",
+        requestedTokens: 10,
+        guardrailDecision: "allow",
+        dryRun: true
+      }),
+    /quota exceeded/i
+  );
+  assert.equal(services.aiGovernance.providerCallCount(), 0);
+  assert.equal(services.aiGovernance.listUsageLogs().filter((usage) => usage.status === "blocked").length, 2);
+});
+
+test("AI gateway uses deterministic fallback only when route fallback policy allows it", () => {
+  const { services, actor } = admin();
+  const primary = services.aiGovernance.createProvider(actor, {
+    name: "Failing OpenAI",
+    adapter: "openai",
+    baseUrl: "mock://fail-primary",
+    models: ["gpt-4.1"]
+  });
+  const fallback = services.aiGovernance.createProvider(actor, {
+    name: "Fallback OpenAI",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  for (const provider of [primary, fallback]) {
+    services.aiGovernance.createApiKey(actor, {
+      providerId: provider.id,
+      name: "Gateway Key",
+      secret: `sk-${provider.id}-secret-that-must-not-leak`,
+      usageMode: provider.id === fallback.id ? "fallback" : "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    });
+  }
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: primary.id,
+    primaryModel: "gpt-4.1",
+    fallbackProviderId: fallback.id,
+    fallbackModel: "gpt-4.1-mini"
+  });
+
+  const result = services.aiGovernance.invokeCompletion(actor, {
+    projectId: "prj_test",
+    scenario: "prd_generation",
+    prompt: "Create a PRD",
+    guardrailDecision: "allow",
+    dryRun: true,
+    allowDeterministicFallback: true,
+    deterministicFallbackText: "Fallback PRD response"
+  });
+
+  assert.equal(result.status, "fallback");
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.providerId, fallback.id);
+  assert.equal(result.text, "Fallback PRD response");
+  assert.equal(services.aiGovernance.providerCallCount(), 1);
+  assert.ok(services.audit.list().some((event) => event.action === "ai.gateway.fallback_used"));
+});
+
 test("guardrail keyword and mock policy classifier return allow warn and block with events", () => {
   const { services, actor } = admin();
 
