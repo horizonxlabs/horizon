@@ -65,6 +65,13 @@ flowchart LR
 | TC-INST-006 | Upgrade health check fails | Admin runs rollback | Previous version is restored and rollback is audited | Rollback report, audit event |
 | TC-ARCH-001 | Architecture review is performed | Reviewer inspects service configuration | Business logic does not depend on Compose-only names or local paths | Architecture review note |
 
+Sprint 12 implementation evidence:
+
+| Requirement / Test Case | Automated Evidence | Current Status |
+| --- | --- | --- |
+| FR-INST-001 to FR-INST-004 / TC-INST-001 to TC-INST-004 | `tests/unit/platform-sprint12-installer-backup-services.test.mjs`, `tests/e2e/sprint12-installer-backup-smoke.test.mjs`, `tests/integration/platform-sprint12-installer-backup-schema.test.mjs` | Focused tests passing |
+| FR-BCK-001 to FR-BCK-003 / TC-BCK-001 to TC-BCK-004 | `tests/unit/platform-sprint12-installer-backup-services.test.mjs`, `tests/e2e/sprint12-installer-backup-smoke.test.mjs`, `tests/integration/platform-sprint12-installer-backup-schema.test.mjs` | Focused tests passing |
+
 ### 4.2 Authentication, Identity, and Access Control
 
 | Requirement | User Story | Acceptance Focus | Test Cases | Priority |

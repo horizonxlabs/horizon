@@ -1,0 +1,1 @@
+No console warnings or errors captured during Sprint 12 UI smoke pass.

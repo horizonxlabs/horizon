@@ -34,6 +34,14 @@ export interface PlatformRequest {
     | "/audit-logs"
     | "/audit-logs/filter"
     | "/admin/monitoring"
+    | "/admin/installer/preflight"
+    | "/admin/installer/setup"
+    | "/admin/installer/reports"
+    | "/admin/backup/policies"
+    | "/admin/backup/runs"
+    | "/admin/backup/pitr"
+    | "/admin/backup/restore-drills"
+    | "/admin/backup/overview"
     | "/admin/knowledge/sources"
     | `/admin/knowledge/sources/${string}/versions`
     | `/admin/knowledge/versions/${string}/approve`
@@ -563,6 +571,97 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(result) };
     }
 
+    if (request.method === "POST" && request.path === "/admin/installer/preflight") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.runPreflight(user, {
+        cpuCores: Number(request.body?.cpuCores ?? 0),
+        memoryGb: Number(request.body?.memoryGb ?? 0),
+        diskFreeGb: Number(request.body?.diskFreeGb ?? 0),
+        os: request.body?.os ? String(request.body.os) : undefined,
+        dockerVersion: request.body?.dockerVersion ? String(request.body.dockerVersion) : undefined,
+        composeVersion: request.body?.composeVersion ? String(request.body.composeVersion) : undefined,
+        portsAvailable: Array.isArray(request.body?.portsAvailable) ? request.body.portsAvailable.map(Number) : undefined,
+        dnsReady: Boolean(request.body?.dnsReady),
+        tlsReady: Boolean(request.body?.tlsReady),
+        networkReady: Boolean(request.body?.networkReady)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/installer/setup") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.saveSetupConfig(user, {
+        domain: String(request.body?.domain ?? ""),
+        databaseUrl: String(request.body?.databaseUrl ?? ""),
+        storage: (request.body?.storage ?? {}) as Record<string, string | undefined>,
+        auth: (request.body?.auth ?? {}) as Record<string, unknown>,
+        ai: (request.body?.ai ?? {}) as Record<string, unknown>,
+        guardrail: (request.body?.guardrail ?? {}) as Record<string, unknown>,
+        backup: (request.body?.backup ?? {}) as Record<string, unknown>,
+        firstAdmin: (request.body?.firstAdmin ?? {}) as Record<string, unknown>
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/installer/reports") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.operations.getOverview(user).installerReports) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/backup/policies") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.configureBackupPolicy(user, {
+        name: String(request.body?.name ?? ""),
+        schedule: String(request.body?.schedule ?? ""),
+        retentionDays: Number(request.body?.retentionDays ?? 0),
+        storage: (request.body?.storage ?? {}) as Record<string, string | undefined>,
+        encryptionMode: String(request.body?.encryptionMode ?? ""),
+        encryptionKeyRef: String(request.body?.encryptionKeyRef ?? ""),
+        enabled: Boolean(request.body?.enabled)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/backup/runs") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.runBackup(user, {
+        policyId: String(request.body?.policyId ?? ""),
+        trigger: String(request.body?.trigger ?? "manual") as never,
+        databaseName: String(request.body?.databaseName ?? "evcp")
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/backup/pitr") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.configurePitr(user, {
+        databaseName: String(request.body?.databaseName ?? "evcp"),
+        walRetentionHours: Number(request.body?.walRetentionHours ?? 0),
+        baseBackupRunId: String(request.body?.baseBackupRunId ?? ""),
+        targetTimestamp: String(request.body?.targetTimestamp ?? ""),
+        rpoMinutes: Number(request.body?.rpoMinutes ?? 0),
+        rtoMinutes: Number(request.body?.rtoMinutes ?? 0)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/backup/restore-drills") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.operations.runRestoreDrill(user, {
+        backupRunId: String(request.body?.backupRunId ?? ""),
+        pitrConfigId: String(request.body?.pitrConfigId ?? ""),
+        targetTimestamp: String(request.body?.targetTimestamp ?? ""),
+        validationChecks: Array.isArray(request.body?.validationChecks) ? request.body.validationChecks.map(String) : [],
+        forceFailureChecks: Array.isArray(request.body?.forceFailureChecks) ? request.body.forceFailureChecks.map(String) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "GET" && request.path === "/admin/backup/overview") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.operations.getOverview(user)) };
+    }
+
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
@@ -990,6 +1089,36 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
   routes.post("/admin/skills/resolve", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/skills/resolve", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/installer/preflight", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/installer/preflight", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/installer/setup", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/installer/setup", headers: request.headers, body: request.body }))
+  );
+  routes.get("/admin/installer/reports", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/installer/reports", headers: request.headers }))
+  );
+  routes.post("/admin/backup/policies", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/backup/policies", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/backup/runs", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/backup/runs", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/backup/pitr", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/backup/pitr", headers: request.headers, body: request.body }))
+  );
+  routes.post("/admin/backup/restore-drills", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/backup/restore-drills", headers: request.headers, body: request.body })
+    )
+  );
+  routes.get("/admin/backup/overview", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/backup/overview", headers: request.headers }))
   );
   routes.get("/admin/monitoring", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/monitoring", headers: request.headers }))

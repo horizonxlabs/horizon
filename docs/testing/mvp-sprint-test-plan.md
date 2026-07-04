@@ -218,7 +218,36 @@ Current evidence on 2026-07-04:
 - Screenshot evidence: `docs/assets/screenshots/sprint11-knowledge-skill-governance.png`, `docs/assets/screenshots/sprint11-knowledge-skill-governance-mobile.png`.
 - Console evidence: `docs/assets/screenshots/sprint11-console-warnings.txt` recorded 0 errors or warnings.
 
-## 15. Regression Suite Growth
+## 15. Production Extension Sprint 12 Tests
+
+| Test ID | Test | Type | Evidence |
+| --- | --- | --- | --- |
+| S12-T001 | Installer preflight creates pass/fail install reports | Operations/unit/API | Checks, installBlocked and actionable failures |
+| S12-T002 | Local setup wizard stores config without exposing secrets | Security/unit/API | Masked database URL and redacted storage/auth values |
+| S12-T003 | Backup policy and run create encrypted artifact metadata | Backup/unit/API | Artifact URI, checksum, size and audit event |
+| S12-T004 | Storage contract supports MinIO and S3-compatible targets | Backup/unit/API | Provider-neutral artifact metadata |
+| S12-T005 | PostgreSQL PITR records WAL retention and RPO/RTO | Recovery/unit/API | PITR config response |
+| S12-T006 | Restore drill pass/fail reports are explicit and audited | Recovery/unit/API | Validation checks, failed checks and critical audit |
+| S12-T007 | Prisma migration and seed create Sprint 12 operations records | Integration/DB | Migrate/seed output and DB counts |
+| S12-T008 | Admin Installer Backup Restore UI renders required sections | UI/E2E | Screenshot and console capture |
+
+Current focused evidence on 2026-07-04:
+
+- Focused Unit: 4 passed, 0 failed.
+- Focused Integration: 4 passed, 0 failed.
+- Focused E2E/API/UI smoke: 4 passed, 0 failed.
+- Platform API typecheck: passed.
+- Admin Web typecheck: passed.
+- Prisma validate: passed.
+- Prisma generate: passed.
+- Prisma migrate deploy: passed, applied `20260703000011_sprint12_installer_backup_restore`.
+- Prisma seed: passed.
+- Full `pnpm verify:sprint12`: passed lint, typecheck, build, unit 57/57, integration 42/42, E2E/API/UI 43/43.
+- Database counts: `installer_reports=1`, `setup_configurations=1`, `backup_policies=1`, `backup_runs=1`, `pitr_configurations=1`, `restore_drill_reports=1`.
+- Screenshot evidence: `docs/assets/screenshots/sprint12-installer-backup-restore.png`, `docs/assets/screenshots/sprint12-installer-backup-restore-mobile.png`.
+- Console evidence: `docs/assets/screenshots/sprint12-console-warnings.txt` recorded 0 errors or warnings.
+
+## 16. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
 | --- | --- |
@@ -234,8 +263,9 @@ Current evidence on 2026-07-04:
 | Sprint 9 | Sprint 8 + auth provider config, Platform Auth session validation, break-glass, policy templates |
 | Sprint 10 | Sprint 9 + runtime overview, schema isolation, health/OpenAPI and migration dry-run |
 | Sprint 11 | Sprint 10 + knowledge retrieval, skill resolution, workspace context metadata and governance UI |
+| Sprint 12 | Sprint 11 + installer preflight, setup redaction, backup/PITR, restore drill and recovery UI |
 
-## 16. Exit Rule
+## 17. Exit Rule
 
 A sprint is not accepted if:
 

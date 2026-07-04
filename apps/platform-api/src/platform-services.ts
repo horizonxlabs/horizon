@@ -36,6 +36,121 @@ export interface AuditEvent {
   metadata: Record<string, unknown>;
 }
 
+export type OperationCheckStatus = "pass" | "warning" | "fail";
+export type BackupStorageProvider = "minio" | "s3" | "s3_compatible";
+
+export interface OperationCheck {
+  name: string;
+  required: string;
+  observed: string;
+  status: OperationCheckStatus;
+  action: string;
+}
+
+export interface ComposeServiceReadiness {
+  name: string;
+  status: "healthy" | "pending" | "failed";
+  endpoint: string;
+}
+
+export interface InstallerReport {
+  id: string;
+  status: "passed" | "failed";
+  installBlocked: boolean;
+  reportPath: string;
+  checks: OperationCheck[];
+  actionableFailures: string[];
+  composeServices: ComposeServiceReadiness[];
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface SetupConfiguration {
+  id: string;
+  status: "completed";
+  domain: string;
+  databaseUrlMasked: string;
+  storage: Record<string, string | undefined>;
+  auth: Record<string, unknown>;
+  ai: Record<string, unknown>;
+  guardrail: Record<string, unknown>;
+  backup: Record<string, unknown>;
+  firstAdmin: Record<string, unknown>;
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface BackupPolicy {
+  id: string;
+  name: string;
+  schedule: string;
+  retentionDays: number;
+  storage: Record<string, string | undefined>;
+  encryptionMode: string;
+  encryptionKeyRef: string;
+  enabled: boolean;
+  status: "active" | "disabled";
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface BackupRun {
+  id: string;
+  policyId: string;
+  trigger: "manual" | "scheduled" | "upgrade";
+  databaseName: string;
+  status: "succeeded" | "failed";
+  encrypted: boolean;
+  artifactUri: string;
+  checksum: string;
+  sizeBytes: number;
+  startedAt: string;
+  finishedAt: string;
+  createdByUserId: string;
+  auditEventId: string;
+}
+
+export interface PitrConfiguration {
+  id: string;
+  databaseName: string;
+  walRetentionHours: number;
+  baseBackupRunId: string;
+  targetTimestamp: string;
+  rpoMinutes: number;
+  rtoMinutes: number;
+  status: "ready" | "invalid";
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface RestoreDrillReport {
+  id: string;
+  backupRunId: string;
+  pitrConfigId: string;
+  targetTimestamp: string;
+  validationChecks: string[];
+  failedChecks: string[];
+  status: "passed" | "failed";
+  recoveryVerified: boolean;
+  reportPath: string;
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface OperationsRecoveryOverview {
+  installerReports: InstallerReport[];
+  setupConfigurations: SetupConfiguration[];
+  policies: BackupPolicy[];
+  runs: BackupRun[];
+  pitrConfigurations: PitrConfiguration[];
+  restoreDrills: RestoreDrillReport[];
+}
+
 export interface CreateProjectInput {
   actor: PlatformUser;
   name: string;
@@ -1220,6 +1335,337 @@ export class MockAuthService {
     if (!roles.includes(user.role)) {
       throw new PermissionError(`Role ${user.role} cannot access this resource`);
     }
+  }
+}
+
+export class OperationsRecoveryService {
+  private readonly installerReports: InstallerReport[] = [];
+  private readonly setupConfigurations: SetupConfiguration[] = [];
+  private readonly backupPolicies: BackupPolicy[] = [];
+  private readonly backupRuns: BackupRun[] = [];
+  private readonly pitrConfigurations: PitrConfiguration[] = [];
+  private readonly restoreDrills: RestoreDrillReport[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService
+  ) {}
+
+  runPreflight(
+    actor: PlatformUser,
+    input: {
+      cpuCores?: number;
+      memoryGb?: number;
+      diskFreeGb?: number;
+      os?: string;
+      dockerVersion?: string;
+      composeVersion?: string;
+      portsAvailable?: number[];
+      dnsReady?: boolean;
+      tlsReady?: boolean;
+      networkReady?: boolean;
+    }
+  ): InstallerReport {
+    this.auth.requireRole(actor, ["admin"]);
+    const ports = new Set(input.portsAvailable ?? []);
+    const checks: OperationCheck[] = [
+      this.numericCheck("CPU", ">= 4 cores", `${input.cpuCores ?? 0} cores`, input.cpuCores ?? 0, 4, "Add CPU capacity before install"),
+      this.numericCheck("RAM", ">= 8 GB", `${input.memoryGb ?? 0} GB`, input.memoryGb ?? 0, 8, "Add memory before install"),
+      this.numericCheck("Disk", ">= 100 GB free", `${input.diskFreeGb ?? 0} GB`, input.diskFreeGb ?? 0, 100, "Increase free disk space"),
+      this.booleanCheck("OS", "Linux server profile", input.os ? input.os : "unknown", Boolean(input.os), "Use a supported Linux server"),
+      this.booleanCheck("Docker", "Docker installed", input.dockerVersion ? input.dockerVersion : "missing", Boolean(input.dockerVersion), "Install Docker Engine"),
+      this.booleanCheck("Compose", "Docker Compose v2 installed", input.composeVersion ? input.composeVersion : "missing", Boolean(input.composeVersion), "Install Docker Compose v2"),
+      this.booleanCheck("Ports", "80, 443, 5432, 6379, 9000 available", [...ports].sort((a, b) => a - b).join(", ") || "none", [80, 443, 5432, 6379, 9000].every((port) => ports.has(port)), "Open required firewall ports"),
+      this.booleanCheck("DNS/TLS", "DNS and TLS readiness", `dns:${Boolean(input.dnsReady)} tls:${Boolean(input.tlsReady)}`, Boolean(input.dnsReady && input.tlsReady), "Complete DNS and TLS readiness"),
+      this.booleanCheck("Network", "Outbound and internal network ready", input.networkReady ? "ready" : "not ready", Boolean(input.networkReady), "Fix network connectivity")
+    ];
+    const actionableFailures = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
+    const installBlocked = actionableFailures.length > 0;
+    const now = new Date().toISOString();
+    const report: Omit<InstallerReport, "auditEventId"> = {
+      id: `instrep_${String(this.installerReports.length + 1).padStart(4, "0")}`,
+      status: installBlocked ? "failed" : "passed",
+      installBlocked,
+      reportPath: `reports/install/${installBlocked ? "failed" : "passed"}-install-report.json`,
+      checks,
+      actionableFailures,
+      composeServices: this.composeServices(),
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: installBlocked ? "installer.preflight.failed" : "installer.preflight.passed",
+      resourceType: "installer_report",
+      resourceId: report.id,
+      severity: installBlocked ? "high" : "info",
+      metadata: { installBlocked, actionableFailures }
+    });
+    const withAudit: InstallerReport = { ...report, auditEventId: audit.id };
+    this.installerReports.push(withAudit);
+    return withAudit;
+  }
+
+  saveSetupConfig(
+    actor: PlatformUser,
+    input: {
+      domain: string;
+      databaseUrl: string;
+      storage: Record<string, string | undefined>;
+      auth: Record<string, unknown>;
+      ai: Record<string, unknown>;
+      guardrail: Record<string, unknown>;
+      backup: Record<string, unknown>;
+      firstAdmin: Record<string, unknown>;
+    }
+  ): SetupConfiguration {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.domain.trim()) throw new ValidationError("Setup domain is required");
+    const now = new Date().toISOString();
+    const config: Omit<SetupConfiguration, "auditEventId"> = {
+      id: `setup_${String(this.setupConfigurations.length + 1).padStart(4, "0")}`,
+      status: "completed",
+      domain: input.domain,
+      databaseUrlMasked: this.maskDatabaseUrl(input.databaseUrl),
+      storage: this.redactRecord(input.storage),
+      auth: this.redactRecord(input.auth),
+      ai: this.redactRecord(input.ai),
+      guardrail: this.redactRecord(input.guardrail),
+      backup: this.redactRecord(input.backup),
+      firstAdmin: this.redactRecord(input.firstAdmin),
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "installer.setup.completed",
+      resourceType: "setup_configuration",
+      resourceId: config.id,
+      metadata: { domain: config.domain, storageProvider: config.storage.provider, databaseUrlMasked: config.databaseUrlMasked }
+    });
+    const withAudit: SetupConfiguration = { ...config, auditEventId: audit.id };
+    this.setupConfigurations.push(withAudit);
+    return withAudit;
+  }
+
+  configureBackupPolicy(
+    actor: PlatformUser,
+    input: {
+      name: string;
+      schedule: string;
+      retentionDays: number;
+      storage: Record<string, string | undefined>;
+      encryptionMode: string;
+      encryptionKeyRef: string;
+      enabled: boolean;
+    }
+  ): BackupPolicy {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.name.trim()) throw new ValidationError("Backup policy name is required");
+    if (!input.schedule.trim()) throw new ValidationError("Backup schedule is required");
+    if (!input.encryptionMode.trim() || !input.encryptionKeyRef.trim()) throw new ValidationError("Backup encryption mode and key reference are required");
+    const now = new Date().toISOString();
+    const policy: Omit<BackupPolicy, "auditEventId"> = {
+      id: `bckpol_${String(this.backupPolicies.length + 1).padStart(4, "0")}`,
+      name: input.name,
+      schedule: input.schedule,
+      retentionDays: input.retentionDays,
+      storage: this.redactRecord(input.storage),
+      encryptionMode: input.encryptionMode,
+      encryptionKeyRef: input.encryptionKeyRef,
+      enabled: input.enabled,
+      status: input.enabled ? "active" : "disabled",
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "backup.policy.configured",
+      resourceType: "backup_policy",
+      resourceId: policy.id,
+      metadata: { schedule: policy.schedule, retentionDays: policy.retentionDays, storageProvider: policy.storage.provider, encryptionMode: policy.encryptionMode }
+    });
+    const withAudit: BackupPolicy = { ...policy, auditEventId: audit.id };
+    this.backupPolicies.push(withAudit);
+    return withAudit;
+  }
+
+  runBackup(actor: PlatformUser, input: { policyId: string; trigger: BackupRun["trigger"]; databaseName: string }): BackupRun {
+    this.auth.requireRole(actor, ["admin"]);
+    const policy = this.requireBackupPolicy(input.policyId);
+    if (policy.status !== "active") throw new ValidationError(`Backup policy ${policy.id} is not active`);
+    const startedAt = new Date().toISOString();
+    const id = `bckrun_${String(this.backupRuns.length + 1).padStart(4, "0")}`;
+    const artifactUri = this.artifactUri(policy, id);
+    const checksum = `sha256:${createHash("sha256").update(`${policy.id}:${input.databaseName}:${id}`).digest("hex")}`;
+    const run: Omit<BackupRun, "auditEventId"> = {
+      id,
+      policyId: policy.id,
+      trigger: input.trigger,
+      databaseName: input.databaseName,
+      status: "succeeded",
+      encrypted: true,
+      artifactUri,
+      checksum,
+      sizeBytes: 2_415_919_104,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      createdByUserId: actor.id
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "backup.succeeded",
+      resourceType: "backup_run",
+      resourceId: run.id,
+      metadata: { policyId: policy.id, artifactUri: run.artifactUri, checksum: run.checksum, encrypted: run.encrypted }
+    });
+    const withAudit: BackupRun = { ...run, auditEventId: audit.id };
+    this.backupRuns.push(withAudit);
+    return withAudit;
+  }
+
+  configurePitr(
+    actor: PlatformUser,
+    input: {
+      databaseName: string;
+      walRetentionHours: number;
+      baseBackupRunId: string;
+      targetTimestamp: string;
+      rpoMinutes: number;
+      rtoMinutes: number;
+    }
+  ): PitrConfiguration {
+    this.auth.requireRole(actor, ["admin"]);
+    this.requireBackupRun(input.baseBackupRunId);
+    const now = new Date().toISOString();
+    const pitr: Omit<PitrConfiguration, "auditEventId"> = {
+      id: `pitr_${String(this.pitrConfigurations.length + 1).padStart(4, "0")}`,
+      databaseName: input.databaseName,
+      walRetentionHours: input.walRetentionHours,
+      baseBackupRunId: input.baseBackupRunId,
+      targetTimestamp: input.targetTimestamp,
+      rpoMinutes: input.rpoMinutes,
+      rtoMinutes: input.rtoMinutes,
+      status: input.walRetentionHours > 0 ? "ready" : "invalid",
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "backup.pitr.configured",
+      resourceType: "pitr_configuration",
+      resourceId: pitr.id,
+      metadata: { databaseName: pitr.databaseName, walRetentionHours: pitr.walRetentionHours, baseBackupRunId: pitr.baseBackupRunId }
+    });
+    const withAudit: PitrConfiguration = { ...pitr, auditEventId: audit.id };
+    this.pitrConfigurations.push(withAudit);
+    return withAudit;
+  }
+
+  runRestoreDrill(
+    actor: PlatformUser,
+    input: {
+      backupRunId: string;
+      pitrConfigId: string;
+      targetTimestamp: string;
+      validationChecks: string[];
+      forceFailureChecks?: string[];
+    }
+  ): RestoreDrillReport {
+    this.auth.requireRole(actor, ["admin"]);
+    this.requireBackupRun(input.backupRunId);
+    this.requirePitr(input.pitrConfigId);
+    const failedChecks = [...(input.forceFailureChecks ?? [])];
+    const status: RestoreDrillReport["status"] = failedChecks.length > 0 ? "failed" : "passed";
+    const now = new Date().toISOString();
+    const report: Omit<RestoreDrillReport, "auditEventId"> = {
+      id: `restore_drill_${String(this.restoreDrills.length + 1).padStart(4, "0")}`,
+      backupRunId: input.backupRunId,
+      pitrConfigId: input.pitrConfigId,
+      targetTimestamp: input.targetTimestamp,
+      validationChecks: [...input.validationChecks],
+      failedChecks,
+      status,
+      recoveryVerified: status === "passed",
+      reportPath: `reports/restore/${status}-restore-drill-report.json`,
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: status === "passed" ? "restore.drill.passed" : "restore.drill.failed",
+      resourceType: "restore_drill_report",
+      resourceId: report.id,
+      severity: status === "passed" ? "info" : "critical",
+      metadata: { backupRunId: report.backupRunId, pitrConfigId: report.pitrConfigId, failedChecks: report.failedChecks, recoveryVerified: report.recoveryVerified }
+    });
+    const withAudit: RestoreDrillReport = { ...report, auditEventId: audit.id };
+    this.restoreDrills.push(withAudit);
+    return withAudit;
+  }
+
+  getOverview(actor: PlatformUser): OperationsRecoveryOverview {
+    this.auth.requireRole(actor, ["admin"]);
+    return {
+      installerReports: [...this.installerReports],
+      setupConfigurations: [...this.setupConfigurations],
+      policies: [...this.backupPolicies],
+      runs: [...this.backupRuns],
+      pitrConfigurations: [...this.pitrConfigurations],
+      restoreDrills: [...this.restoreDrills]
+    };
+  }
+
+  private composeServices(): ComposeServiceReadiness[] {
+    return ["platform-api", "admin-web", "creator-web", "app-store-pwa", "postgres", "keycloak", "minio", "redis", "caddy"].map((name) => ({
+      name,
+      status: "healthy",
+      endpoint: name === "caddy" ? ":443" : name
+    }));
+  }
+
+  private numericCheck(name: string, required: string, observed: string, value: number, minimum: number, action: string): OperationCheck {
+    return { name, required, observed, status: value >= minimum ? "pass" : "fail", action: value >= minimum ? "-" : action };
+  }
+
+  private booleanCheck(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
+    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  }
+
+  private maskDatabaseUrl(databaseUrl: string): string {
+    return databaseUrl.replace(/:\/\/([^:]+):([^@]+)@/, "://$1:***@");
+  }
+
+  private redactRecord<T extends Record<string, unknown>>(record: T): T {
+    return Object.fromEntries(
+      Object.entries(record).filter(([key]) => !["secret", "secretAccessKey", "password", "clientSecret", "apiKey", "rawKey"].some((unsafe) => key.toLowerCase().includes(unsafe.toLowerCase())))
+    ) as T;
+  }
+
+  private artifactUri(policy: BackupPolicy, runId: string): string {
+    const provider = String(policy.storage.provider ?? "minio");
+    const bucket = String(policy.storage.bucket ?? "evcp-backups");
+    const prefix = `${runId}/evcp.dump.enc`;
+    if (provider === "s3" || provider === "s3_compatible") return `s3://${bucket}/${prefix}`;
+    return `minio://${bucket}/${prefix}`;
+  }
+
+  private requireBackupPolicy(policyId: string): BackupPolicy {
+    const policy = this.backupPolicies.find((candidate) => candidate.id === policyId);
+    if (!policy) throw new ValidationError(`Unknown backup policy: ${policyId}`);
+    return policy;
+  }
+
+  private requireBackupRun(runId: string): BackupRun {
+    const run = this.backupRuns.find((candidate) => candidate.id === runId);
+    if (!run) throw new ValidationError(`Unknown backup run: ${runId}`);
+    return run;
+  }
+
+  private requirePitr(pitrId: string): PitrConfiguration {
+    const pitr = this.pitrConfigurations.find((candidate) => candidate.id === pitrId);
+    if (!pitr) throw new ValidationError(`Unknown PITR configuration: ${pitrId}`);
+    return pitr;
   }
 }
 
@@ -4842,6 +5288,7 @@ export interface PlatformApiServices {
   authSso: PlatformAuthSsoService;
   breakGlass: BreakGlassService;
   policyTemplates: PolicyTemplateService;
+  operations: OperationsRecoveryService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -4874,6 +5321,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const authSso = new PlatformAuthSsoService(auth, audit);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
+  const operations = new OperationsRecoveryService(auth, audit);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
 
   return {
@@ -4901,6 +5349,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     authSso,
     breakGlass,
     policyTemplates,
+    operations,
     envelope: { success, failure }
   };
 }
