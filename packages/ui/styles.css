@@ -430,6 +430,22 @@ th {
   gap: var(--evcp-space-3);
 }
 
+.store-action-evidence {
+  align-items: center;
+  background: var(--evcp-color-warning-bg);
+  border: 1px solid #facc15;
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  grid-template-columns: 1fr auto;
+  padding: var(--evcp-space-3);
+}
+
+.store-action-evidence span {
+  color: var(--evcp-color-warning-text);
+  font-size: 13px;
+}
+
 .ticket-timeline {
   display: grid;
   gap: var(--evcp-space-2);
@@ -470,7 +486,8 @@ label {
   gap: 6px;
 }
 
-input {
+input,
+select {
   border: 1px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-control);
   padding: var(--evcp-space-3);

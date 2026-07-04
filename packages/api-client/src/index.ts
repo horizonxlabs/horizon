@@ -90,6 +90,64 @@ export type StorefrontHomeResponse = {
   notifications: unknown[];
 };
 
+export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
+  ownerUserId: string;
+  department: string;
+  accessMode: string;
+  releaseNotes: string[];
+  supportContact: string;
+  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+};
+
+export type StoreAccessRequestInput = {
+  requestedRoleKey: string;
+  reason: string;
+  department?: string;
+};
+
+export type StoreAccessRequestResponse = {
+  id: string;
+  appSlug: string;
+  requestedRoleKey: string;
+  requesterEmail: string;
+  status: "pending";
+  reason: string;
+  department?: string;
+  createdAt: string;
+};
+
+export type StoreTicketInput = {
+  type: "bug" | "feedback" | "feature_request";
+  priority: "low" | "medium" | "high";
+  title: string;
+  description: string;
+  deviceInfo: string;
+  screenshotUrl?: string;
+};
+
+export type StoreTicketTimelineEntryDto = {
+  id: string;
+  ticketId?: string;
+  status: string;
+  label: string;
+  actorId?: string;
+  occurredAt?: string;
+};
+
+export type StoreTicketResponse = {
+  id: string;
+  ticketNumber: string;
+  appSlug: string;
+  appName?: string;
+  type?: string;
+  priority?: string;
+  title?: string;
+  description?: string;
+  deviceInfo?: string;
+  status: string;
+  timeline: StoreTicketTimelineEntryDto[];
+};
+
 export type InstallerPreflightInput = {
   cpuCores: number;
   memoryGb: number;
@@ -246,6 +304,30 @@ export class PlatformApiClient {
 
   listStoreApps(): Promise<StorefrontHomeResponse> {
     return this.request<StorefrontHomeResponse>("/store/apps");
+  }
+
+  getStoreAppDetail(appSlug: string): Promise<StorefrontAppDetailResponse> {
+    return this.request<StorefrontAppDetailResponse>(`/store/apps/${encodeURIComponent(appSlug)}`);
+  }
+
+  requestStoreAccess(appSlug: string, input: StoreAccessRequestInput): Promise<StoreAccessRequestResponse> {
+    return this.request<StoreAccessRequestResponse>(`/store/apps/${encodeURIComponent(appSlug)}/access-requests`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  submitStoreTicket(appSlug: string, input: StoreTicketInput): Promise<StoreTicketResponse> {
+    return this.request<StoreTicketResponse>(`/store/apps/${encodeURIComponent(appSlug)}/tickets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  getStoreTicket(ticketId: string): Promise<StoreTicketResponse> {
+    return this.request<StoreTicketResponse>(`/store/tickets/${encodeURIComponent(ticketId)}`);
   }
 
   runInstallerPreflight(input: InstallerPreflightInput): Promise<InstallerReportDto> {

@@ -57,3 +57,18 @@ test("Admin install wizard is API-client backed and exposes step controls", () =
   assert.match(adminSource, /Back/);
   assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/admin\/installer\/preflight`/);
 });
+
+test("App Store PWA actions are API-client backed", () => {
+  assert.match(apiClient, /getStoreAppDetail\(/);
+  assert.match(apiClient, /requestStoreAccess\(/);
+  assert.match(apiClient, /submitStoreTicket\(/);
+  assert.match(apiClient, /getStoreTicket\(/);
+  assert.match(storeSource, /handleRequestAccess/);
+  assert.match(storeSource, /handleSubmitTicket/);
+  assert.match(storeSource, /requestStoreAccess/);
+  assert.match(storeSource, /submitStoreTicket/);
+  assert.match(storeSource, /getStoreTicket/);
+  assert.match(storeSource, /accessRequestResult/);
+  assert.match(storeSource, /ticketStatus/);
+  assert.doesNotMatch(storeSource, /ticketTimeline = \[/);
+});

@@ -1,16 +1,19 @@
-import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type SimulatedSsoLoginInput, type StorefrontAppCardDto, type StorefrontHomeResponse } from "@evcp/api-client";
+import {
+  createPlatformApiClient,
+  createPlatformSessionStore,
+  type CurrentUserResponse,
+  type SimulatedSsoLoginInput,
+  type StoreAccessRequestResponse,
+  type StorefrontAppCardDto,
+  type StorefrontHomeResponse,
+  type StoreTicketResponse
+} from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { AppCard, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
 import { Bell, Bug, MessageSquare, Search, Send, ShieldCheck, Store, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
-
-const ticketTimeline = [
-  { label: "Ticket submitted", value: "TKT-0001", tone: "success" as const },
-  { label: "Creator review", value: "In review", tone: "warning" as const },
-  { label: "PRD change decision", value: "Waiting", tone: "neutral" as const }
-];
 
 type StoreBootstrapState = {
   userName: string;
@@ -68,6 +71,16 @@ function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
 }
 
+function createStorePlatformClient() {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  return createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "user@company.com"
+  });
+}
+
 function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
   return {
     id: app.id,
@@ -82,13 +95,7 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
 }
 
 async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const client = createPlatformApiClient({
-    baseUrl,
-    sessionToken: platformSessionToken(),
-    legacyUserEmail: "user@company.com"
-  });
+  const client = createStorePlatformClient();
   const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all([client.getCurrentUser(), client.listStoreApps()]);
   return {
     userName: storeHome.profile.userName || currentUser.user.name,
@@ -116,12 +123,53 @@ function clearStoreSessionBridge(): StoreBootstrapState {
   return initialStoreBootstrap;
 }
 
+function fallbackAccessRequest(appSlug: string, requestedRoleKey: string, reason: string): StoreAccessRequestResponse {
+  return {
+    id: "local_access_request_001",
+    appSlug,
+    requestedRoleKey,
+    requesterEmail: "user@company.com",
+    status: "pending",
+    reason,
+    department: "HR",
+    createdAt: new Date().toISOString()
+  };
+}
+
+function fallbackTicket(appSlug: string, title: string, description: string, deviceInfo: string): StoreTicketResponse {
+  return {
+    id: "local_ticket_0001",
+    ticketNumber: "TKT-LOCAL",
+    appSlug,
+    appName: "Local fallback app",
+    type: "bug",
+    priority: "high",
+    title,
+    description,
+    deviceInfo,
+    status: "submitted",
+    timeline: [{ id: "local_tl_001", status: "submitted", label: "Ticket submitted" }]
+  };
+}
+
 function StoreApp() {
   const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [requestedRole, setRequestedRole] = useState("manager");
+  const [requestReason, setRequestReason] = useState("Need approval queue access");
+  const [ticketType, setTicketType] = useState<"bug" | "feedback" | "feature_request">("bug");
+  const [ticketDescription, setTicketDescription] = useState("WFH leave type not visible on mobile");
+  const [ticketDevice, setTicketDevice] = useState("iPhone Safari");
+  const [accessRequestResult, setAccessRequestResult] = useState<StoreAccessRequestResponse | undefined>(undefined);
+  const [ticketResult, setTicketResult] = useState<StoreTicketResponse | undefined>(undefined);
+  const [ticketStatus, setTicketStatus] = useState<StoreTicketResponse | undefined>(undefined);
+  const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const myApps = bootstrap.myApps;
   const availableApps = bootstrap.availableApps;
   const selectedApp = myApps[0] ?? availableApps[0] ?? fallbackStoreApps[0];
+  const visibleTicket = ticketStatus ?? ticketResult;
+  const visibleTimeline = visibleTicket?.timeline ?? [];
 
   useEffect(() => {
     loadStoreBootstrap()
@@ -142,6 +190,51 @@ function StoreApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearStoreSessionBridge());
+    setAccessRequestResult(undefined);
+    setTicketResult(undefined);
+    setTicketStatus(undefined);
+  }
+
+  async function handleRequestAccess() {
+    setIsRequestingAccess(true);
+    try {
+      const client = createStorePlatformClient();
+      await client.getStoreAppDetail(selectedApp.slug);
+      const result = await client.requestStoreAccess(selectedApp.slug, {
+        requestedRoleKey: requestedRole,
+        reason: requestReason,
+        department: "HR"
+      });
+      setAccessRequestResult(result);
+      setBootstrap(await loadStoreBootstrap());
+    } catch {
+      setAccessRequestResult(fallbackAccessRequest(selectedApp.slug, requestedRole, requestReason));
+    } finally {
+      setIsRequestingAccess(false);
+    }
+  }
+
+  async function handleSubmitTicket() {
+    setIsSubmittingTicket(true);
+    const title = ticketDescription.split(".")[0] || "App Store feedback";
+    try {
+      const client = createStorePlatformClient();
+      const submitted = await client.submitStoreTicket(selectedApp.slug, {
+        type: ticketType,
+        priority: "high",
+        title,
+        description: ticketDescription,
+        deviceInfo: ticketDevice
+      });
+      setTicketResult(submitted);
+      setTicketStatus(await client.getStoreTicket(submitted.id));
+    } catch {
+      const localTicket = fallbackTicket(selectedApp.slug, title, ticketDescription, ticketDevice);
+      setTicketResult(localTicket);
+      setTicketStatus(localTicket);
+    } finally {
+      setIsSubmittingTicket(false);
+    }
   }
 
   return (
@@ -222,9 +315,9 @@ function StoreApp() {
           />
           <div className="store-action-row">
             <button type="button">Open</button>
-            <button type="button" className="secondary-button">
+            <button type="button" className="secondary-button" onClick={handleSubmitTicket} disabled={isSubmittingTicket}>
               <Bug size={15} />
-              Submit Ticket
+              {isSubmittingTicket ? "Submitting" : "Submit Ticket"}
             </button>
           </div>
         </SectionCard>
@@ -233,16 +326,23 @@ function StoreApp() {
           <div className="store-form">
             <label>
               Requested role
-              <input defaultValue="manager" />
+              <input value={requestedRole} onChange={(event) => setRequestedRole(event.target.value)} />
             </label>
             <label>
               Reason
-              <input defaultValue="Need approval queue access" />
+              <input value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
             </label>
-            <button type="button">
+            <button type="button" onClick={handleRequestAccess} disabled={isRequestingAccess}>
               <Send size={15} />
-              Request Access
+              {isRequestingAccess ? "Requesting" : "Request Access"}
             </button>
+            {accessRequestResult ? (
+              <div className="store-action-evidence" aria-label="Access request result">
+                <strong>Access request pending</strong>
+                <span>{accessRequestResult.requestedRoleKey} · {accessRequestResult.requesterEmail}</span>
+                <ToneBadge tone="warning">{accessRequestResult.status}</ToneBadge>
+              </div>
+            ) : null}
           </div>
         </SectionCard>
 
@@ -250,28 +350,42 @@ function StoreApp() {
           <div className="store-form">
             <label>
               Type
-              <input defaultValue="bug" />
+              <select value={ticketType} onChange={(event) => setTicketType(event.target.value as "bug" | "feedback" | "feature_request")}>
+                <option value="bug">Bug</option>
+                <option value="feedback">Feedback</option>
+                <option value="feature_request">Feature request</option>
+              </select>
             </label>
             <label>
               Description
-              <input defaultValue="WFH leave type not visible on mobile" />
+              <input value={ticketDescription} onChange={(event) => setTicketDescription(event.target.value)} />
             </label>
             <label>
               Device
-              <input defaultValue="iPhone Safari" />
+              <input value={ticketDevice} onChange={(event) => setTicketDevice(event.target.value)} />
             </label>
+            <button type="button" onClick={handleSubmitTicket} disabled={isSubmittingTicket}>
+              <Bug size={15} />
+              {isSubmittingTicket ? "Submitting" : "Submit Ticket"}
+            </button>
           </div>
         </SectionCard>
 
-        <SectionCard eyebrow="Ticket Status" title="TKT-0001">
+        <SectionCard eyebrow="Ticket Status" title={visibleTicket?.ticketNumber ?? "No ticket yet"}>
           <div className="ticket-timeline">
-            {ticketTimeline.map((item) => (
-              <div key={item.label}>
+            {visibleTimeline.length ? visibleTimeline.map((item) => (
+              <div key={item.id ?? item.label}>
                 <MessageSquare size={16} />
                 <span>{item.label}</span>
-                <ToneBadge tone={item.tone}>{item.value}</ToneBadge>
+                <ToneBadge tone={item.status === "submitted" ? "success" : item.status === "planned" ? "info" : "warning"}>{item.status}</ToneBadge>
               </div>
-            ))}
+            )) : (
+              <div>
+                <MessageSquare size={16} />
+                <span>Submit a ticket to start the support timeline.</span>
+                <ToneBadge tone="neutral">waiting</ToneBadge>
+              </div>
+            )}
           </div>
         </SectionCard>
       </section>

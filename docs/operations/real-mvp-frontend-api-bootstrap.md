@@ -39,11 +39,13 @@ sequenceDiagram
   - explicit `x-mock-user-email` only as a migration/dev fallback.
   - typed success/failure envelope parsing through `PlatformApiError`.
   - `/auth/me`, `/projects` and `/store/apps` bootstrap routes.
+  - App Store operations for `/store/apps/:slug`, `/store/apps/:slug/access-requests`, `/store/apps/:slug/tickets` and `/store/tickets/:ticketId`.
   - installer operations for `/admin/installer/preflight`, `/admin/installer/setup` and `/admin/installer/reports`.
 - Admin Web loads current user from `/auth/me`.
 - Admin Web uses the shared client for the first-run install wizard preflight, setup save and installer report retrieval.
 - Creator Web loads current user and project list from `/auth/me` and `/projects`.
 - App Store PWA loads current user/store profile and apps from `/auth/me` and `/store/apps`.
+- App Store PWA uses the shared client to request access, submit support tickets and retrieve ticket status timelines.
 - Local Vite development falls back to deterministic local state when `VITE_PLATFORM_API_BASE_URL` is not configured.
 
 ## Configuration
@@ -75,7 +77,7 @@ Until the real browser login flow fully replaces the bridge, the frontend client
 ## Remaining Work
 
 - Replace simulated login with the real Keycloak/OIDC browser callback and token storage.
-- Move all page tables/forms/actions from static demo arrays to API calls.
+- Continue moving remaining page tables/forms/actions from static demo arrays to API calls.
 - Remove legacy mock header fallback after all surfaces use Platform Auth bearer sessions.
 - Add browser-level E2E with running API and real login once Keycloak callback is wired.
 - Continue moving service state behind Prisma repositories so API bootstrap data is database-backed in private-server mode.
