@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP install foundation with `.env.example`, private-server Docker Compose services, Caddy routing, install preflight CLI, install documentation and unit/integration/E2E install contract tests.
 - Production candidate readiness audit mapping the final roadmap criteria to Sprint 0-14 integrated evidence and the stacked PR merge order.
 - PR merge maintenance governance requiring non-author code review approval, fresh verification evidence and stacked merge order before any sprint PR is merged.
 - Sprint 14 Security Release Readiness with TLS/session policy overview, secret redaction evidence, upload validation/quarantine, public/external release checklist, sensitive log redaction preview, Prisma security release tables, Admin UI evidence and unit/integration/E2E coverage.

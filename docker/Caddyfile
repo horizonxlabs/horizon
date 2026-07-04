@@ -1,0 +1,20 @@
+:80 {
+  encode zstd gzip
+
+  handle_path /api/* {
+    reverse_proxy platform-api:3100
+  }
+
+  handle_path /creator* {
+    reverse_proxy creator-web:4101
+  }
+
+  handle_path /store* {
+    reverse_proxy app-store-pwa:4102
+  }
+
+  handle {
+    reverse_proxy admin-web:4100
+  }
+}
+

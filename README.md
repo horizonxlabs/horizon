@@ -10,6 +10,8 @@ Sprint 0 foundation through Sprint 14 Security Release Readiness are implemented
 
 ```bash
 pnpm install
+pnpm install:preflight:example
+pnpm verify:install
 pnpm typecheck
 pnpm build
 pnpm test
@@ -41,6 +43,36 @@ Start Platform API:
 ```bash
 pnpm dev:api
 ```
+
+## Phase 2 Real MVP Install Foundation
+
+The current `main` branch contains an integrated mock-first MVP prototype. Phase 2 starts the mock-to-real conversion by making private-server installation reproducible and testable.
+
+Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Replace every example secret in `.env`, then run:
+
+```bash
+pnpm install:preflight
+```
+
+To verify the checked-in install contract without using real secrets:
+
+```bash
+pnpm verify:install
+```
+
+Start the private-server dependency/platform stack:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up -d
+```
+
+The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
 ## Sprint 1 Database
 

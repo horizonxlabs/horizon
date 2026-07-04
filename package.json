@@ -17,6 +17,9 @@
     "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
     "test:integration": "node --import tsx --test tests/integration/*.test.mjs",
     "test:e2e": "node --import tsx --test tests/e2e/*.test.mjs",
+    "install:preflight": "node scripts/install/preflight.mjs --env .env --compose docker/docker-compose.yml",
+    "install:preflight:example": "node scripts/install/preflight.mjs --env .env.example --compose docker/docker-compose.yml --allow-example-secrets",
+    "verify:install": "pnpm install:preflight:example && node --test tests/unit/install-preflight.test.mjs && node --test tests/integration/install-contract.test.mjs && node --test tests/e2e/install-preflight-cli.test.mjs",
     "verify:sprint0": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint1": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
@@ -31,7 +34,8 @@
     "verify:sprint11": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint12": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint13": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
-    "verify:sprint14": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
+    "verify:sprint14": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:real-mvp-install": "pnpm lint && pnpm typecheck && pnpm build && pnpm verify:install && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
