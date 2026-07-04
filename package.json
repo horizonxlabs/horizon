@@ -1,0 +1,45 @@
+{
+  "name": "enterprise-vibe-coding-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @evcp/admin-web --filter @evcp/creator-web --filter @evcp/app-store-pwa dev",
+    "dev:admin": "pnpm --filter @evcp/admin-web dev",
+    "dev:api": "pnpm --filter @evcp/platform-api dev",
+    "dev:creator": "pnpm --filter @evcp/creator-web dev",
+    "dev:store": "pnpm --filter @evcp/app-store-pwa dev",
+    "build": "pnpm -r --filter './packages/*' --filter './apps/*' build",
+    "typecheck": "pnpm -r --filter './packages/*' --filter './apps/*' typecheck",
+    "lint": "node scripts/lint-sprint-0.mjs",
+    "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
+    "test:integration": "node --import tsx --test tests/integration/*.test.mjs",
+    "test:e2e": "node --import tsx --test tests/e2e/*.test.mjs",
+    "verify:sprint0": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint1": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "verify:sprint3": "pnpm lint && pnpm typecheck && pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "@evcp/api-client": "workspace:*",
+    "@evcp/auth-sdk": "workspace:*",
+    "@evcp/config": "workspace:*",
+    "@evcp/mock-data": "workspace:*",
+    "@evcp/types": "workspace:*",
+    "@evcp/ui": "workspace:*",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
