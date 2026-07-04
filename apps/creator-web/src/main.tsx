@@ -11,6 +11,7 @@ import {
   History,
   LayoutDashboard,
   LockKeyhole,
+  MessageSquare,
   Monitor,
   RefreshCw,
   RotateCcw,
@@ -129,6 +130,18 @@ const publishChecklist = [
   { check: "App roles", state: "pass", detail: "Employee, Manager, HR Admin" },
   { check: "At least one owner", state: "pass", detail: "Creator User" },
   { check: "No blocking guardrail event", state: "pass", detail: "clear" }
+];
+
+const creatorTickets = [
+  {
+    ticket: "TKT-0001",
+    type: "bug",
+    submitter: "user@company.com",
+    app: "Leave Management",
+    summary: "WFH leave type missing on mobile",
+    priority: "high",
+    status: "submitted"
+  }
 ];
 
 function CreatorApp() {
@@ -548,6 +561,38 @@ function CreatorApp() {
             />
           </SectionCard>
         </aside>
+      </section>
+
+      <section className="creator-ticket-inbox-shell" aria-label="Creator Ticket Inbox">
+        <SectionCard
+          eyebrow="Creator Ticket Inbox"
+          title="Feedback routed from App Store"
+          action={<ToneBadge tone="warning">1 submitted</ToneBadge>}
+        >
+          <div className="creator-ticket-list">
+            {creatorTickets.map((ticket) => (
+              <article key={ticket.ticket}>
+                <div className="creator-ticket-icon"><MessageSquare size={20} /></div>
+                <div>
+                  <strong>{ticket.ticket} · {ticket.summary}</strong>
+                  <span>{ticket.app} · {ticket.submitter} · priority {ticket.priority}</span>
+                </div>
+                <ToneBadge tone="warning">{ticket.status}</ToneBadge>
+              </article>
+            ))}
+          </div>
+          <div className="creator-ticket-actions" aria-label="Ticket actions">
+            <button type="button">Convert to PRD Change</button>
+            <button type="button" className="secondary-button">Convert to AI Prompt</button>
+            <button type="button" className="ghost-button">Resolve</button>
+          </div>
+          <DecisionPanel
+            tone="info"
+            badge="Traceable"
+            title="Ticket loop keeps PRD and prompt work connected"
+            lines={["Ticket remains visible until resolved", "Converted PRD changes can be reviewed before becoming baseline work"]}
+          />
+        </SectionCard>
       </section>
 
       <section className="creator-summary-grid">

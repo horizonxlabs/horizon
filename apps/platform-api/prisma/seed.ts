@@ -883,6 +883,7 @@ async function main() {
   await prisma.appStoreRegistryEntry.upsert({
     where: { appId: "app_leave_management" },
     update: {
+      projectId: "prj_leave_management",
       deploymentRecordId: "dep_leave_management_001",
       slug: "leave-management",
       name: "Leave Management",
@@ -910,6 +911,82 @@ async function main() {
       ownerUserId: "usr_creator",
       manifestVersion: "1",
       publishedAt: new Date("2026-08-17T11:00:00.000Z")
+    }
+  });
+
+  await prisma.supportTicket.upsert({
+    where: { id: "ticket_leave_management_bug_001" },
+    update: {
+      ticketNumber: "TKT-0001",
+      appSlug: "leave-management",
+      submittedByEmail: "user@company.com",
+      type: "bug",
+      priority: "high",
+      title: "WFH leave type missing",
+      description: "The WFH option is not visible on mobile after publish.",
+      deviceInfo: "iPhone Safari",
+      screenshotUrl: null,
+      status: "submitted",
+      assignedToUserId: "usr_creator"
+    },
+    create: {
+      id: "ticket_leave_management_bug_001",
+      ticketNumber: "TKT-0001",
+      appId: "app_leave_management",
+      appSlug: "leave-management",
+      projectId: "prj_leave_management",
+      submittedByUserId: "usr_end_user",
+      submittedByEmail: "user@company.com",
+      type: "bug",
+      priority: "high",
+      title: "WFH leave type missing",
+      description: "The WFH option is not visible on mobile after publish.",
+      deviceInfo: "iPhone Safari",
+      screenshotUrl: null,
+      status: "submitted",
+      assignedToUserId: "usr_creator"
+    }
+  });
+
+  await prisma.supportTicketTimelineEntry.upsert({
+    where: { id: "ticket_timeline_leave_management_submitted" },
+    update: {
+      ticketId: "ticket_leave_management_bug_001",
+      status: "submitted",
+      label: "Ticket submitted",
+      actorUserId: "usr_end_user",
+      occurredAt: new Date("2026-08-18T09:12:00.000Z")
+    },
+    create: {
+      id: "ticket_timeline_leave_management_submitted",
+      ticketId: "ticket_leave_management_bug_001",
+      status: "submitted",
+      label: "Ticket submitted",
+      actorUserId: "usr_end_user",
+      occurredAt: new Date("2026-08-18T09:12:00.000Z")
+    }
+  });
+
+  await prisma.inAppNotification.upsert({
+    where: { id: "noti_leave_management_ticket_created" },
+    update: {
+      userId: "usr_creator",
+      projectId: "prj_leave_management",
+      type: "ticket_update",
+      title: "New ticket TKT-0001",
+      body: "End User reported that WFH leave type is missing on mobile.",
+      read: false,
+      createdAt: new Date("2026-08-18T09:12:00.000Z")
+    },
+    create: {
+      id: "noti_leave_management_ticket_created",
+      userId: "usr_creator",
+      projectId: "prj_leave_management",
+      type: "ticket_update",
+      title: "New ticket TKT-0001",
+      body: "End User reported that WFH leave type is missing on mobile.",
+      read: false,
+      createdAt: new Date("2026-08-18T09:12:00.000Z")
     }
   });
 }

@@ -58,7 +58,13 @@ export interface PlatformRequest {
     | `/projects/${string}/app/access-requests/decision`
     | `/projects/${string}/publish/review`
     | `/projects/${string}/publish`
-    | "/app-store/registry";
+    | "/app-store/registry"
+    | "/store/apps"
+    | `/store/apps/${string}`
+    | `/store/apps/${string}/access-requests`
+    | `/store/apps/${string}/tickets`
+    | `/store/tickets/${string}`
+    | `/creator/projects/${string}/tickets`;
   headers?: HeaderBag;
   body?: Record<string, unknown>;
 }
@@ -312,6 +318,54 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     if (request.method === "GET" && request.path === "/app-store/registry") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.publish.listRegistry(user)) };
+    }
+
+    if (request.method === "GET" && request.path === "/store/apps") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.storefront.listApps(user)) };
+    }
+
+    const storeAccessMatch = request.path.match(/^\/store\/apps\/([^/]+)\/access-requests$/);
+    if (request.method === "POST" && storeAccessMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const accessRequest = services.storefront.requestAccess(user, storeAccessMatch[1], {
+        requestedRoleKey: String(request.body?.requestedRoleKey ?? ""),
+        reason: String(request.body?.reason ?? ""),
+        department: request.body?.department ? String(request.body.department) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(accessRequest) };
+    }
+
+    const storeTicketCreateMatch = request.path.match(/^\/store\/apps\/([^/]+)\/tickets$/);
+    if (request.method === "POST" && storeTicketCreateMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const ticket = services.tickets.createTicket(user, storeTicketCreateMatch[1], {
+        type: String(request.body?.type ?? "bug") as never,
+        priority: String(request.body?.priority ?? "medium") as never,
+        title: String(request.body?.title ?? ""),
+        description: String(request.body?.description ?? ""),
+        deviceInfo: String(request.body?.deviceInfo ?? ""),
+        screenshotUrl: request.body?.screenshotUrl ? String(request.body.screenshotUrl) : undefined
+      });
+      return { status: HttpStatus.CREATED, body: success(ticket) };
+    }
+
+    const storeAppDetailMatch = request.path.match(/^\/store\/apps\/([^/]+)$/);
+    if (request.method === "GET" && storeAppDetailMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.storefront.getAppDetail(user, storeAppDetailMatch[1])) };
+    }
+
+    const storeTicketStatusMatch = request.path.match(/^\/store\/tickets\/([^/]+)$/);
+    if (request.method === "GET" && storeTicketStatusMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.tickets.getTicketStatus(user, storeTicketStatusMatch[1])) };
+    }
+
+    const creatorTicketInboxMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/tickets$/);
+    if (request.method === "GET" && creatorTicketInboxMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.tickets.listCreatorInbox(user, creatorTicketInboxMatch[1])) };
     }
 
     if (request.method === "GET" && request.path === "/audit-logs") {
@@ -640,6 +694,61 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
   routes.get("/app-store/registry", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
+  );
+  routes.get("/store/apps", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/store/apps", headers: request.headers }))
+  );
+  routes.get("/store/apps/:appSlug", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/access-requests", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/access-requests`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/tickets", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/tickets`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/store/tickets/:ticketId", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/store/tickets/${String(request.params?.ticketId ?? "")}`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.get("/creator/projects/:projectId/tickets", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/tickets`,
+        headers: request.headers
+      })
+    )
   );
   routes.get("/ai/providers", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/ai/providers", headers: request.headers }))

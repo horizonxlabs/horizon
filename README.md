@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 6 App User Management and Publish Registry are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 7 End User App Store PWA and Ticket Loop are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -20,6 +20,7 @@ pnpm verify:sprint3
 pnpm verify:sprint4
 pnpm verify:sprint5
 pnpm verify:sprint6
+pnpm verify:sprint7
 ```
 
 Start frontend shells:
@@ -112,3 +113,13 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Publish readiness checklist with blocked publish explanation
 - Publish API creating deployment record and App Store registry entry
 - Prisma migration and seed data for app access, manifest, publish, deployment and registry records
+
+## Sprint 7 Scope
+
+- End User App Store PWA manifest, icon and offline fallback
+- Storefront APIs for My Apps, Available Apps, app detail and notifications
+- Store-origin request access flow with duplicate pending request handling
+- Support ticket API with type, priority, device info and status timeline
+- Submitter-scoped ticket status view and Creator project ticket inbox
+- Creator Ticket Inbox UI with Convert to PRD Change, Convert to AI Prompt and Resolve actions
+- Prisma migration and seed data for support tickets, timeline entries and in-app notifications

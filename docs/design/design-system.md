@@ -65,8 +65,11 @@ Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/Ent
 ### App Store PWA
 
 - ใช้ `MetricCard` อย่างประหยัด เพราะ mobile surface แคบ
-- ใช้ `SectionCard` สำหรับ request access, feedback, bug report
+- ใช้ `SectionCard` สำหรับ app detail, request access, feedback, bug report และ ticket status
 - ใช้ `StatusPill` สำหรับ app health และ access status
+- ใช้ `store-status-strip` สำหรับ summary ที่ต้อง scan ได้ใน mobile เช่น My Apps, SSO, Offline
+- ใช้ `ticket-timeline` สำหรับ ticket submitted/in review/planned/resolved state โดยต้องมี badge text ไม่พึ่งสีอย่างเดียว
+- ใช้ Creator `creator-ticket-inbox-shell` เมื่อ feedback จาก End User ต้องถูกแปลงเป็น PRD change หรือ AI prompt ต่อ
 
 ## Accessibility
 
