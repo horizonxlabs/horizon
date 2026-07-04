@@ -1,4 +1,4 @@
-import { createPlatformApiClient, type CurrentUserResponse } from "@evcp/api-client";
+import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type SimulatedSsoLoginInput } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
@@ -262,6 +262,14 @@ const initialAdminBootstrap: AdminBootstrapState = {
   source: "local fallback"
 };
 
+const adminSessionBridgeProfile: SimulatedSsoLoginInput = {
+  subject: "keycloak-admin-ui-bridge",
+  email: "admin@company.com",
+  name: "Platform Admin",
+  groups: ["evcp-admins"],
+  appRoles: {}
+};
+
 const installWizardSteps = [
   { id: "preflight", label: "1. Preflight", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
   { id: "setup", label: "2. Setup Config", detail: "domain, database, storage, auth, AI, backup, first admin" },
@@ -349,7 +357,7 @@ function apiBaseUrl(): string | undefined {
 }
 
 function platformSessionToken(): string | undefined {
-  return window.localStorage.getItem("evcp_session") ?? undefined;
+  return createPlatformSessionStore(window.localStorage).getToken();
 }
 
 async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
@@ -365,6 +373,23 @@ async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
     userName: currentUser.user.name,
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
+}
+
+async function signInAdminSessionBridge(): Promise<AdminBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const bridgeClient = createPlatformApiClient({
+    baseUrl,
+    legacyUserEmail: "admin@company.com"
+  });
+  const session = await bridgeClient.simulateSsoLogin(adminSessionBridgeProfile);
+  createPlatformSessionStore(window.localStorage).saveSession(session);
+  return loadAdminBootstrap();
+}
+
+function clearAdminSessionBridge(): AdminBootstrapState {
+  createPlatformSessionStore(window.localStorage).clearSession();
+  return initialAdminBootstrap;
 }
 
 async function runInstallerPreflight(profile: typeof installWizardPassingProfile): Promise<InstallerReportEnvelope["data"] | undefined> {
@@ -477,6 +502,7 @@ function AdminApp() {
   const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
     loadAdminBootstrap()
@@ -520,6 +546,21 @@ function AdminApp() {
     }
   }
 
+  async function handleSignInBridge() {
+    setIsSigningIn(true);
+    try {
+      setBootstrap(await signInAdminSessionBridge());
+    } catch {
+      setBootstrap(initialAdminBootstrap);
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  function handleLogoutBridge() {
+    setBootstrap(clearAdminSessionBridge());
+  }
+
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
       <PageHeader
@@ -529,6 +570,14 @@ function AdminApp() {
         actions={
           <>
           <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Session: {bootstrap.source}</ToneBadge>
+          <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+            <Fingerprint size={16} />
+            {isSigningIn ? "Signing in" : "Demo Sign in"}
+          </button>
+          <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+            <LockKeyhole size={16} />
+            Logout
+          </button>
           <button type="button" className="secondary-button">
             <SlidersHorizontal size={16} />
             ตั้งค่า Route

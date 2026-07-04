@@ -60,7 +60,11 @@ The current session token lookup is:
 localStorage["evcp_session"]
 ```
 
-Until the real browser login/logout flow lands, the frontend client keeps the explicit legacy header fallback per surface:
+The frontend shells expose a temporary `Sign in` bridge that calls the existing simulated SSO endpoint, stores the returned `evcp_session` and reloads bootstrap data with Bearer auth. `Logout` clears both `evcp_session` and `evcp_session_expires_at`.
+
+This is not the final Keycloak/OIDC browser callback. It exists so the Admin, Creator and App Store shells can exercise the Platform Auth bearer contract before the real callback/token exchange is wired.
+
+Until the real browser login flow fully replaces the bridge, the frontend client keeps the explicit legacy header fallback per surface:
 
 - Admin: `admin@company.com`
 - Creator: `creator@company.com`

@@ -90,12 +90,67 @@ export type StorefrontHomeResponse = {
   notifications: unknown[];
 };
 
+export type PlatformAuthClaimsDto = {
+  subject: string;
+  email: string;
+  name: string;
+  groups: string[];
+  platformRoles: string[];
+  appRoles: Record<string, string[]>;
+};
+
+export type SimulatedSsoLoginInput = {
+  providerId?: string;
+  subject: string;
+  email: string;
+  name: string;
+  groups: string[];
+  appRoles?: Record<string, string[]>;
+};
+
+export type PlatformAuthSessionResponse = {
+  id: string;
+  providerId: string;
+  providerType: "oidc" | "saml" | "keycloak";
+  token: string;
+  claims: PlatformAuthClaimsDto;
+  issuedAt: string;
+  expiresAt: string;
+};
+
 export type PlatformApiClientOptions = {
   baseUrl: string;
   sessionToken?: string;
   legacyUserEmail?: string;
   fetcher?: typeof fetch;
 };
+
+export type PlatformSessionStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export const EVCP_SESSION_STORAGE_KEY = "evcp_session";
+export const EVCP_SESSION_EXPIRES_AT_STORAGE_KEY = "evcp_session_expires_at";
+
+export class PlatformSessionStore {
+  constructor(private readonly storage: PlatformSessionStorage) {}
+
+  getToken(): string | undefined {
+    return this.storage.getItem(EVCP_SESSION_STORAGE_KEY) ?? undefined;
+  }
+
+  getExpiresAt(): string | undefined {
+    return this.storage.getItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY) ?? undefined;
+  }
+
+  saveSession(session: Pick<PlatformAuthSessionResponse, "token" | "expiresAt">): void {
+    this.storage.setItem(EVCP_SESSION_STORAGE_KEY, session.token);
+    this.storage.setItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY, session.expiresAt);
+  }
+
+  clearSession(): void {
+    this.storage.removeItem(EVCP_SESSION_STORAGE_KEY);
+    this.storage.removeItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY);
+  }
+}
 
 export class PlatformApiError extends Error {
   readonly code: string;
@@ -136,6 +191,21 @@ export class PlatformApiClient {
     return this.request<StorefrontHomeResponse>("/store/apps");
   }
 
+  simulateSsoLogin(input: SimulatedSsoLoginInput): Promise<PlatformAuthSessionResponse> {
+    return this.request<PlatformAuthSessionResponse>("/admin/auth/simulate-login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        providerId: input.providerId ?? "authprov_keycloak_default_001",
+        subject: input.subject,
+        email: input.email,
+        name: input.name,
+        groups: input.groups,
+        appRoles: input.appRoles ?? {}
+      })
+    });
+  }
+
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
@@ -170,4 +240,8 @@ export class PlatformApiClient {
 
 export function createPlatformApiClient(options: PlatformApiClientOptions): PlatformApiClient {
   return new PlatformApiClient(options);
+}
+
+export function createPlatformSessionStore(storage: PlatformSessionStorage): PlatformSessionStore {
+  return new PlatformSessionStore(storage);
 }

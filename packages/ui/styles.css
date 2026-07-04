@@ -295,7 +295,9 @@ th {
   align-items: center;
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
   gap: var(--evcp-space-2);
+  justify-content: flex-end;
 }
 
 .store-mobile-header h1 {

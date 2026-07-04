@@ -29,3 +29,16 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   assert.match(creatorSource, /loadCreatorBootstrap/);
   assert.match(storeSource, /loadStoreBootstrap/);
 });
+
+test("frontend shells expose Platform Auth sign-in and logout bridge controls", () => {
+  for (const source of [adminSource, creatorSource, storeSource]) {
+    assert.match(source, /createPlatformSessionStore/);
+    assert.match(source, /simulateSsoLogin/);
+    assert.match(source, /Sign in/);
+    assert.match(source, /Logout/);
+  }
+
+  assert.match(adminSource, /adminSessionBridgeProfile/);
+  assert.match(creatorSource, /creatorSessionBridgeProfile/);
+  assert.match(storeSource, /storeSessionBridgeProfile/);
+});

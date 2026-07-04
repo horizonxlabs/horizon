@@ -1,4 +1,4 @@
-import { createPlatformApiClient, type CurrentUserResponse, type PlatformProjectDto } from "@evcp/api-client";
+import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type PlatformProjectDto, type SimulatedSsoLoginInput } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
@@ -66,6 +66,14 @@ const initialCreatorBootstrap: CreatorBootstrapState = {
   source: "local fallback"
 };
 
+const creatorSessionBridgeProfile: SimulatedSsoLoginInput = {
+  subject: "keycloak-creator-ui-bridge",
+  email: "creator@company.com",
+  name: "Creator User",
+  groups: ["evcp-creators"],
+  appRoles: { "leave-management": ["HR Admin"] }
+};
+
 function apiBaseUrl(): string | undefined {
   const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
   if (!configured && import.meta.env.DEV) return undefined;
@@ -73,7 +81,7 @@ function apiBaseUrl(): string | undefined {
 }
 
 function platformSessionToken(): string | undefined {
-  return window.localStorage.getItem("evcp_session") ?? undefined;
+  return createPlatformSessionStore(window.localStorage).getToken();
 }
 
 function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResponse): CreatorProjectView {
@@ -105,6 +113,23 @@ async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
     selectedProject: projects[0] ? projectToView(projects[0], currentUser) : fallbackSelectedProject,
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
+}
+
+async function signInCreatorSessionBridge(): Promise<CreatorBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const bridgeClient = createPlatformApiClient({
+    baseUrl,
+    legacyUserEmail: "admin@company.com"
+  });
+  const session = await bridgeClient.simulateSsoLogin(creatorSessionBridgeProfile);
+  createPlatformSessionStore(window.localStorage).saveSession(session);
+  return loadCreatorBootstrap();
+}
+
+function clearCreatorSessionBridge(): CreatorBootstrapState {
+  createPlatformSessionStore(window.localStorage).clearSession();
+  return initialCreatorBootstrap;
 }
 
 const wizardSteps = [
@@ -254,6 +279,7 @@ const mvpDemoSteps = [
 
 function CreatorApp() {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const selectedProject = bootstrap.selectedProject;
 
   useEffect(() => {
@@ -261,6 +287,21 @@ function CreatorApp() {
       .then(setBootstrap)
       .catch(() => setBootstrap(initialCreatorBootstrap));
   }, []);
+
+  async function handleSignInBridge() {
+    setIsSigningIn(true);
+    try {
+      setBootstrap(await signInCreatorSessionBridge());
+    } catch {
+      setBootstrap(initialCreatorBootstrap);
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  function handleLogoutBridge() {
+    setBootstrap(clearCreatorSessionBridge());
+  }
 
   return (
     <AppShell title="Creator App" navItems={navigation.creator} userName={bootstrap.userName}>
@@ -272,6 +313,14 @@ function CreatorApp() {
         actions={
           <>
             <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Bootstrap: {bootstrap.source}</ToneBadge>
+            <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+              <LockKeyhole size={16} />
+              {isSigningIn ? "Signing in" : "Demo Sign in"}
+            </button>
+            <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+              <RotateCcw size={16} />
+              Logout
+            </button>
             <button type="button" className="secondary-button">
               <GitBranch size={16} />
               Remix

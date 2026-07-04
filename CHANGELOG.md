@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP frontend Platform Auth session controls with shared session storage helpers, simulated SSO login bridge, Admin/Creator/Store sign-in/logout actions and unit/integration/E2E coverage.
 - Phase 2 Real MVP frontend API bootstrap with shared `PlatformApiClient`, bearer/legacy migration auth headers, Admin/Creator/Store bootstrap wiring, local fallback state, docs and unit/integration/E2E coverage.
 - Phase 2 Real MVP Admin first-run install wizard with preflight actions, blocked-install state, masked setup evidence, responsive EVCP UI styling and unit/integration/E2E coverage.
 - Phase 2 Real MVP platform auth session runtime integration with signed `evcp_session` bearer tokens, SSO user provisioning, auth evidence on `/auth/me`, runtime persistence route support and unit/integration/E2E coverage.

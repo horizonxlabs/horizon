@@ -1,4 +1,4 @@
-import { createPlatformApiClient, type CurrentUserResponse, type StorefrontAppCardDto, type StorefrontHomeResponse } from "@evcp/api-client";
+import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type SimulatedSsoLoginInput, type StorefrontAppCardDto, type StorefrontHomeResponse } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { AppCard, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
 import { Bell, Bug, MessageSquare, Search, Send, ShieldCheck, Store, WifiOff } from "lucide-react";
@@ -50,6 +50,14 @@ const initialStoreBootstrap: StoreBootstrapState = {
   source: "local fallback"
 };
 
+const storeSessionBridgeProfile: SimulatedSsoLoginInput = {
+  subject: "keycloak-store-ui-bridge",
+  email: "user@company.com",
+  name: "End User",
+  groups: ["evcp-users"],
+  appRoles: { "leave-management": ["Employee"] }
+};
+
 function apiBaseUrl(): string | undefined {
   const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
   if (!configured && import.meta.env.DEV) return undefined;
@@ -57,7 +65,7 @@ function apiBaseUrl(): string | undefined {
 }
 
 function platformSessionToken(): string | undefined {
-  return window.localStorage.getItem("evcp_session") ?? undefined;
+  return createPlatformSessionStore(window.localStorage).getToken();
 }
 
 function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
@@ -91,8 +99,26 @@ async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
   };
 }
 
+async function signInStoreSessionBridge(): Promise<StoreBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const bridgeClient = createPlatformApiClient({
+    baseUrl,
+    legacyUserEmail: "admin@company.com"
+  });
+  const session = await bridgeClient.simulateSsoLogin(storeSessionBridgeProfile);
+  createPlatformSessionStore(window.localStorage).saveSession(session);
+  return loadStoreBootstrap();
+}
+
+function clearStoreSessionBridge(): StoreBootstrapState {
+  createPlatformSessionStore(window.localStorage).clearSession();
+  return initialStoreBootstrap;
+}
+
 function StoreApp() {
   const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const myApps = bootstrap.myApps;
   const availableApps = bootstrap.availableApps;
   const selectedApp = myApps[0] ?? availableApps[0] ?? fallbackStoreApps[0];
@@ -102,6 +128,21 @@ function StoreApp() {
       .then(setBootstrap)
       .catch(() => setBootstrap(initialStoreBootstrap));
   }, []);
+
+  async function handleSignInBridge() {
+    setIsSigningIn(true);
+    try {
+      setBootstrap(await signInStoreSessionBridge());
+    } catch {
+      setBootstrap(initialStoreBootstrap);
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  function handleLogoutBridge() {
+    setBootstrap(clearStoreSessionBridge());
+  }
 
   return (
     <main className="store-shell">
@@ -113,6 +154,13 @@ function StoreApp() {
         </div>
         <div className="store-header-actions">
           <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>{bootstrap.source}</ToneBadge>
+          <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+            <ShieldCheck size={15} />
+            {isSigningIn ? "Signing in" : "Demo Sign in"}
+          </button>
+          <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+            Logout
+          </button>
           <button type="button" className="store-icon-button" aria-label="Notifications">
             <Bell size={18} />
           </button>

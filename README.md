@@ -121,7 +121,7 @@ See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees
 
 ## Phase 2 Real MVP Frontend API Bootstrap
 
-Admin Web, Creator Web and App Store PWA now start their primary user/project/store identity through `@evcp/api-client` and Platform API bootstrap routes instead of importing frontend mock fixtures directly. Local Vite development keeps deterministic fallback state when no API base URL is configured; private-server compose uses `/api` through Caddy.
+Admin Web, Creator Web and App Store PWA now start their primary user/project/store identity through `@evcp/api-client` and Platform API bootstrap routes instead of importing frontend mock fixtures directly. They can store and clear `evcp_session` bearer tokens through a temporary simulated SSO bridge while the real Keycloak/OIDC browser callback remains pending. Local Vite development keeps deterministic fallback state when no API base URL is configured; private-server compose uses `/api` through Caddy.
 
 See `docs/operations/real-mvp-frontend-api-bootstrap.md`.
 

@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createPlatformApiClient, PlatformApiError, success, failure } = await import("../../packages/api-client/src/index.ts");
+const { createPlatformApiClient, createPlatformSessionStore, PlatformApiError, success, failure } = await import("../../packages/api-client/src/index.ts");
+
+function createMemoryStorage() {
+  const data = new Map();
+  return {
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => data.set(key, value),
+    removeItem: (key) => data.delete(key)
+  };
+}
 
 test("platform API client sends bearer session tokens", async () => {
   let observedAuthorization = "";
@@ -69,4 +78,72 @@ test("platform API client throws typed errors for failure envelopes", async () =
   });
 
   assert.equal(PlatformApiError.name, "PlatformApiError");
+});
+
+test("platform session store saves loads and clears browser tokens", () => {
+  const store = createPlatformSessionStore(createMemoryStorage());
+
+  store.saveSession({
+    token: "evcp_session.payload.signature",
+    expiresAt: "2026-07-04T02:00:00.000Z"
+  });
+
+  assert.equal(store.getToken(), "evcp_session.payload.signature");
+  assert.equal(store.getExpiresAt(), "2026-07-04T02:00:00.000Z");
+
+  store.clearSession();
+
+  assert.equal(store.getToken(), undefined);
+  assert.equal(store.getExpiresAt(), undefined);
+});
+
+test("platform API client posts simulated SSO login payloads through the bridge endpoint", async () => {
+  let observedUrl = "";
+  let observedBody = {};
+  let observedAdminHeader = "";
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observedUrl = String(url);
+      observedAdminHeader = init.headers.get("x-mock-user-email");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "psess_0001",
+            providerId: "authprov_keycloak_default_001",
+            providerType: "keycloak",
+            token: "evcp_session.payload.signature",
+            claims: {
+              subject: "keycloak-creator-ui-bridge",
+              email: "creator@company.com",
+              name: "Creator User",
+              groups: ["evcp-creators"],
+              platformRoles: ["creator"],
+              appRoles: { "leave-management": ["HR Admin"] }
+            },
+            issuedAt: "2026-07-04T01:00:00.000Z",
+            expiresAt: "2026-07-04T02:00:00.000Z"
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const session = await client.simulateSsoLogin({
+    subject: "keycloak-creator-ui-bridge",
+    email: "creator@company.com",
+    name: "Creator User",
+    groups: ["evcp-creators"],
+    appRoles: { "leave-management": ["HR Admin"] }
+  });
+
+  assert.equal(observedUrl, "https://platform.example/api/admin/auth/simulate-login");
+  assert.equal(observedAdminHeader, "admin@company.com");
+  assert.equal(observedBody.providerId, "authprov_keycloak_default_001");
+  assert.equal(observedBody.email, "creator@company.com");
+  assert.deepEqual(observedBody.groups, ["evcp-creators"]);
+  assert.equal(session.token, "evcp_session.payload.signature");
 });
