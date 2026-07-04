@@ -29,6 +29,10 @@ Required secrets include:
 - `STORAGE_SECRET_KEY`
 - `AI_API_KEY`
 
+Required runtime mode:
+
+- `EVCP_CORE_PERSISTENCE=prisma` for private-server core API persistence
+
 3. Run preflight.
 
 ```bash

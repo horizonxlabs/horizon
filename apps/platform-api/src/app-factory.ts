@@ -6,7 +6,12 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createPlatformApiServices, type PlatformApiServices } from "./platform-services";
-import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
+import {
+  createCoreRepositoryBackedService,
+  createPrismaCorePersistence,
+  MemoryCorePersistenceClient,
+  type CoreRepositoryBackedService
+} from "./persistence/core-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -29,6 +34,9 @@ type RouteRegistry = {
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
 };
+
+export type CorePersistenceMode = "legacy" | "memory" | "prisma";
+type RuntimeEnv = Record<string, string | undefined>;
 
 export interface PlatformRequest {
   method: "GET" | "POST";
@@ -131,6 +139,30 @@ export interface PlatformRequest {
 export interface PlatformResponse<T = unknown> {
   status: number;
   body: ApiResult<T>;
+}
+
+export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CorePersistenceMode {
+  const mode = (env.EVCP_CORE_PERSISTENCE ?? "legacy").trim().toLowerCase();
+  if (mode === "legacy" || mode === "memory" || mode === "prisma") return mode;
+  throw new Error(`Unsupported EVCP_CORE_PERSISTENCE mode: ${env.EVCP_CORE_PERSISTENCE}`);
+}
+
+export async function createRuntimePlatformApiServices(env: RuntimeEnv = process.env): Promise<PersistenceAwarePlatformApiServices> {
+  const services = createPlatformApiServices();
+  const mode = resolveCorePersistenceMode(env);
+  if (mode === "legacy") return services;
+  if (mode === "memory") {
+    return {
+      ...services,
+      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient())
+    };
+  }
+
+  const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  return {
+    ...services,
+    corePersistence: service
+  };
 }
 
 function errorResponse(error: unknown): PlatformResponse {

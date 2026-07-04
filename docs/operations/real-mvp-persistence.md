@@ -1,7 +1,7 @@
 # Real MVP Core Persistence Foundation
 
 Status: Phase 2 implementation in progress  
-Issues: #34, #36
+Issues: #34, #36, #38
 
 ## Purpose
 
@@ -40,6 +40,25 @@ flowchart LR
 | `POST /audit-logs/filter` | Filters repository-backed audit events by actor, action, severity, project/app and date range |
 
 The legacy synchronous executor remains available for existing sprint regression tests and for services that have not yet moved to repositories.
+
+## Runtime Mode
+
+Platform API startup reads `EVCP_CORE_PERSISTENCE` through `createRuntimePlatformApiServices`.
+
+| Mode | Use case | Behavior |
+| --- | --- | --- |
+| `legacy` | Existing sprint regression runs | Starts the mock-first in-memory services and does not create a core persistence service |
+| `memory` | Deterministic local/API tests | Starts repository-backed core routes with `MemoryCorePersistenceClient` and no database requirement |
+| `prisma` | Online private server | Starts repository-backed core routes with Prisma through `DATABASE_URL` |
+
+Private-server `.env` should set:
+
+```bash
+EVCP_CORE_PERSISTENCE=prisma
+DATABASE_URL=postgresql://...
+```
+
+`prisma` mode creates the Prisma-backed core repository service lazily during Platform API startup. Existing sprint-specific services still keep their legacy in-memory state until they are migrated in later slices.
 
 ## Repository Coverage
 
