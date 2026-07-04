@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 13 Observability and License are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 14 Security Release Readiness are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -27,6 +27,7 @@ pnpm verify:sprint10
 pnpm verify:sprint11
 pnpm verify:sprint12
 pnpm verify:sprint13
+pnpm verify:sprint14
 ```
 
 Start frontend shells:
@@ -198,3 +199,13 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Existing app continuity behavior that allows `run_existing_app` and preserves data when license enforcement blocks privileged actions
 - Prisma migration and seed data for service health, telemetry export, upgrade report, rollback report, license record, validation log and enforcement event evidence
 - Admin Observability and License UI
+
+## Sprint 14 Scope
+
+- Admin Security Release Readiness service for TLS enforcement, session policy, secret redaction, upload policy, public/external release checklist and RTM regression evidence
+- Admin-only API routes for readiness overview, upload validation, release checklist evaluation and sensitive redaction preview
+- Upload validation that allows supported clean files, blocks unsupported/oversize files and quarantines pending or failed malware scan states
+- Public/external checklist that blocks unsafe exposure until auth, permissions, domain, TLS, data classification and audit checks pass
+- Sensitive prompt, ticket and request payload redaction with rule evidence and no raw secret return
+- Prisma migration and seed data for security readiness reports, readiness checks, upload scan events, release checklist reports and redaction evidence
+- Admin Security Release Readiness UI using shared design system dashboard patterns

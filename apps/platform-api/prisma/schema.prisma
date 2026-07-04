@@ -105,6 +105,11 @@ model PlatformUser {
   licenseRecords LicenseRecord[] @relation("LicenseRecordCreatedBy")
   licenseValidationLogs LicenseValidationLog[] @relation("LicenseValidationLogCreatedBy")
   licenseEnforcementEvents LicenseEnforcementEvent[] @relation("LicenseEnforcementActor")
+  securityReadinessReports SecurityReadinessReport[]
+  securityReadinessChecks SecurityReadinessCheck[]
+  uploadScanEvents UploadScanEvent[]
+  releaseChecklistReports ReleaseChecklistReport[]
+  sensitiveRedactionEvidence SensitiveRedactionEvidence[]
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -1503,4 +1508,88 @@ model LicenseEnforcementEvent {
 
   @@index([action, allowed, checkedAt])
   @@map("license_enforcement_events")
+}
+
+model SecurityReadinessReport {
+  id                    String   @id
+  status                String
+  tlsEnforced           Boolean  @map("tls_enforced")
+  sessionPolicy         Json     @map("session_policy")
+  secretRedactionPassed Boolean  @map("secret_redaction_passed")
+  uploadPolicy          Json     @map("upload_policy")
+  releaseChecklist      Json     @map("release_checklist")
+  rtmRegression         Json     @map("rtm_regression")
+  createdByUserId       String   @map("created_by_user_id")
+  createdBy             PlatformUser @relation(fields: [createdByUserId], references: [id])
+  checks                SecurityReadinessCheck[]
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("security_readiness_reports")
+}
+
+model SecurityReadinessCheck {
+  id              String   @id
+  reportId        String?  @map("report_id")
+  category        String
+  name            String
+  required        String
+  observed        String
+  status          String
+  action          String
+  createdByUserId String   @map("created_by_user_id")
+  report          SecurityReadinessReport? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  createdBy       PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([category, status])
+  @@map("security_readiness_checks")
+}
+
+model UploadScanEvent {
+  id               String   @id
+  fileName         String   @map("file_name")
+  mimeType         String   @map("mime_type")
+  sizeBytes        BigInt   @map("size_bytes")
+  source           String
+  scanStatus       String   @map("scan_status")
+  decision         String
+  quarantineReason String?  @map("quarantine_reason")
+  reasons          String[] @default([])
+  createdByUserId  String   @map("created_by_user_id")
+  createdBy        PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([decision, scanStatus, createdAt])
+  @@map("upload_scan_events")
+}
+
+model ReleaseChecklistReport {
+  id                 String   @id
+  projectId          String   @map("project_id")
+  exposure           String
+  releaseBlocked     Boolean  @map("release_blocked")
+  requiredChecks     Json     @map("required_checks")
+  blockingReasons    String[] @default([]) @map("blocking_reasons")
+  dataClassification String   @map("data_classification")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([exposure, releaseBlocked, createdAt])
+  @@map("release_checklist_reports")
+}
+
+model SensitiveRedactionEvidence {
+  id                    String   @id
+  classification        String
+  surface               String
+  redactionRulesApplied String[] @default([]) @map("redaction_rules_applied")
+  redactedPayload       Json     @map("redacted_payload")
+  createdByUserId       String   @map("created_by_user_id")
+  createdBy             PlatformUser @relation(fields: [createdByUserId], references: [id])
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([classification, surface, createdAt])
+  @@map("sensitive_redaction_evidence")
 }

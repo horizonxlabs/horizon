@@ -27,6 +27,7 @@ Related strategy: `docs/testing/mvp-test-strategy.md`
 | Sprint 11 | Knowledge/skill governance, scoped retrieval, assignment, workspace context metadata | Unit/integration/E2E API/UI evidence, governance DB records, screenshots |
 | Sprint 12 | Installer, setup wizard, backup/PITR, restore drill and recovery UI | Unit/integration/E2E API/UI evidence, operations DB records, screenshots |
 | Sprint 13 | Observability, telemetry export, upgrade/rollback, license validation/enforcement and data continuity | Unit/integration/E2E API/UI evidence, production/license DB records, screenshots |
+| Sprint 14 | Security release readiness, upload validation, public/external checklist, redaction evidence and RTM regression | Unit/integration/E2E API/UI evidence, security release DB records, screenshots |
 
 ## 3. Sprint 0 Tests
 
@@ -281,7 +282,32 @@ Current evidence on 2026-07-04:
 - Screenshot evidence: `docs/assets/screenshots/sprint13-observability-license.png`, `docs/assets/screenshots/sprint13-observability-license-mobile.png`, `docs/assets/screenshots/sprint13-license-enforcement-mobile.png`.
 - Console evidence: `docs/assets/screenshots/sprint13-console-warnings.txt` recorded 0 errors or warnings.
 
-## 17. Regression Suite Growth
+## 17. Production Extension Sprint 14 Tests
+
+| Test ID | Test | Type | Evidence |
+| --- | --- | --- | --- |
+| S14-T001 | Admin readiness dashboard exposes TLS, session, secret redaction, upload, checklist and RTM state | Security/unit/API/UI | Readiness response and Admin UI |
+| S14-T002 | Creator cannot read Admin security readiness route | Security/API | 403 response |
+| S14-T003 | Upload validation allows safe PDF and blocks unsupported or oversize file | Upload/unit/API | Upload decision response |
+| S14-T004 | Pending/failed malware scan state is quarantined before ingestion | Upload/unit/API | Quarantine decision response |
+| S14-T005 | Public/external release checklist blocks until auth, permissions, domain, TLS, data and audit checks pass | Security/unit/API | Checklist report |
+| S14-T006 | Sensitive prompt, ticket and request payload values are redacted | Security/unit/API | Redaction evidence response |
+| S14-T007 | Prisma migration and seed create Sprint 14 security release records without plaintext secret columns | Integration/DB | Migrate/seed output and DB counts |
+| S14-T008 | Admin Security Release Readiness UI renders required sections and mobile checklist list | UI/E2E | Screenshot and console capture |
+
+Current focused evidence on 2026-07-04:
+
+- Focused Unit: 4 passed, 0 failed.
+- Focused Integration: 3 passed, 0 failed.
+- Focused E2E/API/UI smoke: 3 passed, 0 failed.
+- Full `pnpm verify:sprint14`: passed lint, typecheck, build, unit 65/65, integration 48/48, E2E/API/UI 49/49.
+- Prisma migrate deploy: passed, applied `20260703000013_sprint14_security_release_readiness`.
+- Prisma generate and seed: passed.
+- Database counts: `security_readiness_reports=1`, `security_readiness_checks=1`, `upload_scan_events=1`, `release_checklist_reports=1`, `sensitive_redaction_evidence=1`.
+- Screenshot evidence: `docs/assets/screenshots/sprint14-security-release-readiness.png`, `docs/assets/screenshots/sprint14-security-release-readiness-mobile.png`.
+- Console evidence: `docs/assets/screenshots/sprint14-console-warnings.txt` recorded 0 errors or warnings.
+
+## 18. Regression Suite Growth
 
 | After Sprint | Regression Must Include |
 | --- | --- |
@@ -299,8 +325,9 @@ Current evidence on 2026-07-04:
 | Sprint 11 | Sprint 10 + knowledge retrieval, skill resolution, workspace context metadata and governance UI |
 | Sprint 12 | Sprint 11 + installer preflight, setup redaction, backup/PITR, restore drill and recovery UI |
 | Sprint 13 | Sprint 12 + observability dashboard, telemetry export, upgrade/rollback, license validation/enforcement and existing app continuity |
+| Sprint 14 | Sprint 13 + security release readiness, upload quarantine, public/external checklist and redaction evidence |
 
-## 18. Exit Rule
+## 19. Exit Rule
 
 A sprint is not accepted if:
 

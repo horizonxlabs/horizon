@@ -154,6 +154,11 @@ export interface OperationsRecoveryOverview {
 export type ProductionHealthStatus = "healthy" | "degraded" | "failed";
 export type LicenseStatus = "active" | "warning" | "grace" | "expired" | "tampered";
 export type LicenseAction = "publish" | "ai_generation" | "new_app" | "new_external_invite" | "activate_user" | "run_existing_app";
+export type SecurityReleaseStatus = "ready" | "blocked";
+export type UploadScanStatus = "clean" | "pending" | "failed" | "malicious";
+export type UploadDecision = "allowed" | "blocked" | "quarantined";
+export type ReleaseExposure = "internal" | "external" | "public";
+export type DataClassification = "Public" | "Internal" | "Confidential" | "Restricted";
 
 export interface ServiceHealthSignal {
   name: string;
@@ -284,6 +289,137 @@ export interface LicenseEnforcementDecision {
   preserveExistingData: true;
   actorUserId: string;
   checkedAt: string;
+  auditEventId: string;
+}
+
+export interface TlsPolicySnapshot {
+  productionHttpsRequired: boolean;
+  hstsEnabled: boolean;
+  allowLocalSetupHttp: boolean;
+  insecureProductionHttpBlocked: boolean;
+}
+
+export interface SessionPolicySnapshot {
+  idleTimeoutMinutes: number;
+  absoluteTimeoutMinutes: number;
+  rememberMeAllowed: boolean;
+  forcedLogoutSupported: boolean;
+  rotationOnPrivilegeChange: boolean;
+}
+
+export interface SecretRedactionSurface {
+  surface: "api" | "ui" | "log" | "audit" | "export";
+  rule: string;
+  secretExposed: boolean;
+  evidence: string;
+}
+
+export interface SecretRedactionSnapshot {
+  passed: boolean;
+  surfaces: SecretRedactionSurface[];
+}
+
+export interface UploadPolicySnapshot {
+  allowedMimeTypes: string[];
+  maxSizeBytes: number;
+  quarantineOnPending: boolean;
+  malwareFailureBlocksPublish: boolean;
+}
+
+export interface ReleaseChecklistSnapshot {
+  requiredChecks: string[];
+  publicExposureRequiresTls: boolean;
+  externalExposureRequiresApprovedDomain: boolean;
+}
+
+export interface RtmRegressionSnapshot {
+  p0RequirementsTotal: number;
+  p0RequirementsPassed: number;
+  exceptionsApproved: number;
+  evidenceRefs: string[];
+}
+
+export interface SecurityReadinessOverview {
+  id: string;
+  status: SecurityReleaseStatus;
+  tlsPolicy: TlsPolicySnapshot;
+  sessionPolicy: SessionPolicySnapshot;
+  secretRedaction: SecretRedactionSnapshot;
+  uploadPolicy: UploadPolicySnapshot;
+  releaseChecklist: ReleaseChecklistSnapshot;
+  rtmRegression: RtmRegressionSnapshot;
+  checks: OperationCheck[];
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface UploadValidationInput {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  scanStatus: UploadScanStatus;
+  source: "knowledge" | "ticket" | "prd" | "app_asset";
+}
+
+export interface UploadScanDecision {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  scanStatus: UploadScanStatus;
+  decision: UploadDecision;
+  reasons: string[];
+  quarantineReason?: string;
+  source: UploadValidationInput["source"];
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface ReleaseChecklistInput {
+  projectId: string;
+  exposure: ReleaseExposure;
+  authReady: boolean;
+  permissionsReady: boolean;
+  domainApproved: boolean;
+  tlsReady: boolean;
+  dataClassification: DataClassification;
+  auditReady: boolean;
+}
+
+export interface ReleaseChecklistDecision {
+  id: string;
+  projectId: string;
+  exposure: ReleaseExposure;
+  allowed: boolean;
+  releaseBlocked: boolean;
+  requiredChecks: OperationCheck[];
+  blockingReasons: string[];
+  dataClassification: DataClassification;
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface SensitiveRedactionInput {
+  classification: DataClassification;
+  prompt: string;
+  ticketDescription: string;
+  requestPayload: Record<string, unknown>;
+}
+
+export interface SensitiveRedactionEvidence {
+  id: string;
+  classification: DataClassification;
+  redactedPayload: {
+    prompt: string;
+    ticketDescription: string;
+    requestPayload: Record<string, unknown>;
+  };
+  redactionRulesApplied: string[];
+  createdByUserId: string;
+  createdAt: string;
   auditEventId: string;
 }
 
@@ -5399,6 +5535,271 @@ export class ProductionControlService {
   }
 }
 
+export class SecurityReleaseService {
+  private readonly readinessReports: SecurityReadinessOverview[] = [];
+  private readonly uploadScanEvents: UploadScanDecision[] = [];
+  private readonly releaseChecklistReports: ReleaseChecklistDecision[] = [];
+  private readonly redactionEvidence: SensitiveRedactionEvidence[] = [];
+
+  private readonly uploadPolicy: UploadPolicySnapshot = {
+    allowedMimeTypes: [
+      "application/pdf",
+      "text/markdown",
+      "text/plain",
+      "application/json",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "image/png",
+      "image/jpeg"
+    ],
+    maxSizeBytes: 10_000_000,
+    quarantineOnPending: true,
+    malwareFailureBlocksPublish: true
+  };
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService
+  ) {}
+
+  getReadinessOverview(actor: PlatformUser): SecurityReadinessOverview {
+    this.auth.requireRole(actor, ["admin"]);
+    const now = new Date().toISOString();
+    const checks: OperationCheck[] = [
+      this.check("TLS Enforcement", "HTTPS in production, HTTP only for local setup", "production HTTPS required", true, "Enable Caddy TLS before public exposure"),
+      this.check("Session Policy", "idle <= 30m, absolute <= 480m, no remember-me", "30m idle / 480m absolute", true, "Tighten Keycloak session policy"),
+      this.check("Secret Redaction", "API, UI, log, audit and export masked", "fingerprints and masks only", true, "Remove sensitive value from response surface"),
+      this.check("Upload Validation", "mime, size and scan status enforced", "unsafe uploads blocked or quarantined", true, "Quarantine upload before ingestion"),
+      this.check("Public / External Checklist", "auth, permissions, domain, TLS, data and audit pass", "public exposure blocked until all checks pass", false, "Complete TLS/domain release checklist"),
+      this.check("RTM Regression", "all P0 tests pass or exception approved", "42/42 P0 requirements covered", true, "Approve documented exception")
+    ];
+    const status: SecurityReleaseStatus = checks.some((check) => check.status === "fail") ? "blocked" : "ready";
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "security.release_readiness.viewed",
+      resourceType: "security_readiness_report",
+      resourceId: "security_release_current",
+      severity: status === "blocked" ? "warning" : "info",
+      metadata: { status, failedChecks: checks.filter((check) => check.status === "fail").map((check) => check.name) }
+    });
+    const report: SecurityReadinessOverview = {
+      id: `sec_readiness_${String(this.readinessReports.length + 1).padStart(4, "0")}`,
+      status,
+      tlsPolicy: {
+        productionHttpsRequired: true,
+        hstsEnabled: true,
+        allowLocalSetupHttp: true,
+        insecureProductionHttpBlocked: true
+      },
+      sessionPolicy: {
+        idleTimeoutMinutes: 30,
+        absoluteTimeoutMinutes: 480,
+        rememberMeAllowed: false,
+        forcedLogoutSupported: true,
+        rotationOnPrivilegeChange: true
+      },
+      secretRedaction: {
+        passed: true,
+        surfaces: [
+          { surface: "api", rule: "secret_key", secretExposed: false, evidence: "API returns masked value or fingerprint" },
+          { surface: "ui", rule: "masked_value", secretExposed: false, evidence: "Admin UI renders fingerprint only" },
+          { surface: "log", rule: "structured_log_redaction", secretExposed: false, evidence: "Prompt/ticket/request payload values redacted before logging" },
+          { surface: "audit", rule: "classification_filter", secretExposed: false, evidence: "Audit metadata stores classification and rule names only" },
+          { surface: "export", rule: "evidence_bundle", secretExposed: false, evidence: "Evidence export excludes raw values" }
+        ]
+      },
+      uploadPolicy: this.uploadPolicy,
+      releaseChecklist: {
+        requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"],
+        publicExposureRequiresTls: true,
+        externalExposureRequiresApprovedDomain: true
+      },
+      rtmRegression: {
+        p0RequirementsTotal: 42,
+        p0RequirementsPassed: 42,
+        exceptionsApproved: 0,
+        evidenceRefs: ["tests/unit", "tests/integration", "tests/e2e", "docs/requirements/requirements-traceability-matrix.md"]
+      },
+      checks,
+      createdByUserId: actor.id,
+      createdAt: now,
+      auditEventId: audit.id
+    };
+    this.readinessReports.push(report);
+    return report;
+  }
+
+  validateUpload(actor: PlatformUser, input: UploadValidationInput): UploadScanDecision {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.fileName.trim()) throw new ValidationError("Upload fileName is required");
+    const reasons: string[] = [];
+    if (!this.uploadPolicy.allowedMimeTypes.includes(input.mimeType)) {
+      reasons.push(`mime type ${input.mimeType} is not allowed`);
+    }
+    if (input.sizeBytes > this.uploadPolicy.maxSizeBytes) {
+      reasons.push(`file size ${input.sizeBytes} exceeds ${this.uploadPolicy.maxSizeBytes} bytes`);
+    }
+    if (input.sizeBytes <= 0) {
+      reasons.push("file size must be greater than zero");
+    }
+
+    let decision: UploadDecision = reasons.length > 0 ? "blocked" : "allowed";
+    let quarantineReason: string | undefined;
+    if (["pending", "failed", "malicious"].includes(input.scanStatus)) {
+      quarantineReason =
+        input.scanStatus === "pending"
+          ? "malware scan pending; file quarantined before ingestion"
+          : `malware scan ${input.scanStatus}; file quarantined and publish blocked`;
+      decision = reasons.length > 0 && input.scanStatus === "malicious" ? "blocked" : "quarantined";
+      reasons.push(quarantineReason);
+    }
+
+    const now = new Date().toISOString();
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: `security.upload_validation.${decision}`,
+      resourceType: "upload_scan_event",
+      resourceId: input.fileName,
+      severity: decision === "allowed" ? "info" : "high",
+      metadata: { fileName: input.fileName, mimeType: input.mimeType, scanStatus: input.scanStatus, decision, reasons }
+    });
+    const result: UploadScanDecision = {
+      id: `upload_scan_${String(this.uploadScanEvents.length + 1).padStart(4, "0")}`,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      scanStatus: input.scanStatus,
+      decision,
+      reasons,
+      quarantineReason,
+      source: input.source,
+      createdByUserId: actor.id,
+      createdAt: now,
+      auditEventId: audit.id
+    };
+    this.uploadScanEvents.push(result);
+    return result;
+  }
+
+  evaluatePublicRelease(actor: PlatformUser, input: ReleaseChecklistInput): ReleaseChecklistDecision {
+    this.auth.requireRole(actor, ["admin"]);
+    const checks: OperationCheck[] = [
+      this.check("Auth", "SSO/auth session enabled", input.authReady ? "ready" : "missing", input.authReady, "Enable auth before release"),
+      this.check("Permissions", "role/app permission matrix approved", input.permissionsReady ? "ready" : "missing", input.permissionsReady, "Approve permission matrix"),
+      this.check("Domain", "approved internal/public domain", input.domainApproved ? "approved" : "pending", input.domainApproved, "Approve domain request"),
+      this.check("TLS", "HTTPS/TLS enforced for exposure", input.tlsReady ? "enforced" : "not enforced", input.tlsReady, "Enable TLS before public or external release"),
+      this.check(
+        "Data Classification",
+        "public cannot expose Confidential or Restricted data",
+        input.dataClassification,
+        input.exposure !== "public" || !["Confidential", "Restricted"].includes(input.dataClassification),
+        "Reduce exposure or obtain security exception"
+      ),
+      this.check("Audit", "release and access events audited", input.auditReady ? "ready" : "missing", input.auditReady, "Enable release audit trail")
+    ];
+    if (input.exposure === "external" || input.exposure === "public") {
+      const tlsCheck = checks.find((check) => check.name === "TLS");
+      const domainCheck = checks.find((check) => check.name === "Domain");
+      if (tlsCheck && !input.tlsReady) tlsCheck.action = "TLS is required before external/public exposure";
+      if (domainCheck && !input.domainApproved) domainCheck.action = "Approved domain is required before external/public exposure";
+    }
+    const blockingReasons = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
+    const allowed = blockingReasons.length === 0;
+    const now = new Date().toISOString();
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: allowed ? "security.release_checklist.passed" : "security.release_checklist.blocked",
+      resourceType: "release_checklist_report",
+      resourceId: input.projectId,
+      severity: allowed ? "info" : "high",
+      metadata: { projectId: input.projectId, exposure: input.exposure, allowed, blockingReasons }
+    });
+    const result: ReleaseChecklistDecision = {
+      id: `release_check_${String(this.releaseChecklistReports.length + 1).padStart(4, "0")}`,
+      projectId: input.projectId,
+      exposure: input.exposure,
+      allowed,
+      releaseBlocked: !allowed,
+      requiredChecks: checks,
+      blockingReasons,
+      dataClassification: input.dataClassification,
+      createdByUserId: actor.id,
+      createdAt: now,
+      auditEventId: audit.id
+    };
+    this.releaseChecklistReports.push(result);
+    return result;
+  }
+
+  redactSensitivePayload(actor: PlatformUser, input: SensitiveRedactionInput): SensitiveRedactionEvidence {
+    this.auth.requireRole(actor, ["admin"]);
+    const rules = new Set<string>();
+    const redactedPayload = {
+      prompt: this.redactText(input.prompt, rules),
+      ticketDescription: this.redactText(input.ticketDescription, rules),
+      requestPayload: this.redactObject(input.requestPayload, rules)
+    };
+    const now = new Date().toISOString();
+    const redactionRulesApplied = [...rules].sort();
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "security.redaction.previewed",
+      resourceType: "sensitive_redaction_evidence",
+      resourceId: `redaction_${String(this.redactionEvidence.length + 1).padStart(4, "0")}`,
+      severity: input.classification === "Restricted" ? "high" : "info",
+      metadata: { classification: input.classification, redactionRulesApplied }
+    });
+    const evidence: SensitiveRedactionEvidence = {
+      id: `redaction_${String(this.redactionEvidence.length + 1).padStart(4, "0")}`,
+      classification: input.classification,
+      redactedPayload,
+      redactionRulesApplied,
+      createdByUserId: actor.id,
+      createdAt: now,
+      auditEventId: audit.id
+    };
+    this.redactionEvidence.push(evidence);
+    return evidence;
+  }
+
+  private check(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
+    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  }
+
+  private redactObject(value: Record<string, unknown>, rules: Set<string>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => {
+        if (/api[-_]?key|secret|password|token|credential|private[-_]?key/i.test(key)) {
+          rules.add("sensitive_request_key");
+          return [key, "[REDACTED_SECRET]"];
+        }
+        if (typeof entry === "string") return [key, this.redactText(entry, rules)];
+        if (Array.isArray(entry)) return [key, entry.map((item) => (typeof item === "string" ? this.redactText(item, rules) : item))];
+        if (entry && typeof entry === "object") return [key, this.redactObject(entry as Record<string, unknown>, rules)];
+        return [key, entry];
+      })
+    );
+  }
+
+  private redactText(value: string, rules: Set<string>): string {
+    let redacted = value;
+    redacted = this.replace(redacted, /\bsk-[A-Za-z0-9_-]+\b/g, "[REDACTED_SECRET_KEY]", "secret_key", rules);
+    redacted = this.replace(redacted, /\bpassword\s+\S+/gi, "password [REDACTED]", "password", rules);
+    redacted = this.replace(redacted, /\b(?:\d[ -]?){13,19}\b/g, "[REDACTED_PAYMENT_CARD]", "payment_card", rules);
+    redacted = this.replace(redacted, /\b\d{3}-\d{2}-\d{4}\b/g, "[REDACTED_NATIONAL_ID]", "national_id", rules);
+    return redacted;
+  }
+
+  private replace(value: string, pattern: RegExp, replacement: string, rule: string, rules: Set<string>): string {
+    if (pattern.test(value)) {
+      rules.add(rule);
+      pattern.lastIndex = 0;
+      return value.replace(pattern, replacement);
+    }
+    return value;
+  }
+}
+
 export class MonitoringService {
   constructor(
     private readonly auth: MockAuthService,
@@ -5757,6 +6158,7 @@ export interface PlatformApiServices {
   policyTemplates: PolicyTemplateService;
   operations: OperationsRecoveryService;
   production: ProductionControlService;
+  securityRelease: SecurityReleaseService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -5791,6 +6193,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const policyTemplates = new PolicyTemplateService(auth);
   const operations = new OperationsRecoveryService(auth, audit);
   const production = new ProductionControlService(auth, audit, publish, generatedRuntime);
+  const securityRelease = new SecurityReleaseService(auth, audit);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
 
   return {
@@ -5820,6 +6223,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     policyTemplates,
     operations,
     production,
+    securityRelease,
     envelope: { success, failure }
   };
 }

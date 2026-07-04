@@ -46,6 +46,10 @@ export interface PlatformRequest {
     | "/admin/production/upgrade-checks"
     | "/admin/production/rollback"
     | "/admin/production/overview"
+    | "/admin/security/readiness"
+    | "/admin/security/uploads/validate"
+    | "/admin/security/release-checklist"
+    | "/admin/security/redaction/preview"
     | "/admin/license/install"
     | "/admin/license/validate"
     | "/license/enforce"
@@ -702,6 +706,53 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(services.production.getOverview(user)) };
     }
 
+    if (request.method === "GET" && request.path === "/admin/security/readiness") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(services.securityRelease.getReadinessOverview(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/security/uploads/validate") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.securityRelease.validateUpload(user, {
+        fileName: String(request.body?.fileName ?? ""),
+        mimeType: String(request.body?.mimeType ?? ""),
+        sizeBytes: Number(request.body?.sizeBytes ?? 0),
+        scanStatus: String(request.body?.scanStatus ?? "pending") as never,
+        source: String(request.body?.source ?? "ticket") as never
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/security/release-checklist") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.securityRelease.evaluatePublicRelease(user, {
+        projectId: String(request.body?.projectId ?? ""),
+        exposure: String(request.body?.exposure ?? "internal") as never,
+        authReady: Boolean(request.body?.authReady),
+        permissionsReady: Boolean(request.body?.permissionsReady),
+        domainApproved: Boolean(request.body?.domainApproved),
+        tlsReady: Boolean(request.body?.tlsReady),
+        dataClassification: String(request.body?.dataClassification ?? "Internal") as never,
+        auditReady: Boolean(request.body?.auditReady)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (request.method === "POST" && request.path === "/admin/security/redaction/preview") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const requestPayload =
+        request.body?.requestPayload && typeof request.body.requestPayload === "object" && !Array.isArray(request.body.requestPayload)
+          ? (request.body.requestPayload as Record<string, unknown>)
+          : {};
+      const result = services.securityRelease.redactSensitivePayload(user, {
+        classification: String(request.body?.classification ?? "Internal") as never,
+        prompt: String(request.body?.prompt ?? ""),
+        ticketDescription: String(request.body?.ticketDescription ?? ""),
+        requestPayload
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
     if (request.method === "POST" && request.path === "/admin/license/install") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const result = services.production.installLicense(user, {
@@ -1259,6 +1310,27 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
   routes.get("/admin/production/overview", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/production/overview", headers: request.headers }))
+  );
+  routes.get("/admin/security/readiness", (request, response) =>
+    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/security/readiness", headers: request.headers }))
+  );
+  routes.post("/admin/security/uploads/validate", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/security/uploads/validate", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/security/release-checklist", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/security/release-checklist", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/security/redaction/preview", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/admin/security/redaction/preview", headers: request.headers, body: request.body })
+    )
   );
   routes.post("/admin/license/install", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/admin/license/install", headers: request.headers, body: request.body }))

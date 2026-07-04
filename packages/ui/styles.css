@@ -1745,6 +1745,70 @@ button {
   display: none;
 }
 
+.security-release-shell {
+  background:
+    linear-gradient(135deg, rgba(13, 92, 171, 0.07), rgba(8, 129, 141, 0.04)),
+    var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-4);
+  margin-left: calc(-280px - var(--evcp-space-5));
+  padding: var(--evcp-space-4);
+  width: calc(100% + 280px + var(--evcp-space-5));
+}
+
+.security-release-header {
+  align-items: start;
+  display: flex;
+  gap: var(--evcp-space-4);
+  justify-content: space-between;
+}
+
+.security-release-header p {
+  color: var(--evcp-color-muted);
+  margin: 4px 0 0;
+  max-width: 880px;
+}
+
+.security-release-kpi-grid {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.security-release-layout {
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.security-release-grid {
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.security-release-grid > .ds-section-card:first-child,
+.security-release-grid > .ds-section-card:nth-child(4),
+.security-release-grid > .ds-section-card:nth-child(6) {
+  grid-column: 1 / -1;
+}
+
+.security-release-shell .ds-definition-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.security-release-shell .ds-definition-grid dd,
+.security-release-shell .ds-data-table td,
+.security-release-shell .ds-rail-alert span {
+  overflow-wrap: anywhere;
+}
+
+.security-release-mobile-list {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1790,6 +1854,9 @@ button {
     .observability-license-kpi-grid,
     .observability-license-layout,
     .observability-license-grid,
+    .security-release-kpi-grid,
+    .security-release-layout,
+    .security-release-grid,
     .creator-summary-grid,
   .creator-prd-layout,
   .creator-prd-workbench,
@@ -1847,6 +1914,10 @@ button {
     display: grid;
   }
 
+  .security-release-header {
+    display: grid;
+  }
+
   .operations-recovery-shell {
     margin-left: 0;
     padding: var(--evcp-space-3);
@@ -1854,6 +1925,12 @@ button {
   }
 
   .observability-license-shell {
+    margin-left: 0;
+    padding: var(--evcp-space-3);
+    width: auto;
+  }
+
+  .security-release-shell {
     margin-left: 0;
     padding: var(--evcp-space-3);
     width: auto;
@@ -1871,6 +1948,12 @@ button {
     grid-column: auto;
   }
 
+  .security-release-grid > .ds-section-card:first-child,
+  .security-release-grid > .ds-section-card:nth-child(4),
+  .security-release-grid > .ds-section-card:nth-child(6) {
+    grid-column: auto;
+  }
+
   .operations-recovery-shell .ds-definition-grid {
     grid-template-columns: 1fr;
   }
@@ -1879,11 +1962,16 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .security-release-shell .ds-definition-grid {
+    grid-template-columns: 1fr;
+  }
+
   .auth-desktop-table,
   .runtime-desktop-table,
   .governance-desktop-table,
   .operations-desktop-table,
-  .observability-desktop-table {
+  .observability-desktop-table,
+  .security-release-desktop-table {
     display: none;
   }
 
@@ -1891,7 +1979,8 @@ button {
   .runtime-mobile-list,
   .governance-mobile-list,
   .backup-restore-mobile-list,
-  .license-enforcement-mobile-list {
+  .license-enforcement-mobile-list,
+  .security-release-mobile-list {
     display: grid;
     gap: var(--evcp-space-2);
   }
@@ -1900,7 +1989,8 @@ button {
   .runtime-mobile-list article,
   .governance-mobile-list article,
   .backup-restore-mobile-list article,
-  .license-enforcement-mobile-list article {
+  .license-enforcement-mobile-list article,
+  .security-release-mobile-list article {
     background: var(--evcp-color-surface-muted);
     border: 1px solid var(--evcp-color-border-soft);
     border-radius: var(--evcp-radius-card);
@@ -1927,7 +2017,10 @@ button {
   .backup-restore-mobile-list small,
   .license-enforcement-mobile-list strong,
   .license-enforcement-mobile-list span,
-  .license-enforcement-mobile-list small {
+  .license-enforcement-mobile-list small,
+  .security-release-mobile-list strong,
+  .security-release-mobile-list span,
+  .security-release-mobile-list small {
     min-width: 0;
     overflow-wrap: anywhere;
   }

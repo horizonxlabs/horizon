@@ -2133,6 +2133,144 @@ async function main() {
       checkedAt: new Date("2027-02-01T00:00:00.000Z")
     }
   });
+
+  await prisma.securityReadinessReport.upsert({
+    where: { id: "sec_readiness_release_001" },
+    update: {
+      status: "blocked",
+      tlsEnforced: true,
+      sessionPolicy: { idleTimeoutMinutes: 30, absoluteTimeoutMinutes: 480, rememberMeAllowed: false },
+      secretRedactionPassed: true,
+      uploadPolicy: { allowedMimeTypes: ["application/pdf", "text/markdown"], maxSizeBytes: 10000000, quarantineOnPending: true },
+      releaseChecklist: { requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"] },
+      rtmRegression: { p0RequirementsTotal: 42, p0RequirementsPassed: 42, exceptionsApproved: 0 },
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "sec_readiness_release_001",
+      status: "blocked",
+      tlsEnforced: true,
+      sessionPolicy: { idleTimeoutMinutes: 30, absoluteTimeoutMinutes: 480, rememberMeAllowed: false },
+      secretRedactionPassed: true,
+      uploadPolicy: { allowedMimeTypes: ["application/pdf", "text/markdown"], maxSizeBytes: 10000000, quarantineOnPending: true },
+      releaseChecklist: { requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"] },
+      rtmRegression: { p0RequirementsTotal: 42, p0RequirementsPassed: 42, exceptionsApproved: 0 },
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-10T08:00:00.000Z")
+    }
+  });
+
+  await prisma.securityReadinessCheck.upsert({
+    where: { id: "sec_check_tls_001" },
+    update: {
+      reportId: "sec_readiness_release_001",
+      category: "transport",
+      name: "TLS Enforcement",
+      required: "HTTPS in production",
+      observed: "production HTTPS required; local setup HTTP allowed",
+      status: "pass",
+      action: "-",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "sec_check_tls_001",
+      reportId: "sec_readiness_release_001",
+      category: "transport",
+      name: "TLS Enforcement",
+      required: "HTTPS in production",
+      observed: "production HTTPS required; local setup HTTP allowed",
+      status: "pass",
+      action: "-",
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-10T08:01:00.000Z")
+    }
+  });
+
+  await prisma.uploadScanEvent.upsert({
+    where: { id: "upload_scan_quarantine_001" },
+    update: {
+      fileName: "pending.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sizeBytes: BigInt(1000000),
+      source: "ticket",
+      scanStatus: "pending",
+      decision: "quarantined",
+      quarantineReason: "malware scan pending; file quarantined before ingestion",
+      reasons: ["malware scan pending; file quarantined before ingestion"],
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "upload_scan_quarantine_001",
+      fileName: "pending.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sizeBytes: BigInt(1000000),
+      source: "ticket",
+      scanStatus: "pending",
+      decision: "quarantined",
+      quarantineReason: "malware scan pending; file quarantined before ingestion",
+      reasons: ["malware scan pending; file quarantined before ingestion"],
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-10T08:02:00.000Z")
+    }
+  });
+
+  await prisma.releaseChecklistReport.upsert({
+    where: { id: "release_check_public_block_001" },
+    update: {
+      projectId: "prj_leave_management",
+      exposure: "public",
+      releaseBlocked: true,
+      requiredChecks: [
+        { name: "TLS", status: "fail", action: "TLS is required before public exposure" },
+        { name: "Data Classification", status: "fail", action: "Confidential data cannot be public" }
+      ],
+      blockingReasons: ["TLS is required before public exposure", "Confidential data cannot be public"],
+      dataClassification: "Confidential",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "release_check_public_block_001",
+      projectId: "prj_leave_management",
+      exposure: "public",
+      releaseBlocked: true,
+      requiredChecks: [
+        { name: "TLS", status: "fail", action: "TLS is required before public exposure" },
+        { name: "Data Classification", status: "fail", action: "Confidential data cannot be public" }
+      ],
+      blockingReasons: ["TLS is required before public exposure", "Confidential data cannot be public"],
+      dataClassification: "Confidential",
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-10T08:03:00.000Z")
+    }
+  });
+
+  await prisma.sensitiveRedactionEvidence.upsert({
+    where: { id: "redaction_evidence_restricted_001" },
+    update: {
+      classification: "Restricted",
+      surface: "prompt_ticket_request",
+      redactionRulesApplied: ["secret_key", "password", "payment_card", "national_id", "sensitive_request_key"],
+      redactedPayload: {
+        prompt: "Summarize payroll export using [REDACTED_SECRET_KEY]",
+        ticketDescription: "password [REDACTED] and card [REDACTED_PAYMENT_CARD]",
+        requestPayload: { apiKey: "[REDACTED_SECRET]", normalField: "leave request" }
+      },
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "redaction_evidence_restricted_001",
+      classification: "Restricted",
+      surface: "prompt_ticket_request",
+      redactionRulesApplied: ["secret_key", "password", "payment_card", "national_id", "sensitive_request_key"],
+      redactedPayload: {
+        prompt: "Summarize payroll export using [REDACTED_SECRET_KEY]",
+        ticketDescription: "password [REDACTED] and card [REDACTED_PAYMENT_CARD]",
+        requestPayload: { apiKey: "[REDACTED_SECRET]", normalField: "leave request" }
+      },
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-10T08:04:00.000Z")
+    }
+  });
 }
 
 main()
