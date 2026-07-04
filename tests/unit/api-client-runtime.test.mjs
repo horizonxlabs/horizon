@@ -392,3 +392,99 @@ test("platform API client submits App Store tickets and reads ticket status", as
   assert.equal(status.ticketNumber, "TKT-0001");
   assert.equal(status.timeline[0].status, "submitted");
 });
+
+test("platform API client reads Creator workspace snapshots", async () => {
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace");
+      assert.equal(init.headers.get("x-mock-user-email"), "creator@company.com");
+      return new Response(
+        JSON.stringify(
+          success({
+            project: { id: "proj_001", name: "Leave Management", slug: "leave-management" },
+            baseline: { id: "prdv_001", version: "1.0", isBaseline: true },
+            preview: { id: "preview_0001", version: "preview-0001", summary: "Mock preview updated: Add WFH leave type", highlights: [] },
+            tasks: [],
+            usage: [],
+            tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
+          })
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const workspace = await client.getWorkspace("proj_001");
+
+  assert.equal(workspace.preview.version, "preview-0001");
+  assert.equal(workspace.tokenBudget.remainingToday, 880);
+});
+
+test("platform API client submits Creator workspace prompts", async () => {
+  let observedBody = {};
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    sessionToken: "evcp_session.payload.signature",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace/prompts");
+      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            guardrail: { decision: "allow", eventId: "gre_0001" },
+            task: {
+              id: "wst_0001",
+              status: "ready",
+              prompt: "Add WFH leave type",
+              steps: [{ id: "wst_0001_step_1", label: "Understanding request", status: "done", order: 1 }]
+            },
+            preview: { id: "preview_0001", version: "preview-0001", summary: "Mock preview updated: Add WFH leave type", highlights: [] },
+            usage: { id: "ailog_0001", tokensUsed: 120, status: "succeeded" },
+            tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const result = await client.submitWorkspacePrompt("proj_001", { prompt: "Add WFH leave type" });
+
+  assert.equal(observedBody.prompt, "Add WFH leave type");
+  assert.equal(result.task.status, "ready");
+  assert.equal(result.preview.version, "preview-0001");
+});
+
+test("platform API client refreshes Creator workspace preview", async () => {
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace/preview/refresh");
+      assert.equal(init.method, "POST");
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "preview_0001",
+            projectId: "proj_001",
+            version: "preview-0001",
+            summary: "Mock preview updated: Add WFH leave type",
+            device: "desktop",
+            screenTitle: "Leave Management",
+            highlights: ["WFH leave type"],
+            createdAt: "2026-07-04T01:00:00.000Z"
+          })
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const preview = await client.refreshWorkspacePreview("proj_001");
+
+  assert.equal(preview.version, "preview-0001");
+  assert.match(preview.summary, /WFH leave type/);
+});

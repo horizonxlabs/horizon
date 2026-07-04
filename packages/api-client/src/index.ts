@@ -148,6 +148,97 @@ export type StoreTicketResponse = {
   timeline: StoreTicketTimelineEntryDto[];
 };
 
+export type WorkspaceTaskStepDto = {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "done" | "warning" | "failed";
+  order: number;
+};
+
+export type WorkspaceTaskDto = {
+  id: string;
+  projectId: string;
+  prompt: string;
+  status: "ready" | "running" | "blocked" | "failed";
+  guardrailDecision: "allow" | "warn" | "block";
+  guardrailEventId: string;
+  knowledgeVersionIds?: string[];
+  skillVersionId?: string;
+  steps: WorkspaceTaskStepDto[];
+  createdByUserId: string;
+  createdAt: string;
+};
+
+export type PreviewVersionDto = {
+  id: string;
+  projectId: string;
+  version: string;
+  summary: string;
+  device: "desktop" | "tablet" | "mobile";
+  screenTitle: string;
+  highlights: string[];
+  createdAt: string;
+};
+
+export type AiUsageLogDto = {
+  id: string;
+  projectId: string;
+  taskId: string;
+  actorId: string;
+  scenario: string;
+  providerId: string;
+  model: string;
+  prompt: string;
+  tokensUsed: number;
+  occurredAt: string;
+  status?: "succeeded" | "blocked" | "fallback" | "failed";
+};
+
+export type WorkspaceTokenBudgetDto = {
+  remainingToday: number;
+  remainingMonth: number;
+  requestEstimate: number;
+};
+
+export type GuardrailResultDto = {
+  decision: "allow" | "warn" | "block";
+  eventId: string;
+  matchedRuleIds?: string[];
+  reason?: string;
+};
+
+export type WorkspacePromptInput = {
+  prompt: string;
+};
+
+export type WorkspacePromptResultDto = {
+  guardrail: GuardrailResultDto;
+  task: WorkspaceTaskDto;
+  preview: PreviewVersionDto;
+  usage?: AiUsageLogDto;
+  knowledgeRetrieval?: unknown;
+  skillSelection?: unknown;
+  tokenBudget: WorkspaceTokenBudgetDto;
+};
+
+export type WorkspaceSnapshotResponse = {
+  project: PlatformProjectDto;
+  baseline: {
+    id: string;
+    projectId: string;
+    version: string;
+    title?: string;
+    status?: string;
+    summary?: string;
+    isBaseline: boolean;
+    createdAt?: string;
+  };
+  preview: PreviewVersionDto;
+  tasks: WorkspaceTaskDto[];
+  usage: AiUsageLogDto[];
+  tokenBudget: WorkspaceTokenBudgetDto;
+};
+
 export type InstallerPreflightInput = {
   cpuCores: number;
   memoryGb: number;
@@ -328,6 +419,24 @@ export class PlatformApiClient {
 
   getStoreTicket(ticketId: string): Promise<StoreTicketResponse> {
     return this.request<StoreTicketResponse>(`/store/tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  getWorkspace(projectId: string): Promise<WorkspaceSnapshotResponse> {
+    return this.request<WorkspaceSnapshotResponse>(`/projects/${encodeURIComponent(projectId)}/workspace`);
+  }
+
+  submitWorkspacePrompt(projectId: string, input: WorkspacePromptInput): Promise<WorkspacePromptResultDto> {
+    return this.request<WorkspacePromptResultDto>(`/projects/${encodeURIComponent(projectId)}/workspace/prompts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  refreshWorkspacePreview(projectId: string): Promise<PreviewVersionDto> {
+    return this.request<PreviewVersionDto>(`/projects/${encodeURIComponent(projectId)}/workspace/preview/refresh`, {
+      method: "POST"
+    });
   }
 
   runInstallerPreflight(input: InstallerPreflightInput): Promise<InstallerReportDto> {

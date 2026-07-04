@@ -72,3 +72,17 @@ test("App Store PWA actions are API-client backed", () => {
   assert.match(storeSource, /ticketStatus/);
   assert.doesNotMatch(storeSource, /ticketTimeline = \[/);
 });
+
+test("Creator workspace actions are API-client backed", () => {
+  assert.match(apiClient, /getWorkspace\(/);
+  assert.match(apiClient, /submitWorkspacePrompt\(/);
+  assert.match(apiClient, /refreshWorkspacePreview\(/);
+  assert.match(creatorSource, /createCreatorPlatformClient/);
+  assert.match(creatorSource, /loadWorkspaceState/);
+  assert.match(creatorSource, /handleSubmitPrompt/);
+  assert.match(creatorSource, /handleRefreshPreview/);
+  assert.match(creatorSource, /submitWorkspacePrompt/);
+  assert.match(creatorSource, /refreshWorkspacePreview/);
+  assert.match(creatorSource, /workspaceResult/);
+  assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
+});

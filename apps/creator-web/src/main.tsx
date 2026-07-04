@@ -1,4 +1,14 @@
-import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type PlatformProjectDto, type SimulatedSsoLoginInput } from "@evcp/api-client";
+import {
+  createPlatformApiClient,
+  createPlatformSessionStore,
+  type CurrentUserResponse,
+  type PlatformProjectDto,
+  type PreviewVersionDto,
+  type SimulatedSsoLoginInput,
+  type WorkspacePromptResultDto,
+  type WorkspaceSnapshotResponse,
+  type WorkspaceTaskStepDto
+} from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
@@ -84,6 +94,16 @@ function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
 }
 
+function createCreatorPlatformClient() {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  return createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "creator@company.com"
+  });
+}
+
 function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResponse): CreatorProjectView {
   return {
     id: project.id,
@@ -99,13 +119,7 @@ function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResp
 }
 
 async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const client = createPlatformApiClient({
-    baseUrl,
-    sessionToken: platformSessionToken(),
-    legacyUserEmail: "creator@company.com"
-  });
+  const client = createCreatorPlatformClient();
   const currentUser = await client.getCurrentUser();
   const projects = await client.listProjects();
   return {
@@ -113,6 +127,10 @@ async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
     selectedProject: projects[0] ? projectToView(projects[0], currentUser) : fallbackSelectedProject,
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
+}
+
+async function loadWorkspaceState(projectId: string): Promise<WorkspaceSnapshotResponse> {
+  return createCreatorPlatformClient().getWorkspace(projectId);
 }
 
 async function signInCreatorSessionBridge(): Promise<CreatorBootstrapState> {
@@ -164,7 +182,18 @@ const versionRows = [
   }
 ];
 
-const taskSteps = [
+const fallbackPreview: PreviewVersionDto = {
+  id: "preview_local_0001",
+  projectId: fallbackSelectedProject.id,
+  version: "preview-0001",
+  summary: "Updating Leave Management preview with WFH leave type and manager approval visibility.",
+  device: "desktop",
+  screenTitle: "Leave Management",
+  highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"],
+  createdAt: "2026-07-04T00:00:00.000Z"
+};
+
+const fallbackTaskSteps: WorkspaceTaskStepDto[] = [
   "Understanding request",
   "Loading PRD baseline",
   "Guardrail pre-check",
@@ -174,7 +203,12 @@ const taskSteps = [
   "Building preview",
   "Running checks",
   "Ready"
-].map((label, index) => ({ label, status: index < 9 ? "done" : "pending", order: String(index + 1) }));
+].map((label, index) => ({
+  id: `local_step_${index + 1}`,
+  label,
+  status: (index < 9 ? "done" : "pending") as WorkspaceTaskStepDto["status"],
+  order: index + 1
+}));
 
 const usageRows = [
   {
@@ -280,20 +314,55 @@ const mvpDemoSteps = [
 function CreatorApp() {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
+  const [workspaceSnapshot, setWorkspaceSnapshot] = useState<WorkspaceSnapshotResponse | undefined>(undefined);
+  const [workspaceResult, setWorkspaceResult] = useState<WorkspacePromptResultDto | undefined>(undefined);
+  const [previewOverride, setPreviewOverride] = useState<PreviewVersionDto | undefined>(undefined);
+  const [workspaceMessage, setWorkspaceMessage] = useState("Using deterministic local workspace evidence until the Platform API is configured.");
+  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const selectedProject = bootstrap.selectedProject;
+  const latestTask = workspaceResult?.task ?? workspaceSnapshot?.tasks.at(-1);
+  const visibleTaskSteps = latestTask?.steps ?? fallbackTaskSteps;
+  const visiblePreview = previewOverride ?? workspaceResult?.preview ?? workspaceSnapshot?.preview ?? fallbackPreview;
+  const visibleHighlights = visiblePreview.highlights.length ? visiblePreview.highlights : fallbackPreview.highlights;
+  const visibleTokenBudget = workspaceResult?.tokenBudget ?? workspaceSnapshot?.tokenBudget ?? {
+    remainingToday: 880,
+    remainingMonth: 4880,
+    requestEstimate: 120
+  };
+  const visibleUsageRows = (workspaceSnapshot?.usage.length ? workspaceSnapshot.usage : workspaceResult?.usage ? [workspaceResult.usage] : []).map((usage) => ({
+    prompt: usage.prompt,
+    scenario: usage.scenario,
+    tokens: String(usage.tokensUsed),
+    result: visiblePreview.version
+  }));
+  const visibleUsage = visibleUsageRows.length ? visibleUsageRows : usageRows;
 
   useEffect(() => {
     loadCreatorBootstrap()
-      .then(setBootstrap)
+      .then(async (nextBootstrap) => {
+        setBootstrap(nextBootstrap);
+        try {
+          setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
+          setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+        } catch {
+          setWorkspaceSnapshot(undefined);
+        }
+      })
       .catch(() => setBootstrap(initialCreatorBootstrap));
   }, []);
 
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
-      setBootstrap(await signInCreatorSessionBridge());
+      const nextBootstrap = await signInCreatorSessionBridge();
+      setBootstrap(nextBootstrap);
+      setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
+      setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
     } catch {
       setBootstrap(initialCreatorBootstrap);
+      setWorkspaceSnapshot(undefined);
     } finally {
       setIsSigningIn(false);
     }
@@ -301,6 +370,88 @@ function CreatorApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearCreatorSessionBridge());
+    setWorkspaceSnapshot(undefined);
+    setWorkspaceResult(undefined);
+    setPreviewOverride(undefined);
+    setWorkspaceMessage("Using deterministic local workspace evidence until the Platform API is configured.");
+  }
+
+  function fallbackWorkspacePromptResult(): WorkspacePromptResultDto {
+    const now = new Date().toISOString();
+    return {
+      guardrail: { decision: "allow", eventId: "local_guardrail_0001" },
+      task: {
+        id: "local_workspace_task_0001",
+        projectId: selectedProject.id,
+        prompt: promptDraft,
+        status: "ready",
+        guardrailDecision: "allow",
+        guardrailEventId: "local_guardrail_0001",
+        steps: fallbackTaskSteps,
+        createdByUserId: "local_creator",
+        createdAt: now
+      },
+      preview: {
+        ...fallbackPreview,
+        projectId: selectedProject.id,
+        summary: `Local preview updated: ${promptDraft}`,
+        createdAt: now
+      },
+      usage: {
+        id: "local_usage_0001",
+        projectId: selectedProject.id,
+        taskId: "local_workspace_task_0001",
+        actorId: "local_creator",
+        scenario: "frontend_coding",
+        providerId: "local_fallback",
+        model: "deterministic-preview",
+        prompt: promptDraft,
+        tokensUsed: 120,
+        occurredAt: now,
+        status: "succeeded"
+      },
+      tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
+    };
+  }
+
+  async function handleSubmitPrompt() {
+    setIsSubmittingPrompt(true);
+    try {
+      const result = await createCreatorPlatformClient().submitWorkspacePrompt(selectedProject.id, { prompt: promptDraft });
+      setWorkspaceResult(result);
+      setPreviewOverride(undefined);
+      setWorkspaceSnapshot(await loadWorkspaceState(selectedProject.id));
+      setWorkspaceMessage(result.guardrail.decision === "block" ? "Prompt blocked by guardrail. Existing preview was preserved." : "Prompt accepted. Workspace preview and token evidence updated from Platform API.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        const result = fallbackWorkspacePromptResult();
+        setWorkspaceResult(result);
+        setPreviewOverride(undefined);
+        setWorkspaceMessage("Local fallback generated deterministic workspace evidence. Configure Platform API to persist it.");
+      } else {
+        setWorkspaceMessage("Prompt failed. Existing preview was preserved; check Platform API logs for details.");
+      }
+    } finally {
+      setIsSubmittingPrompt(false);
+    }
+  }
+
+  async function handleRefreshPreview() {
+    setIsRefreshingPreview(true);
+    try {
+      const preview = await createCreatorPlatformClient().refreshWorkspacePreview(selectedProject.id);
+      setPreviewOverride(preview);
+      setWorkspaceMessage("Preview refreshed from Platform API.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        setPreviewOverride(visiblePreview);
+        setWorkspaceMessage("Local fallback preview refreshed deterministically.");
+      } else {
+        setWorkspaceMessage("Preview refresh failed. Existing preview remains visible.");
+      }
+    } finally {
+      setIsRefreshingPreview(false);
+    }
   }
 
   return (
@@ -308,7 +459,7 @@ function CreatorApp() {
       <PageHeader
         tone="surface"
         eyebrow="Creator Workspace"
-        title="Workspace: Leave Management"
+        title={`Workspace: ${selectedProject.name}`}
         description="Prompt, AI task progress, token remaining และ live preview อยู่ในหน้าทำงานเดียว"
         actions={
           <>
@@ -336,10 +487,10 @@ function CreatorApp() {
       <section className="workspace-topbar">
         {[
           ["Project", selectedProject.name],
-          ["PRD", "Baseline v1.0"],
-          ["Frontend", "preview-0001"],
-          ["Token Remaining", "880 today / 4,880 month"],
-          ["Publish", "not ready"]
+          ["PRD", workspaceSnapshot?.baseline.version ? `Baseline v${workspaceSnapshot.baseline.version}` : "Baseline v1.0"],
+          ["Frontend", visiblePreview.version],
+          ["Token Remaining", `${visibleTokenBudget.remainingToday} today / ${visibleTokenBudget.remainingMonth} month`],
+          ["Publish", latestTask?.status === "blocked" ? "blocked" : "not ready"]
         ].map(([label, value]) => (
           <div key={label}>
             <span>{label}</span>
@@ -354,37 +505,42 @@ function CreatorApp() {
             <div className="prompt-thread">
               <div className="prompt-message user">
                 <strong>Creator</strong>
-                <p>Add WFH leave type</p>
+                <p>{latestTask?.prompt ?? promptDraft}</p>
               </div>
               <div className="prompt-message system">
                 <strong>Guardrail pre-check</strong>
-                <p>Decision: allow · event gre_0002</p>
+                <p>Decision: {latestTask?.guardrailDecision ?? workspaceResult?.guardrail.decision ?? "allow"} · event {latestTask?.guardrailEventId ?? workspaceResult?.guardrail.eventId ?? "local_guardrail_0001"}</p>
               </div>
               <div className="prompt-message ai">
                 <strong>AI Task</strong>
-                <p>Updating Leave Management preview with WFH leave type and manager approval visibility.</p>
+                <p>{visiblePreview.summary}</p>
               </div>
             </div>
             <div className="prompt-composer">
               <label>
                 Prompt จะถูกตรวจตาม Guardrail ก่อนส่ง AI
-                <input defaultValue="Add WFH leave type" />
+                <input value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} />
               </label>
-              <button type="button">
+              <button type="button" onClick={handleSubmitPrompt} disabled={isSubmittingPrompt || !promptDraft.trim()}>
                 <Send size={16} />
-                Send
+                {isSubmittingPrompt ? "Sending" : "Send"}
               </button>
+            </div>
+            <div className="workspace-action-evidence" aria-label="Workspace action evidence">
+              <strong>{latestTask?.status === "blocked" ? "Prompt blocked" : "Workspace API evidence"}</strong>
+              <span>{workspaceMessage}</span>
+              <ToneBadge tone={latestTask?.status === "blocked" ? "warning" : workspaceSnapshot || workspaceResult ? "success" : "neutral"}>{latestTask?.status ?? "ready"}</ToneBadge>
             </div>
           </SectionCard>
 
           <SectionCard eyebrow="Task Progress" title="Deterministic AI Steps">
             <div className="workspace-progress-list">
-              {taskSteps.map((step) => (
+              {visibleTaskSteps.map((step) => (
                 <div key={step.label}>
                   <CheckCircle2 size={15} />
                   <span>{step.order}</span>
                   <strong>{step.label}</strong>
-                  <ToneBadge tone="success">{step.status}</ToneBadge>
+                  <ToneBadge tone={step.status === "failed" ? "danger" : step.status === "pending" ? "neutral" : step.status === "warning" ? "warning" : "success"}>{step.status}</ToneBadge>
                 </div>
               ))}
             </div>
@@ -393,20 +549,20 @@ function CreatorApp() {
 
         <SectionCard
           eyebrow="Live Preview"
-          title="Leave Management Preview"
-          action={<button type="button" className="ghost-button"><RefreshCw size={15} /> Refresh</button>}
+          title={`${visiblePreview.screenTitle} Preview`}
+          action={<button type="button" className="ghost-button" onClick={handleRefreshPreview} disabled={isRefreshingPreview}><RefreshCw size={15} /> {isRefreshingPreview ? "Refreshing" : "Refresh"}</button>}
         >
           <div className="preview-toolbar">
             <button type="button"><Monitor size={15} /> Desktop</button>
             <button type="button" className="ghost-button"><Tablet size={15} /> Tablet</button>
             <button type="button" className="ghost-button">Mobile</button>
-            <ToneBadge tone="info">preview-0001</ToneBadge>
+            <ToneBadge tone="info">{visiblePreview.version}</ToneBadge>
           </div>
           <div className="live-preview-frame">
             <header>
               <div>
-                <span>Leave Management</span>
-                <strong>Manager approval workspace</strong>
+                <span>{visiblePreview.screenTitle}</span>
+                <strong>{visiblePreview.summary}</strong>
               </div>
               <ToneBadge tone="success">Healthy</ToneBadge>
             </header>
@@ -416,21 +572,13 @@ function CreatorApp() {
               <div><span>Policy</span><strong>Ready</strong><small>shown before submit</small></div>
             </section>
             <section className="preview-board">
-              <article>
-                <span>New Type</span>
-                <strong>Work from home leave</strong>
-                <p>Employee can select WFH in the same request flow.</p>
-              </article>
-              <article>
-                <span>Approval Queue</span>
-                <strong>Manager review lane</strong>
-                <p>Pending approvals are grouped by team and due date.</p>
-              </article>
-              <article>
-                <span>Governance</span>
-                <strong>HR policy note</strong>
-                <p>Policy reminder appears before final submission.</p>
-              </article>
+              {visibleHighlights.map((highlight, index) => (
+                <article key={highlight}>
+                  <span>{index === 0 ? "New Type" : index === 1 ? "Approval Queue" : "Governance"}</span>
+                  <strong>{highlight}</strong>
+                  <p>{index === 0 ? "Employee can select the updated flow in the same request path." : index === 1 ? "Manager review evidence remains visible in the preview." : "Policy and audit context stay attached to the generated change."}</p>
+                </article>
+              ))}
             </section>
           </div>
         </SectionCard>
@@ -439,9 +587,9 @@ function CreatorApp() {
           <SectionCard eyebrow="Token Remaining" title="Quota">
             <DefinitionGrid
               items={[
-                { label: "Today", value: "880 tokens" },
-                { label: "Month", value: "4,880 tokens" },
-                { label: "Estimate", value: "120 tokens" },
+                { label: "Today", value: `${visibleTokenBudget.remainingToday} tokens` },
+                { label: "Month", value: `${visibleTokenBudget.remainingMonth} tokens` },
+                { label: "Estimate", value: `${visibleTokenBudget.requestEstimate} tokens` },
                 { label: "Reset", value: "tomorrow" }
               ]}
             />
@@ -454,7 +602,7 @@ function CreatorApp() {
                 { key: "tokens", label: "Tokens" },
                 { key: "result", label: "Result" }
               ]}
-              rows={usageRows}
+              rows={visibleUsage}
             />
           </SectionCard>
           <DecisionPanel

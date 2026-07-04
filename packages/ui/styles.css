@@ -1047,6 +1047,23 @@ button {
   margin-top: var(--evcp-space-4);
 }
 
+.workspace-action-evidence {
+  align-items: center;
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  grid-template-columns: 1fr auto;
+  margin-top: var(--evcp-space-3);
+  padding: var(--evcp-space-3);
+}
+
+.workspace-action-evidence span {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+}
+
 .workspace-progress-list {
   display: grid;
   gap: 7px;
