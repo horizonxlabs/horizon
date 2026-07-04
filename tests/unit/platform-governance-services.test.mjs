@@ -260,6 +260,44 @@ test("AI gateway maps live provider errors without leaking request secrets", () 
   assert.doesNotMatch(usage.reason, /sk-live-secret/);
 });
 
+test("admin provider test call returns sanitized adapter evidence", () => {
+  const { services, actor } = admin();
+  const provider = services.aiGovernance.createProvider(actor, {
+    name: "OpenAI Test Call",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  services.aiGovernance.createApiKey(actor, {
+    providerId: provider.id,
+    name: "Test Call Key",
+    secret: "sk-test-call-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
+  services.aiGovernance.configureRoute(actor, {
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+
+  const result = services.aiGovernance.testProviderCall(actor, {
+    scenario: "prd_generation",
+    prompt: "Validate provider before Creator use",
+    dryRun: true
+  });
+
+  assert.equal(result.providerId, provider.id);
+  assert.equal(result.providerName, "OpenAI Test Call");
+  assert.equal(result.model, "gpt-4.1-mini");
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.fallbackUsed, false);
+  assert.match(result.outputExcerpt, /AI Gateway dry-run response/);
+  assert.match(result.usageLogId, /^aigw_/);
+  assert.equal(JSON.stringify(result).includes("sk-test-call-secret"), false);
+});
+
 test("AI gateway blocks guardrail and quota before adapter call", () => {
   const { services, actor } = admin();
   const provider = services.aiGovernance.createProvider(actor, {

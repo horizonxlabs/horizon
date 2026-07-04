@@ -15,9 +15,21 @@ test("shared API client exposes frontend bootstrap routes and auth modes", () =>
   assert.match(apiClient, /runInstallerPreflight\(/);
   assert.match(apiClient, /saveInstallerSetup\(/);
   assert.match(apiClient, /listInstallerReports\(/);
+  assert.match(apiClient, /testAiProvider\(/);
   assert.match(apiClient, /authorization/);
   assert.match(apiClient, /x-mock-user-email/);
   assert.match(apiClient, /PlatformApiError/);
+});
+
+test("Admin AI provider test call is API-client backed", () => {
+  assert.match(apiClient, /AiProviderTestCallInput/);
+  assert.match(apiClient, /AiProviderTestCallResponse/);
+  assert.match(apiClient, /\/ai\/provider-test-call/);
+  assert.match(adminSource, /handleRunProviderTestCall/);
+  assert.match(adminSource, /testAiProvider/);
+  assert.match(adminSource, /Provider Test Call/);
+  assert.match(adminSource, /provider-test-call-panel/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
 });
 
 test("frontend shells use API-backed bootstrap instead of direct mock fixtures", () => {

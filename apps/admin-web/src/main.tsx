@@ -1,6 +1,8 @@
 import {
   createPlatformApiClient,
   createPlatformSessionStore,
+  type AiProviderTestCallInput,
+  type AiProviderTestCallResponse,
   type CurrentUserResponse,
   type InstallerPreflightInput,
   type InstallerReportDto,
@@ -499,6 +501,10 @@ async function listInstallerReports(): Promise<InstallerReportDto[]> {
   return createAdminPlatformClient().listInstallerReports();
 }
 
+async function runProviderTestCall(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
+  return createAdminPlatformClient().testAiProvider(input);
+}
+
 function installWizardStepIndex(stepId: InstallWizardStepId): number {
   return installWizardSteps.findIndex((step) => step.id === stepId);
 }
@@ -684,8 +690,11 @@ function AdminApp() {
   const [installerSetupForm, setInstallerSetupForm] = useState(initialInstallerSetupForm);
   const [savedInstallerSetup, setSavedInstallerSetup] = useState<InstallerSetupResponse | undefined>(undefined);
   const [installerReports, setInstallerReports] = useState<InstallerReportDto[]>([]);
+  const [providerTestCallResult, setProviderTestCallResult] = useState<AiProviderTestCallResponse | undefined>(undefined);
+  const [providerTestCallMessage, setProviderTestCallMessage] = useState("Run a dry-run provider test before Creator traffic depends on this route.");
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
   const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
+  const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
@@ -765,6 +774,25 @@ function AdminApp() {
       }));
     } finally {
       setIsSavingInstallerSetup(false);
+    }
+  }
+
+  async function handleRunProviderTestCall() {
+    setIsRunningProviderTestCall(true);
+    setProviderTestCallMessage("Provider test is running through the governed AI Gateway route.");
+    try {
+      const result = await runProviderTestCall({
+        scenario: "prd_generation",
+        prompt: "Validate provider route before Creator PRD generation",
+        dryRun: true
+      });
+      setProviderTestCallResult(result);
+      setProviderTestCallMessage("Provider route validated. Output excerpt and usage evidence are safe to show.");
+    } catch (error) {
+      setProviderTestCallResult(undefined);
+      setProviderTestCallMessage(error instanceof Error ? error.message : "Provider test failed. Review route, active key and adapter setup.");
+    } finally {
+      setIsRunningProviderTestCall(false);
     }
   }
 
@@ -1350,6 +1378,50 @@ function AdminApp() {
         />
 
         <div className="ds-main-stack">
+          <SectionCard
+            eyebrow="Provider Test Call"
+            title="Validate AI provider route"
+            action={
+              <button type="button" className="secondary-button" onClick={handleRunProviderTestCall} disabled={isRunningProviderTestCall}>
+                <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
+              </button>
+            }
+          >
+            <div className="provider-test-call-panel" aria-label="Provider test-call panel">
+              <div className="provider-test-call-summary">
+                <div className="ds-summary-row">
+                  <div className="ds-summary-icon"><BrainCircuit size={22} /></div>
+                  <div>
+                    <strong>{providerTestCallResult?.providerName ?? "Configured PRD provider route"}</strong>
+                    <span>{providerTestCallMessage}</span>
+                  </div>
+                  <ToneBadge tone={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "warning" : "success") : isRunningProviderTestCall ? "info" : "neutral"}>
+                    {providerTestCallResult ? providerTestCallResult.status : isRunningProviderTestCall ? "pending" : "not run"}
+                  </ToneBadge>
+                </div>
+                <DefinitionGrid
+                  items={[
+                    { label: "Scenario", value: "prd_generation" },
+                    { label: "Mode", value: "dry-run by default" },
+                    { label: "Adapter", value: providerTestCallResult?.adapter ?? "provider adapter" },
+                    { label: "Model", value: providerTestCallResult?.model ?? "configured route" },
+                    { label: "Usage Log", value: providerTestCallResult?.usageLogId ?? "created after run" },
+                    { label: "Latency", value: providerTestCallResult ? `${providerTestCallResult.latencyMs}ms` : "pending" }
+                  ]}
+                />
+              </div>
+              <DecisionPanel
+                tone={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "warning" : "success") : "info"}
+                badge={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "fallback" : "validated") : "safe dry-run"}
+                title={providerTestCallResult ? "Adapter route returned governed output" : "No plaintext secret is displayed"}
+                lines={[
+                  providerTestCallResult?.outputExcerpt ?? "Click Run Provider Test to validate route, key, adapter, token usage and usage-log creation.",
+                  providerTestCallResult ? `Tokens: ${providerTestCallResult.tokensUsed} / fallback: ${providerTestCallResult.fallbackUsed ? "yes" : "no"}` : "Response will show provider evidence without raw key material."
+                ]}
+              />
+            </div>
+          </SectionCard>
+
           <SectionCard eyebrow="Provider Registry" title="External AI Providers" action={<button type="button" className="ghost-button">Add API Key</button>}>
             <DataTable
               columns={[

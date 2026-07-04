@@ -1664,6 +1664,31 @@ button {
   display: none;
 }
 
+.provider-test-call-panel {
+  align-items: stretch;
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+}
+
+.provider-test-call-summary {
+  display: grid;
+  gap: var(--evcp-space-3);
+  min-width: 0;
+}
+
+.provider-test-call-panel .ds-summary-row,
+.provider-test-call-panel .ds-definition-grid,
+.provider-test-call-panel .ds-decision-panel {
+  min-width: 0;
+}
+
+.provider-test-call-panel .ds-definition-grid dd,
+.provider-test-call-panel .ds-decision-panel li,
+.provider-test-call-panel .ds-summary-row span {
+  overflow-wrap: anywhere;
+}
+
 .operations-recovery-shell {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border-soft);
@@ -2048,6 +2073,7 @@ button:disabled {
   .ds-metric-grid,
   .ds-grid-2,
   .ds-service-strip,
+  .provider-test-call-panel,
   .admin-monitoring-kpis,
   .admin-monitoring-grid,
     .auth-kpi-grid,

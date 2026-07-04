@@ -148,6 +148,47 @@ test("platform API client posts simulated SSO login payloads through the bridge 
   assert.equal(session.token, "evcp_session.payload.signature");
 });
 
+test("platform API client posts AI provider test-call requests", async () => {
+  let observedUrl = "";
+  let observedBody = {};
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observedUrl = String(url);
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            providerId: "aip_openai",
+            providerName: "OpenAI Production",
+            adapter: "openai",
+            model: "gpt-4.1-mini",
+            status: "succeeded",
+            fallbackUsed: false,
+            tokensUsed: 42,
+            latencyMs: 7,
+            usageLogId: "aigw_0001",
+            outputExcerpt: "Provider route is ready"
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const result = await client.testAiProvider({
+    scenario: "prd_generation",
+    prompt: "Validate provider route",
+    dryRun: true
+  });
+
+  assert.equal(observedUrl, "https://platform.example/api/ai/provider-test-call");
+  assert.deepEqual(observedBody, { scenario: "prd_generation", prompt: "Validate provider route", dryRun: true });
+  assert.equal(result.providerName, "OpenAI Production");
+  assert.equal(result.usageLogId, "aigw_0001");
+});
+
 test("platform API client posts installer preflight profiles", async () => {
   let observedUrl = "";
   let observedBody = {};

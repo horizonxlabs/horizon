@@ -96,6 +96,7 @@ export interface PlatformRequest {
     | "/ai/api-keys"
     | "/ai/routes"
     | "/ai/quotas"
+    | "/ai/provider-test-call"
     | "/guardrails/rules"
     | "/guardrails/test"
     | "/guardrails/events"
@@ -1209,6 +1210,17 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
       return { status: HttpStatus.OK, body: success(quota) };
     }
 
+    if (request.method === "POST" && request.path === "/ai/provider-test-call") {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.aiGovernance.testProviderCall(user, {
+        scenario: String(request.body?.scenario ?? "prd_generation") as never,
+        prompt: request.body?.prompt ? String(request.body.prompt) : undefined,
+        requestedTokens: request.body?.requestedTokens === undefined ? undefined : Number(request.body.requestedTokens),
+        dryRun: request.body?.dryRun === undefined ? undefined : Boolean(request.body.dryRun)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
     if (request.method === "POST" && request.path === "/guardrails/rules") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const rule = services.guardrails.createRule(user, {
@@ -1906,6 +1918,12 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     sendPlatformResponse(
       response,
       executePlatformApiRequest(services, { method: "POST", path: "/ai/quotas", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/ai/provider-test-call", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, { method: "POST", path: "/ai/provider-test-call", headers: request.headers, body: request.body })
     )
   );
   routes.post("/guardrails/rules", (request, response) =>

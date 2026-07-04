@@ -479,6 +479,25 @@ export type InstallerSetupResponse = {
   createdAt?: string;
 };
 
+export type AiProviderTestCallInput = {
+  scenario: string;
+  prompt: string;
+  dryRun?: boolean;
+};
+
+export type AiProviderTestCallResponse = {
+  providerId: string;
+  providerName: string;
+  adapter: string;
+  model: string;
+  status: "succeeded" | "fallback";
+  fallbackUsed: boolean;
+  tokensUsed: number;
+  latencyMs: number;
+  usageLogId: string;
+  outputExcerpt: string;
+};
+
 export type PlatformAuthClaimsDto = {
   subject: string;
   email: string;
@@ -674,6 +693,14 @@ export class PlatformApiClient {
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
     return this.request<InstallerReportDto[]>("/admin/installer/reports");
+  }
+
+  testAiProvider(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
+    return this.request<AiProviderTestCallResponse>("/ai/provider-test-call", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   simulateSsoLogin(input: SimulatedSsoLoginInput): Promise<PlatformAuthSessionResponse> {

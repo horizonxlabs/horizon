@@ -119,11 +119,60 @@ test("Sprint 2 API denies creator access to AI key management", () => {
   assert.equal(denied.body.ok, false);
 });
 
+test("Sprint 2 API supports admin AI provider test-call workflow", () => {
+  const services = createPlatformApiServices();
+  const provider = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/providers",
+    headers: adminHeaders,
+    body: {
+      name: "OpenAI Test Call",
+      adapter: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4.1-mini"]
+    }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/api-keys",
+    headers: adminHeaders,
+    body: {
+      providerId: provider.body.data.id,
+      name: "Test Call Key",
+      secret: "sk-test-call-secret-that-must-not-leak",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/routes",
+    headers: adminHeaders,
+    body: { scenario: "prd_generation", primaryProviderId: provider.body.data.id, primaryModel: "gpt-4.1-mini" }
+  });
+
+  const result = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/provider-test-call",
+    headers: adminHeaders,
+    body: { scenario: "prd_generation", prompt: "Validate provider route", dryRun: true }
+  });
+
+  assert.equal(result.status, 201);
+  assert.equal(result.body.data.providerName, "OpenAI Test Call");
+  assert.equal(result.body.data.status, "succeeded");
+  assert.equal(String(JSON.stringify(result.body)).includes("sk-test-call-secret"), false);
+});
+
 test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", () => {
   const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 
   for (const text of [
     "AI Providers & API Keys",
+    "Provider Test Call",
+    "Run Provider Test",
+    "provider-test-call-panel",
     "Scenario Routing",
     "Token Quota",
     "Guardrail Rules",

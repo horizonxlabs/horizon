@@ -20,6 +20,7 @@ sequenceDiagram
   participant Gateway as AI Gateway
   participant Adapter as OpenAI-Compatible Adapter
   participant Audit
+  participant Admin
 
   Creator->>API: POST /projects/:id/prd/generate
   API->>Guardrail: Evaluate PRD prompt
@@ -31,6 +32,10 @@ sequenceDiagram
   Gateway->>Audit: AI usage and route evidence
   Gateway-->>API: Completion metadata
   API-->>Creator: PRD draft with AI gateway summary
+  Admin->>API: POST /ai/provider-test-call
+  API->>Gateway: Invoke configured scenario route in dry-run by default
+  Gateway-->>API: Provider, adapter, usage and sanitized excerpt
+  API-->>Admin: Test-call evidence without raw key material
 ```
 
 ## Current Guarantees
@@ -40,6 +45,9 @@ sequenceDiagram
 - Live `dryRun: false` execution posts to the provider `/chat/completions` path through an injected runtime fetcher.
 - Live responses normalize text, token usage and latency back into the shared AI Gateway response.
 - Provider HTTP errors are mapped to controlled validation errors and sanitized before usage/audit evidence is recorded.
+- Admins can validate a configured provider route through `POST /ai/provider-test-call` before Creator traffic depends on it.
+- Provider test-call defaults to deterministic dry-run and can opt into live `dryRun: false` when the runtime fetcher is configured.
+- Provider test-call responses include provider id/name, adapter, model, status, fallback flag, tokens, latency, usage log id and a sanitized output excerpt.
 - Guardrail `block` decisions stop before adapter invocation.
 - Quota exhaustion stops before adapter invocation.
 - API keys are stored as local envelopes and responses expose only masked/fingerprint values.
@@ -51,6 +59,5 @@ sequenceDiagram
 
 - Add the production worker/runtime fetcher implementation with retry policy, circuit breaking and provider-specific timeout handling.
 - Persist AI providers, encrypted keys, routes, quotas and usage logs through Prisma repositories.
-- Add provider test-call API for Admin Console.
 - Route workspace/frontend/backend/review/documentation scenarios through the same gateway.
 - Add per-provider cost tables and organization/project/app scoped quota consumption.

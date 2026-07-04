@@ -1486,6 +1486,19 @@ export interface AiCompletionResponse {
   fallbackUsed: boolean;
 }
 
+export interface AiProviderTestCallResult {
+  providerId: string;
+  providerName: string;
+  adapter: AiProviderAdapter;
+  model: string;
+  status: "succeeded" | "fallback";
+  fallbackUsed: boolean;
+  tokensUsed: number;
+  latencyMs: number;
+  usageLogId: string;
+  outputExcerpt: string;
+}
+
 interface AiCompletionAdapter {
   readonly kind: AiProviderAdapter;
   complete(input: {
@@ -2828,6 +2841,42 @@ export class AiGovernanceService {
 
   recordProviderCall(): void {
     this.providerCalls += 1;
+  }
+
+  testProviderCall(
+    actor: PlatformUser,
+    input: {
+      scenario: AiScenario;
+      prompt?: string;
+      requestedTokens?: number;
+      dryRun?: boolean;
+    }
+  ): AiProviderTestCallResult {
+    this.requireAdmin(actor, "ai.provider_test.denied", "ai_provider_test_call", input.scenario);
+    const prompt = input.prompt?.trim() || `Validate ${input.scenario} provider route before Creator use`;
+    const completion = this.invokeCompletion(actor, {
+      projectId: "admin_provider_test_call",
+      scenario: input.scenario,
+      prompt,
+      requestedTokens: input.requestedTokens,
+      guardrailDecision: "allow",
+      dryRun: input.dryRun ?? true,
+      timeoutMs: 10_000
+    });
+    const provider = this.requireProvider(completion.providerId);
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      adapter: completion.adapter,
+      model: completion.model,
+      status: completion.status,
+      fallbackUsed: completion.fallbackUsed,
+      tokensUsed: completion.tokensUsed,
+      latencyMs: completion.latencyMs,
+      usageLogId: completion.usageLogId,
+      outputExcerpt: completion.text.slice(0, 280)
+    };
   }
 
   invokeCompletion(

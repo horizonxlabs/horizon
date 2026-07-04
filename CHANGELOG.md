@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP Admin AI provider test-call workflow with admin-only API route, shared client method, dry-run gateway validation, sanitized provider evidence, Admin Web panel and unit/integration/E2E coverage.
 - Phase 2 Real MVP live OpenAI-compatible AI Provider Adapter path with injected provider fetcher, normalized `/chat/completions` response parsing, sanitized provider error mapping and unit/integration/E2E coverage.
 - Phase 2 Real MVP Admin First-run Installation Journey with explicit prepare/configure/preflight/setup/deploy/migrate/health/login steps, owner/evidence/next-action cards, responsive styling, docs and unit/integration/E2E coverage.
 - Phase 2 Real MVP Creator app users and publish API actions with shared app-access/publish client methods, invitation, access approval, publish registry evidence, deterministic local fallback and unit/integration/E2E coverage.
