@@ -98,6 +98,23 @@ The Admin Console operations surface includes a first-run install wizard for IT/
 
 The wizard keeps deterministic fallback evidence for local UI development when the API is not running, but the private-server compose path is API-ready through Caddy's `/api/*` route.
 
+## First-Run Installation Journey
+
+The Admin Console now presents the install as an explicit operations journey rather than a hidden CLI-only path. Each card has an owner, evidence and next action so IT/System Admin can see whether the platform is still being prepared, already configured, blocked by preflight, ready for deployment, or ready for first login.
+
+| Step | Owner | Evidence | Next Action |
+| --- | --- | --- | --- |
+| Prepare Server | System Admin | Docker host CPU/RAM/disk/ports/DNS/TLS profile | Prepare private server capacity and replace example secrets |
+| Configure Environment | IT Admin | `.env`, `docker/docker-compose.yml`, `VITE_PLATFORM_API_BASE_URL` | Review environment, domain, ports and external AI values |
+| Run Preflight | IT Admin | `POST /api/admin/installer/preflight` and installer report path | Run Preflight |
+| Save Setup | Platform Admin | `POST /api/admin/installer/setup` and masked setup evidence | Save Setup |
+| Deploy Stack | System Admin | `docker compose --env-file .env -f docker/docker-compose.yml up -d` | Deploy Stack |
+| Migrate + Seed | Platform API | `pnpm --filter @evcp/platform-api exec prisma migrate deploy` plus seed | Run Prisma migrate deploy and seed |
+| Verify Health | IT Admin | health endpoints, Caddy `/api/*` route and service readiness | Verify Health |
+| First Admin Login | Platform Admin | `GET /api/auth/me` through a Platform Auth session | First Admin Login |
+
+The journey does not mark deployment, migration or health as complete from UI text alone. It follows the same state source as the wizard: preflight report status, saved setup evidence, active step and installer report history.
+
 ## Installer Report
 
 The installer report includes:

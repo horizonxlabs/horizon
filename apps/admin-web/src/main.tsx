@@ -245,10 +245,28 @@ const restoreValidationRows = [
   { check: "audit-events", status: "pass", evidence: "critical restore audit retained" }
 ];
 
-type InstallWizardStepId = "preflight" | "setup" | "compose" | "migrate_seed" | "verify_health";
+type InstallWizardStepId = "prepare_server" | "configure_environment" | "preflight" | "setup" | "deploy_stack" | "migrate_seed" | "verify_health" | "first_admin_login";
 type InstallWizardDecision = "ready" | "blocked" | "not_run";
 type InstallWizardStepStatus = "current" | "complete" | "blocked" | "pending";
 type PreflightRow = { check: string; required: string; observed: string; status: string; action: string };
+type InstallWizardState = {
+  decision: InstallWizardDecision;
+  source: string;
+  activeStep: InstallWizardStepId;
+  rows: PreflightRow[];
+  actionableFailures: string[];
+  reportPath: string;
+  setupStatus: "pending" | "saved";
+};
+type InstallJourneyStep = {
+  id: InstallWizardStepId;
+  label: string;
+  detail: string;
+  owner: string;
+  evidence: string;
+  nextAction: string;
+  status: InstallWizardStepStatus;
+};
 type InstallWizardSetupForm = {
   domain: string;
   databaseUrl: string;
@@ -306,11 +324,14 @@ const initialInstallerSetupForm: InstallWizardSetupForm = {
 };
 
 const installWizardSteps = [
-  { id: "preflight", label: "1. Preflight", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
-  { id: "setup", label: "2. Setup Config", detail: "domain, database, storage, auth, AI, backup, first admin" },
-  { id: "compose", label: "3. Compose Readiness", detail: "required private-server services are declared" },
-  { id: "migrate_seed", label: "4. Migrate + Seed", detail: "Prisma migration and seed plan is ready" },
-  { id: "verify_health", label: "5. Verify Health", detail: "Platform surfaces and dependencies report healthy" }
+  { id: "prepare_server", label: "1. Prepare Server", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
+  { id: "configure_environment", label: "2. Configure Environment", detail: ".env, secrets, domain, Caddy and compose contract" },
+  { id: "preflight", label: "3. Run Preflight", detail: "installer checks produce pass/fail report evidence" },
+  { id: "setup", label: "4. Save Setup", detail: "domain, database, storage, auth, AI, backup, first admin" },
+  { id: "deploy_stack", label: "5. Deploy Stack", detail: "Docker Compose starts platform and infrastructure services" },
+  { id: "migrate_seed", label: "6. Migrate + Seed", detail: "Prisma migration and seed plan is ready" },
+  { id: "verify_health", label: "7. Verify Health", detail: "Platform surfaces and dependencies report healthy" },
+  { id: "first_admin_login", label: "8. First Admin Login", detail: "Platform Auth session proves Admin Console is usable" }
 ] satisfies Array<{ id: InstallWizardStepId; label: string; detail: string }>;
 
 const installWizardPassingProfile = {
@@ -355,10 +376,10 @@ const installWizardBlockedRows: PreflightRow[] = [
   { check: "Network", required: "Outbound and internal network ready", observed: "not ready", status: "fail", action: "Fix network connectivity" }
 ];
 
-const initialInstallWizardState = {
+const initialInstallWizardState: InstallWizardState = {
   decision: "not_run" as InstallWizardDecision,
   source: "not run",
-  activeStep: "preflight" as InstallWizardStepId,
+  activeStep: "prepare_server",
   rows: installWizardReadyRows,
   actionableFailures: ["Run preflight before marking install ready"],
   reportPath: "reports/install/pending-install-report.json",
@@ -490,6 +511,81 @@ function installWizardStepStatus(activeStep: InstallWizardStepId, stepId: Instal
   if (stepId === activeStep) return "current";
   if (decision === "ready" && stepIndex < activeIndex) return "complete";
   return "pending";
+}
+
+function buildInstallJourneySteps(installWizard: InstallWizardState, setupSaved: boolean, latestInstallerReport?: InstallerReportDto): InstallJourneyStep[] {
+  const metadata: Record<InstallWizardStepId, Omit<InstallJourneyStep, "status">> = {
+    prepare_server: {
+      id: "prepare_server",
+      label: "Prepare Server",
+      detail: "Supported private server profile and network are ready before install.",
+      owner: "System Admin",
+      evidence: "Docker host: CPU/RAM/disk/ports/DNS/TLS profile",
+      nextAction: "Prepare private server capacity and replace example secrets"
+    },
+    configure_environment: {
+      id: "configure_environment",
+      label: "Configure Environment",
+      detail: "Environment, public domain, Caddy route and compose service contract are reviewed.",
+      owner: "IT Admin",
+      evidence: ".env + docker/docker-compose.yml + VITE_PLATFORM_API_BASE_URL",
+      nextAction: "Review .env, domain, ports and external AI provider values"
+    },
+    preflight: {
+      id: "preflight",
+      label: "Run Preflight",
+      detail: "Installer preflight records pass/fail readiness and actionable remediation.",
+      owner: "IT Admin",
+      evidence: `POST /admin/installer/preflight -> ${latestInstallerReport?.reportPath ?? installWizard.reportPath}`,
+      nextAction: "Run Preflight"
+    },
+    setup: {
+      id: "setup",
+      label: "Save Setup",
+      detail: "Admin saves masked setup evidence without rendering plaintext secrets.",
+      owner: "Platform Admin",
+      evidence: "POST /admin/installer/setup -> masked setup evidence",
+      nextAction: "Save Setup"
+    },
+    deploy_stack: {
+      id: "deploy_stack",
+      label: "Deploy Stack",
+      detail: "Private-server platform services are started through the compose contract.",
+      owner: "System Admin",
+      evidence: "docker compose --env-file .env -f docker/docker-compose.yml up -d",
+      nextAction: "Deploy Stack"
+    },
+    migrate_seed: {
+      id: "migrate_seed",
+      label: "Migrate + Seed",
+      detail: "Database schema and initial records are applied after services are up.",
+      owner: "Platform API",
+      evidence: "pnpm --filter @evcp/platform-api exec prisma migrate deploy + seed",
+      nextAction: "Run Prisma migrate deploy and seed"
+    },
+    verify_health: {
+      id: "verify_health",
+      label: "Verify Health",
+      detail: "API, Admin, Creator, Store and dependencies report healthy readiness.",
+      owner: "IT Admin",
+      evidence: "GET /health + Caddy /api/* route + service readiness",
+      nextAction: "Verify Health"
+    },
+    first_admin_login: {
+      id: "first_admin_login",
+      label: "First Admin Login",
+      detail: "First admin session proves the installed Admin Console is usable.",
+      owner: "Platform Admin",
+      evidence: "GET /api/auth/me with Platform Auth session",
+      nextAction: "First Admin Login"
+    }
+  };
+
+  return installWizardSteps.map((step) => ({
+    ...metadata[step.id],
+    label: step.label.replace(/^\d+\.\s*/, ""),
+    status: installWizardStepStatus(installWizard.activeStep, step.id, installWizard.decision, setupSaved)
+  }));
 }
 
 const observabilityLicenseKpis = [
@@ -656,7 +752,7 @@ function AdminApp() {
       setInstallWizard((current) => ({
         ...current,
         source: "Platform API",
-        activeStep: current.decision === "blocked" ? "preflight" : "compose",
+        activeStep: current.decision === "blocked" ? "preflight" : "deploy_stack",
         setupStatus: "saved",
         actionableFailures: current.decision === "blocked" ? current.actionableFailures : ["Setup saved with masked secrets", "Compose readiness can be reviewed next"]
       }));
@@ -679,7 +775,7 @@ function AdminApp() {
       return {
         ...current,
         activeStep: nextStep,
-        decision: nextStep === "verify_health" && current.setupStatus === "saved" ? "ready" : current.decision
+        decision: nextStep === "first_admin_login" && current.setupStatus === "saved" ? "ready" : current.decision
       };
     });
   }
@@ -712,6 +808,7 @@ function AdminApp() {
 
   const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
   const latestInstallerReport = installerReports[installerReports.length - 1];
+  const installJourneyRows = buildInstallJourneySteps(installWizard, Boolean(savedInstallerSetup), latestInstallerReport);
 
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
@@ -1480,11 +1577,14 @@ function AdminApp() {
               <WorkflowRail
                 title="Recovery Path"
                 steps={[
-                  { label: "first-run preflight", icon: <ServerCog size={16} /> },
-                  { label: "setup config", icon: <LockKeyhole size={16} /> },
-                  { label: "compose readiness", icon: <Route size={16} /> },
+                  { label: "prepare server", icon: <ServerCog size={16} /> },
+                  { label: "configure environment", icon: <Route size={16} /> },
+                  { label: "run preflight", icon: <CheckCircle2 size={16} /> },
+                  { label: "save setup", icon: <LockKeyhole size={16} /> },
+                  { label: "deploy stack", icon: <Route size={16} /> },
                   { label: "migrate and seed", icon: <Database size={16} /> },
                   { label: "verify health", icon: <CheckCircle2 size={16} /> },
+                  { label: "first admin login", icon: <Fingerprint size={16} /> },
                   { label: "backup schedule", icon: <Database size={16} /> },
                   { label: "backup run", icon: <ShieldCheck size={16} /> },
                   { label: "PostgreSQL PITR", icon: <Gauge size={16} /> },
@@ -1500,6 +1600,44 @@ function AdminApp() {
 
               <div className="operations-recovery-grid">
                 <SectionCard eyebrow="First-run Install Wizard" title="Private-server install readiness">
+                  <div className="install-journey-shell" aria-label="First-run installation journey">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">First-run Installation Journey</span>
+                        <h2>Ordered private-server install path</h2>
+                      </div>
+                      <ToneBadge tone={installWizard.decision === "blocked" ? "danger" : installWizard.decision === "ready" ? "success" : "warning"}>
+                        {installWizard.decision === "blocked" ? "blocked" : installWizard.decision === "ready" ? "ready" : "not run"}
+                      </ToneBadge>
+                    </div>
+                    <div className="install-journey-board">
+                      {installJourneyRows.map((step) => (
+                        <article key={step.id} className={`install-journey-card status-${step.status}`}>
+                          <div className="install-journey-card-header">
+                            <strong>{step.label}</strong>
+                            <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : step.status === "current" ? "info" : "neutral"}>
+                              {step.status}
+                            </ToneBadge>
+                          </div>
+                          <p>{step.detail}</p>
+                          <dl className="install-journey-meta">
+                            <div>
+                              <dt>Owner</dt>
+                              <dd>{step.owner}</dd>
+                            </div>
+                            <div>
+                              <dt>Evidence</dt>
+                              <dd>{step.evidence}</dd>
+                            </div>
+                            <div>
+                              <dt>Next Action</dt>
+                              <dd>{step.nextAction}</dd>
+                            </div>
+                          </dl>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
                   <div className="install-wizard-panel" aria-label="First-run install wizard">
                     <ol className="install-wizard-steps">
                       {installWizardSteps.map((step) => {
@@ -1524,10 +1662,10 @@ function AdminApp() {
                       ]}
                     />
                     <div className="install-wizard-action-row" aria-label="Install wizard step controls">
-                      <button type="button" className="secondary-button" onClick={handleWizardBack} disabled={installWizard.activeStep === "preflight"}>
+                      <button type="button" className="secondary-button" onClick={handleWizardBack} disabled={installWizard.activeStep === "prepare_server"}>
                         <Route size={16} /> Back
                       </button>
-                      <button type="button" className="secondary-button" onClick={handleWizardNext} disabled={installWizard.decision === "blocked" || installWizard.activeStep === "verify_health"}>
+                      <button type="button" className="secondary-button" onClick={handleWizardNext} disabled={installWizard.decision === "blocked" || installWizard.activeStep === "first_admin_login"}>
                         <CheckCircle2 size={16} /> Next Step
                       </button>
                       <ToneBadge tone={latestInstallerReport?.status === "failed" ? "danger" : latestInstallerReport ? "success" : "neutral"}>

@@ -1717,10 +1717,94 @@ button {
   gap: var(--evcp-space-4);
 }
 
+.install-journey-shell {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.install-journey-board {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.install-journey-card {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  min-height: 220px;
+  min-width: 0;
+  padding: var(--evcp-space-3);
+}
+
+.install-journey-card.status-current {
+  background: var(--evcp-color-primary-soft);
+  border-color: var(--evcp-color-primary-strong);
+}
+
+.install-journey-card.status-complete {
+  background: var(--evcp-color-success-bg);
+  border-color: #86efac;
+}
+
+.install-journey-card.status-blocked {
+  background: var(--evcp-color-danger-bg);
+  border-color: #fca5a5;
+}
+
+.install-journey-card-header {
+  align-items: start;
+  display: flex;
+  gap: var(--evcp-space-2);
+  justify-content: space-between;
+}
+
+.install-journey-card strong {
+  color: var(--evcp-color-text);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.install-journey-card p {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.install-journey-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.install-journey-meta div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.install-journey-meta dt {
+  color: var(--evcp-color-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.install-journey-meta dd {
+  color: var(--evcp-color-text);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .install-wizard-steps {
   display: grid;
   gap: var(--evcp-space-2);
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
@@ -2085,6 +2169,10 @@ button:disabled {
   }
 
   .install-wizard-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .install-journey-board {
     grid-template-columns: 1fr;
   }
 
