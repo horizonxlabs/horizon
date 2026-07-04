@@ -1,5 +1,5 @@
+import { createPlatformApiClient, type CurrentUserResponse, type PlatformProjectDto } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
-import { mockUsers, projects } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
   CheckCircle2,
@@ -26,10 +26,86 @@ import {
   Users,
   WandSparkles
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
-const selectedProject = projects[0];
+type CreatorProjectView = {
+  id: string;
+  slug: string;
+  name: string;
+  appType: string;
+  status: string;
+  owner: string;
+  prdVersion: string;
+  frontendVersion: string;
+  tokenUsedThisMonth: number;
+};
+
+type CreatorBootstrapState = {
+  userName: string;
+  selectedProject: CreatorProjectView;
+  source: "Platform API" | "local fallback";
+};
+
+const fallbackSelectedProject: CreatorProjectView = {
+  id: "proj_leave_management",
+  slug: "leave-management",
+  name: "Leave Management",
+  appType: "Workflow App",
+  status: "draft",
+  owner: "Creator User",
+  prdVersion: "1.0",
+  frontendVersion: "preview-0001",
+  tokenUsedThisMonth: 120
+};
+
+const initialCreatorBootstrap: CreatorBootstrapState = {
+  userName: "Creator User",
+  selectedProject: fallbackSelectedProject,
+  source: "local fallback"
+};
+
+function apiBaseUrl(): string | undefined {
+  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  if (!configured && import.meta.env.DEV) return undefined;
+  return (configured || "/api").replace(/\/$/, "");
+}
+
+function platformSessionToken(): string | undefined {
+  return window.localStorage.getItem("evcp_session") ?? undefined;
+}
+
+function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResponse): CreatorProjectView {
+  return {
+    id: project.id,
+    slug: project.slug,
+    name: project.name,
+    appType: project.appType,
+    status: project.status,
+    owner: currentUser.user.name,
+    prdVersion: project.status === "published" ? "1.0" : "0.1",
+    frontendVersion: project.activeFrontendCheckpointId ?? "preview-pending",
+    tokenUsedThisMonth: 0
+  };
+}
+
+async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const client = createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "creator@company.com"
+  });
+  const currentUser = await client.getCurrentUser();
+  const projects = await client.listProjects();
+  return {
+    userName: currentUser.user.name,
+    selectedProject: projects[0] ? projectToView(projects[0], currentUser) : fallbackSelectedProject,
+    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+  };
+}
 
 const wizardSteps = [
   { title: "1. App Basics", detail: "ชื่อแอป, business problem, app type, target department", status: "complete" },
@@ -177,8 +253,17 @@ const mvpDemoSteps = [
 ];
 
 function CreatorApp() {
+  const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
+  const selectedProject = bootstrap.selectedProject;
+
+  useEffect(() => {
+    loadCreatorBootstrap()
+      .then(setBootstrap)
+      .catch(() => setBootstrap(initialCreatorBootstrap));
+  }, []);
+
   return (
-    <AppShell title="Creator App" navItems={navigation.creator} userName={mockUsers.creator.name}>
+    <AppShell title="Creator App" navItems={navigation.creator} userName={bootstrap.userName}>
       <PageHeader
         tone="surface"
         eyebrow="Creator Workspace"
@@ -186,6 +271,7 @@ function CreatorApp() {
         description="Prompt, AI task progress, token remaining และ live preview อยู่ในหน้าทำงานเดียว"
         actions={
           <>
+            <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Bootstrap: {bootstrap.source}</ToneBadge>
             <button type="button" className="secondary-button">
               <GitBranch size={16} />
               Remix

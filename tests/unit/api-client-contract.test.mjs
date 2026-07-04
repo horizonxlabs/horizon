@@ -12,3 +12,12 @@ test("api client exposes success and failure response envelope helpers", () => {
   assert.match(source, /traceId/);
 });
 
+test("api client exposes platform bootstrap client contract", () => {
+  assert.match(source, /export class PlatformApiClient/);
+  assert.match(source, /getCurrentUser/);
+  assert.match(source, /listProjects/);
+  assert.match(source, /listStoreApps/);
+  assert.match(source, /sessionToken/);
+  assert.match(source, /legacyUserEmail/);
+  assert.match(source, /PlatformApiError/);
+});

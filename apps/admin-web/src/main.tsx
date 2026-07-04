@@ -1,5 +1,5 @@
+import { createPlatformApiClient, type CurrentUserResponse } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
-import { mockUsers } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
   Activity,
@@ -252,6 +252,16 @@ type InstallerReportEnvelope = {
   };
 };
 
+type AdminBootstrapState = {
+  userName: string;
+  source: "Platform API" | "local fallback";
+};
+
+const initialAdminBootstrap: AdminBootstrapState = {
+  userName: "Platform Admin",
+  source: "local fallback"
+};
+
 const installWizardSteps = [
   { id: "preflight", label: "1. Preflight", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
   { id: "setup", label: "2. Setup Config", detail: "domain, database, storage, auth, AI, backup, first admin" },
@@ -336,6 +346,25 @@ function apiBaseUrl(): string | undefined {
   const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
   if (!configured && import.meta.env.DEV) return undefined;
   return (configured || "/api").replace(/\/$/, "");
+}
+
+function platformSessionToken(): string | undefined {
+  return window.localStorage.getItem("evcp_session") ?? undefined;
+}
+
+async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const client = createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "admin@company.com"
+  });
+  const currentUser: CurrentUserResponse = await client.getCurrentUser();
+  return {
+    userName: currentUser.user.name,
+    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+  };
 }
 
 async function runInstallerPreflight(profile: typeof installWizardPassingProfile): Promise<InstallerReportEnvelope["data"] | undefined> {
@@ -445,8 +474,15 @@ const rtmRegressionRows = [
 ];
 
 function AdminApp() {
+  const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
+
+  useEffect(() => {
+    loadAdminBootstrap()
+      .then(setBootstrap)
+      .catch(() => setBootstrap(initialAdminBootstrap));
+  }, []);
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -485,13 +521,14 @@ function AdminApp() {
   }
 
   return (
-    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
+    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
       <PageHeader
         eyebrow="AI Governance"
         title="ศูนย์ควบคุม AI Providers & API Keys"
         description="ควบคุม provider, secret, routing, quota และ guardrail ของทุก AI call ก่อนใช้งานจริงในองค์กร"
         actions={
           <>
+          <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Session: {bootstrap.source}</ToneBadge>
           <button type="button" className="secondary-button">
             <SlidersHorizontal size={16} />
             ตั้งค่า Route

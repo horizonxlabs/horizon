@@ -60,12 +60,12 @@ importers:
 
   apps/admin-web:
     dependencies:
+      '@evcp/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@evcp/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@evcp/mock-data':
-        specifier: workspace:*
-        version: link:../../packages/mock-data
       '@evcp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -91,9 +91,12 @@ importers:
 
   apps/app-store-pwa:
     dependencies:
-      '@evcp/mock-data':
+      '@evcp/api-client':
         specifier: workspace:*
-        version: link:../../packages/mock-data
+        version: link:../../packages/api-client
+      '@evcp/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@evcp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -119,12 +122,12 @@ importers:
 
   apps/creator-web:
     dependencies:
+      '@evcp/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
       '@evcp/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@evcp/mock-data':
-        specifier: workspace:*
-        version: link:../../packages/mock-data
       '@evcp/ui':
         specifier: workspace:*
         version: link:../../packages/ui

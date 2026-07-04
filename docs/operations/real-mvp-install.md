@@ -122,7 +122,7 @@ The installer report includes:
 ## Remaining Mock-to-Real Work
 
 - Replace simulated SSO login with the real Keycloak/OIDC callback and remove mock auth header fallback after all clients send Platform Auth bearer sessions.
-- Replace direct frontend mock-data imports with API clients.
+- Continue replacing static frontend demo sections with API calls; primary user/project/store bootstrap now uses `@evcp/api-client`.
 - Move service state from in-memory/demo records to Prisma-backed repositories.
 - Connect AI Provider Adapter to real external providers.
 - Replace mock generated app preview with real build/deploy/runtime flow.

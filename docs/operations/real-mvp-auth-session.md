@@ -79,7 +79,6 @@ pnpm verify:real-mvp-install
 
 - Replace `/admin/auth/simulate-login` with the real Keycloak/OIDC callback and token exchange.
 - Persist platform sessions in the database instead of the in-memory session registry.
-- Add frontend login/logout flows that store and send the Platform Auth bearer token.
+- Finish frontend login/logout flows that store and send the Platform Auth bearer token; current Admin, Creator and App Store bootstrap clients already read `localStorage["evcp_session"]`.
 - Remove the mock header fallback after Admin, Creator and App Store clients have migrated.
 - Add PostgreSQL-backed auth session E2E coverage against a migrated private-server database.
-

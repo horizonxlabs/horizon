@@ -119,6 +119,12 @@ The Platform API now routes PRD generation through an AI Gateway adapter contrac
 
 See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees and remaining live-worker work.
 
+## Phase 2 Real MVP Frontend API Bootstrap
+
+Admin Web, Creator Web and App Store PWA now start their primary user/project/store identity through `@evcp/api-client` and Platform API bootstrap routes instead of importing frontend mock fixtures directly. Local Vite development keeps deterministic fallback state when no API base URL is configured; private-server compose uses `/api` through Caddy.
+
+See `docs/operations/real-mvp-frontend-api-bootstrap.md`.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:

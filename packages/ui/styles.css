@@ -291,6 +291,13 @@ th {
   padding: var(--evcp-space-5);
 }
 
+.store-header-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--evcp-space-2);
+}
+
 .store-mobile-header h1 {
   font-size: 30px;
   line-height: 1.1;
