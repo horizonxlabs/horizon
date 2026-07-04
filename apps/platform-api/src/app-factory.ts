@@ -12,7 +12,8 @@ import {
   ValidationError,
   type AuthResolution,
   type PlatformApiServices,
-  type PlatformProject
+  type PlatformProject,
+  type PlatformUser
 } from "./platform-services";
 import {
   createCoreRepositoryBackedService,
@@ -44,6 +45,12 @@ import {
   MemoryPublishStorePersistenceClient,
   type PublishStoreRepositoryBackedService
 } from "./persistence/publish-store-repositories";
+import {
+  createGeneratedRuntimeRepositoryBackedService,
+  createPrismaGeneratedRuntimePersistence,
+  MemoryGeneratedRuntimePersistenceClient,
+  type GeneratedRuntimeRepositoryBackedService
+} from "./persistence/generated-runtime-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -69,6 +76,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   prdPersistence?: PrdRepositoryBackedService;
   workspacePersistence?: WorkspaceRepositoryBackedService;
   publishStorePersistence?: PublishStoreRepositoryBackedService;
+  generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
 };
 
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -195,7 +203,8 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
       aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient()),
       prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
       workspacePersistence: createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient()),
-      publishStorePersistence: createPublishStoreRepositoryBackedService(new MemoryPublishStorePersistenceClient())
+      publishStorePersistence: createPublishStoreRepositoryBackedService(new MemoryPublishStorePersistenceClient()),
+      generatedRuntimePersistence: createGeneratedRuntimeRepositoryBackedService(new MemoryGeneratedRuntimePersistenceClient())
     };
   }
 
@@ -204,13 +213,15 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
   const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
   const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL);
+  const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
   return {
     ...services,
     corePersistence: service,
     aiGovernancePersistence,
     prdPersistence,
     workspacePersistence,
-    publishStorePersistence
+    publishStorePersistence,
+    generatedRuntimePersistence
   };
 }
 
@@ -361,18 +372,45 @@ function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isPersistenceGeneratedRuntimeRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path)
+  );
+}
+
+async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformApiServices, actor: PlatformUser, projectId: string) {
+  if (!services.publishStorePersistence) throw new Error("Publish Store persistence service is not configured");
+  const project = await resolvePersistenceProject(services, actor, projectId);
+  const manifest = await services.publishStorePersistence.getManifestForProject(actor, project);
+  const deployment = await services.publishStorePersistence.getLatestDeploymentForProject(actor, project);
+  return { project, manifest, deployment };
+}
+
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
   const prdPersistence = services.prdPersistence;
   const workspacePersistence = services.workspacePersistence;
   const publishStorePersistence = services.publishStorePersistence;
+  const generatedRuntimePersistence = services.generatedRuntimePersistence;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
   const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
   const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
   const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
   const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
-  if (!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence && !useWorkspacePersistence && !usePublishStorePersistence) return executePlatformApiRequest(services, request);
+  const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
+  if (
+    !useCorePersistence &&
+    !useAiGovernancePersistence &&
+    !usePrdPersistence &&
+    !useWorkspacePersistence &&
+    !usePublishStorePersistence &&
+    !useGeneratedRuntimePersistence
+  ) return executePlatformApiRequest(services, request);
 
   try {
     if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
@@ -852,6 +890,68 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     if (publishStorePersistence && request.method === "GET" && persistedStoreAppDetailMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return { status: HttpStatus.OK, body: success(await publishStorePersistence.getStoreAppDetail(user, persistedStoreAppDetailMatch[1])) };
+    }
+
+    const persistedRuntimeOverviewMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOverviewMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOverviewMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getRuntimeOverview(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeSchemaCheckMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeSchemaCheckMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeSchemaCheckMatch[1]);
+      const result = await generatedRuntimePersistence.checkSchemaAccess(user, {
+        ...runtimeInput,
+        attemptedSchema: String(request.body?.attemptedSchema ?? ""),
+        operation: String(request.body?.operation ?? "select")
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: result.allowed ? "generated_runtime.schema_access.allowed" : "generated_runtime.schema_access.denied",
+        resourceType: "generated_app_runtime",
+        resourceId: runtimeInput.deployment.id,
+        severity: result.allowed ? "info" : "warning",
+        metadata: { projectId: runtimeInput.project.id, attemptedSchema: result.attemptedSchema, operation: result.operation }
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    const persistedRuntimeHealthMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/health$/);
+    if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeHealthMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeHealthMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getRuntimeHealth(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeOpenApiMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/openapi$/);
+    if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOpenApiMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOpenApiMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getOpenApiContract(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeMigrationDryRunMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeMigrationDryRunMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeMigrationDryRunMatch[1]);
+      const result = await generatedRuntimePersistence.runMigrationDryRun(user, {
+        ...runtimeInput,
+        migrationId: String(request.body?.migrationId ?? ""),
+        destructiveChanges: Array.isArray(request.body?.destructiveChanges) ? request.body.destructiveChanges.map(String) : [],
+        approvalId: request.body?.approvalId ? String(request.body.approvalId) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: result.status === "blocked" ? "generated_runtime.migration_dry_run.blocked" : "generated_runtime.migration_dry_run.passed",
+        resourceType: "generated_app_runtime",
+        resourceId: runtimeInput.deployment.id,
+        severity: result.status === "blocked" ? "warning" : "info",
+        metadata: { projectId: runtimeInput.project.id, migrationId: result.migrationId, destructiveChanges: result.destructiveChanges }
+      });
+      return { status: HttpStatus.OK, body: success(result) };
     }
 
     return executePlatformApiRequest(services, request);

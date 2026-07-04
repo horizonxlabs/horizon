@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP Generated Runtime persistence with repository-backed artifact/container/schema/health/log/metric/OpenAPI/migration evidence, async admin runtime routes, memory/Prisma wiring and integration/E2E coverage.
 - Phase 2 Real MVP Publish, App Store and ticket runtime persistence with repository-backed app access, manifest, deployment, registry, store access request, support ticket and creator inbox routes plus integration/E2E coverage.
 - Phase 2 Real MVP Workspace runtime persistence with repository-backed workspace task/step/preview/usage routes, persisted prompt evidence across service recreation, blocked prompt persistence and integration/E2E coverage.
 - Phase 2 Real MVP PRD runtime persistence with repository-backed PRD document/version/section routes, runtime memory and Prisma wiring, persisted draft/baseline state across service recreation and integration/E2E coverage.

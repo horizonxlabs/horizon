@@ -1,7 +1,7 @@
 # Real MVP Core Persistence Foundation
 
 Status: Phase 2 implementation in progress  
-Issues: #34, #36, #38, #65, #67, #69, #71
+Issues: #34, #36, #38, #65, #67, #69, #71, #73
 
 ## Purpose
 
@@ -14,6 +14,7 @@ This phase starts replacing mock-only Platform API state with a Prisma-backed pe
 - PRD documents, versions and sections for Sprint 3 baseline flow
 - workspace tasks, task steps, preview versions and AI usage evidence for Sprint 4 prompt flow
 - app roles, members, invitations, access requests, publish requests, manifests, deployments, App Store registry entries, notifications and support tickets for Sprint 6/7 publish and feedback flow
+- generated app runtime artifact, container, schema grant, health, logs, metrics, OpenAPI and migration dry-run evidence for Sprint 10 admin runtime flow
 
 The implementation is intentionally additive. It creates a repository layer, a repository-backed service harness and an async core API execution path without claiming every existing sprint service has already been migrated away from in-memory state.
 
@@ -27,6 +28,7 @@ flowchart LR
   B --> N["PrdRepositoryBackedService"]
   B --> R["WorkspaceRepositoryBackedService"]
   B --> V["PublishStoreRepositoryBackedService"]
+  B --> Z["GeneratedRuntimeRepositoryBackedService"]
   C --> D["PlatformUserRepository"]
   C --> E["ProjectRepository"]
   C --> F["AuditLogRepository"]
@@ -34,6 +36,7 @@ flowchart LR
   N --> O["PRD delegates"]
   R --> S["Workspace delegates"]
   V --> W["Publish, store and ticket delegates"]
+  Z --> AA["Generated runtime delegates"]
   D --> G["CorePersistenceClient"]
   E --> G
   F --> G
@@ -41,6 +44,7 @@ flowchart LR
   O --> P["PrdPersistenceClient"]
   S --> T["WorkspacePersistenceClient"]
   W --> X["PublishStorePersistenceClient"]
+  AA --> AB["GeneratedRuntimePersistenceClient"]
   G --> H["PrismaClient in production"]
   G --> I["MemoryCorePersistenceClient in tests"]
   L --> H
@@ -51,6 +55,8 @@ flowchart LR
   T --> U["MemoryWorkspacePersistenceClient in tests"]
   X --> H
   X --> Y["MemoryPublishStorePersistenceClient in tests"]
+  AB --> H
+  AB --> AC["MemoryGeneratedRuntimePersistenceClient in tests"]
 ```
 
 ## Route-Level Coverage
@@ -114,6 +120,16 @@ flowchart LR
 | `GET /store/tickets/:ticketId` | Returns persisted ticket status for the submitter, creator or admin |
 | `GET /creator/projects/:projectId/tickets` | Returns persisted creator ticket inbox for the project |
 
+## Generated Runtime Route-Level Coverage
+
+| Route | Persistence-backed behavior |
+| --- | --- |
+| `GET /admin/runtime/projects/:projectId` | Resolves persisted project, manifest and latest deployment, then stores and returns generated app artifact, container, schema isolation, health, readiness, log, metrics, OpenAPI and latest migration evidence |
+| `POST /admin/runtime/projects/:projectId/schema/check` | Checks attempted schema access against the persisted schema grant and writes allow/deny audit evidence |
+| `GET /admin/runtime/projects/:projectId/health` | Returns persisted health, readiness, metric and log evidence after service recreation |
+| `GET /admin/runtime/projects/:projectId/openapi` | Returns the persisted OpenAPI contract for the generated app runtime |
+| `POST /admin/runtime/projects/:projectId/migrations/dry-run` | Persists migration dry-run reports, blocks destructive changes without approval and writes audit evidence |
+
 The legacy synchronous executor remains available for existing sprint regression tests and for services that have not yet moved to repositories.
 
 ## Runtime Mode
@@ -123,8 +139,8 @@ Platform API startup reads `EVCP_CORE_PERSISTENCE` through `createRuntimePlatfor
 | Mode | Use case | Behavior |
 | --- | --- | --- |
 | `legacy` | Existing sprint regression runs | Starts the mock-first in-memory services and does not create a core persistence service |
-| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store and ticket routes with memory persistence clients and no database requirement |
-| `prisma` | Online private server | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store and ticket routes with Prisma through `DATABASE_URL` |
+| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket and generated runtime routes with memory persistence clients and no database requirement |
+| `prisma` | Online private server | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket and generated runtime routes with Prisma through `DATABASE_URL` |
 
 Private-server `.env` should set:
 
@@ -133,7 +149,7 @@ EVCP_CORE_PERSISTENCE=prisma
 DATABASE_URL=postgresql://...
 ```
 
-`prisma` mode creates the Prisma-backed core, AI governance, PRD, workspace, publish/App Store and ticket repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
+`prisma` mode creates the Prisma-backed core, AI governance, PRD, workspace, publish/App Store, ticket and generated runtime repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
 
 ## Repository Coverage
 
@@ -146,6 +162,7 @@ DATABASE_URL=postgresql://...
 | `PrdRepositoryBackedService` | `PrdDocument`, `PrdVersion`, `PrdSection` | Persist PRD draft, baseline and ordered section evidence for creator-owned projects |
 | `WorkspaceRepositoryBackedService` | `WorkspaceTask`, `WorkspaceTaskStep`, `PreviewVersion`, `AiUsageLog` | Persist workspace prompt task progress, preview versions and AI usage evidence |
 | `PublishStoreRepositoryBackedService` | `App`, `AppRole`, `AppMember`, `AppInvitation`, `AppAccessRequest`, `AppManifest`, `PublishRequest`, `DeploymentRecord`, `AppStoreRegistryEntry`, `SupportTicket`, `SupportTicketTimelineEntry`, `InAppNotification` | Persist app access defaults, publish manifest/deployment/registry records, App Store access requests, ticket status and creator inbox evidence |
+| `GeneratedRuntimeRepositoryBackedService` | `GeneratedAppRuntime`, `GeneratedAppSchemaGrant`, `GeneratedAppHealthCheck`, `GeneratedAppRuntimeLog`, `GeneratedAppRuntimeMetric`, `GeneratedAppOpenApiContract`, `GeneratedAppMigrationReport` | Persist generated app runtime evidence after publish and keep admin runtime routes available across service recreation |
 
 ## Test Coverage
 
@@ -159,12 +176,14 @@ node --import tsx --test \
   tests/integration/platform-prd-persistence-contract.test.mjs \
   tests/integration/platform-workspace-persistence-contract.test.mjs \
   tests/integration/platform-publish-store-persistence-contract.test.mjs \
+  tests/integration/platform-generated-runtime-persistence-contract.test.mjs \
   tests/e2e/platform-core-persistence-flow.test.mjs \
   tests/e2e/platform-core-api-persistence-smoke.test.mjs \
   tests/e2e/platform-ai-governance-persistence-flow.test.mjs \
   tests/e2e/platform-prd-persistence-flow.test.mjs \
   tests/e2e/platform-workspace-persistence-flow.test.mjs \
-  tests/e2e/platform-publish-store-persistence-flow.test.mjs
+  tests/e2e/platform-publish-store-persistence-flow.test.mjs \
+  tests/e2e/platform-generated-runtime-persistence-flow.test.mjs
 ```
 
 The tests prove:
@@ -184,12 +203,13 @@ The tests prove:
 - Runtime memory persistence keeps workspace preview/task/usage state across service object recreation with the same persistence client.
 - The publish/store persistence service can persist app access defaults, invitations, publish manifest/deployment/registry, App Store access requests and support tickets.
 - Runtime memory persistence keeps published registry, app access request and ticket state across service object recreation with the same persistence client.
+- The generated runtime persistence service can persist artifact, container, schema, health, log, metric, OpenAPI and migration dry-run evidence.
+- Runtime memory persistence keeps generated runtime overview, health, OpenAPI and blocked migration report state across service object recreation with the same persistence client.
 - The repository source remains aligned with the Prisma schema and seed records.
 
 ## Remaining Mock-to-Real Work
 
 - Add PostgreSQL-backed integration tests that run `prisma migrate deploy`, seed and route-level API calls against a real database.
 - Replace simulated SSO login with the real Keycloak/OIDC callback and database-backed Platform Auth session lookup.
-- Move generated runtime/admin hardening services onto repository-backed state.
 - Replace local envelope placeholder encryption with production KMS/secret-store integration before handling real customer provider secrets.
 - Add data migration/rollback notes when replacing each in-memory service.
