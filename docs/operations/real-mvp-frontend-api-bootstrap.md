@@ -40,12 +40,14 @@ sequenceDiagram
   - typed success/failure envelope parsing through `PlatformApiError`.
   - `/auth/me`, `/projects` and `/store/apps` bootstrap routes.
   - Creator workspace operations for `/projects/:projectId/workspace`, `/projects/:projectId/workspace/prompts` and `/projects/:projectId/workspace/preview/refresh`.
+  - Creator app management and publish operations for `/projects/:projectId/app/users`, `/projects/:projectId/app/invitations`, `/projects/:projectId/app/access-requests/decision`, `/projects/:projectId/publish/review`, `/projects/:projectId/publish` and `/app-store/registry`.
   - App Store operations for `/store/apps/:slug`, `/store/apps/:slug/access-requests`, `/store/apps/:slug/tickets` and `/store/tickets/:ticketId`.
   - installer operations for `/admin/installer/preflight`, `/admin/installer/setup` and `/admin/installer/reports`.
 - Admin Web loads current user from `/auth/me`.
 - Admin Web uses the shared client for the first-run install wizard preflight, setup save and installer report retrieval.
 - Creator Web loads current user and project list from `/auth/me` and `/projects`.
 - Creator Web uses the shared client to load workspace state, submit prompts and refresh the live preview while preserving deterministic local fallback state.
+- Creator Web uses the shared client to load app users/roles/invitations/access requests, create invitations, approve access requests, load publish review, publish to the App Store registry and surface deployment evidence.
 - App Store PWA loads current user/store profile and apps from `/auth/me` and `/store/apps`.
 - App Store PWA uses the shared client to request access, submit support tickets and retrieve ticket status timelines.
 - Local Vite development falls back to deterministic local state when `VITE_PLATFORM_API_BASE_URL` is not configured.

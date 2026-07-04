@@ -488,3 +488,161 @@ test("platform API client refreshes Creator workspace preview", async () => {
   assert.equal(preview.version, "preview-0001");
   assert.match(preview.summary, /WFH leave type/);
 });
+
+test("platform API client reads Creator app access snapshots", async () => {
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/users");
+      assert.equal(init.headers.get("x-mock-user-email"), "creator@company.com");
+      return new Response(
+        JSON.stringify(
+          success({
+            app: { id: "app_leave", projectId: "proj_001", slug: "leave-management", name: "Leave Management", status: "draft", route: "/apps/leave-management" },
+            roles: [{ id: "role_employee", appId: "app_leave", key: "employee", name: "Employee", description: "Request leave", permissions: ["leave:request"], memberCount: 1 }],
+            members: [{ id: "mem_001", appId: "app_leave", email: "user@company.com", name: "End User", userType: "internal", roleKey: "employee", roleName: "Employee", status: "active" }],
+            invitations: [],
+            accessRequests: []
+          })
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const snapshot = await client.getAppAccessSnapshot("proj_001");
+
+  assert.equal(snapshot.app.slug, "leave-management");
+  assert.equal(snapshot.roles[0].key, "employee");
+});
+
+test("platform API client creates Creator app invitations", async () => {
+  let observedBody = {};
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    sessionToken: "evcp_session.payload.signature",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/invitations");
+      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "appinv_0001",
+            appId: "app_leave",
+            projectId: "proj_001",
+            email: "manager@company.com",
+            userType: "internal",
+            roleKey: "manager",
+            invitedByUserId: "usr_creator",
+            status: "pending",
+            note: "Join manager queue",
+            createdAt: "2026-07-04T01:00:00.000Z"
+          })
+        ),
+        { status: 201 }
+      );
+    }
+  });
+
+  const invite = await client.createAppInvitation("proj_001", {
+    email: "manager@company.com",
+    roleKey: "manager",
+    userType: "internal",
+    note: "Join manager queue"
+  });
+
+  assert.equal(observedBody.email, "manager@company.com");
+  assert.equal(invite.status, "pending");
+});
+
+test("platform API client decides Creator app access requests", async () => {
+  let observedBody = {};
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/access-requests/decision");
+      observedBody = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "appreq_0001",
+            appId: "app_leave",
+            projectId: "proj_001",
+            requesterEmail: "manager@company.com",
+            requestedRoleKey: "manager",
+            reason: "Approval queue",
+            status: "approved",
+            decidedByUserId: "usr_creator",
+            decidedAt: "2026-07-04T01:00:00.000Z",
+            createdAt: "2026-07-04T00:00:00.000Z"
+          })
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const request = await client.decideAppAccessRequest("proj_001", {
+    requestId: "appreq_0001",
+    decision: "approved"
+  });
+
+  assert.equal(observedBody.requestId, "appreq_0001");
+  assert.equal(request.status, "approved");
+});
+
+test("platform API client reviews publishes and lists Creator registry entries", async () => {
+  const seenUrls = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      seenUrls.push(`${init.method ?? "GET"} ${String(url)}`);
+      if (String(url).endsWith("/publish/review")) {
+        return new Response(
+          JSON.stringify(
+            success({
+              ready: true,
+              manifest: { appId: "app_leave", manifestVersion: "1", app: { slug: "leave-management", route: "/apps/leave-management" }, roles: [] },
+              checklist: [{ key: "prd", label: "PRD baseline", status: "pass", detail: "Baseline v1.0" }]
+            })
+          ),
+          { status: 200 }
+        );
+      }
+      if (String(url).endsWith("/publish")) {
+        return new Response(
+          JSON.stringify(
+            success({
+              publishRequest: { id: "pubreq_0001", status: "published", blockingItems: [], manifestVersion: "1" },
+              deployment: { id: "dep_0001", status: "published", route: "/apps/leave-management" },
+              registryEntry: { id: "store_leave", slug: "leave-management", status: "published", route: "/apps/leave-management" },
+              manifest: { appId: "app_leave", manifestVersion: "1" }
+            })
+          ),
+          { status: 201 }
+        );
+      }
+      return new Response(
+        JSON.stringify(success([{ id: "store_leave", slug: "leave-management", status: "published" }])),
+        { status: 200 }
+      );
+    }
+  });
+
+  const review = await client.getPublishReview("proj_001");
+  const result = await client.publishProject("proj_001");
+  const registry = await client.listAppStoreRegistry();
+
+  assert.deepEqual(seenUrls, [
+    "GET https://platform.example/api/projects/proj_001/publish/review",
+    "POST https://platform.example/api/projects/proj_001/publish",
+    "GET https://platform.example/api/app-store/registry"
+  ]);
+  assert.equal(review.ready, true);
+  assert.equal(result.deployment.status, "published");
+  assert.equal(registry[0].slug, "leave-management");
+});

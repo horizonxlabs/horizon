@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP Creator app users and publish API actions with shared app-access/publish client methods, invitation, access approval, publish registry evidence, deterministic local fallback and unit/integration/E2E coverage.
 - Phase 2 Real MVP Creator workspace API actions with shared workspace client methods, prompt submission, preview refresh, visible task/token evidence, deterministic local fallback and unit/integration/E2E coverage.
 - Phase 2 Real MVP App Store PWA API actions with shared Storefront client methods, request-access submission, ticket submission/status timeline, local fallback evidence and unit/integration/E2E coverage.
 - Phase 2 Real MVP API-backed Admin installer step wizard with shared installer API client methods, Back/Next step controls, editable setup save, masked setup evidence, report retrieval and unit/integration/E2E coverage.

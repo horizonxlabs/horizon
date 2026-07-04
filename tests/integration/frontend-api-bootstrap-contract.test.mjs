@@ -86,3 +86,24 @@ test("Creator workspace actions are API-client backed", () => {
   assert.match(creatorSource, /workspaceResult/);
   assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
 });
+
+test("Creator app users and publish actions are API-client backed", () => {
+  for (const method of [
+    "getAppAccessSnapshot",
+    "createAppInvitation",
+    "decideAppAccessRequest",
+    "getPublishReview",
+    "publishProject",
+    "listAppStoreRegistry"
+  ]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+    assert.match(creatorSource, new RegExp(method));
+  }
+
+  for (const handler of ["loadCreatorPublishState", "handleInviteUser", "handleApproveAccessRequest", "handlePublishProject"]) {
+    assert.match(creatorSource, new RegExp(handler));
+  }
+
+  assert.match(creatorSource, /publishResult/);
+  assert.match(creatorSource, /appAccessSnapshot/);
+});

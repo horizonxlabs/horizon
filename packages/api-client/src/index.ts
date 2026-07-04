@@ -239,6 +239,189 @@ export type WorkspaceSnapshotResponse = {
   tokenBudget: WorkspaceTokenBudgetDto;
 };
 
+export type ManagedAppDto = {
+  id: string;
+  projectId: string;
+  slug: string;
+  name: string;
+  status: "draft" | "published" | "disabled" | "archived";
+  route: string;
+};
+
+export type AppRoleDefinitionDto = {
+  id: string;
+  appId: string;
+  key: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  memberCount: number;
+};
+
+export type AppMemberRecordDto = {
+  id: string;
+  appId: string;
+  userId?: string;
+  email: string;
+  name: string;
+  userType: "internal" | "external";
+  roleId?: string;
+  roleKey: string;
+  roleName: string;
+  status: "active" | "pending" | "approval_required";
+  lastAccessAt?: string;
+};
+
+export type AppInvitationDto = {
+  id: string;
+  appId: string;
+  projectId: string;
+  email: string;
+  userType: "internal" | "external";
+  roleKey: string;
+  invitedByUserId: string;
+  status: "pending" | "accepted" | "revoked" | "approval_required";
+  expiresAt?: string;
+  note?: string;
+  policyWarning?: string;
+  createdAt: string;
+};
+
+export type AppAccessRequestDto = {
+  id: string;
+  appId: string;
+  projectId: string;
+  requesterEmail: string;
+  requestedRoleKey: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  decidedByUserId?: string;
+  decidedAt?: string;
+  createdAt: string;
+};
+
+export type AppAccessSnapshotResponse = {
+  project?: PlatformProjectDto;
+  app: ManagedAppDto;
+  roles: AppRoleDefinitionDto[];
+  members: AppMemberRecordDto[];
+  invitations: AppInvitationDto[];
+  accessRequests: AppAccessRequestDto[];
+};
+
+export type AppInvitationInput = {
+  email: string;
+  roleKey: string;
+  userType: "internal" | "external";
+  expiresAt?: string;
+  note?: string;
+};
+
+export type AppAccessDecisionInput = {
+  requestId: string;
+  decision: "approved" | "rejected";
+  decidedByUserId?: string;
+};
+
+export type AppManifestDto = {
+  id?: string;
+  appId: string;
+  projectId?: string;
+  manifestVersion: string;
+  app?: {
+    id?: string;
+    slug: string;
+    name?: string;
+    route: string;
+    status?: string;
+  };
+  prd?: {
+    versionId: string;
+    version: string;
+  };
+  frontend?: {
+    checkpointId: string;
+    version: string;
+    checksum: string;
+    routes: string[];
+  };
+  auth?: {
+    mode: "platform_auth_sdk";
+    accessMode: "restricted";
+  };
+  roles?: Array<{ key: string; name: string; permissions: string[] }>;
+  database?: {
+    schemaName: string;
+    tables: string[];
+  };
+  generatedAt?: string;
+};
+
+export type PublishChecklistItemDto = {
+  key: string;
+  label: string;
+  status: "pass" | "fail";
+  detail: string;
+};
+
+export type PublishReviewResponse = {
+  project?: PlatformProjectDto;
+  manifest: AppManifestDto;
+  checklist: PublishChecklistItemDto[];
+  ready: boolean;
+};
+
+export type PublishRequestDto = {
+  id: string;
+  projectId?: string;
+  appId?: string;
+  status: "blocked" | "published";
+  requestedByUserId?: string;
+  manifestVersion: string;
+  blockingItems: string[];
+  createdAt?: string;
+  publishedAt?: string;
+};
+
+export type DeploymentRecordDto = {
+  id: string;
+  projectId?: string;
+  appId?: string;
+  publishRequestId?: string;
+  status: "published" | "failed";
+  environment?: "app_store";
+  route: string;
+  manifestVersion?: string;
+  prdVersion?: string;
+  frontendCheckpointId?: string;
+  publishedByUserId?: string;
+  publishedAt?: string;
+};
+
+export type AppStoreRegistryEntryDto = {
+  id: string;
+  appId?: string;
+  projectId?: string;
+  slug: string;
+  name?: string;
+  route?: string;
+  status: "published";
+  visibility?: "restricted";
+  accessMode?: "membership_or_invite";
+  roleKeys?: string[];
+  ownerUserId?: string;
+  deploymentId?: string;
+  manifestVersion?: string;
+  publishedAt?: string;
+};
+
+export type PublishResultResponse = {
+  publishRequest: PublishRequestDto;
+  deployment: DeploymentRecordDto;
+  registryEntry: AppStoreRegistryEntryDto;
+  manifest: AppManifestDto;
+};
+
 export type InstallerPreflightInput = {
   cpuCores: number;
   memoryGb: number;
@@ -437,6 +620,40 @@ export class PlatformApiClient {
     return this.request<PreviewVersionDto>(`/projects/${encodeURIComponent(projectId)}/workspace/preview/refresh`, {
       method: "POST"
     });
+  }
+
+  getAppAccessSnapshot(projectId: string): Promise<AppAccessSnapshotResponse> {
+    return this.request<AppAccessSnapshotResponse>(`/projects/${encodeURIComponent(projectId)}/app/users`);
+  }
+
+  createAppInvitation(projectId: string, input: AppInvitationInput): Promise<AppInvitationDto> {
+    return this.request<AppInvitationDto>(`/projects/${encodeURIComponent(projectId)}/app/invitations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  decideAppAccessRequest(projectId: string, input: AppAccessDecisionInput): Promise<AppAccessRequestDto> {
+    return this.request<AppAccessRequestDto>(`/projects/${encodeURIComponent(projectId)}/app/access-requests/decision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  getPublishReview(projectId: string): Promise<PublishReviewResponse> {
+    return this.request<PublishReviewResponse>(`/projects/${encodeURIComponent(projectId)}/publish/review`);
+  }
+
+  publishProject(projectId: string): Promise<PublishResultResponse> {
+    return this.request<PublishResultResponse>(`/projects/${encodeURIComponent(projectId)}/publish`, {
+      method: "POST"
+    });
+  }
+
+  listAppStoreRegistry(): Promise<AppStoreRegistryEntryDto[]> {
+    return this.request<AppStoreRegistryEntryDto[]>("/app-store/registry");
   }
 
   runInstallerPreflight(input: InstallerPreflightInput): Promise<InstallerReportDto> {
