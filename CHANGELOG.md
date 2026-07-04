@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP AI governance runtime persistence with repository-backed provider/key/route/quota/guardrail routes, memory and Prisma runtime wiring, masked API key responses, guardrail event persistence and integration/E2E coverage.
 - Phase 2 Real MVP Admin AI governance API-backed actions with typed provider/key/route/quota/guardrail client methods, Admin Web Create Provider, Save Masked Key, Configure Route, Configure Quota and Add Guardrail Rule controls, safe secret clearing and unit/integration/E2E coverage.
 - Phase 2 Real MVP Admin AI provider test-call workflow with admin-only API route, shared client method, dry-run gateway validation, sanitized provider evidence, Admin Web panel and unit/integration/E2E coverage.
 - Phase 2 Real MVP live OpenAI-compatible AI Provider Adapter path with injected provider fetcher, normalized `/chat/completions` response parsing, sanitized provider error mapping and unit/integration/E2E coverage.

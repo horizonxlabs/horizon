@@ -9,7 +9,9 @@ test("core API persistence wiring keeps async executor and legacy executor avail
   assert.match(appFactory, /export async function executePlatformApiRequestAsync/);
   assert.match(appFactory, /export function executePlatformApiRequest/);
   assert.match(appFactory, /corePersistence\?: CoreRepositoryBackedService/);
-  assert.match(appFactory, /if \(!services\.corePersistence \|\| !isPersistenceCoreRoute\(request\)\) return executePlatformApiRequest/);
+  assert.match(appFactory, /const useCorePersistence = Boolean\(corePersistence && isPersistenceCoreRoute\(request\)\)/);
+  assert.match(appFactory, /const useAiGovernancePersistence = Boolean\(aiGovernancePersistence && isPersistenceAiGovernanceRoute\(request\)\)/);
+  assert.match(appFactory, /if \(!useCorePersistence && !useAiGovernancePersistence\) return executePlatformApiRequest/);
 });
 
 test("core API persistence wiring covers auth project and audit routes", () => {
@@ -19,10 +21,10 @@ test("core API persistence wiring covers auth project and audit routes", () => {
 
   assert.match(appFactory, /resolvePersistenceAuth/);
   assert.match(appFactory, /buildAuthEvidence/);
-  assert.match(appFactory, /services\.corePersistence\.createProject/);
-  assert.match(appFactory, /services\.corePersistence\.listProjects/);
-  assert.match(appFactory, /services\.corePersistence\.recordAudit/);
-  assert.match(appFactory, /services\.corePersistence\.filterAudit/);
+  assert.match(appFactory, /corePersistence\.createProject/);
+  assert.match(appFactory, /corePersistence\.listProjects/);
+  assert.match(appFactory, /corePersistence\.recordAudit/);
+  assert.match(appFactory, /corePersistence\.filterAudit/);
   assert.match(appFactory, /sendPlatformResponseAsync/);
 });
 

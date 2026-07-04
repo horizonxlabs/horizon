@@ -12,6 +12,12 @@ import {
   MemoryCorePersistenceClient,
   type CoreRepositoryBackedService
 } from "./persistence/core-repositories";
+import {
+  createAiGovernanceRepositoryBackedService,
+  createPrismaAiGovernancePersistence,
+  MemoryAiGovernancePersistenceClient,
+  type AiGovernanceRepositoryBackedService
+} from "./persistence/ai-governance-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -33,6 +39,7 @@ type RouteRegistry = {
 
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
+  aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
 };
 
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -155,14 +162,17 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   if (mode === "memory") {
     return {
       ...services,
-      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient())
+      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient()),
+      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient())
     };
   }
 
   const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL);
   return {
     ...services,
-    corePersistence: service
+    corePersistence: service,
+    aiGovernancePersistence
   };
 }
 
@@ -208,6 +218,11 @@ async function resolvePersistenceAuth(services: PersistenceAwarePlatformApiServi
   };
 }
 
+async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
+  if (services.corePersistence) return (await resolvePersistenceAuth(services, headers)).user;
+  return services.auth.resolveCurrentUser(headers);
+}
+
 function buildAuthEvidence(resolution: AuthResolution) {
   return {
     mode: resolution.mode,
@@ -238,14 +253,30 @@ function isPersistenceCoreRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
+  return (
+    request.path === "/ai/providers" ||
+    request.path === "/ai/api-keys" ||
+    request.path === "/ai/routes" ||
+    request.path === "/ai/quotas" ||
+    request.path === "/guardrails/rules" ||
+    request.path === "/guardrails/test" ||
+    request.path === "/guardrails/events"
+  );
+}
+
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
-  if (!services.corePersistence || !isPersistenceCoreRoute(request)) return executePlatformApiRequest(services, request);
+  const corePersistence = services.corePersistence;
+  const aiGovernancePersistence = services.aiGovernancePersistence;
+  const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
+  const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
+  if (!useCorePersistence && !useAiGovernancePersistence) return executePlatformApiRequest(services, request);
 
   try {
-    if (request.method === "GET" && request.path === "/auth/me") {
+    if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
       const authResolution = await resolvePersistenceAuth(services, request.headers ?? {});
       const user = authResolution.user;
-      await services.corePersistence.recordAudit({
+      await corePersistence.recordAudit({
         actorId: user.id,
         action: "auth.me",
         resourceType: "platform_user",
@@ -255,15 +286,15 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       return { status: HttpStatus.OK, body: success({ user, permissions: user.permissions, auth: buildAuthEvidence(authResolution) }) };
     }
 
-    if (request.method === "GET" && request.path === "/projects") {
+    if (corePersistence && request.method === "GET" && request.path === "/projects") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin", "creator"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.listProjects(user)) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.listProjects(user)) };
     }
 
-    if (request.method === "POST" && request.path === "/projects") {
+    if (corePersistence && request.method === "POST" && request.path === "/projects") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
-      const project = await services.corePersistence.createProject({
+      const project = await corePersistence.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
         slug: String(request.body?.slug ?? "untitled-project"),
@@ -273,7 +304,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
         intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
         dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
       });
-      await services.corePersistence.recordAudit({
+      await corePersistence.recordAudit({
         actorId: user.id,
         action: "project.created",
         resourceType: "project",
@@ -283,16 +314,102 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       return { status: HttpStatus.CREATED, body: success(project) };
     }
 
-    if (request.method === "GET" && request.path === "/audit-logs") {
+    if (corePersistence && request.method === "GET" && request.path === "/audit-logs") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit({})) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.filterAudit({})) };
     }
 
-    if (request.method === "POST" && request.path === "/audit-logs/filter") {
+    if (corePersistence && request.method === "POST" && request.path === "/audit-logs/filter") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/providers") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listProviders(user)) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/providers") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const provider = await aiGovernancePersistence.createProvider(user, {
+        name: String(request.body?.name ?? ""),
+        adapter: String(request.body?.adapter ?? "mock") as never,
+        baseUrl: String(request.body?.baseUrl ?? ""),
+        models: Array.isArray(request.body?.models) ? request.body.models.map(String) : []
+      });
+      return { status: HttpStatus.CREATED, body: success(provider) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/api-keys") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listApiKeys(user)) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/api-keys") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const key = await aiGovernancePersistence.createApiKey(user, {
+        providerId: String(request.body?.providerId ?? ""),
+        name: String(request.body?.name ?? ""),
+        secret: String(request.body?.secret ?? ""),
+        usageMode: String(request.body?.usageMode ?? "production") as never,
+        quotaTokens: Number(request.body?.quotaTokens ?? 0),
+        fallbackPriority: Number(request.body?.fallbackPriority ?? 0)
+      });
+      return { status: HttpStatus.CREATED, body: success(key) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/routes") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const route = await aiGovernancePersistence.configureRoute(user, {
+        scenario: String(request.body?.scenario ?? "prd_generation") as never,
+        primaryProviderId: String(request.body?.primaryProviderId ?? ""),
+        primaryModel: String(request.body?.primaryModel ?? ""),
+        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
+        fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(route) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/quotas") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const quota = await aiGovernancePersistence.configureQuota(user, {
+        scope: String(request.body?.scope ?? "organization") as never,
+        dailyLimit: Number(request.body?.dailyLimit ?? 0),
+        monthlyLimit: Number(request.body?.monthlyLimit ?? 0),
+        warningThreshold: Number(request.body?.warningThreshold ?? 0),
+        hardStop: Boolean(request.body?.hardStop ?? true),
+        usedToday: Number(request.body?.usedToday ?? 0)
+      });
+      return { status: HttpStatus.OK, body: success(quota) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/rules") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const rule = await aiGovernancePersistence.createGuardrailRule(user, {
+        name: String(request.body?.name ?? ""),
+        type: String(request.body?.type ?? "keyword") as never,
+        pattern: String(request.body?.pattern ?? ""),
+        severity: String(request.body?.severity ?? "warning") as never,
+        action: String(request.body?.action ?? "warn") as never,
+        scope: String(request.body?.scope ?? "organization") as never
+      });
+      return { status: HttpStatus.CREATED, body: success(rule) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/test") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const result = await aiGovernancePersistence.testPrompt(user, {
+        prompt: String(request.body?.prompt ?? ""),
+        scenario: String(request.body?.scenario ?? "prd_generation")
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listGuardrailEvents(user)) };
     }
 
     return executePlatformApiRequest(services, request);
