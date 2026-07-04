@@ -3,6 +3,7 @@ import { mockUsers, projects } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
   CheckCircle2,
+  ClipboardCheck,
   Database,
   FileText,
   GitCompareArrows,
@@ -15,9 +16,13 @@ import {
   RotateCcw,
   Send,
   ShieldCheck,
+  ShieldAlert,
+  Store,
   Table2,
   Sparkles,
   Tablet,
+  UserPlus,
+  Users,
   WandSparkles
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
@@ -96,6 +101,34 @@ const migrationRows = [
 const checkpointRows = [
   { version: "fe-0002", status: "current", summary: "Improve manager dashboard", preview: "preview-0002" },
   { version: "fe-0001", status: "previous", summary: "Add WFH leave type", preview: "preview-0001" }
+];
+
+const appMembers = [
+  { user: "Creator User", type: "internal", role: "HR Admin", status: "active", lastAccess: "2026-08-20" },
+  { user: "End User", type: "internal", role: "Employee", status: "active", lastAccess: "2026-08-20" }
+];
+
+const pendingInvites = [
+  { email: "manager@company.com", role: "Manager", invitedBy: "Creator User", expires: "2026-09-01", status: "pending" },
+  { email: "vendor@example.com", role: "Employee", invitedBy: "Creator User", expires: "2026-09-01", status: "approval_required" }
+];
+
+const accessRequests = [
+  { requester: "manager@company.com", role: "Manager", reason: "Needs approval queue access", submitted: "2026-08-17", status: "pending" }
+];
+
+const appRoles = [
+  { role: "Employee", permissions: "leave:request, leave:view-own", members: "1", status: "active" },
+  { role: "Manager", permissions: "leave:approve, leave:view-team", members: "0", status: "ready" },
+  { role: "HR Admin", permissions: "leave:admin, leave:report", members: "1", status: "active" }
+];
+
+const publishChecklist = [
+  { check: "PRD baseline", state: "pass", detail: "Baseline v1.0" },
+  { check: "Active frontend checkpoint", state: "pass", detail: "fe-0001" },
+  { check: "App roles", state: "pass", detail: "Employee, Manager, HR Admin" },
+  { check: "At least one owner", state: "pass", detail: "Creator User" },
+  { check: "No blocking guardrail event", state: "pass", detail: "clear" }
 ];
 
 function CreatorApp() {
@@ -371,6 +404,147 @@ function CreatorApp() {
               badge="Audited"
               title="Restore creates a new current checkpoint"
               lines={["Audit event: frontend.restore.completed", "Backend and data boundaries remain unchanged"]}
+            />
+          </SectionCard>
+        </aside>
+      </section>
+
+      <section className="sprint6-shell" aria-label="App users roles and publish">
+        <div className="sprint6-main-panel">
+          <SectionCard
+            eyebrow="App Users"
+            title="App Users: Leave Management"
+            action={<button type="button"><UserPlus size={15} /> เชิญผู้ใช้</button>}
+          >
+            <div className="sprint6-status-grid">
+              <div>
+                <Users size={18} />
+                <span>Members</span>
+                <strong>2 active</strong>
+              </div>
+              <div>
+                <UserPlus size={18} />
+                <span>Pending Invites</span>
+                <strong>2 waiting</strong>
+              </div>
+              <div>
+                <ShieldAlert size={18} />
+                <span>Access Requests</span>
+                <strong>1 pending</strong>
+              </div>
+              <div>
+                <Store size={18} />
+                <span>App Store registry</span>
+                <strong>ready</strong>
+              </div>
+            </div>
+
+            <div className="sprint6-tabs" aria-label="App user management tabs">
+              {["Members", "Pending Invites", "Access Requests", "Roles"].map((tab) => (
+                <button type="button" className={tab === "Members" ? "" : "ghost-button"} key={tab}>{tab}</button>
+              ))}
+            </div>
+
+            <DataTable
+              columns={[
+                { key: "user", label: "User" },
+                { key: "type", label: "Type" },
+                { key: "role", label: "App Role" },
+                { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "warning") },
+                { key: "lastAccess", label: "Last Access" }
+              ]}
+              rows={appMembers}
+            />
+          </SectionCard>
+
+          <section className="sprint6-subgrid">
+            <SectionCard eyebrow="Pending Invites" title="Invitation Queue">
+              <DataTable
+                columns={[
+                  { key: "email", label: "Email/User" },
+                  { key: "role", label: "Role" },
+                  { key: "invitedBy", label: "Invited By" },
+                  { key: "expires", label: "Expires" },
+                  { key: "status", label: "Status", tone: (value) => (value === "approval_required" ? "warning" : "info") }
+                ]}
+                rows={pendingInvites}
+              />
+              <DecisionPanel
+                tone="warning"
+                badge="Policy"
+                title="External invite requires approval"
+                lines={["External users remain approval_required until policy review passes", "Invite and policy decision are audited"]}
+              />
+            </SectionCard>
+
+            <SectionCard eyebrow="Access Requests" title="Request Review">
+              <DataTable
+                columns={[
+                  { key: "requester", label: "Requester" },
+                  { key: "role", label: "Requested Role" },
+                  { key: "reason", label: "Reason" },
+                  { key: "submitted", label: "Submitted" },
+                  { key: "status", label: "Status", tone: () => "warning" }
+                ]}
+                rows={accessRequests}
+              />
+            </SectionCard>
+          </section>
+
+          <SectionCard eyebrow="App Roles" title="Role Permission Matrix">
+            <DataTable
+              columns={[
+                { key: "role", label: "Role" },
+                { key: "permissions", label: "Permissions" },
+                { key: "members", label: "Members" },
+                { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "info") }
+              ]}
+              rows={appRoles}
+            />
+          </SectionCard>
+        </div>
+
+        <aside className="sprint6-side-panel">
+          <SectionCard
+            eyebrow="Publish Review"
+            title="Manifest + Readiness checklist"
+            action={<button type="button"><Store size={15} /> Publish to App Store</button>}
+          >
+            <DefinitionGrid
+              items={[
+                { label: "Manifest", value: "manifest v1" },
+                { label: "Route", value: "/apps/leave-management" },
+                { label: "Auth", value: "platform_auth_sdk" },
+                { label: "Frontend", value: "fe-0001" },
+                { label: "PRD", value: "Baseline v1.0" },
+                { label: "Visibility", value: "restricted" }
+              ]}
+            />
+            <div className="publish-checklist">
+              {publishChecklist.map((item) => (
+                <div key={item.check}>
+                  <ClipboardCheck size={16} />
+                  <strong>{item.check}</strong>
+                  <span>{item.detail}</span>
+                  <ToneBadge tone="success">{item.state}</ToneBadge>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard eyebrow="Deployment Record" title="Published Output">
+            <div className="deployment-record">
+              <CheckCircle2 size={20} />
+              <div>
+                <strong>dep_leave_management_001</strong>
+                <span>published · manifest v1 · App Store registry visible</span>
+              </div>
+            </div>
+            <DecisionPanel
+              tone="success"
+              badge="Ready"
+              title="Sprint 7 can consume registry and access state"
+              lines={["Registry entry contains slug, route, roles and visibility", "Deployment links PRD and frontend checkpoint"]}
             />
           </SectionCard>
         </aside>

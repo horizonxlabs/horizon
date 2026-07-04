@@ -251,6 +251,179 @@ export interface FrontendRestoreResult {
   auditEventId: string;
 }
 
+export type AppUserType = "internal" | "external";
+export type AppInvitationStatus = "pending" | "accepted" | "revoked" | "approval_required";
+export type AppAccessRequestStatus = "pending" | "approved" | "rejected";
+export type PublishChecklistStatus = "pass" | "fail";
+
+export interface ManagedApp {
+  id: string;
+  projectId: string;
+  slug: string;
+  name: string;
+  status: "draft" | "published" | "disabled" | "archived";
+  route: string;
+}
+
+export interface AppRoleDefinition {
+  id: string;
+  appId: string;
+  key: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  memberCount: number;
+}
+
+export interface AppMemberRecord {
+  id: string;
+  appId: string;
+  userId: string;
+  email: string;
+  name: string;
+  userType: AppUserType;
+  roleId: string;
+  roleKey: string;
+  roleName: string;
+  status: "active" | "pending" | "approval_required";
+  lastAccessAt?: string;
+}
+
+export interface AppInvitation {
+  id: string;
+  appId: string;
+  projectId: string;
+  email: string;
+  userType: AppUserType;
+  roleKey: string;
+  invitedByUserId: string;
+  status: AppInvitationStatus;
+  expiresAt?: string;
+  note?: string;
+  policyWarning?: string;
+  createdAt: string;
+}
+
+export interface AppAccessRequest {
+  id: string;
+  appId: string;
+  projectId: string;
+  requesterEmail: string;
+  requestedRoleKey: string;
+  reason: string;
+  status: AppAccessRequestStatus;
+  decidedByUserId?: string;
+  decidedAt?: string;
+  createdAt: string;
+}
+
+export interface AppAccessSnapshot {
+  project: PlatformProject;
+  app: ManagedApp;
+  roles: AppRoleDefinition[];
+  members: AppMemberRecord[];
+  invitations: AppInvitation[];
+  accessRequests: AppAccessRequest[];
+}
+
+export interface AppManifest {
+  id: string;
+  appId: string;
+  projectId: string;
+  manifestVersion: string;
+  app: {
+    id: string;
+    slug: string;
+    name: string;
+    route: string;
+    status: ManagedApp["status"];
+  };
+  prd: {
+    versionId: string;
+    version: string;
+  };
+  frontend: {
+    checkpointId: string;
+    version: string;
+    checksum: string;
+    routes: string[];
+  };
+  auth: {
+    mode: "platform_auth_sdk";
+    accessMode: "restricted";
+  };
+  roles: Array<Pick<AppRoleDefinition, "key" | "name" | "permissions">>;
+  database: {
+    schemaName: string;
+    tables: string[];
+  };
+  generatedAt: string;
+}
+
+export interface PublishChecklistItem {
+  key: string;
+  label: string;
+  status: PublishChecklistStatus;
+  detail: string;
+}
+
+export interface PublishReview {
+  project: PlatformProject;
+  manifest: AppManifest;
+  checklist: PublishChecklistItem[];
+  ready: boolean;
+}
+
+export interface PublishRequestRecord {
+  id: string;
+  projectId: string;
+  appId: string;
+  status: "blocked" | "published";
+  requestedByUserId: string;
+  manifestVersion: string;
+  blockingItems: string[];
+  createdAt: string;
+  publishedAt?: string;
+}
+
+export interface DeploymentRecord {
+  id: string;
+  projectId: string;
+  appId: string;
+  publishRequestId: string;
+  status: "published" | "failed";
+  environment: "app_store";
+  route: string;
+  manifestVersion: string;
+  prdVersion: string;
+  frontendCheckpointId: string;
+  publishedByUserId: string;
+  publishedAt: string;
+}
+
+export interface AppStoreRegistryEntry {
+  id: string;
+  appId: string;
+  slug: string;
+  name: string;
+  route: string;
+  status: "published";
+  visibility: "restricted";
+  accessMode: "membership_or_invite";
+  roleKeys: string[];
+  ownerUserId: string;
+  deploymentId: string;
+  manifestVersion: string;
+  publishedAt: string;
+}
+
+export interface PublishResult {
+  publishRequest: PublishRequestRecord;
+  deployment: DeploymentRecord;
+  registryEntry: AppStoreRegistryEntry;
+  manifest: AppManifest;
+}
+
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
@@ -1355,6 +1528,563 @@ export class FrontendVersionService {
   }
 }
 
+export class AppUserAccessService {
+  private readonly roles: AppRoleDefinition[] = [];
+  private readonly members: AppMemberRecord[] = [];
+  private readonly invitations: AppInvitation[] = [];
+  private readonly accessRequests: AppAccessRequest[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly identity: IdentityService
+  ) {}
+
+  getSnapshot(actor: PlatformUser, projectId: string): AppAccessSnapshot {
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+
+    return {
+      project,
+      app,
+      roles: this.rolesForApp(app.id),
+      members: this.members.filter((member) => member.appId === app.id),
+      invitations: this.invitations.filter((invitation) => invitation.appId === app.id),
+      accessRequests: this.accessRequests.filter((request) => request.appId === app.id)
+    };
+  }
+
+  createRole(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      key: string;
+      name: string;
+      description?: string;
+      permissions?: string[];
+    }
+  ): AppRoleDefinition {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+    const key = input.key.trim().toLowerCase();
+    if (!key) throw new ValidationError("App role key is required");
+
+    const role: AppRoleDefinition = {
+      id: `approle_${app.id}_${key}`,
+      appId: app.id,
+      key,
+      name: input.name.trim() || key,
+      description: input.description ?? "Custom app role",
+      permissions: input.permissions?.length ? [...input.permissions] : [`${project.slug}:read`],
+      memberCount: this.members.filter((member) => member.appId === app.id && member.roleKey === key).length
+    };
+
+    const existingIndex = this.roles.findIndex((candidate) => candidate.appId === app.id && candidate.key === key);
+    if (existingIndex >= 0) this.roles[existingIndex] = role;
+    else this.roles.push(role);
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "app.role.saved",
+      resourceType: "app_role",
+      resourceId: role.id,
+      metadata: { projectId: project.id, permissions: role.permissions }
+    });
+
+    return role;
+  }
+
+  createInvitation(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      email: string;
+      roleKey: string;
+      userType: AppUserType;
+      expiresAt?: string;
+      note?: string;
+    }
+  ): AppInvitation {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+    this.requireRoleKey(app.id, input.roleKey);
+    const email = input.email.trim().toLowerCase();
+    if (!email) throw new ValidationError("Invitation email is required");
+
+    const now = new Date().toISOString();
+    const isExternal = input.userType === "external";
+    const invitation: AppInvitation = {
+      id: `appinv_${app.id}_${String(this.invitations.length + 1).padStart(4, "0")}`,
+      appId: app.id,
+      projectId: project.id,
+      email,
+      userType: input.userType,
+      roleKey: input.roleKey,
+      invitedByUserId: actor.id,
+      status: isExternal ? "approval_required" : "pending",
+      expiresAt: input.expiresAt,
+      note: input.note,
+      policyWarning: isExternal ? "External invite requires approval before app access is activated." : undefined,
+      createdAt: now
+    };
+
+    this.invitations.push(invitation);
+    this.audit.record({
+      actorId: actor.id,
+      action: isExternal ? "app.invitation.policy_required" : "app.invitation.created",
+      resourceType: "app_invitation",
+      resourceId: invitation.id,
+      severity: isExternal ? "warning" : "info",
+      metadata: { projectId: project.id, email, roleKey: input.roleKey, userType: input.userType }
+    });
+
+    return invitation;
+  }
+
+  createAccessRequest(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      requesterEmail: string;
+      requestedRoleKey: string;
+      reason: string;
+    }
+  ): AppAccessRequest {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+    this.requireRoleKey(app.id, input.requestedRoleKey);
+    const requesterEmail = input.requesterEmail.trim().toLowerCase();
+    if (!requesterEmail) throw new ValidationError("Requester email is required");
+
+    const request: AppAccessRequest = {
+      id: `appreq_${app.id}_${String(this.accessRequests.length + 1).padStart(4, "0")}`,
+      appId: app.id,
+      projectId: project.id,
+      requesterEmail,
+      requestedRoleKey: input.requestedRoleKey,
+      reason: input.reason.trim() || "Access requested from App Store",
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
+
+    this.accessRequests.push(request);
+    this.audit.record({
+      actorId: actor.id,
+      action: "app.access_request.created",
+      resourceType: "app_access_request",
+      resourceId: request.id,
+      metadata: { projectId: project.id, requesterEmail, requestedRoleKey: input.requestedRoleKey }
+    });
+
+    return request;
+  }
+
+  decideAccessRequest(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      requestId: string;
+      decision: "approved" | "rejected";
+      decidedByUserId?: string;
+    }
+  ): AppAccessRequest {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const app = this.ensureApp(project);
+    this.ensureDefaults(project, app);
+    const request = this.accessRequests.find((candidate) => candidate.id === input.requestId && candidate.appId === app.id);
+    if (!request) throw new ValidationError(`Unknown app access request: ${input.requestId}`);
+    if (request.status !== "pending") throw new ConflictError(`Access request ${input.requestId} is already ${request.status}`);
+
+    request.status = input.decision;
+    request.decidedByUserId = input.decidedByUserId ?? actor.id;
+    request.decidedAt = new Date().toISOString();
+
+    if (input.decision === "approved") {
+      this.addMember(app, request.requesterEmail, request.requestedRoleKey, "internal", "active");
+    }
+
+    this.audit.record({
+      actorId: actor.id,
+      action: input.decision === "approved" ? "app.access_request.approved" : "app.access_request.rejected",
+      resourceType: "app_access_request",
+      resourceId: request.id,
+      metadata: { projectId: project.id, requestedRoleKey: request.requestedRoleKey }
+    });
+
+    return request;
+  }
+
+  rolesForProject(actor: PlatformUser, projectId: string): AppRoleDefinition[] {
+    return this.getSnapshot(actor, projectId).roles;
+  }
+
+  membersForProject(actor: PlatformUser, projectId: string): AppMemberRecord[] {
+    return this.getSnapshot(actor, projectId).members;
+  }
+
+  private ensureApp(project: PlatformProject): ManagedApp {
+    return {
+      id: project.appId ?? `app_${project.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+      projectId: project.id,
+      slug: project.slug,
+      name: project.name,
+      status: project.status === "published" ? "published" : "draft",
+      route: `/apps/${project.slug}`
+    };
+  }
+
+  private ensureDefaults(project: PlatformProject, app: ManagedApp): void {
+    if (!this.roles.some((role) => role.appId === app.id)) {
+      const defaultRoles: Array<Omit<AppRoleDefinition, "id" | "appId" | "memberCount">> = [
+        {
+          key: "employee",
+          name: "Employee",
+          description: "Request and view own leave records.",
+          permissions: ["leave:request", "leave:view-own"]
+        },
+        {
+          key: "manager",
+          name: "Manager",
+          description: "Approve team leave requests and view team queue.",
+          permissions: ["leave:approve", "leave:view-team"]
+        },
+        {
+          key: "hr_admin",
+          name: "HR Admin",
+          description: "Administer leave policies and reporting.",
+          permissions: ["leave:admin", "leave:report"]
+        }
+      ];
+
+      for (const role of defaultRoles) {
+        this.roles.push({
+          ...role,
+          id: `approle_${app.id}_${role.key}`,
+          appId: app.id,
+          memberCount: 0
+        });
+      }
+    }
+
+    if (!this.members.some((member) => member.appId === app.id)) {
+      this.addMember(app, "creator@company.com", "hr_admin", "internal", "active", project.ownerUserId);
+      this.addMember(app, "user@company.com", "employee", "internal", "active", mockUsers.endUser.id);
+    }
+
+    if (!this.invitations.some((invitation) => invitation.appId === app.id)) {
+      this.invitations.push({
+        id: `appinv_${app.id}_seed_internal`,
+        appId: app.id,
+        projectId: project.id,
+        email: "manager@company.com",
+        userType: "internal",
+        roleKey: "manager",
+        invitedByUserId: project.ownerUserId,
+        status: "pending",
+        note: "Join manager approval queue",
+        createdAt: new Date("2026-08-17T09:00:00.000Z").toISOString()
+      });
+    }
+
+    if (!this.accessRequests.some((request) => request.appId === app.id)) {
+      this.accessRequests.push({
+        id: `appreq_${app.id}_seed_manager`,
+        appId: app.id,
+        projectId: project.id,
+        requesterEmail: "manager@company.com",
+        requestedRoleKey: "manager",
+        reason: "Needs approval queue access",
+        status: "pending",
+        createdAt: new Date("2026-08-17T10:00:00.000Z").toISOString()
+      });
+    }
+
+    this.recountMembers(app.id);
+  }
+
+  private requireRoleKey(appId: string, roleKey: string): AppRoleDefinition {
+    const role = this.roles.find((candidate) => candidate.appId === appId && candidate.key === roleKey);
+    if (!role) throw new ValidationError(`Unknown app role: ${roleKey}`);
+    return role;
+  }
+
+  private addMember(
+    app: ManagedApp,
+    email: string,
+    roleKey: string,
+    userType: AppUserType,
+    status: AppMemberRecord["status"],
+    userId?: string
+  ): AppMemberRecord {
+    const role = this.requireRoleKey(app.id, roleKey);
+    const existing = this.members.find((member) => member.appId === app.id && member.email === email && member.roleKey === roleKey);
+    if (existing) return existing;
+    const knownUser = this.identity.listUsers().find((user) => user.email === email);
+    const member: AppMemberRecord = {
+      id: `appmem_${app.id}_${String(this.members.length + 1).padStart(4, "0")}`,
+      appId: app.id,
+      userId: userId ?? knownUser?.id ?? slugId("usr", email),
+      email,
+      name: knownUser?.name ?? email.split("@")[0],
+      userType,
+      roleId: role.id,
+      roleKey: role.key,
+      roleName: role.name,
+      status,
+      lastAccessAt: status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
+    };
+
+    this.members.push(member);
+    this.recountMembers(app.id);
+    return member;
+  }
+
+  private rolesForApp(appId: string): AppRoleDefinition[] {
+    this.recountMembers(appId);
+    return this.roles.filter((role) => role.appId === appId);
+  }
+
+  private recountMembers(appId: string): void {
+    for (const role of this.roles.filter((candidate) => candidate.appId === appId)) {
+      role.memberCount = this.members.filter((member) => member.appId === appId && member.roleKey === role.key).length;
+    }
+  }
+}
+
+export class PublishService {
+  private readonly manifests: AppManifest[] = [];
+  private readonly publishRequests: PublishRequestRecord[] = [];
+  private readonly deployments: DeploymentRecord[] = [];
+  private readonly registry: AppStoreRegistryEntry[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly prds: PrdService,
+    private readonly frontendVersions: FrontendVersionService,
+    private readonly databaseView: DatabaseViewService,
+    private readonly appAccess: AppUserAccessService
+  ) {}
+
+  getReview(actor: PlatformUser, projectId: string): PublishReview {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const manifest = this.buildManifest(actor, project);
+    const checklist = this.buildChecklist(actor, project, manifest);
+    return {
+      project,
+      manifest,
+      checklist,
+      ready: checklist.every((item) => item.status === "pass")
+    };
+  }
+
+  publishApp(actor: PlatformUser, projectId: string): PublishResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const review = this.getReview(actor, projectId);
+    const blockingItems = review.checklist.filter((item) => item.status === "fail").map((item) => item.label);
+    const now = new Date().toISOString();
+    const publishRequest: PublishRequestRecord = {
+      id: `pubreq_${review.manifest.app.slug}_${String(this.publishRequests.length + 1).padStart(4, "0")}`,
+      projectId: review.project.id,
+      appId: review.manifest.appId,
+      status: blockingItems.length > 0 ? "blocked" : "published",
+      requestedByUserId: actor.id,
+      manifestVersion: review.manifest.manifestVersion,
+      blockingItems,
+      createdAt: now,
+      publishedAt: blockingItems.length > 0 ? undefined : now
+    };
+
+    this.publishRequests.push(publishRequest);
+
+    if (blockingItems.length > 0) {
+      this.audit.record({
+        actorId: actor.id,
+        action: "app.publish.blocked",
+        resourceType: "publish_request",
+        resourceId: publishRequest.id,
+        severity: "warning",
+        metadata: { projectId: review.project.id, blockingItems }
+      });
+      throw new ValidationError(`Publish blocked: ${blockingItems.join(", ")}`);
+    }
+
+    this.storeManifest(review.manifest);
+    review.project.status = "published";
+    const deployment: DeploymentRecord = {
+      id: `dep_${review.manifest.app.slug.replace(/[^a-z0-9]+/gi, "_")}_${String(this.deployments.length + 1).padStart(3, "0")}`,
+      projectId: review.project.id,
+      appId: review.manifest.appId,
+      publishRequestId: publishRequest.id,
+      status: "published",
+      environment: "app_store",
+      route: review.manifest.app.route,
+      manifestVersion: review.manifest.manifestVersion,
+      prdVersion: review.manifest.prd.version,
+      frontendCheckpointId: review.manifest.frontend.checkpointId,
+      publishedByUserId: actor.id,
+      publishedAt: now
+    };
+
+    const registryEntry: AppStoreRegistryEntry = {
+      id: `store_${review.manifest.app.slug}`,
+      appId: review.manifest.appId,
+      slug: review.manifest.app.slug,
+      name: review.manifest.app.name,
+      route: review.manifest.app.route,
+      status: "published",
+      visibility: "restricted",
+      accessMode: "membership_or_invite",
+      roleKeys: review.manifest.roles.map((role) => role.key),
+      ownerUserId: review.project.ownerUserId,
+      deploymentId: deployment.id,
+      manifestVersion: review.manifest.manifestVersion,
+      publishedAt: now
+    };
+
+    this.deployments.push(deployment);
+    this.upsertRegistry(registryEntry);
+    this.audit.record({
+      actorId: actor.id,
+      action: "app.publish.completed",
+      resourceType: "publish_request",
+      resourceId: publishRequest.id,
+      metadata: {
+        projectId: review.project.id,
+        deploymentId: deployment.id,
+        registryEntryId: registryEntry.id,
+        manifestVersion: review.manifest.manifestVersion
+      }
+    });
+
+    return {
+      publishRequest,
+      deployment,
+      registryEntry,
+      manifest: review.manifest
+    };
+  }
+
+  listRegistry(actor: PlatformUser): AppStoreRegistryEntry[] {
+    this.auth.requireRole(actor, ["admin", "creator", "end_user"]);
+    return [...this.registry];
+  }
+
+  private buildManifest(actor: PlatformUser, project: PlatformProject): AppManifest {
+    const appAccess = this.appAccess.getSnapshot(actor, project.id);
+    let baseline: PrdVersion | undefined;
+    try {
+      baseline = this.prds.listVersions(actor, project.id).find((version) => version.isBaseline);
+    } catch (error) {
+      if (!(error instanceof ValidationError)) throw error;
+    }
+    const database = this.databaseView.getDatabaseView(actor, project.id);
+    let activeCheckpoint: FrontendCheckpoint | undefined;
+    try {
+      activeCheckpoint = this.frontendVersions.getTimeline(actor, project.id).activeCheckpoint;
+    } catch (error) {
+      if (!(error instanceof ValidationError)) throw error;
+    }
+
+    return {
+      id: `manifest_${appAccess.app.id}_v1`,
+      appId: appAccess.app.id,
+      projectId: project.id,
+      manifestVersion: "1",
+      app: {
+        id: appAccess.app.id,
+        slug: appAccess.app.slug,
+        name: appAccess.app.name,
+        route: appAccess.app.route,
+        status: appAccess.app.status
+      },
+      prd: {
+        versionId: baseline?.id ?? "",
+        version: baseline?.version ?? ""
+      },
+      frontend: {
+        checkpointId: activeCheckpoint?.id ?? "",
+        version: activeCheckpoint?.version ?? "",
+        checksum: activeCheckpoint?.checksum ?? "",
+        routes: activeCheckpoint?.routeSnapshot ?? []
+      },
+      auth: {
+        mode: "platform_auth_sdk",
+        accessMode: "restricted"
+      },
+      roles: appAccess.roles.map((role) => ({
+        key: role.key,
+        name: role.name,
+        permissions: [...role.permissions]
+      })),
+      database: {
+        schemaName: database.schemaName,
+        tables: database.tables.map((table) => table.key)
+      },
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  private buildChecklist(actor: PlatformUser, project: PlatformProject, manifest: AppManifest): PublishChecklistItem[] {
+    const access = this.appAccess.getSnapshot(actor, project.id);
+    return [
+      {
+        key: "prd_baseline",
+        label: "PRD baseline",
+        status: manifest.prd.versionId ? "pass" : "fail",
+        detail: manifest.prd.versionId ? `Baseline ${manifest.prd.version}` : "Confirm PRD baseline before publishing"
+      },
+      {
+        key: "active_frontend",
+        label: "Active frontend checkpoint",
+        status: manifest.frontend.checkpointId ? "pass" : "fail",
+        detail: manifest.frontend.checkpointId ? manifest.frontend.version : "Generate or restore an active frontend checkpoint"
+      },
+      {
+        key: "app_roles",
+        label: "App roles",
+        status: manifest.roles.length > 0 ? "pass" : "fail",
+        detail: manifest.roles.length > 0 ? `${manifest.roles.length} roles configured` : "Create at least one app role"
+      },
+      {
+        key: "app_owner",
+        label: "At least one owner",
+        status: project.ownerUserId || access.members.some((member) => member.roleKey === "hr_admin") ? "pass" : "fail",
+        detail: project.ownerUserId ? `Owner ${project.ownerUserId}` : "Assign an owner before publishing"
+      },
+      {
+        key: "blocking_guardrail",
+        label: "No blocking guardrail event",
+        status: "pass",
+        detail: "No blocking guardrail event is attached to this publish review"
+      }
+    ];
+  }
+
+  private storeManifest(manifest: AppManifest): void {
+    const existingIndex = this.manifests.findIndex((candidate) => candidate.appId === manifest.appId);
+    if (existingIndex >= 0) this.manifests[existingIndex] = manifest;
+    else this.manifests.push(manifest);
+  }
+
+  private upsertRegistry(entry: AppStoreRegistryEntry): void {
+    const existingIndex = this.registry.findIndex((candidate) => candidate.appId === entry.appId);
+    if (existingIndex >= 0) this.registry[existingIndex] = entry;
+    else this.registry.push(entry);
+  }
+}
+
 export class WorkspaceService {
   private readonly tasks: WorkspaceTask[] = [];
   private readonly previews: PreviewVersion[] = [];
@@ -1576,6 +2306,8 @@ export interface PlatformApiServices {
   workspace: WorkspaceService;
   databaseView: DatabaseViewService;
   frontendVersions: FrontendVersionService;
+  appAccess: AppUserAccessService;
+  publish: PublishService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -1594,6 +2326,8 @@ export function createPlatformApiServices(): PlatformApiServices {
   const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
   const databaseView = new DatabaseViewService(projects);
   const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
+  const appAccess = new AppUserAccessService(auth, audit, projects, identity);
+  const publish = new PublishService(auth, audit, projects, prds, frontendVersions, databaseView, appAccess);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions);
 
   return {
@@ -1607,6 +2341,8 @@ export function createPlatformApiServices(): PlatformApiServices {
     workspace,
     databaseView,
     frontendVersions,
+    appAccess,
+    publish,
     envelope: { success, failure }
   };
 }

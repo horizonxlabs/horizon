@@ -18,6 +18,8 @@ export const navigation: Record<Surface, NavItem[]> = {
     { label: "Projects", route: "/creator" },
     { label: "Workspace", route: "/creator/projects/leave-management" },
     { label: "PRD", route: "/creator/projects/leave-management/prd" },
+    { label: "Users", route: "/creator/projects/leave-management/users" },
+    { label: "Publish", route: "/creator/projects/leave-management/publish" },
     { label: "Tickets", route: "/creator/projects/leave-management/tickets" }
   ],
   store: [

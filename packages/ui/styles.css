@@ -1097,6 +1097,96 @@ button {
   line-height: 1.45;
 }
 
+.sprint6-shell {
+  align-items: start;
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: minmax(0, 1fr) 360px;
+  margin-bottom: var(--evcp-space-5);
+}
+
+.sprint6-main-panel,
+.sprint6-side-panel {
+  display: grid;
+  gap: var(--evcp-space-4);
+}
+
+.sprint6-status-grid {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: var(--evcp-space-4);
+}
+
+.sprint6-status-grid div {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 12px;
+}
+
+.sprint6-status-grid svg {
+  color: var(--evcp-color-primary);
+}
+
+.sprint6-status-grid span,
+.publish-checklist span,
+.deployment-record span {
+  color: var(--evcp-color-muted);
+}
+
+.sprint6-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+  margin-bottom: var(--evcp-space-3);
+}
+
+.sprint6-subgrid {
+  display: grid;
+  gap: var(--evcp-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.publish-checklist {
+  display: grid;
+  gap: var(--evcp-space-2);
+  margin-top: var(--evcp-space-4);
+}
+
+.publish-checklist div,
+.deployment-record {
+  align-items: center;
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-2);
+  padding: 10px;
+}
+
+.publish-checklist div {
+  grid-template-columns: auto 1fr minmax(90px, .7fr) auto;
+}
+
+.publish-checklist svg,
+.deployment-record svg {
+  color: var(--evcp-color-success-text);
+}
+
+.deployment-record {
+  background: var(--evcp-color-surface-muted);
+  grid-template-columns: auto 1fr;
+}
+
+.deployment-record > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     display: block;
@@ -1135,7 +1225,11 @@ button {
   .preview-board,
   .sprint5-shell,
   .database-overview,
-  .sprint5-subgrid {
+  .sprint5-subgrid,
+  .sprint6-shell,
+  .sprint6-status-grid,
+  .sprint6-subgrid,
+  .publish-checklist div {
     grid-template-columns: 1fr;
   }
 
