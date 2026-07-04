@@ -4,7 +4,7 @@ Private AI application builder for organizations.
 
 ## Current Implementation State
 
-Sprint 0 foundation through Sprint 12 Installer Backup Restore are implemented on top of the validated requirements baseline.
+Sprint 0 foundation through Sprint 13 Observability and License are implemented on top of the validated requirements baseline.
 
 ## Commands
 
@@ -26,6 +26,7 @@ pnpm verify:sprint9
 pnpm verify:sprint10
 pnpm verify:sprint11
 pnpm verify:sprint12
+pnpm verify:sprint13
 ```
 
 Start frontend shells:
@@ -187,3 +188,13 @@ DATABASE_URL='postgresql://evcp:evcp@127.0.0.1:5432/evcp?schema=public' pnpm --f
 - Restore drill report with pass/fail validation checks and critical audit on failed recovery
 - Admin Installer, Backup and Restore UI
 - Prisma migration and seed data for installer, setup, backup, PITR and restore drill evidence
+
+## Sprint 13 Scope
+
+- Production observability dashboard service with core service health, generated app health, queue backpressure, retention and telemetry export state
+- Admin production API routes for observability, upgrade compatibility checks, rollback reports and production overview
+- Signed license install and validation with fingerprint-only storage, edition, seats, app limit, AI entitlement, expiry, warning/grace windows and offline cache
+- License enforcement API for publish, AI generation, new app, external invite and user activation actions
+- Existing app continuity behavior that allows `run_existing_app` and preserves data when license enforcement blocks privileged actions
+- Prisma migration and seed data for service health, telemetry export, upgrade report, rollback report, license record, validation log and enforcement event evidence
+- Admin Observability and License UI

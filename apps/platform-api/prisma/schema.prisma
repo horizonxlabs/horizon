@@ -98,6 +98,13 @@ model PlatformUser {
   backupRuns BackupRun[] @relation("BackupRunCreatedBy")
   pitrConfigurations PitrConfiguration[] @relation("PitrConfigurationCreatedBy")
   restoreDrillReports RestoreDrillReport[] @relation("RestoreDrillCreatedBy")
+  serviceHealthSnapshots ServiceHealthSnapshot[] @relation("ServiceHealthSnapshotCreatedBy")
+  telemetryExportConfigs TelemetryExportConfig[] @relation("TelemetryExportConfigCreatedBy")
+  upgradeCompatibilityReports UpgradeCompatibilityReport[] @relation("UpgradeCompatibilityReportCreatedBy")
+  rollbackReports RollbackReport[] @relation("RollbackReportCreatedBy")
+  licenseRecords LicenseRecord[] @relation("LicenseRecordCreatedBy")
+  licenseValidationLogs LicenseValidationLog[] @relation("LicenseValidationLogCreatedBy")
+  licenseEnforcementEvents LicenseEnforcementEvent[] @relation("LicenseEnforcementActor")
   notifications InAppNotification[]
   auditLogs   AuditLog[]
   guardrailEvents GuardrailEvent[]
@@ -1370,4 +1377,130 @@ model RestoreDrillReport {
 
   @@index([status, createdAt])
   @@map("restore_drill_reports")
+}
+
+model ServiceHealthSnapshot {
+  id                 String   @id
+  serviceName        String   @map("service_name")
+  serviceType        String   @map("service_type")
+  status             String
+  p95LatencyMs       Int?     @map("p95_latency_ms")
+  queueDepth         Int?     @map("queue_depth")
+  errorRate          Float?   @map("error_rate")
+  auditRetentionDays Int      @map("audit_retention_days")
+  signal             Json     @default("{}")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("ServiceHealthSnapshotCreatedBy", fields: [createdByUserId], references: [id])
+  capturedAt         DateTime @default(now()) @map("captured_at")
+
+  @@index([serviceType, status, capturedAt])
+  @@map("service_health_snapshots")
+}
+
+model TelemetryExportConfig {
+  id                 String   @id
+  name               String
+  endpoint           String
+  protocol           String
+  signals            String[]
+  status             String
+  auditRetentionDays Int      @map("audit_retention_days")
+  createdByUserId    String   @map("created_by_user_id")
+  createdBy          PlatformUser @relation("TelemetryExportConfigCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([status, protocol])
+  @@map("telemetry_export_configs")
+}
+
+model UpgradeCompatibilityReport {
+  id              String   @id
+  sourceVersion   String   @map("source_version")
+  targetVersion   String   @map("target_version")
+  status          String
+  upgradeBlocked  Boolean  @map("upgrade_blocked")
+  checks          Json
+  blockingReasons String[] @default([]) @map("blocking_reasons")
+  createdByUserId String   @map("created_by_user_id")
+  createdBy       PlatformUser @relation("UpgradeCompatibilityReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([targetVersion, status, createdAt])
+  @@map("upgrade_compatibility_reports")
+}
+
+model RollbackReport {
+  id                   String   @id
+  fromVersion          String   @map("from_version")
+  toVersion            String   @map("to_version")
+  status               String
+  reason               String
+  rollbackWindowEndsAt DateTime @map("rollback_window_ends_at")
+  reportPath           String   @map("report_path")
+  createdByUserId      String   @map("created_by_user_id")
+  createdBy            PlatformUser @relation("RollbackReportCreatedBy", fields: [createdByUserId], references: [id])
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("rollback_reports")
+}
+
+model LicenseRecord {
+  id                         String   @id
+  licenseKeyFingerprint      String   @map("license_key_fingerprint")
+  signedPayloadFingerprint   String   @map("signed_payload_fingerprint")
+  issuer                     String
+  subject                    String
+  edition                    String
+  seatLimit                  Int      @map("seat_limit")
+  appLimit                   Int      @map("app_limit")
+  aiUsageMonthlyTokens       Int      @map("ai_usage_monthly_tokens")
+  expiresAt                  DateTime @map("expires_at")
+  warningStartsAt            DateTime @map("warning_starts_at")
+  graceEndsAt                DateTime @map("grace_ends_at")
+  offlineValidUntil          DateTime @map("offline_valid_until")
+  status                     String
+  restrictedActions          String[] @default([]) @map("restricted_actions")
+  createdByUserId            String   @map("created_by_user_id")
+  createdBy                  PlatformUser @relation("LicenseRecordCreatedBy", fields: [createdByUserId], references: [id])
+  validationLogs             LicenseValidationLog[]
+  enforcementEvents          LicenseEnforcementEvent[]
+  createdAt                  DateTime @default(now()) @map("created_at")
+
+  @@index([status, expiresAt])
+  @@map("license_records")
+}
+
+model LicenseValidationLog {
+  id                 String   @id
+  licenseId          String   @map("license_id")
+  source             String
+  status             String
+  offlineCacheUsed   Boolean  @map("offline_cache_used")
+  offlineValidUntil  DateTime @map("offline_valid_until")
+  checkedAt          DateTime @map("checked_at")
+  createdByUserId    String   @map("created_by_user_id")
+  license            LicenseRecord @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  createdBy          PlatformUser @relation("LicenseValidationLogCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([licenseId, checkedAt])
+  @@map("license_validation_logs")
+}
+
+model LicenseEnforcementEvent {
+  id                   String   @id
+  licenseId            String   @map("license_id")
+  actorUserId          String   @map("actor_user_id")
+  action               String
+  allowed              Boolean
+  status               String
+  reasons              String[] @default([])
+  restrictedActions    String[] @default([]) @map("restricted_actions")
+  preserveExistingData Boolean  @map("preserve_existing_data")
+  checkedAt            DateTime @map("checked_at")
+  license              LicenseRecord @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  actor                PlatformUser @relation("LicenseEnforcementActor", fields: [actorUserId], references: [id])
+
+  @@index([action, allowed, checkedAt])
+  @@map("license_enforcement_events")
 }

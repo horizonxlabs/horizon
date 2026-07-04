@@ -237,6 +237,53 @@ const restoreValidationRows = [
   { check: "audit-events", status: "pass", evidence: "critical restore audit retained" }
 ];
 
+const observabilityLicenseKpis = [
+  { label: "Service Health", value: "8/8", detail: "core services reporting", icon: Activity, tone: "success" },
+  { label: "Telemetry Export", value: "OTLP", detail: "metrics/logs/traces/alerts", icon: Route, tone: "info" },
+  { label: "License Validation", value: "active", detail: "offline cache until 2027-01-14", icon: Fingerprint, tone: "success" },
+  { label: "License Enforcement", value: "guarded", detail: "privileged actions blocked after grace", icon: ShieldCheck, tone: "warning" }
+] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
+
+const productionServiceRows = [
+  { service: "Platform API", type: "core", status: "healthy", signal: "p95 42ms", retention: "365d audit" },
+  { service: "PostgreSQL", type: "database", status: "healthy", signal: "migration current", retention: "365d audit" },
+  { service: "Keycloak", type: "auth", status: "healthy", signal: "realm evcp active", retention: "90d logs" },
+  { service: "Redis + BullMQ", type: "queue", status: "healthy", signal: "0 delayed jobs", retention: "90d logs" }
+];
+
+const generatedAppHealthRows = [
+  { app: "Leave Management", route: "/apps/leave-management", status: "healthy", readiness: "5/5 checks" },
+  { app: "PRD Workspace Preview", route: "/preview/leave-management", status: "healthy", readiness: "schema isolated" }
+];
+
+const queueBackpressureRows = [
+  { queue: "ai-tasks", depth: "0", oldest: "-", status: "healthy" },
+  { queue: "builds", depth: "1", oldest: "00:01:12", status: "healthy" },
+  { queue: "deployments", depth: "0", oldest: "-", status: "healthy" },
+  { queue: "indexing", depth: "3", oldest: "00:02:05", status: "warning" }
+];
+
+const telemetryExportRows = [
+  { signal: "metrics", endpoint: "otlp://observability.company.test:4317", status: "configured" },
+  { signal: "logs", endpoint: "otlp://observability.company.test:4317", status: "configured" },
+  { signal: "traces", endpoint: "otlp://observability.company.test:4317", status: "configured" },
+  { signal: "alerts", endpoint: "otlp://observability.company.test:4317", status: "configured" }
+];
+
+const upgradeCompatibilityRows = [
+  { check: "Disk space", observed: "20GB", required: ">=100GB", status: "blocked" },
+  { check: "Last backup", observed: "failed", required: "succeeded", status: "blocked" },
+  { check: "Service health", observed: "degraded", required: "healthy", status: "blocked" },
+  { check: "License status", observed: "expired", required: "active / warning", status: "blocked" }
+];
+
+const licenseEnforcementRows = [
+  { action: "publish", decision: "blocked", reason: "expired beyond grace", data: "preserved" },
+  { action: "ai_generation", decision: "blocked", reason: "entitlement exceeded", data: "preserved" },
+  { action: "new_external_invite", decision: "blocked", reason: "seat limit exceeded", data: "preserved" },
+  { action: "run_existing_app", decision: "allowed", reason: "existing app continuity", data: "preserved" }
+];
+
 function AdminApp() {
   useEffect(() => {
     if (!window.location.hash) {
@@ -1135,6 +1182,187 @@ function AdminApp() {
                 { name: "Storage Contract", detail: "MinIO and S3-compatible targets", status: "healthy" },
                 { name: "PITR Metadata", detail: "WAL retention and target timestamp recorded", status: "healthy" },
                 { name: "Admin-only APIs", detail: "Creator and End User denied", status: "healthy" }
+              ]}
+            />
+          </section>
+
+          <section id="observability-license" className="observability-license-shell" aria-label="Observability and License">
+            <div className="observability-license-header">
+              <div>
+                <span className="eyebrow">Production Control</span>
+                <h2>Observability and License</h2>
+                <p>Admin evidence for production health, generated app signals, queue backpressure, telemetry export, upgrade safety and signed license enforcement.</p>
+              </div>
+              <div className="ds-page-actions">
+                <button type="button" className="secondary-button"><Activity size={16} /> Export Health</button>
+                <button type="button"><Fingerprint size={16} /> Validate License</button>
+              </div>
+            </div>
+
+            <section className="observability-license-kpi-grid">
+              {observabilityLicenseKpis.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <MetricCard
+                    key={item.label}
+                    label={item.label}
+                    value={item.value}
+                    detail={item.detail}
+                    icon={<Icon size={18} />}
+                    tone={item.tone}
+                  />
+                );
+              })}
+            </section>
+
+            <section className="observability-license-layout">
+              <WorkflowRail
+                title="Production Gate"
+                steps={[
+                  { label: "Service Health", icon: <Activity size={16} /> },
+                  { label: "Generated App Health", icon: <ServerCog size={16} /> },
+                  { label: "Queue Backpressure", icon: <Gauge size={16} /> },
+                  { label: "Telemetry Export", icon: <Route size={16} /> },
+                  { label: "Upgrade Compatibility", icon: <ShieldCheck size={16} /> },
+                  { label: "Rollback Report", icon: <Database size={16} /> },
+                  { label: "License Validation", icon: <Fingerprint size={16} /> },
+                  { label: "License Enforcement", icon: <LockKeyhole size={16} /> }
+                ]}
+                alert={{
+                  icon: <AlertTriangle size={18} />,
+                  title: "License blocks privileged actions only",
+                  description: "Existing apps keep running and data is preserved when expiry or quota enforcement applies.",
+                  tone: "warning"
+                }}
+              />
+
+              <div className="observability-license-grid">
+                <SectionCard eyebrow="Production" title="Service Health">
+                  <DataTable
+                    columns={[
+                      { key: "service", label: "Service" },
+                      { key: "type", label: "Type" },
+                      { key: "status", label: "Status", tone: () => "success" },
+                      { key: "signal", label: "Signal" },
+                      { key: "retention", label: "Retention" }
+                    ]}
+                    rows={productionServiceRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Generated Apps" title="Generated App Health">
+                  <DataTable
+                    columns={[
+                      { key: "app", label: "App" },
+                      { key: "route", label: "Route" },
+                      { key: "status", label: "Status", tone: () => "success" },
+                      { key: "readiness", label: "Readiness" }
+                    ]}
+                    rows={generatedAppHealthRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Queues" title="Queue Backpressure">
+                  <DataTable
+                    columns={[
+                      { key: "queue", label: "Queue" },
+                      { key: "depth", label: "Depth" },
+                      { key: "oldest", label: "Oldest job" },
+                      { key: "status", label: "Status", tone: (value) => (value === "warning" ? "warning" : "success") }
+                    ]}
+                    rows={queueBackpressureRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Telemetry" title="Telemetry Export">
+                  <DataTable
+                    columns={[
+                      { key: "signal", label: "Signal" },
+                      { key: "endpoint", label: "Endpoint" },
+                      { key: "status", label: "Status", tone: () => "info" }
+                    ]}
+                    rows={telemetryExportRows}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Upgrade" title="Upgrade Compatibility">
+                  <div className="observability-desktop-table">
+                    <DataTable
+                      columns={[
+                        { key: "check", label: "Check" },
+                        { key: "observed", label: "Observed" },
+                        { key: "required", label: "Required" },
+                        { key: "status", label: "Status", tone: () => "danger" }
+                      ]}
+                      rows={upgradeCompatibilityRows}
+                    />
+                  </div>
+                  <DecisionPanel
+                    tone="danger"
+                    badge="blocked"
+                    title="Unsafe upgrade cannot continue"
+                    lines={["Report: upgrade_check_001", "Blocking reasons are retained for PO and IT Admin acceptance"]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="Rollback" title="Rollback Report">
+                  <DefinitionGrid
+                    items={[
+                      { label: "Report", value: "rollback_report_001" },
+                      { label: "From / To", value: "1.1.1 -> 1.1.0" },
+                      { label: "Status", value: <ToneBadge tone="success">succeeded</ToneBadge> },
+                      { label: "Window ends", value: "2026-10-05T12:00:00.000Z" },
+                      { label: "Path", value: "reports/rollback/rollback_report_001.json" }
+                    ]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="License" title="License Validation">
+                  <DefinitionGrid
+                    items={[
+                      { label: "License", value: "license_enterprise_2026" },
+                      { label: "Edition", value: "enterprise" },
+                      { label: "Seat / App Limit", value: "100 seats / 25 apps" },
+                      { label: "AI entitlement", value: "1,000,000 tokens/month" },
+                      { label: "Offline cache", value: "valid until 2027-01-14" },
+                      { label: "Secret handling", value: "fingerprint only" }
+                    ]}
+                  />
+                </SectionCard>
+
+                <SectionCard eyebrow="License" title="License Enforcement">
+                  <div className="observability-desktop-table">
+                    <DataTable
+                      columns={[
+                        { key: "action", label: "Action" },
+                        { key: "decision", label: "Decision", tone: (value) => (value === "allowed" ? "success" : "warning") },
+                        { key: "reason", label: "Reason" },
+                        { key: "data", label: "Data" }
+                      ]}
+                      rows={licenseEnforcementRows}
+                    />
+                  </div>
+                  <div className="license-enforcement-mobile-list">
+                    {licenseEnforcementRows.map((row) => (
+                      <article key={row.action}>
+                        <strong>{row.action}</strong>
+                        <ToneBadge tone={row.decision === "allowed" ? "success" : "warning"}>{row.decision}</ToneBadge>
+                        <span>{row.reason}</span>
+                        <small>Data: {row.data}</small>
+                      </article>
+                    ))}
+                  </div>
+                </SectionCard>
+              </div>
+            </section>
+
+            <ServiceStrip
+              services={[
+                { name: "Health Dashboard", detail: "Platform and generated app signals visible", status: "healthy" },
+                { name: "Telemetry Contract", detail: "OTLP export configured", status: "healthy" },
+                { name: "Upgrade Gate", detail: "Unsafe upgrade blocked", status: "degraded" },
+                { name: "License Guard", detail: "Signed payload and offline cache enforced", status: "healthy" },
+                { name: "Data Continuity", detail: "Existing apps remain available", status: "healthy" }
               ]}
             />
           </section>

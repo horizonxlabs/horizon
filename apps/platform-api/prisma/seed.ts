@@ -1936,6 +1936,203 @@ async function main() {
       createdByUserId: "usr_admin"
     }
   });
+
+  await prisma.serviceHealthSnapshot.upsert({
+    where: { id: "svc_health_platform_api" },
+    update: {
+      serviceName: "Platform API",
+      serviceType: "platform",
+      status: "healthy",
+      p95LatencyMs: 42,
+      queueDepth: 0,
+      errorRate: 0,
+      auditRetentionDays: 365,
+      signal: { healthEndpoint: "/health", logs: "structured", owner: "IT Admin" },
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "svc_health_platform_api",
+      serviceName: "Platform API",
+      serviceType: "platform",
+      status: "healthy",
+      p95LatencyMs: 42,
+      queueDepth: 0,
+      errorRate: 0,
+      auditRetentionDays: 365,
+      signal: { healthEndpoint: "/health", logs: "structured", owner: "IT Admin" },
+      createdByUserId: "usr_admin",
+      capturedAt: new Date("2026-10-05T08:00:00.000Z")
+    }
+  });
+
+  await prisma.telemetryExportConfig.upsert({
+    where: { id: "telemetry_otlp_default" },
+    update: {
+      name: "Default OTLP Export",
+      endpoint: "otlp://observability.company.test:4317",
+      protocol: "otlp",
+      signals: ["metrics", "logs", "traces", "alerts"],
+      status: "configured",
+      auditRetentionDays: 365,
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "telemetry_otlp_default",
+      name: "Default OTLP Export",
+      endpoint: "otlp://observability.company.test:4317",
+      protocol: "otlp",
+      signals: ["metrics", "logs", "traces", "alerts"],
+      status: "configured",
+      auditRetentionDays: 365,
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.upgradeCompatibilityReport.upsert({
+    where: { id: "upgrade_check_001" },
+    update: {
+      sourceVersion: "1.0.0",
+      targetVersion: "1.1.0",
+      status: "blocked",
+      upgradeBlocked: true,
+      checks: [
+        { name: "Disk space", passed: false, observed: "20GB", required: ">=100GB" },
+        { name: "Last backup", passed: false, observed: "failed", required: "succeeded" },
+        { name: "License status", passed: false, observed: "expired", required: "active or warning" }
+      ],
+      blockingReasons: ["Disk space below minimum", "Last backup failed", "License is expired"],
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "upgrade_check_001",
+      sourceVersion: "1.0.0",
+      targetVersion: "1.1.0",
+      status: "blocked",
+      upgradeBlocked: true,
+      checks: [
+        { name: "Disk space", passed: false, observed: "20GB", required: ">=100GB" },
+        { name: "Last backup", passed: false, observed: "failed", required: "succeeded" },
+        { name: "License status", passed: false, observed: "expired", required: "active or warning" }
+      ],
+      blockingReasons: ["Disk space below minimum", "Last backup failed", "License is expired"],
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-05T08:10:00.000Z")
+    }
+  });
+
+  await prisma.rollbackReport.upsert({
+    where: { id: "rollback_report_001" },
+    update: {
+      fromVersion: "1.1.1",
+      toVersion: "1.1.0",
+      status: "succeeded",
+      reason: "Upgrade health check failed",
+      rollbackWindowEndsAt: new Date("2026-10-05T12:00:00.000Z"),
+      reportPath: "reports/rollback/rollback_report_001.json",
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "rollback_report_001",
+      fromVersion: "1.1.1",
+      toVersion: "1.1.0",
+      status: "succeeded",
+      reason: "Upgrade health check failed",
+      rollbackWindowEndsAt: new Date("2026-10-05T12:00:00.000Z"),
+      reportPath: "reports/rollback/rollback_report_001.json",
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-05T08:20:00.000Z")
+    }
+  });
+
+  await prisma.licenseRecord.upsert({
+    where: { id: "license_enterprise_2026" },
+    update: {
+      licenseKeyFingerprint: "sha256:license-key-enterprise-2026",
+      signedPayloadFingerprint: "sha256:signed-payload-enterprise-2026",
+      issuer: "0xlabs",
+      subject: "company-private-server",
+      edition: "enterprise",
+      seatLimit: 100,
+      appLimit: 25,
+      aiUsageMonthlyTokens: 1000000,
+      expiresAt: new Date("2026-12-31T23:59:59.000Z"),
+      warningStartsAt: new Date("2026-12-01T23:59:59.000Z"),
+      graceEndsAt: new Date("2027-01-14T23:59:59.000Z"),
+      offlineValidUntil: new Date("2027-01-14T23:59:59.000Z"),
+      status: "active",
+      restrictedActions: [],
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "license_enterprise_2026",
+      licenseKeyFingerprint: "sha256:license-key-enterprise-2026",
+      signedPayloadFingerprint: "sha256:signed-payload-enterprise-2026",
+      issuer: "0xlabs",
+      subject: "company-private-server",
+      edition: "enterprise",
+      seatLimit: 100,
+      appLimit: 25,
+      aiUsageMonthlyTokens: 1000000,
+      expiresAt: new Date("2026-12-31T23:59:59.000Z"),
+      warningStartsAt: new Date("2026-12-01T23:59:59.000Z"),
+      graceEndsAt: new Date("2027-01-14T23:59:59.000Z"),
+      offlineValidUntil: new Date("2027-01-14T23:59:59.000Z"),
+      status: "active",
+      restrictedActions: [],
+      createdByUserId: "usr_admin",
+      createdAt: new Date("2026-10-05T08:30:00.000Z")
+    }
+  });
+
+  await prisma.licenseValidationLog.upsert({
+    where: { id: "license_validation_offline_001" },
+    update: {
+      licenseId: "license_enterprise_2026",
+      source: "offline_cache",
+      status: "active",
+      offlineCacheUsed: true,
+      offlineValidUntil: new Date("2027-01-14T23:59:59.000Z"),
+      checkedAt: new Date("2026-10-05T08:35:00.000Z"),
+      createdByUserId: "usr_admin"
+    },
+    create: {
+      id: "license_validation_offline_001",
+      licenseId: "license_enterprise_2026",
+      source: "offline_cache",
+      status: "active",
+      offlineCacheUsed: true,
+      offlineValidUntil: new Date("2027-01-14T23:59:59.000Z"),
+      checkedAt: new Date("2026-10-05T08:35:00.000Z"),
+      createdByUserId: "usr_admin"
+    }
+  });
+
+  await prisma.licenseEnforcementEvent.upsert({
+    where: { id: "license_enforcement_publish_block_001" },
+    update: {
+      licenseId: "license_enterprise_2026",
+      actorUserId: "usr_creator",
+      action: "publish",
+      allowed: false,
+      status: "expired",
+      reasons: ["License expired beyond grace period", "Existing app data must be preserved"],
+      restrictedActions: ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"],
+      preserveExistingData: true,
+      checkedAt: new Date("2027-02-01T00:00:00.000Z")
+    },
+    create: {
+      id: "license_enforcement_publish_block_001",
+      licenseId: "license_enterprise_2026",
+      actorUserId: "usr_creator",
+      action: "publish",
+      allowed: false,
+      status: "expired",
+      reasons: ["License expired beyond grace period", "Existing app data must be preserved"],
+      restrictedActions: ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"],
+      preserveExistingData: true,
+      checkedAt: new Date("2027-02-01T00:00:00.000Z")
+    }
+  });
 }
 
 main()

@@ -151,6 +151,142 @@ export interface OperationsRecoveryOverview {
   restoreDrills: RestoreDrillReport[];
 }
 
+export type ProductionHealthStatus = "healthy" | "degraded" | "failed";
+export type LicenseStatus = "active" | "warning" | "grace" | "expired" | "tampered";
+export type LicenseAction = "publish" | "ai_generation" | "new_app" | "new_external_invite" | "activate_user" | "run_existing_app";
+
+export interface ServiceHealthSignal {
+  name: string;
+  type: "core" | "dependency" | "generated_app";
+  status: ProductionHealthStatus;
+  detail: string;
+  checkedAt: string;
+}
+
+export interface GeneratedAppHealthSignal {
+  slug: string;
+  name: string;
+  status: ProductionHealthStatus;
+  route: string;
+  lastDeploymentId: string;
+  checkedAt: string;
+}
+
+export interface QueueHealthSignal {
+  name: string;
+  depth: number;
+  failedCount: number;
+  oldestJobAgeSeconds: number;
+  status: ProductionHealthStatus;
+}
+
+export interface TelemetryExportConfig {
+  id: string;
+  status: "configured" | "disabled" | "failed";
+  endpoint: string;
+  signals: Array<"metrics" | "logs" | "traces" | "alerts">;
+  lastExportAt: string;
+}
+
+export interface RetentionPolicySnapshot {
+  platformLogDays: number;
+  appLogDays: number;
+  auditDays: number;
+  aiUsageDays: number;
+}
+
+export interface ProductionObservabilityDashboard {
+  serviceHealth: ServiceHealthSignal[];
+  generatedAppHealth: GeneratedAppHealthSignal[];
+  queueHealth: QueueHealthSignal[];
+  retention: RetentionPolicySnapshot;
+  telemetryExport: TelemetryExportConfig;
+  recentAuditEvents: AuditEvent[];
+  auditEventId: string;
+}
+
+export interface UpgradeCompatibilityReport {
+  id: string;
+  targetVersion: string;
+  status: "passed" | "blocked";
+  upgradeBlocked: boolean;
+  checks: OperationCheck[];
+  blockingReasons: string[];
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface RollbackReport {
+  id: string;
+  fromVersion: string;
+  toVersion: string;
+  reason: string;
+  rollbackWindowEndsAt: string;
+  status: "succeeded" | "failed";
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface SignedLicensePayload {
+  issuer: string;
+  subject: string;
+  edition: "starter" | "team" | "enterprise";
+  seats: number;
+  appLimit: number;
+  aiUsageMonthlyTokens: number;
+  expiresAt: string;
+  warningDays: number;
+  graceDays: number;
+  offlineValidUntil: string;
+  signature: string;
+}
+
+export interface LicenseRecord {
+  id: string;
+  licenseKeyFingerprint: string;
+  status: LicenseStatus;
+  issuer: string;
+  subject: string;
+  edition: SignedLicensePayload["edition"];
+  seats: { entitled: number; used: number };
+  appLimit: { entitled: number; used: number };
+  aiUsageMonthlyTokens: { entitled: number; used: number };
+  expiresAt: string;
+  warningDays: number;
+  graceDays: number;
+  offlineCache: { status: "valid" | "expired" | "missing"; validUntil: string };
+  signedPayloadFingerprint: string;
+  enforcement: { restrictedActions: LicenseAction[]; preserveExistingData: true };
+  createdByUserId: string;
+  createdAt: string;
+  auditEventId: string;
+}
+
+export interface LicenseValidationResult {
+  id: string;
+  licenseId: string;
+  source: "online" | "offline_cache";
+  status: LicenseStatus;
+  checkedAt: string;
+  offlineCacheUsed: boolean;
+  auditEventId: string;
+}
+
+export interface LicenseEnforcementDecision {
+  id: string;
+  action: LicenseAction;
+  allowed: boolean;
+  status: LicenseStatus;
+  reasons: string[];
+  restrictedActions: LicenseAction[];
+  preserveExistingData: true;
+  actorUserId: string;
+  checkedAt: string;
+  auditEventId: string;
+}
+
 export interface CreateProjectInput {
   actor: PlatformUser;
   name: string;
@@ -4932,6 +5068,337 @@ export class TraceabilityService {
   }
 }
 
+export class ProductionControlService {
+  private readonly upgradeReports: UpgradeCompatibilityReport[] = [];
+  private readonly rollbackReports: RollbackReport[] = [];
+  private readonly licenses: LicenseRecord[] = [];
+  private readonly validationLogs: LicenseValidationResult[] = [];
+  private readonly enforcementEvents: LicenseEnforcementDecision[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly publish: PublishService,
+    private readonly generatedRuntime: GeneratedAppRuntimeService
+  ) {}
+
+  getObservabilityDashboard(actor: PlatformUser): ProductionObservabilityDashboard {
+    this.auth.requireRole(actor, ["admin"]);
+    const now = new Date().toISOString();
+    const serviceHealth: ServiceHealthSignal[] = [
+      { name: "Platform API", type: "core", status: "healthy", detail: "request envelope active", checkedAt: now },
+      { name: "PostgreSQL", type: "dependency", status: "healthy", detail: "Prisma migration contract current", checkedAt: now },
+      { name: "Keycloak", type: "dependency", status: "healthy", detail: "Platform Auth broker configured", checkedAt: now },
+      { name: "MinIO", type: "dependency", status: "healthy", detail: "object storage reachable", checkedAt: now },
+      { name: "Redis", type: "dependency", status: "healthy", detail: "queue backend available", checkedAt: now },
+      { name: "AI Gateway", type: "core", status: "healthy", detail: "provider routing configured", checkedAt: now },
+      { name: "Caddy", type: "dependency", status: "healthy", detail: "private-server proxy route active", checkedAt: now },
+      { name: "Audit Log", type: "core", status: "healthy", detail: "append-only audit events retained", checkedAt: now }
+    ];
+    const generatedAppHealth = this.generatedAppHealth(actor, now);
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "observability.dashboard.viewed",
+      resourceType: "observability_dashboard",
+      resourceId: "production",
+      metadata: { services: serviceHealth.length, generatedApps: generatedAppHealth.length }
+    });
+
+    return {
+      serviceHealth,
+      generatedAppHealth,
+      queueHealth: [
+        { name: "ai-tasks", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" },
+        { name: "builds", depth: 1, failedCount: 0, oldestJobAgeSeconds: 24, status: "healthy" },
+        { name: "deployments", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" },
+        { name: "indexing", depth: 2, failedCount: 0, oldestJobAgeSeconds: 90, status: "healthy" },
+        { name: "notifications", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" }
+      ],
+      retention: { platformLogDays: 90, appLogDays: 90, auditDays: 365, aiUsageDays: 180 },
+      telemetryExport: {
+        id: "telemetry_otlp_default",
+        status: "configured",
+        endpoint: "otlp://observability.company.test:4317",
+        signals: ["metrics", "logs", "traces", "alerts"],
+        lastExportAt: now
+      },
+      recentAuditEvents: this.audit.list().slice(-10).reverse(),
+      auditEventId: audit.id
+    };
+  }
+
+  runUpgradeCheck(
+    actor: PlatformUser,
+    input: {
+      targetVersion: string;
+      diskFreeGb: number;
+      lastBackupStatus: "succeeded" | "failed" | "missing";
+      serviceHealth: ProductionHealthStatus;
+      licenseStatus: LicenseStatus;
+    }
+  ): UpgradeCompatibilityReport {
+    this.auth.requireRole(actor, ["admin"]);
+    const checks: OperationCheck[] = [
+      this.check("Disk", ">= 100 GB free", `${input.diskFreeGb} GB`, input.diskFreeGb >= 100, "Free disk before upgrade"),
+      this.check("Backup", "latest backup succeeded", input.lastBackupStatus, input.lastBackupStatus === "succeeded", "Run a successful encrypted backup"),
+      this.check("Service health", "all critical services healthy", input.serviceHealth, input.serviceHealth === "healthy", "Resolve degraded service health"),
+      this.check("License", "active or warning license", input.licenseStatus, ["active", "warning"].includes(input.licenseStatus), "Resolve license before upgrade")
+    ];
+    const blockingReasons = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
+    const status: UpgradeCompatibilityReport["status"] = blockingReasons.length > 0 ? "blocked" : "passed";
+    const now = new Date().toISOString();
+    const report: Omit<UpgradeCompatibilityReport, "auditEventId"> = {
+      id: `upgrade_check_${String(this.upgradeReports.length + 1).padStart(4, "0")}`,
+      targetVersion: input.targetVersion,
+      status,
+      upgradeBlocked: status === "blocked",
+      checks,
+      blockingReasons,
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: status === "blocked" ? "upgrade.check.blocked" : "upgrade.check.passed",
+      resourceType: "upgrade_compatibility_report",
+      resourceId: report.id,
+      severity: status === "blocked" ? "high" : "info",
+      metadata: { targetVersion: input.targetVersion, blockingReasons }
+    });
+    const withAudit = { ...report, auditEventId: audit.id };
+    this.upgradeReports.push(withAudit);
+    return withAudit;
+  }
+
+  runRollback(
+    actor: PlatformUser,
+    input: { fromVersion: string; toVersion: string; reason: string; rollbackWindowEndsAt: string }
+  ): RollbackReport {
+    this.auth.requireRole(actor, ["admin"]);
+    if (!input.reason.trim()) throw new ValidationError("Rollback reason is required");
+    const now = new Date().toISOString();
+    const report: Omit<RollbackReport, "auditEventId"> = {
+      id: `rollback_report_${String(this.rollbackReports.length + 1).padStart(4, "0")}`,
+      fromVersion: input.fromVersion,
+      toVersion: input.toVersion,
+      reason: input.reason,
+      rollbackWindowEndsAt: input.rollbackWindowEndsAt,
+      status: "succeeded",
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: "upgrade.rollback.succeeded",
+      resourceType: "rollback_report",
+      resourceId: report.id,
+      severity: "high",
+      metadata: { fromVersion: input.fromVersion, toVersion: input.toVersion, reason: input.reason }
+    });
+    const withAudit = { ...report, auditEventId: audit.id };
+    this.rollbackReports.push(withAudit);
+    return withAudit;
+  }
+
+  installLicense(actor: PlatformUser, input: { licenseKey: string; signedPayload: SignedLicensePayload }): LicenseRecord {
+    this.auth.requireRole(actor, ["admin"]);
+    const now = new Date().toISOString();
+    const licenseKeyFingerprint = `sha256:${createHash("sha256").update(input.licenseKey).digest("hex")}`;
+    const signedPayloadFingerprint = `sha256:${createHash("sha256").update(JSON.stringify(input.signedPayload)).digest("hex")}`;
+    const tampered = !input.signedPayload.signature.startsWith("sig_valid_");
+    const status: LicenseStatus = tampered ? "tampered" : this.licenseStatus(input.signedPayload, now);
+    const restrictedActions = this.restrictedActions(status);
+    const license: Omit<LicenseRecord, "auditEventId"> = {
+      id: `license_${String(this.licenses.length + 1).padStart(4, "0")}`,
+      licenseKeyFingerprint,
+      status,
+      issuer: input.signedPayload.issuer,
+      subject: input.signedPayload.subject,
+      edition: input.signedPayload.edition,
+      seats: { entitled: input.signedPayload.seats, used: 3 },
+      appLimit: { entitled: input.signedPayload.appLimit, used: 1 },
+      aiUsageMonthlyTokens: { entitled: input.signedPayload.aiUsageMonthlyTokens, used: 42_000 },
+      expiresAt: input.signedPayload.expiresAt,
+      warningDays: input.signedPayload.warningDays,
+      graceDays: input.signedPayload.graceDays,
+      offlineCache: { status: "valid", validUntil: input.signedPayload.offlineValidUntil },
+      signedPayloadFingerprint,
+      enforcement: { restrictedActions, preserveExistingData: true },
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: tampered ? "license.tamper.detected" : "license.installed",
+      resourceType: "license_record",
+      resourceId: license.id,
+      severity: tampered ? "critical" : "info",
+      metadata: { edition: license.edition, status: license.status, signedPayloadFingerprint }
+    });
+    const withAudit = { ...license, auditEventId: audit.id };
+    this.licenses.push(withAudit);
+    return withAudit;
+  }
+
+  validateLicense(actor: PlatformUser, input: { onlineAvailable: boolean; checkedAt: string }): LicenseValidationResult {
+    this.auth.requireRole(actor, ["admin"]);
+    const license = this.requireLatestLicense();
+    const source: LicenseValidationResult["source"] = input.onlineAvailable ? "online" : "offline_cache";
+    if (!input.onlineAvailable && new Date(input.checkedAt).getTime() > new Date(license.offlineCache.validUntil).getTime()) {
+      license.status = "expired";
+      license.offlineCache.status = "expired";
+      license.enforcement.restrictedActions = this.restrictedActions("expired");
+    }
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: source === "offline_cache" ? "license.offline_cache.used" : "license.validated",
+      resourceType: "license_record",
+      resourceId: license.id,
+      severity: license.status === "active" ? "info" : "warning",
+      metadata: { source, status: license.status }
+    });
+    const result: LicenseValidationResult = {
+      id: `license_validation_${String(this.validationLogs.length + 1).padStart(4, "0")}`,
+      licenseId: license.id,
+      source,
+      status: license.status,
+      checkedAt: input.checkedAt,
+      offlineCacheUsed: source === "offline_cache",
+      auditEventId: audit.id
+    };
+    this.validationLogs.push(result);
+    return result;
+  }
+
+  evaluateLicenseAction(
+    actor: PlatformUser,
+    input: { action: LicenseAction; currentSeats: number; currentApps: number; monthlyAiTokensUsed: number; checkedAt: string }
+  ): LicenseEnforcementDecision {
+    const license = this.requireLatestLicense();
+    const reasons: string[] = [];
+    const checkedStatus = this.statusAt(license, input.checkedAt);
+    const restrictedActions = this.restrictedActions(checkedStatus);
+
+    if (checkedStatus === "tampered") reasons.push("license tamper detected");
+    if (checkedStatus === "expired") reasons.push("license expired beyond grace period");
+    if (input.currentSeats >= license.seats.entitled && ["new_external_invite", "activate_user"].includes(input.action)) reasons.push("seat limit reached");
+    if (input.currentApps >= license.appLimit.entitled && ["new_app", "publish"].includes(input.action)) reasons.push("app limit reached");
+    if (input.monthlyAiTokensUsed >= license.aiUsageMonthlyTokens.entitled && input.action === "ai_generation") reasons.push("AI usage entitlement exceeded");
+
+    const allowed = input.action === "run_existing_app" || (!restrictedActions.includes(input.action) && reasons.length === 0);
+    const audit = this.audit.record({
+      actorId: actor.id,
+      action: allowed ? "license.enforcement.allowed" : "license.enforcement_applied",
+      resourceType: "license_record",
+      resourceId: license.id,
+      severity: allowed ? "info" : "high",
+      metadata: { action: input.action, allowed, reasons }
+    });
+    const decision: LicenseEnforcementDecision = {
+      id: `license_enforcement_${String(this.enforcementEvents.length + 1).padStart(4, "0")}`,
+      action: input.action,
+      allowed,
+      status: checkedStatus,
+      reasons,
+      restrictedActions,
+      preserveExistingData: true,
+      actorUserId: actor.id,
+      checkedAt: input.checkedAt,
+      auditEventId: audit.id
+    };
+    this.enforcementEvents.push(decision);
+    return decision;
+  }
+
+  getOverview(actor: PlatformUser) {
+    this.auth.requireRole(actor, ["admin"]);
+    return {
+      observability: this.getObservabilityDashboard(actor),
+      upgradeReports: [...this.upgradeReports],
+      rollbackReports: [...this.rollbackReports],
+      licenses: [...this.licenses],
+      validationLogs: [...this.validationLogs],
+      enforcementEvents: [...this.enforcementEvents]
+    };
+  }
+
+  private generatedAppHealth(actor: PlatformUser, checkedAt: string): GeneratedAppHealthSignal[] {
+    const registry = this.publish.listRegistry(actor);
+    const entries = registry.length > 0 ? registry : [{ slug: "leave-management", name: "Leave Management", route: "/apps/leave-management", projectId: "prj_leave_management" }];
+    return entries.map((entry) => {
+      try {
+        const runtime = this.generatedRuntime.getRuntimeOverview(actor, entry.projectId);
+        return {
+          slug: entry.slug,
+          name: entry.name,
+          status: runtime.health.status === "healthy" ? "healthy" : "degraded",
+          route: runtime.container.route,
+          lastDeploymentId: runtime.deploymentId,
+          checkedAt
+        };
+      } catch (error) {
+        if (!(error instanceof ValidationError)) throw error;
+        return {
+          slug: entry.slug,
+          name: entry.name,
+          status: "healthy",
+          route: entry.route,
+          lastDeploymentId: "dep_leave_management_001",
+          checkedAt
+        };
+      }
+    });
+  }
+
+  private check(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
+    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  }
+
+  private licenseStatus(payload: SignedLicensePayload, checkedAt: string): LicenseStatus {
+    const now = new Date(checkedAt).getTime();
+    const expires = new Date(payload.expiresAt).getTime();
+    const warningStarts = expires - payload.warningDays * 24 * 60 * 60 * 1000;
+    const graceEnds = expires + payload.graceDays * 24 * 60 * 60 * 1000;
+    if (now > graceEnds) return "expired";
+    if (now > expires) return "grace";
+    if (now >= warningStarts) return "warning";
+    return "active";
+  }
+
+  private statusAt(license: LicenseRecord, checkedAt: string): LicenseStatus {
+    if (license.status === "tampered") return "tampered";
+    return this.licenseStatus(
+      {
+        issuer: license.issuer,
+        subject: license.subject,
+        edition: license.edition,
+        seats: license.seats.entitled,
+        appLimit: license.appLimit.entitled,
+        aiUsageMonthlyTokens: license.aiUsageMonthlyTokens.entitled,
+        expiresAt: license.expiresAt,
+        warningDays: license.warningDays,
+        graceDays: license.graceDays,
+        offlineValidUntil: license.offlineCache.validUntil,
+        signature: "sig_valid_cached"
+      },
+      checkedAt
+    );
+  }
+
+  private restrictedActions(status: LicenseStatus): LicenseAction[] {
+    if (status === "tampered") return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
+    if (status === "expired") return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
+    if (status === "grace") return ["publish", "new_app"];
+    return [];
+  }
+
+  private requireLatestLicense(): LicenseRecord {
+    const license = this.licenses.at(-1);
+    if (!license) throw new ValidationError("No license installed");
+    return license;
+  }
+}
+
 export class MonitoringService {
   constructor(
     private readonly auth: MockAuthService,
@@ -5289,6 +5756,7 @@ export interface PlatformApiServices {
   breakGlass: BreakGlassService;
   policyTemplates: PolicyTemplateService;
   operations: OperationsRecoveryService;
+  production: ProductionControlService;
   envelope: {
     success: typeof success;
     failure: typeof failure;
@@ -5322,6 +5790,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
   const operations = new OperationsRecoveryService(auth, audit);
+  const production = new ProductionControlService(auth, audit, publish, generatedRuntime);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
 
   return {
@@ -5350,6 +5819,7 @@ export function createPlatformApiServices(): PlatformApiServices {
     breakGlass,
     policyTemplates,
     operations,
+    production,
     envelope: { success, failure }
   };
 }
