@@ -173,6 +173,8 @@ export interface PlatformRequest {
     | "/app-store/registry"
     | "/store/apps"
     | `/store/apps/${string}`
+    | `/store/apps/${string}/install`
+    | `/store/apps/${string}/uninstall`
     | `/store/apps/${string}/access-requests`
     | `/store/apps/${string}/tickets`
     | `/store/tickets/${string}`
@@ -365,6 +367,8 @@ function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
     request.path === "/app-store/registry" ||
     request.path === "/store/apps" ||
     /^\/store\/apps\/[^/]+$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/install$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) ||
     /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) ||
     /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) ||
     /^\/store\/tickets\/[^/]+$/.test(request.path) ||
@@ -830,6 +834,34 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     if (publishStorePersistence && request.method === "GET" && request.path === "/store/apps") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return { status: HttpStatus.OK, body: success(await publishStorePersistence.listStoreApps(user)) };
+    }
+
+    const persistedStoreInstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/install$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreInstallMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const installation = await publishStorePersistence.installStoreApp(user, { appSlug: persistedStoreInstallMatch[1] });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "store.app.installed",
+        resourceType: "app_installation",
+        resourceId: installation.id,
+        metadata: { projectId: installation.projectId, appId: installation.appId, appSlug: installation.appSlug }
+      });
+      return { status: HttpStatus.CREATED, body: success(installation) };
+    }
+
+    const persistedStoreUninstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/uninstall$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreUninstallMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const installation = await publishStorePersistence.uninstallStoreApp(user, { appSlug: persistedStoreUninstallMatch[1] });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "store.app.uninstalled",
+        resourceType: "app_installation",
+        resourceId: installation.id,
+        metadata: { projectId: installation.projectId, appId: installation.appId, appSlug: installation.appSlug }
+      });
+      return { status: HttpStatus.OK, body: success(installation) };
     }
 
     const persistedStoreAccessMatch = request.path.match(/^\/store\/apps\/([^/]+)\/access-requests$/);
@@ -2436,25 +2468,45 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/app-store/registry", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
   );
   routes.get("/store/apps", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/store/apps", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/store/apps", headers: request.headers }))
   );
   routes.get("/store/apps/:appSlug", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}`,
         headers: request.headers
       })
     )
   );
-  routes.post("/store/apps/:appSlug/access-requests", (request, response) =>
-    sendPlatformResponse(
+  routes.post("/store/apps/:appSlug/install", (request, response) =>
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/install`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/uninstall", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/uninstall`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/access-requests", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}/access-requests`,
         headers: request.headers,
@@ -2463,9 +2515,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.post("/store/apps/:appSlug/tickets", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}/tickets`,
         headers: request.headers,
@@ -2474,9 +2526,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/store/tickets/:ticketId", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/store/tickets/${String(request.params?.ticketId ?? "")}`,
         headers: request.headers

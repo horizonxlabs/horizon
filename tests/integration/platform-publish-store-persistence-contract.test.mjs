@@ -98,7 +98,7 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.equal(registry.some((entry) => entry.slug === "publish-persisted"), true);
 
   const storeHome = await service.listStoreApps(endUserActor);
-  assert.ok(storeHome.myApps.some((app) => app.slug === "publish-persisted" && app.accessStatus === "active"));
+  assert.ok(storeHome.availableApps.some((app) => app.slug === "publish-persisted" && app.accessStatus === "active" && app.installStatus === "not_installed"));
 
   const access = await service.requestStoreAccess(endUserActor, {
     appSlug: "publish-persisted",

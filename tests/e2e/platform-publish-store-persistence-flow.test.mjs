@@ -201,7 +201,7 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   assert.equal(registry.status, 200);
   assert.ok(registry.body.data.some((entry) => entry.slug === "leave-publish-persisted"));
   assert.equal(storeHome.status, 200);
-  assert.ok(storeHome.body.data.myApps.some((app) => app.slug === "leave-publish-persisted"));
+  assert.ok(storeHome.body.data.availableApps.some((app) => app.slug === "leave-publish-persisted" && app.accessStatus === "active"));
   assert.ok(recreatedAccessSnapshot.body.data.accessRequests.some((request) => request.id === access.body.data.id && request.status === "pending"));
   assert.equal(ticketStatus.status, 200);
   assert.equal(ticketStatus.body.data.ticketNumber, "TKT-0001");

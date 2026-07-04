@@ -922,7 +922,8 @@ export interface GeneratedRuntimeOverview {
 }
 
 export type StoreAppAccessStatus = "active" | "available" | "pending";
-export type StorePrimaryAction = "open" | "request_access" | "view_status";
+export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
+export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
@@ -937,6 +938,9 @@ export interface StorefrontAppCard {
   ownerName: string;
   route: string;
   accessStatus: StoreAppAccessStatus;
+  installStatus: StoreAppInstallStatus;
+  installationId?: string;
+  installedAt?: string;
   myRole?: string;
   health: Status;
   version: string;
@@ -960,7 +964,20 @@ export interface StorefrontAppDetail extends StorefrontAppCard {
   accessMode: AppStoreRegistryEntry["accessMode"];
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+}
+
+export interface StoreAppInstallation {
+  id: string;
+  appId: string;
+  appSlug: string;
+  projectId: string;
+  userId: string;
+  userEmail: string;
+  status: "active" | "disabled";
+  installedAt: string;
+  disabledAt?: string;
+  lastOpenedAt?: string;
 }
 
 export interface StoreAccessRequestResult {
@@ -5259,6 +5276,7 @@ export class StorefrontService {
     const member = this.appAccess.getMemberForEmail(project, actor.email);
     const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
     const accessStatus: StoreAppAccessStatus = member ? "active" : pending ? "pending" : "available";
+    const installStatus: StoreAppInstallStatus = member ? "installed" : "not_installed";
     const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
 
     return {
@@ -5271,6 +5289,9 @@ export class StorefrontService {
       ownerName: owner?.name ?? entry.ownerUserId,
       route: entry.route,
       accessStatus,
+      installStatus,
+      installationId: member ? `legacy_appinst_${entry.appId}_${actor.id}` : undefined,
+      installedAt: member?.lastAccessAt,
       myRole: member?.roleName,
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,

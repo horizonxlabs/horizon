@@ -1,7 +1,7 @@
 # Real MVP Core Persistence Foundation
 
 Status: Phase 2 implementation in progress  
-Issues: #34, #36, #38, #65, #67, #69, #71, #73
+Issues: #34, #36, #38, #65, #67, #69, #71, #73, #75
 
 ## Purpose
 
@@ -14,6 +14,7 @@ This phase starts replacing mock-only Platform API state with a Prisma-backed pe
 - PRD documents, versions and sections for Sprint 3 baseline flow
 - workspace tasks, task steps, preview versions and AI usage evidence for Sprint 4 prompt flow
 - app roles, members, invitations, access requests, publish requests, manifests, deployments, App Store registry entries, notifications and support tickets for Sprint 6/7 publish and feedback flow
+- app installation records that separate end-user install/disable lifecycle from app membership/access lifecycle
 - generated app runtime artifact, container, schema grant, health, logs, metrics, OpenAPI and migration dry-run evidence for Sprint 10 admin runtime flow
 
 The implementation is intentionally additive. It creates a repository layer, a repository-backed service harness and an async core API execution path without claiming every existing sprint service has already been migrated away from in-memory state.
@@ -113,12 +114,39 @@ flowchart LR
 | `GET /projects/:projectId/publish/review` | Builds publish manifest/readiness from persisted project, PRD baseline and latest workspace preview |
 | `POST /projects/:projectId/publish` | Persists publish request, manifest, deployment record and App Store registry entry |
 | `GET /app-store/registry` | Lists persisted published registry entries |
-| `GET /store/apps` | Lists App Store cards from persisted registry, member and pending request state |
-| `GET /store/apps/:slug` | Returns persisted app detail and action availability |
+| `GET /store/apps` | Lists App Store cards from persisted registry, member, pending request and installation state |
+| `GET /store/apps/:slug` | Returns persisted app detail, install status and action availability |
 | `POST /store/apps/:slug/access-requests` | Persists end-user access request and returns existing pending request on duplicate |
 | `POST /store/apps/:slug/tickets` | Requires active app access and persists support ticket with submitted timeline entry |
 | `GET /store/tickets/:ticketId` | Returns persisted ticket status for the submitter, creator or admin |
 | `GET /creator/projects/:projectId/tickets` | Returns persisted creator ticket inbox for the project |
+
+## App Installation Route-Level Coverage
+
+| Route | Persistence-backed behavior |
+| --- | --- |
+| `POST /store/apps/:slug/install` | Requires active app membership, upserts an active app installation and writes `store.app.installed` audit evidence |
+| `POST /store/apps/:slug/uninstall` | Disables the app installation without deleting membership/access and writes `store.app.uninstalled` audit evidence |
+| `GET /store/apps` | Places active installations in `myApps`; visible but not installed apps stay in `availableApps` with install status |
+| `GET /store/apps/:slug` | Exposes `installStatus`, installation metadata and `install`/`uninstall` actions |
+
+## App Install Journey
+
+The App Store PWA does not hide install behind a single opaque button. The detail panel now renders a user-visible install journey whose step status is derived from the same access and installation state returned by the Platform API.
+
+```mermaid
+flowchart LR
+  A["Access Check"] --> B["Manifest Validation"]
+  B --> C["Install Record"]
+  C --> D["My Apps Ready"]
+```
+
+| Step | Evidence source | Done when |
+| --- | --- | --- |
+| Access Check | `accessStatus` from `GET /store/apps` or `GET /store/apps/:slug` | End user has active app membership |
+| Manifest Validation | persisted registry and manifest metadata | App is installable from the private registry |
+| Install Record | `POST /store/apps/:slug/install` response and `app_installations` row | Installation status is active and audited |
+| My Apps Ready | refreshed `GET /store/apps` home payload | Installed app appears in `myApps` with `installStatus=installed` |
 
 ## Generated Runtime Route-Level Coverage
 
@@ -139,8 +167,8 @@ Platform API startup reads `EVCP_CORE_PERSISTENCE` through `createRuntimePlatfor
 | Mode | Use case | Behavior |
 | --- | --- | --- |
 | `legacy` | Existing sprint regression runs | Starts the mock-first in-memory services and does not create a core persistence service |
-| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket and generated runtime routes with memory persistence clients and no database requirement |
-| `prisma` | Online private server | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket and generated runtime routes with Prisma through `DATABASE_URL` |
+| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket, app installation and generated runtime routes with memory persistence clients and no database requirement |
+| `prisma` | Online private server | Starts repository-backed core, AI governance, PRD, workspace, publish, App Store, ticket, app installation and generated runtime routes with Prisma through `DATABASE_URL` |
 
 Private-server `.env` should set:
 
@@ -149,7 +177,7 @@ EVCP_CORE_PERSISTENCE=prisma
 DATABASE_URL=postgresql://...
 ```
 
-`prisma` mode creates the Prisma-backed core, AI governance, PRD, workspace, publish/App Store, ticket and generated runtime repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
+`prisma` mode creates the Prisma-backed core, AI governance, PRD, workspace, publish/App Store, ticket, app installation and generated runtime repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
 
 ## Repository Coverage
 
@@ -161,7 +189,7 @@ DATABASE_URL=postgresql://...
 | `AiGovernanceRepositoryBackedService` | `AiProvider`, `AiApiKey`, `AiScenarioRoute`, `AiQuota`, `GuardrailRule`, `GuardrailEvent` | Persist AI governance setup, keep API secrets masked in responses and preserve guardrail event evidence |
 | `PrdRepositoryBackedService` | `PrdDocument`, `PrdVersion`, `PrdSection` | Persist PRD draft, baseline and ordered section evidence for creator-owned projects |
 | `WorkspaceRepositoryBackedService` | `WorkspaceTask`, `WorkspaceTaskStep`, `PreviewVersion`, `AiUsageLog` | Persist workspace prompt task progress, preview versions and AI usage evidence |
-| `PublishStoreRepositoryBackedService` | `App`, `AppRole`, `AppMember`, `AppInvitation`, `AppAccessRequest`, `AppManifest`, `PublishRequest`, `DeploymentRecord`, `AppStoreRegistryEntry`, `SupportTicket`, `SupportTicketTimelineEntry`, `InAppNotification` | Persist app access defaults, publish manifest/deployment/registry records, App Store access requests, ticket status and creator inbox evidence |
+| `PublishStoreRepositoryBackedService` | `App`, `AppRole`, `AppMember`, `AppInstallation`, `AppInvitation`, `AppAccessRequest`, `AppManifest`, `PublishRequest`, `DeploymentRecord`, `AppStoreRegistryEntry`, `SupportTicket`, `SupportTicketTimelineEntry`, `InAppNotification` | Persist app access defaults, explicit app install/disable lifecycle, publish manifest/deployment/registry records, App Store access requests, ticket status and creator inbox evidence |
 | `GeneratedRuntimeRepositoryBackedService` | `GeneratedAppRuntime`, `GeneratedAppSchemaGrant`, `GeneratedAppHealthCheck`, `GeneratedAppRuntimeLog`, `GeneratedAppRuntimeMetric`, `GeneratedAppOpenApiContract`, `GeneratedAppMigrationReport` | Persist generated app runtime evidence after publish and keep admin runtime routes available across service recreation |
 
 ## Test Coverage
@@ -176,6 +204,7 @@ node --import tsx --test \
   tests/integration/platform-prd-persistence-contract.test.mjs \
   tests/integration/platform-workspace-persistence-contract.test.mjs \
   tests/integration/platform-publish-store-persistence-contract.test.mjs \
+  tests/integration/platform-app-install-persistence-contract.test.mjs \
   tests/integration/platform-generated-runtime-persistence-contract.test.mjs \
   tests/e2e/platform-core-persistence-flow.test.mjs \
   tests/e2e/platform-core-api-persistence-smoke.test.mjs \
@@ -183,6 +212,7 @@ node --import tsx --test \
   tests/e2e/platform-prd-persistence-flow.test.mjs \
   tests/e2e/platform-workspace-persistence-flow.test.mjs \
   tests/e2e/platform-publish-store-persistence-flow.test.mjs \
+  tests/e2e/platform-app-install-persistence-flow.test.mjs \
   tests/e2e/platform-generated-runtime-persistence-flow.test.mjs
 ```
 
@@ -203,6 +233,8 @@ The tests prove:
 - Runtime memory persistence keeps workspace preview/task/usage state across service object recreation with the same persistence client.
 - The publish/store persistence service can persist app access defaults, invitations, publish manifest/deployment/registry, App Store access requests and support tickets.
 - Runtime memory persistence keeps published registry, app access request and ticket state across service object recreation with the same persistence client.
+- The App Store install persistence flow keeps explicit installed/disabled app state separate from active app membership and pending access requests.
+- Runtime memory persistence keeps installed app state across service object recreation with the same persistence client.
 - The generated runtime persistence service can persist artifact, container, schema, health, log, metric, OpenAPI and migration dry-run evidence.
 - Runtime memory persistence keeps generated runtime overview, health, OpenAPI and blocked migration report state across service object recreation with the same persistence client.
 - The repository source remains aligned with the Prisma schema and seed records.
