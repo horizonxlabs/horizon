@@ -12,7 +12,8 @@ test("core API persistence wiring keeps async executor and legacy executor avail
   assert.match(appFactory, /const useCorePersistence = Boolean\(corePersistence && isPersistenceCoreRoute\(request\)\)/);
   assert.match(appFactory, /const useAiGovernancePersistence = Boolean\(aiGovernancePersistence && isPersistenceAiGovernanceRoute\(request\)\)/);
   assert.match(appFactory, /const usePrdPersistence = Boolean\(corePersistence && prdPersistence && isPersistencePrdRoute\(request\)\)/);
-  assert.match(appFactory, /if \(!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence\) return executePlatformApiRequest/);
+  assert.match(appFactory, /const useWorkspacePersistence = Boolean\(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute\(request\)\)/);
+  assert.match(appFactory, /if \(!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence && !useWorkspacePersistence\) return executePlatformApiRequest/);
 });
 
 test("core API persistence wiring covers auth project and audit routes", () => {

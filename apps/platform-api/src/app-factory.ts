@@ -8,6 +8,7 @@ import { PlatformApiModule } from "./platform-api.module";
 import {
   createPlatformApiServices,
   PermissionError,
+  QuotaExceededError,
   ValidationError,
   type AuthResolution,
   type PlatformApiServices,
@@ -31,6 +32,12 @@ import {
   MemoryPrdPersistenceClient,
   type PrdRepositoryBackedService
 } from "./persistence/prd-repositories";
+import {
+  createPrismaWorkspacePersistence,
+  createWorkspaceRepositoryBackedService,
+  MemoryWorkspacePersistenceClient,
+  type WorkspaceRepositoryBackedService
+} from "./persistence/workspace-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -54,6 +61,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
+  workspacePersistence?: WorkspaceRepositoryBackedService;
 };
 
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -178,18 +186,21 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
       ...services,
       corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient()),
       aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient()),
-      prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient())
+      prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
+      workspacePersistence: createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient())
     };
   }
 
   const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL);
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
+  const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
   return {
     ...services,
     corePersistence: service,
     aiGovernancePersistence,
-    prdPersistence
+    prdPersistence,
+    workspacePersistence
   };
 }
 
@@ -313,14 +324,24 @@ function isPersistencePrdRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isPersistenceWorkspaceRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/projects\/[^/]+\/workspace$/.test(request.path) ||
+    /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) ||
+    /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path)
+  );
+}
+
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
   const prdPersistence = services.prdPersistence;
+  const workspacePersistence = services.workspacePersistence;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
   const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
   const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
-  if (!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence) return executePlatformApiRequest(services, request);
+  const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
+  if (!useCorePersistence && !useAiGovernancePersistence && !usePrdPersistence && !useWorkspacePersistence) return executePlatformApiRequest(services, request);
 
   try {
     if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
@@ -538,6 +559,76 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, prdCurrentMatch[1]);
       return { status: HttpStatus.OK, body: success(await prdPersistence.getCurrent(user, project)) };
+    }
+
+    const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
+    if (corePersistence && prdPersistence && workspacePersistence && request.method === "POST" && workspacePromptMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      services.auth.requireRole(user, ["admin", "creator"]);
+      const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      const prompt = String(request.body?.prompt ?? "");
+      const guardrail = services.guardrails.evaluatePrompt(user, {
+        prompt,
+        scenario: "frontend_coding"
+      });
+
+      if (guardrail.decision === "block") {
+        const blocked = await workspacePersistence.blockPrompt(user, { project, baseline, prompt, guardrail });
+        await corePersistence.recordAudit({
+          actorId: user.id,
+          action: "workspace.prompt.blocked",
+          resourceType: "workspace_task",
+          resourceId: blocked.task.id,
+          severity: "warning",
+          metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
+        });
+        return { status: HttpStatus.OK, body: success(blocked) };
+      }
+
+      const route = services.aiGovernance.resolveRoute("frontend_coding");
+      const requestEstimate = 120;
+      const quota = services.aiGovernance.checkQuota("creator", requestEstimate);
+      if (!quota.allowed) {
+        throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
+      }
+      services.aiGovernance.recordProviderCall();
+      const result = await workspacePersistence.submitPrompt(user, {
+        project,
+        baseline,
+        prompt,
+        guardrail,
+        route: route.primary,
+        tokensUsed: requestEstimate
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "workspace.prompt.accepted",
+        resourceType: "workspace_task",
+        resourceId: result.task.id,
+        metadata: {
+          projectId: project.id,
+          previewVersion: result.preview.version,
+          tokensUsed: result.usage?.tokensUsed ?? 0
+        }
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    const workspaceRefreshMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/preview\/refresh$/);
+    if (prdPersistence && workspacePersistence && request.method === "POST" && workspaceRefreshMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, workspaceRefreshMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      return { status: HttpStatus.OK, body: success(await workspacePersistence.refreshPreview(user, { project, baseline })) };
+    }
+
+    const workspaceMatch = request.path.match(/^\/projects\/([^/]+)\/workspace$/);
+    if (prdPersistence && workspacePersistence && request.method === "GET" && workspaceMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, workspaceMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      return { status: HttpStatus.OK, body: success(await workspacePersistence.getWorkspace(user, { project, baseline })) };
     }
 
     return executePlatformApiRequest(services, request);

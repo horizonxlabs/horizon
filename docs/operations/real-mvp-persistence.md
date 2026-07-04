@@ -1,7 +1,7 @@
 # Real MVP Core Persistence Foundation
 
 Status: Phase 2 implementation in progress  
-Issues: #34, #36, #38, #65, #67
+Issues: #34, #36, #38, #65, #67, #69
 
 ## Purpose
 
@@ -12,6 +12,7 @@ This phase starts replacing mock-only Platform API state with a Prisma-backed pe
 - audit logs
 - AI governance providers, masked API keys, route policy, quota policy and guardrail evidence
 - PRD documents, versions and sections for Sprint 3 baseline flow
+- workspace tasks, task steps, preview versions and AI usage evidence for Sprint 4 prompt flow
 
 The implementation is intentionally additive. It creates a repository layer, a repository-backed service harness and an async core API execution path without claiming every existing sprint service has already been migrated away from in-memory state.
 
@@ -23,22 +24,27 @@ flowchart LR
   B --> C["CoreRepositoryBackedService"]
   B --> J["AiGovernanceRepositoryBackedService"]
   B --> N["PrdRepositoryBackedService"]
+  B --> R["WorkspaceRepositoryBackedService"]
   C --> D["PlatformUserRepository"]
   C --> E["ProjectRepository"]
   C --> F["AuditLogRepository"]
   J --> K["AI governance delegates"]
   N --> O["PRD delegates"]
+  R --> S["Workspace delegates"]
   D --> G["CorePersistenceClient"]
   E --> G
   F --> G
   K --> L["AiGovernancePersistenceClient"]
   O --> P["PrdPersistenceClient"]
+  S --> T["WorkspacePersistenceClient"]
   G --> H["PrismaClient in production"]
   G --> I["MemoryCorePersistenceClient in tests"]
   L --> H
   L --> M["MemoryAiGovernancePersistenceClient in tests"]
   P --> H
   P --> Q["MemoryPrdPersistenceClient in tests"]
+  T --> H
+  T --> U["MemoryWorkspacePersistenceClient in tests"]
 ```
 
 ## Route-Level Coverage
@@ -74,6 +80,15 @@ flowchart LR
 | `GET /projects/:projectId/prd/versions` | Lists persisted PRD draft and baseline versions with ordered sections |
 | `GET /projects/:projectId/prd` | Returns the persisted current PRD version after service recreation |
 
+## Workspace Route-Level Coverage
+
+| Route | Persistence-backed behavior |
+| --- | --- |
+| `GET /projects/:projectId/workspace` | Resolves project and persisted PRD baseline, then returns persisted latest preview, tasks, usage and token budget |
+| `POST /projects/:projectId/workspace/prompts` | Persists safe prompt task, ordered steps, preview version and AI usage evidence after guardrail/quota checks |
+| `POST /projects/:projectId/workspace/prompts` blocked | Persists blocked task evidence without replacing latest preview or creating usage |
+| `POST /projects/:projectId/workspace/preview/refresh` | Returns persisted latest preview after service recreation |
+
 The legacy synchronous executor remains available for existing sprint regression tests and for services that have not yet moved to repositories.
 
 ## Runtime Mode
@@ -83,8 +98,8 @@ Platform API startup reads `EVCP_CORE_PERSISTENCE` through `createRuntimePlatfor
 | Mode | Use case | Behavior |
 | --- | --- | --- |
 | `legacy` | Existing sprint regression runs | Starts the mock-first in-memory services and does not create a core persistence service |
-| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance and PRD routes with memory persistence clients and no database requirement |
-| `prisma` | Online private server | Starts repository-backed core, AI governance and PRD routes with Prisma through `DATABASE_URL` |
+| `memory` | Deterministic local/API tests | Starts repository-backed core, AI governance, PRD and workspace routes with memory persistence clients and no database requirement |
+| `prisma` | Online private server | Starts repository-backed core, AI governance, PRD and workspace routes with Prisma through `DATABASE_URL` |
 
 Private-server `.env` should set:
 
@@ -93,7 +108,7 @@ EVCP_CORE_PERSISTENCE=prisma
 DATABASE_URL=postgresql://...
 ```
 
-`prisma` mode creates the Prisma-backed core, AI governance and PRD repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
+`prisma` mode creates the Prisma-backed core, AI governance, PRD and workspace repository services lazily during Platform API startup. Existing sprint-specific services outside this route set still keep their legacy in-memory state until they are migrated in later slices.
 
 ## Repository Coverage
 
@@ -104,6 +119,7 @@ DATABASE_URL=postgresql://...
 | `AuditLogRepository` | `AuditLog` | Record audit events, filter by actor, action, severity, project/app resource and date range |
 | `AiGovernanceRepositoryBackedService` | `AiProvider`, `AiApiKey`, `AiScenarioRoute`, `AiQuota`, `GuardrailRule`, `GuardrailEvent` | Persist AI governance setup, keep API secrets masked in responses and preserve guardrail event evidence |
 | `PrdRepositoryBackedService` | `PrdDocument`, `PrdVersion`, `PrdSection` | Persist PRD draft, baseline and ordered section evidence for creator-owned projects |
+| `WorkspaceRepositoryBackedService` | `WorkspaceTask`, `WorkspaceTaskStep`, `PreviewVersion`, `AiUsageLog` | Persist workspace prompt task progress, preview versions and AI usage evidence |
 
 ## Test Coverage
 
@@ -115,10 +131,12 @@ node --import tsx --test \
   tests/integration/platform-core-api-persistence-contract.test.mjs \
   tests/integration/platform-ai-governance-persistence-contract.test.mjs \
   tests/integration/platform-prd-persistence-contract.test.mjs \
+  tests/integration/platform-workspace-persistence-contract.test.mjs \
   tests/e2e/platform-core-persistence-flow.test.mjs \
   tests/e2e/platform-core-api-persistence-smoke.test.mjs \
   tests/e2e/platform-ai-governance-persistence-flow.test.mjs \
-  tests/e2e/platform-prd-persistence-flow.test.mjs
+  tests/e2e/platform-prd-persistence-flow.test.mjs \
+  tests/e2e/platform-workspace-persistence-flow.test.mjs
 ```
 
 The tests prove:
@@ -134,12 +152,14 @@ The tests prove:
 - Runtime memory persistence keeps AI governance state across service object recreation with the same persistence client.
 - The PRD persistence service can generate a draft, confirm baseline, list versions and return current PRD state from repository-backed data.
 - Runtime memory persistence keeps PRD draft and baseline state across service object recreation with the same persistence client.
+- The workspace persistence service can persist prompt tasks, ordered task steps, preview versions, AI usage logs and blocked prompt evidence.
+- Runtime memory persistence keeps workspace preview/task/usage state across service object recreation with the same persistence client.
 - The repository source remains aligned with the Prisma schema and seed records.
 
 ## Remaining Mock-to-Real Work
 
 - Add PostgreSQL-backed integration tests that run `prisma migrate deploy`, seed and route-level API calls against a real database.
 - Replace simulated SSO login with the real Keycloak/OIDC callback and database-backed Platform Auth session lookup.
-- Move workspace and publish/runtime services onto repository-backed state.
+- Move publish/runtime services onto repository-backed state.
 - Replace local envelope placeholder encryption with production KMS/secret-store integration before handling real customer provider secrets.
 - Add data migration/rollback notes when replacing each in-memory service.
