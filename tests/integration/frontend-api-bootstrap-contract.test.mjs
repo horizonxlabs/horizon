@@ -16,6 +16,13 @@ test("shared API client exposes frontend bootstrap routes and auth modes", () =>
   assert.match(apiClient, /saveInstallerSetup\(/);
   assert.match(apiClient, /listInstallerReports\(/);
   assert.match(apiClient, /testAiProvider\(/);
+  assert.match(apiClient, /listAiProviders\(/);
+  assert.match(apiClient, /createAiProvider\(/);
+  assert.match(apiClient, /createAiApiKey\(/);
+  assert.match(apiClient, /configureAiRoute\(/);
+  assert.match(apiClient, /configureAiQuota\(/);
+  assert.match(apiClient, /createGuardrailRule\(/);
+  assert.match(apiClient, /listGuardrailEvents\(/);
   assert.match(apiClient, /authorization/);
   assert.match(apiClient, /x-mock-user-email/);
   assert.match(apiClient, /PlatformApiError/);
@@ -30,6 +37,26 @@ test("Admin AI provider test call is API-client backed", () => {
   assert.match(adminSource, /Provider Test Call/);
   assert.match(adminSource, /provider-test-call-panel/);
   assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
+});
+
+test("Admin AI governance actions are API-client backed", () => {
+  for (const method of ["listAiProviders", "listAiApiKeys", "createAiProvider", "createAiApiKey", "configureAiRoute", "configureAiQuota", "createGuardrailRule", "listGuardrailEvents"]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+    assert.match(adminSource, new RegExp(method));
+  }
+
+  for (const handler of ["loadAiGovernanceState", "handleCreateAiProvider", "handleSaveAiApiKey", "handleConfigureAiRoute", "handleConfigureAiQuota", "handleCreateGuardrailRule"]) {
+    assert.match(adminSource, new RegExp(handler));
+  }
+
+  for (const label of ["Create Provider", "Save Masked Key", "Configure Route", "Configure Quota", "Add Guardrail Rule"]) {
+    assert.match(adminSource, new RegExp(label));
+  }
+
+  assert.match(adminSource, /aiGovernanceSource/);
+  assert.match(adminSource, /setAiKeySecret\(""\)/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
 });
 
 test("frontend shells use API-backed bootstrap instead of direct mock fixtures", () => {

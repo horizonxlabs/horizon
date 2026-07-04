@@ -1,9 +1,15 @@
 import {
   createPlatformApiClient,
   createPlatformSessionStore,
+  type AiApiKeyDto,
+  type AiProviderDto,
   type AiProviderTestCallInput,
   type AiProviderTestCallResponse,
+  type AiQuotaDto,
+  type AiScenarioRouteDto,
   type CurrentUserResponse,
+  type GuardrailEventDto,
+  type GuardrailRuleDto,
   type InstallerPreflightInput,
   type InstallerReportDto,
   type InstallerSetupResponse,
@@ -293,6 +299,30 @@ type AdminBootstrapState = {
   source: "Platform API" | "local fallback";
 };
 
+type AiGovernanceForm = {
+  providerName: string;
+  providerAdapter: "openai" | "anthropic" | "google" | "azure_openai" | "mock";
+  providerBaseUrl: string;
+  providerModels: string;
+  apiKeyName: string;
+  apiKeyQuotaTokens: string;
+  apiKeyFallbackPriority: string;
+  routeScenario: "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
+  routeModel: string;
+  quotaScope: "organization" | "creator" | "project" | "app";
+  quotaDailyLimit: string;
+  quotaMonthlyLimit: string;
+  quotaWarningThreshold: string;
+  guardrailName: string;
+  guardrailPattern: string;
+};
+
+type AiGovernanceBootstrapState = {
+  providers: AiProviderDto[];
+  apiKeys: AiApiKeyDto[];
+  guardrailEvents: GuardrailEventDto[];
+};
+
 const initialAdminBootstrap: AdminBootstrapState = {
   userName: "Platform Admin",
   source: "local fallback"
@@ -323,6 +353,24 @@ const initialInstallerSetupForm: InstallWizardSetupForm = {
   backupEncryptionKeyRef: "kms://evcp/backup",
   firstAdminEmail: "admin@company.com",
   firstAdminName: "Platform Admin"
+};
+
+const initialAiGovernanceForm: AiGovernanceForm = {
+  providerName: "OpenAI Production",
+  providerAdapter: "openai",
+  providerBaseUrl: "https://api.openai.com/v1",
+  providerModels: "gpt-4.1-mini",
+  apiKeyName: "Primary Production Key",
+  apiKeyQuotaTokens: "100000",
+  apiKeyFallbackPriority: "1",
+  routeScenario: "prd_generation",
+  routeModel: "gpt-4.1-mini",
+  quotaScope: "creator",
+  quotaDailyLimit: "1000",
+  quotaMonthlyLimit: "30000",
+  quotaWarningThreshold: "900",
+  guardrailName: "Block payroll export",
+  guardrailPattern: "payroll export"
 };
 
 const installWizardSteps = [
@@ -499,6 +547,62 @@ async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<Install
 
 async function listInstallerReports(): Promise<InstallerReportDto[]> {
   return createAdminPlatformClient().listInstallerReports();
+}
+
+async function loadAiGovernanceState(): Promise<AiGovernanceBootstrapState> {
+  const client = createAdminPlatformClient();
+  const [providers, apiKeys, guardrailEvents] = await Promise.all([client.listAiProviders(), client.listAiApiKeys(), client.listGuardrailEvents()]);
+  return { providers, apiKeys, guardrailEvents };
+}
+
+async function createAdminAiProvider(form: AiGovernanceForm): Promise<AiProviderDto> {
+  return createAdminPlatformClient().createAiProvider({
+    name: form.providerName,
+    adapter: form.providerAdapter,
+    baseUrl: form.providerBaseUrl,
+    models: form.providerModels.split(",").map((model) => model.trim()).filter(Boolean)
+  });
+}
+
+async function createAdminAiApiKey(providerId: string, form: AiGovernanceForm, secret: string): Promise<AiApiKeyDto> {
+  return createAdminPlatformClient().createAiApiKey({
+    providerId,
+    name: form.apiKeyName,
+    secret,
+    usageMode: "production",
+    quotaTokens: Number.parseInt(form.apiKeyQuotaTokens, 10) || 100000,
+    fallbackPriority: Number.parseInt(form.apiKeyFallbackPriority, 10) || 1
+  });
+}
+
+async function configureAdminAiRoute(providerId: string, form: AiGovernanceForm): Promise<AiScenarioRouteDto> {
+  return createAdminPlatformClient().configureAiRoute({
+    scenario: form.routeScenario,
+    primaryProviderId: providerId,
+    primaryModel: form.routeModel
+  });
+}
+
+async function configureAdminAiQuota(form: AiGovernanceForm): Promise<AiQuotaDto> {
+  return createAdminPlatformClient().configureAiQuota({
+    scope: form.quotaScope,
+    dailyLimit: Number.parseInt(form.quotaDailyLimit, 10) || 1000,
+    monthlyLimit: Number.parseInt(form.quotaMonthlyLimit, 10) || 30000,
+    warningThreshold: Number.parseInt(form.quotaWarningThreshold, 10) || 900,
+    hardStop: true,
+    usedToday: 0
+  });
+}
+
+async function createAdminGuardrailRule(form: AiGovernanceForm): Promise<GuardrailRuleDto> {
+  return createAdminPlatformClient().createGuardrailRule({
+    name: form.guardrailName,
+    type: "keyword",
+    pattern: form.guardrailPattern,
+    severity: "high",
+    action: "block",
+    scope: "organization"
+  });
 }
 
 async function runProviderTestCall(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
@@ -688,12 +792,23 @@ function AdminApp() {
   const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
   const [installerSetupForm, setInstallerSetupForm] = useState(initialInstallerSetupForm);
+  const [aiGovernanceForm, setAiGovernanceForm] = useState(initialAiGovernanceForm);
   const [savedInstallerSetup, setSavedInstallerSetup] = useState<InstallerSetupResponse | undefined>(undefined);
   const [installerReports, setInstallerReports] = useState<InstallerReportDto[]>([]);
+  const [aiProviders, setAiProviders] = useState<AiProviderDto[]>([]);
+  const [aiApiKeys, setAiApiKeys] = useState<AiApiKeyDto[]>([]);
+  const [aiGuardrailEvents, setAiGuardrailEvents] = useState<GuardrailEventDto[]>([]);
+  const [latestAiRoute, setLatestAiRoute] = useState<AiScenarioRouteDto | undefined>(undefined);
+  const [latestAiQuota, setLatestAiQuota] = useState<AiQuotaDto | undefined>(undefined);
+  const [latestGuardrailRule, setLatestGuardrailRule] = useState<GuardrailRuleDto | undefined>(undefined);
+  const [aiGovernanceSource, setAiGovernanceSource] = useState<"Platform API" | "local fallback">("local fallback");
+  const [aiGovernanceMessage, setAiGovernanceMessage] = useState("AI governance actions are ready for local fallback review.");
+  const [aiKeySecret, setAiKeySecret] = useState("");
   const [providerTestCallResult, setProviderTestCallResult] = useState<AiProviderTestCallResponse | undefined>(undefined);
   const [providerTestCallMessage, setProviderTestCallMessage] = useState("Run a dry-run provider test before Creator traffic depends on this route.");
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
   const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
+  const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -705,6 +820,21 @@ function AdminApp() {
     listInstallerReports()
       .then(setInstallerReports)
       .catch(() => setInstallerReports([]));
+
+    loadAiGovernanceState()
+      .then((state) => {
+        setAiProviders(state.providers);
+        setAiApiKeys(state.apiKeys);
+        setAiGuardrailEvents(state.guardrailEvents);
+        setAiGovernanceSource("Platform API");
+        setAiGovernanceMessage("Loaded AI governance state from Platform API.");
+      })
+      .catch(() => {
+        setAiProviders([]);
+        setAiApiKeys([]);
+        setAiGuardrailEvents([]);
+        setAiGovernanceSource("local fallback");
+      });
   }, []);
 
   useEffect(() => {
@@ -819,6 +949,90 @@ function AdminApp() {
     setInstallerSetupForm((current) => ({ ...current, [field]: event.target.value }));
   }
 
+  function handleAiGovernanceField(field: keyof AiGovernanceForm, event: ChangeEvent<HTMLInputElement>) {
+    setAiGovernanceForm((current) => ({ ...current, [field]: event.target.value }) as AiGovernanceForm);
+  }
+
+  async function handleCreateAiProvider() {
+    setIsSavingAiGovernance(true);
+    try {
+      const provider = await createAdminAiProvider(aiGovernanceForm);
+      setAiProviders((current) => [provider, ...current.filter((candidate) => candidate.id !== provider.id)]);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Provider saved: ${provider.name}`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Provider save failed; local fallback rows remain visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleSaveAiApiKey() {
+    setIsSavingAiGovernance(true);
+    try {
+      const providerId = aiProviders[0]?.id ?? "aip_openai";
+      const key = await createAdminAiApiKey(providerId, aiGovernanceForm, aiKeySecret || "replace-before-production");
+      setAiApiKeys((current) => [key, ...current.filter((candidate) => candidate.id !== key.id)]);
+      setAiKeySecret("");
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Masked key saved for ${key.providerId}; fingerprint evidence is visible.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("API key save failed; verify provider exists and secret input is set.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleConfigureAiRoute() {
+    setIsSavingAiGovernance(true);
+    try {
+      const providerId = aiProviders[0]?.id ?? "aip_openai";
+      const route = await configureAdminAiRoute(providerId, aiGovernanceForm);
+      setLatestAiRoute(route);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Route configured for ${route.scenario}.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Route configuration failed; create or load an active provider first.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleConfigureAiQuota() {
+    setIsSavingAiGovernance(true);
+    try {
+      const quota = await configureAdminAiQuota(aiGovernanceForm);
+      setLatestAiQuota(quota);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Quota configured for ${quota.scope}.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Quota configuration failed; local fallback remains visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleCreateGuardrailRule() {
+    setIsSavingAiGovernance(true);
+    try {
+      const rule = await createAdminGuardrailRule(aiGovernanceForm);
+      const events = await createAdminPlatformClient().listGuardrailEvents().catch(() => aiGuardrailEvents);
+      setLatestGuardrailRule(rule);
+      setAiGuardrailEvents(events);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Guardrail active: ${rule.name}`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Guardrail save failed; local fallback rules remain visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
@@ -837,6 +1051,43 @@ function AdminApp() {
   const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
   const latestInstallerReport = installerReports[installerReports.length - 1];
   const installJourneyRows = buildInstallJourneySteps(installWizard, Boolean(savedInstallerSetup), latestInstallerReport);
+  const aiProviderTableRows = aiProviders.length
+    ? aiProviders.map((provider) => ({
+        provider: provider.name,
+        adapter: provider.adapter,
+        endpoint: provider.baseUrl?.replace(/^https?:\/\//, "") ?? "configured endpoint",
+        models: provider.models.join(", "),
+        status: provider.status,
+        checked: aiGovernanceSource
+      }))
+    : providerRows;
+  const latestAiKey = aiApiKeys[0];
+  const aiRouteTableRows = latestAiRoute
+    ? [
+        {
+          scenario: latestAiRoute.scenario,
+          primary: `${latestAiRoute.primary.providerId} / ${latestAiRoute.primary.model}`,
+          fallback: latestAiRoute.fallback ? `${latestAiRoute.fallback.providerId} / ${latestAiRoute.fallback.model}` : "not configured",
+          guard: "quota + guardrail"
+        },
+        ...routeRows.filter((row) => row.scenario !== latestAiRoute.scenario)
+      ]
+    : routeRows;
+  const aiGuardrailRows = latestGuardrailRule
+    ? [
+        { rule: latestGuardrailRule.name, severity: latestGuardrailRule.severity, action: latestGuardrailRule.action, scope: latestGuardrailRule.scope, status: latestGuardrailRule.status },
+        ...guardrailRows.filter((row) => row.rule !== latestGuardrailRule.name)
+      ]
+    : guardrailRows;
+  const aiEventRows = aiGuardrailEvents.length
+    ? aiGuardrailEvents.map((event) => ({
+        event: event.id,
+        decision: event.decision,
+        rule: event.matchedRuleName ?? event.matchedRuleId ?? "No matched rule",
+        actor: event.actorId ?? "Platform API",
+        time: event.occurredAt ?? "latest"
+      }))
+    : eventRows;
 
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
@@ -1422,7 +1673,35 @@ function AdminApp() {
             </div>
           </SectionCard>
 
-          <SectionCard eyebrow="Provider Registry" title="External AI Providers" action={<button type="button" className="ghost-button">Add API Key</button>}>
+          <SectionCard
+            eyebrow="Provider Registry"
+            title="External AI Providers"
+            action={
+              <button type="button" className="ghost-button" onClick={handleCreateAiProvider} disabled={isSavingAiGovernance}>
+                <BrainCircuit size={15} /> Create Provider
+              </button>
+            }
+          >
+            <div className="ai-governance-action-panel">
+              <label>
+                Provider
+                <input value={aiGovernanceForm.providerName} onChange={(event) => handleAiGovernanceField("providerName", event)} />
+              </label>
+              <label>
+                Base URL
+                <input value={aiGovernanceForm.providerBaseUrl} onChange={(event) => handleAiGovernanceField("providerBaseUrl", event)} />
+              </label>
+              <label>
+                Models
+                <input value={aiGovernanceForm.providerModels} onChange={(event) => handleAiGovernanceField("providerModels", event)} />
+              </label>
+              <DefinitionGrid
+                items={[
+                  { label: "Source", value: aiGovernanceSource },
+                  { label: "Last action", value: aiGovernanceMessage }
+                ]}
+              />
+            </div>
             <DataTable
               columns={[
                 { key: "provider", label: "Provider" },
@@ -1432,7 +1711,7 @@ function AdminApp() {
                 { key: "status", label: "Status", tone: () => "success" },
                 { key: "checked", label: "Checked" }
               ]}
-              rows={providerRows}
+              rows={aiProviderTableRows}
             />
           </SectionCard>
 
@@ -1441,17 +1720,30 @@ function AdminApp() {
               <div className="ds-summary-row">
                 <div className="ds-summary-icon"><LockKeyhole size={22} /></div>
                 <div>
-                  <strong>Primary Production Key</strong>
-                  <span>Secret saved. Only fingerprint is visible.</span>
+                  <strong>{latestAiKey?.name ?? "Primary Production Key"}</strong>
+                  <span>{latestAiKey ? "API key saved through Platform API. Only masked evidence is visible." : "Secret input is cleared after save. Only fingerprint is visible."}</span>
                 </div>
-                <ToneBadge tone="success">active</ToneBadge>
+                <ToneBadge tone={latestAiKey ? "success" : "warning"}>{latestAiKey?.status ?? "pending"}</ToneBadge>
+              </div>
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Key Name
+                  <input value={aiGovernanceForm.apiKeyName} onChange={(event) => handleAiGovernanceField("apiKeyName", event)} />
+                </label>
+                <label>
+                  Secret
+                  <input type="password" value={aiKeySecret} onChange={(event) => setAiKeySecret(event.target.value)} placeholder="paste provider secret" />
+                </label>
+                <button type="button" className="secondary-button" onClick={handleSaveAiApiKey} disabled={isSavingAiGovernance}>
+                  <KeyRound size={15} /> Save Masked Key
+                </button>
               </div>
               <DefinitionGrid
                 items={[
-                  { label: "Provider", value: "OpenAI Production" },
-                  { label: "Usage", value: "production" },
-                  { label: "Quota", value: "100k tokens/day" },
-                  { label: "Fingerprint", value: <><Fingerprint size={14} /> fp_9f2a4c01d881</> }
+                  { label: "Provider", value: latestAiKey?.providerId ?? aiProviders[0]?.name ?? "OpenAI Production" },
+                  { label: "Usage", value: latestAiKey?.usageMode ?? "production" },
+                  { label: "Quota", value: latestAiKey?.quotaTokens ? `${latestAiKey.quotaTokens} tokens/day` : `${aiGovernanceForm.apiKeyQuotaTokens} tokens/day` },
+                  { label: "Fingerprint", value: <><Fingerprint size={14} /> {latestAiKey?.fingerprint ?? "fingerprint after save"}</> }
                 ]}
               />
             </SectionCard>
@@ -1471,7 +1763,25 @@ function AdminApp() {
           </section>
 
           <section className="ds-grid-2">
-            <SectionCard eyebrow="Routing Matrix" title="Scenario Routing" action={<button type="button" className="ghost-button">Configure Routing</button>}>
+            <SectionCard
+              eyebrow="Routing Matrix"
+              title="Scenario Routing"
+              action={
+                <button type="button" className="ghost-button" onClick={handleConfigureAiRoute} disabled={isSavingAiGovernance}>
+                  <Route size={15} /> Configure Route
+                </button>
+              }
+            >
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Scenario
+                  <input value={aiGovernanceForm.routeScenario} onChange={(event) => handleAiGovernanceField("routeScenario", event)} />
+                </label>
+                <label>
+                  Primary Model
+                  <input value={aiGovernanceForm.routeModel} onChange={(event) => handleAiGovernanceField("routeModel", event)} />
+                </label>
+              </div>
               <DataTable
                 columns={[
                   { key: "scenario", label: "Scenario" },
@@ -1479,15 +1789,28 @@ function AdminApp() {
                   { key: "fallback", label: "Fallback" },
                   { key: "guard", label: "Guard" }
                 ]}
-                rows={routeRows}
+                rows={aiRouteTableRows}
               />
             </SectionCard>
 
             <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
               <div className="ds-quota-meter">
-                <div><span>Used today</span><strong>999 / 1,000</strong></div>
-                <div className="ds-meter-track"><span style={{ width: "99%" }} /></div>
+                <div><span>Used today</span><strong>{latestAiQuota?.usedToday ?? 0} / {latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit}</strong></div>
+                <div className="ds-meter-track"><span style={{ width: latestAiQuota ? `${Math.min((latestAiQuota.usedToday / Math.max(latestAiQuota.dailyLimit, 1)) * 100, 100)}%` : "0%" }} /></div>
                 <small>Hard stop blocks before provider call.</small>
+              </div>
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Scope
+                  <input value={aiGovernanceForm.quotaScope} onChange={(event) => handleAiGovernanceField("quotaScope", event)} />
+                </label>
+                <label>
+                  Daily Limit
+                  <input value={aiGovernanceForm.quotaDailyLimit} onChange={(event) => handleAiGovernanceField("quotaDailyLimit", event)} />
+                </label>
+                <button type="button" className="secondary-button" onClick={handleConfigureAiQuota} disabled={isSavingAiGovernance}>
+                  <Gauge size={15} /> Configure Quota
+                </button>
               </div>
               <div className="ds-stack-list">
                 {["Organization 1,000 daily", "Creator 500 daily", "Project 300 daily", "App 100 daily"].map((item) => (
@@ -1498,7 +1821,25 @@ function AdminApp() {
           </section>
 
           <section className="ds-grid-2">
-            <SectionCard eyebrow="Security Rules" title="Guardrail Rules" action={<button type="button" className="ghost-button">Add Rule</button>}>
+            <SectionCard
+              eyebrow="Security Rules"
+              title="Guardrail Rules"
+              action={
+                <button type="button" className="ghost-button" onClick={handleCreateGuardrailRule} disabled={isSavingAiGovernance}>
+                  <ShieldCheck size={15} /> Add Guardrail Rule
+                </button>
+              }
+            >
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Rule Name
+                  <input value={aiGovernanceForm.guardrailName} onChange={(event) => handleAiGovernanceField("guardrailName", event)} />
+                </label>
+                <label>
+                  Keyword Pattern
+                  <input value={aiGovernanceForm.guardrailPattern} onChange={(event) => handleAiGovernanceField("guardrailPattern", event)} />
+                </label>
+              </div>
               <DataTable
                 columns={[
                   { key: "rule", label: "Rule" },
@@ -1507,7 +1848,7 @@ function AdminApp() {
                   { key: "scope", label: "Scope" },
                   { key: "status", label: "Status", tone: () => "success" }
                 ]}
-                rows={guardrailRows}
+                rows={aiGuardrailRows}
               />
             </SectionCard>
 
@@ -1520,7 +1861,7 @@ function AdminApp() {
                   { key: "actor", label: "Actor" },
                   { key: "time", label: "Time" }
                 ]}
-                rows={eventRows}
+                rows={aiEventRows}
               />
             </SectionCard>
           </section>

@@ -1689,6 +1689,36 @@ button {
   overflow-wrap: anywhere;
 }
 
+.ai-governance-action-panel {
+  align-items: end;
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: var(--evcp-space-3);
+}
+
+.ai-governance-action-panel.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.ai-governance-action-panel label {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+.ai-governance-action-panel input {
+  color: var(--evcp-color-text);
+  min-width: 0;
+  width: 100%;
+}
+
+.ai-governance-action-panel .ds-definition-grid {
+  grid-column: 1 / -1;
+}
+
 .operations-recovery-shell {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border-soft);
@@ -2074,6 +2104,8 @@ button:disabled {
   .ds-grid-2,
   .ds-service-strip,
   .provider-test-call-panel,
+  .ai-governance-action-panel,
+  .ai-governance-action-panel.compact,
   .admin-monitoring-kpis,
   .admin-monitoring-grid,
     .auth-kpi-grid,

@@ -189,6 +189,76 @@ test("platform API client posts AI provider test-call requests", async () => {
   assert.equal(result.usageLogId, "aigw_0001");
 });
 
+test("platform API client manages AI governance resources", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      const method = init.method ?? "GET";
+      const body = init.body ? JSON.parse(String(init.body)) : undefined;
+      observed.push({ url: String(url), method, body });
+
+      if (method === "GET" && String(url).endsWith("/ai/providers")) {
+        return new Response(JSON.stringify(success([{ id: "aip_openai", name: "OpenAI Production", adapter: "openai", models: ["gpt-4.1"], status: "active" }])), { status: 200 });
+      }
+      if (method === "GET" && String(url).endsWith("/ai/api-keys")) {
+        return new Response(JSON.stringify(success([{ id: "aik_openai", providerId: "aip_openai", name: "Primary", maskedValue: "sk-...1234", fingerprint: "sha256:abc", status: "active" }])), { status: 200 });
+      }
+      if (method === "POST" && String(url).endsWith("/ai/providers")) {
+        return new Response(JSON.stringify(success({ id: "aip_new", name: body.name, adapter: body.adapter, baseUrl: body.baseUrl, models: body.models, status: "active" })), { status: 201 });
+      }
+      if (method === "POST" && String(url).endsWith("/ai/api-keys")) {
+        return new Response(JSON.stringify(success({ id: "aik_new", providerId: body.providerId, name: body.name, maskedValue: "sk-...7890", fingerprint: "sha256:def", status: "active" })), { status: 201 });
+      }
+      if (method === "POST" && String(url).endsWith("/ai/routes")) {
+        return new Response(JSON.stringify(success({ scenario: body.scenario, primary: { providerId: body.primaryProviderId, model: body.primaryModel } })), { status: 200 });
+      }
+      if (method === "POST" && String(url).endsWith("/ai/quotas")) {
+        return new Response(JSON.stringify(success(body)), { status: 200 });
+      }
+      if (method === "POST" && String(url).endsWith("/guardrails/rules")) {
+        return new Response(JSON.stringify(success({ id: "grd_new", ...body, status: "active" })), { status: 201 });
+      }
+      if (method === "GET" && String(url).endsWith("/guardrails/events")) {
+        return new Response(JSON.stringify(success([{ id: "gre_0001", decision: "block", prompt: "redacted", scenario: "prd_generation" }])), { status: 200 });
+      }
+      throw new Error(`Unexpected request ${method} ${url}`);
+    }
+  });
+
+  const providers = await client.listAiProviders();
+  const keys = await client.listAiApiKeys();
+  const provider = await client.createAiProvider({ name: "OpenAI New", adapter: "openai", baseUrl: "https://api.openai.com/v1", models: ["gpt-4.1-mini"] });
+  const key = await client.createAiApiKey({ providerId: provider.id, name: "Primary", secret: "secret-value", usageMode: "production", quotaTokens: 1000, fallbackPriority: 1 });
+  const route = await client.configureAiRoute({ scenario: "prd_generation", primaryProviderId: provider.id, primaryModel: "gpt-4.1-mini" });
+  const quota = await client.configureAiQuota({ scope: "creator", dailyLimit: 1000, monthlyLimit: 30000, warningThreshold: 900, hardStop: true, usedToday: 0 });
+  const rule = await client.createGuardrailRule({ name: "Block payroll export", type: "keyword", pattern: "payroll", severity: "high", action: "block", scope: "organization" });
+  const events = await client.listGuardrailEvents();
+
+  assert.equal(providers[0].id, "aip_openai");
+  assert.equal(keys[0].maskedValue, "sk-...1234");
+  assert.equal(key.fingerprint, "sha256:def");
+  assert.equal(route.primary.model, "gpt-4.1-mini");
+  assert.equal(quota.scope, "creator");
+  assert.equal(rule.status, "active");
+  assert.equal(events[0].id, "gre_0001");
+  assert.deepEqual(
+    observed.map((request) => `${request.method} ${new URL(request.url).pathname}`),
+    [
+      "GET /api/ai/providers",
+      "GET /api/ai/api-keys",
+      "POST /api/ai/providers",
+      "POST /api/ai/api-keys",
+      "POST /api/ai/routes",
+      "POST /api/ai/quotas",
+      "POST /api/guardrails/rules",
+      "GET /api/guardrails/events"
+    ]
+  );
+  assert.equal(observed[3].body.secret, "secret-value");
+});
+
 test("platform API client posts installer preflight profiles", async () => {
   let observedUrl = "";
   let observedBody = {};
