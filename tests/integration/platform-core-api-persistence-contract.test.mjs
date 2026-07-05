@@ -17,7 +17,8 @@ test("core API persistence wiring covers auth project and audit routes", () => {
     assert.match(appFactory, new RegExp(route.replaceAll("/", "\\/")));
   }
 
-  assert.match(appFactory, /resolvePersistenceCurrentUser/);
+  assert.match(appFactory, /resolvePersistenceAuth/);
+  assert.match(appFactory, /buildAuthEvidence/);
   assert.match(appFactory, /services\.corePersistence\.createProject/);
   assert.match(appFactory, /services\.corePersistence\.listProjects/);
   assert.match(appFactory, /services\.corePersistence\.recordAudit/);

@@ -94,6 +94,6 @@ The tests prove:
 ## Remaining Mock-to-Real Work
 
 - Add PostgreSQL-backed integration tests that run `prisma migrate deploy`, seed and route-level API calls against a real database.
-- Move auth session lookup from mock headers to Platform Auth/Keycloak-backed identities.
+- Replace simulated SSO login with the real Keycloak/OIDC callback and database-backed Platform Auth session lookup.
 - Move AI provider, PRD generation, workspace and publish/runtime services onto repository-backed state.
 - Add data migration/rollback notes when replacing each in-memory service.

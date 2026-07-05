@@ -4,6 +4,7 @@
 
 ### Added
 
+- Phase 2 Real MVP platform auth session runtime integration with signed `evcp_session` bearer tokens, SSO user provisioning, auth evidence on `/auth/me`, runtime persistence route support and unit/integration/E2E coverage.
 - Phase 2 Real MVP runtime core persistence configuration with explicit `legacy`, `memory` and `prisma` modes, private-server env contract and Platform API startup wiring.
 - Phase 2 Real MVP core API persistence mode for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`, preserving the legacy mock executor while adding async repository-backed route coverage.
 - Phase 2 Real MVP core persistence foundation with Prisma-shaped user/project/audit repositories, an in-memory contract test double, repository-backed core service harness and unit/integration/E2E coverage.

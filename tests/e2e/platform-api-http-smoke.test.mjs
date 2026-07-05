@@ -23,6 +23,8 @@ test("platform API health and auth/me return shared success envelopes", async ()
   assert.equal(me.status, 200);
   assert.equal(meJson.ok, true);
   assert.equal(meJson.data.user.email, "admin@company.com");
+  assert.equal(meJson.data.auth.mode, "mock_header");
+  assert.equal(meJson.data.auth.legacyMockFallback, true);
   assert.ok(meJson.data.permissions.includes("platform:admin"));
 });
 
@@ -56,4 +58,56 @@ test("platform API rejects missing mock auth and audits project creation", async
 
   assert.equal(audit.status, 200);
   assert.ok(auditJson.data.some((event) => event.action === "project.created"));
+});
+
+test("platform API accepts signed platform session bearer tokens on normal routes", async () => {
+  const services = createPlatformApiServices();
+  const login = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/admin/auth/simulate-login",
+    headers: { "x-mock-user-email": "admin@company.com" },
+    body: {
+      providerId: "authprov_keycloak_default_001",
+      subject: "keycloak-creator-001",
+      email: "creator.session@company.com",
+      name: "Creator Session",
+      groups: ["evcp-creators"],
+      appRoles: { "leave-management": ["Employee"] }
+    }
+  });
+
+  assert.equal(login.status, 201);
+  assert.equal(login.body.data.token.startsWith("evcp_session."), true);
+
+  const bearerHeaders = { authorization: `Bearer ${login.body.data.token}` };
+  const me = executePlatformApiRequest(services, {
+    method: "GET",
+    path: "/auth/me",
+    headers: bearerHeaders
+  });
+
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.user.email, "creator.session@company.com");
+  assert.equal(me.body.data.user.role, "creator");
+  assert.equal(me.body.data.auth.mode, "platform_session");
+  assert.equal(me.body.data.auth.sessionId, login.body.data.id);
+  assert.equal(me.body.data.auth.legacyMockFallback, false);
+
+  const projects = executePlatformApiRequest(services, {
+    method: "GET",
+    path: "/projects",
+    headers: bearerHeaders
+  });
+
+  assert.equal(projects.status, 200);
+  assert.equal(projects.body.ok, true);
+
+  const denied = executePlatformApiRequest(services, {
+    method: "GET",
+    path: "/auth/me",
+    headers: { authorization: "Bearer evcp_session.invalid.invalid" }
+  });
+
+  assert.equal(denied.status, 401);
+  assert.equal(denied.body.error.code, "UNAUTHORIZED");
 });
