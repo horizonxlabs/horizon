@@ -12,6 +12,7 @@ const validEnv = {
   EVCP_CREATOR_PORT: "4101",
   EVCP_STORE_PORT: "4102",
   DATABASE_URL: "postgresql://evcp:example-postgres-password-change-before-use@postgres:5432/evcp?schema=public",
+  EVCP_CORE_PERSISTENCE: "prisma",
   POSTGRES_PASSWORD: "example-postgres-password-change-before-use",
   SESSION_SECRET: "example-session-secret-change-before-use-32chars",
   ENCRYPTION_KEY: "example-encryption-key-change-before-use-32chars",
@@ -63,6 +64,8 @@ test("install preflight passes example contract when example secrets are explici
   const report = evaluateInstallContract({ env: validEnv, composeText, allowExampleSecrets: true });
   assert.equal(report.passed, true);
   assert.equal(report.serviceCount, 9);
+  assert.ok(report.checks.some((item) => item.name === "env:EVCP_CORE_PERSISTENCE" && item.passed === true));
+  assert.ok(report.checks.some((item) => item.name === "env:EVCP_CORE_PERSISTENCE:mode" && item.passed === true));
 });
 
 test("install preflight blocks example secrets for real install mode", () => {
@@ -77,4 +80,3 @@ test("install preflight redacts secret values", () => {
   assert.notEqual(redacted.AI_API_KEY, validEnv.AI_API_KEY);
   assert.equal(redacted.EVCP_ORG_NAME, validEnv.EVCP_ORG_NAME);
 });
-

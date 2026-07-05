@@ -96,6 +96,7 @@ The Platform API now has a first Prisma-shaped repository layer for users, proje
 - `AuditLog` records can be written and filtered by actor, action, severity and project/app resource.
 - A memory-backed `CorePersistenceClient` keeps unit and E2E tests deterministic while matching the Prisma delegate contract.
 - The core API request handler has an async persistence mode for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`.
+- Platform API startup reads `EVCP_CORE_PERSISTENCE`: use `legacy` for existing mock-first regression behavior, `memory` for deterministic local/API tests, and `prisma` for private-server core persistence through `DATABASE_URL`.
 
 This is an integration foundation. Existing sprint-specific services are still being migrated from mock/in-memory state to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
 
