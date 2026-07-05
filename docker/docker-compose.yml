@@ -1,20 +1,151 @@
+name: evcp-private-server
+
+x-evcp-node-service: &evcp-node-service
+  image: node:22-alpine
+  working_dir: /workspace
+  env_file:
+    - path: ../.env
+      required: false
+  volumes:
+    - ..:/workspace
+    - evcp_pnpm_store:/workspace/.pnpm-store
+  command: sh -lc "corepack enable && pnpm install --frozen-lockfile"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: evcp-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: evcp
-      POSTGRES_USER: evcp
-      POSTGRES_PASSWORD: evcp
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
       - evcp_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U evcp -d evcp"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evcp} -d ${POSTGRES_DB:-evcp}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: evcp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: evcp-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - evcp_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-keycloak
+    restart: unless-stopped
+    command: start-dev --http-port=8080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  platform-api:
+    <<: *evcp-node-service
+    container_name: evcp-platform-api
+    restart: unless-stopped
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
+    ports:
+      - "${EVCP_API_PORT:-3100}:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  admin-web:
+    <<: *evcp-node-service
+    container_name: evcp-admin-web
+    restart: unless-stopped
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/admin-web dev -- --host 0.0.0.0 --port 4100"
+    ports:
+      - "${EVCP_ADMIN_PORT:-4100}:4100"
+    depends_on:
+      - platform-api
+
+  creator-web:
+    <<: *evcp-node-service
+    container_name: evcp-creator-web
+    restart: unless-stopped
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/creator-web dev -- --host 0.0.0.0 --port 4101"
+    ports:
+      - "${EVCP_CREATOR_PORT:-4101}:4101"
+    depends_on:
+      - platform-api
+
+  app-store-pwa:
+    <<: *evcp-node-service
+    container_name: evcp-app-store-pwa
+    restart: unless-stopped
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/app-store-pwa dev -- --host 0.0.0.0 --port 4102"
+    ports:
+      - "${EVCP_STORE_PORT:-4102}:4102"
+    depends_on:
+      - platform-api
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: evcp-caddy
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "${EVCP_HTTP_PORT:-8080}:80"
+      - "${EVCP_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - evcp_caddy_data:/data
+      - evcp_caddy_config:/config
+    depends_on:
+      - platform-api
+      - admin-web
+      - creator-web
+      - app-store-pwa
 
 volumes:
   evcp_postgres_data:
+  evcp_minio_data:
+  evcp_caddy_data:
+  evcp_caddy_config:
+  evcp_pnpm_store:
