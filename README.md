@@ -87,7 +87,7 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
-Admin Web also includes a first-run install wizard in the Installer, Backup and Restore surface. It can call the Platform API preflight route through `/api/admin/installer/preflight` in the private-server Caddy path, supports `VITE_PLATFORM_API_BASE_URL` for local integration, and keeps setup evidence masked.
+Admin Web also includes a first-run install wizard in the Installer, Backup and Restore surface. It uses the shared `@evcp/api-client` for installer preflight, setup save and report retrieval through the private-server `/api` Caddy path, supports `VITE_PLATFORM_API_BASE_URL` for local integration, exposes Back/Next step controls, and keeps saved setup evidence masked.
 
 ## Phase 2 Real MVP Core Persistence
 
@@ -118,6 +118,12 @@ See `docs/operations/real-mvp-auth-session.md`.
 The Platform API now routes PRD generation through an AI Gateway adapter contract. The first adapter is OpenAI-compatible and supports deterministic dry-run execution for CI, guardrail and quota pre-checks, fallback policy and usage logging without exposing API key material.
 
 See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees and remaining live-worker work.
+
+## Phase 2 Real MVP Frontend API Bootstrap
+
+Admin Web, Creator Web and App Store PWA now start their primary user/project/store identity through `@evcp/api-client` and Platform API bootstrap routes instead of importing frontend mock fixtures directly. They can store and clear `evcp_session` bearer tokens through a temporary simulated SSO bridge while the real Keycloak/OIDC browser callback remains pending. Local Vite development keeps deterministic fallback state when no API base URL is configured; private-server compose uses `/api` through Caddy.
+
+See `docs/operations/real-mvp-frontend-api-bootstrap.md`.
 
 ## Sprint 1 Database
 

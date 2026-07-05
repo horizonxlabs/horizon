@@ -88,13 +88,32 @@ pnpm verify:sprint14
 
 The Admin Console operations surface includes a first-run install wizard for IT/System Admin review. It is designed to sit on top of the installer API and the private-server Caddy route:
 
-- `Run Preflight` posts the supported server profile to `/api/admin/installer/preflight` by default.
+- `Run Preflight` uses the shared `@evcp/api-client` to post the supported server profile to `/api/admin/installer/preflight` by default.
+- `Save Setup` posts editable domain, database, storage, auth, external AI provider, guardrail, backup and first-admin values to `/api/admin/installer/setup`.
+- The wizard retrieves `/api/admin/installer/reports` so the UI can show the latest install report status after preflight.
 - `VITE_PLATFORM_API_BASE_URL` can point the Admin Web bundle at a direct Platform API URL for local integration testing.
-- The wizard displays the ordered install contract: preflight, setup config, compose readiness, migrate/seed and verify health.
+- The wizard displays the ordered install contract: preflight, setup config, compose readiness, migrate/seed and verify health, with Back/Next controls and per-step status badges.
 - Failed preflight checks mark install as blocked and show actionable remediation.
-- Setup evidence shows domain, masked database URL, storage, auth, external AI provider, backup and first admin without rendering plaintext secrets.
+- Setup evidence shows domain, masked database URL, storage, auth, external AI provider, backup and first admin without rendering plaintext secrets after save.
 
 The wizard keeps deterministic fallback evidence for local UI development when the API is not running, but the private-server compose path is API-ready through Caddy's `/api/*` route.
+
+## First-Run Installation Journey
+
+The Admin Console now presents the install as an explicit operations journey rather than a hidden CLI-only path. Each card has an owner, evidence and next action so IT/System Admin can see whether the platform is still being prepared, already configured, blocked by preflight, ready for deployment, or ready for first login.
+
+| Step | Owner | Evidence | Next Action |
+| --- | --- | --- | --- |
+| Prepare Server | System Admin | Docker host CPU/RAM/disk/ports/DNS/TLS profile | Prepare private server capacity and replace example secrets |
+| Configure Environment | IT Admin | `.env`, `docker/docker-compose.yml`, `VITE_PLATFORM_API_BASE_URL` | Review environment, domain, ports and external AI values |
+| Run Preflight | IT Admin | `POST /api/admin/installer/preflight` and installer report path | Run Preflight |
+| Save Setup | Platform Admin | `POST /api/admin/installer/setup` and masked setup evidence | Save Setup |
+| Deploy Stack | System Admin | `docker compose --env-file .env -f docker/docker-compose.yml up -d` | Deploy Stack |
+| Migrate + Seed | Platform API | `pnpm --filter @evcp/platform-api exec prisma migrate deploy` plus seed | Run Prisma migrate deploy and seed |
+| Verify Health | IT Admin | health endpoints, Caddy `/api/*` route and service readiness | Verify Health |
+| First Admin Login | Platform Admin | `GET /api/auth/me` through a Platform Auth session | First Admin Login |
+
+The journey does not mark deployment, migration or health as complete from UI text alone. It follows the same state source as the wizard: preflight report status, saved setup evidence, active step and installer report history.
 
 ## Installer Report
 
@@ -122,8 +141,8 @@ The installer report includes:
 ## Remaining Mock-to-Real Work
 
 - Replace simulated SSO login with the real Keycloak/OIDC callback and remove mock auth header fallback after all clients send Platform Auth bearer sessions.
-- Replace direct frontend mock-data imports with API clients.
+- Continue replacing static frontend demo sections with API calls; primary user/project/store bootstrap now uses `@evcp/api-client`.
 - Move service state from in-memory/demo records to Prisma-backed repositories.
-- Connect AI Provider Adapter to real external providers.
+- Add the production worker/runtime fetcher around the live AI Provider Adapter path, including retry and circuit-breaker policy.
 - Replace mock generated app preview with real build/deploy/runtime flow.
 - Add E2E tests that use real login, database state and deployed generated app routes.
