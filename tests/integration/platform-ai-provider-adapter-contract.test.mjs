@@ -8,6 +8,18 @@ test("AI provider adapter contract supports external OpenAI-compatible gateway w
 
   assert.match(servicesSource, /interface AiCompletionAdapter/);
   assert.match(servicesSource, /class OpenAiCompatibleCompletionAdapter/);
+  assert.match(servicesSource, /AiGatewayRuntimeOptions/);
+  assert.match(servicesSource, /AiGatewayCircuitBreakerOptions/);
+  assert.match(servicesSource, /maxRetries/);
+  assert.match(servicesSource, /retryableStatusCodes/);
+  assert.match(servicesSource, /circuitBreaker/);
+  assert.match(servicesSource, /providerCircuits/);
+  assert.match(servicesSource, /assertCircuitClosed/);
+  assert.match(servicesSource, /recordCircuitFailure/);
+  assert.match(servicesSource, /chat\/completions/);
+  assert.match(servicesSource, /dryRun: false/);
+  assert.match(servicesSource, /sanitizeProviderError/);
+  assert.match(servicesSource, /fetcher/);
   assert.match(servicesSource, /invokeCompletion/);
   assert.match(servicesSource, /guardrailDecision === "block"/);
   assert.match(servicesSource, /quota_exceeded/);
