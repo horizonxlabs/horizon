@@ -95,8 +95,9 @@ The Platform API now has a first Prisma-shaped repository layer for users, proje
 - `Project` records can be created/upserted and listed with admin/creator scoping.
 - `AuditLog` records can be written and filtered by actor, action, severity and project/app resource.
 - A memory-backed `CorePersistenceClient` keeps unit and E2E tests deterministic while matching the Prisma delegate contract.
+- The core API request handler has an async persistence mode for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`.
 
-This is an integration foundation. Existing routes are still being migrated from mock/in-memory services to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
+This is an integration foundation. Existing sprint-specific services are still being migrated from mock/in-memory state to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
 
 ## Sprint 1 Database
 

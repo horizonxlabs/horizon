@@ -6,6 +6,7 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createPlatformApiServices, type PlatformApiServices } from "./platform-services";
+import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -21,8 +22,12 @@ type HttpResponse = {
 };
 
 type RouteRegistry = {
-  get: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void) => void;
-  post: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void) => void;
+  get: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
+  post: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
+};
+
+export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
+  corePersistence?: CoreRepositoryBackedService;
 };
 
 export interface PlatformRequest {
@@ -154,6 +159,113 @@ function errorResponse(error: unknown): PlatformResponse {
 
 function sendPlatformResponse(response: HttpResponse, platformResponse: PlatformResponse): void {
   response.status(platformResponse.status).json(platformResponse.body);
+}
+
+async function sendPlatformResponseAsync(response: HttpResponse, platformResponse: Promise<PlatformResponse>): Promise<void> {
+  sendPlatformResponse(response, await platformResponse);
+}
+
+function createMockAuthError(message: string): Error {
+  const error = new Error(message);
+  error.name = "MockAuthError";
+  return error;
+}
+
+function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
+  const direct = headers[name];
+  const lower = headers[name.toLowerCase()];
+  const value = direct ?? lower;
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+async function resolvePersistenceCurrentUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
+  const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+  if (!email) throw createMockAuthError("Missing x-mock-user-email header");
+  if (!services.corePersistence) throw new Error("Core persistence service is not configured");
+  return services.corePersistence.getUserByEmail(email);
+}
+
+function buildAuditFilterInput(body: Record<string, unknown> | undefined) {
+  return {
+    actorId: body?.actorId ? String(body.actorId) : undefined,
+    action: body?.action ? String(body.action) : undefined,
+    projectId: body?.projectId ? String(body.projectId) : undefined,
+    appId: body?.appId ? String(body.appId) : undefined,
+    severity: body?.severity ? (String(body.severity) as never) : undefined,
+    dateFrom: body?.dateFrom ? String(body.dateFrom) : undefined,
+    dateTo: body?.dateTo ? String(body.dateTo) : undefined
+  };
+}
+
+function isPersistenceCoreRoute(request: PlatformRequest): boolean {
+  return (
+    request.path === "/auth/me" ||
+    request.path === "/projects" ||
+    request.path === "/audit-logs" ||
+    request.path === "/audit-logs/filter"
+  );
+}
+
+export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
+  if (!services.corePersistence || !isPersistenceCoreRoute(request)) return executePlatformApiRequest(services, request);
+
+  try {
+    if (request.method === "GET" && request.path === "/auth/me") {
+      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      await services.corePersistence.recordAudit({
+        actorId: user.id,
+        action: "auth.me",
+        resourceType: "platform_user",
+        resourceId: user.id
+      });
+      return { status: HttpStatus.OK, body: success({ user, permissions: user.permissions }) };
+    }
+
+    if (request.method === "GET" && request.path === "/projects") {
+      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      services.auth.requireRole(user, ["admin", "creator"]);
+      return { status: HttpStatus.OK, body: success(await services.corePersistence.listProjects(user)) };
+    }
+
+    if (request.method === "POST" && request.path === "/projects") {
+      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      const project = await services.corePersistence.createProject({
+        actor: user,
+        name: String(request.body?.name ?? "Untitled Project"),
+        slug: String(request.body?.slug ?? "untitled-project"),
+        appType: request.body?.appType ? String(request.body.appType) : undefined,
+        businessProblem: request.body?.businessProblem ? String(request.body.businessProblem) : undefined,
+        targetDepartment: request.body?.targetDepartment ? String(request.body.targetDepartment) : undefined,
+        intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
+        dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
+      });
+      await services.corePersistence.recordAudit({
+        actorId: user.id,
+        action: "project.created",
+        resourceType: "project",
+        resourceId: project.id,
+        metadata: { projectId: project.id, slug: project.slug }
+      });
+      return { status: HttpStatus.CREATED, body: success(project) };
+    }
+
+    if (request.method === "GET" && request.path === "/audit-logs") {
+      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      services.auth.requireRole(user, ["admin"]);
+      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit({})) };
+    }
+
+    if (request.method === "POST" && request.path === "/audit-logs/filter") {
+      const user = await resolvePersistenceCurrentUser(services, request.headers ?? {});
+      services.auth.requireRole(user, ["admin"]);
+      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
+    }
+
+    return executePlatformApiRequest(services, request);
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 export function executePlatformApiRequest(services: PlatformApiServices, request: PlatformRequest): PlatformResponse {
@@ -1096,31 +1208,31 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
   }
 }
 
-function registerPlatformRoutes(app: INestApplication, services: PlatformApiServices): void {
+function registerPlatformRoutes(app: INestApplication, services: PersistenceAwarePlatformApiServices): void {
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
 
   routes.get("/health", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/health", headers: request.headers }))
   );
   routes.get("/auth/me", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/auth/me", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/auth/me", headers: request.headers }))
   );
   routes.get("/projects", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/projects", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/projects", headers: request.headers }))
   );
   routes.post("/projects", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, { method: "POST", path: "/projects", headers: request.headers, body: request.body })
+      executePlatformApiRequestAsync(services, { method: "POST", path: "/projects", headers: request.headers, body: request.body })
     )
   );
   routes.get("/audit-logs", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/audit-logs", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/audit-logs", headers: request.headers }))
   );
   routes.post("/audit-logs/filter", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, { method: "POST", path: "/audit-logs/filter", headers: request.headers, body: request.body })
+      executePlatformApiRequestAsync(services, { method: "POST", path: "/audit-logs/filter", headers: request.headers, body: request.body })
     )
   );
   routes.get("/admin/knowledge/sources", (request, response) =>
@@ -1778,7 +1890,7 @@ function registerPlatformRoutes(app: INestApplication, services: PlatformApiServ
   );
 }
 
-export async function createPlatformApiApp(services: PlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
+export async function createPlatformApiApp(services: PersistenceAwarePlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
   const app = await NestFactory.create(PlatformApiModule, {
     logger: false
   });
