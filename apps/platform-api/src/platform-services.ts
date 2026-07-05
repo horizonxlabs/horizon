@@ -922,7 +922,8 @@ export interface GeneratedRuntimeOverview {
 }
 
 export type StoreAppAccessStatus = "active" | "available" | "pending";
-export type StorePrimaryAction = "open" | "request_access" | "view_status";
+export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
+export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
@@ -937,6 +938,9 @@ export interface StorefrontAppCard {
   ownerName: string;
   route: string;
   accessStatus: StoreAppAccessStatus;
+  installStatus: StoreAppInstallStatus;
+  installationId?: string;
+  installedAt?: string;
   myRole?: string;
   health: Status;
   version: string;
@@ -960,7 +964,20 @@ export interface StorefrontAppDetail extends StorefrontAppCard {
   accessMode: AppStoreRegistryEntry["accessMode"];
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+}
+
+export interface StoreAppInstallation {
+  id: string;
+  appId: string;
+  appSlug: string;
+  projectId: string;
+  userId: string;
+  userEmail: string;
+  status: "active" | "disabled";
+  installedAt: string;
+  disabledAt?: string;
+  lastOpenedAt?: string;
 }
 
 export interface StoreAccessRequestResult {
@@ -1486,6 +1503,19 @@ export interface AiCompletionResponse {
   fallbackUsed: boolean;
 }
 
+export interface AiProviderTestCallResult {
+  providerId: string;
+  providerName: string;
+  adapter: AiProviderAdapter;
+  model: string;
+  status: "succeeded" | "fallback";
+  fallbackUsed: boolean;
+  tokensUsed: number;
+  latencyMs: number;
+  usageLogId: string;
+  outputExcerpt: string;
+}
+
 interface AiCompletionAdapter {
   readonly kind: AiProviderAdapter;
   complete(input: {
@@ -1512,9 +1542,17 @@ export interface AiGatewayFetchResponse {
   body?: unknown;
 }
 
+export interface AiGatewayCircuitBreakerOptions {
+  failureThreshold?: number;
+  cooldownMs?: number;
+}
+
 export interface AiGatewayRuntimeOptions {
   fetcher?: (request: AiGatewayFetchRequest) => AiGatewayFetchResponse;
   now?: () => number;
+  maxRetries?: number;
+  retryableStatusCodes?: number[];
+  circuitBreaker?: AiGatewayCircuitBreakerOptions;
 }
 
 export interface GuardrailRule {
@@ -2582,6 +2620,16 @@ function providerErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function aiGatewayAttemptLimit(runtime: AiGatewayRuntimeOptions): number {
+  return Math.max(1, Math.floor(runtime.maxRetries ?? 0) + 1);
+}
+
+function isRetryableProviderStatus(status: number, runtime: AiGatewayRuntimeOptions): boolean {
+  const configured = runtime.retryableStatusCodes;
+  if (configured?.length) return configured.includes(status);
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
 class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
   readonly kind: AiProviderAdapter = "openai";
 
@@ -2606,39 +2654,53 @@ class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
       if (!fetcher) {
         throw new ValidationError("Live external AI fetcher is not configured for the provider adapter runtime");
       }
-      const response = fetcher({
-        url: `${input.provider.baseUrl.replace(/\/$/, "")}/chat/completions`,
-        method: "POST",
-        timeoutMs: input.timeoutMs,
-        headers: {
-          authorization: `Bearer ${secret}`,
-          "content-type": "application/json"
-        },
-        body: {
-          model: input.model,
-          messages: [{ role: "user", content: input.prompt }],
-          temperature: 0.2,
-          metadata: { scenario: input.scenario }
+      const maxAttempts = aiGatewayAttemptLimit(this.runtime);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        let response: AiGatewayFetchResponse;
+        try {
+          response = fetcher({
+            url: `${input.provider.baseUrl.replace(/\/$/, "")}/chat/completions`,
+            method: "POST",
+            timeoutMs: input.timeoutMs,
+            headers: {
+              authorization: `Bearer ${secret}`,
+              "content-type": "application/json"
+            },
+            body: {
+              model: input.model,
+              messages: [{ role: "user", content: input.prompt }],
+              temperature: 0.2,
+              metadata: { scenario: input.scenario }
+            }
+          });
+        } catch (error) {
+          const sanitized = sanitizeProviderError(providerErrorMessage(error), secret);
+          if (attempt < maxAttempts) continue;
+          throw new ValidationError(`OpenAI-compatible provider transport failed (attempts=${maxAttempts}): ${sanitized}`);
         }
-      });
-      if (response.status < 200 || response.status >= 300) {
-        const errorBody = response.body as { error?: { message?: unknown; type?: unknown } } | undefined;
-        const providerMessage = sanitizeProviderError(String(errorBody?.error?.message ?? `HTTP ${response.status}`), secret);
-        const providerType = errorBody?.error?.type ? ` ${String(errorBody.error.type)}` : "";
-        throw new ValidationError(`OpenAI-compatible provider error (${response.status}${providerType}): ${providerMessage}`);
+
+        if (response.status < 200 || response.status >= 300) {
+          const shouldRetry = isRetryableProviderStatus(response.status, this.runtime);
+          if (shouldRetry && attempt < maxAttempts) continue;
+          const errorBody = response.body as { error?: { message?: unknown; type?: unknown } } | undefined;
+          const providerMessage = sanitizeProviderError(String(errorBody?.error?.message ?? `HTTP ${response.status}`), secret);
+          const providerType = errorBody?.error?.type ? ` ${String(errorBody.error.type)}` : "";
+          throw new ValidationError(`OpenAI-compatible provider error (${response.status}${providerType}, attempts=${attempt}): ${providerMessage}`);
+        }
+        const body = response.body as {
+          choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+          usage?: { total_tokens?: unknown; completion_tokens?: unknown; prompt_tokens?: unknown };
+        };
+        const liveText = String(body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? "").trim();
+        if (!liveText) throw new ValidationError("OpenAI-compatible provider returned an empty completion");
+        const totalTokens = Number(body?.usage?.total_tokens ?? body?.usage?.completion_tokens ?? 0);
+        return {
+          text: liveText,
+          tokensUsed: Number.isFinite(totalTokens) && totalTokens > 0 ? totalTokens : estimateAiTokens(input.prompt, liveText),
+          latencyMs: Math.max((this.runtime.now?.() ?? Date.now()) - started, 1)
+        };
       }
-      const body = response.body as {
-        choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
-        usage?: { total_tokens?: unknown; completion_tokens?: unknown; prompt_tokens?: unknown };
-      };
-      const liveText = String(body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? "").trim();
-      if (!liveText) throw new ValidationError("OpenAI-compatible provider returned an empty completion");
-      const totalTokens = Number(body?.usage?.total_tokens ?? body?.usage?.completion_tokens ?? 0);
-      return {
-        text: liveText,
-        tokensUsed: Number.isFinite(totalTokens) && totalTokens > 0 ? totalTokens : estimateAiTokens(input.prompt, liveText),
-        latencyMs: Math.max((this.runtime.now?.() ?? Date.now()) - started, 1)
-      };
+      throw new ValidationError(`OpenAI-compatible provider exhausted attempts=${maxAttempts}`);
     }
     const text = [
       `AI Gateway dry-run response for ${input.scenario}.`,
@@ -2659,6 +2721,7 @@ export class AiGovernanceService {
   private readonly routes: AiScenarioRoute[] = [];
   private readonly quotas: AiQuota[] = [];
   private readonly usageLogs: AiUsageLog[] = [];
+  private readonly providerCircuits = new Map<string, { failures: number; openedAt?: number }>();
   private providerCalls = 0;
 
   constructor(
@@ -2830,6 +2893,42 @@ export class AiGovernanceService {
     this.providerCalls += 1;
   }
 
+  testProviderCall(
+    actor: PlatformUser,
+    input: {
+      scenario: AiScenario;
+      prompt?: string;
+      requestedTokens?: number;
+      dryRun?: boolean;
+    }
+  ): AiProviderTestCallResult {
+    this.requireAdmin(actor, "ai.provider_test.denied", "ai_provider_test_call", input.scenario);
+    const prompt = input.prompt?.trim() || `Validate ${input.scenario} provider route before Creator use`;
+    const completion = this.invokeCompletion(actor, {
+      projectId: "admin_provider_test_call",
+      scenario: input.scenario,
+      prompt,
+      requestedTokens: input.requestedTokens,
+      guardrailDecision: "allow",
+      dryRun: input.dryRun ?? true,
+      timeoutMs: 10_000
+    });
+    const provider = this.requireProvider(completion.providerId);
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      adapter: completion.adapter,
+      model: completion.model,
+      status: completion.status,
+      fallbackUsed: completion.fallbackUsed,
+      tokensUsed: completion.tokensUsed,
+      latencyMs: completion.latencyMs,
+      usageLogId: completion.usageLogId,
+      outputExcerpt: completion.text.slice(0, 280)
+    };
+  }
+
   invokeCompletion(
     actor: PlatformUser,
     input: {
@@ -2971,18 +3070,27 @@ export class AiGovernanceService {
     }
   ): AiCompletionResponse {
     const provider = this.requireProvider(input.target.providerId);
+    const circuitKey = `${provider.id}:${input.target.model}`;
+    this.assertCircuitClosed(circuitKey);
     const key = this.requireActiveKey(provider.id);
     const adapter = this.createAdapter(provider);
     this.recordProviderCall();
-    const response = adapter.complete({
-      provider,
-      key,
-      model: input.target.model,
-      prompt: input.prompt,
-      scenario: input.scenario,
-      dryRun: input.dryRun,
-      timeoutMs: input.timeoutMs
-    });
+    let response: { text: string; tokensUsed: number; latencyMs: number };
+    try {
+      response = adapter.complete({
+        provider,
+        key,
+        model: input.target.model,
+        prompt: input.prompt,
+        scenario: input.scenario,
+        dryRun: input.dryRun,
+        timeoutMs: input.timeoutMs
+      });
+      this.closeCircuit(circuitKey);
+    } catch (error) {
+      this.recordCircuitFailure(circuitKey);
+      throw error;
+    }
     const usage = this.recordUsage({
       projectId: input.projectId,
       taskId: `ai_${input.scenario}_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
@@ -3026,6 +3134,32 @@ export class AiGovernanceService {
     };
     this.usageLogs.push(usage);
     return usage;
+  }
+
+  private assertCircuitClosed(circuitKey: string): void {
+    const circuit = this.providerCircuits.get(circuitKey);
+    if (!circuit?.openedAt) return;
+    const cooldownMs = this.runtime.circuitBreaker?.cooldownMs ?? 60_000;
+    const elapsedMs = (this.runtime.now?.() ?? Date.now()) - circuit.openedAt;
+    if (elapsedMs < cooldownMs) {
+      throw new ValidationError(`AI provider circuit open for ${circuitKey}; retry after ${Math.ceil((cooldownMs - elapsedMs) / 1000)}s`);
+    }
+    this.providerCircuits.delete(circuitKey);
+  }
+
+  private recordCircuitFailure(circuitKey: string): void {
+    const threshold = this.runtime.circuitBreaker?.failureThreshold ?? 0;
+    if (threshold <= 0) return;
+    const current = this.providerCircuits.get(circuitKey) ?? { failures: 0 };
+    const failures = current.failures + 1;
+    this.providerCircuits.set(circuitKey, {
+      failures,
+      openedAt: failures >= threshold ? (this.runtime.now?.() ?? Date.now()) : current.openedAt
+    });
+  }
+
+  private closeCircuit(circuitKey: string): void {
+    this.providerCircuits.delete(circuitKey);
   }
 
   private requireActiveKey(providerId: string): StoredAiApiKey {
@@ -5210,6 +5344,7 @@ export class StorefrontService {
     const member = this.appAccess.getMemberForEmail(project, actor.email);
     const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
     const accessStatus: StoreAppAccessStatus = member ? "active" : pending ? "pending" : "available";
+    const installStatus: StoreAppInstallStatus = member ? "installed" : "not_installed";
     const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
 
     return {
@@ -5222,6 +5357,9 @@ export class StorefrontService {
       ownerName: owner?.name ?? entry.ownerUserId,
       route: entry.route,
       accessStatus,
+      installStatus,
+      installationId: member ? `legacy_appinst_${entry.appId}_${actor.id}` : undefined,
+      installedAt: member?.lastAccessAt,
       myRole: member?.roleName,
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
