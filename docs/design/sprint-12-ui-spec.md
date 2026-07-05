@@ -2,7 +2,7 @@
 
 ## Intent
 
-Sprint 12 Admin UI is an operations recovery control plane. It must show whether a private-server install can proceed, whether setup is complete without exposing secrets, whether backups are encrypted and recoverable, whether PostgreSQL PITR metadata is ready, and whether the latest restore drill passed.
+Sprint 12 Admin UI is an operations recovery control plane. It must show whether a private-server install can proceed through a first-run install wizard, whether setup is complete without exposing secrets, whether backups are encrypted and recoverable, whether PostgreSQL PITR metadata is ready, and whether the latest restore drill passed.
 
 ## Primary Surface
 
@@ -17,13 +17,13 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 | Installer, Backup and Restore                          [Run Preflight] [Drill] |
 | Private-server readiness evidence for install and recovery                      |
 +------------------+------------------+------------------+-----------------------+
-| Preflight Report | Setup Wizard     | Backup Schedule  | Restore Drill         |
+| First-run Wizard | Setup Wizard     | Backup Schedule  | Restore Drill         |
 | passed 9/9       | complete/masked  | enabled daily    | passed RPO/RTO        |
 +------------------+------------------+------------------+-----------------------+
-| Recovery Path    | Preflight Report                                           |
-| preflight        | Check | Required | Observed | Status | Action              |
-| setup wizard     +-------------------------------------------------------------+
-| compose ready    | Setup Wizard              | Docker Compose Readiness       |
+| Recovery Path    | Private-server install readiness                           |
+| preflight        | 1. Preflight | 2. Setup | 3. Compose | 4. Migrate | 5. Health |
+| setup config     +-------------------------------------------------------------+
+| compose ready    | Setup Wizard              | Preflight Report               |
 | backup schedule  | Domain/DB/storage/auth    | API/Admin/Creator/Store/...    |
 | backup run       +-------------------------------------------------------------+
 | PITR             | Backup Schedule           | Backup Runs                    |
@@ -36,10 +36,12 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 
 ## Components
 
-- `PageHeader` with actions for Run Preflight and Run Restore Drill.
+- `PageHeader` with actions for Run Preflight, Simulate Blocked Preflight and Run Restore Drill.
 - `MetricCard` for Preflight Report, Setup Wizard, Backup Schedule and Restore Drill.
-- `WorkflowRail` for preflight -> setup wizard -> compose readiness -> backup schedule -> backup run -> PITR -> restore drill.
+- `WorkflowRail` for prepare server -> configure environment -> run preflight -> save setup -> deploy stack -> migrate/seed -> verify health -> first admin login -> backup schedule -> backup run -> PITR -> restore drill.
 - `SectionCard` for each evidence group.
+- `install-journey-board`, `install-journey-card` and `install-journey-meta` for the First-run Installation Journey cards with owner, evidence and next action.
+- `install-wizard-panel`, `install-wizard-steps`, `install-wizard-action-row` and `install-setup-form` for the first-run install stepper, step controls and setup capture.
 - `DataTable` for preflight checks, compose services, backup runs and restore validation checks.
 - `DefinitionGrid` for setup summary, backup policy and PITR metadata.
 - `DecisionPanel` for setup redaction and restore drill outcome.
@@ -57,8 +59,10 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 
 | State | UI Behavior |
 | --- | --- |
-| Default | Shows latest preflight, setup, backup policy/run, PITR and restore drill evidence |
+| Default | Shows pending first-run install wizard, latest setup, backup policy/run, PITR and restore drill evidence |
+| Passed preflight | Success decision, report path and setup review state; wizard advances to editable setup config |
 | Failed preflight | Danger/warning decision, actionable failed checks, install not marked ready |
+| Saved setup | Shows masked database/storage/auth/AI/backup evidence, clears plaintext secret input and allows compose/migrate/health review |
 | Missing backup policy | Empty section remains visible with configure action |
 | Failed restore drill | Failed checks listed; recovery not marked successful; critical audit shown |
 | Access denied | Admin-only denial via standard API error envelope |
@@ -66,7 +70,10 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 ## Acceptance Criteria
 
 - [x] Admin UI includes `Installer, Backup and Restore`.
+- [x] Admin UI includes a first-run install wizard with prepare server, configure environment, preflight, setup, deploy stack, migrate/seed, health and first admin login steps.
+- [x] Admin UI includes an `install-journey-board` where every install step shows owner, evidence and next action.
+- [x] Admin UI includes Back/Next step controls, per-step statuses and API-backed setup save.
 - [x] UI exposes `Preflight Report`, `Setup Wizard`, `Backup Schedule`, `Backup Runs`, `PostgreSQL PITR`, `Restore Drill` and `Recovery Evidence`.
-- [x] UI uses `operations-recovery-shell` and `backup-restore-mobile-list` patterns.
+- [x] UI uses `operations-recovery-shell`, `install-wizard-panel`, `install-wizard-steps` and `backup-restore-mobile-list` patterns.
 - [x] Setup/backup evidence shows masked values or key references only.
 - [x] Restore drill failure language does not imply successful recovery.

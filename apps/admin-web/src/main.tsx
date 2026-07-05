@@ -1,5 +1,21 @@
+import {
+  createPlatformApiClient,
+  createPlatformSessionStore,
+  type AiApiKeyDto,
+  type AiProviderDto,
+  type AiProviderTestCallInput,
+  type AiProviderTestCallResponse,
+  type AiQuotaDto,
+  type AiScenarioRouteDto,
+  type CurrentUserResponse,
+  type GuardrailEventDto,
+  type GuardrailRuleDto,
+  type InstallerPreflightInput,
+  type InstallerReportDto,
+  type InstallerSetupResponse,
+  type SimulatedSsoLoginInput
+} from "@evcp/api-client";
 import { navigation } from "@evcp/config";
-import { mockUsers } from "@evcp/mock-data";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, MetricCard, PageHeader, SectionCard, ServiceStrip, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
   Activity,
@@ -19,7 +35,7 @@ import {
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useState, type ChangeEvent, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -237,6 +253,451 @@ const restoreValidationRows = [
   { check: "audit-events", status: "pass", evidence: "critical restore audit retained" }
 ];
 
+type InstallWizardStepId = "prepare_server" | "configure_environment" | "preflight" | "setup" | "deploy_stack" | "migrate_seed" | "verify_health" | "first_admin_login";
+type InstallWizardDecision = "ready" | "blocked" | "not_run";
+type InstallWizardStepStatus = "current" | "complete" | "blocked" | "pending";
+type PreflightRow = { check: string; required: string; observed: string; status: string; action: string };
+type InstallWizardState = {
+  decision: InstallWizardDecision;
+  source: string;
+  activeStep: InstallWizardStepId;
+  rows: PreflightRow[];
+  actionableFailures: string[];
+  reportPath: string;
+  setupStatus: "pending" | "saved";
+};
+type InstallJourneyStep = {
+  id: InstallWizardStepId;
+  label: string;
+  detail: string;
+  owner: string;
+  evidence: string;
+  nextAction: string;
+  status: InstallWizardStepStatus;
+};
+type InstallWizardSetupForm = {
+  domain: string;
+  databaseUrl: string;
+  storageProvider: string;
+  storageEndpoint: string;
+  storageBucket: string;
+  storageSecretAccessKey: string;
+  authMode: string;
+  authIssuerUrl: string;
+  aiProviderId: string;
+  aiModel: string;
+  guardrailPolicy: string;
+  backupSchedule: string;
+  backupRetentionDays: string;
+  backupEncryptionKeyRef: string;
+  firstAdminEmail: string;
+  firstAdminName: string;
+};
+
+type AdminBootstrapState = {
+  userName: string;
+  source: "Platform API" | "local fallback";
+};
+
+type AiGovernanceForm = {
+  providerName: string;
+  providerAdapter: "openai" | "anthropic" | "google" | "azure_openai" | "mock";
+  providerBaseUrl: string;
+  providerModels: string;
+  apiKeyName: string;
+  apiKeyQuotaTokens: string;
+  apiKeyFallbackPriority: string;
+  routeScenario: "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
+  routeModel: string;
+  quotaScope: "organization" | "creator" | "project" | "app";
+  quotaDailyLimit: string;
+  quotaMonthlyLimit: string;
+  quotaWarningThreshold: string;
+  guardrailName: string;
+  guardrailPattern: string;
+};
+
+type AiGovernanceBootstrapState = {
+  providers: AiProviderDto[];
+  apiKeys: AiApiKeyDto[];
+  guardrailEvents: GuardrailEventDto[];
+};
+
+const initialAdminBootstrap: AdminBootstrapState = {
+  userName: "Platform Admin",
+  source: "local fallback"
+};
+
+const adminSessionBridgeProfile: SimulatedSsoLoginInput = {
+  subject: "keycloak-admin-ui-bridge",
+  email: "admin@company.com",
+  name: "Platform Admin",
+  groups: ["evcp-admins"],
+  appRoles: {}
+};
+
+const initialInstallerSetupForm: InstallWizardSetupForm = {
+  domain: "platform.company.test",
+  databaseUrl: "postgresql://evcp:REPLACE_ME@postgres:5432/evcp",
+  storageProvider: "minio",
+  storageEndpoint: "http://minio:9000",
+  storageBucket: "evcp-artifacts",
+  storageSecretAccessKey: "replace-me",
+  authMode: "keycloak",
+  authIssuerUrl: "http://keycloak:8080/realms/evcp",
+  aiProviderId: "aip_openai",
+  aiModel: "gpt-4.1",
+  guardrailPolicy: "enterprise-default",
+  backupSchedule: "0 2 * * *",
+  backupRetentionDays: "30",
+  backupEncryptionKeyRef: "kms://evcp/backup",
+  firstAdminEmail: "admin@company.com",
+  firstAdminName: "Platform Admin"
+};
+
+const initialAiGovernanceForm: AiGovernanceForm = {
+  providerName: "OpenAI Production",
+  providerAdapter: "openai",
+  providerBaseUrl: "https://api.openai.com/v1",
+  providerModels: "gpt-4.1-mini",
+  apiKeyName: "Primary Production Key",
+  apiKeyQuotaTokens: "100000",
+  apiKeyFallbackPriority: "1",
+  routeScenario: "prd_generation",
+  routeModel: "gpt-4.1-mini",
+  quotaScope: "creator",
+  quotaDailyLimit: "1000",
+  quotaMonthlyLimit: "30000",
+  quotaWarningThreshold: "900",
+  guardrailName: "Block payroll export",
+  guardrailPattern: "payroll export"
+};
+
+const installWizardSteps = [
+  { id: "prepare_server", label: "1. Prepare Server", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
+  { id: "configure_environment", label: "2. Configure Environment", detail: ".env, secrets, domain, Caddy and compose contract" },
+  { id: "preflight", label: "3. Run Preflight", detail: "installer checks produce pass/fail report evidence" },
+  { id: "setup", label: "4. Save Setup", detail: "domain, database, storage, auth, AI, backup, first admin" },
+  { id: "deploy_stack", label: "5. Deploy Stack", detail: "Docker Compose starts platform and infrastructure services" },
+  { id: "migrate_seed", label: "6. Migrate + Seed", detail: "Prisma migration and seed plan is ready" },
+  { id: "verify_health", label: "7. Verify Health", detail: "Platform surfaces and dependencies report healthy" },
+  { id: "first_admin_login", label: "8. First Admin Login", detail: "Platform Auth session proves Admin Console is usable" }
+] satisfies Array<{ id: InstallWizardStepId; label: string; detail: string }>;
+
+const installWizardPassingProfile = {
+  cpuCores: 8,
+  memoryGb: 32,
+  diskFreeGb: 500,
+  os: "ubuntu-22.04",
+  dockerVersion: "26.1.0",
+  composeVersion: "2.27.0",
+  portsAvailable: [80, 443, 5432, 6379, 9000],
+  dnsReady: true,
+  tlsReady: true,
+  networkReady: true
+};
+
+const installWizardBlockedProfile = {
+  cpuCores: 1,
+  memoryGb: 2,
+  diskFreeGb: 10,
+  os: "",
+  dockerVersion: "",
+  composeVersion: "",
+  portsAvailable: [],
+  dnsReady: false,
+  tlsReady: false,
+  networkReady: false
+};
+
+const installWizardReadyRows: PreflightRow[] = [
+  { check: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
+  { check: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
+  { check: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
+  { check: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" },
+  { check: "Ports", required: "80/443/5432/6379/9000", observed: "all available", status: "pass", action: "-" }
+];
+
+const installWizardBlockedRows: PreflightRow[] = [
+  { check: "CPU", required: ">= 4 cores", observed: "1 core", status: "fail", action: "Add CPU capacity before install" },
+  { check: "RAM", required: ">= 8 GB", observed: "2 GB", status: "fail", action: "Add memory before install" },
+  { check: "Disk", required: ">= 100 GB free", observed: "10 GB", status: "fail", action: "Increase free disk space" },
+  { check: "Docker", required: "Docker installed", observed: "missing", status: "fail", action: "Install Docker Engine" },
+  { check: "Network", required: "Outbound and internal network ready", observed: "not ready", status: "fail", action: "Fix network connectivity" }
+];
+
+const initialInstallWizardState: InstallWizardState = {
+  decision: "not_run" as InstallWizardDecision,
+  source: "not run",
+  activeStep: "prepare_server",
+  rows: installWizardReadyRows,
+  actionableFailures: ["Run preflight before marking install ready"],
+  reportPath: "reports/install/pending-install-report.json",
+  setupStatus: "pending" as "pending" | "saved"
+};
+
+function setupItemsFromConfig(form: InstallWizardSetupForm, savedSetup?: InstallerSetupResponse) {
+  const retentionDays = Number.parseInt(form.backupRetentionDays, 10) || 30;
+  return [
+    { label: "Domain", value: savedSetup?.domain ?? form.domain },
+    { label: "Database", value: savedSetup?.databaseUrlMasked ?? form.databaseUrl.replace(/:[^:@/]+@/, ":***@") },
+    { label: "Storage", value: `${savedSetup?.storage?.provider ?? form.storageProvider} bucket ${savedSetup?.storage?.bucket ?? form.storageBucket} / key fingerprint only` },
+    { label: "Auth", value: `${savedSetup?.auth?.mode ?? form.authMode} / ${savedSetup?.auth?.issuerUrl ?? form.authIssuerUrl}` },
+    { label: "AI Provider", value: `${savedSetup?.ai?.providerId ?? form.aiProviderId} / ${savedSetup?.ai?.model ?? form.aiModel}` },
+    { label: "Backup", value: `${form.backupSchedule} / ${retentionDays}d / ${form.backupEncryptionKeyRef}` },
+    { label: "First Admin", value: String(savedSetup?.firstAdmin?.email ?? form.firstAdminEmail) }
+  ];
+}
+
+function preflightRowsFromReport(report: InstallerReportDto | undefined, fallback: PreflightRow[]): PreflightRow[] {
+  if (!report?.checks?.length) return fallback;
+  return report.checks.map((check) => ({
+    check: check.name,
+    required: check.required,
+    observed: check.observed,
+    status: check.status,
+    action: check.action
+  }));
+}
+
+function apiBaseUrl(): string | undefined {
+  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  if (!configured && import.meta.env.DEV) return undefined;
+  return (configured || "/api").replace(/\/$/, "");
+}
+
+function platformSessionToken(): string | undefined {
+  return createPlatformSessionStore(window.localStorage).getToken();
+}
+
+function createAdminPlatformClient() {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  return createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "admin@company.com"
+  });
+}
+
+async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
+  const client = createAdminPlatformClient();
+  const currentUser: CurrentUserResponse = await client.getCurrentUser();
+  return {
+    userName: currentUser.user.name,
+    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+  };
+}
+
+async function signInAdminSessionBridge(): Promise<AdminBootstrapState> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  const bridgeClient = createPlatformApiClient({
+    baseUrl,
+    legacyUserEmail: "admin@company.com"
+  });
+  const session = await bridgeClient.simulateSsoLogin(adminSessionBridgeProfile);
+  createPlatformSessionStore(window.localStorage).saveSession(session);
+  return loadAdminBootstrap();
+}
+
+function clearAdminSessionBridge(): AdminBootstrapState {
+  createPlatformSessionStore(window.localStorage).clearSession();
+  return initialAdminBootstrap;
+}
+
+async function runInstallerPreflight(profile: InstallerPreflightInput): Promise<InstallerReportDto> {
+  return createAdminPlatformClient().runInstallerPreflight(profile);
+}
+
+async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<InstallerSetupResponse> {
+  return createAdminPlatformClient().saveInstallerSetup({
+    domain: form.domain,
+    databaseUrl: form.databaseUrl,
+    storage: {
+      provider: form.storageProvider,
+      endpoint: form.storageEndpoint,
+      bucket: form.storageBucket,
+      secretAccessKey: form.storageSecretAccessKey
+    },
+    auth: {
+      mode: form.authMode,
+      issuerUrl: form.authIssuerUrl
+    },
+    ai: {
+      providerId: form.aiProviderId,
+      model: form.aiModel
+    },
+    guardrail: {
+      defaultPolicy: form.guardrailPolicy,
+      blockHighRisk: true
+    },
+    backup: {
+      schedule: form.backupSchedule,
+      retentionDays: Number.parseInt(form.backupRetentionDays, 10) || 30,
+      encryptionMode: "kms",
+      encryptionKeyRef: form.backupEncryptionKeyRef
+    },
+    firstAdmin: {
+      email: form.firstAdminEmail,
+      displayName: form.firstAdminName
+    }
+  });
+}
+
+async function listInstallerReports(): Promise<InstallerReportDto[]> {
+  return createAdminPlatformClient().listInstallerReports();
+}
+
+async function loadAiGovernanceState(): Promise<AiGovernanceBootstrapState> {
+  const client = createAdminPlatformClient();
+  const [providers, apiKeys, guardrailEvents] = await Promise.all([client.listAiProviders(), client.listAiApiKeys(), client.listGuardrailEvents()]);
+  return { providers, apiKeys, guardrailEvents };
+}
+
+async function createAdminAiProvider(form: AiGovernanceForm): Promise<AiProviderDto> {
+  return createAdminPlatformClient().createAiProvider({
+    name: form.providerName,
+    adapter: form.providerAdapter,
+    baseUrl: form.providerBaseUrl,
+    models: form.providerModels.split(",").map((model) => model.trim()).filter(Boolean)
+  });
+}
+
+async function createAdminAiApiKey(providerId: string, form: AiGovernanceForm, secret: string): Promise<AiApiKeyDto> {
+  return createAdminPlatformClient().createAiApiKey({
+    providerId,
+    name: form.apiKeyName,
+    secret,
+    usageMode: "production",
+    quotaTokens: Number.parseInt(form.apiKeyQuotaTokens, 10) || 100000,
+    fallbackPriority: Number.parseInt(form.apiKeyFallbackPriority, 10) || 1
+  });
+}
+
+async function configureAdminAiRoute(providerId: string, form: AiGovernanceForm): Promise<AiScenarioRouteDto> {
+  return createAdminPlatformClient().configureAiRoute({
+    scenario: form.routeScenario,
+    primaryProviderId: providerId,
+    primaryModel: form.routeModel
+  });
+}
+
+async function configureAdminAiQuota(form: AiGovernanceForm): Promise<AiQuotaDto> {
+  return createAdminPlatformClient().configureAiQuota({
+    scope: form.quotaScope,
+    dailyLimit: Number.parseInt(form.quotaDailyLimit, 10) || 1000,
+    monthlyLimit: Number.parseInt(form.quotaMonthlyLimit, 10) || 30000,
+    warningThreshold: Number.parseInt(form.quotaWarningThreshold, 10) || 900,
+    hardStop: true,
+    usedToday: 0
+  });
+}
+
+async function createAdminGuardrailRule(form: AiGovernanceForm): Promise<GuardrailRuleDto> {
+  return createAdminPlatformClient().createGuardrailRule({
+    name: form.guardrailName,
+    type: "keyword",
+    pattern: form.guardrailPattern,
+    severity: "high",
+    action: "block",
+    scope: "organization"
+  });
+}
+
+async function runProviderTestCall(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
+  return createAdminPlatformClient().testAiProvider(input);
+}
+
+function installWizardStepIndex(stepId: InstallWizardStepId): number {
+  return installWizardSteps.findIndex((step) => step.id === stepId);
+}
+
+function installWizardStepStatus(activeStep: InstallWizardStepId, stepId: InstallWizardStepId, decision: InstallWizardDecision, setupSaved: boolean): InstallWizardStepStatus {
+  if (decision === "blocked" && stepId === "preflight") return "blocked";
+  if (stepId === "setup" && setupSaved) return "complete";
+  const activeIndex = installWizardStepIndex(activeStep);
+  const stepIndex = installWizardStepIndex(stepId);
+  if (stepId === activeStep) return "current";
+  if (decision === "ready" && stepIndex < activeIndex) return "complete";
+  return "pending";
+}
+
+function buildInstallJourneySteps(installWizard: InstallWizardState, setupSaved: boolean, latestInstallerReport?: InstallerReportDto): InstallJourneyStep[] {
+  const metadata: Record<InstallWizardStepId, Omit<InstallJourneyStep, "status">> = {
+    prepare_server: {
+      id: "prepare_server",
+      label: "Prepare Server",
+      detail: "Supported private server profile and network are ready before install.",
+      owner: "System Admin",
+      evidence: "Docker host: CPU/RAM/disk/ports/DNS/TLS profile",
+      nextAction: "Prepare private server capacity and replace example secrets"
+    },
+    configure_environment: {
+      id: "configure_environment",
+      label: "Configure Environment",
+      detail: "Environment, public domain, Caddy route and compose service contract are reviewed.",
+      owner: "IT Admin",
+      evidence: ".env + docker/docker-compose.yml + VITE_PLATFORM_API_BASE_URL",
+      nextAction: "Review .env, domain, ports and external AI provider values"
+    },
+    preflight: {
+      id: "preflight",
+      label: "Run Preflight",
+      detail: "Installer preflight records pass/fail readiness and actionable remediation.",
+      owner: "IT Admin",
+      evidence: `POST /admin/installer/preflight -> ${latestInstallerReport?.reportPath ?? installWizard.reportPath}`,
+      nextAction: "Run Preflight"
+    },
+    setup: {
+      id: "setup",
+      label: "Save Setup",
+      detail: "Admin saves masked setup evidence without rendering plaintext secrets.",
+      owner: "Platform Admin",
+      evidence: "POST /admin/installer/setup -> masked setup evidence",
+      nextAction: "Save Setup"
+    },
+    deploy_stack: {
+      id: "deploy_stack",
+      label: "Deploy Stack",
+      detail: "Private-server platform services are started through the compose contract.",
+      owner: "System Admin",
+      evidence: "docker compose --env-file .env -f docker/docker-compose.yml up -d",
+      nextAction: "Deploy Stack"
+    },
+    migrate_seed: {
+      id: "migrate_seed",
+      label: "Migrate + Seed",
+      detail: "Database schema and initial records are applied after services are up.",
+      owner: "Platform API",
+      evidence: "pnpm --filter @evcp/platform-api exec prisma migrate deploy + seed",
+      nextAction: "Run Prisma migrate deploy and seed"
+    },
+    verify_health: {
+      id: "verify_health",
+      label: "Verify Health",
+      detail: "API, Admin, Creator, Store and dependencies report healthy readiness.",
+      owner: "IT Admin",
+      evidence: "GET /health + Caddy /api/* route + service readiness",
+      nextAction: "Verify Health"
+    },
+    first_admin_login: {
+      id: "first_admin_login",
+      label: "First Admin Login",
+      detail: "First admin session proves the installed Admin Console is usable.",
+      owner: "Platform Admin",
+      evidence: "GET /api/auth/me with Platform Auth session",
+      nextAction: "First Admin Login"
+    }
+  };
+
+  return installWizardSteps.map((step) => ({
+    ...metadata[step.id],
+    label: step.label.replace(/^\d+\.\s*/, ""),
+    status: installWizardStepStatus(installWizard.activeStep, step.id, installWizard.decision, setupSaved)
+  }));
+}
+
 const observabilityLicenseKpis = [
   { label: "Service Health", value: "8/8", detail: "core services reporting", icon: Activity, tone: "success" },
   { label: "Telemetry Export", value: "OTLP", detail: "metrics/logs/traces/alerts", icon: Route, tone: "info" },
@@ -328,6 +789,54 @@ const rtmRegressionRows = [
 ];
 
 function AdminApp() {
+  const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
+  const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
+  const [installerSetupForm, setInstallerSetupForm] = useState(initialInstallerSetupForm);
+  const [aiGovernanceForm, setAiGovernanceForm] = useState(initialAiGovernanceForm);
+  const [savedInstallerSetup, setSavedInstallerSetup] = useState<InstallerSetupResponse | undefined>(undefined);
+  const [installerReports, setInstallerReports] = useState<InstallerReportDto[]>([]);
+  const [aiProviders, setAiProviders] = useState<AiProviderDto[]>([]);
+  const [aiApiKeys, setAiApiKeys] = useState<AiApiKeyDto[]>([]);
+  const [aiGuardrailEvents, setAiGuardrailEvents] = useState<GuardrailEventDto[]>([]);
+  const [latestAiRoute, setLatestAiRoute] = useState<AiScenarioRouteDto | undefined>(undefined);
+  const [latestAiQuota, setLatestAiQuota] = useState<AiQuotaDto | undefined>(undefined);
+  const [latestGuardrailRule, setLatestGuardrailRule] = useState<GuardrailRuleDto | undefined>(undefined);
+  const [aiGovernanceSource, setAiGovernanceSource] = useState<"Platform API" | "local fallback">("local fallback");
+  const [aiGovernanceMessage, setAiGovernanceMessage] = useState("AI governance actions are ready for local fallback review.");
+  const [aiKeySecret, setAiKeySecret] = useState("");
+  const [providerTestCallResult, setProviderTestCallResult] = useState<AiProviderTestCallResponse | undefined>(undefined);
+  const [providerTestCallMessage, setProviderTestCallMessage] = useState("Run a dry-run provider test before Creator traffic depends on this route.");
+  const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
+  const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
+  const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
+  const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  useEffect(() => {
+    loadAdminBootstrap()
+      .then(setBootstrap)
+      .catch(() => setBootstrap(initialAdminBootstrap));
+
+    listInstallerReports()
+      .then(setInstallerReports)
+      .catch(() => setInstallerReports([]));
+
+    loadAiGovernanceState()
+      .then((state) => {
+        setAiProviders(state.providers);
+        setAiApiKeys(state.apiKeys);
+        setAiGuardrailEvents(state.guardrailEvents);
+        setAiGovernanceSource("Platform API");
+        setAiGovernanceMessage("Loaded AI governance state from Platform API.");
+      })
+      .catch(() => {
+        setAiProviders([]);
+        setAiApiKeys([]);
+        setAiGuardrailEvents([]);
+        setAiGovernanceSource("local fallback");
+      });
+  }, []);
+
   useEffect(() => {
     if (!window.location.hash) {
       return;
@@ -337,14 +846,266 @@ function AdminApp() {
     target?.scrollIntoView({ block: "start" });
   }, []);
 
+  async function handleRunInstallerPreflight(kind: "ready" | "blocked") {
+    setIsRunningInstallCheck(true);
+    const fallbackRows = kind === "ready" ? installWizardReadyRows : installWizardBlockedRows;
+    try {
+      const report = await runInstallerPreflight(kind === "ready" ? installWizardPassingProfile : installWizardBlockedProfile);
+      const reports = await listInstallerReports().catch(() => []);
+      setInstallerReports(reports);
+      setInstallWizard({
+        decision: report?.installBlocked ? "blocked" : "ready",
+        source: "Platform API",
+        activeStep: report?.installBlocked ? "preflight" : "setup",
+        rows: preflightRowsFromReport(report, fallbackRows),
+        actionableFailures: report?.actionableFailures.length ? report.actionableFailures : ["All install checks passed"],
+        reportPath: report?.reportPath ?? "reports/install/private-server-install-report.json",
+        setupStatus: savedInstallerSetup ? "saved" : "pending"
+      });
+    } catch {
+      setInstallWizard({
+        decision: kind === "ready" ? "ready" : "blocked",
+        source: "local fallback",
+        activeStep: kind === "ready" ? "setup" : "preflight",
+        rows: fallbackRows,
+        actionableFailures: kind === "ready" ? ["All install checks passed"] : fallbackRows.filter((row) => row.status === "fail").map((row) => `${row.check}: ${row.action}`),
+        reportPath: `reports/install/${kind === "ready" ? "passed" : "failed"}-install-report.json`,
+        setupStatus: savedInstallerSetup ? "saved" : "pending"
+      });
+    } finally {
+      setIsRunningInstallCheck(false);
+    }
+  }
+
+  async function handleSaveInstallerSetup() {
+    setIsSavingInstallerSetup(true);
+    try {
+      const setup = await saveInstallerSetup(installerSetupForm);
+      setSavedInstallerSetup(setup);
+      setInstallerSetupForm((current) => ({
+        ...current,
+        domain: setup.domain,
+        databaseUrl: setup.databaseUrlMasked,
+        storageSecretAccessKey: ""
+      }));
+      setInstallWizard((current) => ({
+        ...current,
+        source: "Platform API",
+        activeStep: current.decision === "blocked" ? "preflight" : "deploy_stack",
+        setupStatus: "saved",
+        actionableFailures: current.decision === "blocked" ? current.actionableFailures : ["Setup saved with masked secrets", "Compose readiness can be reviewed next"]
+      }));
+    } catch {
+      setInstallWizard((current) => ({
+        ...current,
+        activeStep: current.decision === "blocked" ? "preflight" : "setup",
+        setupStatus: "pending",
+        actionableFailures: ["Setup save failed; review API connectivity and required fields"]
+      }));
+    } finally {
+      setIsSavingInstallerSetup(false);
+    }
+  }
+
+  async function handleRunProviderTestCall() {
+    setIsRunningProviderTestCall(true);
+    setProviderTestCallMessage("Provider test is running through the governed AI Gateway route.");
+    try {
+      const result = await runProviderTestCall({
+        scenario: "prd_generation",
+        prompt: "Validate provider route before Creator PRD generation",
+        dryRun: true
+      });
+      setProviderTestCallResult(result);
+      setProviderTestCallMessage("Provider route validated. Output excerpt and usage evidence are safe to show.");
+    } catch (error) {
+      setProviderTestCallResult(undefined);
+      setProviderTestCallMessage(error instanceof Error ? error.message : "Provider test failed. Review route, active key and adapter setup.");
+    } finally {
+      setIsRunningProviderTestCall(false);
+    }
+  }
+
+  function handleWizardNext() {
+    setInstallWizard((current) => {
+      if (current.decision === "blocked") return current;
+      const nextStep = installWizardSteps[Math.min(installWizardStepIndex(current.activeStep) + 1, installWizardSteps.length - 1)]?.id ?? current.activeStep;
+      return {
+        ...current,
+        activeStep: nextStep,
+        decision: nextStep === "first_admin_login" && current.setupStatus === "saved" ? "ready" : current.decision
+      };
+    });
+  }
+
+  function handleWizardBack() {
+    setInstallWizard((current) => {
+      const previousStep = installWizardSteps[Math.max(installWizardStepIndex(current.activeStep) - 1, 0)]?.id ?? current.activeStep;
+      return { ...current, activeStep: previousStep };
+    });
+  }
+
+  function handleInstallerSetupField(field: keyof InstallWizardSetupForm, event: ChangeEvent<HTMLInputElement>) {
+    setInstallerSetupForm((current) => ({ ...current, [field]: event.target.value }));
+  }
+
+  function handleAiGovernanceField(field: keyof AiGovernanceForm, event: ChangeEvent<HTMLInputElement>) {
+    setAiGovernanceForm((current) => ({ ...current, [field]: event.target.value }) as AiGovernanceForm);
+  }
+
+  async function handleCreateAiProvider() {
+    setIsSavingAiGovernance(true);
+    try {
+      const provider = await createAdminAiProvider(aiGovernanceForm);
+      setAiProviders((current) => [provider, ...current.filter((candidate) => candidate.id !== provider.id)]);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Provider saved: ${provider.name}`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Provider save failed; local fallback rows remain visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleSaveAiApiKey() {
+    setIsSavingAiGovernance(true);
+    try {
+      const providerId = aiProviders[0]?.id ?? "aip_openai";
+      const key = await createAdminAiApiKey(providerId, aiGovernanceForm, aiKeySecret || "replace-before-production");
+      setAiApiKeys((current) => [key, ...current.filter((candidate) => candidate.id !== key.id)]);
+      setAiKeySecret("");
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Masked key saved for ${key.providerId}; fingerprint evidence is visible.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("API key save failed; verify provider exists and secret input is set.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleConfigureAiRoute() {
+    setIsSavingAiGovernance(true);
+    try {
+      const providerId = aiProviders[0]?.id ?? "aip_openai";
+      const route = await configureAdminAiRoute(providerId, aiGovernanceForm);
+      setLatestAiRoute(route);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Route configured for ${route.scenario}.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Route configuration failed; create or load an active provider first.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleConfigureAiQuota() {
+    setIsSavingAiGovernance(true);
+    try {
+      const quota = await configureAdminAiQuota(aiGovernanceForm);
+      setLatestAiQuota(quota);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Quota configured for ${quota.scope}.`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Quota configuration failed; local fallback remains visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleCreateGuardrailRule() {
+    setIsSavingAiGovernance(true);
+    try {
+      const rule = await createAdminGuardrailRule(aiGovernanceForm);
+      const events = await createAdminPlatformClient().listGuardrailEvents().catch(() => aiGuardrailEvents);
+      setLatestGuardrailRule(rule);
+      setAiGuardrailEvents(events);
+      setAiGovernanceSource("Platform API");
+      setAiGovernanceMessage(`Guardrail active: ${rule.name}`);
+    } catch {
+      setAiGovernanceSource("local fallback");
+      setAiGovernanceMessage("Guardrail save failed; local fallback rules remain visible.");
+    } finally {
+      setIsSavingAiGovernance(false);
+    }
+  }
+
+  async function handleSignInBridge() {
+    setIsSigningIn(true);
+    try {
+      setBootstrap(await signInAdminSessionBridge());
+    } catch {
+      setBootstrap(initialAdminBootstrap);
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  function handleLogoutBridge() {
+    setBootstrap(clearAdminSessionBridge());
+  }
+
+  const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
+  const latestInstallerReport = installerReports[installerReports.length - 1];
+  const installJourneyRows = buildInstallJourneySteps(installWizard, Boolean(savedInstallerSetup), latestInstallerReport);
+  const aiProviderTableRows = aiProviders.length
+    ? aiProviders.map((provider) => ({
+        provider: provider.name,
+        adapter: provider.adapter,
+        endpoint: provider.baseUrl?.replace(/^https?:\/\//, "") ?? "configured endpoint",
+        models: provider.models.join(", "),
+        status: provider.status,
+        checked: aiGovernanceSource
+      }))
+    : providerRows;
+  const latestAiKey = aiApiKeys[0];
+  const aiRouteTableRows = latestAiRoute
+    ? [
+        {
+          scenario: latestAiRoute.scenario,
+          primary: `${latestAiRoute.primary.providerId} / ${latestAiRoute.primary.model}`,
+          fallback: latestAiRoute.fallback ? `${latestAiRoute.fallback.providerId} / ${latestAiRoute.fallback.model}` : "not configured",
+          guard: "quota + guardrail"
+        },
+        ...routeRows.filter((row) => row.scenario !== latestAiRoute.scenario)
+      ]
+    : routeRows;
+  const aiGuardrailRows = latestGuardrailRule
+    ? [
+        { rule: latestGuardrailRule.name, severity: latestGuardrailRule.severity, action: latestGuardrailRule.action, scope: latestGuardrailRule.scope, status: latestGuardrailRule.status },
+        ...guardrailRows.filter((row) => row.rule !== latestGuardrailRule.name)
+      ]
+    : guardrailRows;
+  const aiEventRows = aiGuardrailEvents.length
+    ? aiGuardrailEvents.map((event) => ({
+        event: event.id,
+        decision: event.decision,
+        rule: event.matchedRuleName ?? event.matchedRuleId ?? "No matched rule",
+        actor: event.actorId ?? "Platform API",
+        time: event.occurredAt ?? "latest"
+      }))
+    : eventRows;
+
   return (
-    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
+    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
       <PageHeader
         eyebrow="AI Governance"
         title="ศูนย์ควบคุม AI Providers & API Keys"
         description="ควบคุม provider, secret, routing, quota และ guardrail ของทุก AI call ก่อนใช้งานจริงในองค์กร"
         actions={
           <>
+          <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Session: {bootstrap.source}</ToneBadge>
+          <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+            <Fingerprint size={16} />
+            {isSigningIn ? "Signing in" : "Demo Sign in"}
+          </button>
+          <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+            <LockKeyhole size={16} />
+            Logout
+          </button>
           <button type="button" className="secondary-button">
             <SlidersHorizontal size={16} />
             ตั้งค่า Route
@@ -868,7 +1629,79 @@ function AdminApp() {
         />
 
         <div className="ds-main-stack">
-          <SectionCard eyebrow="Provider Registry" title="External AI Providers" action={<button type="button" className="ghost-button">Add API Key</button>}>
+          <SectionCard
+            eyebrow="Provider Test Call"
+            title="Validate AI provider route"
+            action={
+              <button type="button" className="secondary-button" onClick={handleRunProviderTestCall} disabled={isRunningProviderTestCall}>
+                <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
+              </button>
+            }
+          >
+            <div className="provider-test-call-panel" aria-label="Provider test-call panel">
+              <div className="provider-test-call-summary">
+                <div className="ds-summary-row">
+                  <div className="ds-summary-icon"><BrainCircuit size={22} /></div>
+                  <div>
+                    <strong>{providerTestCallResult?.providerName ?? "Configured PRD provider route"}</strong>
+                    <span>{providerTestCallMessage}</span>
+                  </div>
+                  <ToneBadge tone={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "warning" : "success") : isRunningProviderTestCall ? "info" : "neutral"}>
+                    {providerTestCallResult ? providerTestCallResult.status : isRunningProviderTestCall ? "pending" : "not run"}
+                  </ToneBadge>
+                </div>
+                <DefinitionGrid
+                  items={[
+                    { label: "Scenario", value: "prd_generation" },
+                    { label: "Mode", value: "dry-run by default" },
+                    { label: "Adapter", value: providerTestCallResult?.adapter ?? "provider adapter" },
+                    { label: "Model", value: providerTestCallResult?.model ?? "configured route" },
+                    { label: "Usage Log", value: providerTestCallResult?.usageLogId ?? "created after run" },
+                    { label: "Latency", value: providerTestCallResult ? `${providerTestCallResult.latencyMs}ms` : "pending" }
+                  ]}
+                />
+              </div>
+              <DecisionPanel
+                tone={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "warning" : "success") : "info"}
+                badge={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "fallback" : "validated") : "safe dry-run"}
+                title={providerTestCallResult ? "Adapter route returned governed output" : "No plaintext secret is displayed"}
+                lines={[
+                  providerTestCallResult?.outputExcerpt ?? "Click Run Provider Test to validate route, key, adapter, token usage and usage-log creation.",
+                  providerTestCallResult ? `Tokens: ${providerTestCallResult.tokensUsed} / fallback: ${providerTestCallResult.fallbackUsed ? "yes" : "no"}` : "Response will show provider evidence without raw key material."
+                ]}
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            eyebrow="Provider Registry"
+            title="External AI Providers"
+            action={
+              <button type="button" className="ghost-button" onClick={handleCreateAiProvider} disabled={isSavingAiGovernance}>
+                <BrainCircuit size={15} /> Create Provider
+              </button>
+            }
+          >
+            <div className="ai-governance-action-panel">
+              <label>
+                Provider
+                <input value={aiGovernanceForm.providerName} onChange={(event) => handleAiGovernanceField("providerName", event)} />
+              </label>
+              <label>
+                Base URL
+                <input value={aiGovernanceForm.providerBaseUrl} onChange={(event) => handleAiGovernanceField("providerBaseUrl", event)} />
+              </label>
+              <label>
+                Models
+                <input value={aiGovernanceForm.providerModels} onChange={(event) => handleAiGovernanceField("providerModels", event)} />
+              </label>
+              <DefinitionGrid
+                items={[
+                  { label: "Source", value: aiGovernanceSource },
+                  { label: "Last action", value: aiGovernanceMessage }
+                ]}
+              />
+            </div>
             <DataTable
               columns={[
                 { key: "provider", label: "Provider" },
@@ -878,7 +1711,7 @@ function AdminApp() {
                 { key: "status", label: "Status", tone: () => "success" },
                 { key: "checked", label: "Checked" }
               ]}
-              rows={providerRows}
+              rows={aiProviderTableRows}
             />
           </SectionCard>
 
@@ -887,17 +1720,30 @@ function AdminApp() {
               <div className="ds-summary-row">
                 <div className="ds-summary-icon"><LockKeyhole size={22} /></div>
                 <div>
-                  <strong>Primary Production Key</strong>
-                  <span>Secret saved. Only fingerprint is visible.</span>
+                  <strong>{latestAiKey?.name ?? "Primary Production Key"}</strong>
+                  <span>{latestAiKey ? "API key saved through Platform API. Only masked evidence is visible." : "Secret input is cleared after save. Only fingerprint is visible."}</span>
                 </div>
-                <ToneBadge tone="success">active</ToneBadge>
+                <ToneBadge tone={latestAiKey ? "success" : "warning"}>{latestAiKey?.status ?? "pending"}</ToneBadge>
+              </div>
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Key Name
+                  <input value={aiGovernanceForm.apiKeyName} onChange={(event) => handleAiGovernanceField("apiKeyName", event)} />
+                </label>
+                <label>
+                  Secret
+                  <input type="password" value={aiKeySecret} onChange={(event) => setAiKeySecret(event.target.value)} placeholder="paste provider secret" />
+                </label>
+                <button type="button" className="secondary-button" onClick={handleSaveAiApiKey} disabled={isSavingAiGovernance}>
+                  <KeyRound size={15} /> Save Masked Key
+                </button>
               </div>
               <DefinitionGrid
                 items={[
-                  { label: "Provider", value: "OpenAI Production" },
-                  { label: "Usage", value: "production" },
-                  { label: "Quota", value: "100k tokens/day" },
-                  { label: "Fingerprint", value: <><Fingerprint size={14} /> fp_9f2a4c01d881</> }
+                  { label: "Provider", value: latestAiKey?.providerId ?? aiProviders[0]?.name ?? "OpenAI Production" },
+                  { label: "Usage", value: latestAiKey?.usageMode ?? "production" },
+                  { label: "Quota", value: latestAiKey?.quotaTokens ? `${latestAiKey.quotaTokens} tokens/day` : `${aiGovernanceForm.apiKeyQuotaTokens} tokens/day` },
+                  { label: "Fingerprint", value: <><Fingerprint size={14} /> {latestAiKey?.fingerprint ?? "fingerprint after save"}</> }
                 ]}
               />
             </SectionCard>
@@ -917,7 +1763,25 @@ function AdminApp() {
           </section>
 
           <section className="ds-grid-2">
-            <SectionCard eyebrow="Routing Matrix" title="Scenario Routing" action={<button type="button" className="ghost-button">Configure Routing</button>}>
+            <SectionCard
+              eyebrow="Routing Matrix"
+              title="Scenario Routing"
+              action={
+                <button type="button" className="ghost-button" onClick={handleConfigureAiRoute} disabled={isSavingAiGovernance}>
+                  <Route size={15} /> Configure Route
+                </button>
+              }
+            >
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Scenario
+                  <input value={aiGovernanceForm.routeScenario} onChange={(event) => handleAiGovernanceField("routeScenario", event)} />
+                </label>
+                <label>
+                  Primary Model
+                  <input value={aiGovernanceForm.routeModel} onChange={(event) => handleAiGovernanceField("routeModel", event)} />
+                </label>
+              </div>
               <DataTable
                 columns={[
                   { key: "scenario", label: "Scenario" },
@@ -925,15 +1789,28 @@ function AdminApp() {
                   { key: "fallback", label: "Fallback" },
                   { key: "guard", label: "Guard" }
                 ]}
-                rows={routeRows}
+                rows={aiRouteTableRows}
               />
             </SectionCard>
 
             <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
               <div className="ds-quota-meter">
-                <div><span>Used today</span><strong>999 / 1,000</strong></div>
-                <div className="ds-meter-track"><span style={{ width: "99%" }} /></div>
+                <div><span>Used today</span><strong>{latestAiQuota?.usedToday ?? 0} / {latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit}</strong></div>
+                <div className="ds-meter-track"><span style={{ width: latestAiQuota ? `${Math.min((latestAiQuota.usedToday / Math.max(latestAiQuota.dailyLimit, 1)) * 100, 100)}%` : "0%" }} /></div>
                 <small>Hard stop blocks before provider call.</small>
+              </div>
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Scope
+                  <input value={aiGovernanceForm.quotaScope} onChange={(event) => handleAiGovernanceField("quotaScope", event)} />
+                </label>
+                <label>
+                  Daily Limit
+                  <input value={aiGovernanceForm.quotaDailyLimit} onChange={(event) => handleAiGovernanceField("quotaDailyLimit", event)} />
+                </label>
+                <button type="button" className="secondary-button" onClick={handleConfigureAiQuota} disabled={isSavingAiGovernance}>
+                  <Gauge size={15} /> Configure Quota
+                </button>
               </div>
               <div className="ds-stack-list">
                 {["Organization 1,000 daily", "Creator 500 daily", "Project 300 daily", "App 100 daily"].map((item) => (
@@ -944,7 +1821,25 @@ function AdminApp() {
           </section>
 
           <section className="ds-grid-2">
-            <SectionCard eyebrow="Security Rules" title="Guardrail Rules" action={<button type="button" className="ghost-button">Add Rule</button>}>
+            <SectionCard
+              eyebrow="Security Rules"
+              title="Guardrail Rules"
+              action={
+                <button type="button" className="ghost-button" onClick={handleCreateGuardrailRule} disabled={isSavingAiGovernance}>
+                  <ShieldCheck size={15} /> Add Guardrail Rule
+                </button>
+              }
+            >
+              <div className="ai-governance-action-panel compact">
+                <label>
+                  Rule Name
+                  <input value={aiGovernanceForm.guardrailName} onChange={(event) => handleAiGovernanceField("guardrailName", event)} />
+                </label>
+                <label>
+                  Keyword Pattern
+                  <input value={aiGovernanceForm.guardrailPattern} onChange={(event) => handleAiGovernanceField("guardrailPattern", event)} />
+                </label>
+              </div>
               <DataTable
                 columns={[
                   { key: "rule", label: "Rule" },
@@ -953,7 +1848,7 @@ function AdminApp() {
                   { key: "scope", label: "Scope" },
                   { key: "status", label: "Status", tone: () => "success" }
                 ]}
-                rows={guardrailRows}
+                rows={aiGuardrailRows}
               />
             </SectionCard>
 
@@ -966,7 +1861,7 @@ function AdminApp() {
                   { key: "actor", label: "Actor" },
                   { key: "time", label: "Time" }
                 ]}
-                rows={eventRows}
+                rows={aiEventRows}
               />
             </SectionCard>
           </section>
@@ -1062,10 +1957,15 @@ function AdminApp() {
               <div>
                 <span className="eyebrow">Operations Recovery</span>
                 <h2>Installer, Backup and Restore</h2>
-                <p>Private-server readiness evidence for installer preflight, setup wizard, encrypted backups, PostgreSQL PITR and restore drills.</p>
+                <p>First-run install wizard, private-server readiness evidence, encrypted backups, PostgreSQL PITR and restore drills.</p>
               </div>
               <div className="ds-page-actions">
-                <button type="button" className="secondary-button"><ServerCog size={16} /> Run Preflight</button>
+                <button type="button" className="secondary-button" onClick={() => handleRunInstallerPreflight("blocked")} disabled={isRunningInstallCheck}>
+                  <AlertTriangle size={16} /> Simulate Blocked Preflight
+                </button>
+                <button type="button" onClick={() => handleRunInstallerPreflight("ready")} disabled={isRunningInstallCheck}>
+                  <ServerCog size={16} /> {isRunningInstallCheck ? "Running Preflight" : "Run Preflight"}
+                </button>
                 <button type="button"><CheckCircle2 size={16} /> Run Restore Drill</button>
               </div>
             </div>
@@ -1090,9 +1990,14 @@ function AdminApp() {
               <WorkflowRail
                 title="Recovery Path"
                 steps={[
-                  { label: "installer preflight", icon: <ServerCog size={16} /> },
-                  { label: "setup wizard", icon: <LockKeyhole size={16} /> },
-                  { label: "compose readiness", icon: <Route size={16} /> },
+                  { label: "prepare server", icon: <ServerCog size={16} /> },
+                  { label: "configure environment", icon: <Route size={16} /> },
+                  { label: "run preflight", icon: <CheckCircle2 size={16} /> },
+                  { label: "save setup", icon: <LockKeyhole size={16} /> },
+                  { label: "deploy stack", icon: <Route size={16} /> },
+                  { label: "migrate and seed", icon: <Database size={16} /> },
+                  { label: "verify health", icon: <CheckCircle2 size={16} /> },
+                  { label: "first admin login", icon: <Fingerprint size={16} /> },
                   { label: "backup schedule", icon: <Database size={16} /> },
                   { label: "backup run", icon: <ShieldCheck size={16} /> },
                   { label: "PostgreSQL PITR", icon: <Gauge size={16} /> },
@@ -1107,6 +2012,137 @@ function AdminApp() {
               />
 
               <div className="operations-recovery-grid">
+                <SectionCard eyebrow="First-run Install Wizard" title="Private-server install readiness">
+                  <div className="install-journey-shell" aria-label="First-run installation journey">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">First-run Installation Journey</span>
+                        <h2>Ordered private-server install path</h2>
+                      </div>
+                      <ToneBadge tone={installWizard.decision === "blocked" ? "danger" : installWizard.decision === "ready" ? "success" : "warning"}>
+                        {installWizard.decision === "blocked" ? "blocked" : installWizard.decision === "ready" ? "ready" : "not run"}
+                      </ToneBadge>
+                    </div>
+                    <div className="install-journey-board">
+                      {installJourneyRows.map((step) => (
+                        <article key={step.id} className={`install-journey-card status-${step.status}`}>
+                          <div className="install-journey-card-header">
+                            <strong>{step.label}</strong>
+                            <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : step.status === "current" ? "info" : "neutral"}>
+                              {step.status}
+                            </ToneBadge>
+                          </div>
+                          <p>{step.detail}</p>
+                          <dl className="install-journey-meta">
+                            <div>
+                              <dt>Owner</dt>
+                              <dd>{step.owner}</dd>
+                            </div>
+                            <div>
+                              <dt>Evidence</dt>
+                              <dd>{step.evidence}</dd>
+                            </div>
+                            <div>
+                              <dt>Next Action</dt>
+                              <dd>{step.nextAction}</dd>
+                            </div>
+                          </dl>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="install-wizard-panel" aria-label="First-run install wizard">
+                    <ol className="install-wizard-steps">
+                      {installWizardSteps.map((step) => {
+                        const status = installWizardStepStatus(installWizard.activeStep, step.id, installWizard.decision, Boolean(savedInstallerSetup));
+                        return (
+                          <li key={step.id} className={status === "current" ? "active" : `status-${status}`}>
+                            <span>{step.label}</span>
+                            <small>{step.detail}</small>
+                            <ToneBadge tone={status === "complete" ? "success" : status === "blocked" ? "danger" : status === "current" ? "info" : "neutral"}>{status}</ToneBadge>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                    <DecisionPanel
+                      tone={installWizard.decision === "ready" ? "success" : installWizard.decision === "blocked" ? "danger" : "warning"}
+                      badge={installWizard.decision === "ready" ? "ready" : installWizard.decision === "blocked" ? "blocked" : "pending"}
+                      title={installWizard.decision === "ready" ? "Install can proceed after setup review" : installWizard.decision === "blocked" ? "Install blocked by failed preflight checks" : "Run preflight before install"}
+                      lines={[
+                        `Evidence source: ${installWizard.source}`,
+                        `Report: ${installWizard.reportPath}`,
+                        ...installWizard.actionableFailures.slice(0, 3)
+                      ]}
+                    />
+                    <div className="install-wizard-action-row" aria-label="Install wizard step controls">
+                      <button type="button" className="secondary-button" onClick={handleWizardBack} disabled={installWizard.activeStep === "prepare_server"}>
+                        <Route size={16} /> Back
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleWizardNext} disabled={installWizard.decision === "blocked" || installWizard.activeStep === "first_admin_login"}>
+                        <CheckCircle2 size={16} /> Next Step
+                      </button>
+                      <ToneBadge tone={latestInstallerReport?.status === "failed" ? "danger" : latestInstallerReport ? "success" : "neutral"}>
+                        Latest report: {latestInstallerReport?.status ?? "none"}
+                      </ToneBadge>
+                    </div>
+                  </div>
+                </SectionCard>
+
+                <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
+                  <div className="install-setup-form" aria-label="Installer setup configuration form">
+                    <label>
+                      Domain
+                      <input value={installerSetupForm.domain} onChange={(event) => handleInstallerSetupField("domain", event)} />
+                    </label>
+                    <label>
+                      Database URL
+                      <input value={installerSetupForm.databaseUrl} onChange={(event) => handleInstallerSetupField("databaseUrl", event)} />
+                    </label>
+                    <label>
+                      Storage Endpoint
+                      <input value={installerSetupForm.storageEndpoint} onChange={(event) => handleInstallerSetupField("storageEndpoint", event)} />
+                    </label>
+                    <label>
+                      Storage Bucket
+                      <input value={installerSetupForm.storageBucket} onChange={(event) => handleInstallerSetupField("storageBucket", event)} />
+                    </label>
+                    <label>
+                      Storage Secret
+                      <input type="password" value={installerSetupForm.storageSecretAccessKey} placeholder={savedInstallerSetup ? "saved as masked evidence" : "required before save"} onChange={(event) => handleInstallerSetupField("storageSecretAccessKey", event)} />
+                    </label>
+                    <label>
+                      Auth Issuer
+                      <input value={installerSetupForm.authIssuerUrl} onChange={(event) => handleInstallerSetupField("authIssuerUrl", event)} />
+                    </label>
+                    <label>
+                      AI Provider / Model
+                      <input value={`${installerSetupForm.aiProviderId} / ${installerSetupForm.aiModel}`} onChange={(event) => {
+                        const [providerId, model] = event.target.value.split("/").map((item) => item.trim());
+                        setInstallerSetupForm((current) => ({ ...current, aiProviderId: providerId || current.aiProviderId, aiModel: model || current.aiModel }));
+                      }} />
+                    </label>
+                    <label>
+                      First Admin Email
+                      <input value={installerSetupForm.firstAdminEmail} onChange={(event) => handleInstallerSetupField("firstAdminEmail", event)} />
+                    </label>
+                  </div>
+                  <div className="install-wizard-action-row">
+                    <button type="button" onClick={handleSaveInstallerSetup} disabled={isSavingInstallerSetup || installWizard.decision === "blocked"}>
+                      <LockKeyhole size={16} /> {isSavingInstallerSetup ? "Saving Setup" : "Save Setup"}
+                    </button>
+                    <ToneBadge tone={savedInstallerSetup ? "success" : "warning"}>{installWizard.setupStatus === "saved" ? "saved" : "pending save"}</ToneBadge>
+                  </div>
+                  <DefinitionGrid
+                    items={installWizardSetupItems}
+                  />
+                  <DecisionPanel
+                    tone={savedInstallerSetup ? "success" : "warning"}
+                    badge={savedInstallerSetup ? "masked" : "draft"}
+                    title={savedInstallerSetup ? "Setup evidence is ready without exposing secrets" : "Save setup before compose verification"}
+                    lines={savedInstallerSetup ? ["Database password masked", "Storage, AI and backup keys use fingerprints or key references only", "First admin is visible for audit review"] : ["Draft values are editable", "Save setup through Platform API before treating install as configured"]}
+                  />
+                </SectionCard>
+
                 <SectionCard eyebrow="Installer" title="Preflight Report">
                   <div className="operations-desktop-table">
                     <DataTable
@@ -1114,41 +2150,23 @@ function AdminApp() {
                         { key: "check", label: "Check" },
                         { key: "required", label: "Required" },
                         { key: "observed", label: "Observed" },
-                        { key: "status", label: "Status", tone: () => "success" },
+                        { key: "status", label: "Status", tone: (value) => (value === "pass" ? "success" : "danger") },
                         { key: "action", label: "Action" }
                       ]}
-                      rows={preflightRows}
+                      rows={installWizard.rows}
                     />
                   </div>
                   <div className="backup-restore-mobile-list">
-                    {preflightRows.map((row) => (
+                    {installWizard.rows.map((row) => (
                       <article key={row.check}>
                         <strong>{row.check}</strong>
                         <span>Required: {row.required}</span>
                         <span>Observed: {row.observed}</span>
-                        <ToneBadge tone="success">{row.status}</ToneBadge>
+                        <span>Action: {row.action}</span>
+                        <ToneBadge tone={row.status === "pass" ? "success" : "danger"}>{row.status}</ToneBadge>
                       </article>
                     ))}
                   </div>
-                </SectionCard>
-
-                <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
-                  <DefinitionGrid
-                    items={[
-                      { label: "Domain", value: "platform.company.test" },
-                      { label: "Database", value: "postgresql://evcp:***@postgres:5432/evcp" },
-                      { label: "Storage", value: "MinIO / S3-compatible contract" },
-                      { label: "Auth", value: "Keycloak broker ready" },
-                      { label: "AI + Guardrail", value: "external provider route + enterprise policy" },
-                      { label: "First Admin", value: "admin@company.com" }
-                    ]}
-                  />
-                  <DecisionPanel
-                    tone="success"
-                    badge="masked"
-                    title="Setup Wizard completed without exposing secrets"
-                    lines={["Database password masked", "Storage and backup encryption use key references only"]}
-                  />
                 </SectionCard>
 
                 <SectionCard eyebrow="Compose" title="Docker Compose Readiness">

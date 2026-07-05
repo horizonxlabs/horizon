@@ -2,11 +2,20 @@ import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-cl
 import { getMockPermissions } from "@evcp/auth-sdk";
 import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status } from "@evcp/types";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
   permissions: string[];
+}
+
+export type AuthMode = "platform_session" | "mock_header";
+
+export interface AuthResolution {
+  user: PlatformUser;
+  mode: AuthMode;
+  sessionId?: string;
+  expiresAt?: string;
 }
 
 export interface PlatformProject {
@@ -516,6 +525,12 @@ export interface AiUsageLog {
   prompt: string;
   tokensUsed: number;
   occurredAt: string;
+  status?: "succeeded" | "blocked" | "fallback" | "failed";
+  adapter?: AiProviderAdapter;
+  latencyMs?: number;
+  estimatedCostUsd?: number;
+  promptFingerprint?: string;
+  reason?: string;
 }
 
 export interface WorkspacePromptResult {
@@ -907,7 +922,8 @@ export interface GeneratedRuntimeOverview {
 }
 
 export type StoreAppAccessStatus = "active" | "available" | "pending";
-export type StorePrimaryAction = "open" | "request_access" | "view_status";
+export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
+export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
@@ -922,6 +938,9 @@ export interface StorefrontAppCard {
   ownerName: string;
   route: string;
   accessStatus: StoreAppAccessStatus;
+  installStatus: StoreAppInstallStatus;
+  installationId?: string;
+  installedAt?: string;
   myRole?: string;
   health: Status;
   version: string;
@@ -945,7 +964,20 @@ export interface StorefrontAppDetail extends StorefrontAppCard {
   accessMode: AppStoreRegistryEntry["accessMode"];
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+}
+
+export interface StoreAppInstallation {
+  id: string;
+  appId: string;
+  appSlug: string;
+  projectId: string;
+  userId: string;
+  userEmail: string;
+  status: "active" | "disabled";
+  installedAt: string;
+  disabledAt?: string;
+  lastOpenedAt?: string;
 }
 
 export interface StoreAccessRequestResult {
@@ -1448,6 +1480,81 @@ export interface QuotaDecision {
   remainingToday: number;
 }
 
+export interface AiCompletionRequest {
+  scenario: AiScenario;
+  projectId: string;
+  actorId: string;
+  prompt: string;
+  route: AiScenarioRoute;
+  requestedTokens: number;
+  dryRun: boolean;
+  timeoutMs: number;
+}
+
+export interface AiCompletionResponse {
+  text: string;
+  providerId: string;
+  model: string;
+  adapter: AiProviderAdapter;
+  tokensUsed: number;
+  latencyMs: number;
+  status: "succeeded" | "fallback";
+  usageLogId: string;
+  fallbackUsed: boolean;
+}
+
+export interface AiProviderTestCallResult {
+  providerId: string;
+  providerName: string;
+  adapter: AiProviderAdapter;
+  model: string;
+  status: "succeeded" | "fallback";
+  fallbackUsed: boolean;
+  tokensUsed: number;
+  latencyMs: number;
+  usageLogId: string;
+  outputExcerpt: string;
+}
+
+interface AiCompletionAdapter {
+  readonly kind: AiProviderAdapter;
+  complete(input: {
+    provider: AiProvider;
+    key: StoredAiApiKey;
+    model: string;
+    prompt: string;
+    scenario: AiScenario;
+    dryRun: boolean;
+    timeoutMs: number;
+  }): { text: string; tokensUsed: number; latencyMs: number };
+}
+
+export interface AiGatewayFetchRequest {
+  url: string;
+  method: "POST";
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  timeoutMs: number;
+}
+
+export interface AiGatewayFetchResponse {
+  status: number;
+  body?: unknown;
+}
+
+export interface AiGatewayCircuitBreakerOptions {
+  failureThreshold?: number;
+  cooldownMs?: number;
+}
+
+export interface AiGatewayRuntimeOptions {
+  fetcher?: (request: AiGatewayFetchRequest) => AiGatewayFetchResponse;
+  now?: () => number;
+  maxRetries?: number;
+  retryableStatusCodes?: number[];
+  circuitBreaker?: AiGatewayCircuitBreakerOptions;
+}
+
 export interface GuardrailRule {
   id: string;
   name: string;
@@ -1537,7 +1644,7 @@ function toPlatformUser(user: MockUser): PlatformUser {
 function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
   const direct = headers[name];
   const lower = headers[name.toLowerCase()];
-  const value = direct ?? lower;
+  const value = direct ?? lower ?? Object.entries(headers).find(([headerName]) => headerName.toLowerCase() === name.toLowerCase())?.[1];
 
   if (Array.isArray(value)) return value[0];
   return value;
@@ -1554,6 +1661,30 @@ export class IdentityService {
     const user = this.users.find((candidate) => candidate.email === email);
     if (!user) throw new MockAuthError(`Unknown mock user: ${email}`);
     return user;
+  }
+
+  provisionSsoUser(input: { email: string; name: string; platformRoles: PlatformRole[] }): PlatformUser {
+    const email = input.email.trim().toLowerCase();
+    const existing = this.users.find((candidate) => candidate.email === email);
+    if (existing) return existing;
+
+    const role = this.primaryPlatformRole(input.platformRoles);
+    const user: PlatformUser = {
+      id: `usr_sso_${createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
+      name: input.name.trim() || email,
+      email,
+      role,
+      status: "active",
+      permissions: getMockPermissions(role)
+    };
+    this.users.push(user);
+    return user;
+  }
+
+  private primaryPlatformRole(roles: PlatformRole[]): PlatformRole {
+    if (roles.includes("admin")) return "admin";
+    if (roles.includes("creator")) return "creator";
+    return "end_user";
   }
 }
 
@@ -1595,17 +1726,111 @@ export class AuditService {
 }
 
 export class MockAuthService {
+  private readonly sessionSecret = process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production";
+  private readonly issuedSessions = new Map<string, { userId: string; email: string; expiresAt: string }>();
+
   constructor(private readonly identity: IdentityService) {}
 
-  resolveCurrentUser(headers: HeaderBag): PlatformUser {
-    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email) throw new MockAuthError("Missing x-mock-user-email header");
+  getUserByEmail(email: string): PlatformUser {
     return this.identity.getUserByEmail(email);
+  }
+
+  issuePlatformSession(user: PlatformUser, input: { sessionId: string; issuedAt?: Date; ttlSeconds?: number }): { token: string; expiresAt: string } {
+    const issuedAt = input.issuedAt ?? new Date();
+    const ttlSeconds = input.ttlSeconds ?? 60 * 60;
+    const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
+    const expiresAtSeconds = Math.floor(expiresAt.getTime() / 1000);
+    const expiresAtIso = new Date(expiresAtSeconds * 1000).toISOString();
+    const payload = {
+      typ: "evcp.platform.session",
+      sid: input.sessionId,
+      sub: user.id,
+      email: user.email,
+      iat: Math.floor(issuedAt.getTime() / 1000),
+      exp: expiresAtSeconds
+    };
+    const encodedPayload = this.encodeJson(payload);
+    const signature = this.sign(encodedPayload);
+    const token = `evcp_session.${encodedPayload}.${signature}`;
+    this.issuedSessions.set(input.sessionId, { userId: user.id, email: user.email, expiresAt: expiresAtIso });
+    return { token, expiresAt: expiresAtIso };
+  }
+
+  resolve(headers: HeaderBag): AuthResolution {
+    const bearer = this.extractBearer(headers);
+    if (bearer) {
+      const session = this.verifyPlatformSessionToken(bearer);
+      return {
+        user: this.identity.getUserByEmail(session.email),
+        mode: "platform_session",
+        sessionId: session.sessionId,
+        expiresAt: session.expiresAt
+      };
+    }
+
+    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email) throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    return { user: this.identity.getUserByEmail(email), mode: "mock_header" };
+  }
+
+  resolveCurrentUser(headers: HeaderBag): PlatformUser {
+    return this.resolve(headers).user;
   }
 
   requireRole(user: PlatformUser, roles: PlatformRole[]): void {
     if (!roles.includes(user.role)) {
       throw new PermissionError(`Role ${user.role} cannot access this resource`);
+    }
+  }
+
+  private extractBearer(headers: HeaderBag): string | undefined {
+    const authorization = normalizeHeader(headers, "authorization");
+    const match = authorization?.match(/^Bearer\s+(.+)$/i);
+    return match?.[1];
+  }
+
+  private verifyPlatformSessionToken(token: string): { sessionId: string; email: string; expiresAt: string } {
+    const parts = token.split(".");
+    if (parts.length !== 3 || parts[0] !== "evcp_session") {
+      throw new MockAuthError("Invalid platform session token");
+    }
+
+    const [, encodedPayload, signature] = parts;
+    if (this.sign(encodedPayload) !== signature) {
+      throw new MockAuthError("Invalid platform session token signature");
+    }
+
+    const payload = this.decodeJson(encodedPayload) as Partial<{ typ: string; sid: string; email: string; exp: number }>;
+    if (payload.typ !== "evcp.platform.session" || !payload.sid || !payload.email || !payload.exp) {
+      throw new MockAuthError("Invalid platform session token claims");
+    }
+
+    const expiresAtMs = payload.exp * 1000;
+    if (Date.now() >= expiresAtMs) {
+      throw new MockAuthError("Expired platform session token");
+    }
+
+    const issuedSession = this.issuedSessions.get(payload.sid);
+    if (issuedSession && issuedSession.email !== payload.email) {
+      throw new MockAuthError("Platform session token does not match registered session");
+    }
+
+    return { sessionId: payload.sid, email: payload.email, expiresAt: new Date(expiresAtMs).toISOString() };
+  }
+
+  private sign(encodedPayload: string): string {
+    return createHmac("sha256", this.sessionSecret).update(encodedPayload).digest("base64url");
+  }
+
+  private encodeJson(payload: Record<string, unknown>): string {
+    return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  }
+
+  private decodeJson(encodedPayload: string): unknown {
+    try {
+      return JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+    } catch {
+      throw new MockAuthError("Invalid platform session token payload");
     }
   }
 }
@@ -1947,7 +2172,8 @@ export class PlatformAuthSsoService {
 
   constructor(
     private readonly auth: MockAuthService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly identity: IdentityService
   ) {}
 
   createOidcProvider(
@@ -2104,11 +2330,23 @@ export class PlatformAuthSsoService {
       id: `psess_${String(this.sessions.length + 1).padStart(4, "0")}`,
       providerId: provider.id,
       providerType: provider.type,
-      token: `psess_${fingerprintSecret(`${provider.id}:${claims.subject}:${this.sessions.length + 1}`).slice(3)}`,
+      token: "",
       claims,
       issuedAt: issuedAt.toISOString(),
       expiresAt: new Date(issuedAt.getTime() + 60 * 60 * 1000).toISOString()
     };
+    const platformUser = this.identity.provisionSsoUser({
+      email: claims.email,
+      name: claims.name,
+      platformRoles: claims.platformRoles
+    });
+    const issuedToken = this.auth.issuePlatformSession(platformUser, {
+      sessionId: session.id,
+      issuedAt,
+      ttlSeconds: 60 * 60
+    });
+    session.token = issuedToken.token;
+    session.expiresAt = issuedToken.expiresAt;
 
     this.sessions.push(session);
     this.audit.record({
@@ -2174,7 +2412,8 @@ export class BreakGlassService {
 
   constructor(
     private readonly auth: MockAuthService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly runtime: AiGatewayRuntimeOptions = {}
   ) {}
 
   login(actor: PlatformUser, input: { reason: string; ticketRef?: string }): BreakGlassSession {
@@ -2362,16 +2601,133 @@ function encryptSecretEnvelope(secret: string): string {
   return `local-envelope:${Buffer.from(secret, "utf8").toString("base64")}`;
 }
 
+function decryptSecretEnvelope(ciphertext: string): string {
+  if (!ciphertext.startsWith("local-envelope:")) throw new ValidationError("Unsupported AI key envelope");
+  return Buffer.from(ciphertext.replace("local-envelope:", ""), "base64").toString("utf8");
+}
+
+function estimateAiTokens(prompt: string, responseText = ""): number {
+  return Math.max(1, Math.ceil((prompt.length + responseText.length) / 4));
+}
+
+function sanitizeProviderError(message: string, secret?: string): string {
+  let sanitized = message;
+  if (secret) sanitized = sanitized.split(secret).join("[redacted-secret]");
+  return sanitized.replace(/sk-[A-Za-z0-9._-]+/g, "sk-[redacted]");
+}
+
+function providerErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function aiGatewayAttemptLimit(runtime: AiGatewayRuntimeOptions): number {
+  return Math.max(1, Math.floor(runtime.maxRetries ?? 0) + 1);
+}
+
+function isRetryableProviderStatus(status: number, runtime: AiGatewayRuntimeOptions): boolean {
+  const configured = runtime.retryableStatusCodes;
+  if (configured?.length) return configured.includes(status);
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
+  readonly kind: AiProviderAdapter = "openai";
+
+  constructor(private readonly runtime: AiGatewayRuntimeOptions = {}) {}
+
+  complete(input: {
+    provider: AiProvider;
+    key: StoredAiApiKey;
+    model: string;
+    prompt: string;
+    scenario: AiScenario;
+    dryRun: boolean;
+    timeoutMs: number;
+  }): { text: string; tokensUsed: number; latencyMs: number } {
+    const started = this.runtime.now?.() ?? Date.now();
+    if (input.provider.baseUrl.startsWith("mock://fail")) {
+      throw new ValidationError(`AI provider ${input.provider.id} dry-run failed`);
+    }
+    const secret = decryptSecretEnvelope(input.key.secretCiphertext);
+    if (!input.dryRun) {
+      const fetcher = this.runtime.fetcher;
+      if (!fetcher) {
+        throw new ValidationError("Live external AI fetcher is not configured for the provider adapter runtime");
+      }
+      const maxAttempts = aiGatewayAttemptLimit(this.runtime);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        let response: AiGatewayFetchResponse;
+        try {
+          response = fetcher({
+            url: `${input.provider.baseUrl.replace(/\/$/, "")}/chat/completions`,
+            method: "POST",
+            timeoutMs: input.timeoutMs,
+            headers: {
+              authorization: `Bearer ${secret}`,
+              "content-type": "application/json"
+            },
+            body: {
+              model: input.model,
+              messages: [{ role: "user", content: input.prompt }],
+              temperature: 0.2,
+              metadata: { scenario: input.scenario }
+            }
+          });
+        } catch (error) {
+          const sanitized = sanitizeProviderError(providerErrorMessage(error), secret);
+          if (attempt < maxAttempts) continue;
+          throw new ValidationError(`OpenAI-compatible provider transport failed (attempts=${maxAttempts}): ${sanitized}`);
+        }
+
+        if (response.status < 200 || response.status >= 300) {
+          const shouldRetry = isRetryableProviderStatus(response.status, this.runtime);
+          if (shouldRetry && attempt < maxAttempts) continue;
+          const errorBody = response.body as { error?: { message?: unknown; type?: unknown } } | undefined;
+          const providerMessage = sanitizeProviderError(String(errorBody?.error?.message ?? `HTTP ${response.status}`), secret);
+          const providerType = errorBody?.error?.type ? ` ${String(errorBody.error.type)}` : "";
+          throw new ValidationError(`OpenAI-compatible provider error (${response.status}${providerType}, attempts=${attempt}): ${providerMessage}`);
+        }
+        const body = response.body as {
+          choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+          usage?: { total_tokens?: unknown; completion_tokens?: unknown; prompt_tokens?: unknown };
+        };
+        const liveText = String(body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? "").trim();
+        if (!liveText) throw new ValidationError("OpenAI-compatible provider returned an empty completion");
+        const totalTokens = Number(body?.usage?.total_tokens ?? body?.usage?.completion_tokens ?? 0);
+        return {
+          text: liveText,
+          tokensUsed: Number.isFinite(totalTokens) && totalTokens > 0 ? totalTokens : estimateAiTokens(input.prompt, liveText),
+          latencyMs: Math.max((this.runtime.now?.() ?? Date.now()) - started, 1)
+        };
+      }
+      throw new ValidationError(`OpenAI-compatible provider exhausted attempts=${maxAttempts}`);
+    }
+    const text = [
+      `AI Gateway dry-run response for ${input.scenario}.`,
+      `Provider ${input.provider.name} (${input.provider.adapter}) accepted model ${input.model}.`,
+      `Prompt fingerprint ${fingerprintSecret(input.prompt)} using key ${fingerprintSecret(secret)}.`
+    ].join(" ");
+    return {
+      text,
+      tokensUsed: estimateAiTokens(input.prompt, text),
+      latencyMs: Math.max((this.runtime.now?.() ?? Date.now()) - started, 1)
+    };
+  }
+}
+
 export class AiGovernanceService {
   private readonly providers: AiProvider[] = [];
   private readonly apiKeys: StoredAiApiKey[] = [];
   private readonly routes: AiScenarioRoute[] = [];
   private readonly quotas: AiQuota[] = [];
+  private readonly usageLogs: AiUsageLog[] = [];
+  private readonly providerCircuits = new Map<string, { failures: number; openedAt?: number }>();
   private providerCalls = 0;
 
   constructor(
     private readonly auth: MockAuthService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly runtime: AiGatewayRuntimeOptions = {}
   ) {}
 
   createProvider(actor: PlatformUser, input: Omit<AiProvider, "id" | "status" | "createdAt">): AiProvider {
@@ -2535,6 +2891,289 @@ export class AiGovernanceService {
 
   recordProviderCall(): void {
     this.providerCalls += 1;
+  }
+
+  testProviderCall(
+    actor: PlatformUser,
+    input: {
+      scenario: AiScenario;
+      prompt?: string;
+      requestedTokens?: number;
+      dryRun?: boolean;
+    }
+  ): AiProviderTestCallResult {
+    this.requireAdmin(actor, "ai.provider_test.denied", "ai_provider_test_call", input.scenario);
+    const prompt = input.prompt?.trim() || `Validate ${input.scenario} provider route before Creator use`;
+    const completion = this.invokeCompletion(actor, {
+      projectId: "admin_provider_test_call",
+      scenario: input.scenario,
+      prompt,
+      requestedTokens: input.requestedTokens,
+      guardrailDecision: "allow",
+      dryRun: input.dryRun ?? true,
+      timeoutMs: 10_000
+    });
+    const provider = this.requireProvider(completion.providerId);
+
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      adapter: completion.adapter,
+      model: completion.model,
+      status: completion.status,
+      fallbackUsed: completion.fallbackUsed,
+      tokensUsed: completion.tokensUsed,
+      latencyMs: completion.latencyMs,
+      usageLogId: completion.usageLogId,
+      outputExcerpt: completion.text.slice(0, 280)
+    };
+  }
+
+  invokeCompletion(
+    actor: PlatformUser,
+    input: {
+      projectId: string;
+      scenario: AiScenario;
+      prompt: string;
+	      requestedTokens?: number;
+	      guardrailDecision?: GuardrailDecision;
+	      // Callers use dryRun: false only when the runtime supplies a live provider fetcher.
+	      dryRun?: boolean;
+      timeoutMs?: number;
+      allowDeterministicFallback?: boolean;
+      deterministicFallbackText?: string;
+    }
+  ): AiCompletionResponse {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const route = this.resolveRoute(input.scenario);
+    const prompt = input.prompt.trim();
+    if (!prompt) throw new ValidationError("AI prompt is required");
+    const requestedTokens = input.requestedTokens ?? estimateAiTokens(prompt);
+
+    if (input.guardrailDecision === "block") {
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_blocked`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: route.primary.providerId,
+        model: route.primary.model,
+        prompt,
+        tokensUsed: 0,
+        status: "blocked",
+        reason: "guardrail_blocked"
+      });
+      throw new ValidationError(`AI request blocked by guardrail before provider call (${usage.id})`);
+    }
+
+    const quota = this.checkQuota("creator", requestedTokens);
+    if (!quota.allowed) {
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_quota_blocked`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: route.primary.providerId,
+        model: route.primary.model,
+        prompt,
+        tokensUsed: 0,
+        status: "blocked",
+        reason: quota.reason
+      });
+      throw new QuotaExceededError(`Creator quota exceeded before external provider call. Remaining today: ${quota.remainingToday}. Usage log: ${usage.id}`);
+    }
+
+    try {
+      return this.invokeRouteTarget(actor, {
+        projectId: input.projectId,
+        scenario: input.scenario,
+        prompt,
+        route,
+        requestedTokens,
+        dryRun: input.dryRun ?? true,
+        timeoutMs: input.timeoutMs ?? 30_000,
+        target: route.primary,
+        status: "succeeded",
+        fallbackUsed: false
+      });
+    } catch (error) {
+      if (!route.fallback || !input.allowDeterministicFallback || !input.deterministicFallbackText) {
+        const usage = this.recordUsage({
+          projectId: input.projectId,
+          taskId: `ai_${input.scenario}_failed`,
+          actorId: actor.id,
+          scenario: input.scenario,
+          providerId: route.primary.providerId,
+          model: route.primary.model,
+          prompt,
+          tokensUsed: 0,
+          status: "failed",
+          reason: error instanceof Error ? error.message : String(error)
+        });
+        throw new ValidationError(`AI provider call failed and no fallback policy is available (${usage.id}): ${providerErrorMessage(error)}`);
+      }
+
+      const provider = this.requireProvider(route.fallback.providerId);
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_fallback`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: provider.id,
+        model: route.fallback.model,
+        prompt,
+        tokensUsed: estimateAiTokens(prompt, input.deterministicFallbackText),
+        status: "fallback",
+        adapter: provider.adapter,
+        latencyMs: 1,
+        reason: error instanceof Error ? error.message : String(error)
+      });
+      this.audit.record({
+        actorId: actor.id,
+        action: "ai.gateway.fallback_used",
+        resourceType: "ai_usage_log",
+        resourceId: usage.id,
+        severity: "warning",
+        metadata: { projectId: input.projectId, scenario: input.scenario, primaryProviderId: route.primary.providerId, fallbackProviderId: provider.id }
+      });
+      return {
+        text: input.deterministicFallbackText,
+        providerId: provider.id,
+        model: route.fallback.model,
+        adapter: provider.adapter,
+        tokensUsed: usage.tokensUsed,
+        latencyMs: usage.latencyMs ?? 1,
+        status: "fallback",
+        usageLogId: usage.id,
+        fallbackUsed: true
+      };
+    }
+  }
+
+  listUsageLogs(): AiUsageLog[] {
+    return [...this.usageLogs];
+  }
+
+  private invokeRouteTarget(
+    actor: PlatformUser,
+    input: {
+      projectId: string;
+      scenario: AiScenario;
+      prompt: string;
+      route: AiScenarioRoute;
+      requestedTokens: number;
+      dryRun: boolean;
+      timeoutMs: number;
+      target: AiScenarioRoute["primary"];
+      status: "succeeded";
+      fallbackUsed: boolean;
+    }
+  ): AiCompletionResponse {
+    const provider = this.requireProvider(input.target.providerId);
+    const circuitKey = `${provider.id}:${input.target.model}`;
+    this.assertCircuitClosed(circuitKey);
+    const key = this.requireActiveKey(provider.id);
+    const adapter = this.createAdapter(provider);
+    this.recordProviderCall();
+    let response: { text: string; tokensUsed: number; latencyMs: number };
+    try {
+      response = adapter.complete({
+        provider,
+        key,
+        model: input.target.model,
+        prompt: input.prompt,
+        scenario: input.scenario,
+        dryRun: input.dryRun,
+        timeoutMs: input.timeoutMs
+      });
+      this.closeCircuit(circuitKey);
+    } catch (error) {
+      this.recordCircuitFailure(circuitKey);
+      throw error;
+    }
+    const usage = this.recordUsage({
+      projectId: input.projectId,
+      taskId: `ai_${input.scenario}_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
+      actorId: actor.id,
+      scenario: input.scenario,
+      providerId: provider.id,
+      model: input.target.model,
+      prompt: input.prompt,
+      tokensUsed: response.tokensUsed,
+      status: input.status,
+      adapter: provider.adapter,
+      latencyMs: response.latencyMs
+    });
+    this.audit.record({
+      actorId: actor.id,
+      action: "ai.gateway.completed",
+      resourceType: "ai_usage_log",
+      resourceId: usage.id,
+      metadata: { projectId: input.projectId, scenario: input.scenario, providerId: provider.id, model: input.target.model, tokensUsed: response.tokensUsed }
+    });
+    return {
+      text: response.text,
+      providerId: provider.id,
+      model: input.target.model,
+      adapter: provider.adapter,
+      tokensUsed: response.tokensUsed,
+      latencyMs: response.latencyMs,
+      status: input.status,
+      usageLogId: usage.id,
+      fallbackUsed: input.fallbackUsed
+    };
+  }
+
+  private recordUsage(input: Omit<AiUsageLog, "id" | "occurredAt" | "estimatedCostUsd" | "promptFingerprint">): AiUsageLog {
+    const usage: AiUsageLog = {
+      ...input,
+      id: `aigw_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
+      occurredAt: new Date().toISOString(),
+      estimatedCostUsd: Number((input.tokensUsed * 0.000002).toFixed(6)),
+      promptFingerprint: fingerprintSecret(input.prompt)
+    };
+    this.usageLogs.push(usage);
+    return usage;
+  }
+
+  private assertCircuitClosed(circuitKey: string): void {
+    const circuit = this.providerCircuits.get(circuitKey);
+    if (!circuit?.openedAt) return;
+    const cooldownMs = this.runtime.circuitBreaker?.cooldownMs ?? 60_000;
+    const elapsedMs = (this.runtime.now?.() ?? Date.now()) - circuit.openedAt;
+    if (elapsedMs < cooldownMs) {
+      throw new ValidationError(`AI provider circuit open for ${circuitKey}; retry after ${Math.ceil((cooldownMs - elapsedMs) / 1000)}s`);
+    }
+    this.providerCircuits.delete(circuitKey);
+  }
+
+  private recordCircuitFailure(circuitKey: string): void {
+    const threshold = this.runtime.circuitBreaker?.failureThreshold ?? 0;
+    if (threshold <= 0) return;
+    const current = this.providerCircuits.get(circuitKey) ?? { failures: 0 };
+    const failures = current.failures + 1;
+    this.providerCircuits.set(circuitKey, {
+      failures,
+      openedAt: failures >= threshold ? (this.runtime.now?.() ?? Date.now()) : current.openedAt
+    });
+  }
+
+  private closeCircuit(circuitKey: string): void {
+    this.providerCircuits.delete(circuitKey);
+  }
+
+  private requireActiveKey(providerId: string): StoredAiApiKey {
+    const key = this.apiKeys
+      .filter((candidate) => candidate.providerId === providerId && candidate.status === "active")
+      .sort((left, right) => left.fallbackPriority - right.fallbackPriority)[0];
+    if (!key) throw new ValidationError(`No active AI API key configured for provider ${providerId}`);
+    key.lastUsedAt = new Date().toISOString();
+    return key;
+  }
+
+  private createAdapter(provider: AiProvider): AiCompletionAdapter {
+    if (provider.adapter === "openai" || provider.adapter === "azure_openai") return new OpenAiCompatibleCompletionAdapter(this.runtime);
+    throw new ValidationError(`AI provider adapter ${provider.adapter} is not implemented for external calls yet`);
   }
 
   private requireAdmin(actor: PlatformUser, deniedAction: string, resourceType: string, resourceId: string): void {
@@ -3281,12 +3920,17 @@ export class PrdService {
       throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
     }
 
-    const quota = this.aiGovernance.checkQuota("creator", 300);
-    if (!quota.allowed) {
-      throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
-    }
-
-    this.aiGovernance.recordProviderCall();
+    const fallbackText = this.buildDeterministicPrdSummary(project);
+    const completion = this.aiGovernance.invokeCompletion(actor, {
+      projectId: project.id,
+      scenario: "prd_generation",
+      prompt: sourcePrompt,
+      requestedTokens: 300,
+      guardrailDecision: guardrail.decision,
+      dryRun: true,
+      allowDeterministicFallback: true,
+      deterministicFallbackText: fallbackText
+    });
 
     const now = new Date().toISOString();
     const document = this.ensureDocument(project.id, now);
@@ -3300,10 +3944,10 @@ export class PrdService {
       changeSummary: `Generated initial PRD draft for ${project.name}`,
       generatedBy: {
         scenario: "prd_generation",
-        providerId: route.primary.providerId,
-        model: route.primary.model
+        providerId: completion.providerId,
+        model: completion.model
       },
-      sections: this.buildSections(project),
+      sections: this.buildSections(project, completion.text),
       createdByUserId: actor.id,
       createdAt: now
     };
@@ -3318,7 +3962,15 @@ export class PrdService {
       action: "prd.draft.generated",
       resourceType: "prd_version",
       resourceId: draft.id,
-      metadata: { projectId: project.id, route: route.primary, guardrailDecision: guardrail.decision }
+      metadata: {
+        projectId: project.id,
+        route: route.primary,
+        guardrailDecision: guardrail.decision,
+        aiUsageLogId: completion.usageLogId,
+        aiStatus: completion.status,
+        fallbackUsed: completion.fallbackUsed,
+        tokensUsed: completion.tokensUsed
+      }
     });
 
     return draft;
@@ -3460,9 +4112,13 @@ export class PrdService {
     ].join("\n");
   }
 
-  private buildSections(project: PlatformProject): PrdSection[] {
+  private buildDeterministicPrdSummary(project: PlatformProject): string {
+    return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
+  }
+
+  private buildSections(project: PlatformProject, aiSummary?: string): PrdSection[] {
     const sections = [
-      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.`],
+      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.${aiSummary ? `\n\nAI Gateway Summary: ${aiSummary}` : ""}`],
       ["business_objective", "Business Objective", project.businessProblem],
       ["users_roles", "Users and Roles", `Primary users: ${project.intendedUsers.join(", ")}.`],
       ["core_flows", "Core Flows", "Create request, manager review, HR visibility, status tracking and audit trail."],
@@ -4688,6 +5344,7 @@ export class StorefrontService {
     const member = this.appAccess.getMemberForEmail(project, actor.email);
     const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
     const accessStatus: StoreAppAccessStatus = member ? "active" : pending ? "pending" : "available";
+    const installStatus: StoreAppInstallStatus = member ? "installed" : "not_installed";
     const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
 
     return {
@@ -4700,6 +5357,9 @@ export class StorefrontService {
       ownerName: owner?.name ?? entry.ownerUserId,
       route: entry.route,
       accessStatus,
+      installStatus,
+      installationId: member ? `legacy_appinst_${entry.appId}_${actor.id}` : undefined,
+      installedAt: member?.lastAccessAt,
       myRole: member?.roleName,
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
@@ -6167,12 +6827,16 @@ export interface PlatformApiServices {
 
 export type PlatformApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
-export function createPlatformApiServices(): PlatformApiServices {
+export interface PlatformApiServiceOptions {
+  aiGateway?: AiGatewayRuntimeOptions;
+}
+
+export function createPlatformApiServices(options: PlatformApiServiceOptions = {}): PlatformApiServices {
   const identity = new IdentityService();
   const auth = new MockAuthService(identity);
   const audit = new AuditService();
   const projects = new ProjectService(auth, audit);
-  const aiGovernance = new AiGovernanceService(auth, audit);
+  const aiGovernance = new AiGovernanceService(auth, audit, options.aiGateway);
   const guardrails = new GuardrailService(auth, audit);
   const knowledge = new KnowledgeGovernanceService(auth, audit, projects);
   const skills = new SkillGovernanceService(auth, audit, projects);
@@ -6188,7 +6852,7 @@ export function createPlatformApiServices(): PlatformApiServices {
   const domains = new DomainService(auth, audit, projects);
   const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
   const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, generatedRuntime, aiGovernance, guardrails);
-  const authSso = new PlatformAuthSsoService(auth, audit);
+  const authSso = new PlatformAuthSsoService(auth, audit, identity);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
   const operations = new OperationsRecoveryService(auth, audit);

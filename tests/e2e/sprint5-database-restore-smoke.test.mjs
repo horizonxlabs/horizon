@@ -22,6 +22,19 @@ function createSprint5ApiFixture() {
       models: ["gpt-4.1"]
     }
   });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/api-keys",
+    headers: adminHeaders,
+    body: {
+      providerId: provider.body.data.id,
+      name: "Primary Production Key",
+      secret: "sk-test-secret-that-must-not-leak",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    }
+  });
   for (const scenario of ["prd_generation", "frontend_coding"]) {
     executePlatformApiRequest(services, {
       method: "POST",

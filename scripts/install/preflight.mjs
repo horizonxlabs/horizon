@@ -13,6 +13,7 @@ const REQUIRED_ENV = [
   "EVCP_CREATOR_PORT",
   "EVCP_STORE_PORT",
   "DATABASE_URL",
+  "EVCP_CORE_PERSISTENCE",
   "POSTGRES_PASSWORD",
   "SESSION_SECRET",
   "ENCRYPTION_KEY",
@@ -55,6 +56,7 @@ const REQUIRED_SERVICES = [
 ];
 
 const REQUIRED_PORT_KEYS = ["EVCP_HTTP_PORT", "EVCP_API_PORT", "EVCP_ADMIN_PORT", "EVCP_CREATOR_PORT", "EVCP_STORE_PORT"];
+const CORE_PERSISTENCE_MODES = ["legacy", "memory", "prisma"];
 
 export function parseArgs(argv = process.argv.slice(2)) {
   const options = {
@@ -155,6 +157,14 @@ export function evaluateInstallContract({ env, composeText, envPath = ".env", co
   for (const key of REQUIRED_ENV) {
     checks.push(check(`env:${key}`, Boolean(env[key]), env[key] ? "present" : "missing", `Set ${key} in ${envPath}`));
   }
+  checks.push(
+    check(
+      "env:EVCP_CORE_PERSISTENCE:mode",
+      CORE_PERSISTENCE_MODES.includes(String(env.EVCP_CORE_PERSISTENCE ?? "").toLowerCase()),
+      env.EVCP_CORE_PERSISTENCE ?? "missing",
+      "Set EVCP_CORE_PERSISTENCE to legacy, memory or prisma"
+    )
+  );
 
   for (const key of SECRET_ENV) {
     const value = env[key] ?? "";
@@ -248,4 +258,3 @@ if (import.meta.url === entrypoint) {
     process.exitCode = 1;
   });
 }
-

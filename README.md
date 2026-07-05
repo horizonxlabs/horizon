@@ -87,6 +87,44 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
+Admin Web also includes a first-run install wizard in the Installer, Backup and Restore surface. It uses the shared `@evcp/api-client` for installer preflight, setup save and report retrieval through the private-server `/api` Caddy path, supports `VITE_PLATFORM_API_BASE_URL` for local integration, exposes Back/Next step controls, and keeps saved setup evidence masked.
+
+## Phase 2 Real MVP Core Persistence
+
+The Platform API now has a first Prisma-shaped repository layer for users, projects and audit logs:
+
+- `PlatformUser` records hydrate roles and permissions through `PlatformUserRole -> PlatformRole`.
+- `Project` records can be created/upserted and listed with admin/creator scoping.
+- `AuditLog` records can be written and filtered by actor, action, severity and project/app resource.
+- A memory-backed `CorePersistenceClient` keeps unit and E2E tests deterministic while matching the Prisma delegate contract.
+- The core API request handler has an async persistence mode for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`.
+- Platform API startup reads `EVCP_CORE_PERSISTENCE`: use `legacy` for existing mock-first regression behavior, `memory` for deterministic local/API tests, and `prisma` for private-server core persistence through `DATABASE_URL`.
+
+This is an integration foundation. Existing sprint-specific services are still being migrated from mock/in-memory state to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
+
+## Phase 2 Real MVP Platform Auth Sessions
+
+Core Platform API routes now accept signed Platform Auth bearer sessions in addition to the legacy mock-header fallback:
+
+- Simulated SSO login issues `Authorization: Bearer evcp_session.<payload>.<signature>` tokens.
+- `/auth/me` returns auth evidence with `mode`, `sessionId`, `expiresAt` and `legacyMockFallback`.
+- Runtime persistence modes (`memory` and `prisma`) accept bearer sessions for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`.
+- Mock headers remain available only as a migration fallback until real Keycloak/OIDC browser login and frontend token storage are wired.
+
+See `docs/operations/real-mvp-auth-session.md`.
+
+## Phase 2 Real MVP AI Provider Adapter
+
+The Platform API now routes PRD generation through an AI Gateway adapter contract. The first adapter is OpenAI-compatible and supports deterministic dry-run execution for CI, guardrail and quota pre-checks, fallback policy and usage logging without exposing API key material.
+
+See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees and remaining live-worker work.
+
+## Phase 2 Real MVP Frontend API Bootstrap
+
+Admin Web, Creator Web and App Store PWA now start their primary user/project/store identity through `@evcp/api-client` and Platform API bootstrap routes instead of importing frontend mock fixtures directly. They can store and clear `evcp_session` bearer tokens through a temporary simulated SSO bridge while the real Keycloak/OIDC browser callback remains pending. Local Vite development keeps deterministic fallback state when no API base URL is configured; private-server compose uses `/api` through Caddy.
+
+See `docs/operations/real-mvp-frontend-api-bootstrap.md`.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:

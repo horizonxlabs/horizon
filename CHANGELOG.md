@@ -4,7 +4,30 @@
 
 ### Added
 
+- Phase 2 Real MVP AI runtime fetcher controls with bounded retries, retryable provider statuses, sanitized transport failure evidence, provider/model circuit breaker cooldown and unit/integration coverage.
+- Phase 2 Real MVP App Store installation persistence with explicit app install/disable records separate from access membership, install/uninstall API routes, App Store PWA controls and unit/integration/E2E coverage.
+- Phase 2 Real MVP Generated Runtime persistence with repository-backed artifact/container/schema/health/log/metric/OpenAPI/migration evidence, async admin runtime routes, memory/Prisma wiring and integration/E2E coverage.
+- Phase 2 Real MVP Publish, App Store and ticket runtime persistence with repository-backed app access, manifest, deployment, registry, store access request, support ticket and creator inbox routes plus integration/E2E coverage.
+- Phase 2 Real MVP Workspace runtime persistence with repository-backed workspace task/step/preview/usage routes, persisted prompt evidence across service recreation, blocked prompt persistence and integration/E2E coverage.
+- Phase 2 Real MVP PRD runtime persistence with repository-backed PRD document/version/section routes, runtime memory and Prisma wiring, persisted draft/baseline state across service recreation and integration/E2E coverage.
+- Phase 2 Real MVP AI governance runtime persistence with repository-backed provider/key/route/quota/guardrail routes, memory and Prisma runtime wiring, masked API key responses, guardrail event persistence and integration/E2E coverage.
+- Phase 2 Real MVP Admin AI governance API-backed actions with typed provider/key/route/quota/guardrail client methods, Admin Web Create Provider, Save Masked Key, Configure Route, Configure Quota and Add Guardrail Rule controls, safe secret clearing and unit/integration/E2E coverage.
+- Phase 2 Real MVP Admin AI provider test-call workflow with admin-only API route, shared client method, dry-run gateway validation, sanitized provider evidence, Admin Web panel and unit/integration/E2E coverage.
+- Phase 2 Real MVP live OpenAI-compatible AI Provider Adapter path with injected provider fetcher, normalized `/chat/completions` response parsing, sanitized provider error mapping and unit/integration/E2E coverage.
+- Phase 2 Real MVP Admin First-run Installation Journey with explicit prepare/configure/preflight/setup/deploy/migrate/health/login steps, owner/evidence/next-action cards, responsive styling, docs and unit/integration/E2E coverage.
+- Phase 2 Real MVP Creator app users and publish API actions with shared app-access/publish client methods, invitation, access approval, publish registry evidence, deterministic local fallback and unit/integration/E2E coverage.
+- Phase 2 Real MVP Creator workspace API actions with shared workspace client methods, prompt submission, preview refresh, visible task/token evidence, deterministic local fallback and unit/integration/E2E coverage.
+- Phase 2 Real MVP App Store PWA API actions with shared Storefront client methods, request-access submission, ticket submission/status timeline, local fallback evidence and unit/integration/E2E coverage.
+- Phase 2 Real MVP API-backed Admin installer step wizard with shared installer API client methods, Back/Next step controls, editable setup save, masked setup evidence, report retrieval and unit/integration/E2E coverage.
+- Phase 2 Real MVP frontend Platform Auth session controls with shared session storage helpers, simulated SSO login bridge, Admin/Creator/Store sign-in/logout actions and unit/integration/E2E coverage.
+- Phase 2 Real MVP frontend API bootstrap with shared `PlatformApiClient`, bearer/legacy migration auth headers, Admin/Creator/Store bootstrap wiring, local fallback state, docs and unit/integration/E2E coverage.
+- Phase 2 Real MVP Admin first-run install wizard with preflight actions, blocked-install state, masked setup evidence, responsive EVCP UI styling and unit/integration/E2E coverage.
+- Phase 2 Real MVP platform auth session runtime integration with signed `evcp_session` bearer tokens, SSO user provisioning, auth evidence on `/auth/me`, runtime persistence route support and unit/integration/E2E coverage.
+- Phase 2 Real MVP runtime core persistence configuration with explicit `legacy`, `memory` and `prisma` modes, private-server env contract and Platform API startup wiring.
+- Phase 2 Real MVP core API persistence mode for `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter`, preserving the legacy mock executor while adding async repository-backed route coverage.
+- Phase 2 Real MVP core persistence foundation with Prisma-shaped user/project/audit repositories, an in-memory contract test double, repository-backed core service harness and unit/integration/E2E coverage.
 - Phase 2 Real MVP installer flow with ordered install stages, dry-run/execute CLI modes, redacted setup evidence, install report generation, compose readiness checks and unit/integration/E2E coverage.
+- Phase 2 Real MVP external AI Provider Adapter foundation with OpenAI-compatible gateway contract, dry-run adapter invocation, guardrail/quota pre-checks, deterministic fallback policy, usage logging and unit/integration/E2E coverage.
 - Phase 2 Real MVP install foundation with `.env.example`, private-server Docker Compose services, Caddy routing, install preflight CLI, install documentation and unit/integration/E2E install contract tests.
 - Production candidate readiness audit mapping the final roadmap criteria to Sprint 0-14 integrated evidence and the stacked PR merge order.
 - PR merge maintenance governance requiring non-author code review approval, fresh verification evidence and stacked merge order before any sprint PR is merged.

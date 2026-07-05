@@ -22,6 +22,19 @@ function createSprint7ApiFixture() {
       models: ["gpt-4.1"]
     }
   });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/api-keys",
+    headers: adminHeaders,
+    body: {
+      providerId: provider.body.data.id,
+      name: "Primary Production Key",
+      secret: "sk-test-secret-that-must-not-leak",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    }
+  });
   for (const scenario of ["prd_generation", "frontend_coding"]) {
     executePlatformApiRequest(services, {
       method: "POST",
@@ -193,7 +206,8 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
     "Request Access",
     "Submit Ticket",
     "Ticket Status",
-    "TKT-0001",
+    "No ticket yet",
+    "Ticket submitted",
     "Offline"
   ]) {
     assert.match(storeSource, new RegExp(text));

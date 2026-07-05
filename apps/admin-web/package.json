@@ -9,8 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@evcp/api-client": "workspace:*",
     "@evcp/config": "workspace:*",
-    "@evcp/mock-data": "workspace:*",
     "@evcp/ui": "workspace:*",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

@@ -14,6 +14,14 @@ function createSprint8Fixture() {
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-4.1"]
   });
+  services.aiGovernance.createApiKey(admin, {
+    providerId: provider.id,
+    name: "Primary Production Key",
+    secret: "sk-test-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
 
   for (const scenario of ["prd_generation", "frontend_coding"]) {
     services.aiGovernance.configureRoute(admin, {

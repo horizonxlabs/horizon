@@ -23,6 +23,19 @@ function seedGovernedPrdRoute(services) {
   });
   executePlatformApiRequest(services, {
     method: "POST",
+    path: "/ai/api-keys",
+    headers: adminHeaders,
+    body: {
+      providerId: provider.body.data.id,
+      name: "Primary Production Key",
+      secret: "sk-test-secret-that-must-not-leak",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
     path: "/ai/routes",
     headers: adminHeaders,
     body: {
@@ -74,6 +87,9 @@ test("Sprint 3 API smoke creates project generates PRD draft and confirms baseli
   assert.equal(draft.status, 201);
   assert.equal(draft.body.data.version, "0.1");
   assert.ok(draft.body.data.sections.length >= 6);
+  assert.equal(draft.body.data.generatedBy.providerId, services.aiGovernance.resolveRoute("prd_generation").primary.providerId);
+  assert.ok(draft.body.data.sections.find((section) => section.key === "overview")?.body.includes("AI Gateway Summary"));
+  assert.ok(services.aiGovernance.listUsageLogs().some((usage) => usage.scenario === "prd_generation" && usage.status === "succeeded"));
 
   const baseline = executePlatformApiRequest(services, {
     method: "POST",
