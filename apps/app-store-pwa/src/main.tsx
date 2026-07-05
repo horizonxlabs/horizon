@@ -3,6 +3,7 @@ import {
   createPlatformSessionStore,
   type CurrentUserResponse,
   type SimulatedSsoLoginInput,
+  type StoreAppInstallationResponse,
   type StoreAccessRequestResponse,
   type StorefrontAppCardDto,
   type StorefrontHomeResponse,
@@ -10,7 +11,7 @@ import {
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { AppCard, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
-import { Bell, Bug, MessageSquare, Search, Send, ShieldCheck, Store, WifiOff } from "lucide-react";
+import { Bell, Bug, Download, MessageSquare, Search, Send, ShieldCheck, Store, Trash2, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
@@ -90,6 +91,8 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
     owner: app.ownerName,
     myRole: app.myRole,
     accessStatus: app.accessStatus,
+    installStatus: app.installStatus,
+    primaryAction: app.primaryAction as AppStoreItem["primaryAction"],
     health: app.health as AppStoreItem["health"]
   };
 }
@@ -136,6 +139,16 @@ function fallbackAccessRequest(appSlug: string, requestedRoleKey: string, reason
   };
 }
 
+function fallbackInstallation(appSlug: string, status: "active" | "disabled"): StoreAppInstallationResponse {
+  return {
+    id: "local_install_001",
+    appSlug,
+    status,
+    installedAt: new Date().toISOString(),
+    disabledAt: status === "disabled" ? new Date().toISOString() : undefined
+  };
+}
+
 function fallbackTicket(appSlug: string, title: string, description: string, deviceInfo: string): StoreTicketResponse {
   return {
     id: "local_ticket_0001",
@@ -152,6 +165,50 @@ function fallbackTicket(appSlug: string, title: string, description: string, dev
   };
 }
 
+type InstallJourneyStepStatus = "complete" | "current" | "pending" | "blocked";
+
+const appInstallJourneySteps = [
+  {
+    id: "access_check",
+    label: "Access Check",
+    detail: "Confirm SSO user has an active app role before install."
+  },
+  {
+    id: "manifest_validation",
+    label: "Manifest Validation",
+    detail: "Use the published manifest and route metadata from the private registry."
+  },
+  {
+    id: "install_record",
+    label: "Install Record",
+    detail: "Persist the installation record and audit evidence."
+  },
+  {
+    id: "my_apps_ready",
+    label: "My Apps Ready",
+    detail: "Move the app into My Apps so the user can open it."
+  }
+] as const;
+
+function installJourneyStatus(
+  stepId: (typeof appInstallJourneySteps)[number]["id"],
+  app: AppStoreItem,
+  installResult: StoreAppInstallationResponse | undefined,
+  isInstallingApp: boolean
+): InstallJourneyStepStatus {
+  const hasAccess = app.accessStatus === "active";
+  const isInstalled = app.installStatus === "installed" || installResult?.status === "active";
+  const isRemoved = installResult?.status === "disabled";
+
+  if (stepId === "access_check") return hasAccess ? "complete" : "blocked";
+  if (!hasAccess) return "pending";
+  if (isInstalled) return "complete";
+  if (isRemoved) return stepId === "install_record" ? "current" : "pending";
+  if (isInstallingApp) return stepId === "manifest_validation" || stepId === "install_record" ? "current" : "pending";
+  if (stepId === "manifest_validation") return "current";
+  return "pending";
+}
+
 function StoreApp() {
   const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -161,15 +218,22 @@ function StoreApp() {
   const [ticketDescription, setTicketDescription] = useState("WFH leave type not visible on mobile");
   const [ticketDevice, setTicketDevice] = useState("iPhone Safari");
   const [accessRequestResult, setAccessRequestResult] = useState<StoreAccessRequestResponse | undefined>(undefined);
+  const [installResult, setInstallResult] = useState<StoreAppInstallationResponse | undefined>(undefined);
   const [ticketResult, setTicketResult] = useState<StoreTicketResponse | undefined>(undefined);
   const [ticketStatus, setTicketStatus] = useState<StoreTicketResponse | undefined>(undefined);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+  const [isInstallingApp, setIsInstallingApp] = useState(false);
+  const [isUninstallingApp, setIsUninstallingApp] = useState(false);
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const myApps = bootstrap.myApps;
   const availableApps = bootstrap.availableApps;
   const selectedApp = myApps[0] ?? availableApps[0] ?? fallbackStoreApps[0];
   const visibleTicket = ticketStatus ?? ticketResult;
   const visibleTimeline = visibleTicket?.timeline ?? [];
+  const installJourneyRows = appInstallJourneySteps.map((step) => ({
+    ...step,
+    status: installJourneyStatus(step.id, selectedApp, installResult, isInstallingApp)
+  }));
 
   useEffect(() => {
     loadStoreBootstrap()
@@ -191,6 +255,7 @@ function StoreApp() {
   function handleLogoutBridge() {
     setBootstrap(clearStoreSessionBridge());
     setAccessRequestResult(undefined);
+    setInstallResult(undefined);
     setTicketResult(undefined);
     setTicketStatus(undefined);
   }
@@ -211,6 +276,34 @@ function StoreApp() {
       setAccessRequestResult(fallbackAccessRequest(selectedApp.slug, requestedRole, requestReason));
     } finally {
       setIsRequestingAccess(false);
+    }
+  }
+
+  async function handleInstallApp() {
+    setIsInstallingApp(true);
+    try {
+      const client = createStorePlatformClient();
+      const result = await client.installStoreApp(selectedApp.slug);
+      setInstallResult(result);
+      setBootstrap(await loadStoreBootstrap());
+    } catch {
+      setInstallResult(fallbackInstallation(selectedApp.slug, "active"));
+    } finally {
+      setIsInstallingApp(false);
+    }
+  }
+
+  async function handleUninstallApp() {
+    setIsUninstallingApp(true);
+    try {
+      const client = createStorePlatformClient();
+      const result = await client.uninstallStoreApp(selectedApp.slug);
+      setInstallResult(result);
+      setBootstrap(await loadStoreBootstrap());
+    } catch {
+      setInstallResult(fallbackInstallation(selectedApp.slug, "disabled"));
+    } finally {
+      setIsUninstallingApp(false);
     }
   }
 
@@ -309,17 +402,45 @@ function StoreApp() {
             items={[
               { label: "Owner", value: selectedApp.owner },
               { label: "Role", value: selectedApp.myRole ?? "Access required" },
+              { label: "Install", value: <ToneBadge tone={selectedApp.installStatus === "installed" ? "success" : "neutral"}>{selectedApp.installStatus ?? "not_installed"}</ToneBadge> },
               { label: "Health", value: <ToneBadge tone="success">{selectedApp.health}</ToneBadge> },
               { label: "Route", value: `/apps/${selectedApp.slug}` }
             ]}
           />
           <div className="store-action-row">
             <button type="button">Open</button>
+            <button type="button" className="secondary-button" onClick={handleInstallApp} disabled={isInstallingApp || selectedApp.installStatus === "installed" || selectedApp.accessStatus !== "active"}>
+              <Download size={15} />
+              {isInstallingApp ? "Installing" : "Install"}
+            </button>
+            <button type="button" className="secondary-button" onClick={handleUninstallApp} disabled={isUninstallingApp || selectedApp.installStatus !== "installed"}>
+              <Trash2 size={15} />
+              {isUninstallingApp ? "Removing" : "Remove"}
+            </button>
             <button type="button" className="secondary-button" onClick={handleSubmitTicket} disabled={isSubmittingTicket}>
               <Bug size={15} />
               {isSubmittingTicket ? "Submitting" : "Submit Ticket"}
             </button>
           </div>
+          <ol className="store-install-stepper" aria-label="App install journey">
+            {installJourneyRows.map((step, index) => (
+              <li key={step.id} className={`store-install-step status-${step.status}`}>
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{step.label}</strong>
+                  <small>{step.detail}</small>
+                </div>
+                <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : step.status === "current" ? "info" : "neutral"}>{step.status}</ToneBadge>
+              </li>
+            ))}
+          </ol>
+          {installResult ? (
+            <div className="store-action-evidence" aria-label="Install result">
+              <strong>{installResult.status === "active" ? "App installed" : "App removed"}</strong>
+              <span>{installResult.appSlug} · {installResult.installedAt}</span>
+              <ToneBadge tone={installResult.status === "active" ? "success" : "neutral"}>{installResult.status}</ToneBadge>
+            </div>
+          ) : null}
         </SectionCard>
 
         <SectionCard eyebrow="Request Access" title="Manager role request">

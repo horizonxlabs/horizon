@@ -4,6 +4,10 @@
 
 ### Added
 
+- Phase 2 Real MVP AI runtime fetcher controls with bounded retries, retryable provider statuses, sanitized transport failure evidence, provider/model circuit breaker cooldown and unit/integration coverage.
+- Phase 2 Real MVP App Store installation persistence with explicit app install/disable records separate from access membership, install/uninstall API routes, App Store PWA controls and unit/integration/E2E coverage.
+- Phase 2 Real MVP Generated Runtime persistence with repository-backed artifact/container/schema/health/log/metric/OpenAPI/migration evidence, async admin runtime routes, memory/Prisma wiring and integration/E2E coverage.
+- Phase 2 Real MVP Publish, App Store and ticket runtime persistence with repository-backed app access, manifest, deployment, registry, store access request, support ticket and creator inbox routes plus integration/E2E coverage.
 - Phase 2 Real MVP Workspace runtime persistence with repository-backed workspace task/step/preview/usage routes, persisted prompt evidence across service recreation, blocked prompt persistence and integration/E2E coverage.
 - Phase 2 Real MVP PRD runtime persistence with repository-backed PRD document/version/section routes, runtime memory and Prisma wiring, persisted draft/baseline state across service recreation and integration/E2E coverage.
 - Phase 2 Real MVP AI governance runtime persistence with repository-backed provider/key/route/quota/guardrail routes, memory and Prisma runtime wiring, masked API key responses, guardrail event persistence and integration/E2E coverage.

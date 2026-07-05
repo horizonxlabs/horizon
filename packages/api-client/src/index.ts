@@ -73,6 +73,9 @@ export type StorefrontAppCardDto = {
   ownerName: string;
   route: string;
   accessStatus: "active" | "available" | "pending";
+  installStatus?: "installed" | "not_installed" | "disabled";
+  installationId?: string;
+  installedAt?: string;
   myRole?: string;
   health: string;
   version: string;
@@ -96,7 +99,20 @@ export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
   accessMode: string;
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+};
+
+export type StoreAppInstallationResponse = {
+  id: string;
+  appId?: string;
+  appSlug: string;
+  projectId?: string;
+  userId?: string;
+  userEmail?: string;
+  status: "active" | "disabled";
+  installedAt: string;
+  disabledAt?: string;
+  lastOpenedAt?: string;
 };
 
 export type StoreAccessRequestInput = {
@@ -707,6 +723,18 @@ export class PlatformApiClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input)
+    });
+  }
+
+  installStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
+    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/install`, {
+      method: "POST"
+    });
+  }
+
+  uninstallStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
+    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/uninstall`, {
+      method: "POST"
     });
   }
 
