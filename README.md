@@ -60,10 +60,23 @@ Replace every example secret in `.env`, then run:
 pnpm install:preflight
 ```
 
+Plan the full install flow without starting services:
+
+```bash
+pnpm install:plan
+```
+
+Execute the private-server install flow on a prepared server:
+
+```bash
+pnpm install:real
+```
+
 To verify the checked-in install contract without using real secrets:
 
 ```bash
 pnpm verify:install
+pnpm verify:installer
 ```
 
 Start the private-server dependency/platform stack:
