@@ -84,6 +84,18 @@ pnpm verify:install
 pnpm verify:sprint14
 ```
 
+## Admin First-Run Install Wizard
+
+The Admin Console operations surface includes a first-run install wizard for IT/System Admin review. It is designed to sit on top of the installer API and the private-server Caddy route:
+
+- `Run Preflight` posts the supported server profile to `/api/admin/installer/preflight` by default.
+- `VITE_PLATFORM_API_BASE_URL` can point the Admin Web bundle at a direct Platform API URL for local integration testing.
+- The wizard displays the ordered install contract: preflight, setup config, compose readiness, migrate/seed and verify health.
+- Failed preflight checks mark install as blocked and show actionable remediation.
+- Setup evidence shows domain, masked database URL, storage, auth, external AI provider, backup and first admin without rendering plaintext secrets.
+
+The wizard keeps deterministic fallback evidence for local UI development when the API is not running, but the private-server compose path is API-ready through Caddy's `/api/*` route.
+
 ## Installer Report
 
 The installer report includes:

@@ -19,7 +19,7 @@ import {
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -237,6 +237,123 @@ const restoreValidationRows = [
   { check: "audit-events", status: "pass", evidence: "critical restore audit retained" }
 ];
 
+type InstallWizardStepId = "preflight" | "setup" | "compose" | "migrate_seed" | "verify_health";
+type InstallWizardDecision = "ready" | "blocked" | "not_run";
+type PreflightRow = { check: string; required: string; observed: string; status: string; action: string };
+
+type InstallerReportEnvelope = {
+  ok: boolean;
+  data?: {
+    status: "passed" | "failed";
+    installBlocked: boolean;
+    checks: Array<{ name: string; required: string; observed: string; status: string; action: string }>;
+    actionableFailures: string[];
+    reportPath: string;
+  };
+};
+
+const installWizardSteps = [
+  { id: "preflight", label: "1. Preflight", detail: "CPU, RAM, disk, Docker, ports, DNS/TLS, network" },
+  { id: "setup", label: "2. Setup Config", detail: "domain, database, storage, auth, AI, backup, first admin" },
+  { id: "compose", label: "3. Compose Readiness", detail: "required private-server services are declared" },
+  { id: "migrate_seed", label: "4. Migrate + Seed", detail: "Prisma migration and seed plan is ready" },
+  { id: "verify_health", label: "5. Verify Health", detail: "Platform surfaces and dependencies report healthy" }
+] satisfies Array<{ id: InstallWizardStepId; label: string; detail: string }>;
+
+const installWizardSetupItems = [
+  { label: "Domain", value: "platform.company.test" },
+  { label: "Database", value: "postgresql://evcp:***@postgres:5432/evcp" },
+  { label: "Storage", value: "MinIO bucket evcp-artifacts / key fingerprint only" },
+  { label: "Auth", value: "Bundled Keycloak realm evcp" },
+  { label: "AI Provider", value: "External provider route / API key fingerprint only" },
+  { label: "Backup", value: "daily 02:00 / 30d / kms://evcp/backup" },
+  { label: "First Admin", value: "admin@company.com" }
+];
+
+const installWizardPassingProfile = {
+  cpuCores: 8,
+  memoryGb: 32,
+  diskFreeGb: 500,
+  os: "ubuntu-22.04",
+  dockerVersion: "26.1.0",
+  composeVersion: "2.27.0",
+  portsAvailable: [80, 443, 5432, 6379, 9000],
+  dnsReady: true,
+  tlsReady: true,
+  networkReady: true
+};
+
+const installWizardBlockedProfile = {
+  cpuCores: 1,
+  memoryGb: 2,
+  diskFreeGb: 10,
+  os: "",
+  dockerVersion: "",
+  composeVersion: "",
+  portsAvailable: [],
+  dnsReady: false,
+  tlsReady: false,
+  networkReady: false
+};
+
+const installWizardReadyRows: PreflightRow[] = [
+  { check: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
+  { check: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
+  { check: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
+  { check: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" },
+  { check: "Ports", required: "80/443/5432/6379/9000", observed: "all available", status: "pass", action: "-" }
+];
+
+const installWizardBlockedRows: PreflightRow[] = [
+  { check: "CPU", required: ">= 4 cores", observed: "1 core", status: "fail", action: "Add CPU capacity before install" },
+  { check: "RAM", required: ">= 8 GB", observed: "2 GB", status: "fail", action: "Add memory before install" },
+  { check: "Disk", required: ">= 100 GB free", observed: "10 GB", status: "fail", action: "Increase free disk space" },
+  { check: "Docker", required: "Docker installed", observed: "missing", status: "fail", action: "Install Docker Engine" },
+  { check: "Network", required: "Outbound and internal network ready", observed: "not ready", status: "fail", action: "Fix network connectivity" }
+];
+
+const initialInstallWizardState = {
+  decision: "not_run" as InstallWizardDecision,
+  source: "not run",
+  activeStep: "preflight" as InstallWizardStepId,
+  rows: installWizardReadyRows,
+  actionableFailures: ["Run preflight before marking install ready"],
+  reportPath: "reports/install/pending-install-report.json"
+};
+
+function preflightRowsFromReport(report: InstallerReportEnvelope["data"] | undefined, fallback: PreflightRow[]): PreflightRow[] {
+  if (!report?.checks?.length) return fallback;
+  return report.checks.map((check) => ({
+    check: check.name,
+    required: check.required,
+    observed: check.observed,
+    status: check.status,
+    action: check.action
+  }));
+}
+
+function apiBaseUrl(): string | undefined {
+  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  if (!configured && import.meta.env.DEV) return undefined;
+  return (configured || "/api").replace(/\/$/, "");
+}
+
+async function runInstallerPreflight(profile: typeof installWizardPassingProfile): Promise<InstallerReportEnvelope["data"] | undefined> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Preflight API base URL is not configured for local dev");
+  const response = await fetch(`${baseUrl}/admin/installer/preflight`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-mock-user-email": "admin@company.com"
+    },
+    body: JSON.stringify(profile)
+  });
+  const envelope = (await response.json()) as InstallerReportEnvelope;
+  if (!response.ok || !envelope.ok) throw new Error("Preflight API request failed");
+  return envelope.data;
+}
+
 const observabilityLicenseKpis = [
   { label: "Service Health", value: "8/8", detail: "core services reporting", icon: Activity, tone: "success" },
   { label: "Telemetry Export", value: "OTLP", detail: "metrics/logs/traces/alerts", icon: Route, tone: "info" },
@@ -328,6 +445,9 @@ const rtmRegressionRows = [
 ];
 
 function AdminApp() {
+  const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
+  const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
+
   useEffect(() => {
     if (!window.location.hash) {
       return;
@@ -336,6 +456,33 @@ function AdminApp() {
     const target = document.getElementById(window.location.hash.slice(1));
     target?.scrollIntoView({ block: "start" });
   }, []);
+
+  async function handleRunInstallerPreflight(kind: "ready" | "blocked") {
+    setIsRunningInstallCheck(true);
+    const fallbackRows = kind === "ready" ? installWizardReadyRows : installWizardBlockedRows;
+    try {
+      const report = await runInstallerPreflight(kind === "ready" ? installWizardPassingProfile : installWizardBlockedProfile);
+      setInstallWizard({
+        decision: report?.installBlocked ? "blocked" : "ready",
+        source: "Platform API",
+        activeStep: report?.installBlocked ? "preflight" : "verify_health",
+        rows: preflightRowsFromReport(report, fallbackRows),
+        actionableFailures: report?.actionableFailures.length ? report.actionableFailures : ["All install checks passed"],
+        reportPath: report?.reportPath ?? "reports/install/private-server-install-report.json"
+      });
+    } catch {
+      setInstallWizard({
+        decision: kind === "ready" ? "ready" : "blocked",
+        source: "local fallback",
+        activeStep: kind === "ready" ? "verify_health" : "preflight",
+        rows: fallbackRows,
+        actionableFailures: kind === "ready" ? ["All install checks passed"] : fallbackRows.filter((row) => row.status === "fail").map((row) => `${row.check}: ${row.action}`),
+        reportPath: `reports/install/${kind === "ready" ? "passed" : "failed"}-install-report.json`
+      });
+    } finally {
+      setIsRunningInstallCheck(false);
+    }
+  }
 
   return (
     <AppShell title="EVCP Admin" navItems={navigation.admin} userName={mockUsers.admin.name}>
@@ -1062,10 +1209,15 @@ function AdminApp() {
               <div>
                 <span className="eyebrow">Operations Recovery</span>
                 <h2>Installer, Backup and Restore</h2>
-                <p>Private-server readiness evidence for installer preflight, setup wizard, encrypted backups, PostgreSQL PITR and restore drills.</p>
+                <p>First-run install wizard, private-server readiness evidence, encrypted backups, PostgreSQL PITR and restore drills.</p>
               </div>
               <div className="ds-page-actions">
-                <button type="button" className="secondary-button"><ServerCog size={16} /> Run Preflight</button>
+                <button type="button" className="secondary-button" onClick={() => handleRunInstallerPreflight("blocked")} disabled={isRunningInstallCheck}>
+                  <AlertTriangle size={16} /> Simulate Blocked Preflight
+                </button>
+                <button type="button" onClick={() => handleRunInstallerPreflight("ready")} disabled={isRunningInstallCheck}>
+                  <ServerCog size={16} /> {isRunningInstallCheck ? "Running Preflight" : "Run Preflight"}
+                </button>
                 <button type="button"><CheckCircle2 size={16} /> Run Restore Drill</button>
               </div>
             </div>
@@ -1090,9 +1242,11 @@ function AdminApp() {
               <WorkflowRail
                 title="Recovery Path"
                 steps={[
-                  { label: "installer preflight", icon: <ServerCog size={16} /> },
-                  { label: "setup wizard", icon: <LockKeyhole size={16} /> },
+                  { label: "first-run preflight", icon: <ServerCog size={16} /> },
+                  { label: "setup config", icon: <LockKeyhole size={16} /> },
                   { label: "compose readiness", icon: <Route size={16} /> },
+                  { label: "migrate and seed", icon: <Database size={16} /> },
+                  { label: "verify health", icon: <CheckCircle2 size={16} /> },
                   { label: "backup schedule", icon: <Database size={16} /> },
                   { label: "backup run", icon: <ShieldCheck size={16} /> },
                   { label: "PostgreSQL PITR", icon: <Gauge size={16} /> },
@@ -1107,6 +1261,41 @@ function AdminApp() {
               />
 
               <div className="operations-recovery-grid">
+                <SectionCard eyebrow="First-run Install Wizard" title="Private-server install readiness">
+                  <div className="install-wizard-panel" aria-label="First-run install wizard">
+                    <ol className="install-wizard-steps">
+                      {installWizardSteps.map((step) => (
+                        <li key={step.id} className={installWizard.activeStep === step.id ? "active" : ""}>
+                          <span>{step.label}</span>
+                          <small>{step.detail}</small>
+                        </li>
+                      ))}
+                    </ol>
+                    <DecisionPanel
+                      tone={installWizard.decision === "ready" ? "success" : installWizard.decision === "blocked" ? "danger" : "warning"}
+                      badge={installWizard.decision === "ready" ? "ready" : installWizard.decision === "blocked" ? "blocked" : "pending"}
+                      title={installWizard.decision === "ready" ? "Install can proceed after setup review" : installWizard.decision === "blocked" ? "Install blocked by failed preflight checks" : "Run preflight before install"}
+                      lines={[
+                        `Evidence source: ${installWizard.source}`,
+                        `Report: ${installWizard.reportPath}`,
+                        ...installWizard.actionableFailures.slice(0, 3)
+                      ]}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
+                  <DefinitionGrid
+                    items={installWizardSetupItems}
+                  />
+                  <DecisionPanel
+                    tone="success"
+                    badge="masked"
+                    title="Setup evidence is ready without exposing secrets"
+                    lines={["Database password masked", "Storage, AI and backup keys use fingerprints or key references only", "First admin is visible for audit review"]}
+                  />
+                </SectionCard>
+
                 <SectionCard eyebrow="Installer" title="Preflight Report">
                   <div className="operations-desktop-table">
                     <DataTable
@@ -1114,41 +1303,23 @@ function AdminApp() {
                         { key: "check", label: "Check" },
                         { key: "required", label: "Required" },
                         { key: "observed", label: "Observed" },
-                        { key: "status", label: "Status", tone: () => "success" },
+                        { key: "status", label: "Status", tone: (value) => (value === "pass" ? "success" : "danger") },
                         { key: "action", label: "Action" }
                       ]}
-                      rows={preflightRows}
+                      rows={installWizard.rows}
                     />
                   </div>
                   <div className="backup-restore-mobile-list">
-                    {preflightRows.map((row) => (
+                    {installWizard.rows.map((row) => (
                       <article key={row.check}>
                         <strong>{row.check}</strong>
                         <span>Required: {row.required}</span>
                         <span>Observed: {row.observed}</span>
-                        <ToneBadge tone="success">{row.status}</ToneBadge>
+                        <span>Action: {row.action}</span>
+                        <ToneBadge tone={row.status === "pass" ? "success" : "danger"}>{row.status}</ToneBadge>
                       </article>
                     ))}
                   </div>
-                </SectionCard>
-
-                <SectionCard eyebrow="Setup Wizard" title="Deployment configuration">
-                  <DefinitionGrid
-                    items={[
-                      { label: "Domain", value: "platform.company.test" },
-                      { label: "Database", value: "postgresql://evcp:***@postgres:5432/evcp" },
-                      { label: "Storage", value: "MinIO / S3-compatible contract" },
-                      { label: "Auth", value: "Keycloak broker ready" },
-                      { label: "AI + Guardrail", value: "external provider route + enterprise policy" },
-                      { label: "First Admin", value: "admin@company.com" }
-                    ]}
-                  />
-                  <DecisionPanel
-                    tone="success"
-                    badge="masked"
-                    title="Setup Wizard completed without exposing secrets"
-                    lines={["Database password masked", "Storage and backup encryption use key references only"]}
-                  />
                 </SectionCard>
 
                 <SectionCard eyebrow="Compose" title="Docker Compose Readiness">

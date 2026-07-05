@@ -1669,6 +1669,51 @@ button {
   grid-column: 1 / -1;
 }
 
+.install-wizard-panel {
+  display: grid;
+  gap: var(--evcp-space-4);
+}
+
+.install-wizard-steps {
+  display: grid;
+  gap: var(--evcp-space-2);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.install-wizard-steps li {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: 5px;
+  min-height: 86px;
+  padding: var(--evcp-space-3);
+}
+
+.install-wizard-steps li.active {
+  background: var(--evcp-color-primary-soft);
+  border-color: var(--evcp-color-primary-strong);
+}
+
+.install-wizard-steps span {
+  color: var(--evcp-color-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.install-wizard-steps small {
+  color: var(--evcp-color-muted);
+  line-height: 1.35;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
 .operations-recovery-shell .ds-definition-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1955,6 +2000,10 @@ button {
   }
 
   .operations-recovery-shell .ds-definition-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .install-wizard-steps {
     grid-template-columns: 1fr;
   }
 
