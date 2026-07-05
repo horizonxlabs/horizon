@@ -73,6 +73,9 @@ export type StorefrontAppCardDto = {
   ownerName: string;
   route: string;
   accessStatus: "active" | "available" | "pending";
+  installStatus?: "installed" | "not_installed" | "disabled";
+  installationId?: string;
+  installedAt?: string;
   myRole?: string;
   health: string;
   version: string;
@@ -96,7 +99,20 @@ export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
   accessMode: string;
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+};
+
+export type StoreAppInstallationResponse = {
+  id: string;
+  appId?: string;
+  appSlug: string;
+  projectId?: string;
+  userId?: string;
+  userEmail?: string;
+  status: "active" | "disabled";
+  installedAt: string;
+  disabledAt?: string;
+  lastOpenedAt?: string;
 };
 
 export type StoreAccessRequestInput = {
@@ -498,6 +514,105 @@ export type AiProviderTestCallResponse = {
   outputExcerpt: string;
 };
 
+export type AiProviderAdapterDto = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
+export type AiScenarioDto = "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
+export type AiUsageModeDto = "production" | "development" | "fallback";
+
+export type AiProviderDto = {
+  id: string;
+  name: string;
+  adapter: AiProviderAdapterDto;
+  baseUrl?: string;
+  models: string[];
+  status: "active" | "disabled";
+  createdAt?: string;
+};
+
+export type CreateAiProviderInput = {
+  name: string;
+  adapter: AiProviderAdapterDto;
+  baseUrl: string;
+  models: string[];
+};
+
+export type AiApiKeyDto = {
+  id: string;
+  providerId: string;
+  name: string;
+  usageMode: AiUsageModeDto;
+  quotaTokens?: number;
+  fallbackPriority?: number;
+  fingerprint: string;
+  maskedValue: string;
+  status: "active" | "disabled";
+  createdAt?: string;
+  lastUsedAt?: string;
+};
+
+export type CreateAiApiKeyInput = {
+  providerId: string;
+  name: string;
+  secret: string;
+  usageMode: AiUsageModeDto;
+  quotaTokens: number;
+  fallbackPriority: number;
+};
+
+export type AiScenarioRouteDto = {
+  scenario: AiScenarioDto;
+  primary: {
+    providerId: string;
+    model: string;
+  };
+  fallback?: {
+    providerId: string;
+    model: string;
+  };
+};
+
+export type ConfigureAiRouteInput = {
+  scenario: AiScenarioDto;
+  primaryProviderId: string;
+  primaryModel: string;
+  fallbackProviderId?: string;
+  fallbackModel?: string;
+};
+
+export type AiQuotaDto = {
+  scope: "organization" | "creator" | "project" | "app";
+  dailyLimit: number;
+  monthlyLimit: number;
+  warningThreshold: number;
+  hardStop: boolean;
+  usedToday: number;
+};
+
+export type GuardrailRuleDto = {
+  id: string;
+  name: string;
+  type: "keyword" | "regex" | "policy_classifier";
+  pattern: string;
+  severity: "info" | "warning" | "high" | "critical";
+  action: "allow" | "warn" | "block";
+  scope: "organization" | "project" | "app";
+  status: "active" | "disabled";
+  updatedAt?: string;
+};
+
+export type CreateGuardrailRuleInput = Omit<GuardrailRuleDto, "id" | "status" | "updatedAt">;
+
+export type GuardrailEventDto = {
+  id: string;
+  actorId?: string;
+  prompt?: string;
+  scenario: string;
+  decision: "allow" | "warn" | "block";
+  matchedRuleId?: string;
+  matchedRuleName?: string;
+  severity?: GuardrailRuleDto["severity"];
+  occurredAt?: string;
+};
+
 export type PlatformAuthClaimsDto = {
   subject: string;
   email: string;
@@ -611,6 +726,18 @@ export class PlatformApiClient {
     });
   }
 
+  installStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
+    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/install`, {
+      method: "POST"
+    });
+  }
+
+  uninstallStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
+    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/uninstall`, {
+      method: "POST"
+    });
+  }
+
   submitStoreTicket(appSlug: string, input: StoreTicketInput): Promise<StoreTicketResponse> {
     return this.request<StoreTicketResponse>(`/store/apps/${encodeURIComponent(appSlug)}/tickets`, {
       method: "POST",
@@ -693,6 +820,58 @@ export class PlatformApiClient {
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
     return this.request<InstallerReportDto[]>("/admin/installer/reports");
+  }
+
+  listAiProviders(): Promise<AiProviderDto[]> {
+    return this.request<AiProviderDto[]>("/ai/providers");
+  }
+
+  createAiProvider(input: CreateAiProviderInput): Promise<AiProviderDto> {
+    return this.request<AiProviderDto>("/ai/providers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  listAiApiKeys(): Promise<AiApiKeyDto[]> {
+    return this.request<AiApiKeyDto[]>("/ai/api-keys");
+  }
+
+  createAiApiKey(input: CreateAiApiKeyInput): Promise<AiApiKeyDto> {
+    return this.request<AiApiKeyDto>("/ai/api-keys", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  configureAiRoute(input: ConfigureAiRouteInput): Promise<AiScenarioRouteDto> {
+    return this.request<AiScenarioRouteDto>("/ai/routes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  configureAiQuota(input: AiQuotaDto): Promise<AiQuotaDto> {
+    return this.request<AiQuotaDto>("/ai/quotas", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  createGuardrailRule(input: CreateGuardrailRuleInput): Promise<GuardrailRuleDto> {
+    return this.request<GuardrailRuleDto>("/guardrails/rules", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  listGuardrailEvents(): Promise<GuardrailEventDto[]> {
+    return this.request<GuardrailEventDto[]>("/guardrails/events");
   }
 
   testAiProvider(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {

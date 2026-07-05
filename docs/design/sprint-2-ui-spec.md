@@ -103,3 +103,9 @@ flowchart TD
 - [ ] Test prompt clearly returns allow, warn or block.
 - [ ] Guardrail event log is visible and filterable.
 
+## 8. Phase 2 API-Backed UI Status
+
+- Admin Web now uses the shared `@evcp/api-client` for Create Provider, Save Masked Key, Configure Route, Configure Quota, Add Guardrail Rule, Provider Test Call and Guardrail Events retrieval.
+- The secret field is write-only in the UI flow: after Save Masked Key, the input is cleared and the screen shows masked/fingerprint evidence only.
+- Local Vite development still keeps deterministic fallback rows when `VITE_PLATFORM_API_BASE_URL` is not configured; private-server compose uses the Platform API through `/api`.
+- Remaining UX depth for this sprint is route fallback editing, full quota remaining/reset visualization and event filtering controls.

@@ -5,13 +5,52 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
-import { createPlatformApiServices, type AuthResolution, type PlatformApiServices } from "./platform-services";
+import {
+  createPlatformApiServices,
+  PermissionError,
+  QuotaExceededError,
+  ValidationError,
+  type AuthResolution,
+  type PlatformApiServices,
+  type PlatformProject,
+  type PlatformUser
+} from "./platform-services";
 import {
   createCoreRepositoryBackedService,
   createPrismaCorePersistence,
   MemoryCorePersistenceClient,
   type CoreRepositoryBackedService
 } from "./persistence/core-repositories";
+import {
+  createAiGovernanceRepositoryBackedService,
+  createPrismaAiGovernancePersistence,
+  MemoryAiGovernancePersistenceClient,
+  type AiGovernanceRepositoryBackedService
+} from "./persistence/ai-governance-repositories";
+import {
+  createPrdRepositoryBackedService,
+  createPrismaPrdPersistence,
+  MemoryPrdPersistenceClient,
+  type PrdRepositoryBackedService
+} from "./persistence/prd-repositories";
+import {
+  createPrismaWorkspacePersistence,
+  createWorkspaceRepositoryBackedService,
+  MemoryWorkspacePersistenceClient,
+  type WorkspaceRepositoryBackedService
+} from "./persistence/workspace-repositories";
+import {
+  createPrismaPublishStorePersistence,
+  createPublishStoreRepositoryBackedService,
+  MemoryPublishStorePersistenceClient,
+  type PublishStoreRepositoryBackedService
+} from "./persistence/publish-store-repositories";
+import {
+  createGeneratedRuntimeRepositoryBackedService,
+  createPrismaGeneratedRuntimePersistence,
+  MemoryGeneratedRuntimePersistenceClient,
+  type GeneratedRuntimeRepositoryBackedService
+} from "./persistence/generated-runtime-repositories";
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 
@@ -33,6 +72,11 @@ type RouteRegistry = {
 
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
+  aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
+  prdPersistence?: PrdRepositoryBackedService;
+  workspacePersistence?: WorkspaceRepositoryBackedService;
+  publishStorePersistence?: PublishStoreRepositoryBackedService;
+  generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
 };
 
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -129,6 +173,8 @@ export interface PlatformRequest {
     | "/app-store/registry"
     | "/store/apps"
     | `/store/apps/${string}`
+    | `/store/apps/${string}/install`
+    | `/store/apps/${string}/uninstall`
     | `/store/apps/${string}/access-requests`
     | `/store/apps/${string}/tickets`
     | `/store/tickets/${string}`
@@ -155,14 +201,29 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   if (mode === "memory") {
     return {
       ...services,
-      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient())
+      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient()),
+      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient()),
+      prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
+      workspacePersistence: createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient()),
+      publishStorePersistence: createPublishStoreRepositoryBackedService(new MemoryPublishStorePersistenceClient()),
+      generatedRuntimePersistence: createGeneratedRuntimeRepositoryBackedService(new MemoryGeneratedRuntimePersistenceClient())
     };
   }
 
   const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL);
+  const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
+  const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
+  const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL);
+  const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
   return {
     ...services,
-    corePersistence: service
+    corePersistence: service,
+    aiGovernancePersistence,
+    prdPersistence,
+    workspacePersistence,
+    publishStorePersistence,
+    generatedRuntimePersistence
   };
 }
 
@@ -208,6 +269,18 @@ async function resolvePersistenceAuth(services: PersistenceAwarePlatformApiServi
   };
 }
 
+async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
+  if (services.corePersistence) return (await resolvePersistenceAuth(services, headers)).user;
+  return services.auth.resolveCurrentUser(headers);
+}
+
+async function resolvePersistenceProject(services: PersistenceAwarePlatformApiServices, actor: Awaited<ReturnType<typeof resolvePersistenceUser>>, projectId: string): Promise<PlatformProject> {
+  if (!services.corePersistence) throw new Error("Core persistence service is not configured");
+  const project = (await services.corePersistence.listProjects(actor)).find((candidate) => candidate.id === projectId);
+  if (!project) throw new PermissionError(`Role ${actor.role} cannot access project ${projectId}`);
+  return project;
+}
+
 function buildAuthEvidence(resolution: AuthResolution) {
   return {
     mode: resolution.mode,
@@ -229,6 +302,21 @@ function buildAuditFilterInput(body: Record<string, unknown> | undefined) {
   };
 }
 
+function buildPersistencePrdPrompt(project: PlatformProject): string {
+  return [
+    `Create a PRD for ${project.name}.`,
+    `Problem: ${project.businessProblem}`,
+    `App type: ${project.appType}`,
+    `Department: ${project.targetDepartment}`,
+    `Users: ${project.intendedUsers.join(", ")}`,
+    `Sensitivity: ${project.dataSensitivity}`
+  ].join("\n");
+}
+
+function buildDeterministicPrdSummary(project: PlatformProject): string {
+  return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
+}
+
 function isPersistenceCoreRoute(request: PlatformRequest): boolean {
   return (
     request.path === "/auth/me" ||
@@ -238,14 +326,101 @@ function isPersistenceCoreRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
+  return (
+    request.path === "/ai/providers" ||
+    request.path === "/ai/api-keys" ||
+    request.path === "/ai/routes" ||
+    request.path === "/ai/quotas" ||
+    request.path === "/guardrails/rules" ||
+    request.path === "/guardrails/test" ||
+    request.path === "/guardrails/events"
+  );
+}
+
+function isPersistencePrdRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) ||
+    /^\/projects\/[^/]+\/prd$/.test(request.path)
+  );
+}
+
+function isPersistenceWorkspaceRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/projects\/[^/]+\/workspace$/.test(request.path) ||
+    /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) ||
+    /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path)
+  );
+}
+
+function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/projects\/[^/]+\/app\/users$/.test(request.path) ||
+    /^\/projects\/[^/]+\/app\/roles$/.test(request.path) ||
+    /^\/projects\/[^/]+\/app\/invitations$/.test(request.path) ||
+    /^\/projects\/[^/]+\/app\/access-requests$/.test(request.path) ||
+    /^\/projects\/[^/]+\/app\/access-requests\/decision$/.test(request.path) ||
+    /^\/projects\/[^/]+\/publish\/review$/.test(request.path) ||
+    /^\/projects\/[^/]+\/publish$/.test(request.path) ||
+    request.path === "/app-store/registry" ||
+    request.path === "/store/apps" ||
+    /^\/store\/apps\/[^/]+$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/install$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) ||
+    /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) ||
+    /^\/store\/tickets\/[^/]+$/.test(request.path) ||
+    /^\/creator\/projects\/[^/]+\/tickets$/.test(request.path)
+  );
+}
+
+function isPersistenceGeneratedRuntimeRoute(request: PlatformRequest): boolean {
+  return (
+    /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) ||
+    /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path)
+  );
+}
+
+async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformApiServices, actor: PlatformUser, projectId: string) {
+  if (!services.publishStorePersistence) throw new Error("Publish Store persistence service is not configured");
+  const project = await resolvePersistenceProject(services, actor, projectId);
+  const manifest = await services.publishStorePersistence.getManifestForProject(actor, project);
+  const deployment = await services.publishStorePersistence.getLatestDeploymentForProject(actor, project);
+  return { project, manifest, deployment };
+}
+
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
-  if (!services.corePersistence || !isPersistenceCoreRoute(request)) return executePlatformApiRequest(services, request);
+  const corePersistence = services.corePersistence;
+  const aiGovernancePersistence = services.aiGovernancePersistence;
+  const prdPersistence = services.prdPersistence;
+  const workspacePersistence = services.workspacePersistence;
+  const publishStorePersistence = services.publishStorePersistence;
+  const generatedRuntimePersistence = services.generatedRuntimePersistence;
+  const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
+  const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
+  const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
+  const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
+  const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
+  const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
+  if (
+    !useCorePersistence &&
+    !useAiGovernancePersistence &&
+    !usePrdPersistence &&
+    !useWorkspacePersistence &&
+    !usePublishStorePersistence &&
+    !useGeneratedRuntimePersistence
+  ) return executePlatformApiRequest(services, request);
 
   try {
-    if (request.method === "GET" && request.path === "/auth/me") {
+    if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
       const authResolution = await resolvePersistenceAuth(services, request.headers ?? {});
       const user = authResolution.user;
-      await services.corePersistence.recordAudit({
+      await corePersistence.recordAudit({
         actorId: user.id,
         action: "auth.me",
         resourceType: "platform_user",
@@ -255,15 +430,15 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       return { status: HttpStatus.OK, body: success({ user, permissions: user.permissions, auth: buildAuthEvidence(authResolution) }) };
     }
 
-    if (request.method === "GET" && request.path === "/projects") {
+    if (corePersistence && request.method === "GET" && request.path === "/projects") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin", "creator"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.listProjects(user)) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.listProjects(user)) };
     }
 
-    if (request.method === "POST" && request.path === "/projects") {
+    if (corePersistence && request.method === "POST" && request.path === "/projects") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
-      const project = await services.corePersistence.createProject({
+      const project = await corePersistence.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
         slug: String(request.body?.slug ?? "untitled-project"),
@@ -273,7 +448,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
         intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
         dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
       });
-      await services.corePersistence.recordAudit({
+      await corePersistence.recordAudit({
         actorId: user.id,
         action: "project.created",
         resourceType: "project",
@@ -283,16 +458,532 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       return { status: HttpStatus.CREATED, body: success(project) };
     }
 
-    if (request.method === "GET" && request.path === "/audit-logs") {
+    if (corePersistence && request.method === "GET" && request.path === "/audit-logs") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit({})) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.filterAudit({})) };
     }
 
-    if (request.method === "POST" && request.path === "/audit-logs/filter") {
+    if (corePersistence && request.method === "POST" && request.path === "/audit-logs/filter") {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(await services.corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
+      return { status: HttpStatus.OK, body: success(await corePersistence.filterAudit(buildAuditFilterInput(request.body))) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/providers") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listProviders(user)) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/providers") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const provider = await aiGovernancePersistence.createProvider(user, {
+        name: String(request.body?.name ?? ""),
+        adapter: String(request.body?.adapter ?? "mock") as never,
+        baseUrl: String(request.body?.baseUrl ?? ""),
+        models: Array.isArray(request.body?.models) ? request.body.models.map(String) : []
+      });
+      return { status: HttpStatus.CREATED, body: success(provider) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/api-keys") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listApiKeys(user)) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/api-keys") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const key = await aiGovernancePersistence.createApiKey(user, {
+        providerId: String(request.body?.providerId ?? ""),
+        name: String(request.body?.name ?? ""),
+        secret: String(request.body?.secret ?? ""),
+        usageMode: String(request.body?.usageMode ?? "production") as never,
+        quotaTokens: Number(request.body?.quotaTokens ?? 0),
+        fallbackPriority: Number(request.body?.fallbackPriority ?? 0)
+      });
+      return { status: HttpStatus.CREATED, body: success(key) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/routes") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const route = await aiGovernancePersistence.configureRoute(user, {
+        scenario: String(request.body?.scenario ?? "prd_generation") as never,
+        primaryProviderId: String(request.body?.primaryProviderId ?? ""),
+        primaryModel: String(request.body?.primaryModel ?? ""),
+        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
+        fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
+      });
+      return { status: HttpStatus.OK, body: success(route) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/quotas") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const quota = await aiGovernancePersistence.configureQuota(user, {
+        scope: String(request.body?.scope ?? "organization") as never,
+        dailyLimit: Number(request.body?.dailyLimit ?? 0),
+        monthlyLimit: Number(request.body?.monthlyLimit ?? 0),
+        warningThreshold: Number(request.body?.warningThreshold ?? 0),
+        hardStop: Boolean(request.body?.hardStop ?? true),
+        usedToday: Number(request.body?.usedToday ?? 0)
+      });
+      return { status: HttpStatus.OK, body: success(quota) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/rules") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const rule = await aiGovernancePersistence.createGuardrailRule(user, {
+        name: String(request.body?.name ?? ""),
+        type: String(request.body?.type ?? "keyword") as never,
+        pattern: String(request.body?.pattern ?? ""),
+        severity: String(request.body?.severity ?? "warning") as never,
+        action: String(request.body?.action ?? "warn") as never,
+        scope: String(request.body?.scope ?? "organization") as never
+      });
+      return { status: HttpStatus.CREATED, body: success(rule) };
+    }
+
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/test") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const result = await aiGovernancePersistence.testPrompt(user, {
+        prompt: String(request.body?.prompt ?? ""),
+        scenario: String(request.body?.scenario ?? "prd_generation")
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listGuardrailEvents(user)) };
+    }
+
+    const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
+    if (corePersistence && prdPersistence && request.method === "POST" && prdGenerateMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdGenerateMatch[1]);
+      const sourcePrompt = buildPersistencePrdPrompt(project);
+      const guardrail = services.guardrails.evaluatePrompt(user, {
+        prompt: sourcePrompt,
+        scenario: "prd_generation"
+      });
+      if (guardrail.decision === "block") {
+        throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
+      }
+      const completion = services.aiGovernance.invokeCompletion(user, {
+        projectId: project.id,
+        scenario: "prd_generation",
+        prompt: sourcePrompt,
+        requestedTokens: 300,
+        guardrailDecision: guardrail.decision,
+        dryRun: true,
+        allowDeterministicFallback: true,
+        deterministicFallbackText: buildDeterministicPrdSummary(project)
+      });
+      const draft = await prdPersistence.generateDraft(user, {
+        project,
+        sourcePrompt,
+        generatedBy: {
+          scenario: "prd_generation",
+          providerId: completion.providerId,
+          model: completion.model
+        },
+        aiSummary: completion.text
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "prd.draft.generated",
+        resourceType: "prd_version",
+        resourceId: draft.id,
+        metadata: {
+          projectId: project.id,
+          guardrailDecision: guardrail.decision,
+          aiUsageLogId: completion.usageLogId,
+          aiStatus: completion.status,
+          fallbackUsed: completion.fallbackUsed,
+          tokensUsed: completion.tokensUsed
+        }
+      });
+      return { status: HttpStatus.CREATED, body: success(draft) };
+    }
+
+    const prdBaselineMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/baseline$/);
+    if (corePersistence && prdPersistence && request.method === "POST" && prdBaselineMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdBaselineMatch[1]);
+      const baseline = await prdPersistence.confirmBaseline(user, project, String(request.body?.versionId ?? ""));
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "prd.baseline.confirmed",
+        resourceType: "prd_version",
+        resourceId: baseline.id,
+        metadata: { projectId: project.id, sourceVersionId: request.body?.versionId ? String(request.body.versionId) : "" }
+      });
+      return { status: HttpStatus.OK, body: success(baseline) };
+    }
+
+    const prdVersionsMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/versions$/);
+    if (prdPersistence && request.method === "GET" && prdVersionsMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdVersionsMatch[1]);
+      return { status: HttpStatus.OK, body: success(await prdPersistence.listVersions(user, project)) };
+    }
+
+    const prdCurrentMatch = request.path.match(/^\/projects\/([^/]+)\/prd$/);
+    if (prdPersistence && request.method === "GET" && prdCurrentMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, prdCurrentMatch[1]);
+      return { status: HttpStatus.OK, body: success(await prdPersistence.getCurrent(user, project)) };
+    }
+
+    const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
+    if (corePersistence && prdPersistence && workspacePersistence && request.method === "POST" && workspacePromptMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      services.auth.requireRole(user, ["admin", "creator"]);
+      const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      const prompt = String(request.body?.prompt ?? "");
+      const guardrail = services.guardrails.evaluatePrompt(user, {
+        prompt,
+        scenario: "frontend_coding"
+      });
+
+      if (guardrail.decision === "block") {
+        const blocked = await workspacePersistence.blockPrompt(user, { project, baseline, prompt, guardrail });
+        await corePersistence.recordAudit({
+          actorId: user.id,
+          action: "workspace.prompt.blocked",
+          resourceType: "workspace_task",
+          resourceId: blocked.task.id,
+          severity: "warning",
+          metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
+        });
+        return { status: HttpStatus.OK, body: success(blocked) };
+      }
+
+      const route = services.aiGovernance.resolveRoute("frontend_coding");
+      const requestEstimate = 120;
+      const quota = services.aiGovernance.checkQuota("creator", requestEstimate);
+      if (!quota.allowed) {
+        throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
+      }
+      services.aiGovernance.recordProviderCall();
+      const result = await workspacePersistence.submitPrompt(user, {
+        project,
+        baseline,
+        prompt,
+        guardrail,
+        route: route.primary,
+        tokensUsed: requestEstimate
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "workspace.prompt.accepted",
+        resourceType: "workspace_task",
+        resourceId: result.task.id,
+        metadata: {
+          projectId: project.id,
+          previewVersion: result.preview.version,
+          tokensUsed: result.usage?.tokensUsed ?? 0
+        }
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    const workspaceRefreshMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/preview\/refresh$/);
+    if (prdPersistence && workspacePersistence && request.method === "POST" && workspaceRefreshMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, workspaceRefreshMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      return { status: HttpStatus.OK, body: success(await workspacePersistence.refreshPreview(user, { project, baseline })) };
+    }
+
+    const workspaceMatch = request.path.match(/^\/projects\/([^/]+)\/workspace$/);
+    if (prdPersistence && workspacePersistence && request.method === "GET" && workspaceMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, workspaceMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      return { status: HttpStatus.OK, body: success(await workspacePersistence.getWorkspace(user, { project, baseline })) };
+    }
+
+    const persistedAppUsersMatch = request.path.match(/^\/projects\/([^/]+)\/app\/users$/);
+    if (corePersistence && publishStorePersistence && request.method === "GET" && persistedAppUsersMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedAppUsersMatch[1]);
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.getAppAccessSnapshot(user, { project })) };
+    }
+
+    const persistedAppRolesMatch = request.path.match(/^\/projects\/([^/]+)\/app\/roles$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppRolesMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedAppRolesMatch[1]);
+      const role = await publishStorePersistence.createRole(user, {
+        project,
+        key: String(request.body?.key ?? ""),
+        name: String(request.body?.name ?? ""),
+        description: request.body?.description ? String(request.body.description) : undefined,
+        permissions: Array.isArray(request.body?.permissions) ? request.body.permissions.map(String) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "app.role.saved",
+        resourceType: "app_role",
+        resourceId: role.id,
+        metadata: { projectId: project.id, permissions: role.permissions }
+      });
+      return { status: HttpStatus.CREATED, body: success(role) };
+    }
+
+    const persistedAppInvitationsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/invitations$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppInvitationsMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedAppInvitationsMatch[1]);
+      const invitation = await publishStorePersistence.createInvitation(user, {
+        project,
+        email: String(request.body?.email ?? ""),
+        roleKey: String(request.body?.roleKey ?? "employee"),
+        userType: String(request.body?.userType ?? "internal") as never,
+        expiresAt: request.body?.expiresAt ? String(request.body.expiresAt) : undefined,
+        note: request.body?.note ? String(request.body.note) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: invitation.status === "approval_required" ? "app.invitation.policy_required" : "app.invitation.created",
+        resourceType: "app_invitation",
+        resourceId: invitation.id,
+        severity: invitation.status === "approval_required" ? "warning" : "info",
+        metadata: { projectId: project.id, email: invitation.email, roleKey: invitation.roleKey, userType: invitation.userType }
+      });
+      return { status: HttpStatus.CREATED, body: success(invitation) };
+    }
+
+    const persistedAppAccessRequestsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppAccessRequestsMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedAppAccessRequestsMatch[1]);
+      const accessRequest = await publishStorePersistence.createAccessRequest(user, {
+        project,
+        requesterEmail: String(request.body?.requesterEmail ?? ""),
+        requestedRoleKey: String(request.body?.requestedRoleKey ?? "employee"),
+        reason: String(request.body?.reason ?? "")
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "app.access_request.created",
+        resourceType: "app_access_request",
+        resourceId: accessRequest.id,
+        metadata: { projectId: project.id, requesterEmail: accessRequest.requesterEmail, requestedRoleKey: accessRequest.requestedRoleKey }
+      });
+      return { status: HttpStatus.CREATED, body: success(accessRequest) };
+    }
+
+    const persistedAppAccessDecisionMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests\/decision$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppAccessDecisionMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedAppAccessDecisionMatch[1]);
+      const accessRequest = await publishStorePersistence.decideAccessRequest(user, {
+        project,
+        requestId: String(request.body?.requestId ?? ""),
+        decision: String(request.body?.decision ?? "approved") as never,
+        decidedByUserId: request.body?.decidedByUserId ? String(request.body.decidedByUserId) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: accessRequest.status === "approved" ? "app.access_request.approved" : "app.access_request.rejected",
+        resourceType: "app_access_request",
+        resourceId: accessRequest.id,
+        metadata: { projectId: project.id, requestedRoleKey: accessRequest.requestedRoleKey }
+      });
+      return { status: HttpStatus.OK, body: success(accessRequest) };
+    }
+
+    const persistedPublishReviewMatch = request.path.match(/^\/projects\/([^/]+)\/publish\/review$/);
+    if (corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && request.method === "GET" && persistedPublishReviewMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedPublishReviewMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      const preview = await workspacePersistence.refreshPreview(user, { project, baseline });
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.getPublishReview(user, { project, baseline, preview })) };
+    }
+
+    const persistedPublishMatch = request.path.match(/^\/projects\/([^/]+)\/publish$/);
+    if (corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && request.method === "POST" && persistedPublishMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = await resolvePersistenceProject(services, user, persistedPublishMatch[1]);
+      const baseline = await prdPersistence.getCurrent(user, project);
+      const preview = await workspacePersistence.refreshPreview(user, { project, baseline });
+      const result = await publishStorePersistence.publishApp(user, { project, baseline, preview });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "app.publish.completed",
+        resourceType: "publish_request",
+        resourceId: result.publishRequest.id,
+        metadata: {
+          projectId: project.id,
+          deploymentId: result.deployment.id,
+          registryEntryId: result.registryEntry.id,
+          manifestVersion: result.manifest.manifestVersion
+        }
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    if (publishStorePersistence && request.method === "GET" && request.path === "/app-store/registry") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.listRegistry(user)) };
+    }
+
+    if (publishStorePersistence && request.method === "GET" && request.path === "/store/apps") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.listStoreApps(user)) };
+    }
+
+    const persistedStoreInstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/install$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreInstallMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const installation = await publishStorePersistence.installStoreApp(user, { appSlug: persistedStoreInstallMatch[1] });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "store.app.installed",
+        resourceType: "app_installation",
+        resourceId: installation.id,
+        metadata: { projectId: installation.projectId, appId: installation.appId, appSlug: installation.appSlug }
+      });
+      return { status: HttpStatus.CREATED, body: success(installation) };
+    }
+
+    const persistedStoreUninstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/uninstall$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreUninstallMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const installation = await publishStorePersistence.uninstallStoreApp(user, { appSlug: persistedStoreUninstallMatch[1] });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "store.app.uninstalled",
+        resourceType: "app_installation",
+        resourceId: installation.id,
+        metadata: { projectId: installation.projectId, appId: installation.appId, appSlug: installation.appSlug }
+      });
+      return { status: HttpStatus.OK, body: success(installation) };
+    }
+
+    const persistedStoreAccessMatch = request.path.match(/^\/store\/apps\/([^/]+)\/access-requests$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreAccessMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const accessRequest = await publishStorePersistence.requestStoreAccess(user, {
+        appSlug: persistedStoreAccessMatch[1],
+        requestedRoleKey: String(request.body?.requestedRoleKey ?? "employee"),
+        reason: String(request.body?.reason ?? ""),
+        department: request.body?.department ? String(request.body.department) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "store.access_request.created",
+        resourceType: "app_access_request",
+        resourceId: accessRequest.id,
+        metadata: { appSlug: accessRequest.appSlug, requestedRoleKey: accessRequest.requestedRoleKey, department: accessRequest.department }
+      });
+      return { status: HttpStatus.CREATED, body: success(accessRequest) };
+    }
+
+    const persistedStoreTicketCreateMatch = request.path.match(/^\/store\/apps\/([^/]+)\/tickets$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreTicketCreateMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const ticket = await publishStorePersistence.createTicket(user, {
+        appSlug: persistedStoreTicketCreateMatch[1],
+        type: String(request.body?.type ?? "bug") as never,
+        priority: String(request.body?.priority ?? "medium") as never,
+        title: String(request.body?.title ?? ""),
+        description: String(request.body?.description ?? ""),
+        deviceInfo: String(request.body?.deviceInfo ?? ""),
+        screenshotUrl: request.body?.screenshotUrl ? String(request.body.screenshotUrl) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: "ticket.created",
+        resourceType: "support_ticket",
+        resourceId: ticket.id,
+        metadata: { appSlug: ticket.appSlug, type: ticket.type, priority: ticket.priority, assignedToUserId: ticket.assignedToUserId }
+      });
+      return { status: HttpStatus.CREATED, body: success(ticket) };
+    }
+
+    const persistedStoreTicketStatusMatch = request.path.match(/^\/store\/tickets\/([^/]+)$/);
+    if (publishStorePersistence && request.method === "GET" && persistedStoreTicketStatusMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.getTicketStatus(user, persistedStoreTicketStatusMatch[1])) };
+    }
+
+    const persistedCreatorTicketInboxMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/tickets$/);
+    if (corePersistence && publishStorePersistence && request.method === "GET" && persistedCreatorTicketInboxMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      await resolvePersistenceProject(services, user, persistedCreatorTicketInboxMatch[1]);
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.listCreatorInbox(user, persistedCreatorTicketInboxMatch[1])) };
+    }
+
+    const persistedStoreAppDetailMatch = request.path.match(/^\/store\/apps\/([^/]+)$/);
+    if (publishStorePersistence && request.method === "GET" && persistedStoreAppDetailMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return { status: HttpStatus.OK, body: success(await publishStorePersistence.getStoreAppDetail(user, persistedStoreAppDetailMatch[1])) };
+    }
+
+    const persistedRuntimeOverviewMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOverviewMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOverviewMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getRuntimeOverview(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeSchemaCheckMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeSchemaCheckMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeSchemaCheckMatch[1]);
+      const result = await generatedRuntimePersistence.checkSchemaAccess(user, {
+        ...runtimeInput,
+        attemptedSchema: String(request.body?.attemptedSchema ?? ""),
+        operation: String(request.body?.operation ?? "select")
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: result.allowed ? "generated_runtime.schema_access.allowed" : "generated_runtime.schema_access.denied",
+        resourceType: "generated_app_runtime",
+        resourceId: runtimeInput.deployment.id,
+        severity: result.allowed ? "info" : "warning",
+        metadata: { projectId: runtimeInput.project.id, attemptedSchema: result.attemptedSchema, operation: result.operation }
+      });
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
+    const persistedRuntimeHealthMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/health$/);
+    if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeHealthMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeHealthMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getRuntimeHealth(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeOpenApiMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/openapi$/);
+    if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOpenApiMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOpenApiMatch[1]);
+      return { status: HttpStatus.OK, body: success(await generatedRuntimePersistence.getOpenApiContract(user, runtimeInput)) };
+    }
+
+    const persistedRuntimeMigrationDryRunMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeMigrationDryRunMatch) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeMigrationDryRunMatch[1]);
+      const result = await generatedRuntimePersistence.runMigrationDryRun(user, {
+        ...runtimeInput,
+        migrationId: String(request.body?.migrationId ?? ""),
+        destructiveChanges: Array.isArray(request.body?.destructiveChanges) ? request.body.destructiveChanges.map(String) : [],
+        approvalId: request.body?.approvalId ? String(request.body.approvalId) : undefined
+      });
+      await corePersistence.recordAudit({
+        actorId: user.id,
+        action: result.status === "blocked" ? "generated_runtime.migration_dry_run.blocked" : "generated_runtime.migration_dry_run.passed",
+        resourceType: "generated_app_runtime",
+        resourceId: runtimeInput.deployment.id,
+        severity: result.status === "blocked" ? "warning" : "info",
+        metadata: { projectId: runtimeInput.project.id, migrationId: result.migrationId, destructiveChanges: result.destructiveChanges }
+      });
+      return { status: HttpStatus.OK, body: success(result) };
     }
 
     return executePlatformApiRequest(services, request);
@@ -1777,25 +2468,45 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/app-store/registry", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/app-store/registry", headers: request.headers }))
   );
   routes.get("/store/apps", (request, response) =>
-    sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/store/apps", headers: request.headers }))
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, { method: "GET", path: "/store/apps", headers: request.headers }))
   );
   routes.get("/store/apps/:appSlug", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}`,
         headers: request.headers
       })
     )
   );
-  routes.post("/store/apps/:appSlug/access-requests", (request, response) =>
-    sendPlatformResponse(
+  routes.post("/store/apps/:appSlug/install", (request, response) =>
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/install`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/uninstall", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/store/apps/${String(request.params?.appSlug ?? "")}/uninstall`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/store/apps/:appSlug/access-requests", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}/access-requests`,
         headers: request.headers,
@@ -1804,9 +2515,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.post("/store/apps/:appSlug/tickets", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/store/apps/${String(request.params?.appSlug ?? "")}/tickets`,
         headers: request.headers,
@@ -1815,9 +2526,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/store/tickets/:ticketId", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/store/tickets/${String(request.params?.ticketId ?? "")}`,
         headers: request.headers
