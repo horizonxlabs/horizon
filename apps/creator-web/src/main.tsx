@@ -1,4 +1,19 @@
-import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type PlatformProjectDto, type SimulatedSsoLoginInput } from "@evcp/api-client";
+import {
+  createPlatformApiClient,
+  createPlatformSessionStore,
+  type AppAccessSnapshotResponse,
+  type AppInvitationDto,
+  type AppStoreRegistryEntryDto,
+  type CurrentUserResponse,
+  type PlatformProjectDto,
+  type PreviewVersionDto,
+  type PublishResultResponse,
+  type PublishReviewResponse,
+  type SimulatedSsoLoginInput,
+  type WorkspacePromptResultDto,
+  type WorkspaceSnapshotResponse,
+  type WorkspaceTaskStepDto
+} from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, SectionCard, ToneBadge, WorkflowRail } from "@evcp/ui";
 import {
@@ -84,6 +99,16 @@ function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
 }
 
+function createCreatorPlatformClient() {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  return createPlatformApiClient({
+    baseUrl,
+    sessionToken: platformSessionToken(),
+    legacyUserEmail: "creator@company.com"
+  });
+}
+
 function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResponse): CreatorProjectView {
   return {
     id: project.id,
@@ -99,13 +124,7 @@ function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResp
 }
 
 async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const client = createPlatformApiClient({
-    baseUrl,
-    sessionToken: platformSessionToken(),
-    legacyUserEmail: "creator@company.com"
-  });
+  const client = createCreatorPlatformClient();
   const currentUser = await client.getCurrentUser();
   const projects = await client.listProjects();
   return {
@@ -113,6 +132,24 @@ async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
     selectedProject: projects[0] ? projectToView(projects[0], currentUser) : fallbackSelectedProject,
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
+}
+
+async function loadWorkspaceState(projectId: string): Promise<WorkspaceSnapshotResponse> {
+  return createCreatorPlatformClient().getWorkspace(projectId);
+}
+
+async function loadCreatorPublishState(projectId: string): Promise<{
+  access: AppAccessSnapshotResponse;
+  review: PublishReviewResponse;
+  registry: AppStoreRegistryEntryDto[];
+}> {
+  const client = createCreatorPlatformClient();
+  const [access, review, registry] = await Promise.all([
+    client.getAppAccessSnapshot(projectId),
+    client.getPublishReview(projectId),
+    client.listAppStoreRegistry()
+  ]);
+  return { access, review, registry };
 }
 
 async function signInCreatorSessionBridge(): Promise<CreatorBootstrapState> {
@@ -164,7 +201,18 @@ const versionRows = [
   }
 ];
 
-const taskSteps = [
+const fallbackPreview: PreviewVersionDto = {
+  id: "preview_local_0001",
+  projectId: fallbackSelectedProject.id,
+  version: "preview-0001",
+  summary: "Updating Leave Management preview with WFH leave type and manager approval visibility.",
+  device: "desktop",
+  screenTitle: "Leave Management",
+  highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"],
+  createdAt: "2026-07-04T00:00:00.000Z"
+};
+
+const fallbackTaskSteps: WorkspaceTaskStepDto[] = [
   "Understanding request",
   "Loading PRD baseline",
   "Guardrail pre-check",
@@ -174,7 +222,12 @@ const taskSteps = [
   "Building preview",
   "Running checks",
   "Ready"
-].map((label, index) => ({ label, status: index < 9 ? "done" : "pending", order: String(index + 1) }));
+].map((label, index) => ({
+  id: `local_step_${index + 1}`,
+  label,
+  status: (index < 9 ? "done" : "pending") as WorkspaceTaskStepDto["status"],
+  order: index + 1
+}));
 
 const usageRows = [
   {
@@ -280,20 +333,108 @@ const mvpDemoSteps = [
 function CreatorApp() {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
+  const [workspaceSnapshot, setWorkspaceSnapshot] = useState<WorkspaceSnapshotResponse | undefined>(undefined);
+  const [workspaceResult, setWorkspaceResult] = useState<WorkspacePromptResultDto | undefined>(undefined);
+  const [previewOverride, setPreviewOverride] = useState<PreviewVersionDto | undefined>(undefined);
+  const [workspaceMessage, setWorkspaceMessage] = useState("Using deterministic local workspace evidence until the Platform API is configured.");
+  const [appAccessSnapshot, setAppAccessSnapshot] = useState<AppAccessSnapshotResponse | undefined>(undefined);
+  const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
+  const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
+  const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
+  const [publishMessage, setPublishMessage] = useState("Using deterministic local publish evidence until the Platform API is configured.");
+  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
+  const [isInvitingUser, setIsInvitingUser] = useState(false);
+  const [isApprovingAccess, setIsApprovingAccess] = useState(false);
+  const [isPublishingProject, setIsPublishingProject] = useState(false);
   const selectedProject = bootstrap.selectedProject;
+  const latestTask = workspaceResult?.task ?? workspaceSnapshot?.tasks.at(-1);
+  const visibleTaskSteps = latestTask?.steps ?? fallbackTaskSteps;
+  const visiblePreview = previewOverride ?? workspaceResult?.preview ?? workspaceSnapshot?.preview ?? fallbackPreview;
+  const visibleHighlights = visiblePreview.highlights.length ? visiblePreview.highlights : fallbackPreview.highlights;
+  const visibleTokenBudget = workspaceResult?.tokenBudget ?? workspaceSnapshot?.tokenBudget ?? {
+    remainingToday: 880,
+    remainingMonth: 4880,
+    requestEstimate: 120
+  };
+  const visibleUsageRows = (workspaceSnapshot?.usage.length ? workspaceSnapshot.usage : workspaceResult?.usage ? [workspaceResult.usage] : []).map((usage) => ({
+    prompt: usage.prompt,
+    scenario: usage.scenario,
+    tokens: String(usage.tokensUsed),
+    result: visiblePreview.version
+  }));
+  const visibleUsage = visibleUsageRows.length ? visibleUsageRows : usageRows;
+  const visibleAppMembers = appAccessSnapshot?.members.map((member) => ({
+    user: member.name || member.email,
+    type: member.userType,
+    role: member.roleName,
+    status: member.status,
+    lastAccess: member.lastAccessAt ? member.lastAccessAt.slice(0, 10) : "pending"
+  })) ?? appMembers;
+  const visiblePendingInvites = appAccessSnapshot?.invitations.map((invite) => ({
+    email: invite.email,
+    role: invite.roleKey,
+    invitedBy: "Creator User",
+    expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
+    status: invite.status
+  })) ?? pendingInvites;
+  const visibleAccessRequests = appAccessSnapshot?.accessRequests.map((request) => ({
+    id: request.id,
+    requester: request.requesterEmail,
+    role: request.requestedRoleKey,
+    reason: request.reason,
+    submitted: request.createdAt.slice(0, 10),
+    status: request.status
+  })) ?? accessRequests;
+  const visibleAppRoles = appAccessSnapshot?.roles.map((role) => ({
+    role: role.name,
+    permissions: role.permissions.join(", "),
+    members: String(role.memberCount),
+    status: role.memberCount > 0 ? "active" : "ready"
+  })) ?? appRoles;
+  const visiblePublishChecklist = publishReview?.checklist.map((item) => ({
+    check: item.label,
+    state: item.status,
+    detail: item.detail
+  })) ?? publishChecklist;
+  const visibleDeployment = publishResult?.deployment;
+  const visibleRegistryEntry = publishResult?.registryEntry ?? registryEntries.find((entry) => entry.projectId === selectedProject.id || entry.slug === selectedProject.slug);
+
+  async function refreshCreatorPublishState(projectId: string) {
+    const publishState = await loadCreatorPublishState(projectId);
+    setAppAccessSnapshot(publishState.access);
+    setPublishReview(publishState.review);
+    setRegistryEntries(publishState.registry);
+    setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
+  }
 
   useEffect(() => {
     loadCreatorBootstrap()
-      .then(setBootstrap)
+      .then(async (nextBootstrap) => {
+        setBootstrap(nextBootstrap);
+        try {
+          setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
+          await refreshCreatorPublishState(nextBootstrap.selectedProject.id);
+          setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+        } catch {
+          setWorkspaceSnapshot(undefined);
+        }
+      })
       .catch(() => setBootstrap(initialCreatorBootstrap));
   }, []);
 
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
-      setBootstrap(await signInCreatorSessionBridge());
+      const nextBootstrap = await signInCreatorSessionBridge();
+      setBootstrap(nextBootstrap);
+      setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
+      await refreshCreatorPublishState(nextBootstrap.selectedProject.id);
+      setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
     } catch {
       setBootstrap(initialCreatorBootstrap);
+      setWorkspaceSnapshot(undefined);
     } finally {
       setIsSigningIn(false);
     }
@@ -301,6 +442,222 @@ function CreatorApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearCreatorSessionBridge());
+    setWorkspaceSnapshot(undefined);
+    setWorkspaceResult(undefined);
+    setPreviewOverride(undefined);
+    setAppAccessSnapshot(undefined);
+    setPublishReview(undefined);
+    setPublishResult(undefined);
+    setRegistryEntries([]);
+    setWorkspaceMessage("Using deterministic local workspace evidence until the Platform API is configured.");
+    setPublishMessage("Using deterministic local publish evidence until the Platform API is configured.");
+  }
+
+  function fallbackWorkspacePromptResult(): WorkspacePromptResultDto {
+    const now = new Date().toISOString();
+    return {
+      guardrail: { decision: "allow", eventId: "local_guardrail_0001" },
+      task: {
+        id: "local_workspace_task_0001",
+        projectId: selectedProject.id,
+        prompt: promptDraft,
+        status: "ready",
+        guardrailDecision: "allow",
+        guardrailEventId: "local_guardrail_0001",
+        steps: fallbackTaskSteps,
+        createdByUserId: "local_creator",
+        createdAt: now
+      },
+      preview: {
+        ...fallbackPreview,
+        projectId: selectedProject.id,
+        summary: `Local preview updated: ${promptDraft}`,
+        createdAt: now
+      },
+      usage: {
+        id: "local_usage_0001",
+        projectId: selectedProject.id,
+        taskId: "local_workspace_task_0001",
+        actorId: "local_creator",
+        scenario: "frontend_coding",
+        providerId: "local_fallback",
+        model: "deterministic-preview",
+        prompt: promptDraft,
+        tokensUsed: 120,
+        occurredAt: now,
+        status: "succeeded"
+      },
+      tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
+    };
+  }
+
+  async function handleSubmitPrompt() {
+    setIsSubmittingPrompt(true);
+    try {
+      const result = await createCreatorPlatformClient().submitWorkspacePrompt(selectedProject.id, { prompt: promptDraft });
+      setWorkspaceResult(result);
+      setPreviewOverride(undefined);
+      setWorkspaceSnapshot(await loadWorkspaceState(selectedProject.id));
+      setWorkspaceMessage(result.guardrail.decision === "block" ? "Prompt blocked by guardrail. Existing preview was preserved." : "Prompt accepted. Workspace preview and token evidence updated from Platform API.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        const result = fallbackWorkspacePromptResult();
+        setWorkspaceResult(result);
+        setPreviewOverride(undefined);
+        setWorkspaceMessage("Local fallback generated deterministic workspace evidence. Configure Platform API to persist it.");
+      } else {
+        setWorkspaceMessage("Prompt failed. Existing preview was preserved; check Platform API logs for details.");
+      }
+    } finally {
+      setIsSubmittingPrompt(false);
+    }
+  }
+
+  async function handleRefreshPreview() {
+    setIsRefreshingPreview(true);
+    try {
+      const preview = await createCreatorPlatformClient().refreshWorkspacePreview(selectedProject.id);
+      setPreviewOverride(preview);
+      setWorkspaceMessage("Preview refreshed from Platform API.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        setPreviewOverride(visiblePreview);
+        setWorkspaceMessage("Local fallback preview refreshed deterministically.");
+      } else {
+        setWorkspaceMessage("Preview refresh failed. Existing preview remains visible.");
+      }
+    } finally {
+      setIsRefreshingPreview(false);
+    }
+  }
+
+  async function handleInviteUser() {
+    setIsInvitingUser(true);
+    try {
+      const client = createCreatorPlatformClient();
+      await client.createAppInvitation(selectedProject.id, {
+        email: "finance.manager@company.com",
+        roleKey: "manager",
+        userType: "internal",
+        note: "Join manager approval queue"
+      });
+      await refreshCreatorPublishState(selectedProject.id);
+      setPublishMessage("Invitation sent through Platform API and app access state refreshed.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        const now = new Date().toISOString();
+        const fallbackInvite: AppInvitationDto = {
+          id: "local_invite_0001",
+          appId: "local_app",
+          projectId: selectedProject.id,
+          email: "finance.manager@company.com",
+          userType: "internal",
+          roleKey: "manager",
+          invitedByUserId: "local_creator",
+          status: "pending",
+          note: "Join manager approval queue",
+          createdAt: now
+        };
+        setAppAccessSnapshot((current) => current ? { ...current, invitations: [fallbackInvite, ...current.invitations] } : undefined);
+        setPublishMessage("Local fallback recorded deterministic invitation evidence.");
+      } else {
+        setPublishMessage("Invitation failed. Existing app access state was preserved.");
+      }
+    } finally {
+      setIsInvitingUser(false);
+    }
+  }
+
+  async function handleApproveAccessRequest() {
+    const pendingRequest = appAccessSnapshot?.accessRequests.find((request) => request.status === "pending");
+    setIsApprovingAccess(true);
+    try {
+      const client = createCreatorPlatformClient();
+      const targetRequestId = pendingRequest?.id ?? "appreq_local_pending";
+      await client.decideAppAccessRequest(selectedProject.id, {
+        requestId: targetRequestId,
+        decision: "approved"
+      });
+      await refreshCreatorPublishState(selectedProject.id);
+      setPublishMessage("Access request approved through Platform API and membership state refreshed.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        setPublishMessage("Local fallback kept access request evidence. Configure Platform API to approve it persistently.");
+      } else {
+        setPublishMessage("Access request approval failed. Existing request state was preserved.");
+      }
+    } finally {
+      setIsApprovingAccess(false);
+    }
+  }
+
+  async function handlePublishProject() {
+    setIsPublishingProject(true);
+    try {
+      const client = createCreatorPlatformClient();
+      const result = await client.publishProject(selectedProject.id);
+      setPublishResult(result);
+      setRegistryEntries(await client.listAppStoreRegistry());
+      setPublishMessage("Published through Platform API. Deployment and App Store registry evidence updated.");
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not configured")) {
+        const now = new Date().toISOString();
+        setPublishResult({
+          publishRequest: {
+            id: "local_pubreq_0001",
+            projectId: selectedProject.id,
+            appId: "local_app",
+            status: "published",
+            requestedByUserId: "local_creator",
+            manifestVersion: "1",
+            blockingItems: [],
+            createdAt: now,
+            publishedAt: now
+          },
+          deployment: {
+            id: "local_dep_0001",
+            projectId: selectedProject.id,
+            appId: "local_app",
+            publishRequestId: "local_pubreq_0001",
+            status: "published",
+            environment: "app_store",
+            route: `/apps/${selectedProject.slug}`,
+            manifestVersion: "1",
+            prdVersion: "1.0",
+            frontendCheckpointId: visiblePreview.version,
+            publishedByUserId: "local_creator",
+            publishedAt: now
+          },
+          registryEntry: {
+            id: `local_store_${selectedProject.slug}`,
+            appId: "local_app",
+            projectId: selectedProject.id,
+            slug: selectedProject.slug,
+            name: selectedProject.name,
+            route: `/apps/${selectedProject.slug}`,
+            status: "published",
+            visibility: "restricted",
+            accessMode: "membership_or_invite",
+            roleKeys: ["employee", "manager", "hr_admin"],
+            ownerUserId: "local_creator",
+            deploymentId: "local_dep_0001",
+            manifestVersion: "1",
+            publishedAt: now
+          },
+          manifest: {
+            appId: "local_app",
+            projectId: selectedProject.id,
+            manifestVersion: "1",
+            app: { slug: selectedProject.slug, name: selectedProject.name, route: `/apps/${selectedProject.slug}`, status: "published" }
+          }
+        });
+        setPublishMessage("Local fallback produced deterministic publish evidence. Configure Platform API for persistent registry.");
+      } else {
+        setPublishMessage(error instanceof Error ? `Publish blocked: ${error.message}` : "Publish blocked. Existing deployment evidence was preserved.");
+      }
+    } finally {
+      setIsPublishingProject(false);
+    }
   }
 
   return (
@@ -308,7 +665,7 @@ function CreatorApp() {
       <PageHeader
         tone="surface"
         eyebrow="Creator Workspace"
-        title="Workspace: Leave Management"
+        title={`Workspace: ${selectedProject.name}`}
         description="Prompt, AI task progress, token remaining และ live preview อยู่ในหน้าทำงานเดียว"
         actions={
           <>
@@ -336,10 +693,10 @@ function CreatorApp() {
       <section className="workspace-topbar">
         {[
           ["Project", selectedProject.name],
-          ["PRD", "Baseline v1.0"],
-          ["Frontend", "preview-0001"],
-          ["Token Remaining", "880 today / 4,880 month"],
-          ["Publish", "not ready"]
+          ["PRD", workspaceSnapshot?.baseline.version ? `Baseline v${workspaceSnapshot.baseline.version}` : "Baseline v1.0"],
+          ["Frontend", visiblePreview.version],
+          ["Token Remaining", `${visibleTokenBudget.remainingToday} today / ${visibleTokenBudget.remainingMonth} month`],
+          ["Publish", latestTask?.status === "blocked" ? "blocked" : "not ready"]
         ].map(([label, value]) => (
           <div key={label}>
             <span>{label}</span>
@@ -354,37 +711,42 @@ function CreatorApp() {
             <div className="prompt-thread">
               <div className="prompt-message user">
                 <strong>Creator</strong>
-                <p>Add WFH leave type</p>
+                <p>{latestTask?.prompt ?? promptDraft}</p>
               </div>
               <div className="prompt-message system">
                 <strong>Guardrail pre-check</strong>
-                <p>Decision: allow · event gre_0002</p>
+                <p>Decision: {latestTask?.guardrailDecision ?? workspaceResult?.guardrail.decision ?? "allow"} · event {latestTask?.guardrailEventId ?? workspaceResult?.guardrail.eventId ?? "local_guardrail_0001"}</p>
               </div>
               <div className="prompt-message ai">
                 <strong>AI Task</strong>
-                <p>Updating Leave Management preview with WFH leave type and manager approval visibility.</p>
+                <p>{visiblePreview.summary}</p>
               </div>
             </div>
             <div className="prompt-composer">
               <label>
                 Prompt จะถูกตรวจตาม Guardrail ก่อนส่ง AI
-                <input defaultValue="Add WFH leave type" />
+                <input value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} />
               </label>
-              <button type="button">
+              <button type="button" onClick={handleSubmitPrompt} disabled={isSubmittingPrompt || !promptDraft.trim()}>
                 <Send size={16} />
-                Send
+                {isSubmittingPrompt ? "Sending" : "Send"}
               </button>
+            </div>
+            <div className="workspace-action-evidence" aria-label="Workspace action evidence">
+              <strong>{latestTask?.status === "blocked" ? "Prompt blocked" : "Workspace API evidence"}</strong>
+              <span>{workspaceMessage}</span>
+              <ToneBadge tone={latestTask?.status === "blocked" ? "warning" : workspaceSnapshot || workspaceResult ? "success" : "neutral"}>{latestTask?.status ?? "ready"}</ToneBadge>
             </div>
           </SectionCard>
 
           <SectionCard eyebrow="Task Progress" title="Deterministic AI Steps">
             <div className="workspace-progress-list">
-              {taskSteps.map((step) => (
+              {visibleTaskSteps.map((step) => (
                 <div key={step.label}>
                   <CheckCircle2 size={15} />
                   <span>{step.order}</span>
                   <strong>{step.label}</strong>
-                  <ToneBadge tone="success">{step.status}</ToneBadge>
+                  <ToneBadge tone={step.status === "failed" ? "danger" : step.status === "pending" ? "neutral" : step.status === "warning" ? "warning" : "success"}>{step.status}</ToneBadge>
                 </div>
               ))}
             </div>
@@ -393,20 +755,20 @@ function CreatorApp() {
 
         <SectionCard
           eyebrow="Live Preview"
-          title="Leave Management Preview"
-          action={<button type="button" className="ghost-button"><RefreshCw size={15} /> Refresh</button>}
+          title={`${visiblePreview.screenTitle} Preview`}
+          action={<button type="button" className="ghost-button" onClick={handleRefreshPreview} disabled={isRefreshingPreview}><RefreshCw size={15} /> {isRefreshingPreview ? "Refreshing" : "Refresh"}</button>}
         >
           <div className="preview-toolbar">
             <button type="button"><Monitor size={15} /> Desktop</button>
             <button type="button" className="ghost-button"><Tablet size={15} /> Tablet</button>
             <button type="button" className="ghost-button">Mobile</button>
-            <ToneBadge tone="info">preview-0001</ToneBadge>
+            <ToneBadge tone="info">{visiblePreview.version}</ToneBadge>
           </div>
           <div className="live-preview-frame">
             <header>
               <div>
-                <span>Leave Management</span>
-                <strong>Manager approval workspace</strong>
+                <span>{visiblePreview.screenTitle}</span>
+                <strong>{visiblePreview.summary}</strong>
               </div>
               <ToneBadge tone="success">Healthy</ToneBadge>
             </header>
@@ -416,21 +778,13 @@ function CreatorApp() {
               <div><span>Policy</span><strong>Ready</strong><small>shown before submit</small></div>
             </section>
             <section className="preview-board">
-              <article>
-                <span>New Type</span>
-                <strong>Work from home leave</strong>
-                <p>Employee can select WFH in the same request flow.</p>
-              </article>
-              <article>
-                <span>Approval Queue</span>
-                <strong>Manager review lane</strong>
-                <p>Pending approvals are grouped by team and due date.</p>
-              </article>
-              <article>
-                <span>Governance</span>
-                <strong>HR policy note</strong>
-                <p>Policy reminder appears before final submission.</p>
-              </article>
+              {visibleHighlights.map((highlight, index) => (
+                <article key={highlight}>
+                  <span>{index === 0 ? "New Type" : index === 1 ? "Approval Queue" : "Governance"}</span>
+                  <strong>{highlight}</strong>
+                  <p>{index === 0 ? "Employee can select the updated flow in the same request path." : index === 1 ? "Manager review evidence remains visible in the preview." : "Policy and audit context stay attached to the generated change."}</p>
+                </article>
+              ))}
             </section>
           </div>
         </SectionCard>
@@ -439,9 +793,9 @@ function CreatorApp() {
           <SectionCard eyebrow="Token Remaining" title="Quota">
             <DefinitionGrid
               items={[
-                { label: "Today", value: "880 tokens" },
-                { label: "Month", value: "4,880 tokens" },
-                { label: "Estimate", value: "120 tokens" },
+                { label: "Today", value: `${visibleTokenBudget.remainingToday} tokens` },
+                { label: "Month", value: `${visibleTokenBudget.remainingMonth} tokens` },
+                { label: "Estimate", value: `${visibleTokenBudget.requestEstimate} tokens` },
                 { label: "Reset", value: "tomorrow" }
               ]}
             />
@@ -454,7 +808,7 @@ function CreatorApp() {
                 { key: "tokens", label: "Tokens" },
                 { key: "result", label: "Result" }
               ]}
-              rows={usageRows}
+              rows={visibleUsage}
             />
           </SectionCard>
           <DecisionPanel
@@ -594,29 +948,34 @@ function CreatorApp() {
           <SectionCard
             eyebrow="App Users"
             title="App Users: Leave Management"
-            action={<button type="button"><UserPlus size={15} /> เชิญผู้ใช้</button>}
+            action={<button type="button" onClick={handleInviteUser} disabled={isInvitingUser}><UserPlus size={15} /> {isInvitingUser ? "กำลังเชิญ" : "เชิญผู้ใช้"}</button>}
           >
             <div className="sprint6-status-grid">
               <div>
                 <Users size={18} />
                 <span>Members</span>
-                <strong>2 active</strong>
+                <strong>{visibleAppMembers.filter((member) => member.status === "active").length} active</strong>
               </div>
               <div>
                 <UserPlus size={18} />
                 <span>Pending Invites</span>
-                <strong>2 waiting</strong>
+                <strong>{visiblePendingInvites.filter((invite) => invite.status === "pending" || invite.status === "approval_required").length} waiting</strong>
               </div>
               <div>
                 <ShieldAlert size={18} />
                 <span>Access Requests</span>
-                <strong>1 pending</strong>
+                <strong>{visibleAccessRequests.filter((request) => request.status === "pending").length} pending</strong>
               </div>
               <div>
                 <Store size={18} />
                 <span>App Store registry</span>
-                <strong>ready</strong>
+                <strong>{visibleRegistryEntry ? "published" : publishReview?.ready ? "ready" : "checking"}</strong>
               </div>
+            </div>
+            <div className="workspace-action-evidence" aria-label="Publish action evidence">
+              <strong>{publishResult ? "Publish evidence" : "App management evidence"}</strong>
+              <span>{publishMessage}</span>
+              <ToneBadge tone={publishResult ? "success" : publishReview?.ready ? "info" : "neutral"}>{publishResult?.deployment.status ?? (publishReview?.ready ? "ready" : "local")}</ToneBadge>
             </div>
 
             <div className="sprint6-tabs" aria-label="App user management tabs">
@@ -633,7 +992,7 @@ function CreatorApp() {
                 { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "warning") },
                 { key: "lastAccess", label: "Last Access" }
               ]}
-              rows={appMembers}
+              rows={visibleAppMembers}
             />
           </SectionCard>
 
@@ -644,10 +1003,10 @@ function CreatorApp() {
                   { key: "email", label: "Email/User" },
                   { key: "role", label: "Role" },
                   { key: "invitedBy", label: "Invited By" },
-                  { key: "expires", label: "Expires" },
-                  { key: "status", label: "Status", tone: (value) => (value === "approval_required" ? "warning" : "info") }
-                ]}
-                rows={pendingInvites}
+                { key: "expires", label: "Expires" },
+                { key: "status", label: "Status", tone: (value) => (value === "approval_required" ? "warning" : "info") }
+              ]}
+                rows={visiblePendingInvites}
               />
               <DecisionPanel
                 tone="warning"
@@ -666,8 +1025,13 @@ function CreatorApp() {
                   { key: "submitted", label: "Submitted" },
                   { key: "status", label: "Status", tone: () => "warning" }
                 ]}
-                rows={accessRequests}
+                rows={visibleAccessRequests}
               />
+              <div className="creator-ticket-actions">
+                <button type="button" onClick={handleApproveAccessRequest} disabled={isApprovingAccess || !visibleAccessRequests.some((request) => request.status === "pending")}>
+                  {isApprovingAccess ? "Approving" : "Approve Pending Request"}
+                </button>
+              </div>
             </SectionCard>
           </section>
 
@@ -679,7 +1043,7 @@ function CreatorApp() {
                 { key: "members", label: "Members" },
                 { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "info") }
               ]}
-              rows={appRoles}
+              rows={visibleAppRoles}
             />
           </SectionCard>
         </div>
@@ -688,25 +1052,25 @@ function CreatorApp() {
           <SectionCard
             eyebrow="Publish Review"
             title="Manifest + Readiness checklist"
-            action={<button type="button"><Store size={15} /> Publish to App Store</button>}
+            action={<button type="button" onClick={handlePublishProject} disabled={isPublishingProject || publishReview?.ready === false}><Store size={15} /> {isPublishingProject ? "Publishing" : "Publish to App Store"}</button>}
           >
             <DefinitionGrid
               items={[
-                { label: "Manifest", value: "manifest v1" },
-                { label: "Route", value: "/apps/leave-management" },
-                { label: "Auth", value: "platform_auth_sdk" },
-                { label: "Frontend", value: "fe-0001" },
-                { label: "PRD", value: "Baseline v1.0" },
-                { label: "Visibility", value: "restricted" }
+                { label: "Manifest", value: `manifest v${publishReview?.manifest.manifestVersion ?? publishResult?.manifest.manifestVersion ?? "1"}` },
+                { label: "Route", value: publishReview?.manifest.app?.route ?? publishResult?.manifest.app?.route ?? `/apps/${selectedProject.slug}` },
+                { label: "Auth", value: publishReview?.manifest.auth?.mode ?? "platform_auth_sdk" },
+                { label: "Frontend", value: publishReview?.manifest.frontend?.checkpointId ?? visiblePreview.version },
+                { label: "PRD", value: publishReview?.manifest.prd?.version ? `Baseline v${publishReview.manifest.prd.version}` : "Baseline v1.0" },
+                { label: "Visibility", value: visibleRegistryEntry?.visibility ?? "restricted" }
               ]}
             />
             <div className="publish-checklist">
-              {publishChecklist.map((item) => (
+              {visiblePublishChecklist.map((item) => (
                 <div key={item.check}>
                   <ClipboardCheck size={16} />
                   <strong>{item.check}</strong>
                   <span>{item.detail}</span>
-                  <ToneBadge tone="success">{item.state}</ToneBadge>
+                  <ToneBadge tone={item.state === "pass" ? "success" : "danger"}>{item.state}</ToneBadge>
                 </div>
               ))}
             </div>
@@ -716,8 +1080,8 @@ function CreatorApp() {
             <div className="deployment-record">
               <CheckCircle2 size={20} />
               <div>
-                <strong>dep_leave_management_001</strong>
-                <span>published · manifest v1 · App Store registry visible</span>
+                <strong>{visibleDeployment?.id ?? "dep_leave_management_001"}</strong>
+                <span>{visibleDeployment?.status ?? "published"} · manifest v{visibleDeployment?.manifestVersion ?? publishResult?.manifest.manifestVersion ?? "1"} · {visibleRegistryEntry ? "App Store registry visible" : "registry pending"}</span>
               </div>
             </div>
             <DecisionPanel

@@ -206,7 +206,8 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
     "Request Access",
     "Submit Ticket",
     "Ticket Status",
-    "TKT-0001",
+    "No ticket yet",
+    "Ticket submitted",
     "Offline"
   ]) {
     assert.match(storeSource, new RegExp(text));

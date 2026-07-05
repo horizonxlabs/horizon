@@ -1,0 +1,135 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const { createPlatformApiClient } = await import("../../packages/api-client/src/index.ts");
+const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
+
+const adminHeaders = { "x-mock-user-email": "admin@company.com" };
+const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
+
+function createStoreActionsFixture() {
+  const services = createPlatformApiServices();
+  const provider = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/providers",
+    headers: adminHeaders,
+    body: {
+      name: "OpenAI Production",
+      adapter: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4.1"]
+    }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/api-keys",
+    headers: adminHeaders,
+    body: {
+      providerId: provider.body.data.id,
+      name: "Primary Production Key",
+      secret: "sk-test-secret-that-must-not-leak",
+      usageMode: "production",
+      quotaTokens: 100000,
+      fallbackPriority: 1
+    }
+  });
+  for (const scenario of ["prd_generation", "frontend_coding"]) {
+    executePlatformApiRequest(services, {
+      method: "POST",
+      path: "/ai/routes",
+      headers: adminHeaders,
+      body: { scenario, primaryProviderId: provider.body.data.id, primaryModel: "gpt-4.1" }
+    });
+  }
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/ai/quotas",
+    headers: adminHeaders,
+    body: { scope: "creator", dailyLimit: 1000, monthlyLimit: 5000, warningThreshold: 800, hardStop: true, usedToday: 0 }
+  });
+  const project = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/projects",
+    headers: creatorHeaders,
+    body: {
+      name: "Leave Management",
+      slug: "leave-management-store-actions",
+      appType: "Workflow App",
+      businessProblem: "Employees need leave requests",
+      intendedUsers: ["Employee", "Manager"]
+    }
+  });
+  const draft = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${project.body.data.id}/prd/generate`,
+    headers: creatorHeaders
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${project.body.data.id}/prd/baseline`,
+    headers: creatorHeaders,
+    body: { versionId: draft.body.data.id }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${project.body.data.id}/workspace/prompts`,
+    headers: creatorHeaders,
+    body: { prompt: "Add WFH leave type" }
+  });
+  executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${project.body.data.id}/publish`,
+    headers: creatorHeaders
+  });
+  return services;
+}
+
+function createApiClientForServices(services) {
+  return createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "user@company.com",
+    fetcher: async (url, init = {}) => {
+      const parsed = new URL(String(url));
+      const body = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+      const result = executePlatformApiRequest(services, {
+        method: init.method ?? "GET",
+        path: parsed.pathname.replace(/^\/api/, ""),
+        headers: Object.fromEntries(new Headers(init.headers).entries()),
+        body
+      });
+      return new Response(JSON.stringify(result.body), { status: result.status });
+    }
+  });
+}
+
+test("App Store API client actions request access submit ticket and read status", async () => {
+  const services = createStoreActionsFixture();
+  const client = createApiClientForServices(services);
+
+  const detail = await client.getStoreAppDetail("leave-management-store-actions");
+  assert.equal(detail.accessStatus, "active");
+  assert.ok(detail.actions.includes("submit_ticket"));
+
+  const access = await client.requestStoreAccess("leave-management-store-actions", {
+    requestedRoleKey: "manager",
+    reason: "Need approval access",
+    department: "HR"
+  });
+  assert.equal(access.status, "pending");
+  assert.equal(access.requestedRoleKey, "manager");
+
+  const ticket = await client.submitStoreTicket("leave-management-store-actions", {
+    type: "bug",
+    priority: "high",
+    title: "WFH leave type missing",
+    description: "The WFH option is not visible on mobile.",
+    deviceInfo: "iPhone Safari"
+  });
+  assert.equal(ticket.status, "submitted");
+
+  const status = await client.getStoreTicket(ticket.id);
+  assert.equal(status.ticketNumber, "TKT-0001");
+  assert.equal(status.appName, "Leave Management");
+  assert.ok(status.timeline.some((entry) => entry.status === "submitted"));
+});
