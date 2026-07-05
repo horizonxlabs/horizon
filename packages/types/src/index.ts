@@ -31,6 +31,8 @@ export interface AppStoreItem {
   owner: string;
   myRole?: string;
   accessStatus: "active" | "available" | "pending";
+  installStatus?: "installed" | "not_installed" | "disabled";
+  primaryAction?: "open" | "install" | "request_access" | "view_status";
   health: Status;
 }
 
