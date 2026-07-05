@@ -22,6 +22,7 @@ import type {
   PublishResult,
   PublishReview,
   StoreAccessRequestResult,
+  StoreAppInstallation,
   StorefrontAppCard,
   StorefrontAppDetail,
   StorefrontHome,
@@ -75,6 +76,16 @@ interface AppMemberRecordData {
   userType?: string;
   status?: string;
   lastAccessAt?: DateValue | null;
+}
+
+interface AppInstallationRecord {
+  id: string;
+  appId: string;
+  userId: string;
+  status: string;
+  installedAt: DateValue;
+  disabledAt?: DateValue | null;
+  lastOpenedAt?: DateValue | null;
 }
 
 interface AppInvitationRecord {
@@ -219,6 +230,16 @@ export interface PublishStorePersistenceClient {
   appMember: {
     findMany(args: { where: { appId: string }; include?: Record<string, unknown> }): Promise<AppMemberRecordData[]>;
     create(args: { data: { appId: string; userId: string; roleId: string } }): Promise<AppMemberRecordData>;
+  };
+  appInstallation: {
+    findFirst(args: { where: { appId?: string; userId?: string; status?: string } }): Promise<AppInstallationRecord | null>;
+    findMany(args: { where: { appId?: string; userId?: string; status?: string }; orderBy?: { installedAt?: "asc" | "desc" } }): Promise<AppInstallationRecord[]>;
+    upsert(args: {
+      where: { appId_userId: { appId: string; userId: string } };
+      update: Partial<AppInstallationRecord>;
+      create: AppInstallationRecord;
+    }): Promise<AppInstallationRecord>;
+    update(args: { where: { id: string }; data: Partial<AppInstallationRecord> }): Promise<AppInstallationRecord>;
   };
   appInvitation: {
     findMany(args: { where: { appId?: string; projectId?: string }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<AppInvitationRecord[]>;
@@ -479,8 +500,8 @@ export class PublishStoreRepositoryBackedService {
         userName: actor.name,
         email: actor.email
       },
-      myApps: cards.filter((card) => card.accessStatus === "active"),
-      availableApps: cards.filter((card) => card.accessStatus !== "active"),
+      myApps: cards.filter((card) => card.installStatus === "installed"),
+      availableApps: cards.filter((card) => card.installStatus !== "installed"),
       notifications
     };
   }
@@ -489,7 +510,6 @@ export class PublishStoreRepositoryBackedService {
     requireAnyRole(actor, ["end_user"]);
     const entry = await this.requireRegistryEntry(appSlug);
     const card = await this.toCard(actor, entry);
-    const active = card.accessStatus === "active";
     return {
       ...card,
       ownerUserId: entry.ownerUserId,
@@ -498,8 +518,50 @@ export class PublishStoreRepositoryBackedService {
       accessMode: entry.accessMode,
       releaseNotes: ["Published from persisted manifest", "WFH leave type and manager approval preview are available"],
       supportContact: "Creator User",
-      actions: active ? ["open", "submit_ticket", "send_feedback"] : ["request_access", "view_status"]
+      actions: this.storeActionsForCard(card)
     };
+  }
+
+  async installStoreApp(actor: PlatformUser, input: { appSlug: string }): Promise<StoreAppInstallation> {
+    requireAnyRole(actor, ["end_user"]);
+    const entry = await this.requireRegistryEntry(input.appSlug);
+    const member = await this.getMemberForEmail(entry.appId, actor.email);
+    if (!member) throw new PermissionError(`App ${input.appSlug} requires active access before install`);
+    const existing = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
+    const now = new Date();
+    const record = await this.client.appInstallation.upsert({
+      where: { appId_userId: { appId: entry.appId, userId: actor.id } },
+      update: {
+        status: "active",
+        disabledAt: null,
+        lastOpenedAt: now
+      },
+      create: {
+        id: `appinst_${entry.appId}_${actor.id}`,
+        appId: entry.appId,
+        userId: actor.id,
+        status: "active",
+        installedAt: existing?.installedAt ?? now,
+        disabledAt: null,
+        lastOpenedAt: now
+      }
+    });
+    return mapInstallation(record, entry, actor);
+  }
+
+  async uninstallStoreApp(actor: PlatformUser, input: { appSlug: string }): Promise<StoreAppInstallation> {
+    requireAnyRole(actor, ["end_user"]);
+    const entry = await this.requireRegistryEntry(input.appSlug);
+    const existing = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
+    if (!existing || existing.status !== "active") throw new ValidationError(`App ${input.appSlug} is not installed`);
+    const record = await this.client.appInstallation.update({
+      where: { id: existing.id },
+      data: {
+        status: "disabled",
+        disabledAt: new Date()
+      }
+    });
+    return mapInstallation(record, entry, actor);
   }
 
   async requestStoreAccess(actor: PlatformUser, input: { appSlug: string; requestedRoleKey: string; reason: string; department?: string }): Promise<StoreAccessRequestResult> {
@@ -863,7 +925,9 @@ export class PublishStoreRepositoryBackedService {
   private async toCard(actor: PlatformUser, entry: AppStoreRegistryEntry): Promise<StorefrontAppCard> {
     const member = await this.getMemberForEmail(entry.appId, actor.email);
     const pending = await this.getPendingRequestForEmail(entry.appId, actor.email);
+    const installation = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
     const accessStatus = member ? "active" : pending ? "pending" : "available";
+    const installStatus = installation?.status === "active" ? "installed" : installation ? "disabled" : "not_installed";
     return {
       id: entry.id,
       appId: entry.appId,
@@ -874,12 +938,21 @@ export class PublishStoreRepositoryBackedService {
       ownerName: defaultUserName(entry.ownerUserId, entry.ownerUserId),
       route: entry.route,
       accessStatus,
+      installStatus,
+      installationId: installation?.id,
+      installedAt: installation ? toIsoString(installation.installedAt) : undefined,
       myRole: member?.roleName,
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
       lastUpdated: entry.publishedAt,
-      primaryAction: accessStatus === "active" ? "open" : accessStatus === "pending" ? "view_status" : "request_access"
+      primaryAction: installStatus === "installed" ? "open" : accessStatus === "active" ? "install" : accessStatus === "pending" ? "view_status" : "request_access"
     };
+  }
+
+  private storeActionsForCard(card: StorefrontAppCard): StorefrontAppDetail["actions"] {
+    if (card.installStatus === "installed") return ["open", "uninstall", "submit_ticket", "send_feedback"];
+    if (card.accessStatus === "active") return ["install", "submit_ticket", "send_feedback"];
+    return card.accessStatus === "pending" ? ["view_status"] : ["request_access"];
   }
 
   private async ensureNotifications(actor: PlatformUser, cards: StorefrontAppCard[]): Promise<InAppNotification[]> {
@@ -908,6 +981,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
   readonly app: PublishStorePersistenceClient["app"];
   readonly appRole: PublishStorePersistenceClient["appRole"];
   readonly appMember: PublishStorePersistenceClient["appMember"];
+  readonly appInstallation: PublishStorePersistenceClient["appInstallation"];
   readonly appInvitation: PublishStorePersistenceClient["appInvitation"];
   readonly appAccessRequest: PublishStorePersistenceClient["appAccessRequest"];
   readonly appManifest: PublishStorePersistenceClient["appManifest"];
@@ -921,6 +995,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
   private readonly apps: AppRecord[] = [];
   private readonly roles: AppRoleRecord[] = [];
   private readonly members: AppMemberRecordData[] = [];
+  private readonly installations: AppInstallationRecord[] = [];
   private readonly invitations: AppInvitationRecord[] = [];
   private readonly accessRequests: AppAccessRequestRecord[] = [];
   private readonly manifests: AppManifestRecord[] = [];
@@ -935,6 +1010,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
     apps: AppRecord[];
     roles: AppRoleRecord[];
     members: AppMemberRecordData[];
+    installations: AppInstallationRecord[];
     invitations: AppInvitationRecord[];
     accessRequests: AppAccessRequestRecord[];
     manifests: AppManifestRecord[];
@@ -948,6 +1024,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
     this.apps = seed.apps ?? [];
     this.roles = seed.roles ?? [];
     this.members = seed.members ?? [];
+    this.installations = seed.installations ?? [];
     this.invitations = seed.invitations ?? [];
     this.accessRequests = seed.accessRequests ?? [];
     this.manifests = seed.manifests ?? [];
@@ -992,6 +1069,21 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         this.members.push(member);
         return this.withMemberRelations(member);
       }
+    };
+    this.appInstallation = {
+      findFirst: async ({ where }) => this.installations.find((installation) => matchesInstallation(installation, where)) ?? null,
+      findMany: async ({ where, orderBy }) => sortByDate(this.installations.filter((installation) => matchesInstallation(installation, where)), "installedAt", orderBy?.installedAt),
+      upsert: async ({ where, update, create }) => {
+        const index = this.installations.findIndex((installation) => installation.appId === where.appId_userId.appId && installation.userId === where.appId_userId.userId);
+        if (index >= 0) {
+          const next = { ...this.installations[index], ...update };
+          this.installations[index] = next;
+          return next;
+        }
+        this.installations.push(create);
+        return create;
+      },
+      update: async ({ where, data }) => updateById(this.installations, where.id, data, "app installation")
     };
     this.appInvitation = {
       findMany: async ({ where, orderBy }) => sortByDate(this.invitations.filter((invitation) => matchesAppScoped(invitation, where)), "createdAt", orderBy?.createdAt),
@@ -1165,6 +1257,21 @@ function mapAccessRequest(record: AppAccessRequestRecord): AppAccessRequest {
     decidedByUserId: record.decidedByUserId ?? undefined,
     decidedAt: record.decidedAt ? toIsoString(record.decidedAt) : undefined,
     createdAt: toIsoString(record.createdAt)
+  };
+}
+
+function mapInstallation(record: AppInstallationRecord, entry: AppStoreRegistryEntry, actor: PlatformUser): StoreAppInstallation {
+  return {
+    id: record.id,
+    appId: record.appId,
+    appSlug: entry.slug,
+    projectId: entry.projectId,
+    userId: record.userId,
+    userEmail: actor.email,
+    status: record.status === "disabled" ? "disabled" : "active",
+    installedAt: toIsoString(record.installedAt),
+    disabledAt: record.disabledAt ? toIsoString(record.disabledAt) : undefined,
+    lastOpenedAt: record.lastOpenedAt ? toIsoString(record.lastOpenedAt) : undefined
   };
 }
 
@@ -1393,6 +1500,13 @@ function matchesAccessRequest(record: AppAccessRequestRecord, where: { appId?: s
   if (where.requesterEmail && record.requesterEmail !== where.requesterEmail) return false;
   if (where.status && record.status !== where.status) return false;
   if (where.requestedRoleKey && record.requestedRoleKey !== where.requestedRoleKey) return false;
+  return true;
+}
+
+function matchesInstallation(record: AppInstallationRecord, where: { appId?: string; userId?: string; status?: string }): boolean {
+  if (where.appId && record.appId !== where.appId) return false;
+  if (where.userId && record.userId !== where.userId) return false;
+  if (where.status && record.status !== where.status) return false;
   return true;
 }
 
