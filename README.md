@@ -87,6 +87,17 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 The compose contract declares PostgreSQL, Redis, MinIO, Keycloak, Platform API, Admin Web, Creator Web, App Store PWA and Caddy. See `docs/operations/real-mvp-install.md` for the current install steps and the remaining mock-to-real gaps.
 
+## Phase 2 Real MVP Core Persistence
+
+The Platform API now has a first Prisma-shaped repository layer for users, projects and audit logs:
+
+- `PlatformUser` records hydrate roles and permissions through `PlatformUserRole -> PlatformRole`.
+- `Project` records can be created/upserted and listed with admin/creator scoping.
+- `AuditLog` records can be written and filtered by actor, action, severity and project/app resource.
+- A memory-backed `CorePersistenceClient` keeps unit and E2E tests deterministic while matching the Prisma delegate contract.
+
+This is an integration foundation. Existing routes are still being migrated from mock/in-memory services to repository-backed services in later Phase 2 slices. See `docs/operations/real-mvp-persistence.md`.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:
