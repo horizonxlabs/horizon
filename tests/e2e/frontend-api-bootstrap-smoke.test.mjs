@@ -34,3 +34,34 @@ test("frontend source exposes API bootstrap state without direct mock-data impor
   assert.match(storeSource, /loadStoreBootstrap/);
   assert.doesNotMatch(`${adminSource}\n${creatorSource}\n${storeSource}`, /@evcp\/mock-data/);
 });
+
+test("frontend session bridge can issue a bearer token accepted by bootstrap auth", () => {
+  const services = createPlatformApiServices();
+  const login = executePlatformApiRequest(services, {
+    method: "POST",
+    path: "/admin/auth/simulate-login",
+    headers: adminHeaders,
+    body: {
+      providerId: "authprov_keycloak_default_001",
+      subject: "keycloak-creator-ui-bridge",
+      email: "creator@company.com",
+      name: "Creator User",
+      groups: ["evcp-creators"],
+      appRoles: { "leave-management": ["HR Admin"] }
+    }
+  });
+
+  assert.equal(login.status, 201);
+  assert.equal(login.body.data.token.startsWith("evcp_session."), true);
+
+  const me = executePlatformApiRequest(services, {
+    method: "GET",
+    path: "/auth/me",
+    headers: { authorization: `Bearer ${login.body.data.token}` }
+  });
+
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.user.email, "creator@company.com");
+  assert.equal(me.body.data.auth.mode, "platform_session");
+  assert.equal(me.body.data.auth.legacyMockFallback, false);
+});

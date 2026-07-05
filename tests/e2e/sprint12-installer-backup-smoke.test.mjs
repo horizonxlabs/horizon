@@ -82,6 +82,15 @@ test("Sprint 12 API supports installer preflight and setup wizard", () => {
   assert.equal(setup.body.data.status, "completed");
   assert.equal(setup.body.data.storage.secretAccessKey, undefined);
   assert.match(setup.body.data.databaseUrlMasked, /\*\*\*/);
+
+  const reports = executePlatformApiRequest(services, {
+    method: "GET",
+    path: "/admin/installer/reports",
+    headers: adminHeaders
+  });
+  assert.equal(reports.status, 200);
+  assert.equal(reports.body.data.length, 2);
+  assert.equal(reports.body.data[0].status, "passed");
 });
 
 test("Sprint 12 API supports backup policy run PITR and restore drill", () => {
