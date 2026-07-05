@@ -6,6 +6,7 @@ const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
 const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 
 test("shared API client exposes frontend bootstrap routes and auth modes", () => {
   assert.match(apiClient, /class PlatformApiClient/);
@@ -100,16 +101,36 @@ test("Admin install wizard is API-client backed and exposes step controls", () =
 test("App Store PWA actions are API-client backed", () => {
   assert.match(apiClient, /getStoreAppDetail\(/);
   assert.match(apiClient, /requestStoreAccess\(/);
+  assert.match(apiClient, /installStoreApp\(/);
+  assert.match(apiClient, /uninstallStoreApp\(/);
   assert.match(apiClient, /submitStoreTicket\(/);
   assert.match(apiClient, /getStoreTicket\(/);
   assert.match(storeSource, /handleRequestAccess/);
+  assert.match(storeSource, /handleInstallApp/);
+  assert.match(storeSource, /handleUninstallApp/);
   assert.match(storeSource, /handleSubmitTicket/);
   assert.match(storeSource, /requestStoreAccess/);
+  assert.match(storeSource, /installStoreApp/);
+  assert.match(storeSource, /uninstallStoreApp/);
   assert.match(storeSource, /submitStoreTicket/);
   assert.match(storeSource, /getStoreTicket/);
   assert.match(storeSource, /accessRequestResult/);
+  assert.match(storeSource, /installResult/);
   assert.match(storeSource, /ticketStatus/);
   assert.doesNotMatch(storeSource, /ticketTimeline = \[/);
+});
+
+test("App Store PWA exposes an install journey instead of a single opaque install action", () => {
+  assert.match(storeSource, /appInstallJourneySteps/);
+  assert.match(storeSource, /installJourneyStatus/);
+  assert.match(storeSource, /aria-label="App install journey"/);
+  for (const label of ["Access Check", "Manifest Validation", "Install Record", "My Apps Ready"]) {
+    assert.match(storeSource, new RegExp(label));
+  }
+  assert.match(storeSource, /store-install-stepper/);
+  assert.match(storeSource, /store-install-step status-/);
+  assert.match(storeSource, /installResult\?\.status === "active"/);
+  assert.match(persistenceDocs, /App Install Journey/);
 });
 
 test("Creator workspace actions are API-client backed", () => {

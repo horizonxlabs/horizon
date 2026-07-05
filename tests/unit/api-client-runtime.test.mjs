@@ -60,6 +60,37 @@ test("platform API client sends explicit legacy mock header only when configured
   assert.equal(projects[0].name, "Leave Management");
 });
 
+test("platform API client installs and uninstalls App Store apps", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "user@company.com",
+    fetcher: async (url, init) => {
+      observed.push({ url: String(url), method: init.method ?? "GET", user: init.headers.get("x-mock-user-email") });
+      if (String(url).endsWith("/store/apps/leave-management/install")) {
+        return new Response(JSON.stringify(success({ id: "appinst_001", appSlug: "leave-management", status: "active", installedAt: "2026-07-04T04:20:00.000Z" })), { status: 201 });
+      }
+      if (String(url).endsWith("/store/apps/leave-management/uninstall")) {
+        return new Response(JSON.stringify(success({ id: "appinst_001", appSlug: "leave-management", status: "disabled", installedAt: "2026-07-04T04:20:00.000Z", disabledAt: "2026-07-04T04:25:00.000Z" })), { status: 200 });
+      }
+      throw new Error(`Unexpected request ${url}`);
+    }
+  });
+
+  const installed = await client.installStoreApp("leave-management");
+  const uninstalled = await client.uninstallStoreApp("leave-management");
+
+  assert.equal(installed.status, "active");
+  assert.equal(uninstalled.status, "disabled");
+  assert.deepEqual(
+    observed.map((request) => `${request.method} ${new URL(request.url).pathname} ${request.user}`),
+    [
+      "POST /api/store/apps/leave-management/install user@company.com",
+      "POST /api/store/apps/leave-management/uninstall user@company.com"
+    ]
+  );
+});
+
 test("platform API client throws typed errors for failure envelopes", async () => {
   const client = createPlatformApiClient({
     baseUrl: "https://platform.example/api",

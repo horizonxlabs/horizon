@@ -425,6 +425,74 @@ th {
   margin-top: var(--evcp-space-4);
 }
 
+.store-install-stepper {
+  display: grid;
+  gap: var(--evcp-space-2);
+  list-style: none;
+  margin: var(--evcp-space-4) 0 0;
+  padding: 0;
+}
+
+.store-install-step {
+  align-items: center;
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--evcp-space-3);
+}
+
+.store-install-step > span:first-child {
+  align-items: center;
+  background: var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-control);
+  color: #334155;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.store-install-step > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.store-install-step small {
+  color: var(--evcp-color-muted);
+  line-height: 1.35;
+}
+
+.store-install-step.status-complete > span:first-child {
+  background: var(--evcp-color-success-bg);
+  color: var(--evcp-color-success-text);
+}
+
+.store-install-step.status-current {
+  border-color: #7dd3fc;
+  background: #f0f9ff;
+}
+
+.store-install-step.status-current > span:first-child {
+  background: var(--evcp-color-info-bg);
+  color: var(--evcp-color-info-text);
+}
+
+.store-install-step.status-blocked {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.store-install-step.status-blocked > span:first-child {
+  background: var(--evcp-color-danger-bg);
+  color: var(--evcp-color-danger-text);
+}
+
 .store-form {
   display: grid;
   gap: var(--evcp-space-3);
