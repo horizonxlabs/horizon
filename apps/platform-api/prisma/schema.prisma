@@ -69,6 +69,7 @@ model PlatformUser {
   projects    Project[]           @relation("ProjectOwner")
   memberships ProjectMember[]
   appMembers  AppMember[]
+  appInstallations AppInstallation[]
   appInvitationsSent AppInvitation[] @relation("AppInvitationInvitedBy")
   appAccessDecisions AppAccessRequest[] @relation("AppAccessRequestDecidedBy")
   publishRequests PublishRequest[] @relation("PublishRequestRequestedBy")
@@ -227,6 +228,7 @@ model App {
   project            Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   roles              AppRole[]
   members            AppMember[]
+  appInstallations   AppInstallation[]
   invitations        AppInvitation[]
   accessRequests     AppAccessRequest[]
   manifest           AppManifest?
@@ -267,6 +269,22 @@ model AppMember {
 
   @@id([appId, userId, roleId])
   @@map("app_members")
+}
+
+model AppInstallation {
+  id           String       @id
+  appId        String       @map("app_id")
+  userId       String       @map("user_id")
+  status       String
+  installedAt  DateTime     @default(now()) @map("installed_at")
+  disabledAt   DateTime?    @map("disabled_at")
+  lastOpenedAt DateTime?    @map("last_opened_at")
+  app          App          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user         PlatformUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, userId])
+  @@index([userId, status])
+  @@map("app_installations")
 }
 
 model AuditLog {
