@@ -38,8 +38,9 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 
 - `PageHeader` with actions for Run Preflight, Simulate Blocked Preflight and Run Restore Drill.
 - `MetricCard` for Preflight Report, Setup Wizard, Backup Schedule and Restore Drill.
-- `WorkflowRail` for first-run preflight -> setup config -> compose readiness -> migrate/seed -> verify health -> backup schedule -> backup run -> PITR -> restore drill.
+- `WorkflowRail` for prepare server -> configure environment -> run preflight -> save setup -> deploy stack -> migrate/seed -> verify health -> first admin login -> backup schedule -> backup run -> PITR -> restore drill.
 - `SectionCard` for each evidence group.
+- `install-journey-board`, `install-journey-card` and `install-journey-meta` for the First-run Installation Journey cards with owner, evidence and next action.
 - `install-wizard-panel`, `install-wizard-steps`, `install-wizard-action-row` and `install-setup-form` for the first-run install stepper, step controls and setup capture.
 - `DataTable` for preflight checks, compose services, backup runs and restore validation checks.
 - `DefinitionGrid` for setup summary, backup policy and PITR metadata.
@@ -69,7 +70,8 @@ Sprint 12 Admin UI is an operations recovery control plane. It must show whether
 ## Acceptance Criteria
 
 - [x] Admin UI includes `Installer, Backup and Restore`.
-- [x] Admin UI includes a first-run install wizard with preflight, setup, compose, migrate/seed and health steps.
+- [x] Admin UI includes a first-run install wizard with prepare server, configure environment, preflight, setup, deploy stack, migrate/seed, health and first admin login steps.
+- [x] Admin UI includes an `install-journey-board` where every install step shows owner, evidence and next action.
 - [x] Admin UI includes Back/Next step controls, per-step statuses and API-backed setup save.
 - [x] UI exposes `Preflight Report`, `Setup Wizard`, `Backup Schedule`, `Backup Runs`, `PostgreSQL PITR`, `Restore Drill` and `Recovery Evidence`.
 - [x] UI uses `operations-recovery-shell`, `install-wizard-panel`, `install-wizard-steps` and `backup-restore-mobile-list` patterns.

@@ -6,6 +6,7 @@ const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
 const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 
 test("shared API client exposes frontend bootstrap routes and auth modes", () => {
   assert.match(apiClient, /class PlatformApiClient/);
@@ -15,9 +16,48 @@ test("shared API client exposes frontend bootstrap routes and auth modes", () =>
   assert.match(apiClient, /runInstallerPreflight\(/);
   assert.match(apiClient, /saveInstallerSetup\(/);
   assert.match(apiClient, /listInstallerReports\(/);
+  assert.match(apiClient, /testAiProvider\(/);
+  assert.match(apiClient, /listAiProviders\(/);
+  assert.match(apiClient, /createAiProvider\(/);
+  assert.match(apiClient, /createAiApiKey\(/);
+  assert.match(apiClient, /configureAiRoute\(/);
+  assert.match(apiClient, /configureAiQuota\(/);
+  assert.match(apiClient, /createGuardrailRule\(/);
+  assert.match(apiClient, /listGuardrailEvents\(/);
   assert.match(apiClient, /authorization/);
   assert.match(apiClient, /x-mock-user-email/);
   assert.match(apiClient, /PlatformApiError/);
+});
+
+test("Admin AI provider test call is API-client backed", () => {
+  assert.match(apiClient, /AiProviderTestCallInput/);
+  assert.match(apiClient, /AiProviderTestCallResponse/);
+  assert.match(apiClient, /\/ai\/provider-test-call/);
+  assert.match(adminSource, /handleRunProviderTestCall/);
+  assert.match(adminSource, /testAiProvider/);
+  assert.match(adminSource, /Provider Test Call/);
+  assert.match(adminSource, /provider-test-call-panel/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
+});
+
+test("Admin AI governance actions are API-client backed", () => {
+  for (const method of ["listAiProviders", "listAiApiKeys", "createAiProvider", "createAiApiKey", "configureAiRoute", "configureAiQuota", "createGuardrailRule", "listGuardrailEvents"]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+    assert.match(adminSource, new RegExp(method));
+  }
+
+  for (const handler of ["loadAiGovernanceState", "handleCreateAiProvider", "handleSaveAiApiKey", "handleConfigureAiRoute", "handleConfigureAiQuota", "handleCreateGuardrailRule"]) {
+    assert.match(adminSource, new RegExp(handler));
+  }
+
+  for (const label of ["Create Provider", "Save Masked Key", "Configure Route", "Configure Quota", "Add Guardrail Rule"]) {
+    assert.match(adminSource, new RegExp(label));
+  }
+
+  assert.match(adminSource, /aiGovernanceSource/);
+  assert.match(adminSource, /setAiKeySecret\(""\)/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
+  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
 });
 
 test("frontend shells use API-backed bootstrap instead of direct mock fixtures", () => {
@@ -61,14 +101,69 @@ test("Admin install wizard is API-client backed and exposes step controls", () =
 test("App Store PWA actions are API-client backed", () => {
   assert.match(apiClient, /getStoreAppDetail\(/);
   assert.match(apiClient, /requestStoreAccess\(/);
+  assert.match(apiClient, /installStoreApp\(/);
+  assert.match(apiClient, /uninstallStoreApp\(/);
   assert.match(apiClient, /submitStoreTicket\(/);
   assert.match(apiClient, /getStoreTicket\(/);
   assert.match(storeSource, /handleRequestAccess/);
+  assert.match(storeSource, /handleInstallApp/);
+  assert.match(storeSource, /handleUninstallApp/);
   assert.match(storeSource, /handleSubmitTicket/);
   assert.match(storeSource, /requestStoreAccess/);
+  assert.match(storeSource, /installStoreApp/);
+  assert.match(storeSource, /uninstallStoreApp/);
   assert.match(storeSource, /submitStoreTicket/);
   assert.match(storeSource, /getStoreTicket/);
   assert.match(storeSource, /accessRequestResult/);
+  assert.match(storeSource, /installResult/);
   assert.match(storeSource, /ticketStatus/);
   assert.doesNotMatch(storeSource, /ticketTimeline = \[/);
+});
+
+test("App Store PWA exposes an install journey instead of a single opaque install action", () => {
+  assert.match(storeSource, /appInstallJourneySteps/);
+  assert.match(storeSource, /installJourneyStatus/);
+  assert.match(storeSource, /aria-label="App install journey"/);
+  for (const label of ["Access Check", "Manifest Validation", "Install Record", "My Apps Ready"]) {
+    assert.match(storeSource, new RegExp(label));
+  }
+  assert.match(storeSource, /store-install-stepper/);
+  assert.match(storeSource, /store-install-step status-/);
+  assert.match(storeSource, /installResult\?\.status === "active"/);
+  assert.match(persistenceDocs, /App Install Journey/);
+});
+
+test("Creator workspace actions are API-client backed", () => {
+  assert.match(apiClient, /getWorkspace\(/);
+  assert.match(apiClient, /submitWorkspacePrompt\(/);
+  assert.match(apiClient, /refreshWorkspacePreview\(/);
+  assert.match(creatorSource, /createCreatorPlatformClient/);
+  assert.match(creatorSource, /loadWorkspaceState/);
+  assert.match(creatorSource, /handleSubmitPrompt/);
+  assert.match(creatorSource, /handleRefreshPreview/);
+  assert.match(creatorSource, /submitWorkspacePrompt/);
+  assert.match(creatorSource, /refreshWorkspacePreview/);
+  assert.match(creatorSource, /workspaceResult/);
+  assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
+});
+
+test("Creator app users and publish actions are API-client backed", () => {
+  for (const method of [
+    "getAppAccessSnapshot",
+    "createAppInvitation",
+    "decideAppAccessRequest",
+    "getPublishReview",
+    "publishProject",
+    "listAppStoreRegistry"
+  ]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+    assert.match(creatorSource, new RegExp(method));
+  }
+
+  for (const handler of ["loadCreatorPublishState", "handleInviteUser", "handleApproveAccessRequest", "handlePublishProject"]) {
+    assert.match(creatorSource, new RegExp(handler));
+  }
+
+  assert.match(creatorSource, /publishResult/);
+  assert.match(creatorSource, /appAccessSnapshot/);
 });
