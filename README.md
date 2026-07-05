@@ -113,6 +113,12 @@ Core Platform API routes now accept signed Platform Auth bearer sessions in addi
 
 See `docs/operations/real-mvp-auth-session.md`.
 
+## Phase 2 Real MVP AI Provider Adapter
+
+The Platform API now routes PRD generation through an AI Gateway adapter contract. The first adapter is OpenAI-compatible and supports deterministic dry-run execution for CI, guardrail and quota pre-checks, fallback policy and usage logging without exposing API key material.
+
+See `docs/operations/real-mvp-ai-provider-adapter.md` for the current guarantees and remaining live-worker work.
+
 ## Sprint 1 Database
 
 Start PostgreSQL:

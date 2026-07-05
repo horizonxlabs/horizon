@@ -13,6 +13,14 @@ function sprint3Services() {
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-4.1"]
   });
+  services.aiGovernance.createApiKey(admin, {
+    providerId: provider.id,
+    name: "Primary Production Key",
+    secret: "sk-test-secret-that-must-not-leak",
+    usageMode: "production",
+    quotaTokens: 100000,
+    fallbackPriority: 1
+  });
 
   services.aiGovernance.configureRoute(admin, {
     scenario: "prd_generation",
@@ -50,6 +58,9 @@ test("creator creates a project and generates deterministic PRD draft through go
   assert.equal(draft.status, "draft");
   assert.equal(draft.version, "0.1");
   assert.equal(draft.generatedBy.scenario, "prd_generation");
+  assert.equal(draft.generatedBy.providerId, services.aiGovernance.resolveRoute("prd_generation").primary.providerId);
+  assert.ok(draft.sections.find((section) => section.key === "overview")?.body.includes("AI Gateway Summary"));
+  assert.equal(services.aiGovernance.listUsageLogs().some((usage) => usage.scenario === "prd_generation" && usage.status === "succeeded"), true);
   assert.ok(draft.sections.some((section) => section.key === "acceptance_criteria"));
   assert.ok(services.audit.list().some((event) => event.action === "prd.draft.generated" && event.resourceId === draft.id));
 });

@@ -525,6 +525,12 @@ export interface AiUsageLog {
   prompt: string;
   tokensUsed: number;
   occurredAt: string;
+  status?: "succeeded" | "blocked" | "fallback" | "failed";
+  adapter?: AiProviderAdapter;
+  latencyMs?: number;
+  estimatedCostUsd?: number;
+  promptFingerprint?: string;
+  reason?: string;
 }
 
 export interface WorkspacePromptResult {
@@ -1455,6 +1461,42 @@ export interface QuotaDecision {
   allowed: boolean;
   reason: "within_quota" | "quota_warning" | "quota_exceeded";
   remainingToday: number;
+}
+
+export interface AiCompletionRequest {
+  scenario: AiScenario;
+  projectId: string;
+  actorId: string;
+  prompt: string;
+  route: AiScenarioRoute;
+  requestedTokens: number;
+  dryRun: boolean;
+  timeoutMs: number;
+}
+
+export interface AiCompletionResponse {
+  text: string;
+  providerId: string;
+  model: string;
+  adapter: AiProviderAdapter;
+  tokensUsed: number;
+  latencyMs: number;
+  status: "succeeded" | "fallback";
+  usageLogId: string;
+  fallbackUsed: boolean;
+}
+
+interface AiCompletionAdapter {
+  readonly kind: AiProviderAdapter;
+  complete(input: {
+    provider: AiProvider;
+    key: StoredAiApiKey;
+    model: string;
+    prompt: string;
+    scenario: AiScenario;
+    dryRun: boolean;
+    timeoutMs: number;
+  }): { text: string; tokensUsed: number; latencyMs: number };
 }
 
 export interface GuardrailRule {
@@ -2502,11 +2544,54 @@ function encryptSecretEnvelope(secret: string): string {
   return `local-envelope:${Buffer.from(secret, "utf8").toString("base64")}`;
 }
 
+function decryptSecretEnvelope(ciphertext: string): string {
+  if (!ciphertext.startsWith("local-envelope:")) throw new ValidationError("Unsupported AI key envelope");
+  return Buffer.from(ciphertext.replace("local-envelope:", ""), "base64").toString("utf8");
+}
+
+function estimateAiTokens(prompt: string, responseText = ""): number {
+  return Math.max(1, Math.ceil((prompt.length + responseText.length) / 4));
+}
+
+class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
+  readonly kind: AiProviderAdapter = "openai";
+
+  complete(input: {
+    provider: AiProvider;
+    key: StoredAiApiKey;
+    model: string;
+    prompt: string;
+    scenario: AiScenario;
+    dryRun: boolean;
+    timeoutMs: number;
+  }): { text: string; tokensUsed: number; latencyMs: number } {
+    const started = Date.now();
+    if (!input.dryRun) {
+      throw new ValidationError("Live external AI calls require the platform worker runtime; use dry-run in local tests");
+    }
+    if (input.provider.baseUrl.startsWith("mock://fail")) {
+      throw new ValidationError(`AI provider ${input.provider.id} dry-run failed`);
+    }
+    const secret = decryptSecretEnvelope(input.key.secretCiphertext);
+    const text = [
+      `AI Gateway dry-run response for ${input.scenario}.`,
+      `Provider ${input.provider.name} (${input.provider.adapter}) accepted model ${input.model}.`,
+      `Prompt fingerprint ${fingerprintSecret(input.prompt)} using key ${fingerprintSecret(secret)}.`
+    ].join(" ");
+    return {
+      text,
+      tokensUsed: estimateAiTokens(input.prompt, text),
+      latencyMs: Math.max(Date.now() - started, 1)
+    };
+  }
+}
+
 export class AiGovernanceService {
   private readonly providers: AiProvider[] = [];
   private readonly apiKeys: StoredAiApiKey[] = [];
   private readonly routes: AiScenarioRoute[] = [];
   private readonly quotas: AiQuota[] = [];
+  private readonly usageLogs: AiUsageLog[] = [];
   private providerCalls = 0;
 
   constructor(
@@ -2675,6 +2760,217 @@ export class AiGovernanceService {
 
   recordProviderCall(): void {
     this.providerCalls += 1;
+  }
+
+  invokeCompletion(
+    actor: PlatformUser,
+    input: {
+      projectId: string;
+      scenario: AiScenario;
+      prompt: string;
+      requestedTokens?: number;
+      guardrailDecision?: GuardrailDecision;
+      dryRun?: boolean;
+      timeoutMs?: number;
+      allowDeterministicFallback?: boolean;
+      deterministicFallbackText?: string;
+    }
+  ): AiCompletionResponse {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const route = this.resolveRoute(input.scenario);
+    const prompt = input.prompt.trim();
+    if (!prompt) throw new ValidationError("AI prompt is required");
+    const requestedTokens = input.requestedTokens ?? estimateAiTokens(prompt);
+
+    if (input.guardrailDecision === "block") {
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_blocked`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: route.primary.providerId,
+        model: route.primary.model,
+        prompt,
+        tokensUsed: 0,
+        status: "blocked",
+        reason: "guardrail_blocked"
+      });
+      throw new ValidationError(`AI request blocked by guardrail before provider call (${usage.id})`);
+    }
+
+    const quota = this.checkQuota("creator", requestedTokens);
+    if (!quota.allowed) {
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_quota_blocked`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: route.primary.providerId,
+        model: route.primary.model,
+        prompt,
+        tokensUsed: 0,
+        status: "blocked",
+        reason: quota.reason
+      });
+      throw new QuotaExceededError(`Creator quota exceeded before external provider call. Remaining today: ${quota.remainingToday}. Usage log: ${usage.id}`);
+    }
+
+    try {
+      return this.invokeRouteTarget(actor, {
+        projectId: input.projectId,
+        scenario: input.scenario,
+        prompt,
+        route,
+        requestedTokens,
+        dryRun: input.dryRun ?? true,
+        timeoutMs: input.timeoutMs ?? 30_000,
+        target: route.primary,
+        status: "succeeded",
+        fallbackUsed: false
+      });
+    } catch (error) {
+      if (!route.fallback || !input.allowDeterministicFallback || !input.deterministicFallbackText) {
+        const usage = this.recordUsage({
+          projectId: input.projectId,
+          taskId: `ai_${input.scenario}_failed`,
+          actorId: actor.id,
+          scenario: input.scenario,
+          providerId: route.primary.providerId,
+          model: route.primary.model,
+          prompt,
+          tokensUsed: 0,
+          status: "failed",
+          reason: error instanceof Error ? error.message : String(error)
+        });
+        throw new ValidationError(`AI provider call failed and no fallback policy is available (${usage.id})`);
+      }
+
+      const provider = this.requireProvider(route.fallback.providerId);
+      const usage = this.recordUsage({
+        projectId: input.projectId,
+        taskId: `ai_${input.scenario}_fallback`,
+        actorId: actor.id,
+        scenario: input.scenario,
+        providerId: provider.id,
+        model: route.fallback.model,
+        prompt,
+        tokensUsed: estimateAiTokens(prompt, input.deterministicFallbackText),
+        status: "fallback",
+        adapter: provider.adapter,
+        latencyMs: 1,
+        reason: error instanceof Error ? error.message : String(error)
+      });
+      this.audit.record({
+        actorId: actor.id,
+        action: "ai.gateway.fallback_used",
+        resourceType: "ai_usage_log",
+        resourceId: usage.id,
+        severity: "warning",
+        metadata: { projectId: input.projectId, scenario: input.scenario, primaryProviderId: route.primary.providerId, fallbackProviderId: provider.id }
+      });
+      return {
+        text: input.deterministicFallbackText,
+        providerId: provider.id,
+        model: route.fallback.model,
+        adapter: provider.adapter,
+        tokensUsed: usage.tokensUsed,
+        latencyMs: usage.latencyMs ?? 1,
+        status: "fallback",
+        usageLogId: usage.id,
+        fallbackUsed: true
+      };
+    }
+  }
+
+  listUsageLogs(): AiUsageLog[] {
+    return [...this.usageLogs];
+  }
+
+  private invokeRouteTarget(
+    actor: PlatformUser,
+    input: {
+      projectId: string;
+      scenario: AiScenario;
+      prompt: string;
+      route: AiScenarioRoute;
+      requestedTokens: number;
+      dryRun: boolean;
+      timeoutMs: number;
+      target: AiScenarioRoute["primary"];
+      status: "succeeded";
+      fallbackUsed: boolean;
+    }
+  ): AiCompletionResponse {
+    const provider = this.requireProvider(input.target.providerId);
+    const key = this.requireActiveKey(provider.id);
+    const adapter = this.createAdapter(provider);
+    this.recordProviderCall();
+    const response = adapter.complete({
+      provider,
+      key,
+      model: input.target.model,
+      prompt: input.prompt,
+      scenario: input.scenario,
+      dryRun: input.dryRun,
+      timeoutMs: input.timeoutMs
+    });
+    const usage = this.recordUsage({
+      projectId: input.projectId,
+      taskId: `ai_${input.scenario}_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
+      actorId: actor.id,
+      scenario: input.scenario,
+      providerId: provider.id,
+      model: input.target.model,
+      prompt: input.prompt,
+      tokensUsed: response.tokensUsed,
+      status: input.status,
+      adapter: provider.adapter,
+      latencyMs: response.latencyMs
+    });
+    this.audit.record({
+      actorId: actor.id,
+      action: "ai.gateway.completed",
+      resourceType: "ai_usage_log",
+      resourceId: usage.id,
+      metadata: { projectId: input.projectId, scenario: input.scenario, providerId: provider.id, model: input.target.model, tokensUsed: response.tokensUsed }
+    });
+    return {
+      text: response.text,
+      providerId: provider.id,
+      model: input.target.model,
+      adapter: provider.adapter,
+      tokensUsed: response.tokensUsed,
+      latencyMs: response.latencyMs,
+      status: input.status,
+      usageLogId: usage.id,
+      fallbackUsed: input.fallbackUsed
+    };
+  }
+
+  private recordUsage(input: Omit<AiUsageLog, "id" | "occurredAt" | "estimatedCostUsd" | "promptFingerprint">): AiUsageLog {
+    const usage: AiUsageLog = {
+      ...input,
+      id: `aigw_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
+      occurredAt: new Date().toISOString(),
+      estimatedCostUsd: Number((input.tokensUsed * 0.000002).toFixed(6)),
+      promptFingerprint: fingerprintSecret(input.prompt)
+    };
+    this.usageLogs.push(usage);
+    return usage;
+  }
+
+  private requireActiveKey(providerId: string): StoredAiApiKey {
+    const key = this.apiKeys
+      .filter((candidate) => candidate.providerId === providerId && candidate.status === "active")
+      .sort((left, right) => left.fallbackPriority - right.fallbackPriority)[0];
+    if (!key) throw new ValidationError(`No active AI API key configured for provider ${providerId}`);
+    key.lastUsedAt = new Date().toISOString();
+    return key;
+  }
+
+  private createAdapter(provider: AiProvider): AiCompletionAdapter {
+    if (provider.adapter === "openai" || provider.adapter === "azure_openai") return new OpenAiCompatibleCompletionAdapter();
+    throw new ValidationError(`AI provider adapter ${provider.adapter} is not implemented for external calls yet`);
   }
 
   private requireAdmin(actor: PlatformUser, deniedAction: string, resourceType: string, resourceId: string): void {
@@ -3421,12 +3717,17 @@ export class PrdService {
       throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
     }
 
-    const quota = this.aiGovernance.checkQuota("creator", 300);
-    if (!quota.allowed) {
-      throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
-    }
-
-    this.aiGovernance.recordProviderCall();
+    const fallbackText = this.buildDeterministicPrdSummary(project);
+    const completion = this.aiGovernance.invokeCompletion(actor, {
+      projectId: project.id,
+      scenario: "prd_generation",
+      prompt: sourcePrompt,
+      requestedTokens: 300,
+      guardrailDecision: guardrail.decision,
+      dryRun: true,
+      allowDeterministicFallback: true,
+      deterministicFallbackText: fallbackText
+    });
 
     const now = new Date().toISOString();
     const document = this.ensureDocument(project.id, now);
@@ -3440,10 +3741,10 @@ export class PrdService {
       changeSummary: `Generated initial PRD draft for ${project.name}`,
       generatedBy: {
         scenario: "prd_generation",
-        providerId: route.primary.providerId,
-        model: route.primary.model
+        providerId: completion.providerId,
+        model: completion.model
       },
-      sections: this.buildSections(project),
+      sections: this.buildSections(project, completion.text),
       createdByUserId: actor.id,
       createdAt: now
     };
@@ -3458,7 +3759,15 @@ export class PrdService {
       action: "prd.draft.generated",
       resourceType: "prd_version",
       resourceId: draft.id,
-      metadata: { projectId: project.id, route: route.primary, guardrailDecision: guardrail.decision }
+      metadata: {
+        projectId: project.id,
+        route: route.primary,
+        guardrailDecision: guardrail.decision,
+        aiUsageLogId: completion.usageLogId,
+        aiStatus: completion.status,
+        fallbackUsed: completion.fallbackUsed,
+        tokensUsed: completion.tokensUsed
+      }
     });
 
     return draft;
@@ -3600,9 +3909,13 @@ export class PrdService {
     ].join("\n");
   }
 
-  private buildSections(project: PlatformProject): PrdSection[] {
+  private buildDeterministicPrdSummary(project: PlatformProject): string {
+    return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
+  }
+
+  private buildSections(project: PlatformProject, aiSummary?: string): PrdSection[] {
     const sections = [
-      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.`],
+      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.${aiSummary ? `\n\nAI Gateway Summary: ${aiSummary}` : ""}`],
       ["business_objective", "Business Objective", project.businessProblem],
       ["users_roles", "Users and Roles", `Primary users: ${project.intendedUsers.join(", ")}.`],
       ["core_flows", "Core Flows", "Create request, manager review, HR visibility, status tracking and audit trail."],
