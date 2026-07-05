@@ -293,13 +293,14 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
 }
 
 export function AppCard({ app }: { app: AppStoreItem }) {
-  const action = app.accessStatus === "active" ? "Open" : "Request Access";
+  const action = app.primaryAction === "open" ? "Open" : app.primaryAction === "install" ? "Install" : app.accessStatus === "pending" ? "View Status" : "Request Access";
 
   return (
     <article className="card">
       <h3>{app.name}</h3>
       <p>{app.description}</p>
       <p>{app.myRole ? `Role: ${app.myRole}` : "Access required"}</p>
+      {app.installStatus ? <p>{app.installStatus === "installed" ? "Installed" : "Not installed"}</p> : null}
       <StatusPill status={app.health} />
       <button type="button">{action}</button>
     </article>
