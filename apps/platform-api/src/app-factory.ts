@@ -5,6 +5,7 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
+import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
 import {
   createPlatformApiServices,
   PermissionError,
@@ -158,6 +159,9 @@ export interface PlatformRequest {
     | `/projects/${string}/workspace`
     | `/projects/${string}/workspace/prompts`
     | `/projects/${string}/workspace/preview/refresh`
+    | `/projects/${string}/workspace/container`
+    | `/projects/${string}/workspace/container/stop`
+    | `/projects/${string}/workspace/container/wake`
     | `/projects/${string}/database`
     | `/projects/${string}/database/sql`
     | `/projects/${string}/frontend/checkpoints`
@@ -395,6 +399,34 @@ async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformAp
 }
 
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
+  const containerMatch = request.path.match(
+    /^\/projects\/([^/]+)\/workspace\/container(?:\/(stop|wake))?$/
+  );
+  if (containerMatch) {
+    const projectId = containerMatch[1];
+    const action = containerMatch[2];
+    const user = services.auth.resolveCurrentUser(request.headers ?? {});
+    const projectIds = services.projects.listProjects(user).map((project) => project.id);
+    const auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+    const routes = createWorkspaceRoutes({ orchestrator: services.workspaceOrchestrator });
+    let result;
+    if (request.method === "POST" && !action) {
+      result = await routes.provision(auth, { projectId, slug: String((request.body as Record<string, unknown> | undefined)?.slug ?? projectId) });
+    } else if (request.method === "GET" && !action) {
+      result = await routes.get(auth, { projectId });
+    } else if (request.method === "POST" && action === "stop") {
+      result = await routes.stop(auth, { projectId });
+    } else if (request.method === "POST" && action === "wake") {
+      result = await routes.wake(auth, { projectId });
+    } else {
+      return { status: HttpStatus.METHOD_NOT_ALLOWED, body: failure("METHOD_NOT_ALLOWED", "method not allowed") };
+    }
+    return {
+      status: result.status,
+      body: result.status < 400 ? success(result.body) : failure("WORKSPACE_ERROR", String(result.body.error ?? "error"))
+    };
+  }
+
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
   const prdPersistence = services.prdPersistence;
