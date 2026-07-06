@@ -133,3 +133,20 @@ export interface MigrationRecord {
   commitSha: string;
   appliedAt: string;
 }
+
+// --- MVP Plan 5: Publish-to-Production ---
+
+export type DeploymentHealthStatus = "pending" | "healthy" | "failed";
+
+export interface WorkspaceDeployment {
+  id: string;
+  projectId: string;
+  slug: string;
+  environment: EnvironmentName;
+  commitSha: string;
+  imageTag: string;
+  containerId: string | null;
+  publishedByUserId: string;
+  healthStatus: DeploymentHealthStatus;
+  createdAt: string;
+}
