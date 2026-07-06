@@ -47,6 +47,7 @@ export interface DockerEngine {
   stopContainer(containerId: string): Promise<void>;
   removeContainer(containerId: string): Promise<void>;
   execInContainer(containerId: string, cmd: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  commitContainer(containerId: string, imageTag: string): Promise<{ imageId: string }>;
 }
 
 interface MemoryContainer {
@@ -56,9 +57,17 @@ interface MemoryContainer {
 }
 
 export function createMemoryDockerEngine(): DockerEngine & {
-  state: { containers: MemoryContainer[]; execCalls: Array<{ containerId: string; cmd: string[] }> };
+  state: {
+    containers: MemoryContainer[];
+    execCalls: Array<{ containerId: string; cmd: string[] }>;
+    commits: Array<{ containerId: string; imageTag: string }>;
+  };
 } {
-  const state = { containers: [] as MemoryContainer[], execCalls: [] as Array<{ containerId: string; cmd: string[] }> };
+  const state = {
+    containers: [] as MemoryContainer[],
+    execCalls: [] as Array<{ containerId: string; cmd: string[] }>,
+    commits: [] as Array<{ containerId: string; imageTag: string }>
+  };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
     if (!container) {
@@ -87,6 +96,11 @@ export function createMemoryDockerEngine(): DockerEngine & {
       find(containerId);
       state.execCalls.push({ containerId, cmd });
       return { stdout: "", stderr: "", exitCode: 0 };
+    },
+    async commitContainer(containerId, imageTag) {
+      find(containerId);
+      state.commits.push({ containerId, imageTag });
+      return { imageId: `mem-image-${state.commits.length}` };
     }
   };
 }

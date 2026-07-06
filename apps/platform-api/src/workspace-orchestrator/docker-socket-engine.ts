@@ -133,6 +133,16 @@ export function createDockerSocketEngine(opts: {
       const { ExitCode } = await inspect.json();
 
       return { stdout, stderr: "", exitCode: Number(ExitCode ?? 0) };
+    },
+    async commitContainer(containerId, imageTag) {
+      const [repo, tag] = imageTag.includes(":") ? imageTag.split(":") : [imageTag, "latest"];
+      const result = await request({
+        method: "POST",
+        path: `/commit?container=${containerId}&repo=${repo}&tag=${tag}`
+      });
+      await expect("commit", result, [201]);
+      const payload = await result.json();
+      return { imageId: String(payload.Id) };
     }
   };
 }
