@@ -2077,6 +2077,7 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
         headers: Record<string, string | string[] | undefined>;
         url: string;
         originalUrl: string;
+        body?: unknown;
         on: (event: string, cb: (chunk: unknown) => void) => void;
       }, res: {
         status: (code: number) => { json: (body: unknown) => void };
@@ -2088,8 +2089,14 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
       }) => void
     ) => void;
   };
+  type PreviewReq = Parameters<RawExpress["all"]>[1] extends (req: infer Q, res: infer _S) => void
+    ? Q
+    : never;
+  type PreviewRes = Parameters<RawExpress["all"]>[1] extends (req: infer _Q, res: infer S) => void
+    ? S
+    : never;
   const rawApp = app.getHttpAdapter().getInstance() as unknown as RawExpress;
-  const previewHandler = async (req: any, res: any) => {
+  const previewHandler = async (req: PreviewReq, res: PreviewRes) => {
     const slug = String(req.params?.slug ?? "");
     const decision = await resolvePreviewProxyDecision(services, req.headers, slug);
     if ("status" in decision) {
@@ -2097,7 +2104,8 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
       return;
     }
     const target = new URL(decision.upstream);
-    const forwardPath = req.originalUrl.replace(new RegExp(`^/preview/${slug}`), "") || "/";
+    const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const forwardPath = req.originalUrl.replace(new RegExp(`^/preview/${escapedSlug}`), "") || "/";
     const proxyReq = nodeHttp.request(
       {
         hostname: target.hostname,
@@ -2117,7 +2125,16 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     proxyReq.on("error", () => {
       if (!res.headersSent) res.status(502).json({ error: "preview_upstream_unreachable" });
     });
-    req.pipe ? req.pipe(proxyReq) : proxyReq.end();
+    const method = String(req.method ?? "GET").toUpperCase();
+    if (method === "GET" || method === "HEAD" || req.body === undefined || req.body === null) {
+      proxyReq.end();
+    } else {
+      const payload = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+      proxyReq.setHeader("content-type", "application/json");
+      proxyReq.setHeader("content-length", Buffer.byteLength(payload));
+      proxyReq.write(payload);
+      proxyReq.end();
+    }
   };
   rawApp.all("/preview/:slug", previewHandler);
   rawApp.all("/preview/:slug/*", previewHandler);
