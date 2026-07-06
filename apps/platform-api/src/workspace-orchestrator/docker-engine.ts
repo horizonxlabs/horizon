@@ -46,6 +46,7 @@ export interface DockerEngine {
   startContainer(containerId: string): Promise<void>;
   stopContainer(containerId: string): Promise<void>;
   removeContainer(containerId: string): Promise<void>;
+  execInContainer(containerId: string, cmd: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 interface MemoryContainer {
@@ -54,8 +55,10 @@ interface MemoryContainer {
   status: "created" | "running" | "stopped";
 }
 
-export function createMemoryDockerEngine(): DockerEngine & { state: { containers: MemoryContainer[] } } {
-  const state = { containers: [] as MemoryContainer[] };
+export function createMemoryDockerEngine(): DockerEngine & {
+  state: { containers: MemoryContainer[]; execCalls: Array<{ containerId: string; cmd: string[] }> };
+} {
+  const state = { containers: [] as MemoryContainer[], execCalls: [] as Array<{ containerId: string; cmd: string[] }> };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
     if (!container) {
@@ -79,6 +82,11 @@ export function createMemoryDockerEngine(): DockerEngine & { state: { containers
     async removeContainer(containerId) {
       find(containerId);
       state.containers = state.containers.filter((item) => item.containerId !== containerId);
+    },
+    async execInContainer(containerId, cmd) {
+      find(containerId);
+      state.execCalls.push({ containerId, cmd });
+      return { stdout: "", stderr: "", exitCode: 0 };
     }
   };
 }

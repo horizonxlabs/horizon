@@ -4,6 +4,7 @@ import type { DockerEngine, DevContainerSpec } from "./docker-engine";
 export interface DockerRequestResult {
   status: number;
   json: () => Promise<any>;
+  text?: string;
 }
 
 export type DockerRequestFn = (input: {
@@ -109,6 +110,29 @@ export function createDockerSocketEngine(opts: {
     async removeContainer(containerId) {
       const result = await request({ method: "DELETE", path: `/containers/${containerId}?force=true` });
       await expect("remove", result, [204]);
+    },
+    async execInContainer(containerId, cmd) {
+      const create = await request({
+        method: "POST",
+        path: `/containers/${containerId}/exec`,
+        body: { Cmd: cmd, AttachStdout: true, AttachStderr: true }
+      });
+      await expect("exec-create", create, [201]);
+      const { Id: execId } = await create.json();
+
+      const start = await request({
+        method: "POST",
+        path: `/exec/${execId}/start`,
+        body: { Detach: false, Tty: false }
+      });
+      await expect("exec-start", start, [200]);
+      const stdout = start.text ?? "";
+
+      const inspect = await request({ method: "GET", path: `/exec/${execId}/json` });
+      await expect("exec-inspect", inspect, [200]);
+      const { ExitCode } = await inspect.json();
+
+      return { stdout, stderr: "", exitCode: Number(ExitCode ?? 0) };
     }
   };
 }
