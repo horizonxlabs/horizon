@@ -1,0 +1,209 @@
+import type { WorkspaceContainerRecord, WorkspaceState } from "@evcp/types";
+import { assertTransition } from "./state";
+import { schemaNameFor, roleNameFor, type PostgresProvisioner } from "./postgres-provisioner";
+import type { ObjectStorageProvisioner, LlmGatewayAdmin } from "./resource-ports";
+import type { ProjectSecretStore } from "./secret-store";
+import { buildDevContainerSpec, type DockerEngine } from "./docker-engine";
+
+export interface WorkspaceAuditEvent {
+  action: string;
+  projectId: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface WorkspaceOrchestratorDeps {
+  postgres: PostgresProvisioner;
+  objectStorage: ObjectStorageProvisioner;
+  llmGateway: LlmGatewayAdmin;
+  secrets: ProjectSecretStore;
+  docker: DockerEngine;
+  image?: string;
+  network?: string;
+  cpuCores?: number;
+  memoryMb?: number;
+  postgresHost?: string;
+  s3Endpoint?: string;
+  onAudit?: (event: WorkspaceAuditEvent) => void;
+}
+
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
+  const image = deps.image ?? "evcp/workspace-next:1";
+  const network = deps.network ?? "evcp-internal";
+  const cpuCores = deps.cpuCores ?? Number(process.env.EVCP_WORKSPACE_CPU ?? 1);
+  const memoryMb = deps.memoryMb ?? Number(process.env.EVCP_WORKSPACE_MEM_MB ?? 2048);
+  const postgresHost = deps.postgresHost ?? "postgres:5432";
+  const s3Endpoint = deps.s3Endpoint ?? "http://minio:9000";
+  const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
+
+  const records = new Map<string, WorkspaceContainerRecord>();
+  const llmKeyIds = new Map<string, string>();
+
+  const now = () => new Date().toISOString();
+
+  const save = (record: WorkspaceContainerRecord): WorkspaceContainerRecord => {
+    const next = { ...record, updatedAt: now() };
+    records.set(record.projectId, next);
+    return next;
+  };
+
+  const mustGet = (projectId: string): WorkspaceContainerRecord => {
+    const record = records.get(projectId);
+    if (!record) {
+      throw new Error(`no workspace found for project '${projectId}'`);
+    }
+    return record;
+  };
+
+  return {
+    getWorkspace(projectId: string): WorkspaceContainerRecord | null {
+      return records.get(projectId) ?? null;
+    },
+
+    listSecretNames(projectId: string): string[] {
+      return deps.secrets.listNames(projectId);
+    },
+
+    markActivity(projectId: string): void {
+      const record = records.get(projectId);
+      if (record) {
+        save({ ...record, lastActivityAt: now() });
+      }
+    },
+
+    async provisionWorkspace(input: { projectId: string; slug: string }): Promise<WorkspaceContainerRecord> {
+      const existing = records.get(input.projectId);
+      if (existing && existing.state !== "failed") {
+        throw new Error(`workspace already provisioned for project '${input.projectId}'`);
+      }
+      let record: WorkspaceContainerRecord = save({
+        id: `ws-${input.slug}`,
+        projectId: input.projectId,
+        slug: input.slug,
+        state: "provisioning",
+        containerId: null,
+        cpuCores,
+        memoryMb,
+        lastActivityAt: now(),
+        createdAt: now(),
+        updatedAt: now()
+      });
+
+      const rollbacks: Array<() => Promise<void>> = [];
+      try {
+        const pg = await deps.postgres.provisionSchema(input.slug);
+        rollbacks.push(() => deps.postgres.releaseSchema(input.slug));
+
+        const bucket = await deps.objectStorage.provisionBucket(input.slug);
+        rollbacks.push(() => deps.objectStorage.releaseBucket(input.slug));
+
+        const llmKey = await deps.llmGateway.createVirtualKey({
+          projectId: input.projectId,
+          slug: input.slug
+        });
+        llmKeyIds.set(input.projectId, llmKey.keyId);
+        rollbacks.push(() => deps.llmGateway.revokeVirtualKey(llmKey.keyId));
+
+        deps.secrets.put(
+          input.projectId,
+          "DATABASE_URL",
+          `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/evcp?schema=${pg.schemaName}`
+        );
+        deps.secrets.put(input.projectId, "S3_ENDPOINT", s3Endpoint);
+        deps.secrets.put(input.projectId, "S3_BUCKET", bucket.bucket);
+        deps.secrets.put(input.projectId, "S3_ACCESS_KEY", bucket.accessKey);
+        deps.secrets.put(input.projectId, "S3_SECRET_KEY", bucket.secretKey);
+        deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
+        rollbacks.push(async () => deps.secrets.removeAll(input.projectId));
+
+        const spec = buildDevContainerSpec({
+          slug: input.slug,
+          image,
+          env: deps.secrets.resolveEnv(input.projectId),
+          cpuCores,
+          memoryMb,
+          network,
+          workspaceVolume: `evcp-ws-${input.slug}-data`
+        });
+
+        const { containerId } = await deps.docker.createContainer(spec);
+        rollbacks.push(() => deps.docker.removeContainer(containerId));
+        await deps.docker.startContainer(containerId);
+
+        assertTransition(record.state, "running");
+        record = save({ ...record, state: "running", containerId, lastActivityAt: now() });
+        audit({
+          action: "workspace.provisioned",
+          projectId: input.projectId,
+          metadata: { slug: input.slug }
+        });
+        return record;
+      } catch (error) {
+        for (const rollback of rollbacks.reverse()) {
+          try {
+            await rollback();
+          } catch {
+            // best-effort rollback; ignore secondary failures
+          }
+        }
+        assertTransition(record.state, "failed");
+        record = save({ ...record, state: "failed", containerId: null });
+        audit({
+          action: "workspace.provision_failed",
+          projectId: input.projectId,
+          metadata: { slug: input.slug, error: (error as Error).message }
+        });
+        throw error;
+      }
+    },
+
+    async stopWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
+      const record = mustGet(projectId);
+      assertTransition(record.state, "idle");
+      await deps.docker.stopContainer(record.containerId!);
+      const next = save({ ...record, state: "idle" });
+      audit({ action: "workspace.stopped", projectId });
+      return next;
+    },
+
+    async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
+      const record = mustGet(projectId);
+      assertTransition(record.state, "running");
+      await deps.docker.startContainer(record.containerId!);
+      const next = save({ ...record, state: "running", lastActivityAt: now() });
+      audit({ action: "workspace.started", projectId });
+      return next;
+    },
+
+    async archiveWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
+      const record = mustGet(projectId);
+      assertTransition(record.state, "archived");
+      if (record.containerId) {
+        await deps.docker.stopContainer(record.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(record.containerId);
+      }
+      const next = save({ ...record, state: "archived", containerId: null });
+      audit({ action: "workspace.archived", projectId });
+      return next;
+    },
+
+    async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {
+      const stopped: string[] = [];
+      for (const record of records.values()) {
+        if (record.state !== "running") {
+          continue;
+        }
+        const idleMs = nowDate.getTime() - new Date(record.lastActivityAt).getTime();
+        if (idleMs >= IDLE_TIMEOUT_MS) {
+          await this.stopWorkspace(record.projectId);
+          stopped.push(record.projectId);
+        }
+      }
+      return stopped;
+    }
+  };
+}
+
+export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>;
+export { schemaNameFor, roleNameFor };
