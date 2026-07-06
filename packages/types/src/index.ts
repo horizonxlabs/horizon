@@ -94,3 +94,42 @@ export interface EnvironmentRecord {
   routePath: string;
   status: "active" | "disabled";
 }
+
+// --- MVP Plan 4: AI Generation Loop ---
+
+export type ChatMessageRole = "user" | "assistant" | "system";
+
+export interface WorkspaceChatMessage {
+  id: string;
+  projectId: string;
+  role: ChatMessageRole;
+  content: string;
+  artifactActionIds: string[];
+  commitSha: string | null;
+  tokenUsage: { promptTokens: number; completionTokens: number } | null;
+  createdAt: string;
+}
+
+export interface WorkspaceChatSummary {
+  projectId: string;
+  summary: string;
+  updatedAt: string;
+}
+
+export interface CodeCheckpoint {
+  id: string;
+  projectId: string;
+  tag: string;
+  commitSha: string;
+  label: string;
+  createdAt: string;
+}
+
+export interface MigrationRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  sql: string;
+  commitSha: string;
+  appliedAt: string;
+}
