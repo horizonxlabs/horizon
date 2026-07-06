@@ -145,16 +145,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               yield { type: "action_result", actionId: open.id, ok: result.ok };
 
               if (!result.ok) {
-                deps.errorFeedback.recordFailure(open.id);
-                if (!deps.errorFeedback.shouldRetry(open.id)) {
+                if (deps.errorFeedback.shouldRetry(open.id)) {
+                  deps.errorFeedback.recordFailure(open.id);
+                  prompt = deps.errorFeedback.buildRetryPrompt(runnable, result);
+                  roundFailed = true;
+                } else {
                   yield {
                     type: "error",
                     message: `Action failed after retries: ${result.error}. Command: ${describeRunnable(runnable)}`
                   };
                   turnFailed = true;
-                  roundFailed = true;
-                } else {
-                  prompt = deps.errorFeedback.buildRetryPrompt(runnable, result);
                   roundFailed = true;
                 }
               } else {

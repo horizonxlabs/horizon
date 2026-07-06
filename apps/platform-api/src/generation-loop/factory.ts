@@ -62,7 +62,6 @@ export function createDefaultGenerationService(opts: {
       // TODO: wire to the real git-commit-in-container flow once available; for now
       // this returns a placeholder sha so the turn can complete and be audited.
       const sha = "unimplemented-commit-sha";
-      opts.onAudit?.({ action: "generation.commit_created", projectId, metadata: { sha } });
       return sha;
     },
     onAudit: opts.onAudit

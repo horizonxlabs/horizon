@@ -63,7 +63,11 @@ test("successful file-action turn streams tokens, action_result, commit, then do
 
 test("retries failing shell action stops after 2 failed rounds, surfacing an error event", async () => {
   const docker = createMemoryDockerEngine();
-  docker.execInContainer = async (containerId, cmd) => ({ stdout: "", stderr: "boom\n", exitCode: 1 });
+  let execAttempts = 0;
+  docker.execInContainer = async (containerId, cmd) => {
+    execAttempts += 1;
+    return { stdout: "", stderr: "boom\n", exitCode: 1 };
+  };
   const { containerId } = await docker.createContainer({
     name: "evcp-ws-demo",
     image: "img",
@@ -97,4 +101,5 @@ test("retries failing shell action stops after 2 failed rounds, surfacing an err
   assert.match(errorEvent.message, /npm run build/);
   assert.equal(events.some((event) => event.type === "commit"), false);
   assert.equal(events.at(-1).type, "done");
+  assert.equal(execAttempts, 3, "expected exactly 3 attempts (initial + 2 retries)");
 });
