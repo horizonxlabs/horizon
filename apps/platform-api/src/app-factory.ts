@@ -425,28 +425,32 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     /^\/projects\/([^/]+)\/workspace\/container(?:\/(stop|wake))?$/
   );
   if (containerMatch) {
-    const projectId = containerMatch[1];
-    const action = containerMatch[2];
-    const user = services.auth.resolveCurrentUser(request.headers ?? {});
-    const projectIds = services.projects.listProjects(user).map((project) => project.id);
-    const auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
-    const routes = createWorkspaceRoutes({ orchestrator: services.workspaceOrchestrator });
-    let result;
-    if (request.method === "POST" && !action) {
-      result = await routes.provision(auth, { projectId, slug: String((request.body as Record<string, unknown> | undefined)?.slug ?? projectId) });
-    } else if (request.method === "GET" && !action) {
-      result = await routes.get(auth, { projectId });
-    } else if (request.method === "POST" && action === "stop") {
-      result = await routes.stop(auth, { projectId });
-    } else if (request.method === "POST" && action === "wake") {
-      result = await routes.wake(auth, { projectId });
-    } else {
-      return { status: HttpStatus.METHOD_NOT_ALLOWED, body: failure("METHOD_NOT_ALLOWED", "method not allowed") };
+    try {
+      const projectId = containerMatch[1];
+      const action = containerMatch[2];
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const projectIds = services.projects.listProjects(user).map((project) => project.id);
+      const auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+      const routes = createWorkspaceRoutes({ orchestrator: services.workspaceOrchestrator });
+      let result;
+      if (request.method === "POST" && !action) {
+        result = await routes.provision(auth, { projectId, slug: String((request.body as Record<string, unknown> | undefined)?.slug ?? projectId) });
+      } else if (request.method === "GET" && !action) {
+        result = await routes.get(auth, { projectId });
+      } else if (request.method === "POST" && action === "stop") {
+        result = await routes.stop(auth, { projectId });
+      } else if (request.method === "POST" && action === "wake") {
+        result = await routes.wake(auth, { projectId });
+      } else {
+        return { status: HttpStatus.METHOD_NOT_ALLOWED, body: failure("METHOD_NOT_ALLOWED", "method not allowed") };
+      }
+      return {
+        status: result.status,
+        body: result.status < 400 ? success(result.body) : failure("WORKSPACE_ERROR", String(result.body.error ?? "error"))
+      };
+    } catch (error) {
+      return errorResponse(error);
     }
-    return {
-      status: result.status,
-      body: result.status < 400 ? success(result.body) : failure("WORKSPACE_ERROR", String(result.body.error ?? "error"))
-    };
   }
 
   const corePersistence = services.corePersistence;
@@ -2107,13 +2111,19 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     const target = new URL(decision.upstream);
     const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const forwardPath = req.originalUrl.replace(new RegExp(`^/preview/${escapedSlug}`), "") || "/";
+    const forwardHeaders: Record<string, string | string[] | undefined> = { ...req.headers, host: target.host };
+    for (const key of Object.keys(forwardHeaders)) {
+      if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {
+        delete forwardHeaders[key];
+      }
+    }
     const proxyReq = nodeHttp.request(
       {
         hostname: target.hostname,
         port: target.port || 80,
         method: req.method,
         path: forwardPath,
-        headers: { ...req.headers, host: target.host }
+        headers: forwardHeaders
       },
       (proxyRes: any) => {
         res.statusCode = proxyRes.statusCode ?? 502;

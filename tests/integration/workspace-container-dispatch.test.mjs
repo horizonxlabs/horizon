@@ -41,6 +41,17 @@ test("stop then wake transitions the container", async () => {
   assert.equal(woken.status, 200);
 });
 
+test("missing auth returns 401, not a crash", async () => {
+  const services = createPlatformApiServices();
+  const res = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/projects/prj_leave_management/workspace/container",
+    headers: {},
+    body: { slug: "leave-tracker" }
+  });
+  assert.equal(res.status, 401);
+});
+
 test("non-member is forbidden", async () => {
   const services = createPlatformApiServices();
   const res = await executePlatformApiRequestAsync(services, {

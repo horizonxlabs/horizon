@@ -3,7 +3,6 @@ import { createPgClientPostgresProvisioner } from "./postgres-provisioner";
 import { createMemoryObjectStorageProvisioner, createMemoryLlmGatewayAdmin } from "./resource-ports";
 import { createProjectSecretStore } from "./secret-store";
 import { createMemoryDockerEngine } from "./docker-engine";
-import type { WorkspaceAuthContext } from "./routes";
 
 const DEV_SECRET_KEY = "0".repeat(64);
 
@@ -20,16 +19,4 @@ export function createDefaultWorkspaceOrchestrator(opts: {
     docker: createMemoryDockerEngine(),
     onAudit: opts.onAudit
   });
-}
-
-export function toWorkspaceAuthContext(user: {
-  id: string;
-  roles?: string[];
-  projectIds?: string[];
-}): WorkspaceAuthContext {
-  return {
-    userId: user.id,
-    roles: user.roles ?? [],
-    projectIds: user.projectIds ?? []
-  };
 }
