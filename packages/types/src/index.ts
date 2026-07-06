@@ -29,6 +29,7 @@ export interface AppStoreItem {
   name: string;
   description: string;
   owner: string;
+  route?: string;
   myRole?: string;
   accessStatus: "active" | "available" | "pending";
   installStatus?: "installed" | "not_installed" | "disabled";
@@ -45,4 +46,51 @@ export interface ServiceStatus {
 export interface NavItem {
   label: string;
   route: string;
+}
+
+// --- MVP Plan 1: Workspace Foundation ---
+
+export type WorkspaceState = "provisioning" | "running" | "idle" | "archived" | "failed";
+
+export type EnvironmentName = "dev" | "staging" | "production";
+
+export interface WorkspaceContainerRecord {
+  id: string;
+  projectId: string;
+  slug: string;
+  state: WorkspaceState;
+  containerId: string | null;
+  cpuCores: number;
+  memoryMb: number;
+  lastActivityAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProjectResourceType = "pg_schema" | "s3_bucket" | "llm_key";
+
+export interface ProjectResourceRecord {
+  id: string;
+  projectId: string;
+  type: ProjectResourceType;
+  identifier: string;
+  status: "active" | "released";
+  createdAt: string;
+}
+
+export interface ProjectSecretRecord {
+  id: string;
+  projectId: string;
+  name: string;
+  encryptedValue: string;
+  rotatedAt: string | null;
+  createdAt: string;
+}
+
+export interface EnvironmentRecord {
+  id: string;
+  projectId: string;
+  name: EnvironmentName;
+  routePath: string;
+  status: "active" | "disabled";
 }
