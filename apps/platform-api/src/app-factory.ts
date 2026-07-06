@@ -5,7 +5,8 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
-import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
+import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import * as nodeHttp from "node:http";
 import {
   createPlatformApiServices,
   PermissionError,
@@ -261,6 +262,26 @@ function sendPlatformResponse(response: HttpResponse, platformResponse: Platform
 
 async function sendPlatformResponseAsync(response: HttpResponse, platformResponse: Promise<PlatformResponse>): Promise<void> {
   sendPlatformResponse(response, await platformResponse);
+}
+
+export async function resolvePreviewProxyDecision(
+  services: PersistenceAwarePlatformApiServices,
+  headers: HeaderBag,
+  slug: string
+): Promise<{ status: number } | { upstream: string }> {
+  let auth: { userId: string; roles: string[]; projectIds: string[] } | null = null;
+  try {
+    const user = services.auth.resolveCurrentUser(headers ?? {});
+    const projectIds = services.projects.listProjects(user).map((project) => project.id);
+    auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+  } catch {
+    auth = null;
+  }
+  const resolution = await resolvePreviewTarget(services.workspaceOrchestrator, auth, slug);
+  if (!resolution.ok) {
+    return { status: resolution.status };
+  }
+  return { upstream: resolution.upstream };
 }
 
 async function resolvePersistenceAuth(services: PersistenceAwarePlatformApiServices, headers: HeaderBag): Promise<AuthResolution> {
@@ -2005,6 +2026,102 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
       executePlatformApiRequestAsync(services, { method: "POST", path: "/audit-logs/filter", headers: request.headers, body: request.body })
     )
   );
+  routes.post("/projects/:projectId/workspace/container", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/container`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.get("/projects/:projectId/workspace/container", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "GET",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/container`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/workspace/container/stop", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/container/stop`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/projects/:projectId/workspace/container/wake", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/projects/${String(request.params?.projectId ?? "")}/workspace/container/wake`,
+        headers: request.headers
+      })
+    )
+  );
+
+  type RawExpress = {
+    all: (
+      path: string,
+      handler: (req: {
+        params: Record<string, string>;
+        method: string;
+        headers: Record<string, string | string[] | undefined>;
+        url: string;
+        originalUrl: string;
+        on: (event: string, cb: (chunk: unknown) => void) => void;
+      }, res: {
+        status: (code: number) => { json: (body: unknown) => void };
+        statusCode: number;
+        setHeader: (k: string, v: string | string[] | number) => void;
+        end: (body?: unknown) => void;
+        write: (chunk: unknown) => void;
+        headersSent: boolean;
+      }) => void
+    ) => void;
+  };
+  const rawApp = app.getHttpAdapter().getInstance() as unknown as RawExpress;
+  const previewHandler = async (req: any, res: any) => {
+    const slug = String(req.params?.slug ?? "");
+    const decision = await resolvePreviewProxyDecision(services, req.headers, slug);
+    if ("status" in decision) {
+      res.status(decision.status).json({ error: "preview_unavailable" });
+      return;
+    }
+    const target = new URL(decision.upstream);
+    const forwardPath = req.originalUrl.replace(new RegExp(`^/preview/${slug}`), "") || "/";
+    const proxyReq = nodeHttp.request(
+      {
+        hostname: target.hostname,
+        port: target.port || 80,
+        method: req.method,
+        path: forwardPath,
+        headers: { ...req.headers, host: target.host }
+      },
+      (proxyRes: any) => {
+        res.statusCode = proxyRes.statusCode ?? 502;
+        for (const [key, value] of Object.entries(proxyRes.headers)) {
+          if (value !== undefined) res.setHeader(key, value as string | string[]);
+        }
+        proxyRes.pipe(res);
+      }
+    );
+    proxyReq.on("error", () => {
+      if (!res.headersSent) res.status(502).json({ error: "preview_upstream_unreachable" });
+    });
+    req.pipe ? req.pipe(proxyReq) : proxyReq.end();
+  };
+  rawApp.all("/preview/:slug", previewHandler);
+  rawApp.all("/preview/:slug/*", previewHandler);
+
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/sources", headers: request.headers }))
   );
