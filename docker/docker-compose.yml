@@ -29,6 +29,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - evcp-internal
 
   redis:
     image: redis:7-alpine
@@ -60,6 +62,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - evcp-internal
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -85,6 +89,17 @@ services:
     command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
     ports:
       - "${EVCP_API_PORT:-3100}:3100"
+    volumes:
+      - ..:/workspace
+      - evcp_pnpm_store:/workspace/.pnpm-store
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      EVCP_LITELLM_BASE_URL: http://litellm:4000
+      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
+      EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+    networks:
+      - evcp-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +107,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      litellm:
+        condition: service_started
 
   admin-web:
     <<: *evcp-node-service
@@ -142,6 +159,25 @@ services:
       - admin-web
       - creator-web
       - app-store-pwa
+    networks:
+      - evcp-internal
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: evcp-litellm
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: ["--config", "/etc/litellm/litellm-config.yaml"]
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    networks:
+      - evcp-internal
 
 volumes:
   evcp_postgres_data:
@@ -149,3 +185,7 @@ volumes:
   evcp_caddy_data:
   evcp_caddy_config:
   evcp_pnpm_store:
+
+networks:
+  evcp-internal:
+    driver: bridge
