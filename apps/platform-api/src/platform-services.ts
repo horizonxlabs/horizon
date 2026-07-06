@@ -3,6 +3,8 @@ import { getMockPermissions } from "@evcp/auth-sdk";
 import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status } from "@evcp/types";
 import { createHash, createHmac } from "node:crypto";
+import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
+import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
@@ -6802,6 +6804,7 @@ export interface PlatformApiServices {
   skills: SkillGovernanceService;
   prds: PrdService;
   workspace: WorkspaceService;
+  workspaceOrchestrator: WorkspaceOrchestrator;
   databaseView: DatabaseViewService;
   frontendVersions: FrontendVersionService;
   appAccess: AppUserAccessService;
@@ -6859,6 +6862,16 @@ export function createPlatformApiServices(options: PlatformApiServiceOptions = {
   const production = new ProductionControlService(auth, audit, publish, generatedRuntime);
   const securityRelease = new SecurityReleaseService(auth, audit);
   const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
+  const workspaceOrchestrator = createDefaultWorkspaceOrchestrator({
+    onAudit: (event) =>
+      audit.record({
+        actorId: "system",
+        action: event.action,
+        resourceType: "workspace_container",
+        resourceId: event.projectId,
+        metadata: event.metadata
+      })
+  });
 
   return {
     identity,
@@ -6871,6 +6884,7 @@ export function createPlatformApiServices(options: PlatformApiServiceOptions = {
     skills,
     prds,
     workspace,
+    workspaceOrchestrator,
     databaseView,
     frontendVersions,
     appAccess,
