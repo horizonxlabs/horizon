@@ -216,3 +216,19 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
 export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>;
 export { schemaNameFor, roleNameFor };
+
+export function startIdleSweep(
+  orchestrator: Pick<WorkspaceOrchestrator, "stopIdleWorkspaces">,
+  opts: { intervalMs?: number } = {},
+): { stop(): void } {
+  const intervalMs = opts.intervalMs ?? 60_000;
+  const timer = setInterval(() => {
+    void orchestrator.stopIdleWorkspaces().catch(() => undefined);
+  }, intervalMs);
+  timer.unref?.();
+  return {
+    stop() {
+      clearInterval(timer);
+    },
+  };
+}

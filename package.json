@@ -24,6 +24,7 @@
     "install:real:example": "node scripts/install/installer.mjs --env .env.example --compose docker/docker-compose.yml --allow-example-secrets",
     "verify:install": "pnpm install:preflight:example && node --test tests/unit/install-preflight.test.mjs && node --test tests/integration/install-contract.test.mjs && node --test tests/e2e/install-preflight-cli.test.mjs",
     "verify:installer": "pnpm install:real:example && node --test tests/unit/install-installer.test.mjs && node --test tests/integration/install-installer-contract.test.mjs && node --test tests/e2e/install-installer-cli.test.mjs",
+    "verify:workspace": "node --import tsx --test tests/unit/workspace-*.test.mjs tests/integration/workspace-compose-contract.test.mjs",
     "verify:sprint0": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint1": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
