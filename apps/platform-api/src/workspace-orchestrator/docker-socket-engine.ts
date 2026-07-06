@@ -67,17 +67,33 @@ export function createDockerSocketEngine(opts: {
 
   const expect = async (op: string, result: DockerRequestResult, okStatuses: number[]) => {
     if (!okStatuses.includes(result.status)) {
-      throw new Error(`docker engine ${op} failed (${result.status})`);
+      let message: string | undefined;
+      try {
+        const body = await result.json();
+        message = body && typeof body.message === "string" ? body.message : undefined;
+      } catch {
+        message = undefined;
+      }
+      throw new Error(
+        `docker engine ${op} failed (${result.status})${message ? `: ${message}` : ""}`
+      );
     }
   };
 
   return {
     async createContainer(spec) {
-      const result = await request({
-        method: "POST",
-        path: `/containers/create?name=${spec.name}`,
-        body: buildCreateContainerBody(spec)
-      });
+      const createOnce = () =>
+        request({
+          method: "POST",
+          path: `/containers/create?name=${spec.name}`,
+          body: buildCreateContainerBody(spec)
+        });
+
+      let result = await createOnce();
+      if (result.status === 409) {
+        await request({ method: "DELETE", path: `/containers/${spec.name}?force=true` });
+        result = await createOnce();
+      }
       await expect("create", result, [201]);
       const payload = await result.json();
       return { containerId: String(payload.Id) };

@@ -72,3 +72,31 @@ test("non-2xx throws a descriptive error", async () => {
   });
   await assert.rejects(() => engine.startContainer("abc123"), /docker engine start failed \(500\)/);
 });
+
+test("createContainer recovers from a 409 name conflict by removing then retrying once", async () => {
+  const calls = [];
+  let createAttempts = 0;
+  const engine = createDockerSocketEngine({
+    request: async ({ method, path }) => {
+      calls.push(`${method} ${path}`);
+      if (path.startsWith("/containers/create")) {
+        createAttempts += 1;
+        if (createAttempts === 1) return { status: 409, json: async () => ({ message: "name in use" }) };
+        return { status: 201, json: async () => ({ Id: "abc123" }) };
+      }
+      return { status: 204, json: async () => ({}) };
+    }
+  });
+  const { containerId } = await engine.createContainer(spec);
+  assert.equal(containerId, "abc123");
+  // must have: create(409) -> delete by name -> create(201)
+  assert.equal(createAttempts, 2);
+  assert.ok(calls.some((c) => c.startsWith("DELETE /containers/evcp-ws-leave-tracker")), "removed stale container by name");
+});
+
+test("error message includes the daemon message", async () => {
+  const engine = createDockerSocketEngine({
+    request: async () => ({ status: 500, json: async () => ({ message: "disk full" }) })
+  });
+  await assert.rejects(() => engine.startContainer("abc123"), /docker engine start failed \(500\).*disk full/s);
+});
