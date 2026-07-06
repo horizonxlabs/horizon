@@ -24,4 +24,8 @@ test("/apps/{slug} resolution gates on a healthy deployment and auth", async () 
 
   // no auth → 401
   assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), { ok: false, status: 401 });
+
+  // cross-tenant caller with a non-matching project → 403
+  const otherAuth = { userId: "u2", roles: ["creator"], projectIds: ["other"] };
+  assert.deepEqual(await resolveAppsTarget(deployments, otherAuth, "app"), { ok: false, status: 403 });
 });

@@ -56,7 +56,7 @@ export function createPublishRoutes(deps: {
   };
 }
 
-export type AppsResolution = { ok: true; upstream: string } | { ok: false; status: 401 | 404 | 503 };
+export type AppsResolution = { ok: true; upstream: string } | { ok: false; status: 401 | 403 | 404 | 503 };
 
 export async function resolveAppsTarget(
   deployments: DeploymentStore,
@@ -69,6 +69,9 @@ export async function resolveAppsTarget(
   const current = deployments.getCurrent(slug);
   if (!current) {
     return { ok: false, status: 404 };
+  }
+  if (!auth.projectIds.includes(current.projectId)) {
+    return { ok: false, status: 403 };
   }
   return { ok: true, upstream: `http://evcp-prod-${slug}:3000` };
 }

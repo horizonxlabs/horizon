@@ -48,7 +48,19 @@ test("resolveAppsTarget: 401 no auth, 404 no healthy deployment, 200 upstream wh
     commitSha: "s", imageTag: "t", containerId: "c", publishedByUserId: "u1"
   });
   deployments.updateHealth(dep.id, "healthy");
-  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: [] }, "app"), {
+  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: ["p1"] }, "app"), {
     ok: true, upstream: "http://evcp-prod-app:3000"
+  });
+});
+
+test("resolveAppsTarget: 403 when caller is not a member of the deployment's project", async () => {
+  const deployments = createMemoryDeploymentStore();
+  const dep = deployments.create({
+    projectId: "p1", slug: "app", environment: "production",
+    commitSha: "s", imageTag: "t", containerId: "c", publishedByUserId: "u1"
+  });
+  deployments.updateHealth(dep.id, "healthy");
+  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: ["other"] }, "app"), {
+    ok: false, status: 403
   });
 });
