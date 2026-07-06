@@ -2183,7 +2183,10 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
       }
     }
   });
-  rawApp.all("/projects/:projectId/chat", chatSseHandler);
+  rawApp.all(
+    "/projects/:projectId/chat",
+    chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
+  );
 
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/sources", headers: request.headers }))

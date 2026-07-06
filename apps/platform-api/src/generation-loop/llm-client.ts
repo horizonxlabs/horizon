@@ -48,7 +48,7 @@ export function createLiteLlmCompletionClient(opts: {
       }
 
       let buffer = "";
-      for await (const rawChunk of response.body as AsyncIterable<Uint8Array>) {
+      for await (const rawChunk of response.body as unknown as AsyncIterable<Uint8Array>) {
         buffer += new TextDecoder().decode(rawChunk);
         const lines = buffer.split("\n\n");
         buffer = lines.pop() ?? "";

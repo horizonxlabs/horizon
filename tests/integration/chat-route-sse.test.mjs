@@ -13,7 +13,7 @@ import { createErrorFeedbackTracker } from "../../apps/platform-api/src/generati
 
 const template = { name: "nextjs-base", lockedFiles: ["package.json"], files: [] };
 
-test("POST /projects/:projectId/chat streams SSE events for an authorized member", async () => {
+async function setup(resolveAuth) {
   const docker = createMemoryDockerEngine();
   const { containerId } = await docker.createContainer({
     name: "evcp-ws-demo",
@@ -47,7 +47,7 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
 
   const handler = createChatSseHandler({
     generationService,
-    resolveAuth: () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] })
+    resolveAuth
   });
 
   const server = http.createServer((req, res) => {
@@ -59,21 +59,29 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
 
   await new Promise((resolve) => server.listen(0, resolve));
   const { port } = server.address();
+  return { server, port };
+}
+
+async function postChat(port, path, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: "127.0.0.1", port, path, method: "POST", headers: { "content-type": "application/json" } },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
+      }
+    );
+    req.on("error", reject);
+    req.end(JSON.stringify(body));
+  });
+}
+
+test("POST /projects/:projectId/chat streams SSE events for an authorized member", async () => {
+  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
 
   try {
-    const body = JSON.stringify({ prompt: "add home page" });
-    const raw = await new Promise((resolve, reject) => {
-      const req = http.request(
-        { host: "127.0.0.1", port, path: "/projects/p1/chat", method: "POST", headers: { "content-type": "application/json" } },
-        (res) => {
-          const chunks = [];
-          res.on("data", (chunk) => chunks.push(chunk));
-          res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
-        }
-      );
-      req.on("error", reject);
-      req.end(body);
-    });
+    const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
 
     assert.equal(raw.statusCode, 200);
     assert.match(raw.headers["content-type"], /text\/event-stream/);
@@ -81,6 +89,30 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
     assert.match(raw.body, /event: action_result/);
     assert.match(raw.body, /event: commit/);
     assert.match(raw.body, /event: done/);
+  } finally {
+    server.close();
+  }
+});
+
+test("POST /projects/:projectId/chat returns 403 when caller is not a member of the project", async () => {
+  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
+
+  try {
+    const raw = await postChat(port, "/projects/p2/chat", { prompt: "add home page" });
+
+    assert.equal(raw.statusCode, 403);
+  } finally {
+    server.close();
+  }
+});
+
+test("POST /projects/:projectId/chat returns 401 when there is no session", async () => {
+  const { server, port } = await setup(() => null);
+
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
+
+    assert.equal(raw.statusCode, 401);
   } finally {
     server.close();
   }
