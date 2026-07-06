@@ -66,3 +66,34 @@ test("litellm admin client surfaces non-200 as error", async () => {
     /litellm key generation failed \(401\)/
   );
 });
+
+test("litellm admin client calls /key/delete with master key auth", async () => {
+  const calls = [];
+  const fakeFetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({}), { status: 200 });
+  };
+  const gateway = createLiteLlmGatewayAdmin({
+    baseUrl: "http://litellm:4000",
+    masterKey: "sk-master",
+    fetchImpl: fakeFetch
+  });
+  await gateway.revokeVirtualKey("tok_1");
+  assert.equal(calls[0].url, "http://litellm:4000/key/delete");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer sk-master");
+  const body = JSON.parse(calls[0].init.body);
+  assert.deepEqual(body, { keys: ["tok_1"] });
+});
+
+test("litellm admin client surfaces non-200 revoke as error", async () => {
+  const gateway = createLiteLlmGatewayAdmin({
+    baseUrl: "http://litellm:4000",
+    masterKey: "sk-master",
+    fetchImpl: async () => new Response("nope", { status: 500 })
+  });
+  await assert.rejects(
+    () => gateway.revokeVirtualKey("tok_1"),
+    /litellm key revoke failed \(500\)/
+  );
+});

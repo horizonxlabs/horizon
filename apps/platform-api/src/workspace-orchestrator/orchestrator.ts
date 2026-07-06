@@ -1,4 +1,4 @@
-import type { WorkspaceContainerRecord, WorkspaceState } from "@evcp/types";
+import type { WorkspaceContainerRecord } from "@evcp/types";
 import { assertTransition } from "./state";
 import { schemaNameFor, roleNameFor, type PostgresProvisioner } from "./postgres-provisioner";
 import type { ObjectStorageProvisioner, LlmGatewayAdmin } from "./resource-ports";
@@ -38,6 +38,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
 
   const records = new Map<string, WorkspaceContainerRecord>();
+  // Retained per-project so a future deleteWorkspace() can revoke the LiteLLM key on hard-delete (see follow-up).
   const llmKeyIds = new Map<string, string>();
 
   const now = () => new Date().toISOString();

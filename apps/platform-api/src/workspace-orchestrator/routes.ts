@@ -79,9 +79,8 @@ export async function resolvePreviewTarget(
     }
   }
   if (!record) {
-    // distinguish "exists but not yours" from "does not exist" is deferred;
-    // membership scan above means unknown slug and non-member both need a wider lookup
-    const anyWorkspace = orchestrator.findBySlug?.(slug) ?? null;
+    // Not one of the caller's workspaces: 403 if the slug exists at all (someone else's), else 404.
+    const anyWorkspace = orchestrator.findBySlug(slug);
     return anyWorkspace ? { ok: false, status: 403 } : { ok: false, status: 404 };
   }
   if (record.state === "idle") {

@@ -100,7 +100,7 @@ export function createLiteLlmGatewayAdmin(opts: {
       const response = await fetchImpl(`${opts.baseUrl}/key/delete`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ key_aliases: undefined, keys: [keyId] })
+        body: JSON.stringify({ keys: [keyId] })
       });
       if (!response.ok) {
         throw new Error(`litellm key revoke failed (${response.status})`);
