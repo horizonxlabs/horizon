@@ -6,6 +6,7 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import * as nodeHttp from "node:http";
 import {
   createPlatformApiServices,
@@ -2820,6 +2821,13 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
   );
 }
 
+export function startWorkspaceIdleSweep(
+  services: PersistenceAwarePlatformApiServices,
+  opts: { intervalMs?: number } = {}
+): { stop(): void } {
+  return startIdleSweep(services.workspaceOrchestrator, opts);
+}
+
 export async function createPlatformApiApp(services: PersistenceAwarePlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
   const app = await NestFactory.create(PlatformApiModule, {
     logger: false
@@ -2830,6 +2838,7 @@ export async function createPlatformApiApp(services: PersistenceAwarePlatformApi
     credentials: true
   });
   registerPlatformRoutes(app, services);
+  startWorkspaceIdleSweep(services);
 
   return app;
 }
