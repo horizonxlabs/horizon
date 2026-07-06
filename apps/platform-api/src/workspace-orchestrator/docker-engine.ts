@@ -41,6 +41,35 @@ export function buildDevContainerSpec(input: {
   };
 }
 
+export function buildProdContainerSpec(input: {
+  slug: string;
+  image: string;
+  env: Record<string, string>;
+  cpuCores?: number;
+  memoryMb?: number;
+  network: string;
+  workspaceVolume: string;
+}): DevContainerSpec {
+  assertValidProjectSlug(input.slug);
+  const cpuCores = input.cpuCores ?? 1;
+  const memoryMb = input.memoryMb ?? 1024;
+  const env = { ...input.env, NODE_ENV: "production" };
+  return {
+    name: `evcp-prod-${input.slug}`,
+    image: input.image,
+    env: Object.entries(env).map(([name, value]) => `${name}=${value}`),
+    hostConfig: {
+      NanoCpus: Math.round(cpuCores * 1_000_000_000),
+      Memory: memoryMb * 1024 * 1024,
+      NetworkMode: input.network,
+      Binds: [`${input.workspaceVolume}:/workspace`]
+    },
+    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": "production" },
+    exposedPort: 3000,
+    publishPorts: false
+  };
+}
+
 export interface DockerEngine {
   createContainer(spec: DevContainerSpec): Promise<{ containerId: string }>;
   startContainer(containerId: string): Promise<void>;
