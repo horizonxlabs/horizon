@@ -61,6 +61,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return records.get(projectId) ?? null;
     },
 
+    findBySlug(slug: string): WorkspaceContainerRecord | null {
+      for (const record of records.values()) {
+        if (record.slug === slug) {
+          return record;
+        }
+      }
+      return null;
+    },
+
     listSecretNames(projectId: string): string[] {
       return deps.secrets.listNames(projectId);
     },
