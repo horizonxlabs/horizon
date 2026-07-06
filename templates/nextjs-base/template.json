@@ -1,0 +1,4 @@
+{
+  "name": "nextjs-base",
+  "lockedFiles": ["platform.config.ts", "lib/storage.ts", "package.json"]
+}
