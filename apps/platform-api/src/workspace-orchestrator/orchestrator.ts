@@ -198,6 +198,27 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return next;
     },
 
+    async deleteWorkspace(projectId: string): Promise<void> {
+      const record = records.get(projectId);
+      if (!record) {
+        return;
+      }
+      if (record.containerId) {
+        await deps.docker.stopContainer(record.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(record.containerId).catch(() => undefined);
+      }
+      await deps.postgres.releaseSchema(record.slug).catch(() => undefined);
+      await deps.objectStorage.releaseBucket(record.slug).catch(() => undefined);
+      const keyId = llmKeyIds.get(projectId);
+      if (keyId) {
+        await deps.llmGateway.revokeVirtualKey(keyId).catch(() => undefined);
+      }
+      deps.secrets.removeAll(projectId);
+      records.delete(projectId);
+      llmKeyIds.delete(projectId);
+      audit({ action: "workspace.deleted", projectId });
+    },
+
     async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {
       const stopped: string[] = [];
       for (const record of records.values()) {
