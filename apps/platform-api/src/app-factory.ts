@@ -6,6 +6,8 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import { createChatSseHandler } from "./generation-loop/chat-route";
+import { createDefaultGenerationService } from "./generation-loop/factory";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import * as nodeHttp from "node:http";
 import {
@@ -2149,6 +2151,39 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
   };
   rawApp.all("/preview/:slug", previewHandler);
   rawApp.all("/preview/:slug/*", previewHandler);
+
+  // NOTE (Task 9 deviation, DONE_WITH_CONCERNS): the shared DockerEngine instance is
+  // constructed inside workspace-orchestrator/factory.ts and is never exposed on
+  // WorkspaceOrchestrator or PersistenceAwarePlatformApiServices, so it cannot be
+  // reached cleanly from here. createDefaultGenerationService's optional `docker`
+  // param is therefore left unset, meaning generated `shell`/`file`/`migration`
+  // actions will hit the throwing placeholder engine until a real engine is
+  // threaded through (e.g. by having createDefaultWorkspaceOrchestrator return it,
+  // or constructing a second engine instance here).
+  const generationService = createDefaultGenerationService({
+    orchestrator: services.workspaceOrchestrator,
+    onAudit: (event) =>
+      services.audit.record({
+        actorId: "system",
+        action: event.action,
+        resourceType: "workspace_container",
+        resourceId: event.projectId,
+        metadata: event.metadata
+      })
+  });
+  const chatSseHandler = createChatSseHandler({
+    generationService,
+    resolveAuth: (req) => {
+      try {
+        const user = services.auth.resolveCurrentUser((req as { headers?: HeaderBag }).headers ?? {});
+        const projectIds = services.projects.listProjects(user).map((project) => project.id);
+        return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+      } catch {
+        return null;
+      }
+    }
+  });
+  rawApp.all("/projects/:projectId/chat", chatSseHandler);
 
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/sources", headers: request.headers }))
