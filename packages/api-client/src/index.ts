@@ -34,6 +34,22 @@ export type PlatformUserDto = {
   permissions?: string[];
 };
 
+export type CreatePlatformUserInput = {
+  email: string;
+  name: string;
+  role: string;
+  tempPassword: string;
+};
+
+export type PlatformUserSummary = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  mustChangePassword: boolean;
+};
+
 export type PlatformAuthEvidenceDto = {
   mode: "platform_session" | "mock_header";
   sessionId?: string;
@@ -886,6 +902,14 @@ export class PlatformApiClient {
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
     return this.request<InstallerReportDto[]>("/admin/installer/reports");
+  }
+
+  createUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
+    return this.request<PlatformUserSummary>("/admin/users", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   listAiProviders(): Promise<AiProviderDto[]> {

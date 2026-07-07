@@ -1,18 +1,21 @@
 import {
   createPlatformApiClient,
   createPlatformSessionStore,
+  PlatformApiError,
   type AiApiKeyDto,
   type AiProviderDto,
   type AiProviderTestCallInput,
   type AiProviderTestCallResponse,
   type AiQuotaDto,
   type AiScenarioRouteDto,
+  type CreatePlatformUserInput,
   type CurrentUserResponse,
   type GuardrailEventDto,
   type GuardrailRuleDto,
   type InstallerPreflightInput,
   type InstallerReportDto,
   type InstallerSetupResponse,
+  type PlatformUserSummary,
   type SimulatedSsoLoginInput
 } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
@@ -38,7 +41,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import "@evcp/ui/styles.css";
+
+if (typeof window !== "undefined") {
+  void import("@evcp/ui/styles.css");
+}
 
 type BadgeTone = "success" | "warning" | "danger" | "neutral" | "info";
 
@@ -533,13 +539,14 @@ function sectionIdFromAdminPath(pathname: string): string | undefined {
   return undefined;
 }
 
-type AdminPage = "dashboard" | "services" | "ai-providers" | "guardrails" | "audit-logs";
+type AdminPage = "dashboard" | "services" | "ai-providers" | "guardrails" | "audit-logs" | "users";
 
 function adminPageFromPath(pathname: string): AdminPage {
   if (pathname.endsWith("/services")) return "services";
   if (pathname.endsWith("/ai-providers")) return "ai-providers";
   if (pathname.endsWith("/guardrails")) return "guardrails";
   if (pathname.endsWith("/audit-logs")) return "audit-logs";
+  if (pathname.endsWith("/users")) return "users";
   return "dashboard";
 }
 
@@ -568,6 +575,11 @@ const adminPageCopy: Record<AdminPage, { eyebrow: string; title: string; descrip
     eyebrow: "Audit Evidence",
     title: "Audit Logs",
     description: "ค้นหา evidence ของ action สำคัญ เช่น provider, setup, publish, ticket และ policy decision"
+  },
+  users: {
+    eyebrow: "Identity",
+    title: "Users",
+    description: "Create Creator accounts with a temporary password issued once and required to change on first login"
   }
 };
 
@@ -693,6 +705,26 @@ async function createAdminGuardrailRule(form: AiGovernanceForm): Promise<Guardra
 
 async function runProviderTestCall(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
   return createAdminPlatformClient().testAiProvider(input);
+}
+
+export function buildCreateUserPayload(input: { email: string; name: string; role: string; tempPassword: string }): CreatePlatformUserInput {
+  return {
+    email: input.email.trim().toLowerCase(),
+    name: input.name.trim(),
+    role: input.role.trim() || "creator",
+    tempPassword: input.tempPassword
+  };
+}
+
+export function generateTempPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < 12; i += 1) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
+async function createAdminUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
+  return createAdminPlatformClient().createUser(input);
 }
 
 function installWizardStepIndex(stepId: InstallWizardStepId): number {
@@ -1048,6 +1080,10 @@ function AdminApp() {
   const [firstRunSetupComplete, setFirstRunSetupComplete] = useState(firstRunSetupIsComplete);
   const [firstRunSetupMessage, setFirstRunSetupMessage] = useState("Run preflight, create the first Platform Admin, then enter the Admin Console.");
   const [isCompletingFirstRunSetup, setIsCompletingFirstRunSetup] = useState(false);
+  const [createUserForm, setCreateUserForm] = useState({ email: "", name: "", role: "creator", tempPassword: "" });
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [createUserError, setCreateUserError] = useState("");
+  const [createdUserReveal, setCreatedUserReveal] = useState<{ summary: PlatformUserSummary; tempPassword: string } | undefined>(undefined);
 
   useEffect(() => {
     loadOrCreateAdminSessionBridge()
@@ -1314,6 +1350,39 @@ function AdminApp() {
       setAiGovernanceMessage("Guardrail save failed; local fallback rules remain visible.");
     } finally {
       setIsSavingAiGovernance(false);
+    }
+  }
+
+  function handleCreateUserField(field: "email" | "name" | "role" | "tempPassword", value: string) {
+    setCreateUserForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function handleGenerateTempPassword() {
+    setCreateUserForm((current) => ({ ...current, tempPassword: generateTempPassword() }));
+  }
+
+  async function handleCreateUser() {
+    setIsCreatingUser(true);
+    setCreateUserError("");
+    try {
+      const payload = buildCreateUserPayload(createUserForm);
+      const summary = await createAdminUser(payload);
+      setCreatedUserReveal({ summary, tempPassword: payload.tempPassword });
+      setCreateUserForm({ email: "", name: "", role: "creator", tempPassword: "" });
+    } catch (error) {
+      if (error instanceof PlatformApiError) {
+        if (error.code === "email_exists") {
+          setCreateUserError("That email already exists");
+        } else if (error.code === "weak_password") {
+          setCreateUserError("Temp password must be at least 8 characters");
+        } else {
+          setCreateUserError(error.message || "User creation failed");
+        }
+      } else {
+        setCreateUserError(error instanceof Error ? error.message : "User creation failed");
+      }
+    } finally {
+      setIsCreatingUser(false);
     }
   }
 
@@ -1646,6 +1715,67 @@ function AdminApp() {
             <button type="button" className="secondary-button"><Route size={15} /> project</button>
           </div>
           <DataTable columns={[{ key: "action", label: "Action" }, { key: "actor", label: "Actor" }, { key: "severity", label: "Severity", tone: () => "danger" }]} rows={auditFilterRows} />
+        </SectionCard>
+      </section>
+    );
+  }
+
+  if (adminPage === "users") {
+    return renderAdminShell(
+      <section className="admin-page-stack" aria-label="User management">
+        <SectionCard eyebrow="Create Account" title="Create Creator account">
+          <div className="ai-governance-action-panel compact">
+            <label>
+              Email
+              <input
+                type="email"
+                value={createUserForm.email}
+                onChange={(event) => handleCreateUserField("email", event.target.value)}
+              />
+            </label>
+            <label>
+              Name
+              <input
+                value={createUserForm.name}
+                onChange={(event) => handleCreateUserField("name", event.target.value)}
+              />
+            </label>
+            <label>
+              Role
+              <select value={createUserForm.role} onChange={(event) => handleCreateUserField("role", event.target.value)}>
+                <option value="creator">Creator</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label>
+              Temp Password
+              <input
+                value={createUserForm.tempPassword}
+                onChange={(event) => handleCreateUserField("tempPassword", event.target.value)}
+              />
+            </label>
+            <button type="button" className="secondary-button" onClick={handleGenerateTempPassword}>
+              <KeyRound size={15} /> Generate
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCreateUser()}
+              disabled={isCreatingUser || !createUserForm.email || !createUserForm.name || !createUserForm.tempPassword}
+            >
+              <ShieldCheck size={15} /> {isCreatingUser ? "Creating" : "Create User"}
+            </button>
+          </div>
+          {createUserError ? (
+            <DecisionPanel tone="danger" badge="error" title={createUserError} lines={["Fix the field above and try again."]} />
+          ) : null}
+          {createdUserReveal ? (
+            <DecisionPanel
+              tone="success"
+              badge="temp password"
+              title="Give this to the Creator — they'll change it on first login"
+              lines={[`Email: ${createdUserReveal.summary.email}`, `Temporary password: ${createdUserReveal.tempPassword}`]}
+            />
+          ) : null}
         </SectionCard>
       </section>
     );
@@ -3147,4 +3277,6 @@ function AdminApp() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<AdminApp />);
+if (typeof document !== "undefined") {
+  createRoot(document.getElementById("root")!).render(<AdminApp />);
+}
