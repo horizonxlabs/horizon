@@ -289,11 +289,9 @@ export async function resolvePreviewProxyDecision(
   headers: HeaderBag,
   slug: string
 ): Promise<{ status: number } | { upstream: string }> {
-  let auth: { userId: string; roles: string[]; projectIds: string[] } | null = null;
+  let auth: WorkspaceAuthContext | null = null;
   try {
-    const user = services.auth.resolveCurrentUser(headers ?? {});
-    const projectIds = services.projects.listProjects(user).map((project) => project.id);
-    auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+    auth = await resolveWorkspaceAuth(services, headers ?? {});
   } catch {
     auth = null;
   }
@@ -2373,11 +2371,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
   });
   const chatSseHandler = createChatSseHandler({
     generationService,
-    resolveAuth: (req) => {
+    resolveAuth: async (req) => {
       try {
-        const user = services.auth.resolveCurrentUser((req as { headers?: HeaderBag }).headers ?? {});
-        const projectIds = services.projects.listProjects(user).map((project) => project.id);
-        return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+        return await resolveWorkspaceAuth(services, (req as { headers?: HeaderBag }).headers ?? {});
       } catch {
         return null;
       }
