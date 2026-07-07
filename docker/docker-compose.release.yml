@@ -1,0 +1,193 @@
+name: evcp-private-server
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evcp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${EVCP_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - evcp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evcp} -d ${POSTGRES_DB:-evcp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - evcp-internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: evcp-redis
+    restart: unless-stopped
+    ports:
+      - "${EVCP_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - evcp-internal
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: evcp-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    ports:
+      - "${EVCP_MINIO_API_PORT:-9000}:9000"
+      - "${EVCP_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - evcp_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - evcp-internal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-keycloak
+    restart: unless-stopped
+    command: start-dev --http-port=8080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${EVCP_KEYCLOAK_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - evcp-internal
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: evcp-litellm
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: ["--config", "/etc/litellm/litellm-config.yaml"]
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    networks:
+      - evcp-internal
+
+  platform-api:
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-platform-api:${EVCP_VERSION:?EVCP_VERSION is required}
+    container_name: evcp-platform-api
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "${EVCP_API_PORT:-3100}:3100"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      EVCP_LITELLM_BASE_URL: http://litellm:4000
+      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
+      EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY}/evcp-workspace-next:${EVCP_VERSION}
+      EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
+      EVCP_WORKSPACE_NETWORK: evcp-private-server_evcp-internal
+      EVCP_WORKSPACE_REAL_ADAPTERS: "1"
+      EVCP_PG_HOST: postgres
+      EVCP_PG_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      EVCP_S3_HOST: minio
+      EVCP_S3_PORT: "9000"
+      EVCP_S3_SSL: "false"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+    networks:
+      - evcp-internal
+
+  admin-web:
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-admin-web:${EVCP_VERSION:?EVCP_VERSION is required}
+    container_name: evcp-admin-web
+    restart: unless-stopped
+    depends_on:
+      - platform-api
+    networks:
+      - evcp-internal
+
+  creator-web:
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-creator-web:${EVCP_VERSION:?EVCP_VERSION is required}
+    container_name: evcp-creator-web
+    restart: unless-stopped
+    depends_on:
+      - platform-api
+    networks:
+      - evcp-internal
+
+  app-store-pwa:
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-app-store-pwa:${EVCP_VERSION:?EVCP_VERSION is required}
+    container_name: evcp-app-store-pwa
+    restart: unless-stopped
+    depends_on:
+      - platform-api
+    networks:
+      - evcp-internal
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: evcp-caddy
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "${EVCP_HTTP_PORT:-8080}:80"
+      - "${EVCP_HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile.release:/etc/caddy/Caddyfile:ro
+      - evcp_caddy_data:/data
+      - evcp_caddy_config:/config
+    depends_on:
+      - platform-api
+      - admin-web
+      - creator-web
+      - app-store-pwa
+    networks:
+      - evcp-internal
+
+volumes:
+  evcp_postgres_data:
+  evcp_minio_data:
+  evcp_caddy_data:
+  evcp_caddy_config:
+
+networks:
+  evcp-internal:
+    driver: bridge
