@@ -27,8 +27,12 @@ import {
   createCoreRepositoryBackedService,
   createPrismaCorePersistence,
   MemoryCorePersistenceClient,
-  type CoreRepositoryBackedService
+  type CoreRepositoryBackedService,
+  type CorePersistenceClient
 } from "./persistence/core-repositories";
+import { createPlatformCredentialService, type PlatformCredentialService } from "./auth/platform-credential-service";
+import { createCorePersistenceCredentialStore, createUserWithRole } from "./auth/prisma-credential-store";
+import { getMockPermissions } from "@evcp/auth-sdk";
 import {
   createAiGovernanceRepositoryBackedService,
   createPrismaAiGovernancePersistence,
@@ -80,6 +84,8 @@ type RouteRegistry = {
 
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
+  corePersistenceClient?: CorePersistenceClient;
+  credentialService?: PlatformCredentialService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
   workspacePersistence?: WorkspaceRepositoryBackedService;
@@ -95,6 +101,9 @@ export interface PlatformRequest {
   path:
     | "/health"
     | "/auth/me"
+    | "/auth/login"
+    | "/auth/change-password"
+    | "/admin/users"
     | "/projects"
     | "/audit-logs"
     | "/audit-logs/filter"
@@ -210,9 +219,12 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const mode = resolveCorePersistenceMode(env);
   if (mode === "legacy") return services;
   if (mode === "memory") {
+    const client = new MemoryCorePersistenceClient();
     return {
       ...services,
-      corePersistence: createCoreRepositoryBackedService(new MemoryCorePersistenceClient()),
+      corePersistence: createCoreRepositoryBackedService(client),
+      corePersistenceClient: client,
+      credentialService: createPlatformCredentialService(createCorePersistenceCredentialStore(client)),
       aiGovernancePersistence: createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient()),
       prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
       workspacePersistence: createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient()),
@@ -221,7 +233,7 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
     };
   }
 
-  const { service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL);
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
   const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
@@ -230,6 +242,8 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   return {
     ...services,
     corePersistence: service,
+    corePersistenceClient: client,
+    credentialService: createPlatformCredentialService(createCorePersistenceCredentialStore(client)),
     aiGovernancePersistence,
     prdPersistence,
     workspacePersistence,
@@ -357,6 +371,10 @@ function isPersistenceCoreRoute(request: PlatformRequest): boolean {
   );
 }
 
+function isNativeAuthRoute(request: PlatformRequest): boolean {
+  return request.path === "/admin/users" || request.path === "/auth/login" || request.path === "/auth/change-password";
+}
+
 function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
   return (
     request.path === "/ai/providers" ||
@@ -464,22 +482,114 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
   const workspacePersistence = services.workspacePersistence;
   const publishStorePersistence = services.publishStorePersistence;
   const generatedRuntimePersistence = services.generatedRuntimePersistence;
+  const corePersistenceClient = services.corePersistenceClient;
+  const credentialService = services.credentialService;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
   const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
   const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
   const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
   const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
   const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
+  const useNativeAuth = Boolean(corePersistenceClient && credentialService && isNativeAuthRoute(request));
   if (
     !useCorePersistence &&
     !useAiGovernancePersistence &&
     !usePrdPersistence &&
     !useWorkspacePersistence &&
     !usePublishStorePersistence &&
-    !useGeneratedRuntimePersistence
+    !useGeneratedRuntimePersistence &&
+    !useNativeAuth
   ) return executePlatformApiRequest(services, request);
 
   try {
+    if (corePersistenceClient && credentialService && request.method === "POST" && request.path === "/admin/users") {
+      const actor = await resolvePersistenceUser(services, request.headers ?? {});
+      services.auth.requireRole(actor, ["admin"]);
+
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const name = String(body.name ?? "").trim();
+      const tempPassword = String(body.tempPassword ?? "");
+      const role = body.role ? String(body.role) : "creator";
+
+      if (!email || !name || !tempPassword) {
+        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: "invalid_input" } };
+      }
+
+      const existing = await corePersistenceClient.platformUser.findUnique({ where: { email } });
+      if (existing) {
+        return { status: HttpStatus.CONFLICT, body: { ok: false, error: "email_exists" } };
+      }
+
+      const id = `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const created = await createUserWithRole(corePersistenceClient, { id, email, name, role });
+
+      const passwordResult = await credentialService.setPassword(created.id, tempPassword, { mustChange: true });
+      if (!passwordResult.ok) {
+        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: passwordResult.reason } };
+      }
+
+      services.identity.registerUser({
+        id: created.id,
+        email: created.email,
+        name: created.name,
+        role: role as PlatformUser["role"],
+        status: created.status as PlatformUser["status"],
+        permissions: getMockPermissions(role as PlatformUser["role"])
+      } as PlatformUser);
+
+      const summary = {
+        id: created.id,
+        email: created.email,
+        name: created.name,
+        role,
+        status: created.status,
+        mustChangePassword: true
+      };
+      return { status: HttpStatus.CREATED, body: success(summary) };
+    }
+
+    if (credentialService && request.method === "POST" && request.path === "/auth/login") {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const email = String(body.email ?? "");
+      const password = String(body.password ?? "");
+
+      const verified = await credentialService.verifyLogin(email, password);
+      if (!verified) {
+        return { status: HttpStatus.UNAUTHORIZED, body: { ok: false, error: "invalid_credentials" } };
+      }
+
+      const user = services.identity.getUserByEmail(email.trim().toLowerCase());
+      if (!user) {
+        return { status: HttpStatus.UNAUTHORIZED, body: { ok: false, error: "invalid_credentials" } };
+      }
+
+      const session = services.authSso.issueNativeSession(user);
+      return {
+        status: HttpStatus.OK,
+        body: success({
+          token: session.token,
+          expiresAt: session.expiresAt,
+          mustChangePassword: verified.mustChangePassword
+        })
+      };
+    }
+
+    if (credentialService && request.method === "POST" && request.path === "/auth/change-password") {
+      const actorResolution = services.auth.resolve(request.headers ?? {});
+      const actor = actorResolution.user;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const currentPassword = String(body.currentPassword ?? "");
+      const newPassword = String(body.newPassword ?? "");
+
+      const result = await credentialService.changePassword(actor.id, currentPassword, newPassword);
+      if (!result.ok) {
+        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: result.reason } };
+      }
+
+      return { status: HttpStatus.OK, body: success({ ok: true }) };
+    }
+
     if (corePersistence && request.method === "GET" && request.path === "/auth/me") {
       const authResolution = await resolvePersistenceAuth(services, request.headers ?? {});
       const user = authResolution.user;

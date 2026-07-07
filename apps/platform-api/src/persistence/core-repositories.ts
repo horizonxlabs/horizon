@@ -112,7 +112,7 @@ interface UpdateUserCredentialArgs {
 }
 
 interface CreateUserArgs {
-  data: { id: string; email: string; name: string; status?: string };
+  data: { id: string; email: string; name: string; status?: string; roles?: PlatformUserRoleRecord[] };
 }
 
 export interface CorePersistenceClient {
@@ -300,7 +300,8 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
           name: data.name,
           status,
           passwordHash: null,
-          mustChangePassword: false
+          mustChangePassword: false,
+          roles: data.roles
         };
         this.users.push(created);
         return { id: created.id, email: created.email, name: created.name, status: created.status };
@@ -419,6 +420,37 @@ function defaultUsers(): PlatformUserRecord[] {
 function normalizeRole(role: string | undefined): PlatformRole {
   if (role === "admin" || role === "creator" || role === "end_user") return role;
   return "end_user";
+}
+
+const ROLE_RECORD_IDS: Record<PlatformRole, string> = {
+  admin: "role_admin",
+  creator: "role_creator",
+  end_user: "role_end_user"
+};
+
+const ROLE_RECORD_NAMES: Record<PlatformRole, string> = {
+  admin: "Platform Admin",
+  creator: "Creator",
+  end_user: "End User"
+};
+
+/**
+ * Builds the role-join record (`{ role: PlatformRoleRecord }`) for a given role key, mirroring
+ * the seed pattern in `defaultUsers()`. Used to persist a newly created platform user's role
+ * onto the `roles` join array on `PlatformUserRecord`, since role is not a scalar column.
+ */
+export function buildPlatformUserRoleRecords(role: string | undefined): PlatformUserRoleRecord[] {
+  const normalized = normalizeRole(role);
+  return [
+    {
+      role: {
+        id: ROLE_RECORD_IDS[normalized],
+        key: normalized,
+        name: ROLE_RECORD_NAMES[normalized],
+        permissions: getMockPermissions(normalized)
+      }
+    }
+  ];
 }
 
 function normalizeSensitivity(value: string | null): PlatformProject["dataSensitivity"] {

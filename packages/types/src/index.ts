@@ -158,3 +158,37 @@ export interface WorkspaceDeployment {
   healthStatus: DeploymentHealthStatus;
   createdAt: string;
 }
+
+// --- Native platform auth: create user, login, change password ---
+
+export interface CreatePlatformUserRequest {
+  email: string;
+  name: string;
+  role?: string;
+  tempPassword: string;
+}
+
+export interface PlatformUserSummary {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  mustChangePassword: boolean;
+}
+
+export interface NativeLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface NativeLoginResponse {
+  token: string;
+  expiresAt: string;
+  mustChangePassword: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}

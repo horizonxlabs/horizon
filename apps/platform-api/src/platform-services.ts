@@ -1688,6 +1688,25 @@ export class IdentityService {
     if (roles.includes("creator")) return "creator";
     return "end_user";
   }
+
+  /**
+   * Registers (or updates) a `PlatformUser` with a caller-specified id, upserting by email.
+   * Used to dual-write users created through core-persistence (e.g. the native `/admin/users`
+   * route) into this separate mock-identity store, so bearer session tokens issued for them
+   * later resolve correctly via `MockAuthService.resolve()`/`resolveCurrentUser()` (both of
+   * which look the user up here by email, not in core-persistence).
+   */
+  registerUser(user: PlatformUser): PlatformUser {
+    const email = user.email.trim().toLowerCase();
+    const existingIndex = this.users.findIndex((candidate) => candidate.email === email);
+    const normalized: PlatformUser = { ...user, email };
+    if (existingIndex >= 0) {
+      this.users[existingIndex] = normalized;
+    } else {
+      this.users.push(normalized);
+    }
+    return normalized;
+  }
 }
 
 export class AuditService {
@@ -2359,6 +2378,40 @@ export class PlatformAuthSsoService {
       metadata: { providerId: provider.id, providerType: provider.type, email: claims.email, platformRoles: claims.platformRoles }
     });
     return session;
+  }
+
+  /**
+   * Issues a session for a native (email/password) login. Reuses the exact issuance body of
+   * `simulateLogin` above — same `issuePlatformSession` call, same push onto `this.sessions` —
+   * without duplicating any SSO provider/claims resolution, since the user already exists
+   * (with its role already resolved) via the native credential-verification path.
+   */
+  issueNativeSession(user: PlatformUser): { token: string; expiresAt: string } {
+    const sessionId = `psess_${String(this.sessions.length + 1).padStart(4, "0")}`;
+    const issuedAt = new Date();
+    const issuedToken = this.auth.issuePlatformSession(user, {
+      sessionId,
+      issuedAt,
+      ttlSeconds: 60 * 60
+    });
+    const session: PlatformAuthSession = {
+      id: sessionId,
+      providerId: "native",
+      providerType: "oidc",
+      token: issuedToken.token,
+      claims: {
+        subject: user.id,
+        email: user.email,
+        name: user.name,
+        groups: [],
+        platformRoles: [user.role],
+        appRoles: {}
+      },
+      issuedAt: issuedAt.toISOString(),
+      expiresAt: issuedToken.expiresAt
+    };
+    this.sessions.push(session);
+    return { token: issuedToken.token, expiresAt: issuedToken.expiresAt };
   }
 
   validateGeneratedAppSession(token: string, input: { appSlug: string; requiredRole?: string }): GeneratedAppSessionValidation {
