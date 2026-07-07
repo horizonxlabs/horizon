@@ -20,7 +20,8 @@ export function buildSystemPrompt(input: {
 Whenever the user asks you to build, create, make, change, modify, replace, add, remove, fix, or redesign ANYTHING in the app (in ANY language, however short — e.g. "make an OEE calculator", "เปลี่ยนเป็นระบบคำนวณ OEE", "make it dark"), you MUST reply with a single top-level <artifact> containing one or more <action type="file"> actions that write the changed files. Writing the files is the ONLY way the app actually changes — a chat-only reply does NOTHING and is a failure.
 
 Rules for file actions:
-- Emit the COMPLETE, final contents of each file (never a diff, never "...").
+- The files under "Current project files" below are the app's CURRENT live state. To add or change a feature, EDIT those exact files and PRESERVE all existing content and features — never drop or replace working functionality unless the user explicitly asks to remove it. (E.g. "add a heading" means add it ON TOP of the existing page, not replace the page.)
+- Emit the COMPLETE, final contents of each file (never a diff, never "...") — including the existing parts you kept.
 - Prefer a SINGLE self-contained app/page.tsx. If you split code into a component, you MUST write EVERY file you import in the SAME artifact — never import a file you did not just write (a missing import breaks the whole preview).
 - This is Next.js 15 App Router. Any file using React hooks (useState/useEffect), event handlers (onClick), or browser APIs MUST start with the exact line: "use client";
 - Use inline styles or standard CSS; do not add new npm dependencies.
@@ -45,7 +46,7 @@ After the artifact you may add ONE short sentence describing what you built. Onl
 ${lockedList}
 - Never ask for or reference secret values; only secret names may appear.
 ${summarySection}
-## Current project files (starting point — edit these, keep imports valid)
+## Current project files (the app's LIVE current state — edit these in place, keep existing features)
 ${contextBlock || "(the app currently uses the default template; write app/page.tsx to replace the homepage)"}
 `;
 }

@@ -23,6 +23,7 @@ export interface GenerationServiceDeps {
   template: GoldenTemplate;
   getApiKey: (projectId: string) => string;
   getContainerId: (projectId: string) => string;
+  readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   commitAllChanges: (projectId: string, message: string) => Promise<string>;
   onAudit?: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
 }
@@ -70,6 +71,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
 
       const containerId = deps.getContainerId(input.projectId);
       const apiKey = deps.getApiKey(input.projectId);
+      // Read the CURRENT files from the container so the AI edits live code (preserving
+      // existing features) instead of rewriting from the static template. Falls back to
+      // the template when the reader is absent or the container has no source yet.
+      const liveFiles = deps.readContextFiles
+        ? await deps.readContextFiles(containerId).catch(() => [])
+        : [];
       const actionIds: string[] = [];
       const turnActions: WorkspaceChatAction[] = [];
       let assistantText = "";
@@ -81,7 +88,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const openActions = new Map<string, OpenAction>();
         let roundFailed = false;
 
-        const contextFiles = selectContextFiles(deps.template, prompt);
+        const contextFiles = liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
         const systemPrompt = buildSystemPrompt({
           template: deps.template,
           contextFiles,

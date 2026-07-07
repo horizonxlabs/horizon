@@ -12,6 +12,7 @@ import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { createContainerGitCommitter } from "./container-git";
+import { createContainerFileReader } from "./container-files";
 
 export { createMessageParser };
 
@@ -46,6 +47,7 @@ export function createDefaultGenerationService(opts: {
         } as unknown as DockerEngine));
 
   const gitCommitter = createContainerGitCommitter(docker);
+  const fileReader = createContainerFileReader(docker);
 
   return createGenerationService({
     llmClient,
@@ -67,6 +69,7 @@ export function createDefaultGenerationService(opts: {
       }
       return workspace.containerId;
     },
+    readContextFiles: (containerId) => fileReader.read(containerId),
     commitAllChanges: async (projectId, message) => {
       opts.orchestrator.markActivity(projectId);
       const workspace = opts.orchestrator.getWorkspace(projectId);
