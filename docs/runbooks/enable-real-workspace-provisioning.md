@@ -64,3 +64,37 @@ Set `EVCP_WORKSPACE_REAL_ADAPTERS: "0"` in `docker/docker-compose.yml` and recre
 - Secrets (DB/S3 creds) are stored only in the encrypted `ProjectSecretStore` and never surfaced to the Creator — only env var NAMES appear in the UI.
 - Workspace containers run non-root, on the internal network, and never publish host ports.
 - LiteLLM per-project virtual keys are memory-backed until Plan 7.
+
+## Enable AI generation (LiteLLM) — makes vibe coding work
+
+The AI chat needs a real LLM provider key. LiteLLM (config `docker/litellm-config.yaml`) targets
+`anthropic/claude-sonnet-5` by default, `openai/gpt-4.1` as fallback. Add these to `docker/.env`
+(values are YOURS — never commit them; this repo never stores them):
+
+```
+LITELLM_MASTER_KEY=sk-<choose-a-strong-random-master-key>
+LITELLM_DATABASE_URL=postgresql://evcp:<POSTGRES_PASSWORD>@postgres:5432/evcp
+ANTHROPIC_API_KEY=sk-ant-<your-real-anthropic-key>
+# optional fallback:
+# OPENAI_API_KEY=sk-<your-openai-key>
+```
+
+Then start LiteLLM and recreate platform-api so it picks up the master key:
+
+```
+docker compose -f docker/docker-compose.yml up -d litellm
+docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
+docker logs evcp-litellm 2>&1 | tail -20      # expect it to bind and load coding-default
+```
+
+Verify the full vibe-coding flow (guarded live test, runs inside the recreated container):
+
+```
+docker exec -e EVCP_VIBE_LIVE=1 -e EVCP_WORKSPACE_REAL_ADAPTERS=1 -e EVCP_TEST_SEED=$RANDOM \
+  evcp-platform-api sh -lc 'cd /workspace && node --import tsx --test tests/integration/vibe-coding-e2e-live.test.mjs'
+# expect: a prompt produces a real file + git commit inside the project container
+```
+
+**MVP note:** chat authenticates to LiteLLM with the master key (server-side; never shown to the Creator).
+Per-project virtual-key budgets are a follow-up. Chat history/checkpoints are in-memory (lost on
+platform-api restart) until Postgres-backed persistence lands.
