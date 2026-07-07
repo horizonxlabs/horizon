@@ -1,4 +1,4 @@
-import type { WorkspaceChatMessage } from "@evcp/types";
+import type { WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
 import { createMessageParser, type ActionType } from "./message-parser";
 import type { LlmCompletionClient } from "./llm-client";
@@ -10,7 +10,7 @@ import { buildSystemPrompt } from "./system-prompt";
 
 export type ChatStreamEvent =
   | { type: "token"; content: string }
-  | { type: "action_result"; actionId: string; ok: boolean }
+  | { type: "action_result"; actionId: string; actionType: "file" | "shell" | "migration"; label: string; ok: boolean }
   | { type: "commit"; sha: string }
   | { type: "error"; message: string }
   | { type: "done" };
@@ -52,6 +52,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
   };
 
   return {
+    history(projectId: string): WorkspaceChatMessage[] {
+      return deps.chatHistory.listMessages(projectId);
+    },
     async *runTurn(input: { projectId: string; prompt: string }): AsyncIterable<ChatStreamEvent> {
       const userMessage: WorkspaceChatMessage = {
         id: nextMessageId(),
@@ -68,6 +71,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       const containerId = deps.getContainerId(input.projectId);
       const apiKey = deps.getApiKey(input.projectId);
       const actionIds: string[] = [];
+      const turnActions: WorkspaceChatAction[] = [];
       let assistantText = "";
       let turnFailed = false;
       let prompt = input.prompt;
@@ -142,7 +146,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 projectId: input.projectId,
                 metadata: { actionId: open.id, type: open.type, ok: result.ok }
               });
-              yield { type: "action_result", actionId: open.id, ok: result.ok };
+              const actionLabel = describeRunnable(runnable);
+              turnActions.push({ id: open.id, type: open.type, label: actionLabel, ok: result.ok });
+              yield { type: "action_result", actionId: open.id, actionType: open.type, label: actionLabel, ok: result.ok };
 
               if (!result.ok) {
                 if (deps.errorFeedback.shouldRetry(open.id)) {
@@ -183,6 +189,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         role: "assistant",
         content: assistantText,
         artifactActionIds: actionIds,
+        actions: turnActions,
         commitSha: null,
         tokenUsage: null,
         createdAt: new Date().toISOString()

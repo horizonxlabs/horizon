@@ -99,12 +99,20 @@ export interface EnvironmentRecord {
 
 export type ChatMessageRole = "user" | "assistant" | "system";
 
+export interface WorkspaceChatAction {
+  id: string;
+  type: "file" | "shell" | "migration";
+  label: string;
+  ok: boolean;
+}
+
 export interface WorkspaceChatMessage {
   id: string;
   projectId: string;
   role: ChatMessageRole;
   content: string;
   artifactActionIds: string[];
+  actions?: WorkspaceChatAction[];
   commitSha: string | null;
   tokenUsage: { promptTokens: number; completionTokens: number } | null;
   createdAt: string;

@@ -2229,6 +2229,10 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     "/projects/:projectId/chat",
     chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
   );
+  rawApp.all(
+    "/projects/:projectId/chat/history",
+    chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
+  );
 
   // NOTE (Task 9, DONE_WITH_CONCERNS): createDefaultPublishStack ships a throwing
   // docker placeholder plus memory-backed git/migration stores — real publish needs
