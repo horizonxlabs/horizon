@@ -181,7 +181,7 @@ services:
       - postgres
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-evcp}
+      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
