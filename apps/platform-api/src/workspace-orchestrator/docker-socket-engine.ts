@@ -112,6 +112,13 @@ export function createDockerSocketEngine(opts: {
       const result = await request({ method: "DELETE", path: `/containers/${containerId}?force=true` });
       await expect("remove", result, [204]);
     },
+    async inspectContainer(name) {
+      const result = await request({ method: "GET", path: `/containers/${name}/json` });
+      if (result.status === 404) return null;
+      await expect("inspect", result, [200]);
+      const payload = await result.json();
+      return { containerId: String(payload.Id), running: Boolean(payload?.State?.Running) };
+    },
     async execInContainer(containerId, cmd) {
       const create = await request({
         method: "POST",
