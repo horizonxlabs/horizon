@@ -98,6 +98,8 @@ services:
       EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
       EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+      EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
+      EVCP_WORKSPACE_NETWORK: docker_evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"
       EVCP_PG_HOST: postgres
       EVCP_PG_PORT: "5432"

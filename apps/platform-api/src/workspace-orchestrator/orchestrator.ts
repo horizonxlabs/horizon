@@ -30,7 +30,7 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const image = deps.image ?? "evcp/workspace-next:1";
-  const network = deps.network ?? "evcp-internal";
+  const network = deps.network ?? process.env.EVCP_WORKSPACE_NETWORK ?? "evcp-internal";
   const cpuCores = deps.cpuCores ?? Number(process.env.EVCP_WORKSPACE_CPU ?? 1);
   const memoryMb = deps.memoryMb ?? Number(process.env.EVCP_WORKSPACE_MEM_MB ?? 2048);
   const postgresHost = deps.postgresHost ?? "postgres:5432";

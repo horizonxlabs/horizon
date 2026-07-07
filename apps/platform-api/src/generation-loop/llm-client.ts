@@ -38,7 +38,7 @@ export function createLiteLlmCompletionClient(opts: {
           Authorization: `Bearer ${input.apiKey}`,
         },
         body: JSON.stringify({
-          model: "default",
+          model: process.env.EVCP_LITELLM_MODEL ?? "coding-default",
           stream: true,
           messages: [{ role: "system", content: input.systemPrompt }, ...input.messages],
         }),

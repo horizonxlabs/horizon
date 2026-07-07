@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createDefaultWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/factory.ts";
 import { createDefaultGenerationService } from "../../apps/platform-api/src/generation-loop/factory.ts";
+import { createDockerSocketEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-socket-engine.ts";
 
 const LIVE = process.env.EVCP_VIBE_LIVE === "1";
 
@@ -39,15 +40,15 @@ test("prompt -> AI writes a real file into the container and commits", { skip: !
     const commit = events.find((e) => e.type === "commit");
     assert.ok(commit && /^[0-9a-f]{7,40}$/.test(commit.sha), "expected a real git commit sha");
 
-    // the AI-written file exists in the real container
-    const cat = execFileSync("docker", [
-      "exec",
-      record.containerId,
+    // the AI-written file exists in the real container (verify via the Docker socket,
+    // not the docker CLI — the platform-api container has the socket, not the binary)
+    const engine = createDockerSocketEngine();
+    const { stdout } = await engine.execInContainer(record.containerId, [
       "sh",
       "-c",
       "cat /workspace/app/hello.txt 2>/dev/null || true"
-    ]).toString();
-    assert.match(cat, /HELLO_FROM_AI/, "expected the AI-written file in the container");
+    ]);
+    assert.match(stdout, /HELLO_FROM_AI/, "expected the AI-written file in the container");
   } finally {
     await orchestrator.deleteWorkspace(projectId);
   }

@@ -56,7 +56,7 @@ export function createDefaultGenerationService(opts: {
       migrations: createMemoryMigrationStore()
     }),
     errorFeedback: createErrorFeedbackTracker(),
-    template: loadGoldenTemplate(),
+    template: env.EVCP_TEMPLATE_DIR ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR) : loadGoldenTemplate(),
     // MVP: authenticate to LiteLLM with the master key server-side. Never surfaced to the Creator.
     // Per-project virtual-key budgets are a follow-up.
     getApiKey: () => env.EVCP_LITELLM_MASTER_KEY ?? "",
