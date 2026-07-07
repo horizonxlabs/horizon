@@ -8,6 +8,8 @@ import {
 import { createProjectSecretStore } from "./secret-store";
 import { createMemoryDockerEngine } from "./docker-engine";
 import { createDockerSocketEngine } from "./docker-socket-engine";
+import { createPgRunSql } from "./pg-runner";
+import { createMinioObjectStorageProvisioner } from "./minio-object-storage";
 
 const DEV_SECRET_KEY = "0".repeat(64);
 
@@ -27,16 +29,31 @@ export function createDefaultWorkspaceOrchestrator(opts: {
   const mode = resolveWorkspaceAdapterMode(env);
 
   if (mode === "real") {
+    const pgRunSql = createPgRunSql({
+      host: env.EVCP_PG_HOST ?? "postgres",
+      port: Number(env.EVCP_PG_PORT ?? 5432),
+      user: env.POSTGRES_USER ?? "evcp",
+      password: env.POSTGRES_PASSWORD,
+      database: env.POSTGRES_DB ?? "evcp"
+    });
+
+    const objectStorage = createMinioObjectStorageProvisioner({
+      endPoint: env.EVCP_S3_HOST ?? "minio",
+      port: Number(env.EVCP_S3_PORT ?? 9000),
+      useSSL: (env.EVCP_S3_SSL ?? "false") === "true",
+      accessKey: env.MINIO_ROOT_USER as string,
+      secretKey: env.MINIO_ROOT_PASSWORD as string
+    });
+
     const hasLiteLlmConfig = Boolean(env.EVCP_LITELLM_BASE_URL && env.EVCP_LITELLM_MASTER_KEY);
     console.warn(
-      `[workspace] real-adapter mode active: Docker=real, LiteLLM=${hasLiteLlmConfig ? "real" : "memory-stub"}, ` +
-        `Postgres/MinIO=in-memory placeholders. Containers boot for real but their DATABASE_URL/S3_* point at ` +
-        `unprovisioned infrastructure and will NOT connect — do not treat a booted container as a working workspace ` +
-        `until real Postgres/MinIO adapters land.`
+      `[workspace] real-adapter mode: Docker=real, Postgres=real (${env.EVCP_PG_HOST ?? "postgres"}), ` +
+        `MinIO=real (${env.EVCP_S3_HOST ?? "minio"}), LiteLLM=${hasLiteLlmConfig ? "real" : "memory-stub (litellm not configured)"}.`
     );
+
     return createWorkspaceOrchestrator({
-      postgres: createPgClientPostgresProvisioner(async () => {}),
-      objectStorage: createMemoryObjectStorageProvisioner(),
+      postgres: createPgClientPostgresProvisioner(pgRunSql),
+      objectStorage,
       llmGateway: hasLiteLlmConfig
         ? createLiteLlmGatewayAdmin({
             baseUrl: env.EVCP_LITELLM_BASE_URL as string,

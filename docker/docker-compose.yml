@@ -98,6 +98,17 @@ services:
       EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
       EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+      EVCP_WORKSPACE_REAL_ADAPTERS: "1"
+      EVCP_PG_HOST: postgres
+      EVCP_PG_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      EVCP_S3_HOST: minio
+      EVCP_S3_PORT: "9000"
+      EVCP_S3_SSL: "false"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     networks:
       - evcp-internal
     depends_on:
