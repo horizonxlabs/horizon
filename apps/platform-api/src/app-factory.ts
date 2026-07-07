@@ -2130,7 +2130,14 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
   const rawApp = app.getHttpAdapter().getInstance() as unknown as RawExpress;
   const previewHandler = async (req: PreviewReq, res: PreviewRes) => {
     const slug = String(req.params?.slug ?? "");
-    const decision = await resolvePreviewProxyDecision(services, req.headers, slug);
+    // Iframes cannot send an Authorization header, so accept a ?token= query param as an
+    // alternative for browser preview embedding. (Local MVP: token appears in the URL —
+    // switch to an httpOnly session cookie for production.)
+    const queryToken = (req.url ?? "").match(/[?&]token=([^&]+)/)?.[1];
+    const previewHeaders = queryToken
+      ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(queryToken)}` }
+      : req.headers;
+    const decision = await resolvePreviewProxyDecision(services, previewHeaders, slug);
     if ("status" in decision) {
       res.status(decision.status).json({ error: "preview_unavailable" });
       return;
