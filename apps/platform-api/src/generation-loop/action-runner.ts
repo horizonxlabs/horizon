@@ -26,6 +26,9 @@ export function createActionRunner(deps: {
   docker: DockerEngine;
   checkpoints: CheckpointStore;
   migrations: MigrationStore;
+  // Executes migration SQL against the project's real Postgres (via the container's
+  // DATABASE_URL). Absent in memory/test mode, where migrations are only recorded.
+  runMigrationSql?: (databaseUrl: string, sql: string) => Promise<void>;
 }): ActionRunner {
   return {
     async runAction(input) {
@@ -56,7 +59,19 @@ export function createActionRunner(deps: {
         return { ok: true, stdout: result.stdout };
       }
 
-      // migration
+      // migration — execute the SQL against the project's real Postgres schema, then record it.
+      if (deps.runMigrationSql) {
+        const envResult = await deps.docker.execInContainer(input.containerId, ["sh", "-c", 'printf %s "$DATABASE_URL"']);
+        const databaseUrl = (envResult.stdout ?? "").trim();
+        if (!databaseUrl) {
+          return { ok: false, error: "DATABASE_URL is not set in the workspace container; cannot run migration", stdout: "", stderr: "", exitCode: 1 };
+        }
+        try {
+          await deps.runMigrationSql(databaseUrl, action.sql);
+        } catch (error) {
+          return { ok: false, error: `migration failed: ${(error as Error).message}`, stdout: "", stderr: (error as Error).message, exitCode: 1 };
+        }
+      }
       deps.migrations.recordMigration({
         projectId: input.projectId,
         name: action.name,

@@ -37,9 +37,22 @@ Format:
 
 After the artifact you may add ONE short sentence describing what you built. Only reply WITHOUT an artifact when the user asks a pure question that requires no app change.
 
+## Database (when the app needs to store data)
+A per-project PostgreSQL database is already provisioned. Follow this pattern EXACTLY — it is the only one that works here:
+- Create/alter tables by emitting <action type="migration" name="create_x">CREATE TABLE IF NOT EXISTS ... </action> with raw SQL. This runs against your project's database immediately. Put every table you need in migration actions.
+- Query the database ONLY from server code (Route Handlers under app/api/.../route.ts, or Server Components) using the "pg" library (already installed) with process.env.DATABASE_URL:
+  import { Pool } from "pg";
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // in a handler: const { rows } = await pool.query("SELECT * FROM items ORDER BY id DESC");
+  Never import "pg" or use process.env in a client component.
+- Do NOT use Prisma, an ORM, SQLite, or any other database — only "pg" + the migration action.
+- This app is served under a base path. When client code fetches your OWN API routes, prefix the path with the base path, or fetches will 404:
+  const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  const res = await fetch(base + "/api/items");
+- A client component that reads/writes data must call your app/api route via fetch (with the base-path prefix); it must never touch the database directly.
+
 ## Other capabilities
 - Shell command: <action type="shell">command</action>
-- DB migration: <action type="migration" name="...">raw SQL</action>
 
 ## Constraints
 - These files are LOCKED — never modify them:

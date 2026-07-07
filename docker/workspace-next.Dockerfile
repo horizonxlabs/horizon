@@ -27,6 +27,9 @@ USER evcp
 
 EXPOSE 3000
 
-# Default: run the template's dev server bound to all interfaces on 3000.
-# The template's package.json "dev" script already serves on 0.0.0.0:3000.
-CMD ["sh", "-lc", "npm run dev -- --hostname 0.0.0.0 --port 3000 || pnpm run dev --hostname 0.0.0.0 --port 3000 || npx next dev --hostname 0.0.0.0 --port 3000"]
+# Default: ensure dependencies match the (possibly volume-persisted) package.json — so a new
+# dependency such as `pg`, or one the AI adds, is installed even when a pre-existing workspace
+# volume shadows the image's node_modules — then run the dev server on all interfaces on 3000.
+# The install is best-effort (|| true) so the dev server still starts if the registry is briefly
+# unreachable and node_modules is already populated.
+CMD ["sh", "-lc", "npm install --no-audit --no-fund --prefer-offline >/dev/null 2>&1 || true; npm run dev -- --hostname 0.0.0.0 --port 3000 || npx next dev --hostname 0.0.0.0 --port 3000"]

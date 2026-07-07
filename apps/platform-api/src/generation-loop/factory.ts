@@ -13,6 +13,7 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { createContainerGitCommitter } from "./container-git";
 import { createContainerFileReader } from "./container-files";
+import { createPgMigrationRunner } from "./migration-runner";
 
 export { createMessageParser };
 
@@ -55,7 +56,8 @@ export function createDefaultGenerationService(opts: {
     actionRunner: createActionRunner({
       docker,
       checkpoints: createMemoryCheckpointStore(),
-      migrations: createMemoryMigrationStore()
+      migrations: createMemoryMigrationStore(),
+      ...(mode === "real" ? { runMigrationSql: createPgMigrationRunner().run } : {})
     }),
     errorFeedback: createErrorFeedbackTracker(),
     template: env.EVCP_TEMPLATE_DIR ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR) : loadGoldenTemplate(),
