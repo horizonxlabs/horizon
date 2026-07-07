@@ -34,8 +34,22 @@ test("admin install wizard uses EVCP operational UI classes and responsive styli
   assert.match(styles, /\.install-wizard-panel/);
   assert.match(styles, /\.install-wizard-steps/);
   assert.match(styles, /\.install-setup-form/);
+  assert.match(styles, /\.first-run-shell/);
+  assert.match(styles, /\.first-run-hero/);
+  assert.match(styles, /\.first-run-layout/);
+  assert.match(styles, /\.first-run-form/);
   assert.match(styles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(styles, /button:disabled/);
+});
+
+test("admin first-run screen behaves like an initial product setup gate", () => {
+  assert.match(adminSource, /First-run Setup/);
+  assert.match(adminSource, /ตั้งค่า Enterprise Vibe Coding Platform/);
+  assert.match(adminSource, /Platform Admin คนแรก/);
+  assert.match(adminSource, /firstRunSetupIsComplete/);
+  assert.match(adminSource, /Create admin & finish setup/);
+  assert.match(adminSource, /Enter Admin Console/);
+  assert.match(adminSource, /firstAdminTemporaryPassword/);
 });
 
 test("install documentation and UI spec describe the first-run wizard", () => {

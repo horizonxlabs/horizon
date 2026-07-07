@@ -631,16 +631,38 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       if (guardrail.decision === "block") {
         throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
       }
-      const completion = services.aiGovernance.invokeCompletion(user, {
-        projectId: project.id,
-        scenario: "prd_generation",
-        prompt: sourcePrompt,
-        requestedTokens: 300,
-        guardrailDecision: guardrail.decision,
-        dryRun: true,
-        allowDeterministicFallback: true,
-        deterministicFallbackText: buildDeterministicPrdSummary(project)
-      });
+      const deterministicFallbackText = buildDeterministicPrdSummary(project);
+      let completion: {
+        text: string;
+        providerId: string;
+        model: string;
+        usageLogId?: string;
+        status?: string;
+        fallbackUsed?: boolean;
+        tokensUsed?: number;
+      };
+      try {
+        completion = services.aiGovernance.invokeCompletion(user, {
+          projectId: project.id,
+          scenario: "prd_generation",
+          prompt: sourcePrompt,
+          requestedTokens: 300,
+          guardrailDecision: guardrail.decision,
+          dryRun: true,
+          allowDeterministicFallback: true,
+          deterministicFallbackText
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("No route configured")) throw error;
+        completion = {
+          text: deterministicFallbackText,
+          providerId: "deterministic_prd_fallback",
+          model: "local-deterministic-prd",
+          status: "fallback",
+          fallbackUsed: true,
+          tokensUsed: 0
+        };
+      }
       const draft = await prdPersistence.generateDraft(user, {
         project,
         sourcePrompt,
@@ -2533,9 +2555,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "POST", path: "/license/enforce", headers: request.headers, body: request.body }))
   );
   routes.post("/projects/:projectId/prd/generate", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd/generate`,
         headers: request.headers,
@@ -2544,9 +2566,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.post("/projects/:projectId/prd/baseline", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd/baseline`,
         headers: request.headers,
@@ -2555,9 +2577,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/projects/:projectId/prd/versions", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd/versions`,
         headers: request.headers
@@ -2565,9 +2587,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     )
   );
   routes.get("/projects/:projectId/prd", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/prd`,
         headers: request.headers
@@ -3007,6 +3029,7 @@ export async function createPlatformApiApp(services: PersistenceAwarePlatformApi
     logger: false
   });
 
+  (app as INestApplication & { useBodyParser: (type: "json", options: { limit: string }) => void }).useBodyParser("json", { limit: "1mb" });
   app.enableCors({
     origin: true,
     credentials: true

@@ -4,8 +4,10 @@ import {
   type AppAccessSnapshotResponse,
   type AppInvitationDto,
   type AppStoreRegistryEntryDto,
+  type CreateProjectInput,
   type CurrentUserResponse,
   type PlatformProjectDto,
+  type PrdVersionDto,
   type PreviewVersionDto,
   type PublishResultResponse,
   type PublishReviewResponse,
@@ -19,6 +21,7 @@ import { AppShell, DataTable, DecisionPanel, DefinitionGrid, PageHeader, Section
 import {
   CheckCircle2,
   ClipboardCheck,
+  FolderPlus,
   Database,
   FileText,
   GitCompareArrows,
@@ -41,7 +44,7 @@ import {
   Users,
   WandSparkles
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -60,7 +63,18 @@ type CreatorProjectView = {
 type CreatorBootstrapState = {
   userName: string;
   selectedProject: CreatorProjectView;
+  projects: CreatorProjectView[];
   source: "Platform API" | "local fallback";
+};
+
+type CreateProjectFormState = {
+  name: string;
+  slug: string;
+  appType: string;
+  businessProblem: string;
+  targetDepartment: string;
+  intendedUsers: string;
+  dataSensitivity: CreateProjectInput["dataSensitivity"];
 };
 
 const fallbackSelectedProject: CreatorProjectView = {
@@ -78,7 +92,18 @@ const fallbackSelectedProject: CreatorProjectView = {
 const initialCreatorBootstrap: CreatorBootstrapState = {
   userName: "Creator User",
   selectedProject: fallbackSelectedProject,
+  projects: [fallbackSelectedProject],
   source: "local fallback"
+};
+
+const initialCreateProjectForm: CreateProjectFormState = {
+  name: "Expense Approval",
+  slug: "expense-approval",
+  appType: "Workflow App",
+  businessProblem: "ลดเวลาการอนุมัติค่าใช้จ่ายและทำให้ผู้จัดการเห็นรายการค้างอนุมัติในที่เดียว",
+  targetDepartment: "Finance",
+  intendedUsers: "Employee, Manager, Finance Admin",
+  dataSensitivity: "internal"
 };
 
 const creatorSessionBridgeProfile: SimulatedSsoLoginInput = {
@@ -91,9 +116,80 @@ const creatorSessionBridgeProfile: SimulatedSsoLoginInput = {
 
 function apiBaseUrl(): string | undefined {
   const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  if ((!configured || configured === "/api") && typeof window !== "undefined" && window.location.port === "4101") {
+    return "http://127.0.0.1:3100";
+  }
   if (!configured && import.meta.env.DEV) return undefined;
   return (configured || "/api").replace(/\/$/, "");
 }
+
+type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
+
+function creatorPageFromPath(pathname: string): CreatorPage {
+  if (pathname.endsWith("/prd")) return "prd";
+  if (pathname.endsWith("/users")) return "users";
+  if (pathname.endsWith("/publish")) return "publish";
+  if (pathname.endsWith("/tickets")) return "tickets";
+  if (pathname.includes("/creator/projects/")) return "workspace";
+  return "projects";
+}
+
+function projectRouteSegmentFromPath(pathname: string): string | undefined {
+  return pathname.match(/\/creator\/projects\/([^/]+)/)?.[1];
+}
+
+function slugifyProjectName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64) || "untitled-project";
+}
+
+function createCreatorNavigation(project: CreatorProjectView) {
+  const projectBaseRoute = `/creator/projects/${project.slug}`;
+  return navigation.creator.map((item) => {
+    if (!item.route.includes("/creator/projects/leave-management")) return item;
+    return {
+      ...item,
+      route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
+    };
+  });
+}
+
+const creatorPageCopy: Record<CreatorPage, { eyebrow: string; title: string; description: string }> = {
+  projects: {
+    eyebrow: "Creator Projects",
+    title: "Projects",
+    description: "เลือก project หรือเริ่มสร้างแอปใหม่จาก business problem"
+  },
+  workspace: {
+    eyebrow: "AI Workspace",
+    title: "AI Workspace: Leave Management",
+    description: "ใช้ prompt เพื่อสร้างหรือแก้ frontend preview หลังจากมี PRD draft/baseline ของ project ที่เลือก"
+  },
+  prd: {
+    eyebrow: "PRD Baseline",
+    title: "PRD Review: Leave Management",
+    description: "ตรวจ PRD sections, version history และ confirm baseline ก่อน generate app"
+  },
+  users: {
+    eyebrow: "Access Management",
+    title: "Users & Roles",
+    description: "จัดการ app members, invitations, access requests และ role permission matrix"
+  },
+  publish: {
+    eyebrow: "Publish & Registry",
+    title: "Publish & Registry",
+    description: "ตรวจ manifest, readiness checklist และลงทะเบียนแอปก่อนเปิดให้ end user ใช้งาน"
+  },
+  tickets: {
+    eyebrow: "Feedback Loop",
+    title: "Tickets & Changes",
+    description: "รับ bug/feedback จาก App Store แล้วแปลงเป็น PRD change หรือ AI prompt"
+  }
+};
 
 function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
@@ -123,15 +219,28 @@ function projectToView(project: PlatformProjectDto, currentUser: CurrentUserResp
   };
 }
 
-async function loadCreatorBootstrap(): Promise<CreatorBootstrapState> {
+async function loadCreatorBootstrap(selectedProjectKey = projectRouteSegmentFromPath(window.location.pathname)): Promise<CreatorBootstrapState> {
   const client = createCreatorPlatformClient();
   const currentUser = await client.getCurrentUser();
   const projects = await client.listProjects();
+  const projectViews = projects.map((project) => projectToView(project, currentUser));
+  const selectedProject =
+    projectViews.find((project) => project.slug === selectedProjectKey || project.id === selectedProjectKey) ??
+    projectViews[0] ??
+    fallbackSelectedProject;
   return {
     userName: currentUser.user.name,
-    selectedProject: projects[0] ? projectToView(projects[0], currentUser) : fallbackSelectedProject,
+    selectedProject,
+    projects: projectViews.length ? projectViews : [fallbackSelectedProject],
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
+}
+
+async function loadPrdState(projectId: string): Promise<{ current?: PrdVersionDto; versions: PrdVersionDto[] }> {
+  const client = createCreatorPlatformClient();
+  const versions = await client.listPrdVersions(projectId);
+  const current = versions.length ? await client.getCurrentPrd(projectId) : undefined;
+  return { current, versions };
 }
 
 async function loadWorkspaceState(projectId: string): Promise<WorkspaceSnapshotResponse> {
@@ -343,16 +452,29 @@ function CreatorApp() {
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [publishMessage, setPublishMessage] = useState("Using deterministic local publish evidence until the Platform API is configured.");
+  const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
+  const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>(initialCreateProjectForm);
+  const [createProjectMessage, setCreateProjectMessage] = useState("กรอกข้อมูลแอป แล้วระบบจะสร้าง project และ PRD draft ให้ทันที");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
+  const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const [isInvitingUser, setIsInvitingUser] = useState(false);
   const [isApprovingAccess, setIsApprovingAccess] = useState(false);
   const [isPublishingProject, setIsPublishingProject] = useState(false);
   const selectedProject = bootstrap.selectedProject;
+  const creatorNavItems = createCreatorNavigation(selectedProject);
+  const selectedFallbackPreview: PreviewVersionDto = {
+    ...fallbackPreview,
+    projectId: selectedProject.id,
+    screenTitle: selectedProject.name,
+    summary: `${selectedProject.name} preview will appear after the first AI workspace prompt.`
+  };
   const latestTask = workspaceResult?.task ?? workspaceSnapshot?.tasks.at(-1);
   const visibleTaskSteps = latestTask?.steps ?? fallbackTaskSteps;
-  const visiblePreview = previewOverride ?? workspaceResult?.preview ?? workspaceSnapshot?.preview ?? fallbackPreview;
-  const visibleHighlights = visiblePreview.highlights.length ? visiblePreview.highlights : fallbackPreview.highlights;
+  const visiblePreview = previewOverride ?? workspaceResult?.preview ?? workspaceSnapshot?.preview ?? selectedFallbackPreview;
+  const visibleHighlights = visiblePreview.highlights.length ? visiblePreview.highlights : selectedFallbackPreview.highlights;
   const visibleTokenBudget = workspaceResult?.tokenBudget ?? workspaceSnapshot?.tokenBudget ?? {
     remainingToday: 880,
     remainingMonth: 4880,
@@ -400,6 +522,26 @@ function CreatorApp() {
   })) ?? publishChecklist;
   const visibleDeployment = publishResult?.deployment;
   const visibleRegistryEntry = publishResult?.registryEntry ?? registryEntries.find((entry) => entry.projectId === selectedProject.id || entry.slug === selectedProject.slug);
+  const visiblePrdSections = currentPrdVersion?.sections?.length
+    ? currentPrdVersion.sections.map((section) => ({ key: section.key, title: section.title, body: section.body, order: String(section.order) }))
+    : prdSections.map((section) => ({
+        ...section,
+        body: section.body.replaceAll("Leave Management", selectedProject.name)
+      }));
+  const visibleVersionRows = prdVersionList.length
+    ? prdVersionList.map((version) => ({
+        version: version.version,
+        status: version.status,
+        summary: version.changeSummary,
+        author: selectedProject.owner
+      }))
+    : versionRows.map((row) => ({
+        ...row,
+        summary: row.summary.replaceAll("Leave Management", selectedProject.name),
+        author: selectedProject.owner
+      }));
+  const creatorPage = creatorPageFromPath(window.location.pathname);
+  const pageCopy = creatorPageCopy[creatorPage];
 
   async function refreshCreatorPublishState(projectId: string) {
     const publishState = await loadCreatorPublishState(projectId);
@@ -409,10 +551,34 @@ function CreatorApp() {
     setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
   }
 
+  async function refreshPrdState(projectId: string) {
+    const prdState = await loadPrdState(projectId);
+    setCurrentPrdVersion(prdState.current);
+    setPrdVersionList(prdState.versions);
+  }
+
+  function resetProjectRuntimeState() {
+    setWorkspaceSnapshot(undefined);
+    setWorkspaceResult(undefined);
+    setPreviewOverride(undefined);
+    setAppAccessSnapshot(undefined);
+    setPublishReview(undefined);
+    setPublishResult(undefined);
+    setRegistryEntries([]);
+    setCurrentPrdVersion(undefined);
+    setPrdVersionList([]);
+  }
+
   useEffect(() => {
     loadCreatorBootstrap()
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
+        try {
+          await refreshPrdState(nextBootstrap.selectedProject.id);
+        } catch {
+          setCurrentPrdVersion(undefined);
+          setPrdVersionList([]);
+        }
         try {
           setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
           await refreshCreatorPublishState(nextBootstrap.selectedProject.id);
@@ -429,9 +595,20 @@ function CreatorApp() {
     try {
       const nextBootstrap = await signInCreatorSessionBridge();
       setBootstrap(nextBootstrap);
-      setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
-      await refreshCreatorPublishState(nextBootstrap.selectedProject.id);
-      setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+      try {
+        await refreshPrdState(nextBootstrap.selectedProject.id);
+      } catch {
+        setCurrentPrdVersion(undefined);
+        setPrdVersionList([]);
+      }
+      try {
+        setWorkspaceSnapshot(await loadWorkspaceState(nextBootstrap.selectedProject.id));
+        await refreshCreatorPublishState(nextBootstrap.selectedProject.id);
+        setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+      } catch {
+        setWorkspaceSnapshot(undefined);
+        setWorkspaceMessage("Signed in. Confirm PRD baseline before workspace generation.");
+      }
     } catch {
       setBootstrap(initialCreatorBootstrap);
       setWorkspaceSnapshot(undefined);
@@ -442,15 +619,82 @@ function CreatorApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearCreatorSessionBridge());
-    setWorkspaceSnapshot(undefined);
-    setWorkspaceResult(undefined);
-    setPreviewOverride(undefined);
-    setAppAccessSnapshot(undefined);
-    setPublishReview(undefined);
-    setPublishResult(undefined);
-    setRegistryEntries([]);
+    resetProjectRuntimeState();
     setWorkspaceMessage("Using deterministic local workspace evidence until the Platform API is configured.");
     setPublishMessage("Using deterministic local publish evidence until the Platform API is configured.");
+  }
+
+  function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
+    setCreateProjectForm((current) => ({
+      ...current,
+      [field]: field === "slug" ? slugifyProjectName(value) : value,
+      ...(field === "name" ? { slug: slugifyProjectName(value) } : {})
+    }));
+  }
+
+  async function handleSelectProject(project: CreatorProjectView, targetPage: CreatorPage = creatorPage) {
+    setBootstrap((current) => ({ ...current, selectedProject: project }));
+    resetProjectRuntimeState();
+    const routeBase = `/creator/projects/${project.slug}`;
+    const routeByPage: Record<CreatorPage, string> = {
+      projects: "/creator/",
+      workspace: routeBase,
+      prd: `${routeBase}/prd`,
+      users: `${routeBase}/users`,
+      publish: `${routeBase}/publish`,
+      tickets: `${routeBase}/tickets`
+    };
+    window.history.pushState({}, "", routeByPage[targetPage]);
+    try {
+      await refreshPrdState(project.id);
+    } catch {
+      setCurrentPrdVersion(undefined);
+      setPrdVersionList([]);
+    }
+    try {
+      setWorkspaceSnapshot(await loadWorkspaceState(project.id));
+      await refreshCreatorPublishState(project.id);
+      setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+    } catch {
+      setWorkspaceSnapshot(undefined);
+      setWorkspaceMessage("Project selected. Confirm PRD baseline before workspace generation.");
+    }
+  }
+
+  async function handleCreateProjectSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsCreatingProject(true);
+    setCreateProjectMessage("Creating project and generating the first PRD draft through the Platform API.");
+    try {
+      const client = createCreatorPlatformClient();
+      const project = await client.createProject({
+        name: createProjectForm.name.trim(),
+        slug: slugifyProjectName(createProjectForm.slug || createProjectForm.name),
+        appType: createProjectForm.appType.trim() || "Workflow App",
+        businessProblem: createProjectForm.businessProblem.trim(),
+        targetDepartment: createProjectForm.targetDepartment.trim(),
+        intendedUsers: createProjectForm.intendedUsers.split(",").map((user) => user.trim()).filter(Boolean),
+        dataSensitivity: createProjectForm.dataSensitivity
+      });
+      const draft = await client.generatePrdDraft(project.id);
+      const nextBootstrap = await loadCreatorBootstrap(project.slug);
+      setBootstrap(nextBootstrap);
+      setCurrentPrdVersion(draft);
+      setPrdVersionList([draft]);
+      setWorkspaceSnapshot(undefined);
+      setWorkspaceResult(undefined);
+      setPreviewOverride(undefined);
+      setPublishReview(undefined);
+      setPublishResult(undefined);
+      setRegistryEntries([]);
+      setCreateProjectMessage(`สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`);
+      setIsCreateProjectDialogOpen(false);
+      window.history.pushState({}, "", `/creator/projects/${project.slug}/prd`);
+    } catch (error) {
+      setCreateProjectMessage(error instanceof Error ? `Create project failed: ${error.message}` : "Create project failed. Please review required fields.");
+    } finally {
+      setIsCreatingProject(false);
+    }
   }
 
   function fallbackWorkspacePromptResult(): WorkspacePromptResultDto {
@@ -469,7 +713,7 @@ function CreatorApp() {
         createdAt: now
       },
       preview: {
-        ...fallbackPreview,
+        ...selectedFallbackPreview,
         projectId: selectedProject.id,
         summary: `Local preview updated: ${promptDraft}`,
         createdAt: now
@@ -660,24 +904,358 @@ function CreatorApp() {
     }
   }
 
+  const creatorSessionControls = (
+    <>
+      <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Bootstrap: {bootstrap.source}</ToneBadge>
+      <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+        <LockKeyhole size={16} />
+        {isSigningIn ? "Signing in" : "Demo Sign in"}
+      </button>
+      <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+        <RotateCcw size={16} />
+        Logout
+      </button>
+    </>
+  );
+  const creatorPageActions = creatorPage === "projects" ? (
+    <button type="button" onClick={() => setIsCreateProjectDialogOpen(true)}>
+      <FolderPlus size={16} />
+      Create Project Wizard
+    </button>
+  ) : undefined;
+
+  const renderCreatorShell = (content: ReactNode) => (
+    <AppShell title="Creator App" navItems={creatorNavItems} userName={bootstrap.userName} session={creatorSessionControls}>
+      {creatorPage === "workspace" ? null : (
+        <PageHeader
+          tone="surface"
+          eyebrow={pageCopy.eyebrow}
+          title={pageCopy.title.replace("Leave Management", selectedProject.name)}
+          description={pageCopy.description}
+          actions={creatorPageActions}
+        />
+      )}
+      {isCreateProjectDialogOpen ? (
+        <div className="creator-dialog-backdrop" role="presentation">
+          <form className="creator-project-dialog" onSubmit={handleCreateProjectSubmit} aria-label="Create project wizard">
+            <header>
+              <div>
+                <span className="eyebrow">Create Project Wizard</span>
+                <h2>สร้าง Project ใหม่</h2>
+                <p>ระบบจะสร้าง project, เรียก governed AI route และสร้าง PRD draft แรกให้ทันที</p>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => setIsCreateProjectDialogOpen(false)} disabled={isCreatingProject}>Close</button>
+            </header>
+            <div className="creator-project-form">
+              <label>
+                Project name
+                <input required value={createProjectForm.name} onChange={(event) => handleCreateProjectField("name", event.target.value)} />
+              </label>
+              <label>
+                Slug
+                <input required value={createProjectForm.slug} onChange={(event) => handleCreateProjectField("slug", event.target.value)} />
+              </label>
+              <label>
+                App type
+                <input value={createProjectForm.appType} onChange={(event) => handleCreateProjectField("appType", event.target.value)} />
+              </label>
+              <label>
+                Target department
+                <input value={createProjectForm.targetDepartment} onChange={(event) => handleCreateProjectField("targetDepartment", event.target.value)} />
+              </label>
+              <label className="creator-project-form-wide">
+                Business problem
+                <textarea required value={createProjectForm.businessProblem} onChange={(event) => handleCreateProjectField("businessProblem", event.target.value)} />
+              </label>
+              <label>
+                Intended users
+                <input value={createProjectForm.intendedUsers} onChange={(event) => handleCreateProjectField("intendedUsers", event.target.value)} />
+              </label>
+              <label>
+                Data sensitivity
+                <select value={createProjectForm.dataSensitivity} onChange={(event) => handleCreateProjectField("dataSensitivity", event.target.value)}>
+                  <option value="internal">Internal</option>
+                  <option value="confidential">Confidential</option>
+                  <option value="restricted">Restricted</option>
+                  <option value="public">Public</option>
+                </select>
+              </label>
+            </div>
+            <DecisionPanel
+              tone={createProjectMessage.includes("failed") ? "danger" : "info"}
+              badge={isCreatingProject ? "Creating" : "Ready"}
+              title={createProjectMessage}
+              lines={["POST /projects", "POST /projects/{projectId}/prd/generate", "Refresh project list and select the new project"]}
+            />
+            <footer>
+              <button type="button" className="secondary-button" onClick={() => setIsCreateProjectDialogOpen(false)} disabled={isCreatingProject}>Cancel</button>
+              <button type="submit" disabled={isCreatingProject}>
+                <WandSparkles size={16} />
+                {isCreatingProject ? "Creating Project" : "Create Project + Generate PRD"}
+              </button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
+      {content}
+    </AppShell>
+  );
+
+  if (creatorPage === "projects") {
+    return renderCreatorShell(
+      <section className="creator-summary-grid">
+        <SectionCard eyebrow="Project Picker · โปรเจกต์ของฉัน" title={selectedProject.name}>
+          <div className="creator-project-list" aria-label="Creator projects">
+            {bootstrap.projects.map((project) => (
+              <button
+                type="button"
+                className={`creator-project-card ${project.id === selectedProject.id ? "active" : ""}`.trim()}
+                key={project.id}
+                onClick={() => void handleSelectProject(project, "projects")}
+                aria-current={project.id === selectedProject.id ? "true" : undefined}
+              >
+                <div className="ds-summary-icon"><LayoutDashboard size={22} /></div>
+                <div>
+                  <strong>{project.name}</strong>
+                  <span>{project.appType} · owner {project.owner}</span>
+                </div>
+                <ToneBadge tone={project.id === selectedProject.id ? "success" : "warning"}>{project.status}</ToneBadge>
+              </button>
+            ))}
+          </div>
+          <DefinitionGrid items={[{ label: "PRD", value: currentPrdVersion ? `v${currentPrdVersion.version} ${currentPrdVersion.status}` : "draft pending" }, { label: "Frontend", value: selectedProject.frontendVersion }, { label: "Access", value: "Owner" }, { label: "Health", value: <ToneBadge tone="success">healthy</ToneBadge> }]} />
+          <div className="creator-card-actions">
+            <button type="button" onClick={() => void handleSelectProject(selectedProject, "prd")}>Review PRD</button>
+            <button type="button" className="ghost-button" onClick={() => void handleSelectProject(selectedProject, "workspace")}>Open AI Workspace</button>
+          </div>
+        </SectionCard>
+        <SectionCard eyebrow="Create Project Wizard" title="Generate PRD">
+          <div className="creator-step-list">
+            {wizardSteps.map((step) => (
+              <div key={step.title}>
+                <CheckCircle2 size={16} />
+                <div><strong>{step.title}</strong><span>{step.detail}</span></div>
+                <ToneBadge tone={step.status === "complete" ? "success" : "info"}>{step.status}</ToneBadge>
+              </div>
+            ))}
+          </div>
+          <DecisionPanel tone="warning" badge="Guarded" title="PRD generation uses governed AI route" lines={["Required fields complete", "Token quota available", "Guardrail decision: allow"]} />
+        </SectionCard>
+      </section>
+    );
+  }
+
+  if (creatorPage === "workspace") {
+    return renderCreatorShell(
+      <section className="ag-workspace" aria-label="Antigravity style workspace">
+        <aside className="ag-rail" aria-label="Workspace conversations and projects">
+          <button type="button" className="ag-new-conversation">
+            <span>+</span>
+            New Conversation
+          </button>
+          <nav className="ag-rail-nav" aria-label="Workspace quick links">
+            <a href="#conversation-history"><History size={16} />Conversation History</a>
+            <a href="#scheduled-tasks"><ClipboardCheck size={16} />Scheduled Tasks</a>
+          </nav>
+          <div className="ag-rail-section">
+            <header><span>Projects</span><small>Filter</small></header>
+            {bootstrap.projects.map((project) => (
+              <article className={project.id === selectedProject.id ? "active" : ""} key={project.id}>
+                <div><FileText size={15} /><strong>{project.slug}</strong></div>
+                <button type="button" onClick={() => void handleSelectProject(project, "workspace")}>{project.name}</button>
+                <small>{project.id === selectedProject.id ? "now" : project.status}</small>
+              </article>
+            ))}
+          </div>
+          <div className="ag-rail-section">
+            <header><span>Conversations</span></header>
+            {[
+              ["Create leave request workflow", "active"],
+              ["Review PRD baseline", "5h"],
+              ["Prepare publish checklist", "1d"]
+            ].map(([label, meta]) => (
+              <button type="button" key={label}>
+                <span>{label}</span>
+                <small>{meta}</small>
+              </button>
+            ))}
+          </div>
+          <div className="ag-rail-footer">
+            <ShieldCheck size={15} />
+            <div><strong>Enterprise Lock</strong><span>Auth, data, secrets locked by IT</span></div>
+          </div>
+        </aside>
+
+        <main className="ag-stage">
+          <div className="ag-stage-top">
+            <div>
+              <FileText size={16} />
+              <strong>{selectedProject.slug}</strong>
+            </div>
+            <ToneBadge tone={latestTask?.status === "blocked" ? "warning" : "success"}>{latestTask?.status ?? "ready"}</ToneBadge>
+          </div>
+
+          <section className="ag-composer-card" aria-label="AI builder command composer">
+            <textarea aria-label="Prompt" value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} placeholder="Ask anything, @ to mention, / for actions" />
+            <div className="ag-composer-actions">
+              <button type="button" className="ghost-button">+</button>
+              <button type="button" className="ghost-button">External AI Route</button>
+              <button type="button" className="ghost-button">New Worktree</button>
+              <button type="button" className="ghost-button">main</button>
+              <button type="button" onClick={handleSubmitPrompt} disabled={isSubmittingPrompt || !promptDraft.trim()}>
+                <Send size={15} />
+                {isSubmittingPrompt ? "Sending" : "Run"}
+              </button>
+            </div>
+          </section>
+
+          <div className="ag-suggestion-row" aria-label="Prompt suggestions">
+            {["Generate PRD change", "Build UI preview", "Run policy check", "Prepare publish evidence"].map((suggestion) => (
+              <button type="button" className="ghost-button" key={suggestion} onClick={() => setPromptDraft(suggestion)}>{suggestion}</button>
+            ))}
+          </div>
+
+          <section className="ag-left-workbench" aria-label="Current build context">
+            <article>
+              <span className="eyebrow">Current Run</span>
+              <strong>{latestTask?.status ?? "Ready for prompt"}</strong>
+              <p>{workspaceMessage}</p>
+            </article>
+            <article>
+              <span className="eyebrow">Build Steps</span>
+              <div className="ag-step-strip">
+                {visibleTaskSteps.slice(0, 3).map((step) => (
+                  <div key={step.label}><CheckCircle2 size={14} /><span>{step.label}</span></div>
+                ))}
+              </div>
+            </article>
+            <article className="wide">
+              <span className="eyebrow">Output Path</span>
+              <strong>PRD → Preview → Governance → Publish</strong>
+              <p>ทุก prompt ต้องสร้าง artifact ที่ตรวจได้ก่อนส่งต่อไป App Store ภายในองค์กร</p>
+            </article>
+          </section>
+
+          <section className="ag-worktree-menu" aria-label="Worktree menu preview">
+            <button type="button"><Monitor size={15} /> Local</button>
+            <button type="button"><GitBranch size={15} /> New Worktree</button>
+          </section>
+
+          <section className="ag-lower-dock" aria-label="Workspace evidence and artifacts">
+            <article className="ag-dock-card">
+              <span className="eyebrow">Agent Runs</span>
+              <div className="ag-agent-list">
+                {[
+                  ["Coordinator", "Plan and split tasks", "running"],
+                  ["Frontend Agent", "Preview artifact", "ready"],
+                  ["Policy Agent", "Platform boundary", workspaceResult?.guardrail.decision ?? "allow"]
+                ].map(([name, detail, status]) => (
+                  <div key={name}><strong>{name}</strong><span>{detail}</span><ToneBadge tone={status === "running" ? "info" : "success"}>{status}</ToneBadge></div>
+                ))}
+              </div>
+            </article>
+            <article className="ag-dock-card ag-preview-dock">
+              <span className="eyebrow">Selected Artifact</span>
+              <div className="ag-preview-summary">
+                <div>
+                  <strong>{visiblePreview.screenTitle}</strong>
+                  <p>{visiblePreview.summary}</p>
+                </div>
+                <button type="button" className="ghost-button" onClick={handleRefreshPreview} disabled={isRefreshingPreview}><RefreshCw size={15} /> {isRefreshingPreview ? "Refreshing" : "Refresh"}</button>
+              </div>
+              <div className="ag-mini-preview">
+                {visibleHighlights.map((highlight) => <span key={highlight}>{highlight}</span>)}
+              </div>
+            </article>
+            <article className="ag-dock-card">
+              <span className="eyebrow">Governance</span>
+              <div className="ag-policy-list">
+                {[
+                  ["PRD", workspaceSnapshot?.baseline.version ? `Baseline v${workspaceSnapshot.baseline.version}` : "Baseline v1.0"],
+                  ["Auth", "Platform Auth / IdP"],
+                  ["Database", `app_${selectedProject.slug.replaceAll("-", "_")}`],
+                  ["Quota", `${visibleTokenBudget.remainingToday} today`]
+                ].map(([label, value]) => <div key={label}><strong>{label}</strong><span>{value}</span></div>)}
+              </div>
+            </article>
+          </section>
+        </main>
+      </section>
+    );
+  }
+
+  if (creatorPage === "prd") {
+    return renderCreatorShell(
+      <section className="ds-workbench creator-prd-workbench">
+        <WorkflowRail eyebrow="PRD Flow" title="Review Path" steps={[{ label: "project input captured", icon: <CheckCircle2 size={16} /> }, { label: "governed AI route resolved", icon: <CheckCircle2 size={16} /> }, { label: "PRD draft generated", icon: <CheckCircle2 size={16} /> }, { label: "Confirm Baseline v1.0", icon: <LockKeyhole size={16} /> }]} />
+        <div className="ds-main-stack">
+          <SectionCard eyebrow="PRD Viewer" title="Structured PRD Sections" action={<button type="button">Confirm Baseline</button>}>
+            <div className="creator-prd-sections">
+              {visiblePrdSections.map((section) => <article id={section.key} key={section.key}><span>{section.order}</span><div><h3>{section.title}</h3><p>{section.body}</p></div></article>)}
+            </div>
+          </SectionCard>
+          <SectionCard eyebrow="Version History" title="PRD Version History">
+            <DataTable columns={[{ key: "version", label: "Version" }, { key: "status", label: "Status", tone: (value) => (value === "baseline" ? "success" : "warning") }, { key: "summary", label: "Summary" }, { key: "author", label: "Author" }]} rows={visibleVersionRows} />
+          </SectionCard>
+        </div>
+      </section>
+    );
+  }
+
+  if (creatorPage === "users") {
+    return renderCreatorShell(
+      <section className="sprint6-shell" aria-label="App users roles">
+        <div className="sprint6-main-panel">
+          <SectionCard eyebrow="App Users" title={`App Users: ${selectedProject.name}`} action={<button type="button" onClick={handleInviteUser} disabled={isInvitingUser}><UserPlus size={15} /> {isInvitingUser ? "กำลังเชิญ" : "เชิญผู้ใช้"}</button>}>
+            <DataTable columns={[{ key: "user", label: "User" }, { key: "type", label: "Type" }, { key: "role", label: "App Role" }, { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "warning") }, { key: "lastAccess", label: "Last Access" }]} rows={visibleAppMembers} />
+          </SectionCard>
+          <SectionCard eyebrow="Access Requests" title="Request Review">
+            <DataTable columns={[{ key: "requester", label: "Requester" }, { key: "role", label: "Requested Role" }, { key: "reason", label: "Reason" }, { key: "submitted", label: "Submitted" }, { key: "status", label: "Status", tone: () => "warning" }]} rows={visibleAccessRequests} />
+          </SectionCard>
+          <SectionCard eyebrow="App Roles" title="Role Permission Matrix">
+            <DataTable columns={[{ key: "role", label: "Role" }, { key: "permissions", label: "Permissions" }, { key: "members", label: "Members" }, { key: "status", label: "Status", tone: (value) => (value === "active" ? "success" : "info") }]} rows={visibleAppRoles} />
+          </SectionCard>
+        </div>
+      </section>
+    );
+  }
+
+  if (creatorPage === "publish") {
+    return renderCreatorShell(
+      <section className="sprint6-shell" aria-label="Publish app">
+        <SectionCard eyebrow="Publish Review" title="Manifest + Readiness checklist" action={<button type="button" onClick={handlePublishProject} disabled={isPublishingProject || publishReview?.ready === false}><Store size={15} /> {isPublishingProject ? "Publishing" : "Publish to App Store"}</button>}>
+          <DefinitionGrid items={[{ label: "Manifest", value: `manifest v${publishReview?.manifest.manifestVersion ?? publishResult?.manifest.manifestVersion ?? "1"}` }, { label: "Route", value: publishReview?.manifest.app?.route ?? publishResult?.manifest.app?.route ?? `/apps/${selectedProject.slug}` }, { label: "Auth", value: publishReview?.manifest.auth?.mode ?? "platform_auth_sdk" }, { label: "Frontend", value: publishReview?.manifest.frontend?.checkpointId ?? visiblePreview.version }, { label: "Visibility", value: visibleRegistryEntry?.visibility ?? "restricted" }]} />
+          <div className="publish-checklist">{visiblePublishChecklist.map((item) => <div key={item.check}><ClipboardCheck size={16} /><strong>{item.check}</strong><span>{item.detail}</span><ToneBadge tone={item.state === "pass" ? "success" : "danger"}>{item.state}</ToneBadge></div>)}</div>
+        </SectionCard>
+        <SectionCard eyebrow="Deployment Record" title="Published Output">
+          <div className="deployment-record"><CheckCircle2 size={20} /><div><strong>{visibleDeployment?.id ?? "dep_leave_management_001"}</strong><span>{visibleDeployment?.status ?? "published"} · manifest v{visibleDeployment?.manifestVersion ?? publishResult?.manifest.manifestVersion ?? "1"}</span></div></div>
+        </SectionCard>
+      </section>
+    );
+  }
+
+  if (creatorPage === "tickets") {
+    return renderCreatorShell(
+      <section className="admin-page-stack" aria-label="Tickets and PRD changes">
+        <SectionCard eyebrow="Creator Ticket Inbox" title="Feedback routed from App Store" action={<ToneBadge tone="warning">1 submitted</ToneBadge>}>
+          <div className="creator-ticket-list">{creatorTickets.map((ticket) => <article key={ticket.ticket}><div className="creator-ticket-icon"><MessageSquare size={20} /></div><div><strong>{ticket.ticket} · {ticket.summary}</strong><span>{ticket.app} · {ticket.submitter} · priority {ticket.priority}</span></div><ToneBadge tone="warning">{ticket.status}</ToneBadge></article>)}</div>
+        </SectionCard>
+        <SectionCard eyebrow="PRD Change Requests" title="Approval queue">
+          <DataTable columns={[{ key: "change", label: "Change" }, { key: "source", label: "Source" }, { key: "risk", label: "Risk", tone: () => "warning" }, { key: "status", label: "Status", tone: () => "success" }, { key: "requestedBy", label: "Requested By" }, { key: "updated", label: "Updated" }]} rows={prdChangeRows} />
+        </SectionCard>
+      </section>
+    );
+  }
+
   return (
-    <AppShell title="Creator App" navItems={navigation.creator} userName={bootstrap.userName}>
+    <AppShell title="Creator App" navItems={creatorNavItems} userName={bootstrap.userName} session={creatorSessionControls}>
       <PageHeader
         tone="surface"
-        eyebrow="Creator Workspace"
-        title={`Workspace: ${selectedProject.name}`}
-        description="Prompt, AI task progress, token remaining และ live preview อยู่ในหน้าทำงานเดียว"
+        eyebrow={pageCopy.eyebrow}
+        title={pageCopy.title.replace("Leave Management", selectedProject.name)}
+        description={pageCopy.description}
         actions={
           <>
-            <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Bootstrap: {bootstrap.source}</ToneBadge>
-            <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
-              <LockKeyhole size={16} />
-              {isSigningIn ? "Signing in" : "Demo Sign in"}
-            </button>
-            <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
-              <RotateCcw size={16} />
-              Logout
-            </button>
             <button type="button" className="secondary-button">
               <GitBranch size={16} />
               Remix
@@ -690,6 +1268,7 @@ function CreatorApp() {
         }
       />
 
+      <div className={`creator-route-scope creator-route-${creatorPage}`}>
       <section className="workspace-topbar">
         {[
           ["Project", selectedProject.name],
@@ -1294,12 +1873,12 @@ function CreatorApp() {
           <SectionCard eyebrow="PRD Viewer" title="Structured PRD Sections" action={<button type="button">Confirm Baseline</button>}>
             <div className="creator-prd-layout">
               <nav className="creator-prd-nav" aria-label="PRD sections">
-                {prdSections.map((section) => (
+                {visiblePrdSections.map((section) => (
                   <a href={`#${section.key}`} key={section.key}>{section.title}</a>
                 ))}
               </nav>
               <div className="creator-prd-sections">
-                {prdSections.map((section) => (
+                {visiblePrdSections.map((section) => (
                   <article id={section.key} key={section.key}>
                     <span>{section.order}</span>
                     <div>
@@ -1332,7 +1911,7 @@ function CreatorApp() {
                   { key: "summary", label: "Summary" },
                   { key: "author", label: "Author" }
                 ]}
-                rows={versionRows}
+                rows={visibleVersionRows}
               />
             </SectionCard>
 
@@ -1354,6 +1933,7 @@ function CreatorApp() {
           </section>
         </div>
       </section>
+      </div>
     </AppShell>
   );
 }

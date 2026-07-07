@@ -11,7 +11,7 @@ import {
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { AppCard, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
-import { Bell, Bug, Download, MessageSquare, Search, Send, ShieldCheck, Store, Trash2, WifiOff } from "lucide-react";
+import { ArrowLeft, Bell, Bug, CalendarCheck2, CheckCircle2, Clock3, Download, MessageSquare, Plus, Search, Send, ShieldCheck, Store, Trash2, UserCheck, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
@@ -31,6 +31,7 @@ const fallbackStoreApps: AppStoreItem[] = [
     name: "Leave Management",
     description: "Submit, approve and track leave requests inside the private enterprise app store.",
     owner: "Creator User",
+    route: "/apps/leave-management",
     myRole: "Employee",
     accessStatus: "active",
     health: "healthy"
@@ -41,6 +42,7 @@ const fallbackStoreApps: AppStoreItem[] = [
     name: "Procurement Request",
     description: "Request purchasing approval with governed access.",
     owner: "Finance Ops",
+    route: "/apps/procurement-request",
     accessStatus: "available",
     health: "healthy"
   }
@@ -89,6 +91,7 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
     name: app.name,
     description: app.description,
     owner: app.ownerName,
+    route: app.route,
     myRole: app.myRole,
     accessStatus: app.accessStatus,
     installStatus: app.installStatus,
@@ -163,6 +166,161 @@ function fallbackTicket(appSlug: string, title: string, description: string, dev
     status: "submitted",
     timeline: [{ id: "local_tl_001", status: "submitted", label: "Ticket submitted" }]
   };
+}
+
+type LeaveRequest = {
+  id: string;
+  employee: string;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  status: "pending" | "approved";
+};
+
+const seededLeaveRequests: LeaveRequest[] = [
+  {
+    id: "LR-1001",
+    employee: "Somchai P.",
+    leaveType: "WFH",
+    startDate: "2026-07-06",
+    endDate: "2026-07-06",
+    reason: "Work from home for focused planning",
+    status: "pending"
+  },
+  {
+    id: "LR-1002",
+    employee: "Nalida K.",
+    leaveType: "Annual Leave",
+    startDate: "2026-07-08",
+    endDate: "2026-07-09",
+    reason: "Family trip",
+    status: "approved"
+  }
+];
+
+function GeneratedLeaveManagementApp() {
+  const [requests, setRequests] = useState<LeaveRequest[]>(seededLeaveRequests);
+  const [leaveType, setLeaveType] = useState("Annual Leave");
+  const [startDate, setStartDate] = useState("2026-07-10");
+  const [endDate, setEndDate] = useState("2026-07-10");
+  const [reason, setReason] = useState("Personal leave request");
+  const [lastSubmitted, setLastSubmitted] = useState<LeaveRequest | undefined>(undefined);
+  const pendingCount = requests.filter((request) => request.status === "pending").length;
+  const approvedCount = requests.filter((request) => request.status === "approved").length;
+
+  function handleSubmitLeaveRequest() {
+    const nextRequest: LeaveRequest = {
+      id: `LR-${1000 + requests.length + 1}`,
+      employee: "End User",
+      leaveType,
+      startDate,
+      endDate,
+      reason,
+      status: "pending"
+    };
+    setRequests((current) => [nextRequest, ...current]);
+    setLastSubmitted(nextRequest);
+  }
+
+  function approveRequest(requestId: string) {
+    setRequests((current) => current.map((request) => request.id === requestId ? { ...request, status: "approved" } : request));
+  }
+
+  return (
+    <main className="generated-app-shell">
+      <header className="generated-app-header">
+        <a className="button-link secondary-link" href="/store">
+          <ArrowLeft size={15} />
+          App Store
+        </a>
+        <div>
+          <span className="eyebrow">Generated App Runtime</span>
+          <h1>Leave Management</h1>
+          <p>Submit, track and approve employee leave requests with Platform Auth role context.</p>
+        </div>
+        <ToneBadge tone="success">published</ToneBadge>
+      </header>
+
+      <section className="generated-app-kpis" aria-label="Leave summary">
+        <div>
+          <CalendarCheck2 size={18} />
+          <span>Total requests</span>
+          <strong>{requests.length}</strong>
+        </div>
+        <div>
+          <Clock3 size={18} />
+          <span>Pending approval</span>
+          <strong>{pendingCount}</strong>
+        </div>
+        <div>
+          <UserCheck size={18} />
+          <span>Approved</span>
+          <strong>{approvedCount}</strong>
+        </div>
+      </section>
+
+      <section className="generated-app-grid">
+        <SectionCard eyebrow="Employee Flow" title="New leave request">
+          <div className="generated-request-form">
+            <label>
+              Leave type
+              <select value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
+                <option>Annual Leave</option>
+                <option>Sick Leave</option>
+                <option>WFH</option>
+                <option>Business Trip</option>
+              </select>
+            </label>
+            <label>
+              Start date
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label>
+              End date
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </label>
+            <label>
+              Reason
+              <input value={reason} onChange={(event) => setReason(event.target.value)} />
+            </label>
+            <button type="button" onClick={handleSubmitLeaveRequest} disabled={!reason.trim() || !startDate || !endDate}>
+              <Plus size={15} />
+              Submit request
+            </button>
+          </div>
+          {lastSubmitted ? (
+            <div className="generated-app-evidence" aria-label="Last submitted request">
+              <CheckCircle2 size={18} />
+              <div>
+                <strong>{lastSubmitted.id} submitted</strong>
+                <span>{lastSubmitted.leaveType} · {lastSubmitted.startDate} to {lastSubmitted.endDate}</span>
+              </div>
+              <ToneBadge tone="warning">pending</ToneBadge>
+            </div>
+          ) : null}
+        </SectionCard>
+
+        <SectionCard eyebrow="Manager Flow" title="Approval queue">
+          <div className="generated-request-list">
+            {requests.map((request) => (
+              <article key={request.id}>
+                <div>
+                  <strong>{request.id} · {request.employee}</strong>
+                  <span>{request.leaveType} · {request.startDate} to {request.endDate}</span>
+                  <small>{request.reason}</small>
+                </div>
+                <ToneBadge tone={request.status === "approved" ? "success" : "warning"}>{request.status}</ToneBadge>
+                <button type="button" className="secondary-button" onClick={() => approveRequest(request.id)} disabled={request.status === "approved"}>
+                  Approve
+                </button>
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+    </main>
+  );
 }
 
 type InstallJourneyStepStatus = "complete" | "current" | "pending" | "blocked";
@@ -330,6 +488,11 @@ function StoreApp() {
     }
   }
 
+  function handleOpenSelectedApp() {
+    if (selectedApp.accessStatus !== "active") return;
+    window.location.assign(selectedApp.route ?? `/apps/${selectedApp.slug}`);
+  }
+
   return (
     <main className="store-shell">
       <header className="store-mobile-header">
@@ -408,7 +571,7 @@ function StoreApp() {
             ]}
           />
           <div className="store-action-row">
-            <button type="button">Open</button>
+            <button type="button" onClick={handleOpenSelectedApp} disabled={selectedApp.accessStatus !== "active"}>Open</button>
             <button type="button" className="secondary-button" onClick={handleInstallApp} disabled={isInstallingApp || selectedApp.installStatus === "installed" || selectedApp.accessStatus !== "active"}>
               <Download size={15} />
               {isInstallingApp ? "Installing" : "Install"}
@@ -514,4 +677,5 @@ function StoreApp() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StoreApp />);
+const currentPath = window.location.pathname;
+createRoot(document.getElementById("root")!).render(currentPath.startsWith("/apps/leave-management") ? <GeneratedLeaveManagementApp /> : <StoreApp />);

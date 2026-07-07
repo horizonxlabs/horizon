@@ -1,20 +1,31 @@
 :80 {
-  encode zstd gzip
+	encode zstd gzip
 
-  handle_path /api/* {
-    reverse_proxy platform-api:3100
-  }
+	handle_path /api/* {
+		reverse_proxy platform-api:3100
+	}
 
-  handle_path /creator* {
-    reverse_proxy creator-web:4101
-  }
+	redir /creator /creator/ 308
+	redir /store /store/ 308
 
-  handle_path /store* {
-    reverse_proxy app-store-pwa:4102
-  }
+	handle /creator* {
+		reverse_proxy creator-web:4101
+	}
 
-  handle {
-    reverse_proxy admin-web:4100
-  }
+	handle /apps/* {
+		rewrite * /store{uri}
+		reverse_proxy app-store-pwa:4102
+	}
+
+	handle /store* {
+		reverse_proxy app-store-pwa:4102
+	}
+
+	handle /preview/* {
+		reverse_proxy platform-api:3100
+	}
+
+	handle {
+		reverse_proxy admin-web:4100
+	}
 }
-

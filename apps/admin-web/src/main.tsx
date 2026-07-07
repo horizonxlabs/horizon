@@ -29,13 +29,14 @@ import {
   KeyRound,
   ListFilter,
   LockKeyhole,
+  LogIn,
   Route,
   ServerCog,
   ShieldCheck,
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import { useEffect, useState, type ChangeEvent, type ComponentType } from "react";
+import { useEffect, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
 
@@ -292,6 +293,7 @@ type InstallWizardSetupForm = {
   backupEncryptionKeyRef: string;
   firstAdminEmail: string;
   firstAdminName: string;
+  firstAdminTemporaryPassword: string;
 };
 
 type AdminBootstrapState = {
@@ -352,8 +354,11 @@ const initialInstallerSetupForm: InstallWizardSetupForm = {
   backupRetentionDays: "30",
   backupEncryptionKeyRef: "kms://evcp/backup",
   firstAdminEmail: "admin@company.com",
-  firstAdminName: "Platform Admin"
+  firstAdminName: "Platform Admin",
+  firstAdminTemporaryPassword: "change-me-on-first-login"
 };
+
+const firstRunSetupStorageKey = "evcp:first-run-setup-complete";
 
 const initialAiGovernanceForm: AiGovernanceForm = {
   providerName: "OpenAI Production",
@@ -462,7 +467,6 @@ function preflightRowsFromReport(report: InstallerReportDto | undefined, fallbac
 
 function apiBaseUrl(): string | undefined {
   const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
-  if (!configured && import.meta.env.DEV) return undefined;
   return (configured || "/api").replace(/\/$/, "");
 }
 
@@ -489,6 +493,12 @@ async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
   };
 }
 
+async function loadOrCreateAdminSessionBridge(): Promise<AdminBootstrapState> {
+  const current = await loadAdminBootstrap().catch(() => initialAdminBootstrap);
+  if (current.source === "Platform API") return current;
+  return signInAdminSessionBridge();
+}
+
 async function signInAdminSessionBridge(): Promise<AdminBootstrapState> {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
@@ -498,7 +508,10 @@ async function signInAdminSessionBridge(): Promise<AdminBootstrapState> {
   });
   const session = await bridgeClient.simulateSsoLogin(adminSessionBridgeProfile);
   createPlatformSessionStore(window.localStorage).saveSession(session);
-  return loadAdminBootstrap();
+  return {
+    userName: session.claims.name || "Platform Admin",
+    source: "Platform API"
+  };
 }
 
 function clearAdminSessionBridge(): AdminBootstrapState {
@@ -506,12 +519,64 @@ function clearAdminSessionBridge(): AdminBootstrapState {
   return initialAdminBootstrap;
 }
 
+function scrollToAdminSection(sectionId: string) {
+  window.history.replaceState(null, "", `${window.location.pathname}#${sectionId}`);
+  document.getElementById(sectionId)?.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function sectionIdFromAdminPath(pathname: string): string | undefined {
+  if (pathname.endsWith("/services")) return "platform-services";
+  if (pathname.endsWith("/ai-providers")) return "ai-provider-registry";
+  if (pathname.endsWith("/guardrails")) return "guardrail-rules";
+  if (pathname.endsWith("/audit-logs")) return "audit-evidence";
+  if (pathname === "/admin" || pathname === "/admin/") return "admin-dashboard-top";
+  return undefined;
+}
+
+type AdminPage = "dashboard" | "services" | "ai-providers" | "guardrails" | "audit-logs";
+
+function adminPageFromPath(pathname: string): AdminPage {
+  if (pathname.endsWith("/services")) return "services";
+  if (pathname.endsWith("/ai-providers")) return "ai-providers";
+  if (pathname.endsWith("/guardrails")) return "guardrails";
+  if (pathname.endsWith("/audit-logs")) return "audit-logs";
+  return "dashboard";
+}
+
+const adminPageCopy: Record<AdminPage, { eyebrow: string; title: string; description: string }> = {
+  dashboard: {
+    eyebrow: "Platform Overview",
+    title: "Admin Dashboard",
+    description: "ภาพรวมสถานะระบบ private server, AI governance และ readiness ที่ต้องดูประจำวัน"
+  },
+  services: {
+    eyebrow: "System Operations",
+    title: "Services & Runtime Operations",
+    description: "ติดตาม service health, runtime hardening, installer, backup, observability, license และ release readiness"
+  },
+  "ai-providers": {
+    eyebrow: "AI Governance",
+    title: "AI Providers & API Keys",
+    description: "ควบคุม provider, secret, routing และ quota ของ AI traffic ก่อน Creator ใช้งานจริง"
+  },
+  guardrails: {
+    eyebrow: "Policy Guardrails",
+    title: "Guardrail Rules",
+    description: "จัดการ policy rule, keyword pattern, block decision และ guardrail event evidence"
+  },
+  "audit-logs": {
+    eyebrow: "Audit Evidence",
+    title: "Audit Logs",
+    description: "ค้นหา evidence ของ action สำคัญ เช่น provider, setup, publish, ticket และ policy decision"
+  }
+};
+
 async function runInstallerPreflight(profile: InstallerPreflightInput): Promise<InstallerReportDto> {
   return createAdminPlatformClient().runInstallerPreflight(profile);
 }
 
-async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<InstallerSetupResponse> {
-  return createAdminPlatformClient().saveInstallerSetup({
+function installerSetupPayload(form: InstallWizardSetupForm) {
+  return {
     domain: form.domain,
     databaseUrl: form.databaseUrl,
     storage: {
@@ -540,9 +605,30 @@ async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<Install
     },
     firstAdmin: {
       email: form.firstAdminEmail,
-      displayName: form.firstAdminName
+      displayName: form.firstAdminName,
+      temporaryPassword: form.firstAdminTemporaryPassword
     }
-  });
+  };
+}
+
+async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<InstallerSetupResponse> {
+  try {
+    return await createAdminPlatformClient().saveInstallerSetup(installerSetupPayload(form));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Expired platform session token")) {
+      await signInAdminSessionBridge();
+      return createAdminPlatformClient().saveInstallerSetup(installerSetupPayload(form));
+    }
+    throw error;
+  }
+}
+
+function firstRunSetupIsComplete(): boolean {
+  return typeof window !== "undefined" && window.localStorage.getItem(firstRunSetupStorageKey) === "true";
+}
+
+function markFirstRunSetupComplete(): void {
+  window.localStorage.setItem(firstRunSetupStorageKey, "true");
 }
 
 async function listInstallerReports(): Promise<InstallerReportDto[]> {
@@ -788,6 +874,154 @@ const rtmRegressionRows = [
   { suite: "e2e", scope: "admin API + UI smoke", result: "pass", evidence: "admin readiness dashboard" }
 ];
 
+function FirstRunSetupScreen({
+  form,
+  installWizard,
+  savedSetup,
+  setupItems,
+  journeyRows,
+  message,
+  isRunningPreflight,
+  isCompletingSetup,
+  onFieldChange,
+  onRunPreflight,
+  onCompleteSetup,
+  onEnterConsole
+}: {
+  form: InstallWizardSetupForm;
+  installWizard: InstallWizardState;
+  savedSetup?: InstallerSetupResponse;
+  setupItems: Array<{ label: string; value: string }>;
+  journeyRows: InstallJourneyStep[];
+  message: string;
+  isRunningPreflight: boolean;
+  isCompletingSetup: boolean;
+  onFieldChange: (field: keyof InstallWizardSetupForm, event: ChangeEvent<HTMLInputElement>) => void;
+  onRunPreflight: () => void;
+  onCompleteSetup: () => void;
+  onEnterConsole: () => void;
+}) {
+  const visibleJourneyRows = journeyRows.filter((step) => ["preflight", "setup", "first_admin_login", "verify_health"].includes(step.id));
+  const canCompleteSetup = installWizard.decision === "ready" && Boolean(form.domain.trim() && form.firstAdminEmail.trim() && form.firstAdminTemporaryPassword.trim());
+  return (
+    <main className="first-run-shell">
+      <section className="first-run-hero">
+        <div>
+          <span className="eyebrow">First-run Setup</span>
+          <h1>ตั้งค่า Enterprise Vibe Coding Platform</h1>
+          <p>ตั้งค่าระบบ private server และสร้าง Platform Admin คนแรกก่อนเปิด Admin Console</p>
+        </div>
+        <ToneBadge tone={savedSetup ? "success" : installWizard.decision === "blocked" ? "danger" : installWizard.decision === "ready" ? "info" : "warning"}>
+          {savedSetup ? "setup complete" : installWizard.decision === "blocked" ? "blocked" : installWizard.decision === "ready" ? "ready" : "not configured"}
+        </ToneBadge>
+      </section>
+
+      <section className="first-run-layout">
+        <aside className="first-run-progress" aria-label="First-run setup progress">
+          {visibleJourneyRows.map((step) => (
+            <article key={step.id} className={`first-run-step status-${step.status}`}>
+              <span>{step.status}</span>
+              <strong>{step.label}</strong>
+              <small>{step.owner}</small>
+            </article>
+          ))}
+        </aside>
+
+        <section className="first-run-main">
+          <SectionCard eyebrow="Private Server" title="Platform configuration">
+            <div className="first-run-form">
+              <label>
+                Platform domain
+                <input value={form.domain} onChange={(event) => onFieldChange("domain", event)} />
+              </label>
+              <label>
+                Database URL
+                <input value={form.databaseUrl} onChange={(event) => onFieldChange("databaseUrl", event)} />
+              </label>
+              <label>
+                Storage endpoint
+                <input value={form.storageEndpoint} onChange={(event) => onFieldChange("storageEndpoint", event)} />
+              </label>
+              <label>
+                Storage bucket
+                <input value={form.storageBucket} onChange={(event) => onFieldChange("storageBucket", event)} />
+              </label>
+              <label>
+                Storage secret access key
+                <input type="password" value={form.storageSecretAccessKey} onChange={(event) => onFieldChange("storageSecretAccessKey", event)} />
+              </label>
+              <label>
+                Auth issuer URL
+                <input value={form.authIssuerUrl} onChange={(event) => onFieldChange("authIssuerUrl", event)} />
+              </label>
+            </div>
+          </SectionCard>
+
+          <section className="first-run-subgrid">
+            <SectionCard eyebrow="First Admin" title="Create platform admin">
+              <div className="first-run-form compact">
+                <label>
+                  Admin display name
+                  <input value={form.firstAdminName} onChange={(event) => onFieldChange("firstAdminName", event)} />
+                </label>
+                <label>
+                  Admin email
+                  <input type="email" value={form.firstAdminEmail} onChange={(event) => onFieldChange("firstAdminEmail", event)} />
+                </label>
+                <label>
+                  Temporary password
+                  <input type="password" value={form.firstAdminTemporaryPassword} onChange={(event) => onFieldChange("firstAdminTemporaryPassword", event)} />
+                </label>
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="AI Bootstrap" title="Default provider route">
+              <div className="first-run-form compact">
+                <label>
+                  Provider ID
+                  <input value={form.aiProviderId} onChange={(event) => onFieldChange("aiProviderId", event)} />
+                </label>
+                <label>
+                  Model
+                  <input value={form.aiModel} onChange={(event) => onFieldChange("aiModel", event)} />
+                </label>
+                <label>
+                  Guardrail policy
+                  <input value={form.guardrailPolicy} onChange={(event) => onFieldChange("guardrailPolicy", event)} />
+                </label>
+              </div>
+            </SectionCard>
+          </section>
+
+          <SectionCard eyebrow="Setup Evidence" title="Ready-to-save configuration">
+            <DefinitionGrid items={setupItems} />
+            <div className="first-run-action-row">
+              <button type="button" className="secondary-button" onClick={onRunPreflight} disabled={isRunningPreflight || isCompletingSetup}>
+                <CheckCircle2 size={15} />
+                {isRunningPreflight ? "Running preflight" : "Run preflight"}
+              </button>
+              <button type="button" onClick={onCompleteSetup} disabled={!canCompleteSetup || isCompletingSetup || isRunningPreflight || Boolean(savedSetup)}>
+                <LockKeyhole size={15} />
+                {isCompletingSetup ? "Creating admin" : "Create admin & finish setup"}
+              </button>
+              <button type="button" className="secondary-button" onClick={onEnterConsole} disabled={!savedSetup}>
+                <LogIn size={15} />
+                Enter Admin Console
+              </button>
+            </div>
+            <DecisionPanel
+              tone={savedSetup ? "success" : installWizard.decision === "blocked" ? "danger" : "info"}
+              badge={savedSetup ? "Complete" : "First-run"}
+              title={message}
+              lines={savedSetup ? ["Admin Console unlocked for this browser", "Setup evidence saved with masked secrets"] : installWizard.actionableFailures}
+            />
+          </SectionCard>
+        </section>
+      </section>
+    </main>
+  );
+}
+
 function AdminApp() {
   const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
@@ -811,9 +1045,12 @@ function AdminApp() {
   const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [firstRunSetupComplete, setFirstRunSetupComplete] = useState(firstRunSetupIsComplete);
+  const [firstRunSetupMessage, setFirstRunSetupMessage] = useState("Run preflight, create the first Platform Admin, then enter the Admin Console.");
+  const [isCompletingFirstRunSetup, setIsCompletingFirstRunSetup] = useState(false);
 
   useEffect(() => {
-    loadAdminBootstrap()
+    loadOrCreateAdminSessionBridge()
       .then(setBootstrap)
       .catch(() => setBootstrap(initialAdminBootstrap));
 
@@ -838,12 +1075,24 @@ function AdminApp() {
   }, []);
 
   useEffect(() => {
-    if (!window.location.hash) {
-      return;
-    }
+    if (bootstrap.source !== "Platform API") return;
+    loadAiGovernanceState()
+      .then((state) => {
+        setAiProviders(state.providers);
+        setAiApiKeys(state.apiKeys);
+        setAiGuardrailEvents(state.guardrailEvents);
+        setAiGovernanceSource("Platform API");
+        setAiGovernanceMessage("Loaded AI governance state from Platform API.");
+      })
+      .catch((error) => {
+        setAiGovernanceMessage(error instanceof Error ? error.message : "Unable to load AI governance state from Platform API.");
+      });
+  }, [bootstrap.source]);
 
-    const target = document.getElementById(window.location.hash.slice(1));
-    target?.scrollIntoView({ block: "start" });
+  useEffect(() => {
+    const sectionId = window.location.hash ? window.location.hash.slice(1) : sectionIdFromAdminPath(window.location.pathname);
+    if (!sectionId) return;
+    window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ block: "start" }), 0);
   }, []);
 
   async function handleRunInstallerPreflight(kind: "ready" | "blocked") {
@@ -886,7 +1135,8 @@ function AdminApp() {
         ...current,
         domain: setup.domain,
         databaseUrl: setup.databaseUrlMasked,
-        storageSecretAccessKey: ""
+        storageSecretAccessKey: "",
+        firstAdminTemporaryPassword: ""
       }));
       setInstallWizard((current) => ({
         ...current,
@@ -947,6 +1197,40 @@ function AdminApp() {
 
   function handleInstallerSetupField(field: keyof InstallWizardSetupForm, event: ChangeEvent<HTMLInputElement>) {
     setInstallerSetupForm((current) => ({ ...current, [field]: event.target.value }));
+  }
+
+  async function handleCompleteFirstRunSetup() {
+    setIsCompletingFirstRunSetup(true);
+    setFirstRunSetupMessage("Saving setup and creating first admin evidence through the Platform API.");
+    try {
+      const setup = await saveInstallerSetup(installerSetupForm);
+      setSavedInstallerSetup(setup);
+      setInstallerSetupForm((current) => ({
+        ...current,
+        domain: setup.domain,
+        databaseUrl: setup.databaseUrlMasked,
+        storageSecretAccessKey: "",
+        firstAdminTemporaryPassword: ""
+      }));
+      setInstallWizard((current) => ({
+        ...current,
+        source: "Platform API",
+        activeStep: "first_admin_login",
+        setupStatus: "saved",
+        decision: "ready",
+        actionableFailures: ["Setup saved", "First admin identity recorded", "Admin Console can be opened"]
+      }));
+      setFirstRunSetupMessage("First-run setup complete. Enter the Admin Console with the first admin identity.");
+    } catch (error) {
+      setFirstRunSetupMessage(error instanceof Error ? error.message : "First-run setup failed. Review required fields and API connectivity.");
+    } finally {
+      setIsCompletingFirstRunSetup(false);
+    }
+  }
+
+  function handleEnterAdminConsole() {
+    markFirstRunSetupComplete();
+    setFirstRunSetupComplete(true);
   }
 
   function handleAiGovernanceField(field: keyof AiGovernanceForm, event: ChangeEvent<HTMLInputElement>) {
@@ -1051,6 +1335,26 @@ function AdminApp() {
   const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
   const latestInstallerReport = installerReports[installerReports.length - 1];
   const installJourneyRows = buildInstallJourneySteps(installWizard, Boolean(savedInstallerSetup), latestInstallerReport);
+
+  if (!firstRunSetupComplete) {
+    return (
+      <FirstRunSetupScreen
+        form={installerSetupForm}
+        installWizard={installWizard}
+        savedSetup={savedInstallerSetup}
+        setupItems={installWizardSetupItems}
+        journeyRows={installJourneyRows}
+        message={firstRunSetupMessage}
+        isRunningPreflight={isRunningInstallCheck}
+        isCompletingSetup={isCompletingFirstRunSetup}
+        onFieldChange={handleInstallerSetupField}
+        onRunPreflight={() => void handleRunInstallerPreflight("ready")}
+        onCompleteSetup={() => void handleCompleteFirstRunSetup()}
+        onEnterConsole={handleEnterAdminConsole}
+      />
+    );
+  }
+
   const aiProviderTableRows = aiProviders.length
     ? aiProviders.map((provider) => ({
         provider: provider.name,
@@ -1088,36 +1392,276 @@ function AdminApp() {
         time: event.occurredAt ?? "latest"
       }))
     : eventRows;
+  const adminPage = adminPageFromPath(window.location.pathname);
+  const pageCopy = adminPageCopy[adminPage];
+  const adminSessionControls = (
+    <>
+      <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Session: {bootstrap.source}</ToneBadge>
+      <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+        <Fingerprint size={16} />
+        {isSigningIn ? "Refreshing" : "Refresh Session"}
+      </button>
+      <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+        <LockKeyhole size={16} />
+        Logout
+      </button>
+    </>
+  );
+  const adminPageActions = adminPage === "ai-providers" || adminPage === "guardrails" ? (
+    <>
+      <button type="button" className="secondary-button" onClick={() => scrollToAdminSection("ai-routing-matrix")}>
+        <SlidersHorizontal size={16} />
+        ตั้งค่า Route
+      </button>
+      <button type="button" onClick={() => scrollToAdminSection("ai-provider-registry")}>
+        <KeyRound size={16} />
+        เพิ่ม Provider
+      </button>
+    </>
+  ) : undefined;
+
+  const renderAdminShell = (content: ReactNode) => (
+    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName} environmentLabel="Online Private Server" session={adminSessionControls}>
+      <PageHeader
+        eyebrow={pageCopy.eyebrow}
+        title={pageCopy.title}
+        description={pageCopy.description}
+        actions={adminPageActions}
+      />
+      {content}
+    </AppShell>
+  );
+
+  if (adminPage === "dashboard") {
+    return renderAdminShell(
+      <>
+        <section className="ds-metric-grid" id="admin-dashboard-top">
+          {kpis.map((item) => {
+            const Icon = item.icon;
+            return <MetricCard key={item.label} label={item.label} value={item.value} detail={item.detail} icon={<Icon size={18} />} tone={item.tone} />;
+          })}
+        </section>
+        <ServiceStrip
+          services={[
+            { name: "Platform API", detail: "Prisma persistence and API routes healthy", status: "healthy" },
+            { name: "Admin Console", detail: "First-run setup gate ready", status: "healthy" },
+            { name: "Creator Workspace", detail: "Route-scoped pages active", status: "healthy" },
+            { name: "App Store Runtime", detail: "/apps/leave-management opens generated app", status: "healthy" }
+          ]}
+        />
+      </>
+    );
+  }
+
+  if (adminPage === "services") {
+    return renderAdminShell(
+      <section className="admin-page-stack" aria-label="Services and operations">
+        <section className="ds-metric-grid" aria-label="Service operation summary">
+          {[
+            { label: "Core Services", value: "5/5", detail: "API, DB, Queue, Storage, Proxy", icon: ServerCog, tone: "success" },
+            { label: "Generated Apps", value: "2", detail: "published/runtime checks", icon: Route, tone: "success" },
+            { label: "Backups", value: "2 passed", detail: "encrypted artifacts retained", icon: Database, tone: "info" },
+            { label: "Release Gates", value: "guarded", detail: "security and license checks", icon: ShieldCheck, tone: "warning" }
+          ].map((item) => {
+            const Icon = item.icon;
+            return <MetricCard key={item.label} label={item.label} value={item.value} detail={item.detail} icon={<Icon size={18} />} tone={item.tone as BadgeTone} />;
+          })}
+        </section>
+        <section className="ds-grid-2">
+          <SectionCard eyebrow="Service Health" title="Runtime services">
+            <DataTable
+              columns={[
+                { key: "service", label: "Service" },
+                { key: "status", label: "Status", tone: () => "success" },
+                { key: "signal", label: "Signal" },
+                { key: "owner", label: "Owner" }
+              ]}
+              rows={serviceHealthRows}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Generated Apps" title="Runtime health">
+            <DataTable
+              columns={[
+                { key: "app", label: "App" },
+                { key: "route", label: "Route" },
+                { key: "status", label: "Status", tone: () => "success" },
+                { key: "readiness", label: "Readiness" }
+              ]}
+              rows={generatedAppHealthRows}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Installer" title="First-run setup reports">
+            <DataTable
+              columns={[
+                { key: "check", label: "Check" },
+                { key: "required", label: "Required" },
+                { key: "observed", label: "Observed" },
+                { key: "status", label: "Status", tone: (value) => (value === "pass" ? "success" : "danger") },
+                { key: "action", label: "Action" }
+              ]}
+              rows={installWizard.rows}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Backup" title="Backup and restore evidence">
+            <DataTable
+              columns={[
+                { key: "run", label: "Run" },
+                { key: "status", label: "Status", tone: () => "success" },
+                { key: "artifact", label: "Artifact" },
+                { key: "checksum", label: "Checksum" },
+                { key: "size", label: "Size" }
+              ]}
+              rows={backupRunRows}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Observability" title="Telemetry exports">
+            <DataTable
+              columns={[
+                { key: "signal", label: "Signal" },
+                { key: "endpoint", label: "Endpoint" },
+                { key: "status", label: "Status", tone: () => "success" }
+              ]}
+              rows={telemetryExportRows}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Release Readiness" title="Security gates">
+            <DataTable
+              columns={[
+                { key: "label", label: "Gate" },
+                { key: "value", label: "Status", tone: () => "success" },
+                { key: "detail", label: "Evidence" }
+              ]}
+              rows={securityReleaseKpis.map(({ label, value, detail }) => ({ label, value, detail }))}
+            />
+          </SectionCard>
+        </section>
+      </section>
+    );
+  }
+
+  if (adminPage === "ai-providers") {
+    return renderAdminShell(
+      <section className="admin-page-stack" aria-label="AI provider management">
+        <section className="ds-metric-grid">
+          {kpis.map((item) => {
+            const Icon = item.icon;
+            return <MetricCard key={item.label} label={item.label} value={item.value} detail={item.detail} icon={<Icon size={18} />} tone={item.tone} />;
+          })}
+        </section>
+        <section className="ds-grid-2">
+          <SectionCard
+            eyebrow="Provider Test Call"
+            title="Validate AI provider route"
+            action={<button type="button" className="secondary-button" onClick={handleRunProviderTestCall} disabled={isRunningProviderTestCall}><Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}</button>}
+          >
+            <DecisionPanel
+              tone={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "warning" : "success") : "info"}
+              badge={providerTestCallResult ? (providerTestCallResult.fallbackUsed ? "fallback" : "validated") : "safe dry-run"}
+              title={providerTestCallResult ? "Adapter route returned governed output" : providerTestCallMessage}
+              lines={[
+                providerTestCallResult?.outputExcerpt ?? "Click Run Provider Test to validate route, key, adapter and usage-log creation.",
+                providerTestCallResult ? `Tokens: ${providerTestCallResult.tokensUsed} / fallback: ${providerTestCallResult.fallbackUsed ? "yes" : "no"}` : "Response never shows raw provider secret."
+              ]}
+            />
+          </SectionCard>
+          <SectionCard eyebrow="Secret Control" title="API Key Management">
+            <div className="ai-governance-action-panel compact">
+              <label>Key Name<input value={aiGovernanceForm.apiKeyName} onChange={(event) => handleAiGovernanceField("apiKeyName", event)} /></label>
+              <label>Secret<input type="password" value={aiKeySecret} onChange={(event) => setAiKeySecret(event.target.value)} placeholder="paste provider secret" /></label>
+              <button type="button" className="secondary-button" onClick={handleSaveAiApiKey} disabled={isSavingAiGovernance}><KeyRound size={15} /> Save Masked Key</button>
+            </div>
+          </SectionCard>
+        </section>
+        <SectionCard
+          eyebrow="Provider Registry"
+          title="External AI Providers"
+          action={<button type="button" className="ghost-button" onClick={handleCreateAiProvider} disabled={isSavingAiGovernance}><BrainCircuit size={15} /> Create Provider</button>}
+        >
+          <div className="ai-governance-action-panel">
+            <label>Provider<input value={aiGovernanceForm.providerName} onChange={(event) => handleAiGovernanceField("providerName", event)} /></label>
+            <label>Base URL<input value={aiGovernanceForm.providerBaseUrl} onChange={(event) => handleAiGovernanceField("providerBaseUrl", event)} /></label>
+            <label>Models<input value={aiGovernanceForm.providerModels} onChange={(event) => handleAiGovernanceField("providerModels", event)} /></label>
+          </div>
+          <DataTable
+            columns={[
+              { key: "provider", label: "Provider" },
+              { key: "adapter", label: "Adapter" },
+              { key: "endpoint", label: "Endpoint" },
+              { key: "models", label: "Models" },
+              { key: "status", label: "Status", tone: () => "success" },
+              { key: "checked", label: "Checked" }
+            ]}
+            rows={aiProviderTableRows}
+          />
+        </SectionCard>
+        <section id="ai-routing-matrix" className="ds-grid-2">
+          <SectionCard eyebrow="Routing Matrix" title="Scenario Routing" action={<button type="button" className="ghost-button" onClick={handleConfigureAiRoute} disabled={isSavingAiGovernance}><Route size={15} /> Configure Route</button>}>
+            <DataTable columns={[{ key: "scenario", label: "Scenario" }, { key: "primary", label: "Primary" }, { key: "fallback", label: "Fallback" }, { key: "guard", label: "Guard" }]} rows={aiRouteTableRows} />
+          </SectionCard>
+          <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
+            <div className="ai-governance-action-panel compact">
+              <label>Scope<input value={aiGovernanceForm.quotaScope} onChange={(event) => handleAiGovernanceField("quotaScope", event)} /></label>
+              <label>Daily Limit<input value={aiGovernanceForm.quotaDailyLimit} onChange={(event) => handleAiGovernanceField("quotaDailyLimit", event)} /></label>
+              <button type="button" className="secondary-button" onClick={handleConfigureAiQuota} disabled={isSavingAiGovernance}><Gauge size={15} /> Configure Quota</button>
+            </div>
+          </SectionCard>
+        </section>
+      </section>
+    );
+  }
+
+  if (adminPage === "guardrails") {
+    return renderAdminShell(
+      <section className="admin-page-stack" aria-label="Guardrail management">
+        <SectionCard eyebrow="Security Rules" title="Guardrail Rules" action={<button type="button" className="ghost-button" onClick={handleCreateGuardrailRule} disabled={isSavingAiGovernance}><ShieldCheck size={15} /> Add Guardrail Rule</button>}>
+          <div className="ai-governance-action-panel compact">
+            <label>Rule Name<input value={aiGovernanceForm.guardrailName} onChange={(event) => handleAiGovernanceField("guardrailName", event)} /></label>
+            <label>Keyword Pattern<input value={aiGovernanceForm.guardrailPattern} onChange={(event) => handleAiGovernanceField("guardrailPattern", event)} /></label>
+          </div>
+          <DataTable
+            columns={[
+              { key: "rule", label: "Rule" },
+              { key: "severity", label: "Severity", tone: (value) => (value === "high" ? "danger" : "warning") },
+              { key: "action", label: "Action", tone: (value) => (value === "block" ? "danger" : "warning") },
+              { key: "scope", label: "Scope" },
+              { key: "status", label: "Status", tone: () => "success" }
+            ]}
+            rows={aiGuardrailRows}
+          />
+        </SectionCard>
+        <SectionCard eyebrow="Event Log" title="Guardrail Events">
+          <DataTable columns={[{ key: "event", label: "Event" }, { key: "decision", label: "Decision", tone: () => "danger" }, { key: "rule", label: "Matched Rule" }, { key: "actor", label: "Actor" }, { key: "time", label: "Time" }]} rows={aiEventRows} />
+        </SectionCard>
+      </section>
+    );
+  }
+
+  if (adminPage === "audit-logs") {
+    return renderAdminShell(
+      <section className="admin-page-stack" aria-label="Audit logs">
+        <SectionCard eyebrow="Audit Filters" title="Governance evidence search">
+          <div className="admin-filter-bar" aria-label="Audit filter controls">
+            <button type="button"><ListFilter size={15} /> action</button>
+            <button type="button" className="secondary-button"><Gauge size={15} /> severity</button>
+            <button type="button" className="secondary-button"><Route size={15} /> project</button>
+          </div>
+          <DataTable columns={[{ key: "action", label: "Action" }, { key: "actor", label: "Actor" }, { key: "severity", label: "Severity", tone: () => "danger" }]} rows={auditFilterRows} />
+        </SectionCard>
+      </section>
+    );
+  }
 
   return (
-    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName}>
+    <AppShell title="EVCP Admin" navItems={navigation.admin} userName={bootstrap.userName} environmentLabel="Online Private Server" session={adminSessionControls}>
+      <div id="admin-dashboard-top" />
       <PageHeader
-        eyebrow="AI Governance"
-        title="ศูนย์ควบคุม AI Providers & API Keys"
-        description="ควบคุม provider, secret, routing, quota และ guardrail ของทุก AI call ก่อนใช้งานจริงในองค์กร"
-        actions={
-          <>
-          <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>Session: {bootstrap.source}</ToneBadge>
-          <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
-            <Fingerprint size={16} />
-            {isSigningIn ? "Signing in" : "Demo Sign in"}
-          </button>
-          <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
-            <LockKeyhole size={16} />
-            Logout
-          </button>
-          <button type="button" className="secondary-button">
-            <SlidersHorizontal size={16} />
-            ตั้งค่า Route
-          </button>
-          <button type="button">
-            <KeyRound size={16} />
-            เพิ่ม Provider
-          </button>
-          </>
-        }
+        eyebrow={pageCopy.eyebrow}
+        title={pageCopy.title}
+        description={pageCopy.description}
+        actions={adminPageActions}
       />
 
+      <div className={`admin-route-scope admin-route-${adminPage}`}>
       <section className="ds-metric-grid">
         {kpis.map((item) => {
           const Icon = item.icon;
@@ -1673,15 +2217,16 @@ function AdminApp() {
             </div>
           </SectionCard>
 
-          <SectionCard
-            eyebrow="Provider Registry"
-            title="External AI Providers"
-            action={
-              <button type="button" className="ghost-button" onClick={handleCreateAiProvider} disabled={isSavingAiGovernance}>
-                <BrainCircuit size={15} /> Create Provider
-              </button>
-            }
-          >
+          <div id="ai-provider-registry">
+            <SectionCard
+              eyebrow="Provider Registry"
+              title="External AI Providers"
+              action={
+                <button type="button" className="ghost-button" onClick={handleCreateAiProvider} disabled={isSavingAiGovernance}>
+                  <BrainCircuit size={15} /> Create Provider
+                </button>
+              }
+            >
             <div className="ai-governance-action-panel">
               <label>
                 Provider
@@ -1702,20 +2247,21 @@ function AdminApp() {
                 ]}
               />
             </div>
-            <DataTable
-              columns={[
-                { key: "provider", label: "Provider" },
-                { key: "adapter", label: "Adapter" },
-                { key: "endpoint", label: "Endpoint" },
-                { key: "models", label: "Models" },
-                { key: "status", label: "Status", tone: () => "success" },
-                { key: "checked", label: "Checked" }
-              ]}
-              rows={aiProviderTableRows}
-            />
-          </SectionCard>
+              <DataTable
+                columns={[
+                  { key: "provider", label: "Provider" },
+                  { key: "adapter", label: "Adapter" },
+                  { key: "endpoint", label: "Endpoint" },
+                  { key: "models", label: "Models" },
+                  { key: "status", label: "Status", tone: () => "success" },
+                  { key: "checked", label: "Checked" }
+                ]}
+                rows={aiProviderTableRows}
+              />
+            </SectionCard>
+          </div>
 
-          <section className="ds-grid-2">
+          <section id="ai-secret-management" className="ds-grid-2">
             <SectionCard eyebrow="Secret Control" title="API Key Management">
               <div className="ds-summary-row">
                 <div className="ds-summary-icon"><LockKeyhole size={22} /></div>
@@ -1762,7 +2308,7 @@ function AdminApp() {
             </SectionCard>
           </section>
 
-          <section className="ds-grid-2">
+          <section id="ai-routing-matrix" className="ds-grid-2">
             <SectionCard
               eyebrow="Routing Matrix"
               title="Scenario Routing"
@@ -1820,7 +2366,7 @@ function AdminApp() {
             </SectionCard>
           </section>
 
-          <section className="ds-grid-2">
+          <section id="guardrail-rules" className="ds-grid-2">
             <SectionCard
               eyebrow="Security Rules"
               title="Guardrail Rules"
@@ -1866,7 +2412,7 @@ function AdminApp() {
             </SectionCard>
           </section>
 
-          <section className="admin-monitoring-shell" aria-label="MVP Monitoring">
+          <section id="platform-services" className="admin-monitoring-shell" aria-label="MVP Monitoring">
             <div className="admin-monitoring-header">
               <div>
                 <span className="eyebrow">MVP Monitoring</span>
@@ -1934,21 +2480,23 @@ function AdminApp() {
                 />
               </SectionCard>
 
-              <SectionCard eyebrow="Audit Filters" title="Governance evidence search">
-                <div className="admin-filter-bar" aria-label="Audit filter controls">
-                  <button type="button"><ListFilter size={15} /> action</button>
-                  <button type="button" className="secondary-button"><Gauge size={15} /> severity</button>
-                  <button type="button" className="secondary-button"><Route size={15} /> project</button>
-                </div>
-                <DataTable
-                  columns={[
-                    { key: "action", label: "Action" },
-                    { key: "actor", label: "Actor" },
-                    { key: "severity", label: "Severity", tone: () => "danger" }
-                  ]}
-                  rows={auditFilterRows}
-                />
-              </SectionCard>
+              <div id="audit-evidence">
+                <SectionCard eyebrow="Audit Filters" title="Governance evidence search">
+                  <div className="admin-filter-bar" aria-label="Audit filter controls">
+                    <button type="button"><ListFilter size={15} /> action</button>
+                    <button type="button" className="secondary-button"><Gauge size={15} /> severity</button>
+                    <button type="button" className="secondary-button"><Route size={15} /> project</button>
+                  </div>
+                  <DataTable
+                    columns={[
+                      { key: "action", label: "Action" },
+                      { key: "actor", label: "Actor" },
+                      { key: "severity", label: "Severity", tone: () => "danger" }
+                    ]}
+                    rows={auditFilterRows}
+                  />
+                </SectionCard>
+              </div>
             </section>
           </section>
 
@@ -2124,6 +2672,10 @@ function AdminApp() {
                     <label>
                       First Admin Email
                       <input value={installerSetupForm.firstAdminEmail} onChange={(event) => handleInstallerSetupField("firstAdminEmail", event)} />
+                    </label>
+                    <label>
+                      First Admin Temporary Password
+                      <input type="password" value={installerSetupForm.firstAdminTemporaryPassword} placeholder={savedInstallerSetup ? "saved as redacted bootstrap evidence" : "required before save"} onChange={(event) => handleInstallerSetupField("firstAdminTemporaryPassword", event)} />
                     </label>
                   </div>
                   <div className="install-wizard-action-row">
@@ -2590,6 +3142,7 @@ function AdminApp() {
           />
         </div>
       </section>
+      </div>
     </AppShell>
   );
 }

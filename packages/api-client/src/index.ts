@@ -63,6 +63,42 @@ export type PlatformProjectDto = {
   createdAt: string;
 };
 
+export type CreateProjectInput = {
+  name: string;
+  slug: string;
+  appType?: string;
+  businessProblem?: string;
+  targetDepartment?: string;
+  intendedUsers?: string[];
+  dataSensitivity?: "public" | "internal" | "confidential" | "restricted";
+};
+
+export type PrdSectionDto = {
+  id?: string;
+  key: string;
+  title: string;
+  body: string;
+  order: number;
+};
+
+export type PrdVersionDto = {
+  id: string;
+  projectId?: string;
+  version: string;
+  status: "draft" | "baseline" | string;
+  isBaseline?: boolean;
+  sourcePrompt?: string;
+  changeSummary: string;
+  generatedBy?: unknown;
+  createdByUserId?: string;
+  createdAt?: string;
+  sections?: PrdSectionDto[];
+};
+
+export type ConfirmPrdBaselineInput = {
+  versionId: string;
+};
+
 export type StorefrontAppCardDto = {
   id: string;
   appId: string;
@@ -699,7 +735,7 @@ export class PlatformApiClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.sessionToken = options.sessionToken;
     this.legacyUserEmail = options.legacyUserEmail;
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   getCurrentUser(): Promise<CurrentUserResponse> {
@@ -708,6 +744,36 @@ export class PlatformApiClient {
 
   listProjects(): Promise<PlatformProjectDto[]> {
     return this.request<PlatformProjectDto[]>("/projects");
+  }
+
+  createProject(input: CreateProjectInput): Promise<PlatformProjectDto> {
+    return this.request<PlatformProjectDto>("/projects", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  generatePrdDraft(projectId: string): Promise<PrdVersionDto> {
+    return this.request<PrdVersionDto>(`/projects/${encodeURIComponent(projectId)}/prd/generate`, {
+      method: "POST"
+    });
+  }
+
+  getCurrentPrd(projectId: string): Promise<PrdVersionDto> {
+    return this.request<PrdVersionDto>(`/projects/${encodeURIComponent(projectId)}/prd`);
+  }
+
+  listPrdVersions(projectId: string): Promise<PrdVersionDto[]> {
+    return this.request<PrdVersionDto[]>(`/projects/${encodeURIComponent(projectId)}/prd/versions`);
+  }
+
+  confirmPrdBaseline(projectId: string, input: ConfirmPrdBaselineInput): Promise<PrdVersionDto> {
+    return this.request<PrdVersionDto>(`/projects/${encodeURIComponent(projectId)}/prd/baseline`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   listStoreApps(): Promise<StorefrontHomeResponse> {

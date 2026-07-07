@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
+const { createPlatformApiApp, executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
 
 test("platform API health and auth/me return shared success envelopes", async () => {
@@ -110,4 +110,36 @@ test("platform API accepts signed platform session bearer tokens on normal route
 
   assert.equal(denied.status, 401);
   assert.equal(denied.body.error.code, "UNAUTHORIZED");
+});
+
+test("platform HTTP runtime parses JSON bodies for admin configuration routes", async () => {
+  const app = await createPlatformApiApp(createPlatformApiServices());
+  await app.listen(0, "127.0.0.1");
+  try {
+    const address = app.getHttpServer().address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const response = await fetch(`http://127.0.0.1:${port}/admin/auth/simulate-login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-mock-user-email": "admin@company.com"
+      },
+      body: JSON.stringify({
+        providerId: "authprov_keycloak_default_001",
+        subject: "keycloak-admin-http-001",
+        email: "admin.http@company.com",
+        name: "Admin HTTP",
+        groups: ["evcp-admins"],
+        appRoles: {}
+      })
+    });
+    const envelope = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(envelope.ok, true);
+    assert.equal(envelope.data.providerId, "authprov_keycloak_default_001");
+    assert.equal(envelope.data.token.startsWith("evcp_session."), true);
+  } finally {
+    await app.close();
+  }
 });

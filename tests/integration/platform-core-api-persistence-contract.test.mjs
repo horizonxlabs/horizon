@@ -32,6 +32,21 @@ test("core API persistence wiring covers auth project and audit routes", () => {
   assert.match(appFactory, /sendPlatformResponseAsync/);
 });
 
+test("PRD express routes use async persistence executor", () => {
+  for (const route of [
+    'routes.post("/projects/:projectId/prd/generate"',
+    'routes.post("/projects/:projectId/prd/baseline"',
+    'routes.get("/projects/:projectId/prd/versions"',
+    'routes.get("/projects/:projectId/prd"'
+  ]) {
+    const index = appFactory.indexOf(route);
+    assert.notEqual(index, -1, `${route} should exist`);
+    const routeBlock = appFactory.slice(index, index + 420);
+    assert.match(routeBlock, /sendPlatformResponseAsync/);
+    assert.match(routeBlock, /executePlatformApiRequestAsync/);
+  }
+});
+
 test("persistence operations doc names route-level wiring as current coverage", () => {
   assert.match(persistenceDoc, /Current Data Flow/);
   assert.match(persistenceDoc, /Route-Level Coverage/);

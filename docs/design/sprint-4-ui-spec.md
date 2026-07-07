@@ -8,7 +8,9 @@ Evidence: `docs/assets/screenshots/sprint4-creator-workspace.png`
 
 ## 1. Design Objective
 
-Sprint 4 delivers the core Lovable-like Creator Workspace. The UI must support prompt-driven changes while keeping PRD context, guardrail state, token usage and live preview visible.
+Sprint 4 delivers the core Creator Workspace. The target direction is a Bolt-like vibe coding experience for enterprise users: prompt-driven full-stack app iteration in the browser with code/file context, AI diff, terminal/build/test logs, live preview and publish handoff visible in one workspace. The UI must support prompt-driven changes while keeping PRD context, guardrail state, token usage and live preview visible.
+
+The enterprise difference is mandatory: data, infrastructure, database, users, authentication, secrets, routes and deployment policy are locked by the platform and controlled by IT/Admin surfaces. Creator can inspect and request changes inside project scope, but cannot self-provision or bypass those boundaries from the workspace.
 
 ## 2. Screens
 
@@ -19,6 +21,8 @@ Sprint 4 delivers the core Lovable-like Creator Workspace. The UI must support p
 | Workspace tab | Database | Placeholder link/context for Sprint 5 |
 | Workspace tab | Versions | Placeholder link/context for Sprint 5 |
 | Workspace tab | Logs | Prompt/task/guardrail events |
+| Workspace tab | Code / Diff | Generated files, scoped code editor for Developer role, AI changes and review status |
+| Workspace tab | Terminal | Build/test/install logs from governed workspace runner, not unrestricted host shell |
 
 ## 3. Workspace Flow
 
@@ -30,8 +34,11 @@ flowchart TD
   C -->|Warn| E["Show warning and require acknowledge"]
   C -->|Allow| F["Create AI task"]
   F --> G["Show task progress"]
-  G --> H["Update mock preview"]
-  H --> I["Record token usage"]
+  G --> H["Validate platform contract"]
+  H --> I{"Boundary safe?"}
+  I -->|No| J["Block or require admin/policy request"]
+  I -->|Yes| K["Update preview/code diff"]
+  K --> L["Record token usage"]
 ```
 
 ## 4. Desktop Layout
@@ -43,7 +50,7 @@ Use a three-panel workspace:
 | Topbar | Full width | Project name, PRD version, frontend version, tokens, publish status |
 | Left panel | 280-360px | Chat history, AI plan, task progress |
 | Center panel | Flexible | Live preview frame and device controls |
-| Right panel | 280-360px | PRD, Database, Versions, Users, Tickets, Logs, API tabs |
+| Right panel | 280-360px | PRD, Database, Versions, Users, Tickets, Code/Diff, Terminal, Logs, API tabs |
 | Bottom composer | Full width or left/center | Prompt input, send action, guardrail hint |
 
 ## 5. Prompt Panel
@@ -94,6 +101,17 @@ Topbar token widget must show:
 
 Creator must never see provider secret or system-wide model config.
 
+## 8.1 Enterprise Lock Boundary
+
+The workspace must make the locked boundary clear without turning the UI into an admin console:
+
+- Auth source: Platform Auth / IdP controlled by IT.
+- User source: Platform user directory and app-role claims.
+- Database source: platform-provisioned PostgreSQL schema per app.
+- Infrastructure source: generated app container, route, TLS and storage managed by platform.
+- Secrets source: platform secret references only; no raw value display.
+- Boundary action: unsafe prompt/code changes become block, warning or approval request, not direct mutation.
+
 ## 9. States
 
 | State | UI Requirement |
@@ -118,6 +136,10 @@ Creator must never see provider secret or system-wide model config.
 | `DeviceSwitcher` | Desktop/tablet/mobile modes |
 | `WorkspaceRightTabs` | PRD/database/version/user/log/API context |
 | `GuardrailResultBanner` | Allow/warn/block feedback |
+| `CodeExplorer` | Project-scoped generated files and read/write access by role |
+| `DiffReviewPanel` | AI-generated change summary, per-file diff and accept/revert state |
+| `WorkspaceTerminalLog` | Governed install/build/test logs, no unrestricted shell access |
+| `EnterpriseBoundaryPanel` | Read-only auth/database/infra/secret constraints for the selected project |
 
 ## 11. Acceptance Criteria
 
@@ -127,3 +149,6 @@ Creator must never see provider secret or system-wide model config.
 - [ ] Live preview updates after accepted prompt.
 - [ ] Desktop workspace supports prompt, preview and right context simultaneously.
 - [ ] Guardrail block and token exhausted states are explicit and testable.
+- [ ] Workspace exposes Bolt-like code/file, diff and terminal/build/test evidence without local setup.
+- [ ] Creator cannot change platform auth, user directory, global infrastructure, database server, routes, TLS or secrets from the workspace.
+- [ ] Boundary-violating prompt/code changes are blocked or converted into approval/admin requests with audit evidence.

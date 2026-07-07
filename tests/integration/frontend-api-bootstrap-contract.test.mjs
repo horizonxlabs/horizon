@@ -6,7 +6,13 @@ const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
 const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
+const appConfig = readFileSync("packages/config/src/index.ts", "utf8");
 const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
+const caddyfile = readFileSync("docker/Caddyfile", "utf8");
+const creatorViteConfig = readFileSync("apps/creator-web/vite.config.ts", "utf8");
+const storeViteConfig = readFileSync("apps/app-store-pwa/vite.config.ts", "utf8");
+const storeIndex = readFileSync("apps/app-store-pwa/index.html", "utf8");
 
 test("shared API client exposes frontend bootstrap routes and auth modes", () => {
   assert.match(apiClient, /class PlatformApiClient/);
@@ -77,13 +83,33 @@ test("frontend shells expose Platform Auth sign-in and logout bridge controls", 
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.match(source, /createPlatformSessionStore/);
     assert.match(source, /simulateSsoLogin/);
-    assert.match(source, /Sign in/);
+    assert.match(source, /Sign in|Refresh Session/);
     assert.match(source, /Logout/);
   }
 
   assert.match(adminSource, /adminSessionBridgeProfile/);
   assert.match(creatorSource, /creatorSessionBridgeProfile/);
   assert.match(storeSource, /storeSessionBridgeProfile/);
+});
+
+test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {
+  assert.match(adminSource, /adminPageFromPath/);
+  assert.match(adminSource, /renderAdminShell/);
+  assert.match(adminSource, /adminPageCopy/);
+  for (const branch of ['adminPage === "dashboard"', 'adminPage === "services"', 'adminPage === "ai-providers"', 'adminPage === "guardrails"', 'adminPage === "audit-logs"']) {
+    assert.match(adminSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(creatorSource, /creatorPageFromPath/);
+  assert.match(creatorSource, /renderCreatorShell/);
+  assert.match(creatorSource, /creatorPageCopy/);
+  for (const branch of ['creatorPage === "projects"', 'creatorPage === "workspace"', 'creatorPage === "prd"', 'creatorPage === "users"', 'creatorPage === "publish"', 'creatorPage === "tickets"']) {
+    assert.match(creatorSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(uiStyles, /\.admin-page-stack/);
+  assert.match(caddyfile, /redir \/creator \/creator\/ 308/);
+  assert.match(caddyfile, /redir \/store \/store\/ 308/);
+  assert.match(appConfig, /route: "\/creator\/"/);
+  assert.match(appConfig, /route: "\/store\/"/);
 });
 
 test("Admin install wizard is API-client backed and exposes step controls", () => {
@@ -133,6 +159,23 @@ test("App Store PWA exposes an install journey instead of a single opaque instal
   assert.match(persistenceDocs, /App Install Journey/);
 });
 
+test("published app route opens a usable generated Leave Management runtime", () => {
+  assert.match(caddyfile, /handle \/apps\/\*/);
+  assert.match(caddyfile, /rewrite \* \/store\{uri\}/);
+  assert.match(caddyfile, /handle \/store\*/);
+  assert.match(creatorViteConfig, /base: "\/creator\/"/);
+  assert.match(storeViteConfig, /base: "\/store\/"/);
+  assert.match(storeIndex, /href="manifest\.webmanifest"/);
+  assert.match(caddyfile, /reverse_proxy app-store-pwa:4102/);
+  assert.match(storeSource, /GeneratedLeaveManagementApp/);
+  assert.match(storeSource, /currentPath\.startsWith\("\/apps\/leave-management"\)/);
+  assert.match(storeSource, /handleOpenSelectedApp/);
+  assert.match(storeSource, /window\.location\.assign\(selectedApp\.route \?\? `\/apps\/\$\{selectedApp\.slug\}`\)/);
+  for (const text of ["New leave request", "Submit request", "Approval queue", "approveRequest", "Last submitted request"]) {
+    assert.match(storeSource, new RegExp(text));
+  }
+});
+
 test("Creator workspace actions are API-client backed", () => {
   assert.match(apiClient, /getWorkspace\(/);
   assert.match(apiClient, /submitWorkspacePrompt\(/);
@@ -145,6 +188,23 @@ test("Creator workspace actions are API-client backed", () => {
   assert.match(creatorSource, /refreshWorkspacePreview/);
   assert.match(creatorSource, /workspaceResult/);
   assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
+});
+
+test("Creator project wizard creates a real project and generated PRD draft", () => {
+  for (const method of ["createProject", "generatePrdDraft", "listPrdVersions", "getCurrentPrd"]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+    assert.match(creatorSource, new RegExp(method));
+  }
+
+  assert.match(creatorSource, /handleCreateProjectSubmit/);
+  assert.match(creatorSource, /Create Project \+ Generate PRD/);
+  assert.match(creatorSource, /client\.createProject/);
+  assert.match(creatorSource, /client\.generatePrdDraft/);
+  assert.match(creatorSource, /loadCreatorBootstrap\(project\.slug\)/);
+  assert.match(creatorSource, /setCurrentPrdVersion\(draft\)/);
+  assert.match(creatorSource, /creator-project-dialog/);
+  assert.match(creatorSource, /createCreatorNavigation/);
+  assert.doesNotMatch(creatorSource, /navItems=\{navigation\.creator\}/);
 });
 
 test("Creator app users and publish actions are API-client backed", () => {
