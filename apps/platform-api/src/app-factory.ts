@@ -2153,7 +2153,7 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     }
   };
   rawApp.all("/preview/:slug", previewHandler);
-  rawApp.all("/preview/:slug/*", previewHandler);
+  rawApp.all("/preview/:slug/*splat", previewHandler);
 
   // NOTE (Task 9 deviation, DONE_WITH_CONCERNS): the shared DockerEngine instance is
   // constructed inside workspace-orchestrator/factory.ts and is never exposed on
@@ -2312,7 +2312,7 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     }
   };
   rawApp.all("/apps/:slug", appsProdHandler);
-  rawApp.all("/apps/:slug/*", appsProdHandler);
+  rawApp.all("/apps/:slug/*splat", appsProdHandler);
 
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(response, executePlatformApiRequest(services, { method: "GET", path: "/admin/knowledge/sources", headers: request.headers }))
