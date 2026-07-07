@@ -42,9 +42,11 @@ export function createMessageParser() {
       if (!state.inArtifact) {
         const start = state.buffer.indexOf("<artifact");
         if (start === -1) {
-          if (state.buffer.length > 0) {
-            events.push({ type: "text", content: state.buffer });
-            state.buffer = "";
+          const holdBack = partialTagOverlap(state.buffer, "<artifact");
+          const emitLen = state.buffer.length - holdBack;
+          if (emitLen > 0) {
+            events.push({ type: "text", content: state.buffer.slice(0, emitLen) });
+            state.buffer = state.buffer.slice(emitLen);
           }
           return events;
         }

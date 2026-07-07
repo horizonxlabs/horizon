@@ -45,6 +45,34 @@ test("parses a stream split mid-tag across multiple push() calls", () => {
   assert.equal(events.find((event) => event.type === "action_chunk").content, "const x = 1;");
 });
 
+test("reassembles an <artifact> opening tag split across chunks", () => {
+  const parser = createMessageParser();
+  // The streaming boundary falls INSIDE the opening "<artifact" tag.
+  const events = [
+    ...parser.push("Here you go:\n<arti"),
+    ...parser.push('fact id="b"><action type="file" filePath="app/page.tsx">const x = 1;</action></artifact>'),
+    ...parser.flush()
+  ];
+  const start = events.find((event) => event.type === "action_start");
+  assert.ok(start, "expected an action_start even though <artifact> was split across chunks");
+  assert.equal(start.filePath, "app/page.tsx");
+  assert.equal(events.find((event) => event.type === "action_chunk").content, "const x = 1;");
+});
+
+test("parses a stream delivered one character at a time", () => {
+  const parser = createMessageParser();
+  const input =
+    'intro <artifact id="c"><action type="file" filePath="app/page.tsx">const y = 2;</action></artifact>';
+  const events = [];
+  for (const char of input) events.push(...parser.push(char));
+  events.push(...parser.flush());
+  const start = events.find((event) => event.type === "action_start");
+  assert.ok(start, "expected an action_start for a character-by-character stream");
+  assert.equal(start.filePath, "app/page.tsx");
+  const chunks = events.filter((event) => event.type === "action_chunk").map((event) => event.content).join("");
+  assert.equal(chunks, "const y = 2;");
+});
+
 test("rejects an unknown action type", () => {
   const parser = createMessageParser();
   assert.throws(
