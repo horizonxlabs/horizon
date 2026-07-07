@@ -1,10 +1,14 @@
 import type { CredentialStore, CredentialRecord } from "./platform-credential-service";
 import type { CorePersistenceClient } from "../persistence/core-repositories";
 
-export function createCorePersistenceCredentialStore(client: CorePersistenceClient): CredentialStore {
+export function createCorePersistenceCredentialStore(
+  client: CorePersistenceClient
+): CredentialStore {
   return {
     async getByEmail(email: string): Promise<CredentialRecord | null> {
-      const row = await client.platformUser.findUnique({ where: { email: email.trim().toLowerCase() } });
+      const row = await client.platformUser.findUnique({
+        where: { email: email.trim().toLowerCase() }
+      });
       return row
         ? {
             userId: row.id,
@@ -23,7 +27,10 @@ export function createCorePersistenceCredentialStore(client: CorePersistenceClie
           }
         : null;
     },
-    async setPassword(userId: string, fields: { passwordHash: string; mustChangePassword: boolean }): Promise<void> {
+    async setPassword(
+      userId: string,
+      fields: { passwordHash: string; mustChangePassword: boolean }
+    ): Promise<void> {
       await client.platformUser.update({
         where: { id: userId },
         data: {

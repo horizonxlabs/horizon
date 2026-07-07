@@ -61,10 +61,12 @@ function nodeSocketRequest(socketPath: string): DockerRequestFn {
     });
 }
 
-export function createDockerSocketEngine(opts: {
-  socketPath?: string;
-  request?: DockerRequestFn;
-} = {}): DockerEngine {
+export function createDockerSocketEngine(
+  opts: {
+    socketPath?: string;
+    request?: DockerRequestFn;
+  } = {}
+): DockerEngine {
   const request = opts.request ?? nodeSocketRequest(opts.socketPath ?? "/var/run/docker.sock");
 
   const expect = async (op: string, result: DockerRequestResult, okStatuses: number[]) => {
@@ -109,7 +111,10 @@ export function createDockerSocketEngine(opts: {
       await expect("stop", result, [204, 304]);
     },
     async removeContainer(containerId) {
-      const result = await request({ method: "DELETE", path: `/containers/${containerId}?force=true` });
+      const result = await request({
+        method: "DELETE",
+        path: `/containers/${containerId}?force=true`
+      });
       await expect("remove", result, [204]);
     },
     async inspectContainer(name) {

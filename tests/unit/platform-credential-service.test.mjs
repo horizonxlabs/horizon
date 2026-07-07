@@ -31,8 +31,14 @@ test("changePassword requires the correct current password and clears mustChange
   const store = new MemoryCredentialStore([{ userId: "u1", email: "a@co" }]);
   const svc = createPlatformCredentialService(store);
   await svc.setPassword("u1", "temp-pass-1", { mustChange: true });
-  assert.deepEqual(await svc.changePassword("u1", "wrong-pass-1", "new-pass-12"), { ok: false, reason: "wrong_current" });
-  assert.deepEqual(await svc.changePassword("u1", "temp-pass-1", "weak7!"), { ok: false, reason: "weak_password" });
+  assert.deepEqual(await svc.changePassword("u1", "wrong-pass-1", "new-pass-12"), {
+    ok: false,
+    reason: "wrong_current"
+  });
+  assert.deepEqual(await svc.changePassword("u1", "temp-pass-1", "weak7!"), {
+    ok: false,
+    reason: "weak_password"
+  });
   assert.deepEqual(await svc.changePassword("u1", "temp-pass-1", "new-pass-12"), { ok: true });
   const relogin = await svc.verifyLogin("a@co", "new-pass-12");
   assert.deepEqual(relogin, { userId: "u1", mustChangePassword: false });

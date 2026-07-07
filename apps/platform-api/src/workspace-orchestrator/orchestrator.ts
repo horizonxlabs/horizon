@@ -82,7 +82,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
     },
 
-    async provisionWorkspace(input: { projectId: string; slug: string }): Promise<WorkspaceContainerRecord> {
+    async provisionWorkspace(input: {
+      projectId: string;
+      slug: string;
+    }): Promise<WorkspaceContainerRecord> {
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
         // Idempotent: already provisioned in this process — return it instead of erroring.
@@ -109,7 +112,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           createdAt: now(),
           updatedAt: now()
         });
-        audit({ action: "workspace.reattached", projectId: input.projectId, metadata: { slug: input.slug } });
+        audit({
+          action: "workspace.reattached",
+          projectId: input.projectId,
+          metadata: { slug: input.slug }
+        });
         return healed;
       }
 
@@ -156,7 +163,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         const spec = buildDevContainerSpec({
           slug: input.slug,
           image,
-          env: { ...deps.secrets.resolveEnv(input.projectId), EVCP_PREVIEW_BASE: `/preview/${input.slug}` },
+          env: {
+            ...deps.secrets.resolveEnv(input.projectId),
+            EVCP_PREVIEW_BASE: `/preview/${input.slug}`
+          },
           cpuCores,
           memoryMb,
           network,
@@ -267,7 +277,7 @@ export { schemaNameFor, roleNameFor };
 
 export function startIdleSweep(
   orchestrator: Pick<WorkspaceOrchestrator, "stopIdleWorkspaces">,
-  opts: { intervalMs?: number } = {},
+  opts: { intervalMs?: number } = {}
 ): { stop(): void } {
   const intervalMs = opts.intervalMs ?? 60_000;
   const timer = setInterval(() => {
@@ -277,6 +287,6 @@ export function startIdleSweep(
   return {
     stop() {
       clearInterval(timer);
-    },
+    }
   };
 }

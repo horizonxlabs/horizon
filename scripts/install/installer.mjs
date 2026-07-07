@@ -6,8 +6,26 @@ import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { evaluateInstallContract, loadEnvFile } from "./preflight.mjs";
 
-const CORE_SERVICES = ["platform-api", "admin-web", "creator-web", "app-store-pwa", "postgres", "redis", "minio", "keycloak", "caddy"];
-const SECRET_KEYS = ["password", "secret", "api_key", "apikey", "token", "client_secret", "access_key"];
+const CORE_SERVICES = [
+  "platform-api",
+  "admin-web",
+  "creator-web",
+  "app-store-pwa",
+  "postgres",
+  "redis",
+  "minio",
+  "keycloak",
+  "caddy"
+];
+const SECRET_KEYS = [
+  "password",
+  "secret",
+  "api_key",
+  "apikey",
+  "token",
+  "client_secret",
+  "access_key"
+];
 
 export function parseInstallerArgs(argv = process.argv.slice(2)) {
   const options = {
@@ -36,7 +54,9 @@ export function parseInstallerArgs(argv = process.argv.slice(2)) {
 }
 
 export function fingerprint(value) {
-  return `sha256:${createHash("sha256").update(String(value ?? "")).digest("hex")}`;
+  return `sha256:${createHash("sha256")
+    .update(String(value ?? ""))
+    .digest("hex")}`;
 }
 
 export function redactDeep(value) {
@@ -112,7 +132,9 @@ export function evaluateComposeReadiness(preflightReport) {
   return CORE_SERVICES.map((service) => ({
     name: service,
     status: preflightReport.composeServices.includes(service) ? "ready" : "missing",
-    action: preflightReport.composeServices.includes(service) ? "-" : `Declare ${service} in ${preflightReport.composeFile}`
+    action: preflightReport.composeServices.includes(service)
+      ? "-"
+      : `Declare ${service} in ${preflightReport.composeFile}`
   }));
 }
 
@@ -126,7 +148,12 @@ export function createStage(name, status, detail, actions = []) {
   };
 }
 
-export function buildInstallReport({ env, composeText, options, startedAt = new Date().toISOString() }) {
+export function buildInstallReport({
+  env,
+  composeText,
+  options,
+  startedAt = new Date().toISOString()
+}) {
   const preflight = evaluateInstallContract({
     env,
     composeText,
@@ -137,16 +164,59 @@ export function buildInstallReport({ env, composeText, options, startedAt = new 
   });
   const setupEvidence = buildSetupEvidence(env);
   const composeReadiness = evaluateComposeReadiness(preflight);
-  const actionableFailures = preflight.checks.filter((check) => !check.passed).map((check) => `${check.name}: ${check.action}`);
+  const actionableFailures = preflight.checks
+    .filter((check) => !check.passed)
+    .map((check) => `${check.name}: ${check.action}`);
   const stages = [
-    createStage("preflight", preflight.passed ? "passed" : "failed", preflight.passed ? "All prerequisite checks passed" : "Preflight blocked install", actionableFailures),
-    createStage("configure", preflight.passed ? "passed" : "blocked", "Captured setup wizard configuration evidence", preflight.passed ? [] : ["Fix preflight failures before writing setup evidence"]),
-    createStage("write_config_evidence", preflight.passed ? "passed" : "blocked", "Wrote redacted install report and setup evidence", preflight.passed ? [] : ["No config evidence written for failed preflight"]),
-    createStage("deploy_compose", preflight.passed ? "passed" : "blocked", options.dryRun ? "Dry-run planned docker compose deployment" : "Docker Compose deployment executed", ["docker compose --env-file <env> -f <compose> up -d"]),
-    createStage("migrate_seed", preflight.passed ? "passed" : "blocked", options.dryRun ? "Dry-run planned Prisma migrate deploy and seed" : "Database migration and seed executed", ["pnpm --filter @evcp/platform-api exec prisma migrate deploy", "pnpm --filter @evcp/platform-api seed"]),
-    createStage("verify_health", preflight.passed ? "passed" : "blocked", "Verified required service readiness contract", composeReadiness.filter((service) => service.status !== "ready").map((service) => service.action))
+    createStage(
+      "preflight",
+      preflight.passed ? "passed" : "failed",
+      preflight.passed ? "All prerequisite checks passed" : "Preflight blocked install",
+      actionableFailures
+    ),
+    createStage(
+      "configure",
+      preflight.passed ? "passed" : "blocked",
+      "Captured setup wizard configuration evidence",
+      preflight.passed ? [] : ["Fix preflight failures before writing setup evidence"]
+    ),
+    createStage(
+      "write_config_evidence",
+      preflight.passed ? "passed" : "blocked",
+      "Wrote redacted install report and setup evidence",
+      preflight.passed ? [] : ["No config evidence written for failed preflight"]
+    ),
+    createStage(
+      "deploy_compose",
+      preflight.passed ? "passed" : "blocked",
+      options.dryRun
+        ? "Dry-run planned docker compose deployment"
+        : "Docker Compose deployment executed",
+      ["docker compose --env-file <env> -f <compose> up -d"]
+    ),
+    createStage(
+      "migrate_seed",
+      preflight.passed ? "passed" : "blocked",
+      options.dryRun
+        ? "Dry-run planned Prisma migrate deploy and seed"
+        : "Database migration and seed executed",
+      [
+        "pnpm --filter @evcp/platform-api exec prisma migrate deploy",
+        "pnpm --filter @evcp/platform-api seed"
+      ]
+    ),
+    createStage(
+      "verify_health",
+      preflight.passed ? "passed" : "blocked",
+      "Verified required service readiness contract",
+      composeReadiness
+        .filter((service) => service.status !== "ready")
+        .map((service) => service.action)
+    )
   ];
-  const passed = stages.every((stage) => stage.status === "passed") && composeReadiness.every((service) => service.status === "ready");
+  const passed =
+    stages.every((stage) => stage.status === "passed") &&
+    composeReadiness.every((service) => service.status === "ready");
 
   return {
     id: `install_${createHash("sha256").update(`${startedAt}:${options.envPath}:${options.composePath}`).digest("hex").slice(0, 12)}`,
@@ -177,8 +247,25 @@ export function runInstaller(options) {
   });
 
   if (!options.dryRun && report.status === "passed") {
-    execFileSync("docker", ["compose", "--env-file", options.envPath, "-f", options.composePath, "up", "-d"], { stdio: "inherit" });
-    execFileSync("pnpm", ["--filter", "@evcp/platform-api", "exec", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"], { stdio: "inherit" });
+    execFileSync(
+      "docker",
+      ["compose", "--env-file", options.envPath, "-f", options.composePath, "up", "-d"],
+      { stdio: "inherit" }
+    );
+    execFileSync(
+      "pnpm",
+      [
+        "--filter",
+        "@evcp/platform-api",
+        "exec",
+        "prisma",
+        "migrate",
+        "deploy",
+        "--schema",
+        "prisma/schema.prisma"
+      ],
+      { stdio: "inherit" }
+    );
     execFileSync("pnpm", ["--filter", "@evcp/platform-api", "seed"], { stdio: "inherit" });
   }
 

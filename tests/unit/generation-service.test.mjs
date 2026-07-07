@@ -78,7 +78,8 @@ test("retries failing shell action stops after 2 failed rounds, surfacing an err
     publishPorts: false
   });
 
-  const scriptedReply = '<artifact id="a1" title="x"><action type="shell">npm run build</action></artifact>';
+  const scriptedReply =
+    '<artifact id="a1" title="x"><action type="shell">npm run build</action></artifact>';
   const service = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([scriptedReply, scriptedReply, scriptedReply]),
     chatHistory: createMemoryChatHistoryStore(),
@@ -99,7 +100,10 @@ test("retries failing shell action stops after 2 failed rounds, surfacing an err
   const errorEvent = events.find((event) => event.type === "error");
   assert.ok(errorEvent, "expected an error event after exhausting retries");
   assert.match(errorEvent.message, /npm run build/);
-  assert.equal(events.some((event) => event.type === "commit"), false);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
   assert.equal(events.at(-1).type, "done");
   assert.equal(execAttempts, 3, "expected exactly 3 attempts (initial + 2 retries)");
 });

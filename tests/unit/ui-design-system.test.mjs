@@ -43,12 +43,22 @@ test("design system uses EVCP tokens instead of page-only hardcoded styling", ()
 });
 
 test("apps preload LINE Seed Thai fonts before React renders", () => {
-  for (const htmlPath of ["apps/creator-web/index.html", "apps/admin-web/index.html", "apps/app-store-pwa/index.html"]) {
+  for (const htmlPath of [
+    "apps/creator-web/index.html",
+    "apps/admin-web/index.html",
+    "apps/app-store-pwa/index.html"
+  ]) {
     const html = readFileSync(htmlPath, "utf8");
-    assert.match(html, /rel="preload" href="fonts\/LINESeedSansTH_W_Rg\.woff2" as="font" type="font\/woff2" crossorigin/);
+    assert.match(
+      html,
+      /rel="preload" href="fonts\/LINESeedSansTH_W_Rg\.woff2" as="font" type="font\/woff2" crossorigin/
+    );
     assert.match(html, /font-family: "LINE Seed Sans TH"/);
     assert.match(html, /font-display: block/);
-    assert.match(html, /src: url\("%BASE_URL%fonts\/LINESeedSansTH_W_Rg\.woff2"\) format\("woff2"\)/);
+    assert.match(
+      html,
+      /src: url\("%BASE_URL%fonts\/LINESeedSansTH_W_Rg\.woff2"\) format\("woff2"\)/
+    );
   }
 });
 
@@ -90,7 +100,15 @@ test("admin governance screen consumes shared design system components", () => {
   const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 
   assert.match(adminSource, /from "@evcp\/ui"/);
-  for (const component of ["PageHeader", "MetricCard", "SectionCard", "DataTable", "DecisionPanel", "WorkflowRail", "ServiceStrip"]) {
+  for (const component of [
+    "PageHeader",
+    "MetricCard",
+    "SectionCard",
+    "DataTable",
+    "DecisionPanel",
+    "WorkflowRail",
+    "ServiceStrip"
+  ]) {
     assert.match(adminSource, new RegExp(`\\b${component}\\b`));
     assert.doesNotMatch(adminSource, new RegExp(`function ${component}\\b`));
   }
@@ -105,11 +123,30 @@ test.skip("creator AI workspace exposes Antigravity-style command workspace", ()
   const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
   const css = readFileSync("packages/ui/styles.css", "utf8");
 
-  for (const uiText of ["New Conversation", "Conversation History", "Scheduled Tasks", "Ask anything, @ to mention, / for actions", "New Worktree", "Selected Artifact", "Current Run", "Output Path", "Enterprise Lock"]) {
+  for (const uiText of [
+    "New Conversation",
+    "Conversation History",
+    "Scheduled Tasks",
+    "Ask anything, @ to mention, / for actions",
+    "New Worktree",
+    "Selected Artifact",
+    "Current Run",
+    "Output Path",
+    "Enterprise Lock"
+  ]) {
     assert.match(creatorSource, new RegExp(uiText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 
-  for (const className of ["ag-workspace", "ag-rail", "ag-stage", "ag-composer-card", "ag-composer-actions", "ag-left-workbench", "ag-worktree-menu", "ag-lower-dock"]) {
+  for (const className of [
+    "ag-workspace",
+    "ag-rail",
+    "ag-stage",
+    "ag-composer-card",
+    "ag-composer-actions",
+    "ag-left-workbench",
+    "ag-worktree-menu",
+    "ag-lower-dock"
+  ]) {
     assert.match(creatorSource, new RegExp(className));
     assert.match(css, new RegExp(`\\.${className}`));
   }

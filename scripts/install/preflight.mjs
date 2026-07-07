@@ -55,7 +55,13 @@ const REQUIRED_SERVICES = [
   "caddy"
 ];
 
-const REQUIRED_PORT_KEYS = ["EVCP_HTTP_PORT", "EVCP_API_PORT", "EVCP_ADMIN_PORT", "EVCP_CREATOR_PORT", "EVCP_STORE_PORT"];
+const REQUIRED_PORT_KEYS = [
+  "EVCP_HTTP_PORT",
+  "EVCP_API_PORT",
+  "EVCP_ADMIN_PORT",
+  "EVCP_CREATOR_PORT",
+  "EVCP_STORE_PORT"
+];
 const CORE_PERSISTENCE_MODES = ["legacy", "memory", "prisma"];
 
 export function parseArgs(argv = process.argv.slice(2)) {
@@ -94,7 +100,10 @@ export function loadEnvFile(envPath) {
     const separator = line.indexOf("=");
     if (separator === -1) continue;
     const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim().replace(/^"|"$/g, "");
+    const value = line
+      .slice(separator + 1)
+      .trim()
+      .replace(/^"|"$/g, "");
     env[key] = value;
   }
   return env;
@@ -144,18 +153,35 @@ function hasStrongEnoughSecret(value) {
 
 function runVersion(command, args) {
   try {
-    return execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }).trim();
   } catch {
     return "";
   }
 }
 
-export function evaluateInstallContract({ env, composeText, envPath = ".env", composePath = "docker/docker-compose.yml", live = false, allowExampleSecrets = false }) {
+export function evaluateInstallContract({
+  env,
+  composeText,
+  envPath = ".env",
+  composePath = "docker/docker-compose.yml",
+  live = false,
+  allowExampleSecrets = false
+}) {
   const checks = [];
   const composeServices = parseComposeServices(composeText);
 
   for (const key of REQUIRED_ENV) {
-    checks.push(check(`env:${key}`, Boolean(env[key]), env[key] ? "present" : "missing", `Set ${key} in ${envPath}`));
+    checks.push(
+      check(
+        `env:${key}`,
+        Boolean(env[key]),
+        env[key] ? "present" : "missing",
+        `Set ${key} in ${envPath}`
+      )
+    );
   }
   checks.push(
     check(
@@ -174,7 +200,9 @@ export function evaluateInstallContract({ env, composeText, envPath = ".env", co
         `secret:${key}`,
         hasStrongEnoughSecret(value) && (exampleAllowed || !isExampleSecret(value)),
         value ? maskSecret(value) : "missing",
-        exampleAllowed ? "Replace example secret before production use" : `Set a non-example secret for ${key}`
+        exampleAllowed
+          ? "Replace example secret before production use"
+          : `Set a non-example secret for ${key}`
       )
     );
   }
@@ -182,27 +210,80 @@ export function evaluateInstallContract({ env, composeText, envPath = ".env", co
   const ports = REQUIRED_PORT_KEYS.map((key) => Number(env[key]));
   for (const key of REQUIRED_PORT_KEYS) {
     const value = Number(env[key]);
-    checks.push(check(`port:${key}`, Number.isInteger(value) && value > 0 && value < 65536, env[key] ?? "missing", `Set ${key} to a valid TCP port`));
+    checks.push(
+      check(
+        `port:${key}`,
+        Number.isInteger(value) && value > 0 && value < 65536,
+        env[key] ?? "missing",
+        `Set ${key} to a valid TCP port`
+      )
+    );
   }
-  checks.push(check("ports:unique", new Set(ports).size === ports.length, ports.join(", "), "Use unique host ports for platform surfaces"));
+  checks.push(
+    check(
+      "ports:unique",
+      new Set(ports).size === ports.length,
+      ports.join(", "),
+      "Use unique host ports for platform surfaces"
+    )
+  );
 
   for (const service of REQUIRED_SERVICES) {
-    checks.push(check(`compose:${service}`, composeServices.includes(service), composeServices.includes(service) ? "declared" : "missing", `Add ${service} to ${composePath}`));
+    checks.push(
+      check(
+        `compose:${service}`,
+        composeServices.includes(service),
+        composeServices.includes(service) ? "declared" : "missing",
+        `Add ${service} to ${composePath}`
+      )
+    );
   }
 
-  checks.push(check("compose:env-file", composeText.includes("../.env"), composeText.includes("../.env") ? "declared" : "missing", "Compose services must load ../.env"));
-  checks.push(check("compose:no-hardcoded-postgres-password", !/POSTGRES_PASSWORD:\s*evcp\b/.test(composeText), "checked", "Do not hardcode default database password"));
-  checks.push(check("compose:caddy-route", composeText.includes("caddy") && existsSync("docker/Caddyfile"), "checked", "Add Caddy reverse proxy config"));
+  checks.push(
+    check(
+      "compose:env-file",
+      composeText.includes("../.env"),
+      composeText.includes("../.env") ? "declared" : "missing",
+      "Compose services must load ../.env"
+    )
+  );
+  checks.push(
+    check(
+      "compose:no-hardcoded-postgres-password",
+      !/POSTGRES_PASSWORD:\s*evcp\b/.test(composeText),
+      "checked",
+      "Do not hardcode default database password"
+    )
+  );
+  checks.push(
+    check(
+      "compose:caddy-route",
+      composeText.includes("caddy") && existsSync("docker/Caddyfile"),
+      "checked",
+      "Add Caddy reverse proxy config"
+    )
+  );
 
   if (live) {
     const nodeVersion = runVersion("node", ["--version"]);
     const pnpmVersion = runVersion("pnpm", ["--version"]);
     const dockerVersion = runVersion("docker", ["--version"]);
     const composeVersion = runVersion("docker", ["compose", "version"]);
-    checks.push(check("tool:node", Boolean(nodeVersion), nodeVersion || "missing", "Install Node.js"));
+    checks.push(
+      check("tool:node", Boolean(nodeVersion), nodeVersion || "missing", "Install Node.js")
+    );
     checks.push(check("tool:pnpm", Boolean(pnpmVersion), pnpmVersion || "missing", "Install pnpm"));
-    checks.push(check("tool:docker", Boolean(dockerVersion), dockerVersion || "missing", "Install Docker"));
-    checks.push(check("tool:docker-compose", Boolean(composeVersion), composeVersion || "missing", "Install Docker Compose v2"));
+    checks.push(
+      check("tool:docker", Boolean(dockerVersion), dockerVersion || "missing", "Install Docker")
+    );
+    checks.push(
+      check(
+        "tool:docker-compose",
+        Boolean(composeVersion),
+        composeVersion || "missing",
+        "Install Docker Compose v2"
+      )
+    );
   }
 
   const passed = checks.every((item) => item.passed);
@@ -219,7 +300,12 @@ export function evaluateInstallContract({ env, composeText, envPath = ".env", co
 }
 
 export function printTextReport(report) {
-  const lines = [`EVCP install preflight: ${report.passed ? "PASS" : "FAIL"}`, `mode: ${report.mode}`, `env: ${report.envFile}`, `compose: ${report.composeFile}`];
+  const lines = [
+    `EVCP install preflight: ${report.passed ? "PASS" : "FAIL"}`,
+    `mode: ${report.mode}`,
+    `env: ${report.envFile}`,
+    `compose: ${report.composeFile}`
+  ];
   for (const item of report.checks) {
     lines.push(`${item.passed ? "PASS" : "FAIL"} ${item.name} - ${item.observed}`);
   }

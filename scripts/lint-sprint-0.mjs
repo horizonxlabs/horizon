@@ -52,7 +52,8 @@ const secretValuePatterns = [
 ];
 
 const secretAssignmentPattern = /^\s*(OPENAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*(.+?)\s*$/;
-const allowedSecretPlaceholders = /^(|["']?(example|changeme|change-me|change-before-use|placeholder|your[-_ ]?key|.*<[^>]+>.*)["']?)$/i;
+const allowedSecretPlaceholders =
+  /^(|["']?(example|changeme|change-me|change-before-use|placeholder|your[-_ ]?key|.*<[^>]+>.*)["']?)$/i;
 
 function trackedTextFiles() {
   const output = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" });

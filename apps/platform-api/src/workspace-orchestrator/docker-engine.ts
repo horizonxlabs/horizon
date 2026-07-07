@@ -78,7 +78,10 @@ export interface DockerEngine {
   // Look up an existing container by its name (e.g. "evcp-ws-<slug>"). Returns null if none.
   // Used to self-heal the orchestrator after a restart and to keep provisioning idempotent.
   inspectContainer(name: string): Promise<{ containerId: string; running: boolean } | null>;
-  execInContainer(containerId: string, cmd: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  execInContainer(
+    containerId: string,
+    cmd: string[]
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
   commitContainer(containerId: string, imageTag: string): Promise<{ imageId: string }>;
 }
 
@@ -126,7 +129,9 @@ export function createMemoryDockerEngine(): DockerEngine & {
     },
     async inspectContainer(name) {
       const container = state.containers.find((item) => item.spec.name === name);
-      return container ? { containerId: container.containerId, running: container.status === "running" } : null;
+      return container
+        ? { containerId: container.containerId, running: container.status === "running" }
+        : null;
     },
     async execInContainer(containerId, cmd) {
       find(containerId);

@@ -10,7 +10,12 @@ test("admin can create a native platform user with a temp password", async () =>
   const created = await exec.asAdmin({
     method: "POST",
     path: "/admin/users",
-    body: { email: "new.creator@company.com", name: "New Creator", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "new.creator@company.com",
+      name: "New Creator",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   assert.equal(created.status, 201);
@@ -27,7 +32,12 @@ test("non-admin cannot create a native platform user", async () => {
   const forbidden = await exec.asCreator({
     method: "POST",
     path: "/admin/users",
-    body: { email: "blocked@company.com", name: "Blocked", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "blocked@company.com",
+      name: "Blocked",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   assert.equal(forbidden.status, 403);
@@ -39,7 +49,12 @@ test("native login with temp password issues a session and reports mustChangePas
   await exec.asAdmin({
     method: "POST",
     path: "/admin/users",
-    body: { email: "login.user@company.com", name: "Login User", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "login.user@company.com",
+      name: "Login User",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   const login = await exec.anon({
@@ -60,7 +75,12 @@ test("login with wrong password and login with unknown email return a uniform 40
   await exec.asAdmin({
     method: "POST",
     path: "/admin/users",
-    body: { email: "uniform.user@company.com", name: "Uniform User", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "uniform.user@company.com",
+      name: "Uniform User",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   const wrongPassword = await exec.anon({
@@ -86,7 +106,12 @@ test("change-password with the native session token updates the password and cle
   await exec.asAdmin({
     method: "POST",
     path: "/admin/users",
-    body: { email: "change.pw@company.com", name: "Change Pw", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "change.pw@company.com",
+      name: "Change Pw",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   const login = await exec.anon({
@@ -121,7 +146,12 @@ test("created native user is persisted with the creator role visible via /auth/m
   await exec.asAdmin({
     method: "POST",
     path: "/admin/users",
-    body: { email: "role.check@company.com", name: "Role Check", role: "creator", tempPassword: "Temp1234!" }
+    body: {
+      email: "role.check@company.com",
+      name: "Role Check",
+      role: "creator",
+      tempPassword: "Temp1234!"
+    }
   });
 
   const login = await exec.anon({
@@ -209,7 +239,13 @@ test("simulate-login is disabled when EVCP_ALLOW_SIMULATE_LOGIN=0", async () => 
   const res = await exec.asAdmin({
     method: "POST",
     path: "/admin/auth/simulate-login",
-    body: { providerId: "authprov_keycloak_default_001", subject: "s", email: "creator@company.com", name: "C", groups: ["evcp-creators"] }
+    body: {
+      providerId: "authprov_keycloak_default_001",
+      subject: "s",
+      email: "creator@company.com",
+      name: "C",
+      groups: ["evcp-creators"]
+    }
   });
   assert.equal(res.status, 403);
   assert.equal(res.body.error.code, "simulate_login_disabled");

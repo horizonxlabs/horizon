@@ -39,7 +39,12 @@ test("parses a stream split mid-tag across multiple push() calls", () => {
   const part2 = 'le" filePath="a.ts">const x = 1;</act';
   const part3 = "ion></artifact>";
 
-  const events = [...parser.push(part1), ...parser.push(part2), ...parser.push(part3), ...parser.flush()];
+  const events = [
+    ...parser.push(part1),
+    ...parser.push(part2),
+    ...parser.push(part3),
+    ...parser.flush()
+  ];
 
   assert.equal(events.find((event) => event.type === "action_start").filePath, "a.ts");
   assert.equal(events.find((event) => event.type === "action_chunk").content, "const x = 1;");
@@ -50,7 +55,9 @@ test("reassembles an <artifact> opening tag split across chunks", () => {
   // The streaming boundary falls INSIDE the opening "<artifact" tag.
   const events = [
     ...parser.push("Here you go:\n<arti"),
-    ...parser.push('fact id="b"><action type="file" filePath="app/page.tsx">const x = 1;</action></artifact>'),
+    ...parser.push(
+      'fact id="b"><action type="file" filePath="app/page.tsx">const x = 1;</action></artifact>'
+    ),
     ...parser.flush()
   ];
   const start = events.find((event) => event.type === "action_start");
@@ -69,7 +76,10 @@ test("parses a stream delivered one character at a time", () => {
   const start = events.find((event) => event.type === "action_start");
   assert.ok(start, "expected an action_start for a character-by-character stream");
   assert.equal(start.filePath, "app/page.tsx");
-  const chunks = events.filter((event) => event.type === "action_chunk").map((event) => event.content).join("");
+  const chunks = events
+    .filter((event) => event.type === "action_chunk")
+    .map((event) => event.content)
+    .join("");
   assert.equal(chunks, "const y = 2;");
 });
 

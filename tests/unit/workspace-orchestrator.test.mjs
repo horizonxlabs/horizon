@@ -44,12 +44,18 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.ok(executedSql.some((sql) => sql.includes("CREATE SCHEMA")));
   assert.deepEqual(deps.objectStorage.state.buckets, ["proj-leave-tracker"]);
   assert.equal(deps.llmGateway.state.keys.length, 1);
-  assert.deepEqual(
-    orchestrator.listSecretNames("p1").sort(),
-    ["DATABASE_URL", "LLM_GATEWAY_KEY", "S3_ACCESS_KEY", "S3_BUCKET", "S3_ENDPOINT", "S3_SECRET_KEY"]
-  );
+  assert.deepEqual(orchestrator.listSecretNames("p1").sort(), [
+    "DATABASE_URL",
+    "LLM_GATEWAY_KEY",
+    "S3_ACCESS_KEY",
+    "S3_BUCKET",
+    "S3_ENDPOINT",
+    "S3_SECRET_KEY"
+  ]);
   assert.equal(deps.docker.state.containers[0].status, "running");
-  assert.ok(deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL=")));
+  assert.ok(
+    deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL="))
+  );
   assert.ok(audits.some((event) => event.action === "workspace.provisioned"));
 });
 
@@ -82,10 +88,16 @@ test("duplicate provisioning for same project is idempotent (returns the existin
 
 test("provision self-heals to the existing container after a restart (empty records, same docker)", async () => {
   const { deps } = createDeps();
-  const first = await createWorkspaceOrchestrator(deps).provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
+  const first = await createWorkspaceOrchestrator(deps).provisionWorkspace({
+    projectId: "p1",
+    slug: "leave-tracker"
+  });
   // Simulate a platform-api restart: a fresh orchestrator (empty in-memory records) sharing the
   // same docker engine (the container is still running). Provision must re-attach, not re-provision.
-  const healed = await createWorkspaceOrchestrator(deps).provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
+  const healed = await createWorkspaceOrchestrator(deps).provisionWorkspace({
+    projectId: "p1",
+    slug: "leave-tracker"
+  });
   assert.equal(healed.containerId, first.containerId);
   assert.equal(healed.state, "running");
 });

@@ -164,7 +164,13 @@ export interface OperationsRecoveryOverview {
 
 export type ProductionHealthStatus = "healthy" | "degraded" | "failed";
 export type LicenseStatus = "active" | "warning" | "grace" | "expired" | "tampered";
-export type LicenseAction = "publish" | "ai_generation" | "new_app" | "new_external_invite" | "activate_user" | "run_existing_app";
+export type LicenseAction =
+  | "publish"
+  | "ai_generation"
+  | "new_app"
+  | "new_external_invite"
+  | "activate_user"
+  | "run_existing_app";
 export type SecurityReleaseStatus = "ready" | "blocked";
 export type UploadScanStatus = "clean" | "pending" | "failed" | "malicious";
 export type UploadDecision = "allowed" | "blocked" | "quarantined";
@@ -654,7 +660,9 @@ export interface FrontendRestoreResult {
   restoredFrom: FrontendCheckpoint;
   boundary: {
     frontendChanged: true;
-    unchanged: Array<"backend" | "database" | "auth" | "app_roles" | "membership" | "domain" | "prd_baseline">;
+    unchanged: Array<
+      "backend" | "database" | "auth" | "app_roles" | "membership" | "domain" | "prd_baseline"
+    >;
   };
   auditEventId: string;
 }
@@ -926,7 +934,14 @@ export interface GeneratedRuntimeOverview {
 export type StoreAppAccessStatus = "active" | "available" | "pending";
 export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
 export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
-export type TicketType = "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
+export type TicketType =
+  | "bug"
+  | "feedback"
+  | "feature"
+  | "access_issue"
+  | "data_issue"
+  | "performance"
+  | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
 
@@ -966,7 +981,15 @@ export interface StorefrontAppDetail extends StorefrontAppCard {
   accessMode: AppStoreRegistryEntry["accessMode"];
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<
+    | "open"
+    | "install"
+    | "uninstall"
+    | "request_access"
+    | "submit_ticket"
+    | "send_feedback"
+    | "view_status"
+  >;
 }
 
 export interface StoreAppInstallation {
@@ -1043,7 +1066,12 @@ export interface InAppNotification {
 }
 
 export type PrdChangeSourceType = "ticket" | "prompt" | "manual";
-export type PrdChangeStatus = "draft" | "pending_approval" | "approved" | "rejected" | "changes_requested";
+export type PrdChangeStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "changes_requested";
 export type PrdChangeRiskLevel = "low" | "medium" | "high" | "critical";
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
@@ -1252,8 +1280,20 @@ export interface PolicyTemplate {
 export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
-export type AiScenario = "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
-export type AgentRoleKey = "requirement_analyst" | "database_designer" | "frontend_developer" | "backend_developer" | "security_reviewer" | "technical_writer";
+export type AiScenario =
+  | "prd_generation"
+  | "requirement_analysis"
+  | "frontend_coding"
+  | "backend_coding"
+  | "review"
+  | "documentation";
+export type AgentRoleKey =
+  | "requirement_analyst"
+  | "database_designer"
+  | "frontend_developer"
+  | "backend_developer"
+  | "security_reviewer"
+  | "technical_writer";
 export type GuardrailDecision = "allow" | "warn" | "block";
 export type GuardrailRuleType = "keyword" | "regex" | "policy";
 
@@ -1646,7 +1686,12 @@ function toPlatformUser(user: MockUser): PlatformUser {
 function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
   const direct = headers[name];
   const lower = headers[name.toLowerCase()];
-  const value = direct ?? lower ?? Object.entries(headers).find(([headerName]) => headerName.toLowerCase() === name.toLowerCase())?.[1];
+  const value =
+    direct ??
+    lower ??
+    Object.entries(headers).find(
+      ([headerName]) => headerName.toLowerCase() === name.toLowerCase()
+    )?.[1];
 
   if (Array.isArray(value)) return value[0];
   return value;
@@ -1665,7 +1710,11 @@ export class IdentityService {
     return user;
   }
 
-  provisionSsoUser(input: { email: string; name: string; platformRoles: PlatformRole[] }): PlatformUser {
+  provisionSsoUser(input: {
+    email: string;
+    name: string;
+    platformRoles: PlatformRole[];
+  }): PlatformUser {
     const email = input.email.trim().toLowerCase();
     const existing = this.users.find((candidate) => candidate.email === email);
     if (existing) return existing;
@@ -1712,7 +1761,10 @@ export class IdentityService {
 export class AuditService {
   private readonly events: AuditEvent[] = [];
 
-  record(input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> & Partial<Pick<AuditEvent, "severity" | "metadata">>): AuditEvent {
+  record(
+    input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> &
+      Partial<Pick<AuditEvent, "severity" | "metadata">>
+  ): AuditEvent {
     const event: AuditEvent = {
       id: `aud_${String(this.events.length + 1).padStart(4, "0")}`,
       actorId: input.actorId,
@@ -1747,8 +1799,12 @@ export class AuditService {
 }
 
 export class MockAuthService {
-  private readonly sessionSecret = process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production";
-  private readonly issuedSessions = new Map<string, { userId: string; email: string; expiresAt: string }>();
+  private readonly sessionSecret =
+    process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production";
+  private readonly issuedSessions = new Map<
+    string,
+    { userId: string; email: string; expiresAt: string }
+  >();
 
   constructor(private readonly identity: IdentityService) {}
 
@@ -1756,7 +1812,10 @@ export class MockAuthService {
     return this.identity.getUserByEmail(email);
   }
 
-  issuePlatformSession(user: PlatformUser, input: { sessionId: string; issuedAt?: Date; ttlSeconds?: number }): { token: string; expiresAt: string } {
+  issuePlatformSession(
+    user: PlatformUser,
+    input: { sessionId: string; issuedAt?: Date; ttlSeconds?: number }
+  ): { token: string; expiresAt: string } {
     const issuedAt = input.issuedAt ?? new Date();
     const ttlSeconds = input.ttlSeconds ?? 60 * 60;
     const expiresAt = new Date(issuedAt.getTime() + ttlSeconds * 1000);
@@ -1773,7 +1832,11 @@ export class MockAuthService {
     const encodedPayload = this.encodeJson(payload);
     const signature = this.sign(encodedPayload);
     const token = `evcp_session.${encodedPayload}.${signature}`;
-    this.issuedSessions.set(input.sessionId, { userId: user.id, email: user.email, expiresAt: expiresAtIso });
+    this.issuedSessions.set(input.sessionId, {
+      userId: user.id,
+      email: user.email,
+      expiresAt: expiresAtIso
+    });
     return { token, expiresAt: expiresAtIso };
   }
 
@@ -1789,8 +1852,10 @@ export class MockAuthService {
       };
     }
 
-    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email) throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    const email =
+      normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email)
+      throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
     return { user: this.identity.getUserByEmail(email), mode: "mock_header" };
   }
 
@@ -1806,15 +1871,27 @@ export class MockAuthService {
    * persistence read (`corePersistence.getUserByEmail`) so login/change-password no longer depend
    * on the mock identity store.
    */
-  resolveSessionClaims(headers: HeaderBag): { mode: AuthMode; email: string; sessionId?: string; expiresAt?: string } {
+  resolveSessionClaims(headers: HeaderBag): {
+    mode: AuthMode;
+    email: string;
+    sessionId?: string;
+    expiresAt?: string;
+  } {
     const bearer = this.extractBearer(headers);
     if (bearer) {
       const session = this.verifyPlatformSessionToken(bearer);
-      return { mode: "platform_session", email: session.email, sessionId: session.sessionId, expiresAt: session.expiresAt };
+      return {
+        mode: "platform_session",
+        email: session.email,
+        sessionId: session.sessionId,
+        expiresAt: session.expiresAt
+      };
     }
 
-    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email) throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    const email =
+      normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email)
+      throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
     return { mode: "mock_header", email };
   }
 
@@ -1830,7 +1907,11 @@ export class MockAuthService {
     return match?.[1];
   }
 
-  private verifyPlatformSessionToken(token: string): { sessionId: string; email: string; expiresAt: string } {
+  private verifyPlatformSessionToken(token: string): {
+    sessionId: string;
+    email: string;
+    expiresAt: string;
+  } {
     const parts = token.split(".");
     if (parts.length !== 3 || parts[0] !== "evcp_session") {
       throw new MockAuthError("Invalid platform session token");
@@ -1841,7 +1922,12 @@ export class MockAuthService {
       throw new MockAuthError("Invalid platform session token signature");
     }
 
-    const payload = this.decodeJson(encodedPayload) as Partial<{ typ: string; sid: string; email: string; exp: number }>;
+    const payload = this.decodeJson(encodedPayload) as Partial<{
+      typ: string;
+      sid: string;
+      email: string;
+      exp: number;
+    }>;
     if (payload.typ !== "evcp.platform.session" || !payload.sid || !payload.email || !payload.exp) {
       throw new MockAuthError("Invalid platform session token claims");
     }
@@ -1856,7 +1942,11 @@ export class MockAuthService {
       throw new MockAuthError("Platform session token does not match registered session");
     }
 
-    return { sessionId: payload.sid, email: payload.email, expiresAt: new Date(expiresAtMs).toISOString() };
+    return {
+      sessionId: payload.sid,
+      email: payload.email,
+      expiresAt: new Date(expiresAtMs).toISOString()
+    };
   }
 
   private sign(encodedPayload: string): string {
@@ -1907,17 +1997,76 @@ export class OperationsRecoveryService {
     this.auth.requireRole(actor, ["admin"]);
     const ports = new Set(input.portsAvailable ?? []);
     const checks: OperationCheck[] = [
-      this.numericCheck("CPU", ">= 4 cores", `${input.cpuCores ?? 0} cores`, input.cpuCores ?? 0, 4, "Add CPU capacity before install"),
-      this.numericCheck("RAM", ">= 8 GB", `${input.memoryGb ?? 0} GB`, input.memoryGb ?? 0, 8, "Add memory before install"),
-      this.numericCheck("Disk", ">= 100 GB free", `${input.diskFreeGb ?? 0} GB`, input.diskFreeGb ?? 0, 100, "Increase free disk space"),
-      this.booleanCheck("OS", "Linux server profile", input.os ? input.os : "unknown", Boolean(input.os), "Use a supported Linux server"),
-      this.booleanCheck("Docker", "Docker installed", input.dockerVersion ? input.dockerVersion : "missing", Boolean(input.dockerVersion), "Install Docker Engine"),
-      this.booleanCheck("Compose", "Docker Compose v2 installed", input.composeVersion ? input.composeVersion : "missing", Boolean(input.composeVersion), "Install Docker Compose v2"),
-      this.booleanCheck("Ports", "80, 443, 5432, 6379, 9000 available", [...ports].sort((a, b) => a - b).join(", ") || "none", [80, 443, 5432, 6379, 9000].every((port) => ports.has(port)), "Open required firewall ports"),
-      this.booleanCheck("DNS/TLS", "DNS and TLS readiness", `dns:${Boolean(input.dnsReady)} tls:${Boolean(input.tlsReady)}`, Boolean(input.dnsReady && input.tlsReady), "Complete DNS and TLS readiness"),
-      this.booleanCheck("Network", "Outbound and internal network ready", input.networkReady ? "ready" : "not ready", Boolean(input.networkReady), "Fix network connectivity")
+      this.numericCheck(
+        "CPU",
+        ">= 4 cores",
+        `${input.cpuCores ?? 0} cores`,
+        input.cpuCores ?? 0,
+        4,
+        "Add CPU capacity before install"
+      ),
+      this.numericCheck(
+        "RAM",
+        ">= 8 GB",
+        `${input.memoryGb ?? 0} GB`,
+        input.memoryGb ?? 0,
+        8,
+        "Add memory before install"
+      ),
+      this.numericCheck(
+        "Disk",
+        ">= 100 GB free",
+        `${input.diskFreeGb ?? 0} GB`,
+        input.diskFreeGb ?? 0,
+        100,
+        "Increase free disk space"
+      ),
+      this.booleanCheck(
+        "OS",
+        "Linux server profile",
+        input.os ? input.os : "unknown",
+        Boolean(input.os),
+        "Use a supported Linux server"
+      ),
+      this.booleanCheck(
+        "Docker",
+        "Docker installed",
+        input.dockerVersion ? input.dockerVersion : "missing",
+        Boolean(input.dockerVersion),
+        "Install Docker Engine"
+      ),
+      this.booleanCheck(
+        "Compose",
+        "Docker Compose v2 installed",
+        input.composeVersion ? input.composeVersion : "missing",
+        Boolean(input.composeVersion),
+        "Install Docker Compose v2"
+      ),
+      this.booleanCheck(
+        "Ports",
+        "80, 443, 5432, 6379, 9000 available",
+        [...ports].sort((a, b) => a - b).join(", ") || "none",
+        [80, 443, 5432, 6379, 9000].every((port) => ports.has(port)),
+        "Open required firewall ports"
+      ),
+      this.booleanCheck(
+        "DNS/TLS",
+        "DNS and TLS readiness",
+        `dns:${Boolean(input.dnsReady)} tls:${Boolean(input.tlsReady)}`,
+        Boolean(input.dnsReady && input.tlsReady),
+        "Complete DNS and TLS readiness"
+      ),
+      this.booleanCheck(
+        "Network",
+        "Outbound and internal network ready",
+        input.networkReady ? "ready" : "not ready",
+        Boolean(input.networkReady),
+        "Fix network connectivity"
+      )
     ];
-    const actionableFailures = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
+    const actionableFailures = checks
+      .filter((check) => check.status === "fail")
+      .map((check) => `${check.name}: ${check.action}`);
     const installBlocked = actionableFailures.length > 0;
     const now = new Date().toISOString();
     const report: Omit<InstallerReport, "auditEventId"> = {
@@ -1979,7 +2128,11 @@ export class OperationsRecoveryService {
       action: "installer.setup.completed",
       resourceType: "setup_configuration",
       resourceId: config.id,
-      metadata: { domain: config.domain, storageProvider: config.storage.provider, databaseUrlMasked: config.databaseUrlMasked }
+      metadata: {
+        domain: config.domain,
+        storageProvider: config.storage.provider,
+        databaseUrlMasked: config.databaseUrlMasked
+      }
     });
     const withAudit: SetupConfiguration = { ...config, auditEventId: audit.id };
     this.setupConfigurations.push(withAudit);
@@ -2001,7 +2154,8 @@ export class OperationsRecoveryService {
     this.auth.requireRole(actor, ["admin"]);
     if (!input.name.trim()) throw new ValidationError("Backup policy name is required");
     if (!input.schedule.trim()) throw new ValidationError("Backup schedule is required");
-    if (!input.encryptionMode.trim() || !input.encryptionKeyRef.trim()) throw new ValidationError("Backup encryption mode and key reference are required");
+    if (!input.encryptionMode.trim() || !input.encryptionKeyRef.trim())
+      throw new ValidationError("Backup encryption mode and key reference are required");
     const now = new Date().toISOString();
     const policy: Omit<BackupPolicy, "auditEventId"> = {
       id: `bckpol_${String(this.backupPolicies.length + 1).padStart(4, "0")}`,
@@ -2021,17 +2175,26 @@ export class OperationsRecoveryService {
       action: "backup.policy.configured",
       resourceType: "backup_policy",
       resourceId: policy.id,
-      metadata: { schedule: policy.schedule, retentionDays: policy.retentionDays, storageProvider: policy.storage.provider, encryptionMode: policy.encryptionMode }
+      metadata: {
+        schedule: policy.schedule,
+        retentionDays: policy.retentionDays,
+        storageProvider: policy.storage.provider,
+        encryptionMode: policy.encryptionMode
+      }
     });
     const withAudit: BackupPolicy = { ...policy, auditEventId: audit.id };
     this.backupPolicies.push(withAudit);
     return withAudit;
   }
 
-  runBackup(actor: PlatformUser, input: { policyId: string; trigger: BackupRun["trigger"]; databaseName: string }): BackupRun {
+  runBackup(
+    actor: PlatformUser,
+    input: { policyId: string; trigger: BackupRun["trigger"]; databaseName: string }
+  ): BackupRun {
     this.auth.requireRole(actor, ["admin"]);
     const policy = this.requireBackupPolicy(input.policyId);
-    if (policy.status !== "active") throw new ValidationError(`Backup policy ${policy.id} is not active`);
+    if (policy.status !== "active")
+      throw new ValidationError(`Backup policy ${policy.id} is not active`);
     const startedAt = new Date().toISOString();
     const id = `bckrun_${String(this.backupRuns.length + 1).padStart(4, "0")}`;
     const artifactUri = this.artifactUri(policy, id);
@@ -2055,7 +2218,12 @@ export class OperationsRecoveryService {
       action: "backup.succeeded",
       resourceType: "backup_run",
       resourceId: run.id,
-      metadata: { policyId: policy.id, artifactUri: run.artifactUri, checksum: run.checksum, encrypted: run.encrypted }
+      metadata: {
+        policyId: policy.id,
+        artifactUri: run.artifactUri,
+        checksum: run.checksum,
+        encrypted: run.encrypted
+      }
     });
     const withAudit: BackupRun = { ...run, auditEventId: audit.id };
     this.backupRuns.push(withAudit);
@@ -2093,7 +2261,11 @@ export class OperationsRecoveryService {
       action: "backup.pitr.configured",
       resourceType: "pitr_configuration",
       resourceId: pitr.id,
-      metadata: { databaseName: pitr.databaseName, walRetentionHours: pitr.walRetentionHours, baseBackupRunId: pitr.baseBackupRunId }
+      metadata: {
+        databaseName: pitr.databaseName,
+        walRetentionHours: pitr.walRetentionHours,
+        baseBackupRunId: pitr.baseBackupRunId
+      }
     });
     const withAudit: PitrConfiguration = { ...pitr, auditEventId: audit.id };
     this.pitrConfigurations.push(withAudit);
@@ -2135,7 +2307,12 @@ export class OperationsRecoveryService {
       resourceType: "restore_drill_report",
       resourceId: report.id,
       severity: status === "passed" ? "info" : "critical",
-      metadata: { backupRunId: report.backupRunId, pitrConfigId: report.pitrConfigId, failedChecks: report.failedChecks, recoveryVerified: report.recoveryVerified }
+      metadata: {
+        backupRunId: report.backupRunId,
+        pitrConfigId: report.pitrConfigId,
+        failedChecks: report.failedChecks,
+        recoveryVerified: report.recoveryVerified
+      }
     });
     const withAudit: RestoreDrillReport = { ...report, auditEventId: audit.id };
     this.restoreDrills.push(withAudit);
@@ -2155,19 +2332,54 @@ export class OperationsRecoveryService {
   }
 
   private composeServices(): ComposeServiceReadiness[] {
-    return ["platform-api", "admin-web", "creator-web", "app-store-pwa", "postgres", "keycloak", "minio", "redis", "caddy"].map((name) => ({
+    return [
+      "platform-api",
+      "admin-web",
+      "creator-web",
+      "app-store-pwa",
+      "postgres",
+      "keycloak",
+      "minio",
+      "redis",
+      "caddy"
+    ].map((name) => ({
       name,
       status: "healthy",
       endpoint: name === "caddy" ? ":443" : name
     }));
   }
 
-  private numericCheck(name: string, required: string, observed: string, value: number, minimum: number, action: string): OperationCheck {
-    return { name, required, observed, status: value >= minimum ? "pass" : "fail", action: value >= minimum ? "-" : action };
+  private numericCheck(
+    name: string,
+    required: string,
+    observed: string,
+    value: number,
+    minimum: number,
+    action: string
+  ): OperationCheck {
+    return {
+      name,
+      required,
+      observed,
+      status: value >= minimum ? "pass" : "fail",
+      action: value >= minimum ? "-" : action
+    };
   }
 
-  private booleanCheck(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
-    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  private booleanCheck(
+    name: string,
+    required: string,
+    observed: string,
+    pass: boolean,
+    action: string
+  ): OperationCheck {
+    return {
+      name,
+      required,
+      observed,
+      status: pass ? "pass" : "fail",
+      action: pass ? "-" : action
+    };
   }
 
   private maskDatabaseUrl(databaseUrl: string): string {
@@ -2176,7 +2388,12 @@ export class OperationsRecoveryService {
 
   private redactRecord<T extends Record<string, unknown>>(record: T): T {
     return Object.fromEntries(
-      Object.entries(record).filter(([key]) => !["secret", "secretAccessKey", "password", "clientSecret", "apiKey", "rawKey"].some((unsafe) => key.toLowerCase().includes(unsafe.toLowerCase())))
+      Object.entries(record).filter(
+        ([key]) =>
+          !["secret", "secretAccessKey", "password", "clientSecret", "apiKey", "rawKey"].some(
+            (unsafe) => key.toLowerCase().includes(unsafe.toLowerCase())
+          )
+      )
     ) as T;
   }
 
@@ -2256,7 +2473,11 @@ export class PlatformAuthSsoService {
       resourceType: "auth_provider_config",
       resourceId: provider.id,
       severity: "high",
-      metadata: { providerType: provider.type, issuerUrl: provider.issuerUrl, fingerprint: provider.clientSecretFingerprint }
+      metadata: {
+        providerType: provider.type,
+        issuerUrl: provider.issuerUrl,
+        fingerprint: provider.clientSecretFingerprint
+      }
     });
     return provider;
   }
@@ -2297,7 +2518,11 @@ export class PlatformAuthSsoService {
       resourceType: "auth_provider_config",
       resourceId: provider.id,
       severity: "high",
-      metadata: { providerType: provider.type, entityId: provider.entityId, fingerprint: provider.certificateFingerprint }
+      metadata: {
+        providerType: provider.type,
+        entityId: provider.entityId,
+        fingerprint: provider.certificateFingerprint
+      }
     });
     return provider;
   }
@@ -2314,10 +2539,26 @@ export class PlatformAuthSsoService {
       realm: "evcp",
       baseUrl: "http://keycloak:8080/realms/evcp",
       clients: [
-        { clientId: "evcp-platform-api", purpose: "Platform API token validation", redirectUris: ["http://127.0.0.1:4100/*"] },
-        { clientId: "evcp-admin-web", purpose: "Admin Console login", redirectUris: ["http://127.0.0.1:4100/*"] },
-        { clientId: "evcp-creator-web", purpose: "Creator Workspace login", redirectUris: ["http://127.0.0.1:4101/*"] },
-        { clientId: "evcp-generated-app", purpose: "Generated app Platform Auth SDK", redirectUris: ["/apps/*"] }
+        {
+          clientId: "evcp-platform-api",
+          purpose: "Platform API token validation",
+          redirectUris: ["http://127.0.0.1:4100/*"]
+        },
+        {
+          clientId: "evcp-admin-web",
+          purpose: "Admin Console login",
+          redirectUris: ["http://127.0.0.1:4100/*"]
+        },
+        {
+          clientId: "evcp-creator-web",
+          purpose: "Creator Workspace login",
+          redirectUris: ["http://127.0.0.1:4101/*"]
+        },
+        {
+          clientId: "evcp-generated-app",
+          purpose: "Generated app Platform Auth SDK",
+          redirectUris: ["/apps/*"]
+        }
       ],
       defaultGroups: [
         { group: "evcp-admins", platformRoles: ["admin"] },
@@ -2332,7 +2573,8 @@ export class PlatformAuthSsoService {
     return {
       allowed: true,
       requiresSecurityReview: true,
-      boundary: "Direct IdP integrations must still terminate into the Platform Auth session and claims contract.",
+      boundary:
+        "Direct IdP integrations must still terminate into the Platform Auth session and claims contract.",
       constraints: [
         "Generated apps must never integrate directly with external IdP.",
         "OIDC/SAML claim mapping must match Keycloak-backed Platform Auth claims.",
@@ -2395,7 +2637,12 @@ export class PlatformAuthSsoService {
       action: "auth.sso_login.succeeded",
       resourceType: "platform_auth_session",
       resourceId: session.id,
-      metadata: { providerId: provider.id, providerType: provider.type, email: claims.email, platformRoles: claims.platformRoles }
+      metadata: {
+        providerId: provider.id,
+        providerType: provider.type,
+        email: claims.email,
+        platformRoles: claims.platformRoles
+      }
     });
     return session;
   }
@@ -2434,7 +2681,10 @@ export class PlatformAuthSsoService {
     return { token: issuedToken.token, expiresAt: issuedToken.expiresAt };
   }
 
-  validateGeneratedAppSession(token: string, input: { appSlug: string; requiredRole?: string }): GeneratedAppSessionValidation {
+  validateGeneratedAppSession(
+    token: string,
+    input: { appSlug: string; requiredRole?: string }
+  ): GeneratedAppSessionValidation {
     const session = this.sessions.find((candidate) => candidate.token === token);
     if (!session) return { allowed: false, reason: "invalid_session" };
     const roles = session.claims.appRoles[input.appSlug] ?? [];
@@ -2468,13 +2718,20 @@ export class PlatformAuthSsoService {
     return provider;
   }
 
-  private mapPlatformRoles(mapping: Record<string, PlatformRole[]>, groups: string[]): PlatformRole[] {
+  private mapPlatformRoles(
+    mapping: Record<string, PlatformRole[]>,
+    groups: string[]
+  ): PlatformRole[] {
     const roles = groups.flatMap((group) => mapping[group] ?? []);
     return [...new Set(roles)];
   }
 
-  private normalizeMapping(mapping: Record<string, PlatformRole[]>): Record<string, PlatformRole[]> {
-    return Object.fromEntries(Object.entries(mapping).map(([group, roles]) => [group, [...new Set(roles)]]));
+  private normalizeMapping(
+    mapping: Record<string, PlatformRole[]>
+  ): Record<string, PlatformRole[]> {
+    return Object.fromEntries(
+      Object.entries(mapping).map(([group, roles]) => [group, [...new Set(roles)]])
+    );
   }
 
   private maskAuthSecret(secret: string): string {
@@ -2560,7 +2817,12 @@ export class PolicyTemplateService {
       classification: "restricted",
       label: "Restricted",
       requiredReviewers: ["Project Owner", "Security Admin", "Platform Admin"],
-      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity", "break_glass_disabled"],
+      requiredChecks: [
+        "auth_session_required",
+        "app_role_required",
+        "audit_high_severity",
+        "break_glass_disabled"
+      ],
       publishAllowed: false,
       externalExposureAllowed: false
     }
@@ -2573,10 +2835,16 @@ export class PolicyTemplateService {
     return [...this.templates];
   }
 
-  evaluate(actor: PlatformUser, input: { classification: PolicyClassification; action: string }): PolicyTemplate {
+  evaluate(
+    actor: PlatformUser,
+    input: { classification: PolicyClassification; action: string }
+  ): PolicyTemplate {
     this.auth.requireRole(actor, ["admin"]);
-    const template = this.templates.find((candidate) => candidate.classification === input.classification);
-    if (!template) throw new ValidationError(`Unknown policy classification: ${input.classification}`);
+    const template = this.templates.find(
+      (candidate) => candidate.classification === input.classification
+    );
+    if (!template)
+      throw new ValidationError(`Unknown policy classification: ${input.classification}`);
     return template;
   }
 }
@@ -2619,7 +2887,8 @@ export class ProjectService {
       status: "draft",
       ownerUserId: input.actor.id,
       appType: input.appType ?? "Workflow App",
-      businessProblem: input.businessProblem ?? "Capture the business problem before PRD generation.",
+      businessProblem:
+        input.businessProblem ?? "Capture the business problem before PRD generation.",
       targetDepartment: input.targetDepartment ?? "Business Team",
       intendedUsers: input.intendedUsers ?? ["Business User"],
       dataSensitivity: input.dataSensitivity ?? "internal",
@@ -2660,7 +2929,10 @@ export class ProjectService {
 }
 
 function slugId(prefix: string, value: string): string {
-  return `${prefix}_${value.replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "").toLowerCase()}`;
+  return `${prefix}_${value
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_|_$/g, "")
+    .toLowerCase()}`;
 }
 
 function fingerprintSecret(secret: string): string {
@@ -2677,7 +2949,8 @@ function encryptSecretEnvelope(secret: string): string {
 }
 
 function decryptSecretEnvelope(ciphertext: string): string {
-  if (!ciphertext.startsWith("local-envelope:")) throw new ValidationError("Unsupported AI key envelope");
+  if (!ciphertext.startsWith("local-envelope:"))
+    throw new ValidationError("Unsupported AI key envelope");
   return Buffer.from(ciphertext.replace("local-envelope:", ""), "base64").toString("utf8");
 }
 
@@ -2727,7 +3000,9 @@ class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
     if (!input.dryRun) {
       const fetcher = this.runtime.fetcher;
       if (!fetcher) {
-        throw new ValidationError("Live external AI fetcher is not configured for the provider adapter runtime");
+        throw new ValidationError(
+          "Live external AI fetcher is not configured for the provider adapter runtime"
+        );
       }
       const maxAttempts = aiGatewayAttemptLimit(this.runtime);
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -2751,27 +3026,44 @@ class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
         } catch (error) {
           const sanitized = sanitizeProviderError(providerErrorMessage(error), secret);
           if (attempt < maxAttempts) continue;
-          throw new ValidationError(`OpenAI-compatible provider transport failed (attempts=${maxAttempts}): ${sanitized}`);
+          throw new ValidationError(
+            `OpenAI-compatible provider transport failed (attempts=${maxAttempts}): ${sanitized}`
+          );
         }
 
         if (response.status < 200 || response.status >= 300) {
           const shouldRetry = isRetryableProviderStatus(response.status, this.runtime);
           if (shouldRetry && attempt < maxAttempts) continue;
-          const errorBody = response.body as { error?: { message?: unknown; type?: unknown } } | undefined;
-          const providerMessage = sanitizeProviderError(String(errorBody?.error?.message ?? `HTTP ${response.status}`), secret);
+          const errorBody = response.body as
+            | { error?: { message?: unknown; type?: unknown } }
+            | undefined;
+          const providerMessage = sanitizeProviderError(
+            String(errorBody?.error?.message ?? `HTTP ${response.status}`),
+            secret
+          );
           const providerType = errorBody?.error?.type ? ` ${String(errorBody.error.type)}` : "";
-          throw new ValidationError(`OpenAI-compatible provider error (${response.status}${providerType}, attempts=${attempt}): ${providerMessage}`);
+          throw new ValidationError(
+            `OpenAI-compatible provider error (${response.status}${providerType}, attempts=${attempt}): ${providerMessage}`
+          );
         }
         const body = response.body as {
           choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
           usage?: { total_tokens?: unknown; completion_tokens?: unknown; prompt_tokens?: unknown };
         };
-        const liveText = String(body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? "").trim();
-        if (!liveText) throw new ValidationError("OpenAI-compatible provider returned an empty completion");
-        const totalTokens = Number(body?.usage?.total_tokens ?? body?.usage?.completion_tokens ?? 0);
+        const liveText = String(
+          body?.choices?.[0]?.message?.content ?? body?.choices?.[0]?.text ?? ""
+        ).trim();
+        if (!liveText)
+          throw new ValidationError("OpenAI-compatible provider returned an empty completion");
+        const totalTokens = Number(
+          body?.usage?.total_tokens ?? body?.usage?.completion_tokens ?? 0
+        );
         return {
           text: liveText,
-          tokensUsed: Number.isFinite(totalTokens) && totalTokens > 0 ? totalTokens : estimateAiTokens(input.prompt, liveText),
+          tokensUsed:
+            Number.isFinite(totalTokens) && totalTokens > 0
+              ? totalTokens
+              : estimateAiTokens(input.prompt, liveText),
           latencyMs: Math.max((this.runtime.now?.() ?? Date.now()) - started, 1)
         };
       }
@@ -2805,7 +3097,10 @@ export class AiGovernanceService {
     private readonly runtime: AiGatewayRuntimeOptions = {}
   ) {}
 
-  createProvider(actor: PlatformUser, input: Omit<AiProvider, "id" | "status" | "createdAt">): AiProvider {
+  createProvider(
+    actor: PlatformUser,
+    input: Omit<AiProvider, "id" | "status" | "createdAt">
+  ): AiProvider {
     this.requireAdmin(actor, "ai.provider.denied", "ai_provider", input.name);
 
     const provider: AiProvider = {
@@ -2914,7 +3209,10 @@ export class AiGovernanceService {
       action: "ai.route.configured",
       resourceType: "ai_scenario_route",
       resourceId: route.scenario,
-      metadata: { primaryProviderId: route.primary.providerId, fallbackProviderId: route.fallback?.providerId }
+      metadata: {
+        primaryProviderId: route.primary.providerId,
+        fallbackProviderId: route.fallback?.providerId
+      }
     });
 
     return route;
@@ -2946,7 +3244,8 @@ export class AiGovernanceService {
 
   checkQuota(scope: AiQuota["scope"], requestedTokens: number): QuotaDecision {
     const quota = this.quotas.find((candidate) => candidate.scope === scope);
-    if (!quota) return { allowed: true, reason: "within_quota", remainingToday: Number.MAX_SAFE_INTEGER };
+    if (!quota)
+      return { allowed: true, reason: "within_quota", remainingToday: Number.MAX_SAFE_INTEGER };
 
     const remainingToday = Math.max(quota.dailyLimit - quota.usedToday, 0);
     if (quota.hardStop && requestedTokens > remainingToday) {
@@ -2978,7 +3277,8 @@ export class AiGovernanceService {
     }
   ): AiProviderTestCallResult {
     this.requireAdmin(actor, "ai.provider_test.denied", "ai_provider_test_call", input.scenario);
-    const prompt = input.prompt?.trim() || `Validate ${input.scenario} provider route before Creator use`;
+    const prompt =
+      input.prompt?.trim() || `Validate ${input.scenario} provider route before Creator use`;
     const completion = this.invokeCompletion(actor, {
       projectId: "admin_provider_test_call",
       scenario: input.scenario,
@@ -3010,10 +3310,10 @@ export class AiGovernanceService {
       projectId: string;
       scenario: AiScenario;
       prompt: string;
-	      requestedTokens?: number;
-	      guardrailDecision?: GuardrailDecision;
-	      // Callers use dryRun: false only when the runtime supplies a live provider fetcher.
-	      dryRun?: boolean;
+      requestedTokens?: number;
+      guardrailDecision?: GuardrailDecision;
+      // Callers use dryRun: false only when the runtime supplies a live provider fetcher.
+      dryRun?: boolean;
       timeoutMs?: number;
       allowDeterministicFallback?: boolean;
       deterministicFallbackText?: string;
@@ -3038,7 +3338,9 @@ export class AiGovernanceService {
         status: "blocked",
         reason: "guardrail_blocked"
       });
-      throw new ValidationError(`AI request blocked by guardrail before provider call (${usage.id})`);
+      throw new ValidationError(
+        `AI request blocked by guardrail before provider call (${usage.id})`
+      );
     }
 
     const quota = this.checkQuota("creator", requestedTokens);
@@ -3055,7 +3357,9 @@ export class AiGovernanceService {
         status: "blocked",
         reason: quota.reason
       });
-      throw new QuotaExceededError(`Creator quota exceeded before external provider call. Remaining today: ${quota.remainingToday}. Usage log: ${usage.id}`);
+      throw new QuotaExceededError(
+        `Creator quota exceeded before external provider call. Remaining today: ${quota.remainingToday}. Usage log: ${usage.id}`
+      );
     }
 
     try {
@@ -3072,7 +3376,11 @@ export class AiGovernanceService {
         fallbackUsed: false
       });
     } catch (error) {
-      if (!route.fallback || !input.allowDeterministicFallback || !input.deterministicFallbackText) {
+      if (
+        !route.fallback ||
+        !input.allowDeterministicFallback ||
+        !input.deterministicFallbackText
+      ) {
         const usage = this.recordUsage({
           projectId: input.projectId,
           taskId: `ai_${input.scenario}_failed`,
@@ -3085,7 +3393,9 @@ export class AiGovernanceService {
           status: "failed",
           reason: error instanceof Error ? error.message : String(error)
         });
-        throw new ValidationError(`AI provider call failed and no fallback policy is available (${usage.id}): ${providerErrorMessage(error)}`);
+        throw new ValidationError(
+          `AI provider call failed and no fallback policy is available (${usage.id}): ${providerErrorMessage(error)}`
+        );
       }
 
       const provider = this.requireProvider(route.fallback.providerId);
@@ -3109,7 +3419,12 @@ export class AiGovernanceService {
         resourceType: "ai_usage_log",
         resourceId: usage.id,
         severity: "warning",
-        metadata: { projectId: input.projectId, scenario: input.scenario, primaryProviderId: route.primary.providerId, fallbackProviderId: provider.id }
+        metadata: {
+          projectId: input.projectId,
+          scenario: input.scenario,
+          primaryProviderId: route.primary.providerId,
+          fallbackProviderId: provider.id
+        }
       });
       return {
         text: input.deterministicFallbackText,
@@ -3184,7 +3499,13 @@ export class AiGovernanceService {
       action: "ai.gateway.completed",
       resourceType: "ai_usage_log",
       resourceId: usage.id,
-      metadata: { projectId: input.projectId, scenario: input.scenario, providerId: provider.id, model: input.target.model, tokensUsed: response.tokensUsed }
+      metadata: {
+        projectId: input.projectId,
+        scenario: input.scenario,
+        providerId: provider.id,
+        model: input.target.model,
+        tokensUsed: response.tokensUsed
+      }
     });
     return {
       text: response.text,
@@ -3199,7 +3520,9 @@ export class AiGovernanceService {
     };
   }
 
-  private recordUsage(input: Omit<AiUsageLog, "id" | "occurredAt" | "estimatedCostUsd" | "promptFingerprint">): AiUsageLog {
+  private recordUsage(
+    input: Omit<AiUsageLog, "id" | "occurredAt" | "estimatedCostUsd" | "promptFingerprint">
+  ): AiUsageLog {
     const usage: AiUsageLog = {
       ...input,
       id: `aigw_${String(this.usageLogs.length + 1).padStart(4, "0")}`,
@@ -3217,7 +3540,9 @@ export class AiGovernanceService {
     const cooldownMs = this.runtime.circuitBreaker?.cooldownMs ?? 60_000;
     const elapsedMs = (this.runtime.now?.() ?? Date.now()) - circuit.openedAt;
     if (elapsedMs < cooldownMs) {
-      throw new ValidationError(`AI provider circuit open for ${circuitKey}; retry after ${Math.ceil((cooldownMs - elapsedMs) / 1000)}s`);
+      throw new ValidationError(
+        `AI provider circuit open for ${circuitKey}; retry after ${Math.ceil((cooldownMs - elapsedMs) / 1000)}s`
+      );
     }
     this.providerCircuits.delete(circuitKey);
   }
@@ -3241,17 +3566,26 @@ export class AiGovernanceService {
     const key = this.apiKeys
       .filter((candidate) => candidate.providerId === providerId && candidate.status === "active")
       .sort((left, right) => left.fallbackPriority - right.fallbackPriority)[0];
-    if (!key) throw new ValidationError(`No active AI API key configured for provider ${providerId}`);
+    if (!key)
+      throw new ValidationError(`No active AI API key configured for provider ${providerId}`);
     key.lastUsedAt = new Date().toISOString();
     return key;
   }
 
   private createAdapter(provider: AiProvider): AiCompletionAdapter {
-    if (provider.adapter === "openai" || provider.adapter === "azure_openai") return new OpenAiCompatibleCompletionAdapter(this.runtime);
-    throw new ValidationError(`AI provider adapter ${provider.adapter} is not implemented for external calls yet`);
+    if (provider.adapter === "openai" || provider.adapter === "azure_openai")
+      return new OpenAiCompatibleCompletionAdapter(this.runtime);
+    throw new ValidationError(
+      `AI provider adapter ${provider.adapter} is not implemented for external calls yet`
+    );
   }
 
-  private requireAdmin(actor: PlatformUser, deniedAction: string, resourceType: string, resourceId: string): void {
+  private requireAdmin(
+    actor: PlatformUser,
+    deniedAction: string,
+    resourceType: string,
+    resourceId: string
+  ): void {
     try {
       this.auth.requireRole(actor, ["admin"]);
     } catch (error) {
@@ -3274,7 +3608,12 @@ export class AiGovernanceService {
   }
 
   private toPublicKey(key: StoredAiApiKey): AiApiKey {
-    const { secretCiphertext: _secretCiphertext, keyVersion: _keyVersion, encryptionProvider: _encryptionProvider, ...publicKey } = key;
+    const {
+      secretCiphertext: _secretCiphertext,
+      keyVersion: _keyVersion,
+      encryptionProvider: _encryptionProvider,
+      ...publicKey
+    } = key;
     return publicKey;
   }
 }
@@ -3288,7 +3627,10 @@ export class GuardrailService {
     private readonly audit: AuditService
   ) {}
 
-  createRule(actor: PlatformUser, input: Omit<GuardrailRule, "id" | "status" | "updatedAt">): GuardrailRule {
+  createRule(
+    actor: PlatformUser,
+    input: Omit<GuardrailRule, "id" | "status" | "updatedAt">
+  ): GuardrailRule {
     this.auth.requireRole(actor, ["admin"]);
 
     const rule: GuardrailRule = {
@@ -3327,7 +3669,10 @@ export class GuardrailService {
     return this.evaluatePrompt(actor, input);
   }
 
-  evaluatePrompt(actor: PlatformUser, input: { prompt: string; scenario: string }): GuardrailResult {
+  evaluatePrompt(
+    actor: PlatformUser,
+    input: { prompt: string; scenario: string }
+  ): GuardrailResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const matchedRule = this.findMatchingRule(input.prompt);
     const classifierDecision = this.classifyPolicy(input.prompt);
@@ -3471,10 +3816,13 @@ export class KnowledgeGovernanceService {
   ): KnowledgeVersion {
     this.auth.requireRole(actor, ["admin"]);
     const source = this.requireSource(sourceId);
-    if (!input.contentHash.trim()) throw new ValidationError("Knowledge version content hash is required");
-    if (!input.changelog.trim()) throw new ValidationError("Knowledge version changelog is required");
+    if (!input.contentHash.trim())
+      throw new ValidationError("Knowledge version content hash is required");
+    if (!input.changelog.trim())
+      throw new ValidationError("Knowledge version changelog is required");
 
-    const versionNumber = this.versions.filter((candidate) => candidate.sourceId === sourceId).length + 1;
+    const versionNumber =
+      this.versions.filter((candidate) => candidate.sourceId === sourceId).length + 1;
     const version: KnowledgeVersion = {
       id: `${sourceId}_${input.version ?? `v${versionNumber}`}`,
       sourceId,
@@ -3513,7 +3861,9 @@ export class KnowledgeGovernanceService {
     const decidedAt = new Date().toISOString();
 
     if (input.decision === "approved") {
-      for (const candidate of this.versions.filter((item) => item.sourceId === version.sourceId && item.isActive)) {
+      for (const candidate of this.versions.filter(
+        (item) => item.sourceId === version.sourceId && item.isActive
+      )) {
         candidate.isActive = false;
         candidate.lifecycleStatus = "superseded";
       }
@@ -3546,7 +3896,11 @@ export class KnowledgeGovernanceService {
       action: `knowledge.version.${input.decision}`,
       resourceType: "knowledge_version",
       resourceId: version.id,
-      metadata: { sourceId: source.id, note: approval.note, lifecycleStatus: version.lifecycleStatus }
+      metadata: {
+        sourceId: source.id,
+        note: approval.note,
+        lifecycleStatus: version.lifecycleStatus
+      }
     });
 
     return { version, approval, auditEventId: auditEvent.id };
@@ -3568,7 +3922,9 @@ export class KnowledgeGovernanceService {
     if (actor.role === "creator" && !input.projectId) {
       throw new ValidationError("Creator knowledge retrieval requires project context");
     }
-    const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
+    const project = input.projectId
+      ? this.projects.getProjectForActor(actor, input.projectId)
+      : undefined;
     const department = input.department ?? project?.targetDepartment;
     const appId = input.appId ?? project?.appId;
     const required = new Set(input.requiredKnowledgeSourceIds ?? []);
@@ -3576,7 +3932,12 @@ export class KnowledgeGovernanceService {
     const deniedVersionIds: string[] = [];
     const deniedReasons: string[] = [];
 
-    for (const version of this.versions.filter((candidate) => candidate.approvalStatus === "approved" && candidate.lifecycleStatus === "active" && candidate.isActive)) {
+    for (const version of this.versions.filter(
+      (candidate) =>
+        candidate.approvalStatus === "approved" &&
+        candidate.lifecycleStatus === "active" &&
+        candidate.isActive
+    )) {
       const source = this.requireSource(version.sourceId);
       if (source.status !== "active" || source.indexStatus !== "indexed") continue;
       if (required.size > 0 && !required.has(source.id)) continue;
@@ -3652,18 +4013,32 @@ export class KnowledgeGovernanceService {
 
   private scopeMismatch(
     scope: GovernanceScope,
-    input: { projectId?: string; appId?: string; department?: string; agentRole: AgentRoleKey; scenario: AiScenario }
+    input: {
+      projectId?: string;
+      appId?: string;
+      department?: string;
+      agentRole: AgentRoleKey;
+      scenario: AiScenario;
+    }
   ): string | undefined {
-    if (scope.scenarios?.length && !scope.scenarios.includes(input.scenario)) return `scenario mismatch: ${input.scenario}`;
-    if (scope.agentRoles?.length && !scope.agentRoles.includes(input.agentRole)) return `agent role mismatch: ${input.agentRole}`;
+    if (scope.scenarios?.length && !scope.scenarios.includes(input.scenario))
+      return `scenario mismatch: ${input.scenario}`;
+    if (scope.agentRoles?.length && !scope.agentRoles.includes(input.agentRole))
+      return `agent role mismatch: ${input.agentRole}`;
     if (scope.visibility === "department" || scope.department) {
-      if (scope.department && scope.department !== input.department) return `department mismatch: ${input.department ?? "unknown"}`;
+      if (scope.department && scope.department !== input.department)
+        return `department mismatch: ${input.department ?? "unknown"}`;
     }
     if (scope.visibility === "project" || scope.projectIds?.length) {
-      if (scope.projectIds?.length && (!input.projectId || !scope.projectIds.includes(input.projectId))) return `project mismatch: ${input.projectId ?? "unknown"}`;
+      if (
+        scope.projectIds?.length &&
+        (!input.projectId || !scope.projectIds.includes(input.projectId))
+      )
+        return `project mismatch: ${input.projectId ?? "unknown"}`;
     }
     if (scope.visibility === "app" || scope.appIds?.length) {
-      if (scope.appIds?.length && (!input.appId || !scope.appIds.includes(input.appId))) return `app mismatch: ${input.appId ?? "unknown"}`;
+      if (scope.appIds?.length && (!input.appId || !scope.appIds.includes(input.appId)))
+        return `app mismatch: ${input.appId ?? "unknown"}`;
     }
     return undefined;
   }
@@ -3693,7 +4068,10 @@ export class SkillGovernanceService {
     private readonly projects: ProjectService
   ) {}
 
-  createSkill(actor: PlatformUser, input: { key: string; name: string; description?: string; ownerUserId: string }): SkillDefinition {
+  createSkill(
+    actor: PlatformUser,
+    input: { key: string; name: string; description?: string; ownerUserId: string }
+  ): SkillDefinition {
     this.auth.requireRole(actor, ["admin"]);
     if (!input.key.trim()) throw new ValidationError("Skill key is required");
     if (!input.name.trim()) throw new ValidationError("Skill name is required");
@@ -3746,10 +4124,17 @@ export class SkillGovernanceService {
     const skill = this.requireSkill(skillId);
     if (!input.instruction.trim()) throw new ValidationError("Skill instruction is required");
 
-    const versionNumber = this.versions.filter((candidate) => candidate.skillId === skillId).length + 1;
+    const versionNumber =
+      this.versions.filter((candidate) => candidate.skillId === skillId).length + 1;
     const versionName = input.version ?? `v${versionNumber}`;
     const contentHash = createHash("sha256")
-      .update(JSON.stringify({ instruction: input.instruction, inputSchema: input.inputSchema, outputSchema: input.outputSchema }))
+      .update(
+        JSON.stringify({
+          instruction: input.instruction,
+          inputSchema: input.inputSchema,
+          outputSchema: input.outputSchema
+        })
+      )
       .digest("hex");
     const version: SkillVersion = {
       id: `${skill.id}_${versionName}`,
@@ -3791,7 +4176,9 @@ export class SkillGovernanceService {
     const decidedAt = new Date().toISOString();
 
     if (input.decision === "approved") {
-      for (const candidate of this.versions.filter((item) => item.skillId === version.skillId && item.isActive)) {
+      for (const candidate of this.versions.filter(
+        (item) => item.skillId === version.skillId && item.isActive
+      )) {
         candidate.isActive = false;
         candidate.lifecycleStatus = "superseded";
       }
@@ -3864,7 +4251,12 @@ export class SkillGovernanceService {
       action: "skill.assignment.created",
       resourceType: "skill_assignment",
       resourceId: assignment.id,
-      metadata: { skillId: assignment.skillId, skillVersionId: assignment.skillVersionId, scopeType: assignment.scopeType, scopeId: assignment.scopeId }
+      metadata: {
+        skillId: assignment.skillId,
+        skillVersionId: assignment.skillVersionId,
+        scopeType: assignment.scopeType,
+        scopeId: assignment.scopeId
+      }
     });
     return assignment;
   }
@@ -3883,19 +4275,38 @@ export class SkillGovernanceService {
     if (actor.role === "creator" && !input.projectId) {
       throw new ValidationError("Creator skill resolution requires project context");
     }
-    const project = input.projectId ? this.projects.getProjectForActor(actor, input.projectId) : undefined;
+    const project = input.projectId
+      ? this.projects.getProjectForActor(actor, input.projectId)
+      : undefined;
     const department = input.department ?? project?.targetDepartment;
     const appId = input.appId ?? project?.appId;
 
     const candidates = this.assignments
-      .filter((assignment) => assignment.status === "active" && assignment.agentRole === input.agentRole && assignment.scenario === input.scenario)
-      .filter((assignment) => this.assignmentMatches(assignment, { projectId: input.projectId, appId, department }))
+      .filter(
+        (assignment) =>
+          assignment.status === "active" &&
+          assignment.agentRole === input.agentRole &&
+          assignment.scenario === input.scenario
+      )
+      .filter((assignment) =>
+        this.assignmentMatches(assignment, { projectId: input.projectId, appId, department })
+      )
       .map((assignment) => {
-        const version = this.versions.find((candidate) => candidate.id === assignment.skillVersionId);
-        const skill = version ? this.skills.find((candidate) => candidate.id === version.skillId) : undefined;
+        const version = this.versions.find(
+          (candidate) => candidate.id === assignment.skillVersionId
+        );
+        const skill = version
+          ? this.skills.find((candidate) => candidate.id === version.skillId)
+          : undefined;
         return { assignment, version, skill };
       })
-      .filter(({ version, skill }) => skill?.status === "active" && version?.approvalStatus === "approved" && version.lifecycleStatus === "active" && version.isActive)
+      .filter(
+        ({ version, skill }) =>
+          skill?.status === "active" &&
+          version?.approvalStatus === "approved" &&
+          version.lifecycleStatus === "active" &&
+          version.isActive
+      )
       .sort((left, right) => right.assignment.priority - left.assignment.priority);
 
     const selected = candidates[0];
@@ -3908,7 +4319,9 @@ export class SkillGovernanceService {
         severity: "warning",
         metadata: { projectId: input.projectId, appId, department }
       });
-      throw new ValidationError(`No approved active skill for ${input.agentRole} / ${input.scenario}`);
+      throw new ValidationError(
+        `No approved active skill for ${input.agentRole} / ${input.scenario}`
+      );
     }
 
     this.audit.record({
@@ -3949,7 +4362,10 @@ export class SkillGovernanceService {
     return skill;
   }
 
-  private assignmentMatches(assignment: SkillAssignment, input: { projectId?: string; appId?: string; department?: string }): boolean {
+  private assignmentMatches(
+    assignment: SkillAssignment,
+    input: { projectId?: string; appId?: string; department?: string }
+  ): boolean {
     if (assignment.scopeType === "global") return true;
     if (assignment.scopeType === "project") return assignment.scopeId === input.projectId;
     if (assignment.scopeType === "app") return assignment.scopeId === input.appId;
@@ -3992,7 +4408,9 @@ export class PrdService {
     });
 
     if (guardrail.decision === "block") {
-      throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
+      throw new ValidationError(
+        `PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`
+      );
     }
 
     const fallbackText = this.buildDeterministicPrdSummary(project);
@@ -4053,7 +4471,9 @@ export class PrdService {
 
   getCurrent(actor: PlatformUser, projectId: string): PrdVersion {
     const document = this.getDocumentForActor(actor, projectId);
-    const version = document.versions.find((candidate) => candidate.id === document.currentVersionId);
+    const version = document.versions.find(
+      (candidate) => candidate.id === document.currentVersionId
+    );
     if (!version) throw new ValidationError(`No current PRD version for project ${projectId}`);
     return version;
   }
@@ -4083,7 +4503,10 @@ export class PrdService {
       isBaseline: true,
       changeSummary: `Baseline v1.0 confirmed for ${project.name}`,
       createdAt: now,
-      sections: draft.sections.map((section) => ({ ...section, id: section.id.replace(versionId, `prdver_${project.id}_baseline_v1_0`) }))
+      sections: draft.sections.map((section) => ({
+        ...section,
+        id: section.id.replace(versionId, `prdver_${project.id}_baseline_v1_0`)
+      }))
     };
 
     document.status = "baseline_confirmed";
@@ -4103,15 +4526,23 @@ export class PrdService {
     return baseline;
   }
 
-  createVersionFromChange(actor: PlatformUser, projectId: string, change: PrdChangeRequest): PrdVersion {
+  createVersionFromChange(
+    actor: PlatformUser,
+    projectId: string,
+    change: PrdChangeRequest
+  ): PrdVersion {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
     const document = this.getDocumentForActor(actor, project.id);
-    const current = document.versions.find((candidate) => candidate.id === document.currentVersionId);
+    const current = document.versions.find(
+      (candidate) => candidate.id === document.currentVersionId
+    );
     if (!current) throw new ValidationError(`No current PRD version for project ${projectId}`);
 
     const now = new Date().toISOString();
-    const approvedCount = document.versions.filter((version) => version.version.startsWith("1.")).length;
+    const approvedCount = document.versions.filter((version) =>
+      version.version.startsWith("1.")
+    ).length;
     const versionNumber = `1.${Math.max(approvedCount, 1)}`;
     const version: PrdVersion = {
       id: `prdver_${project.id}_change_${String(approvedCount).padStart(2, "0")}`,
@@ -4193,14 +4624,38 @@ export class PrdService {
 
   private buildSections(project: PlatformProject, aiSummary?: string): PrdSection[] {
     const sections = [
-      ["overview", "Overview", `${project.name} is a ${project.appType} for ${project.targetDepartment}.${aiSummary ? `\n\nAI Gateway Summary: ${aiSummary}` : ""}`],
+      [
+        "overview",
+        "Overview",
+        `${project.name} is a ${project.appType} for ${project.targetDepartment}.${aiSummary ? `\n\nAI Gateway Summary: ${aiSummary}` : ""}`
+      ],
       ["business_objective", "Business Objective", project.businessProblem],
       ["users_roles", "Users and Roles", `Primary users: ${project.intendedUsers.join(", ")}.`],
-      ["core_flows", "Core Flows", "Create request, manager review, HR visibility, status tracking and audit trail."],
-      ["data_model", "Data Model", "Employee, leave request, approval step, attachment, notification and audit event."],
-      ["permissions", "Permissions", "Employees manage own requests. Managers approve team requests. HR admins administer policy."],
-      ["nfr", "Non-Functional Requirements", `Data sensitivity is ${project.dataSensitivity}; all access must be authenticated and audited.`],
-      ["acceptance_criteria", "Acceptance Criteria", "Creator can generate, review and confirm PRD baseline before app generation."]
+      [
+        "core_flows",
+        "Core Flows",
+        "Create request, manager review, HR visibility, status tracking and audit trail."
+      ],
+      [
+        "data_model",
+        "Data Model",
+        "Employee, leave request, approval step, attachment, notification and audit event."
+      ],
+      [
+        "permissions",
+        "Permissions",
+        "Employees manage own requests. Managers approve team requests. HR admins administer policy."
+      ],
+      [
+        "nfr",
+        "Non-Functional Requirements",
+        `Data sensitivity is ${project.dataSensitivity}; all access must be authenticated and audited.`
+      ],
+      [
+        "acceptance_criteria",
+        "Acceptance Criteria",
+        "Creator can generate, review and confirm PRD baseline before app generation."
+      ]
     ];
 
     return sections.map(([key, title, body], index) => ({
@@ -4219,9 +4674,7 @@ export class DatabaseViewService {
   private readonly sampleRecords: AppDatabaseSampleRecord[] = [];
   private readonly migrations: AppDatabaseMigration[] = [];
 
-  constructor(
-    private readonly projects: ProjectService
-  ) {}
+  constructor(private readonly projects: ProjectService) {}
 
   getDatabaseView(actor: PlatformUser, projectId: string): DatabaseViewSnapshot {
     const project = this.projects.getProjectForActor(actor, projectId);
@@ -4238,16 +4691,24 @@ export class DatabaseViewService {
         "Schema changes must go through AI migration flow"
       ],
       tables: this.tables.filter((table) => table.projectId === project.id),
-      relationships: this.relationships.filter((relationship) => relationship.projectId === project.id),
+      relationships: this.relationships.filter(
+        (relationship) => relationship.projectId === project.id
+      ),
       migrations: this.migrations.filter((migration) => migration.projectId === project.id),
       sampleRecords: this.sampleRecords.filter((record) => record.projectId === project.id)
     };
   }
 
-  listSampleRecords(actor: PlatformUser, projectId: string, tableKey: string): AppDatabaseSampleRecord[] {
+  listSampleRecords(
+    actor: PlatformUser,
+    projectId: string,
+    tableKey: string
+  ): AppDatabaseSampleRecord[] {
     const project = this.projects.getProjectForActor(actor, projectId);
     this.ensureMetadata(project);
-    return this.sampleRecords.filter((record) => record.projectId === project.id && record.tableKey === tableKey);
+    return this.sampleRecords.filter(
+      (record) => record.projectId === project.id && record.tableKey === tableKey
+    );
   }
 
   executeRawSql(actor: PlatformUser, projectId: string, _sql: string): never {
@@ -4261,9 +4722,14 @@ export class DatabaseViewService {
       schemaName: view.schemaName,
       tables: view.tables.map((table) => ({
         key: table.key,
-        columns: table.columns.map((column) => `${column.name}:${column.dataType}:${column.required}`)
+        columns: table.columns.map(
+          (column) => `${column.name}:${column.dataType}:${column.required}`
+        )
       })),
-      relationships: view.relationships.map((relationship) => `${relationship.sourceTable}.${relationship.sourceColumn}->${relationship.targetTable}.${relationship.targetColumn}`),
+      relationships: view.relationships.map(
+        (relationship) =>
+          `${relationship.sourceTable}.${relationship.sourceColumn}->${relationship.targetTable}.${relationship.targetColumn}`
+      ),
       migrations: view.migrations.map((migration) => `${migration.migrationId}:${migration.status}`)
     };
   }
@@ -4277,9 +4743,30 @@ export class DatabaseViewService {
         displayName: "Employees",
         description: "Employee directory fields used by Leave Management.",
         columns: [
-          { id: "", tableKey: "employees", name: "id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "employees", name: "full_name", dataType: "text", required: true, source: "generated" },
-          { id: "", tableKey: "employees", name: "manager_id", dataType: "uuid", required: false, source: "generated" }
+          {
+            id: "",
+            tableKey: "employees",
+            name: "id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "employees",
+            name: "full_name",
+            dataType: "text",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "employees",
+            name: "manager_id",
+            dataType: "uuid",
+            required: false,
+            source: "generated"
+          }
         ]
       },
       {
@@ -4287,10 +4774,40 @@ export class DatabaseViewService {
         displayName: "Leave Requests",
         description: "Employee leave requests including WFH leave type from Sprint 4 prompt.",
         columns: [
-          { id: "", tableKey: "leave_requests", name: "id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "leave_requests", name: "employee_id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "leave_requests", name: "leave_type", dataType: "text", required: true, defaultValue: "annual", source: "generated" },
-          { id: "", tableKey: "leave_requests", name: "status", dataType: "text", required: true, defaultValue: "pending", source: "generated" }
+          {
+            id: "",
+            tableKey: "leave_requests",
+            name: "id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "leave_requests",
+            name: "employee_id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "leave_requests",
+            name: "leave_type",
+            dataType: "text",
+            required: true,
+            defaultValue: "annual",
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "leave_requests",
+            name: "status",
+            dataType: "text",
+            required: true,
+            defaultValue: "pending",
+            source: "generated"
+          }
         ]
       },
       {
@@ -4298,10 +4815,38 @@ export class DatabaseViewService {
         displayName: "Approval Steps",
         description: "Manager approval queue entries linked to leave requests.",
         columns: [
-          { id: "", tableKey: "approval_steps", name: "id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "approval_steps", name: "leave_request_id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "approval_steps", name: "approver_id", dataType: "uuid", required: true, source: "generated" },
-          { id: "", tableKey: "approval_steps", name: "decision", dataType: "text", required: false, source: "generated" }
+          {
+            id: "",
+            tableKey: "approval_steps",
+            name: "id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "approval_steps",
+            name: "leave_request_id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "approval_steps",
+            name: "approver_id",
+            dataType: "uuid",
+            required: true,
+            source: "generated"
+          },
+          {
+            id: "",
+            tableKey: "approval_steps",
+            name: "decision",
+            dataType: "text",
+            required: false,
+            source: "generated"
+          }
         ]
       }
     ];
@@ -4363,7 +4908,12 @@ export class DatabaseViewService {
         projectId: project.id,
         tableKey: "approval_steps",
         ordinal: 1,
-        data: { id: "ap_9001", leave_request_id: "lr_1001", approver_id: "emp_mgr_01", decision: null }
+        data: {
+          id: "ap_9001",
+          leave_request_id: "lr_1001",
+          approver_id: "emp_mgr_01",
+          decision: null
+        }
       }
     );
 
@@ -4390,13 +4940,20 @@ export class FrontendVersionService {
     private readonly databaseView: DatabaseViewService
   ) {}
 
-  recordFromPreview(actor: PlatformUser, preview: PreviewVersion, task: WorkspaceTask): FrontendCheckpoint {
+  recordFromPreview(
+    actor: PlatformUser,
+    preview: PreviewVersion,
+    task: WorkspaceTask
+  ): FrontendCheckpoint {
     const project = this.projects.getProjectForActor(actor, preview.projectId);
-    for (const checkpoint of this.checkpoints.filter((candidate) => candidate.projectId === project.id && candidate.status === "current")) {
+    for (const checkpoint of this.checkpoints.filter(
+      (candidate) => candidate.projectId === project.id && candidate.status === "current"
+    )) {
       checkpoint.status = "previous";
     }
 
-    const versionNumber = this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
+    const versionNumber =
+      this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
     const checkpoint: FrontendCheckpoint = {
       id: `fechk_${project.id}_${String(versionNumber).padStart(4, "0")}`,
       projectId: project.id,
@@ -4405,7 +4962,11 @@ export class FrontendVersionService {
       sourceTaskId: task.id,
       status: "current",
       checksum: `sha256:${createHash("sha256").update(`${project.id}:${preview.version}:${task.prompt}`).digest("hex").slice(0, 16)}`,
-      fileManifest: ["src/pages/LeaveRequest.tsx", "src/components/ApprovalQueue.tsx", "src/styles/leave-management.css"],
+      fileManifest: [
+        "src/pages/LeaveRequest.tsx",
+        "src/components/ApprovalQueue.tsx",
+        "src/styles/leave-management.css"
+      ],
       routeSnapshot: ["/leave-requests", "/manager/approvals", "/policy"],
       changeSummary: preview.summary,
       changedAreas: ["UI components", "Frontend routing", "CSS styles"],
@@ -4422,7 +4983,8 @@ export class FrontendVersionService {
     const project = this.projects.getProjectForActor(actor, projectId);
     const checkpoints = this.listCheckpoints(actor, project.id);
     const activeCheckpoint = checkpoints.find((checkpoint) => checkpoint.status === "current");
-    if (!activeCheckpoint) throw new ValidationError(`No frontend checkpoints for project ${projectId}`);
+    if (!activeCheckpoint)
+      throw new ValidationError(`No frontend checkpoints for project ${projectId}`);
     return { project, activeCheckpoint, checkpoints };
   }
 
@@ -4431,7 +4993,11 @@ export class FrontendVersionService {
     return this.checkpoints.filter((checkpoint) => checkpoint.projectId === projectId);
   }
 
-  compareCheckpoints(actor: PlatformUser, projectId: string, input: { fromCheckpointId: string; toCheckpointId?: string }): FrontendCompareResult {
+  compareCheckpoints(
+    actor: PlatformUser,
+    projectId: string,
+    input: { fromCheckpointId: string; toCheckpointId?: string }
+  ): FrontendCompareResult {
     const checkpoints = this.listCheckpoints(actor, projectId);
     const from = checkpoints.find((checkpoint) => checkpoint.id === input.fromCheckpointId);
     const to = input.toCheckpointId
@@ -4450,17 +5016,26 @@ export class FrontendVersionService {
     };
   }
 
-  restoreFrontend(actor: PlatformUser, projectId: string, checkpointId: string): FrontendRestoreResult {
+  restoreFrontend(
+    actor: PlatformUser,
+    projectId: string,
+    checkpointId: string
+  ): FrontendRestoreResult {
     const project = this.projects.getProjectForActor(actor, projectId);
-    const source = this.listCheckpoints(actor, project.id).find((checkpoint) => checkpoint.id === checkpointId);
+    const source = this.listCheckpoints(actor, project.id).find(
+      (checkpoint) => checkpoint.id === checkpointId
+    );
     if (!source) throw new ValidationError(`Unknown frontend checkpoint: ${checkpointId}`);
 
-    for (const checkpoint of this.checkpoints.filter((candidate) => candidate.projectId === project.id && candidate.status === "current")) {
+    for (const checkpoint of this.checkpoints.filter(
+      (candidate) => candidate.projectId === project.id && candidate.status === "current"
+    )) {
       checkpoint.status = "previous";
     }
 
     const now = new Date().toISOString();
-    const versionNumber = this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
+    const versionNumber =
+      this.checkpoints.filter((checkpoint) => checkpoint.projectId === project.id).length + 1;
     const restored: FrontendCheckpoint = {
       ...source,
       id: `fechk_${project.id}_${String(versionNumber).padStart(4, "0")}`,
@@ -4497,7 +5072,9 @@ export class FrontendVersionService {
 
   captureBoundarySnapshot(actor: PlatformUser, projectId: string): Record<string, unknown> {
     const project = this.projects.getProjectForActor(actor, projectId);
-    const baseline = this.prds.listVersions(actor, project.id).find((version) => version.isBaseline);
+    const baseline = this.prds
+      .listVersions(actor, project.id)
+      .find((version) => version.isBaseline);
     return {
       backend: "platform-api:v1",
       database: this.databaseView.boundaryDigest(actor, project.id),
@@ -4512,7 +5089,15 @@ export class FrontendVersionService {
   private restoreBoundary(): FrontendRestoreResult["boundary"] {
     return {
       frontendChanged: true,
-      unchanged: ["backend", "database", "auth", "app_roles", "membership", "domain", "prd_baseline"]
+      unchanged: [
+        "backend",
+        "database",
+        "auth",
+        "app_roles",
+        "membership",
+        "domain",
+        "prd_baseline"
+      ]
     };
   }
 }
@@ -4573,10 +5158,14 @@ export class AppUserAccessService {
       name: input.name.trim() || key,
       description: input.description ?? "Custom app role",
       permissions: input.permissions?.length ? [...input.permissions] : [`${project.slug}:read`],
-      memberCount: this.members.filter((member) => member.appId === app.id && member.roleKey === key).length
+      memberCount: this.members.filter(
+        (member) => member.appId === app.id && member.roleKey === key
+      ).length
     };
 
-    const existingIndex = this.roles.findIndex((candidate) => candidate.appId === app.id && candidate.key === key);
+    const existingIndex = this.roles.findIndex(
+      (candidate) => candidate.appId === app.id && candidate.key === key
+    );
     if (existingIndex >= 0) this.roles[existingIndex] = role;
     else this.roles.push(role);
 
@@ -4623,7 +5212,9 @@ export class AppUserAccessService {
       status: isExternal ? "approval_required" : "pending",
       expiresAt: input.expiresAt,
       note: input.note,
-      policyWarning: isExternal ? "External invite requires approval before app access is activated." : undefined,
+      policyWarning: isExternal
+        ? "External invite requires approval before app access is activated."
+        : undefined,
       createdAt: now
     };
 
@@ -4693,9 +5284,12 @@ export class AppUserAccessService {
     const project = this.projects.getProjectForActor(actor, projectId);
     const app = this.ensureApp(project);
     this.ensureDefaults(project, app);
-    const request = this.accessRequests.find((candidate) => candidate.id === input.requestId && candidate.appId === app.id);
+    const request = this.accessRequests.find(
+      (candidate) => candidate.id === input.requestId && candidate.appId === app.id
+    );
     if (!request) throw new ValidationError(`Unknown app access request: ${input.requestId}`);
-    if (request.status !== "pending") throw new ConflictError(`Access request ${input.requestId} is already ${request.status}`);
+    if (request.status !== "pending")
+      throw new ConflictError(`Access request ${input.requestId} is already ${request.status}`);
 
     request.status = input.decision;
     request.decidedByUserId = input.decidedByUserId ?? actor.id;
@@ -4707,7 +5301,10 @@ export class AppUserAccessService {
 
     this.audit.record({
       actorId: actor.id,
-      action: input.decision === "approved" ? "app.access_request.approved" : "app.access_request.rejected",
+      action:
+        input.decision === "approved"
+          ? "app.access_request.approved"
+          : "app.access_request.rejected",
       resourceType: "app_access_request",
       resourceId: request.id,
       metadata: { projectId: project.id, requestedRoleKey: request.requestedRoleKey }
@@ -4729,7 +5326,11 @@ export class AppUserAccessService {
     return snapshot.members.find((member) => member.email === email && member.status === "active");
   }
 
-  getPendingRequestForEmail(project: PlatformProject, email: string, roleKey?: string): AppAccessRequest | undefined {
+  getPendingRequestForEmail(
+    project: PlatformProject,
+    email: string,
+    roleKey?: string
+  ): AppAccessRequest | undefined {
     const snapshot = this.getSnapshotForProject(project);
     return snapshot.accessRequests.find(
       (request) =>
@@ -4762,7 +5363,8 @@ export class AppUserAccessService {
         requesterEmail: existing.requesterEmail,
         status: "pending",
         reason: existing.reason,
-        department: typeof existing.reason === "string" && input.department ? input.department : undefined,
+        department:
+          typeof existing.reason === "string" && input.department ? input.department : undefined,
         createdAt: existing.createdAt
       };
     }
@@ -4784,7 +5386,11 @@ export class AppUserAccessService {
       action: "store.access_request.created",
       resourceType: "app_access_request",
       resourceId: accessRequest.id,
-      metadata: { projectId: project.id, requestedRoleKey: input.requestedRoleKey, department: input.department }
+      metadata: {
+        projectId: project.id,
+        requestedRoleKey: input.requestedRoleKey,
+        department: input.department
+      }
     });
 
     return {
@@ -4844,8 +5450,22 @@ export class AppUserAccessService {
     }
 
     if (!this.members.some((member) => member.appId === app.id)) {
-      this.addMember(app, "creator@company.com", "hr_admin", "internal", "active", project.ownerUserId);
-      this.addMember(app, "user@company.com", "employee", "internal", "active", mockUsers.endUser.id);
+      this.addMember(
+        app,
+        "creator@company.com",
+        "hr_admin",
+        "internal",
+        "active",
+        project.ownerUserId
+      );
+      this.addMember(
+        app,
+        "user@company.com",
+        "employee",
+        "internal",
+        "active",
+        mockUsers.endUser.id
+      );
     }
 
     if (!this.invitations.some((invitation) => invitation.appId === app.id)) {
@@ -4880,7 +5500,9 @@ export class AppUserAccessService {
   }
 
   private requireRoleKey(appId: string, roleKey: string): AppRoleDefinition {
-    const role = this.roles.find((candidate) => candidate.appId === appId && candidate.key === roleKey);
+    const role = this.roles.find(
+      (candidate) => candidate.appId === appId && candidate.key === roleKey
+    );
     if (!role) throw new ValidationError(`Unknown app role: ${roleKey}`);
     return role;
   }
@@ -4894,7 +5516,9 @@ export class AppUserAccessService {
     userId?: string
   ): AppMemberRecord {
     const role = this.requireRoleKey(app.id, roleKey);
-    const existing = this.members.find((member) => member.appId === app.id && member.email === email && member.roleKey === roleKey);
+    const existing = this.members.find(
+      (member) => member.appId === app.id && member.email === email && member.roleKey === roleKey
+    );
     if (existing) return existing;
     const knownUser = this.identity.listUsers().find((user) => user.email === email);
     const member: AppMemberRecord = {
@@ -4908,7 +5532,8 @@ export class AppUserAccessService {
       roleKey: role.key,
       roleName: role.name,
       status,
-      lastAccessAt: status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
+      lastAccessAt:
+        status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
     };
 
     this.members.push(member);
@@ -4923,7 +5548,9 @@ export class AppUserAccessService {
 
   private recountMembers(appId: string): void {
     for (const role of this.roles.filter((candidate) => candidate.appId === appId)) {
-      role.memberCount = this.members.filter((member) => member.appId === appId && member.roleKey === role.key).length;
+      role.memberCount = this.members.filter(
+        (member) => member.appId === appId && member.roleKey === role.key
+      ).length;
     }
   }
 }
@@ -4960,7 +5587,9 @@ export class PublishService {
   publishApp(actor: PlatformUser, projectId: string): PublishResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const review = this.getReview(actor, projectId);
-    const blockingItems = review.checklist.filter((item) => item.status === "fail").map((item) => item.label);
+    const blockingItems = review.checklist
+      .filter((item) => item.status === "fail")
+      .map((item) => item.label);
     const now = new Date().toISOString();
     const publishRequest: PublishRequestRecord = {
       id: `pubreq_${review.manifest.app.slug}_${String(this.publishRequests.length + 1).padStart(4, "0")}`,
@@ -5053,7 +5682,9 @@ export class PublishService {
   getLatestDeploymentForProject(actor: PlatformUser, projectId: string): DeploymentRecord {
     this.auth.requireRole(actor, ["admin", "creator"]);
     this.projects.getProjectForActor(actor, projectId);
-    const deployment = [...this.deployments].reverse().find((candidate) => candidate.projectId === projectId);
+    const deployment = [...this.deployments]
+      .reverse()
+      .find((candidate) => candidate.projectId === projectId);
     if (!deployment) throw new ValidationError(`No deployment record for project ${projectId}`);
     return deployment;
   }
@@ -5061,7 +5692,9 @@ export class PublishService {
   getManifestForProject(actor: PlatformUser, projectId: string): AppManifest {
     this.auth.requireRole(actor, ["admin", "creator"]);
     this.projects.getProjectForActor(actor, projectId);
-    const manifest = [...this.manifests].reverse().find((candidate) => candidate.projectId === projectId);
+    const manifest = [...this.manifests]
+      .reverse()
+      .find((candidate) => candidate.projectId === projectId);
     if (!manifest) throw new ValidationError(`No app manifest for project ${projectId}`);
     return manifest;
   }
@@ -5129,32 +5762,48 @@ export class PublishService {
     };
   }
 
-  private buildChecklist(actor: PlatformUser, project: PlatformProject, manifest: AppManifest): PublishChecklistItem[] {
+  private buildChecklist(
+    actor: PlatformUser,
+    project: PlatformProject,
+    manifest: AppManifest
+  ): PublishChecklistItem[] {
     const access = this.appAccess.getSnapshot(actor, project.id);
     return [
       {
         key: "prd_baseline",
         label: "PRD baseline",
         status: manifest.prd.versionId ? "pass" : "fail",
-        detail: manifest.prd.versionId ? `Baseline ${manifest.prd.version}` : "Confirm PRD baseline before publishing"
+        detail: manifest.prd.versionId
+          ? `Baseline ${manifest.prd.version}`
+          : "Confirm PRD baseline before publishing"
       },
       {
         key: "active_frontend",
         label: "Active frontend checkpoint",
         status: manifest.frontend.checkpointId ? "pass" : "fail",
-        detail: manifest.frontend.checkpointId ? manifest.frontend.version : "Generate or restore an active frontend checkpoint"
+        detail: manifest.frontend.checkpointId
+          ? manifest.frontend.version
+          : "Generate or restore an active frontend checkpoint"
       },
       {
         key: "app_roles",
         label: "App roles",
         status: manifest.roles.length > 0 ? "pass" : "fail",
-        detail: manifest.roles.length > 0 ? `${manifest.roles.length} roles configured` : "Create at least one app role"
+        detail:
+          manifest.roles.length > 0
+            ? `${manifest.roles.length} roles configured`
+            : "Create at least one app role"
       },
       {
         key: "app_owner",
         label: "At least one owner",
-        status: project.ownerUserId || access.members.some((member) => member.roleKey === "hr_admin") ? "pass" : "fail",
-        detail: project.ownerUserId ? `Owner ${project.ownerUserId}` : "Assign an owner before publishing"
+        status:
+          project.ownerUserId || access.members.some((member) => member.roleKey === "hr_admin")
+            ? "pass"
+            : "fail",
+        detail: project.ownerUserId
+          ? `Owner ${project.ownerUserId}`
+          : "Assign an owner before publishing"
       },
       {
         key: "blocking_guardrail",
@@ -5166,7 +5815,9 @@ export class PublishService {
   }
 
   private storeManifest(manifest: AppManifest): void {
-    const existingIndex = this.manifests.findIndex((candidate) => candidate.appId === manifest.appId);
+    const existingIndex = this.manifests.findIndex(
+      (candidate) => candidate.appId === manifest.appId
+    );
     if (existingIndex >= 0) this.manifests[existingIndex] = manifest;
     else this.manifests.push(manifest);
   }
@@ -5242,7 +5893,13 @@ export class GeneratedAppRuntimeService {
       },
       readiness: {
         ready: true,
-        gates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"]
+        gates: [
+          "artifact_contract_present",
+          "migrations_applied",
+          "schema_grant_active",
+          "platform_auth_ready",
+          "route_registered"
+        ]
       },
       logSample: {
         appId: manifest.appId,
@@ -5261,7 +5918,12 @@ export class GeneratedAppRuntimeService {
       openApi: {
         version: "1.0.0",
         openapiPath: `generated-apps/${slug}/openapi/openapi.json`,
-        paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+        paths: [
+          "/api/leave-requests",
+          "/api/leave-requests/{id}",
+          "/api/approval-steps",
+          "/api/runtime/health"
+        ],
         pathCount: 4
       },
       migrationDryRun: {
@@ -5296,7 +5958,9 @@ export class GeneratedAppRuntimeService {
 
     this.audit.record({
       actorId: actor.id,
-      action: allowed ? "generated_runtime.schema_access.allowed" : "generated_runtime.schema_access.denied",
+      action: allowed
+        ? "generated_runtime.schema_access.allowed"
+        : "generated_runtime.schema_access.denied",
       resourceType: "generated_app_runtime",
       resourceId: runtime.deploymentId,
       severity: allowed ? "info" : "warning",
@@ -5327,11 +5991,17 @@ export class GeneratedAppRuntimeService {
 
     this.audit.record({
       actorId: actor.id,
-      action: blocked ? "generated_runtime.migration_dry_run.blocked" : "generated_runtime.migration_dry_run.passed",
+      action: blocked
+        ? "generated_runtime.migration_dry_run.blocked"
+        : "generated_runtime.migration_dry_run.passed",
       resourceType: "generated_app_runtime",
       resourceId: runtime.deploymentId,
       severity: blocked ? "warning" : "info",
-      metadata: { projectId: runtime.projectId, migrationId: result.migrationId, destructiveChanges }
+      metadata: {
+        projectId: runtime.projectId,
+        migrationId: result.migrationId,
+        destructiveChanges
+      }
     });
 
     return result;
@@ -5379,9 +6049,14 @@ export class StorefrontService {
       ownerName: owner?.name ?? entry.ownerUserId,
       department: project.targetDepartment,
       accessMode: entry.accessMode,
-      releaseNotes: ["Published from Sprint 6 manifest", "WFH leave type and manager approval preview are available"],
+      releaseNotes: [
+        "Published from Sprint 6 manifest",
+        "WFH leave type and manager approval preview are available"
+      ],
       supportContact: "Creator User",
-      actions: active ? ["open", "submit_ticket", "send_feedback"] : ["request_access", "view_status"]
+      actions: active
+        ? ["open", "submit_ticket", "send_feedback"]
+        : ["request_access", "view_status"]
     };
   }
 
@@ -5418,7 +6093,11 @@ export class StorefrontService {
     const project = this.projects.getProjectById(entry.projectId);
     const member = this.appAccess.getMemberForEmail(project, actor.email);
     const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
-    const accessStatus: StoreAppAccessStatus = member ? "active" : pending ? "pending" : "available";
+    const accessStatus: StoreAppAccessStatus = member
+      ? "active"
+      : pending
+        ? "pending"
+        : "available";
     const installStatus: StoreAppInstallStatus = member ? "installed" : "not_installed";
     const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
 
@@ -5439,11 +6118,19 @@ export class StorefrontService {
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
       lastUpdated: entry.publishedAt,
-      primaryAction: accessStatus === "active" ? "open" : accessStatus === "pending" ? "view_status" : "request_access"
+      primaryAction:
+        accessStatus === "active"
+          ? "open"
+          : accessStatus === "pending"
+            ? "view_status"
+            : "request_access"
     };
   }
 
-  private ensureNotifications(actor: PlatformUser, cards: StorefrontAppCard[]): InAppNotification[] {
+  private ensureNotifications(
+    actor: PlatformUser,
+    cards: StorefrontAppCard[]
+  ): InAppNotification[] {
     if (!this.notifications.some((notification) => notification.userId === actor.id)) {
       for (const card of cards) {
         this.notifications.push({
@@ -5451,7 +6138,10 @@ export class StorefrontService {
           userId: actor.id,
           type: "app_published",
           title: `${card.name} is available`,
-          body: card.accessStatus === "active" ? "You can open this app from My Apps." : "Request access from the app detail page.",
+          body:
+            card.accessStatus === "active"
+              ? "You can open this app from My Apps."
+              : "Request access from the app detail page.",
           read: false,
           createdAt: card.lastUpdated
         });
@@ -5527,7 +6217,12 @@ export class TicketService {
       action: "ticket.created",
       resourceType: "support_ticket",
       resourceId: ticket.id,
-      metadata: { appSlug, type: ticket.type, priority: ticket.priority, assignedToUserId: ticket.assignedToUserId }
+      metadata: {
+        appSlug,
+        type: ticket.type,
+        priority: ticket.priority,
+        assignedToUserId: ticket.assignedToUserId
+      }
     });
 
     return ticket;
@@ -5535,11 +6230,17 @@ export class TicketService {
 
   getTicketStatus(actor: PlatformUser, ticketId: string): TicketStatusView {
     const ticket = this.requireTicket(ticketId);
-    if (actor.role !== "creator" && actor.role !== "admin" && ticket.submittedByUserId !== actor.id) {
+    if (
+      actor.role !== "creator" &&
+      actor.role !== "admin" &&
+      ticket.submittedByUserId !== actor.id
+    ) {
       throw new PermissionError(`User ${actor.email} cannot access ticket ${ticketId}`);
     }
     const detail = this.storefront.getAppDetail(
-      actor.role === "end_user" ? actor : { ...actor, role: "end_user", email: ticket.submittedByEmail },
+      actor.role === "end_user"
+        ? actor
+        : { ...actor, role: "end_user", email: ticket.submittedByEmail },
       ticket.appSlug
     );
     return { ...ticket, appName: detail.name };
@@ -5552,7 +6253,10 @@ export class TicketService {
       .filter((ticket) => ticket.projectId === projectId)
       .map((ticket) => ({
         ...ticket,
-        appName: this.storefront.getAppDetail({ ...actor, role: "end_user", email: ticket.submittedByEmail }, ticket.appSlug).name,
+        appName: this.storefront.getAppDetail(
+          { ...actor, role: "end_user", email: ticket.submittedByEmail },
+          ticket.appSlug
+        ).name,
         actions: ["reply", "convert_to_prd_change", "convert_to_ai_prompt", "resolve"]
       }));
   }
@@ -5561,14 +6265,17 @@ export class TicketService {
     this.auth.requireRole(actor, ["admin", "creator"]);
     this.projects.getProjectForActor(actor, projectId);
     const ticket = this.requireTicket(ticketId);
-    if (ticket.projectId !== projectId) throw new PermissionError(`Ticket ${ticketId} does not belong to project ${projectId}`);
+    if (ticket.projectId !== projectId)
+      throw new PermissionError(`Ticket ${ticketId} does not belong to project ${projectId}`);
     return ticket;
   }
 
   listTickets(actor?: PlatformUser): SupportTicket[] {
     if (actor) this.auth.requireRole(actor, ["admin", "creator"]);
     if (!actor || actor.role === "admin") return [...this.tickets];
-    return this.tickets.filter((ticket) => this.projects.getProjectById(ticket.projectId).ownerUserId === actor.id);
+    return this.tickets.filter(
+      (ticket) => this.projects.getProjectById(ticket.projectId).ownerUserId === actor.id
+    );
   }
 
   markTicketPlanned(ticketId: string): SupportTicket {
@@ -5591,7 +6298,6 @@ export class TicketService {
     if (!ticket) throw new ValidationError(`Unknown ticket: ${ticketId}`);
     return ticket;
   }
-
 }
 
 export class PrdChangeService {
@@ -5620,12 +6326,17 @@ export class PrdChangeService {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
     const ticket = this.tickets.getTicketForProject(actor, project.id, input.ticketId);
-    const existing = this.changes.find((change) => change.projectId === project.id && change.sourceTicketId === ticket.id);
+    const existing = this.changes.find(
+      (change) => change.projectId === project.id && change.sourceTicketId === ticket.id
+    );
     if (existing) return existing;
     if (!input.title.trim()) throw new ValidationError("PRD change title is required");
-    if (!input.proposedRequirement.trim()) throw new ValidationError("Proposed requirement is required");
-    if (input.affectedSections.length === 0) throw new ValidationError("At least one affected PRD section is required");
-    if (input.acceptanceCriteria.length === 0) throw new ValidationError("At least one acceptance criterion is required");
+    if (!input.proposedRequirement.trim())
+      throw new ValidationError("Proposed requirement is required");
+    if (input.affectedSections.length === 0)
+      throw new ValidationError("At least one affected PRD section is required");
+    if (input.acceptanceCriteria.length === 0)
+      throw new ValidationError("At least one acceptance criterion is required");
 
     const now = new Date().toISOString();
     const change: PrdChangeRequest = {
@@ -5710,24 +6421,33 @@ export class PrdChangeService {
 
     this.audit.record({
       actorId: actor.id,
-      action: input.decision === "approved" ? "prd.change.approved" : `prd.change.${input.decision}`,
+      action:
+        input.decision === "approved" ? "prd.change.approved" : `prd.change.${input.decision}`,
       resourceType: "prd_change_request",
       resourceId: change.id,
       severity: input.decision === "approved" ? "high" : "warning",
-      metadata: { projectId: project.id, approvedPrdVersionId: change.approvedPrdVersionId, decision: input.decision }
+      metadata: {
+        projectId: project.id,
+        approvedPrdVersionId: change.approvedPrdVersionId,
+        decision: input.decision
+      }
     });
 
     return { change, decision, prdVersion };
   }
 
   getLatestApprovedChange(actor: PlatformUser, projectId: string): PrdChangeRequest {
-    const change = [...this.listChanges(actor, projectId)].reverse().find((candidate) => candidate.status === "approved");
+    const change = [...this.listChanges(actor, projectId)]
+      .reverse()
+      .find((candidate) => candidate.status === "approved");
     if (!change) throw new ValidationError(`No approved PRD change for project ${projectId}`);
     return change;
   }
 
   private requireChange(projectId: string, changeId: string): PrdChangeRequest {
-    const change = this.changes.find((candidate) => candidate.id === changeId && candidate.projectId === projectId);
+    const change = this.changes.find(
+      (candidate) => candidate.id === changeId && candidate.projectId === projectId
+    );
     if (!change) throw new ValidationError(`Unknown PRD change request: ${changeId}`);
     return change;
   }
@@ -5766,7 +6486,10 @@ export class DomainService {
     this.ensureSetting(project);
     const domain = input.domain.trim().toLowerCase();
     if (!domain) throw new ValidationError("Domain is required");
-    if (!input.checklistAccepted) throw new ValidationError("Security checklist acknowledgement is required for public domain request");
+    if (!input.checklistAccepted)
+      throw new ValidationError(
+        "Security checklist acknowledgement is required for public domain request"
+      );
 
     const now = new Date().toISOString();
     const request: DomainRequest = {
@@ -5790,16 +6513,25 @@ export class DomainService {
       resourceType: "domain_request",
       resourceId: request.id,
       severity: "warning",
-      metadata: { projectId: project.id, domain: request.domain, dataClassification: request.dataClassification }
+      metadata: {
+        projectId: project.id,
+        domain: request.domain,
+        dataClassification: request.dataClassification
+      }
     });
 
     return request;
   }
 
-  decideDomainRequest(actor: PlatformUser, requestId: string, input: { decision: "approved" | "rejected"; note: string }): DomainRequest {
+  decideDomainRequest(
+    actor: PlatformUser,
+    requestId: string,
+    input: { decision: "approved" | "rejected"; note: string }
+  ): DomainRequest {
     this.auth.requireRole(actor, ["admin"]);
     const request = this.requireRequest(requestId);
-    if (request.status !== "pending_approval") throw new ConflictError(`Domain request ${requestId} is already ${request.status}`);
+    if (request.status !== "pending_approval")
+      throw new ConflictError(`Domain request ${requestId} is already ${request.status}`);
     const setting = this.ensureSetting(this.projects.getProjectById(request.projectId));
     request.status = input.decision;
     request.decidedByUserId = actor.id;
@@ -5827,7 +6559,9 @@ export class DomainService {
   listRequests(actor: PlatformUser): DomainRequest[] {
     this.auth.requireRole(actor, ["admin", "creator"]);
     if (actor.role === "admin") return [...this.requests];
-    return this.requests.filter((request) => this.projects.getProjectById(request.projectId).ownerUserId === actor.id);
+    return this.requests.filter(
+      (request) => this.projects.getProjectById(request.projectId).ownerUserId === actor.id
+    );
   }
 
   getLatestApprovedSetting(actor: PlatformUser, projectId: string): DomainSetting {
@@ -5874,10 +6608,14 @@ export class TraceabilityService {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
     const change = this.prdChanges.getLatestApprovedChange(actor, project.id);
-    if (!change.sourceTicketId) throw new ValidationError(`PRD change ${change.id} is not linked to a ticket`);
+    if (!change.sourceTicketId)
+      throw new ValidationError(`PRD change ${change.id} is not linked to a ticket`);
     const ticket = this.tickets.getTicketForProject(actor, project.id, change.sourceTicketId);
-    const prdVersion = this.prds.listVersions(actor, project.id).find((version) => version.id === change.approvedPrdVersionId);
-    if (!prdVersion) throw new ValidationError(`No approved PRD version linked to change ${change.id}`);
+    const prdVersion = this.prds
+      .listVersions(actor, project.id)
+      .find((version) => version.id === change.approvedPrdVersionId);
+    if (!prdVersion)
+      throw new ValidationError(`No approved PRD version linked to change ${change.id}`);
     const frontend = this.frontendVersions.getTimeline(actor, project.id).activeCheckpoint;
     const manifest = this.publish.getManifestForProject(actor, project.id);
     const deployment = this.publish.getLatestDeploymentForProject(actor, project.id);
@@ -5885,9 +6623,13 @@ export class TraceabilityService {
     const auditEventIds = this.audit
       .filter({ projectId: project.id })
       .filter((event) =>
-        ["ticket.converted_to_prd_change", "prd.change.approved", "prd.version.created_from_change", "domain.request.approved", "app.publish.completed"].includes(
-          event.action
-        )
+        [
+          "ticket.converted_to_prd_change",
+          "prd.change.approved",
+          "prd.version.created_from_change",
+          "domain.request.approved",
+          "app.publish.completed"
+        ].includes(event.action)
       )
       .map((event) => event.id);
 
@@ -5957,14 +6699,62 @@ export class ProductionControlService {
     this.auth.requireRole(actor, ["admin"]);
     const now = new Date().toISOString();
     const serviceHealth: ServiceHealthSignal[] = [
-      { name: "Platform API", type: "core", status: "healthy", detail: "request envelope active", checkedAt: now },
-      { name: "PostgreSQL", type: "dependency", status: "healthy", detail: "Prisma migration contract current", checkedAt: now },
-      { name: "Keycloak", type: "dependency", status: "healthy", detail: "Platform Auth broker configured", checkedAt: now },
-      { name: "MinIO", type: "dependency", status: "healthy", detail: "object storage reachable", checkedAt: now },
-      { name: "Redis", type: "dependency", status: "healthy", detail: "queue backend available", checkedAt: now },
-      { name: "AI Gateway", type: "core", status: "healthy", detail: "provider routing configured", checkedAt: now },
-      { name: "Caddy", type: "dependency", status: "healthy", detail: "private-server proxy route active", checkedAt: now },
-      { name: "Audit Log", type: "core", status: "healthy", detail: "append-only audit events retained", checkedAt: now }
+      {
+        name: "Platform API",
+        type: "core",
+        status: "healthy",
+        detail: "request envelope active",
+        checkedAt: now
+      },
+      {
+        name: "PostgreSQL",
+        type: "dependency",
+        status: "healthy",
+        detail: "Prisma migration contract current",
+        checkedAt: now
+      },
+      {
+        name: "Keycloak",
+        type: "dependency",
+        status: "healthy",
+        detail: "Platform Auth broker configured",
+        checkedAt: now
+      },
+      {
+        name: "MinIO",
+        type: "dependency",
+        status: "healthy",
+        detail: "object storage reachable",
+        checkedAt: now
+      },
+      {
+        name: "Redis",
+        type: "dependency",
+        status: "healthy",
+        detail: "queue backend available",
+        checkedAt: now
+      },
+      {
+        name: "AI Gateway",
+        type: "core",
+        status: "healthy",
+        detail: "provider routing configured",
+        checkedAt: now
+      },
+      {
+        name: "Caddy",
+        type: "dependency",
+        status: "healthy",
+        detail: "private-server proxy route active",
+        checkedAt: now
+      },
+      {
+        name: "Audit Log",
+        type: "core",
+        status: "healthy",
+        detail: "append-only audit events retained",
+        checkedAt: now
+      }
     ];
     const generatedAppHealth = this.generatedAppHealth(actor, now);
     const audit = this.audit.record({
@@ -5981,9 +6771,21 @@ export class ProductionControlService {
       queueHealth: [
         { name: "ai-tasks", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" },
         { name: "builds", depth: 1, failedCount: 0, oldestJobAgeSeconds: 24, status: "healthy" },
-        { name: "deployments", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" },
+        {
+          name: "deployments",
+          depth: 0,
+          failedCount: 0,
+          oldestJobAgeSeconds: 0,
+          status: "healthy"
+        },
         { name: "indexing", depth: 2, failedCount: 0, oldestJobAgeSeconds: 90, status: "healthy" },
-        { name: "notifications", depth: 0, failedCount: 0, oldestJobAgeSeconds: 0, status: "healthy" }
+        {
+          name: "notifications",
+          depth: 0,
+          failedCount: 0,
+          oldestJobAgeSeconds: 0,
+          status: "healthy"
+        }
       ],
       retention: { platformLogDays: 90, appLogDays: 90, auditDays: 365, aiUsageDays: 180 },
       telemetryExport: {
@@ -6010,13 +6812,40 @@ export class ProductionControlService {
   ): UpgradeCompatibilityReport {
     this.auth.requireRole(actor, ["admin"]);
     const checks: OperationCheck[] = [
-      this.check("Disk", ">= 100 GB free", `${input.diskFreeGb} GB`, input.diskFreeGb >= 100, "Free disk before upgrade"),
-      this.check("Backup", "latest backup succeeded", input.lastBackupStatus, input.lastBackupStatus === "succeeded", "Run a successful encrypted backup"),
-      this.check("Service health", "all critical services healthy", input.serviceHealth, input.serviceHealth === "healthy", "Resolve degraded service health"),
-      this.check("License", "active or warning license", input.licenseStatus, ["active", "warning"].includes(input.licenseStatus), "Resolve license before upgrade")
+      this.check(
+        "Disk",
+        ">= 100 GB free",
+        `${input.diskFreeGb} GB`,
+        input.diskFreeGb >= 100,
+        "Free disk before upgrade"
+      ),
+      this.check(
+        "Backup",
+        "latest backup succeeded",
+        input.lastBackupStatus,
+        input.lastBackupStatus === "succeeded",
+        "Run a successful encrypted backup"
+      ),
+      this.check(
+        "Service health",
+        "all critical services healthy",
+        input.serviceHealth,
+        input.serviceHealth === "healthy",
+        "Resolve degraded service health"
+      ),
+      this.check(
+        "License",
+        "active or warning license",
+        input.licenseStatus,
+        ["active", "warning"].includes(input.licenseStatus),
+        "Resolve license before upgrade"
+      )
     ];
-    const blockingReasons = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
-    const status: UpgradeCompatibilityReport["status"] = blockingReasons.length > 0 ? "blocked" : "passed";
+    const blockingReasons = checks
+      .filter((check) => check.status === "fail")
+      .map((check) => `${check.name}: ${check.action}`);
+    const status: UpgradeCompatibilityReport["status"] =
+      blockingReasons.length > 0 ? "blocked" : "passed";
     const now = new Date().toISOString();
     const report: Omit<UpgradeCompatibilityReport, "auditEventId"> = {
       id: `upgrade_check_${String(this.upgradeReports.length + 1).padStart(4, "0")}`,
@@ -6071,13 +6900,18 @@ export class ProductionControlService {
     return withAudit;
   }
 
-  installLicense(actor: PlatformUser, input: { licenseKey: string; signedPayload: SignedLicensePayload }): LicenseRecord {
+  installLicense(
+    actor: PlatformUser,
+    input: { licenseKey: string; signedPayload: SignedLicensePayload }
+  ): LicenseRecord {
     this.auth.requireRole(actor, ["admin"]);
     const now = new Date().toISOString();
     const licenseKeyFingerprint = `sha256:${createHash("sha256").update(input.licenseKey).digest("hex")}`;
     const signedPayloadFingerprint = `sha256:${createHash("sha256").update(JSON.stringify(input.signedPayload)).digest("hex")}`;
     const tampered = !input.signedPayload.signature.startsWith("sig_valid_");
-    const status: LicenseStatus = tampered ? "tampered" : this.licenseStatus(input.signedPayload, now);
+    const status: LicenseStatus = tampered
+      ? "tampered"
+      : this.licenseStatus(input.signedPayload, now);
     const restrictedActions = this.restrictedActions(status);
     const license: Omit<LicenseRecord, "auditEventId"> = {
       id: `license_${String(this.licenses.length + 1).padStart(4, "0")}`,
@@ -6111,11 +6945,19 @@ export class ProductionControlService {
     return withAudit;
   }
 
-  validateLicense(actor: PlatformUser, input: { onlineAvailable: boolean; checkedAt: string }): LicenseValidationResult {
+  validateLicense(
+    actor: PlatformUser,
+    input: { onlineAvailable: boolean; checkedAt: string }
+  ): LicenseValidationResult {
     this.auth.requireRole(actor, ["admin"]);
     const license = this.requireLatestLicense();
-    const source: LicenseValidationResult["source"] = input.onlineAvailable ? "online" : "offline_cache";
-    if (!input.onlineAvailable && new Date(input.checkedAt).getTime() > new Date(license.offlineCache.validUntil).getTime()) {
+    const source: LicenseValidationResult["source"] = input.onlineAvailable
+      ? "online"
+      : "offline_cache";
+    if (
+      !input.onlineAvailable &&
+      new Date(input.checkedAt).getTime() > new Date(license.offlineCache.validUntil).getTime()
+    ) {
       license.status = "expired";
       license.offlineCache.status = "expired";
       license.enforcement.restrictedActions = this.restrictedActions("expired");
@@ -6143,7 +6985,13 @@ export class ProductionControlService {
 
   evaluateLicenseAction(
     actor: PlatformUser,
-    input: { action: LicenseAction; currentSeats: number; currentApps: number; monthlyAiTokensUsed: number; checkedAt: string }
+    input: {
+      action: LicenseAction;
+      currentSeats: number;
+      currentApps: number;
+      monthlyAiTokensUsed: number;
+      checkedAt: string;
+    }
   ): LicenseEnforcementDecision {
     const license = this.requireLatestLicense();
     const reasons: string[] = [];
@@ -6152,11 +7000,25 @@ export class ProductionControlService {
 
     if (checkedStatus === "tampered") reasons.push("license tamper detected");
     if (checkedStatus === "expired") reasons.push("license expired beyond grace period");
-    if (input.currentSeats >= license.seats.entitled && ["new_external_invite", "activate_user"].includes(input.action)) reasons.push("seat limit reached");
-    if (input.currentApps >= license.appLimit.entitled && ["new_app", "publish"].includes(input.action)) reasons.push("app limit reached");
-    if (input.monthlyAiTokensUsed >= license.aiUsageMonthlyTokens.entitled && input.action === "ai_generation") reasons.push("AI usage entitlement exceeded");
+    if (
+      input.currentSeats >= license.seats.entitled &&
+      ["new_external_invite", "activate_user"].includes(input.action)
+    )
+      reasons.push("seat limit reached");
+    if (
+      input.currentApps >= license.appLimit.entitled &&
+      ["new_app", "publish"].includes(input.action)
+    )
+      reasons.push("app limit reached");
+    if (
+      input.monthlyAiTokensUsed >= license.aiUsageMonthlyTokens.entitled &&
+      input.action === "ai_generation"
+    )
+      reasons.push("AI usage entitlement exceeded");
 
-    const allowed = input.action === "run_existing_app" || (!restrictedActions.includes(input.action) && reasons.length === 0);
+    const allowed =
+      input.action === "run_existing_app" ||
+      (!restrictedActions.includes(input.action) && reasons.length === 0);
     const audit = this.audit.record({
       actorId: actor.id,
       action: allowed ? "license.enforcement.allowed" : "license.enforcement_applied",
@@ -6195,7 +7057,17 @@ export class ProductionControlService {
 
   private generatedAppHealth(actor: PlatformUser, checkedAt: string): GeneratedAppHealthSignal[] {
     const registry = this.publish.listRegistry(actor);
-    const entries = registry.length > 0 ? registry : [{ slug: "leave-management", name: "Leave Management", route: "/apps/leave-management", projectId: "prj_leave_management" }];
+    const entries =
+      registry.length > 0
+        ? registry
+        : [
+            {
+              slug: "leave-management",
+              name: "Leave Management",
+              route: "/apps/leave-management",
+              projectId: "prj_leave_management"
+            }
+          ];
     return entries.map((entry) => {
       try {
         const runtime = this.generatedRuntime.getRuntimeOverview(actor, entry.projectId);
@@ -6221,8 +7093,20 @@ export class ProductionControlService {
     });
   }
 
-  private check(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
-    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  private check(
+    name: string,
+    required: string,
+    observed: string,
+    pass: boolean,
+    action: string
+  ): OperationCheck {
+    return {
+      name,
+      required,
+      observed,
+      status: pass ? "pass" : "fail",
+      action: pass ? "-" : action
+    };
   }
 
   private licenseStatus(payload: SignedLicensePayload, checkedAt: string): LicenseStatus {
@@ -6257,8 +7141,10 @@ export class ProductionControlService {
   }
 
   private restrictedActions(status: LicenseStatus): LicenseAction[] {
-    if (status === "tampered") return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
-    if (status === "expired") return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
+    if (status === "tampered")
+      return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
+    if (status === "expired")
+      return ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"];
     if (status === "grace") return ["publish", "new_app"];
     return [];
   }
@@ -6301,21 +7187,62 @@ export class SecurityReleaseService {
     this.auth.requireRole(actor, ["admin"]);
     const now = new Date().toISOString();
     const checks: OperationCheck[] = [
-      this.check("TLS Enforcement", "HTTPS in production, HTTP only for local setup", "production HTTPS required", true, "Enable Caddy TLS before public exposure"),
-      this.check("Session Policy", "idle <= 30m, absolute <= 480m, no remember-me", "30m idle / 480m absolute", true, "Tighten Keycloak session policy"),
-      this.check("Secret Redaction", "API, UI, log, audit and export masked", "fingerprints and masks only", true, "Remove sensitive value from response surface"),
-      this.check("Upload Validation", "mime, size and scan status enforced", "unsafe uploads blocked or quarantined", true, "Quarantine upload before ingestion"),
-      this.check("Public / External Checklist", "auth, permissions, domain, TLS, data and audit pass", "public exposure blocked until all checks pass", false, "Complete TLS/domain release checklist"),
-      this.check("RTM Regression", "all P0 tests pass or exception approved", "42/42 P0 requirements covered", true, "Approve documented exception")
+      this.check(
+        "TLS Enforcement",
+        "HTTPS in production, HTTP only for local setup",
+        "production HTTPS required",
+        true,
+        "Enable Caddy TLS before public exposure"
+      ),
+      this.check(
+        "Session Policy",
+        "idle <= 30m, absolute <= 480m, no remember-me",
+        "30m idle / 480m absolute",
+        true,
+        "Tighten Keycloak session policy"
+      ),
+      this.check(
+        "Secret Redaction",
+        "API, UI, log, audit and export masked",
+        "fingerprints and masks only",
+        true,
+        "Remove sensitive value from response surface"
+      ),
+      this.check(
+        "Upload Validation",
+        "mime, size and scan status enforced",
+        "unsafe uploads blocked or quarantined",
+        true,
+        "Quarantine upload before ingestion"
+      ),
+      this.check(
+        "Public / External Checklist",
+        "auth, permissions, domain, TLS, data and audit pass",
+        "public exposure blocked until all checks pass",
+        false,
+        "Complete TLS/domain release checklist"
+      ),
+      this.check(
+        "RTM Regression",
+        "all P0 tests pass or exception approved",
+        "42/42 P0 requirements covered",
+        true,
+        "Approve documented exception"
+      )
     ];
-    const status: SecurityReleaseStatus = checks.some((check) => check.status === "fail") ? "blocked" : "ready";
+    const status: SecurityReleaseStatus = checks.some((check) => check.status === "fail")
+      ? "blocked"
+      : "ready";
     const audit = this.audit.record({
       actorId: actor.id,
       action: "security.release_readiness.viewed",
       resourceType: "security_readiness_report",
       resourceId: "security_release_current",
       severity: status === "blocked" ? "warning" : "info",
-      metadata: { status, failedChecks: checks.filter((check) => check.status === "fail").map((check) => check.name) }
+      metadata: {
+        status,
+        failedChecks: checks.filter((check) => check.status === "fail").map((check) => check.name)
+      }
     });
     const report: SecurityReadinessOverview = {
       id: `sec_readiness_${String(this.readinessReports.length + 1).padStart(4, "0")}`,
@@ -6336,11 +7263,36 @@ export class SecurityReleaseService {
       secretRedaction: {
         passed: true,
         surfaces: [
-          { surface: "api", rule: "secret_key", secretExposed: false, evidence: "API returns masked value or fingerprint" },
-          { surface: "ui", rule: "masked_value", secretExposed: false, evidence: "Admin UI renders fingerprint only" },
-          { surface: "log", rule: "structured_log_redaction", secretExposed: false, evidence: "Prompt/ticket/request payload values redacted before logging" },
-          { surface: "audit", rule: "classification_filter", secretExposed: false, evidence: "Audit metadata stores classification and rule names only" },
-          { surface: "export", rule: "evidence_bundle", secretExposed: false, evidence: "Evidence export excludes raw values" }
+          {
+            surface: "api",
+            rule: "secret_key",
+            secretExposed: false,
+            evidence: "API returns masked value or fingerprint"
+          },
+          {
+            surface: "ui",
+            rule: "masked_value",
+            secretExposed: false,
+            evidence: "Admin UI renders fingerprint only"
+          },
+          {
+            surface: "log",
+            rule: "structured_log_redaction",
+            secretExposed: false,
+            evidence: "Prompt/ticket/request payload values redacted before logging"
+          },
+          {
+            surface: "audit",
+            rule: "classification_filter",
+            secretExposed: false,
+            evidence: "Audit metadata stores classification and rule names only"
+          },
+          {
+            surface: "export",
+            rule: "evidence_bundle",
+            secretExposed: false,
+            evidence: "Evidence export excludes raw values"
+          }
         ]
       },
       uploadPolicy: this.uploadPolicy,
@@ -6353,7 +7305,12 @@ export class SecurityReleaseService {
         p0RequirementsTotal: 42,
         p0RequirementsPassed: 42,
         exceptionsApproved: 0,
-        evidenceRefs: ["tests/unit", "tests/integration", "tests/e2e", "docs/requirements/requirements-traceability-matrix.md"]
+        evidenceRefs: [
+          "tests/unit",
+          "tests/integration",
+          "tests/e2e",
+          "docs/requirements/requirements-traceability-matrix.md"
+        ]
       },
       checks,
       createdByUserId: actor.id,
@@ -6396,7 +7353,13 @@ export class SecurityReleaseService {
       resourceType: "upload_scan_event",
       resourceId: input.fileName,
       severity: decision === "allowed" ? "info" : "high",
-      metadata: { fileName: input.fileName, mimeType: input.mimeType, scanStatus: input.scanStatus, decision, reasons }
+      metadata: {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        scanStatus: input.scanStatus,
+        decision,
+        reasons
+      }
     });
     const result: UploadScanDecision = {
       id: `upload_scan_${String(this.uploadScanEvents.length + 1).padStart(4, "0")}`,
@@ -6416,29 +7379,67 @@ export class SecurityReleaseService {
     return result;
   }
 
-  evaluatePublicRelease(actor: PlatformUser, input: ReleaseChecklistInput): ReleaseChecklistDecision {
+  evaluatePublicRelease(
+    actor: PlatformUser,
+    input: ReleaseChecklistInput
+  ): ReleaseChecklistDecision {
     this.auth.requireRole(actor, ["admin"]);
     const checks: OperationCheck[] = [
-      this.check("Auth", "SSO/auth session enabled", input.authReady ? "ready" : "missing", input.authReady, "Enable auth before release"),
-      this.check("Permissions", "role/app permission matrix approved", input.permissionsReady ? "ready" : "missing", input.permissionsReady, "Approve permission matrix"),
-      this.check("Domain", "approved internal/public domain", input.domainApproved ? "approved" : "pending", input.domainApproved, "Approve domain request"),
-      this.check("TLS", "HTTPS/TLS enforced for exposure", input.tlsReady ? "enforced" : "not enforced", input.tlsReady, "Enable TLS before public or external release"),
+      this.check(
+        "Auth",
+        "SSO/auth session enabled",
+        input.authReady ? "ready" : "missing",
+        input.authReady,
+        "Enable auth before release"
+      ),
+      this.check(
+        "Permissions",
+        "role/app permission matrix approved",
+        input.permissionsReady ? "ready" : "missing",
+        input.permissionsReady,
+        "Approve permission matrix"
+      ),
+      this.check(
+        "Domain",
+        "approved internal/public domain",
+        input.domainApproved ? "approved" : "pending",
+        input.domainApproved,
+        "Approve domain request"
+      ),
+      this.check(
+        "TLS",
+        "HTTPS/TLS enforced for exposure",
+        input.tlsReady ? "enforced" : "not enforced",
+        input.tlsReady,
+        "Enable TLS before public or external release"
+      ),
       this.check(
         "Data Classification",
         "public cannot expose Confidential or Restricted data",
         input.dataClassification,
-        input.exposure !== "public" || !["Confidential", "Restricted"].includes(input.dataClassification),
+        input.exposure !== "public" ||
+          !["Confidential", "Restricted"].includes(input.dataClassification),
         "Reduce exposure or obtain security exception"
       ),
-      this.check("Audit", "release and access events audited", input.auditReady ? "ready" : "missing", input.auditReady, "Enable release audit trail")
+      this.check(
+        "Audit",
+        "release and access events audited",
+        input.auditReady ? "ready" : "missing",
+        input.auditReady,
+        "Enable release audit trail"
+      )
     ];
     if (input.exposure === "external" || input.exposure === "public") {
       const tlsCheck = checks.find((check) => check.name === "TLS");
       const domainCheck = checks.find((check) => check.name === "Domain");
-      if (tlsCheck && !input.tlsReady) tlsCheck.action = "TLS is required before external/public exposure";
-      if (domainCheck && !input.domainApproved) domainCheck.action = "Approved domain is required before external/public exposure";
+      if (tlsCheck && !input.tlsReady)
+        tlsCheck.action = "TLS is required before external/public exposure";
+      if (domainCheck && !input.domainApproved)
+        domainCheck.action = "Approved domain is required before external/public exposure";
     }
-    const blockingReasons = checks.filter((check) => check.status === "fail").map((check) => `${check.name}: ${check.action}`);
+    const blockingReasons = checks
+      .filter((check) => check.status === "fail")
+      .map((check) => `${check.name}: ${check.action}`);
     const allowed = blockingReasons.length === 0;
     const now = new Date().toISOString();
     const audit = this.audit.record({
@@ -6466,7 +7467,10 @@ export class SecurityReleaseService {
     return result;
   }
 
-  redactSensitivePayload(actor: PlatformUser, input: SensitiveRedactionInput): SensitiveRedactionEvidence {
+  redactSensitivePayload(
+    actor: PlatformUser,
+    input: SensitiveRedactionInput
+  ): SensitiveRedactionEvidence {
     this.auth.requireRole(actor, ["admin"]);
     const rules = new Set<string>();
     const redactedPayload = {
@@ -6497,11 +7501,26 @@ export class SecurityReleaseService {
     return evidence;
   }
 
-  private check(name: string, required: string, observed: string, pass: boolean, action: string): OperationCheck {
-    return { name, required, observed, status: pass ? "pass" : "fail", action: pass ? "-" : action };
+  private check(
+    name: string,
+    required: string,
+    observed: string,
+    pass: boolean,
+    action: string
+  ): OperationCheck {
+    return {
+      name,
+      required,
+      observed,
+      status: pass ? "pass" : "fail",
+      action: pass ? "-" : action
+    };
   }
 
-  private redactObject(value: Record<string, unknown>, rules: Set<string>): Record<string, unknown> {
+  private redactObject(
+    value: Record<string, unknown>,
+    rules: Set<string>
+  ): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => {
         if (/api[-_]?key|secret|password|token|credential|private[-_]?key/i.test(key)) {
@@ -6509,8 +7528,13 @@ export class SecurityReleaseService {
           return [key, "[REDACTED_SECRET]"];
         }
         if (typeof entry === "string") return [key, this.redactText(entry, rules)];
-        if (Array.isArray(entry)) return [key, entry.map((item) => (typeof item === "string" ? this.redactText(item, rules) : item))];
-        if (entry && typeof entry === "object") return [key, this.redactObject(entry as Record<string, unknown>, rules)];
+        if (Array.isArray(entry))
+          return [
+            key,
+            entry.map((item) => (typeof item === "string" ? this.redactText(item, rules) : item))
+          ];
+        if (entry && typeof entry === "object")
+          return [key, this.redactObject(entry as Record<string, unknown>, rules)];
         return [key, entry];
       })
     );
@@ -6518,14 +7542,44 @@ export class SecurityReleaseService {
 
   private redactText(value: string, rules: Set<string>): string {
     let redacted = value;
-    redacted = this.replace(redacted, /\bsk-[A-Za-z0-9_-]+\b/g, "[REDACTED_SECRET_KEY]", "secret_key", rules);
-    redacted = this.replace(redacted, /\bpassword\s+\S+/gi, "password [REDACTED]", "password", rules);
-    redacted = this.replace(redacted, /\b(?:\d[ -]?){13,19}\b/g, "[REDACTED_PAYMENT_CARD]", "payment_card", rules);
-    redacted = this.replace(redacted, /\b\d{3}-\d{2}-\d{4}\b/g, "[REDACTED_NATIONAL_ID]", "national_id", rules);
+    redacted = this.replace(
+      redacted,
+      /\bsk-[A-Za-z0-9_-]+\b/g,
+      "[REDACTED_SECRET_KEY]",
+      "secret_key",
+      rules
+    );
+    redacted = this.replace(
+      redacted,
+      /\bpassword\s+\S+/gi,
+      "password [REDACTED]",
+      "password",
+      rules
+    );
+    redacted = this.replace(
+      redacted,
+      /\b(?:\d[ -]?){13,19}\b/g,
+      "[REDACTED_PAYMENT_CARD]",
+      "payment_card",
+      rules
+    );
+    redacted = this.replace(
+      redacted,
+      /\b\d{3}-\d{2}-\d{4}\b/g,
+      "[REDACTED_NATIONAL_ID]",
+      "national_id",
+      rules
+    );
     return redacted;
   }
 
-  private replace(value: string, pattern: RegExp, replacement: string, rule: string, rules: Set<string>): string {
+  private replace(
+    value: string,
+    pattern: RegExp,
+    replacement: string,
+    rule: string,
+    rules: Set<string>
+  ): string {
     if (pattern.test(value)) {
       rules.add(rule);
       pattern.lastIndex = 0;
@@ -6579,7 +7633,9 @@ export class MonitoringService {
         guardrailEvents: this.guardrails.listEvents().length
       },
       ticketCounts: {
-        open: tickets.filter((ticket) => ["submitted", "in_review", "planned"].includes(ticket.status)).length,
+        open: tickets.filter((ticket) =>
+          ["submitted", "in_review", "planned"].includes(ticket.status)
+        ).length,
         inReview: tickets.filter((ticket) => ticket.status === "in_review").length,
         resolved: tickets.filter((ticket) => ["resolved", "closed"].includes(ticket.status)).length
       },
@@ -6624,7 +7680,11 @@ export class WorkspaceService {
     };
   }
 
-  submitPrompt(actor: PlatformUser, projectId: string, input: { prompt: string }): WorkspacePromptResult {
+  submitPrompt(
+    actor: PlatformUser,
+    projectId: string,
+    input: { prompt: string }
+  ): WorkspacePromptResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
     this.requireBaseline(actor, project.id);
@@ -6638,7 +7698,15 @@ export class WorkspaceService {
     const now = new Date().toISOString();
 
     if (guardrail.decision === "block") {
-      const blockedTask = this.createTask(project.id, actor.id, prompt, "blocked", guardrail, now, "failed");
+      const blockedTask = this.createTask(
+        project.id,
+        actor.id,
+        prompt,
+        "blocked",
+        guardrail,
+        now,
+        "failed"
+      );
       this.tasks.push(blockedTask);
       this.audit.record({
         actorId: actor.id,
@@ -6670,13 +7738,16 @@ export class WorkspaceService {
     const requestEstimate = 120;
     const quota = this.aiGovernance.checkQuota("creator", requestEstimate);
     if (!quota.allowed) {
-      throw new QuotaExceededError(`Creator quota exceeded. Remaining today: ${quota.remainingToday}`);
+      throw new QuotaExceededError(
+        `Creator quota exceeded. Remaining today: ${quota.remainingToday}`
+      );
     }
 
     this.aiGovernance.recordProviderCall();
     const task = this.createTask(project.id, actor.id, prompt, "ready", guardrail, now, "done", {
       knowledgeVersionIds: knowledgeRetrieval.matchedVersionIds,
-      skillVersionId: skillSelection.skillVersionId === "none" ? undefined : skillSelection.skillVersionId
+      skillVersionId:
+        skillSelection.skillVersionId === "none" ? undefined : skillSelection.skillVersionId
     });
     const preview = this.createPreview(project.id, prompt, now);
     this.frontendVersions.recordFromPreview(actor, preview, task);
@@ -6751,12 +7822,17 @@ export class WorkspaceService {
       versions = this.prds.listVersions(actor, projectId);
     } catch (error) {
       if (error instanceof ValidationError) {
-        throw new ValidationError(`PRD baseline is required before opening workspace for project ${projectId}`);
+        throw new ValidationError(
+          `PRD baseline is required before opening workspace for project ${projectId}`
+        );
       }
       throw error;
     }
     const baseline = versions.find((version) => version.isBaseline);
-    if (!baseline) throw new ValidationError(`PRD baseline is required before opening workspace for project ${projectId}`);
+    if (!baseline)
+      throw new ValidationError(
+        `PRD baseline is required before opening workspace for project ${projectId}`
+      );
     return baseline;
   }
 
@@ -6804,7 +7880,10 @@ export class WorkspaceService {
   }
 
   private createPreview(projectId: string, prompt: string, createdAt: string): PreviewVersion {
-    const versionNumber = this.previews.filter((preview) => preview.projectId === projectId && preview.version !== "preview-0000").length + 1;
+    const versionNumber =
+      this.previews.filter(
+        (preview) => preview.projectId === projectId && preview.version !== "preview-0000"
+      ).length + 1;
     return {
       id: `preview_${projectId}_${String(versionNumber).padStart(4, "0")}`,
       projectId,
@@ -6818,7 +7897,9 @@ export class WorkspaceService {
   }
 
   private latestPreview(projectId: string): PreviewVersion {
-    const preview = [...this.previews].reverse().find((candidate) => candidate.projectId === projectId);
+    const preview = [...this.previews]
+      .reverse()
+      .find((candidate) => candidate.projectId === projectId);
     if (preview) return preview;
 
     return {
@@ -6907,7 +7988,9 @@ export interface PlatformApiServiceOptions {
   aiGateway?: AiGatewayRuntimeOptions;
 }
 
-export function createPlatformApiServices(options: PlatformApiServiceOptions = {}): PlatformApiServices {
+export function createPlatformApiServices(
+  options: PlatformApiServiceOptions = {}
+): PlatformApiServices {
   const identity = new IdentityService();
   const auth = new MockAuthService(identity);
   const audit = new AuditService();
@@ -6920,21 +8003,58 @@ export function createPlatformApiServices(options: PlatformApiServiceOptions = {
   const databaseView = new DatabaseViewService(projects);
   const frontendVersions = new FrontendVersionService(audit, projects, prds, databaseView);
   const appAccess = new AppUserAccessService(auth, audit, projects, identity);
-  const publish = new PublishService(auth, audit, projects, prds, frontendVersions, databaseView, appAccess);
+  const publish = new PublishService(
+    auth,
+    audit,
+    projects,
+    prds,
+    frontendVersions,
+    databaseView,
+    appAccess
+  );
   const generatedRuntime = new GeneratedAppRuntimeService(auth, audit, projects, publish);
   const storefront = new StorefrontService(auth, identity, projects, publish, appAccess);
   const tickets = new TicketService(auth, audit, storefront, projects);
   const prdChanges = new PrdChangeService(auth, audit, projects, tickets, prds);
   const domains = new DomainService(auth, audit, projects);
-  const traceability = new TraceabilityService(auth, audit, projects, tickets, prdChanges, prds, frontendVersions, publish, domains);
-  const monitoring = new MonitoringService(auth, audit, tickets, domains, publish, generatedRuntime, aiGovernance, guardrails);
+  const traceability = new TraceabilityService(
+    auth,
+    audit,
+    projects,
+    tickets,
+    prdChanges,
+    prds,
+    frontendVersions,
+    publish,
+    domains
+  );
+  const monitoring = new MonitoringService(
+    auth,
+    audit,
+    tickets,
+    domains,
+    publish,
+    generatedRuntime,
+    aiGovernance,
+    guardrails
+  );
   const authSso = new PlatformAuthSsoService(auth, audit, identity);
   const breakGlass = new BreakGlassService(auth, audit);
   const policyTemplates = new PolicyTemplateService(auth);
   const operations = new OperationsRecoveryService(auth, audit);
   const production = new ProductionControlService(auth, audit, publish, generatedRuntime);
   const securityRelease = new SecurityReleaseService(auth, audit);
-  const workspace = new WorkspaceService(auth, audit, projects, prds, aiGovernance, guardrails, frontendVersions, knowledge, skills);
+  const workspace = new WorkspaceService(
+    auth,
+    audit,
+    projects,
+    prds,
+    aiGovernance,
+    guardrails,
+    frontendVersions,
+    knowledge,
+    skills
+  );
   const workspaceOrchestrator = createDefaultWorkspaceOrchestrator({
     onAudit: (event) =>
       audit.record({

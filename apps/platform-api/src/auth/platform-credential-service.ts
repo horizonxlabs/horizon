@@ -9,7 +9,10 @@ export interface CredentialRecord {
 export interface CredentialStore {
   getByEmail(email: string): Promise<CredentialRecord | null>;
   getById(userId: string): Promise<CredentialRecord | null>;
-  setPassword(userId: string, fields: { passwordHash: string; mustChangePassword: boolean }): Promise<void>;
+  setPassword(
+    userId: string,
+    fields: { passwordHash: string; mustChangePassword: boolean }
+  ): Promise<void>;
 }
 
 export interface PlatformCredentialService {
@@ -18,7 +21,10 @@ export interface PlatformCredentialService {
     plaintext: string,
     opts: { mustChange: boolean }
   ): Promise<{ ok: true } | { ok: false; reason: "weak_password" }>;
-  verifyLogin(email: string, plaintext: string): Promise<{ userId: string; mustChangePassword: boolean } | null>;
+  verifyLogin(
+    email: string,
+    plaintext: string
+  ): Promise<{ userId: string; mustChangePassword: boolean } | null>;
   changePassword(
     userId: string,
     currentPlaintext: string,
@@ -66,7 +72,12 @@ export class MemoryCredentialStore implements CredentialStore {
   }>;
 
   constructor(
-    seed: Array<{ userId: string; email: string; passwordHash?: string | null; mustChangePassword?: boolean }> = []
+    seed: Array<{
+      userId: string;
+      email: string;
+      passwordHash?: string | null;
+      mustChangePassword?: boolean;
+    }> = []
   ) {
     this.rows = seed.map((row) => ({
       userId: row.userId,
@@ -78,15 +89,30 @@ export class MemoryCredentialStore implements CredentialStore {
 
   async getByEmail(email: string): Promise<CredentialRecord | null> {
     const row = this.rows.find((candidate) => candidate.email === email.trim().toLowerCase());
-    return row ? { userId: row.userId, passwordHash: row.passwordHash, mustChangePassword: row.mustChangePassword } : null;
+    return row
+      ? {
+          userId: row.userId,
+          passwordHash: row.passwordHash,
+          mustChangePassword: row.mustChangePassword
+        }
+      : null;
   }
 
   async getById(userId: string): Promise<CredentialRecord | null> {
     const row = this.rows.find((candidate) => candidate.userId === userId);
-    return row ? { userId: row.userId, passwordHash: row.passwordHash, mustChangePassword: row.mustChangePassword } : null;
+    return row
+      ? {
+          userId: row.userId,
+          passwordHash: row.passwordHash,
+          mustChangePassword: row.mustChangePassword
+        }
+      : null;
   }
 
-  async setPassword(userId: string, fields: { passwordHash: string; mustChangePassword: boolean }): Promise<void> {
+  async setPassword(
+    userId: string,
+    fields: { passwordHash: string; mustChangePassword: boolean }
+  ): Promise<void> {
     const row = this.rows.find((candidate) => candidate.userId === userId);
     if (!row) throw new Error(`MemoryCredentialStore: unknown userId ${userId}`);
     row.passwordHash = fields.passwordHash;

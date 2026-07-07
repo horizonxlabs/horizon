@@ -3,9 +3,24 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 const roles = [
-  { id: "role_admin", key: "admin", name: "Platform Admin", permissions: ["platform:admin", "ai:manage", "guardrail:manage", "audit:view"] },
-  { id: "role_creator", key: "creator", name: "Creator", permissions: ["project:create", "project:update", "app:publish-request", "ticket:manage"] },
-  { id: "role_end_user", key: "end_user", name: "End User", permissions: ["store:view", "ticket:create", "access:request"] }
+  {
+    id: "role_admin",
+    key: "admin",
+    name: "Platform Admin",
+    permissions: ["platform:admin", "ai:manage", "guardrail:manage", "audit:view"]
+  },
+  {
+    id: "role_creator",
+    key: "creator",
+    name: "Creator",
+    permissions: ["project:create", "project:update", "app:publish-request", "ticket:manage"]
+  },
+  {
+    id: "role_end_user",
+    key: "end_user",
+    name: "End User",
+    permissions: ["store:view", "ticket:create", "access:request"]
+  }
 ];
 
 const users = [
@@ -346,7 +361,11 @@ async function main() {
       isBaseline: false,
       sourcePrompt: "Create a PRD for Leave Management.",
       changeSummary: "Generated initial PRD draft for Leave Management",
-      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: "aip_openai_production",
+        model: "gpt-4.1"
+      },
       createdByUserId: "usr_creator"
     },
     create: {
@@ -357,7 +376,11 @@ async function main() {
       isBaseline: false,
       sourcePrompt: "Create a PRD for Leave Management.",
       changeSummary: "Generated initial PRD draft for Leave Management",
-      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: "aip_openai_production",
+        model: "gpt-4.1"
+      },
       createdByUserId: "usr_creator"
     }
   });
@@ -370,7 +393,11 @@ async function main() {
       isBaseline: true,
       sourcePrompt: "Create a PRD for Leave Management.",
       changeSummary: "Baseline v1.0 confirmed for Leave Management",
-      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: "aip_openai_production",
+        model: "gpt-4.1"
+      },
       createdByUserId: "usr_creator"
     },
     create: {
@@ -381,7 +408,11 @@ async function main() {
       isBaseline: true,
       sourcePrompt: "Create a PRD for Leave Management.",
       changeSummary: "Baseline v1.0 confirmed for Leave Management",
-      generatedBy: { scenario: "prd_generation", providerId: "aip_openai_production", model: "gpt-4.1" },
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: "aip_openai_production",
+        model: "gpt-4.1"
+      },
       createdByUserId: "usr_creator"
     }
   });
@@ -396,11 +427,27 @@ async function main() {
 
   const prdSections = [
     ["overview", "Overview", "Leave Management is a Workflow App for HR Department."],
-    ["business_objective", "Business Objective", "Employees need self-service leave requests with manager approval."],
+    [
+      "business_objective",
+      "Business Objective",
+      "Employees need self-service leave requests with manager approval."
+    ],
     ["users_roles", "Users and Roles", "Primary users are Employee, Manager and HR Admin."],
-    ["core_flows", "Core Flows", "Create request, manager review, HR visibility and status tracking."],
-    ["data_model", "Data Model", "Employee, leave request, approval step, notification and audit event."],
-    ["acceptance_criteria", "Acceptance Criteria", "Creator can generate, review and confirm Baseline v1.0 before app generation."]
+    [
+      "core_flows",
+      "Core Flows",
+      "Create request, manager review, HR visibility and status tracking."
+    ],
+    [
+      "data_model",
+      "Data Model",
+      "Employee, leave request, approval step, notification and audit event."
+    ],
+    [
+      "acceptance_criteria",
+      "Acceptance Criteria",
+      "Creator can generate, review and confirm Baseline v1.0 before app generation."
+    ]
   ];
 
   for (const [index, section] of prdSections.entries()) {
@@ -634,7 +681,9 @@ async function main() {
 
   await prisma.appDatabaseSampleRecord.upsert({
     where: { tableId_ordinal: { tableId: "dbtbl_leave_requests", ordinal: 1 } },
-    update: { data: { id: "lr_1001", employee_id: "emp_001", leave_type: "WFH", status: "pending" } },
+    update: {
+      data: { id: "lr_1001", employee_id: "emp_001", leave_type: "WFH", status: "pending" }
+    },
     create: {
       id: "dbrec_leave_request_1",
       projectId: "prj_leave_management",
@@ -647,7 +696,9 @@ async function main() {
 
   await prisma.appDatabaseSampleRecord.upsert({
     where: { tableId_ordinal: { tableId: "dbtbl_leave_requests", ordinal: 2 } },
-    update: { data: { id: "lr_1002", employee_id: "emp_002", leave_type: "annual", status: "approved" } },
+    update: {
+      data: { id: "lr_1002", employee_id: "emp_002", leave_type: "annual", status: "approved" }
+    },
     create: {
       id: "dbrec_leave_request_2",
       projectId: "prj_leave_management",
@@ -659,7 +710,12 @@ async function main() {
   });
 
   await prisma.appDatabaseMigration.upsert({
-    where: { projectId_migrationId: { projectId: "prj_leave_management", migrationId: "2026081001_leave_management_base" } },
+    where: {
+      projectId_migrationId: {
+        projectId: "prj_leave_management",
+        migrationId: "2026081001_leave_management_base"
+      }
+    },
     update: {
       status: "applied",
       linkedPrdVersion: "1.0",
@@ -811,7 +867,10 @@ async function main() {
       route: "/apps/leave-management",
       authMode: "platform_auth_sdk",
       roleSnapshot: leaveManifest.roles,
-      databaseSnapshot: { schemaName: "app_leave_management", tables: ["employees", "leave_requests", "approval_steps"] },
+      databaseSnapshot: {
+        schemaName: "app_leave_management",
+        tables: ["employees", "leave_requests", "approval_steps"]
+      },
       manifest: leaveManifest
     },
     create: {
@@ -825,7 +884,10 @@ async function main() {
       route: "/apps/leave-management",
       authMode: "platform_auth_sdk",
       roleSnapshot: leaveManifest.roles,
-      databaseSnapshot: { schemaName: "app_leave_management", tables: ["employees", "leave_requests", "approval_steps"] },
+      databaseSnapshot: {
+        schemaName: "app_leave_management",
+        tables: ["employees", "leave_requests", "approval_steps"]
+      },
       manifest: leaveManifest
     }
   });
@@ -918,7 +980,16 @@ async function main() {
     where: { id: "garun_leave_management_001" },
     update: {
       artifactRoot: "generated-apps/leave-management",
-      requiredPaths: ["app.manifest.json", "package.json", "frontend/", "backend/", "prisma/", "openapi/", "tests/", "README.md"],
+      requiredPaths: [
+        "app.manifest.json",
+        "package.json",
+        "frontend/",
+        "backend/",
+        "prisma/",
+        "openapi/",
+        "tests/",
+        "README.md"
+      ],
       containerName: "evcp-app-leave-management-dep_leave_management_001",
       imageTag: "leave-management:1",
       route: "/apps/leave-management",
@@ -933,7 +1004,16 @@ async function main() {
       projectId: "prj_leave_management",
       deploymentRecordId: "dep_leave_management_001",
       artifactRoot: "generated-apps/leave-management",
-      requiredPaths: ["app.manifest.json", "package.json", "frontend/", "backend/", "prisma/", "openapi/", "tests/", "README.md"],
+      requiredPaths: [
+        "app.manifest.json",
+        "package.json",
+        "frontend/",
+        "backend/",
+        "prisma/",
+        "openapi/",
+        "tests/",
+        "README.md"
+      ],
       containerName: "evcp-app-leave-management-dep_leave_management_001",
       imageTag: "leave-management:1",
       route: "/apps/leave-management",
@@ -970,7 +1050,13 @@ async function main() {
       healthStatus: "healthy",
       readinessStatus: "ready",
       dependencies: { database: "healthy", platformAuth: "ready", route: "ready" },
-      readinessGates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"],
+      readinessGates: [
+        "artifact_contract_present",
+        "migrations_applied",
+        "schema_grant_active",
+        "platform_auth_ready",
+        "route_registered"
+      ],
       checkedAt: new Date("2026-08-17T11:05:00.000Z")
     },
     create: {
@@ -979,7 +1065,13 @@ async function main() {
       healthStatus: "healthy",
       readinessStatus: "ready",
       dependencies: { database: "healthy", platformAuth: "ready", route: "ready" },
-      readinessGates: ["artifact_contract_present", "migrations_applied", "schema_grant_active", "platform_auth_ready", "route_registered"],
+      readinessGates: [
+        "artifact_contract_present",
+        "migrations_applied",
+        "schema_grant_active",
+        "platform_auth_ready",
+        "route_registered"
+      ],
       checkedAt: new Date("2026-08-17T11:05:00.000Z")
     }
   });
@@ -1033,7 +1125,12 @@ async function main() {
     update: {
       version: "1.0.0",
       openapiPath: "generated-apps/leave-management/openapi/openapi.json",
-      paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+      paths: [
+        "/api/leave-requests",
+        "/api/leave-requests/{id}",
+        "/api/approval-steps",
+        "/api/runtime/health"
+      ],
       pathCount: 4
     },
     create: {
@@ -1041,7 +1138,12 @@ async function main() {
       runtimeId: "garun_leave_management_001",
       version: "1.0.0",
       openapiPath: "generated-apps/leave-management/openapi/openapi.json",
-      paths: ["/api/leave-requests", "/api/leave-requests/{id}", "/api/approval-steps", "/api/runtime/health"],
+      paths: [
+        "/api/leave-requests",
+        "/api/leave-requests/{id}",
+        "/api/approval-steps",
+        "/api/runtime/health"
+      ],
       pathCount: 4
     }
   });
@@ -1149,7 +1251,11 @@ async function main() {
       isBaseline: false,
       sourcePrompt: "Approved PRD change prdchg_leave_management_001",
       changeSummary: "Add WFH leave visibility requirement",
-      generatedBy: { scenario: "requirement_analysis", providerId: "human_approval", model: "creator_review" },
+      generatedBy: {
+        scenario: "requirement_analysis",
+        providerId: "human_approval",
+        model: "creator_review"
+      },
       createdByUserId: "usr_creator"
     },
     create: {
@@ -1160,7 +1266,11 @@ async function main() {
       isBaseline: false,
       sourcePrompt: "Approved PRD change prdchg_leave_management_001",
       changeSummary: "Add WFH leave visibility requirement",
-      generatedBy: { scenario: "requirement_analysis", providerId: "human_approval", model: "creator_review" },
+      generatedBy: {
+        scenario: "requirement_analysis",
+        providerId: "human_approval",
+        model: "creator_review"
+      },
       createdByUserId: "usr_creator"
     }
   });
@@ -1471,7 +1581,12 @@ async function main() {
       classification: "restricted",
       label: "Restricted",
       requiredReviewers: ["Project Owner", "Security Admin", "Platform Admin"],
-      requiredChecks: ["auth_session_required", "app_role_required", "audit_high_severity", "break_glass_disabled"],
+      requiredChecks: [
+        "auth_session_required",
+        "app_role_required",
+        "audit_high_severity",
+        "break_glass_disabled"
+      ],
       publishAllowed: false,
       externalExposureAllowed: false,
       createdByUserId: "usr_admin"
@@ -1586,7 +1701,9 @@ async function main() {
   });
 
   await prisma.knowledgeIndexChunk.upsert({
-    where: { versionId_chunkKey: { versionId: "knver_leave_policy_v1", chunkKey: "leave-policy-001" } },
+    where: {
+      versionId_chunkKey: { versionId: "knver_leave_policy_v1", chunkKey: "leave-policy-001" }
+    },
     update: {
       heading: "WFH Leave Approval",
       excerpt: "WFH leave requires manager approval and HR visibility.",
@@ -1741,8 +1858,20 @@ async function main() {
       checks: [
         { name: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
         { name: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
-        { name: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
-        { name: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" }
+        {
+          name: "Disk",
+          required: ">= 100 GB free",
+          observed: "500 GB",
+          status: "pass",
+          action: "-"
+        },
+        {
+          name: "Docker",
+          required: "Docker installed",
+          observed: "26.1.0",
+          status: "pass",
+          action: "-"
+        }
       ],
       actionableFailures: [],
       composeServices: [
@@ -1766,8 +1895,20 @@ async function main() {
       checks: [
         { name: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
         { name: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
-        { name: "Disk", required: ">= 100 GB free", observed: "500 GB", status: "pass", action: "-" },
-        { name: "Docker", required: "Docker installed", observed: "26.1.0", status: "pass", action: "-" }
+        {
+          name: "Disk",
+          required: ">= 100 GB free",
+          observed: "500 GB",
+          status: "pass",
+          action: "-"
+        },
+        {
+          name: "Docker",
+          required: "Docker installed",
+          observed: "26.1.0",
+          status: "pass",
+          action: "-"
+        }
       ],
       actionableFailures: [],
       composeServices: [
@@ -1795,7 +1936,12 @@ async function main() {
       authConfig: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
       aiConfig: { providerId: "aip_openai_production", model: "gpt-4.1" },
       guardrailConfig: { defaultPolicy: "enterprise-default", blockHighRisk: true },
-      backupConfig: { schedule: "0 2 * * *", retentionDays: 30, encryptionMode: "kms", encryptionKeyRef: "kms://evcp/backup" },
+      backupConfig: {
+        schedule: "0 2 * * *",
+        retentionDays: 30,
+        encryptionMode: "kms",
+        encryptionKeyRef: "kms://evcp/backup"
+      },
       firstAdminConfig: { email: "admin@company.com", displayName: "Platform Admin" },
       createdByUserId: "usr_admin"
     },
@@ -1808,7 +1954,12 @@ async function main() {
       authConfig: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
       aiConfig: { providerId: "aip_openai_production", model: "gpt-4.1" },
       guardrailConfig: { defaultPolicy: "enterprise-default", blockHighRisk: true },
-      backupConfig: { schedule: "0 2 * * *", retentionDays: 30, encryptionMode: "kms", encryptionKeyRef: "kms://evcp/backup" },
+      backupConfig: {
+        schedule: "0 2 * * *",
+        retentionDays: 30,
+        encryptionMode: "kms",
+        encryptionKeyRef: "kms://evcp/backup"
+      },
       firstAdminConfig: { email: "admin@company.com", displayName: "Platform Admin" },
       createdByUserId: "usr_admin"
     }
@@ -1987,7 +2138,12 @@ async function main() {
       checks: [
         { name: "Disk space", passed: false, observed: "20GB", required: ">=100GB" },
         { name: "Last backup", passed: false, observed: "failed", required: "succeeded" },
-        { name: "License status", passed: false, observed: "expired", required: "active or warning" }
+        {
+          name: "License status",
+          passed: false,
+          observed: "expired",
+          required: "active or warning"
+        }
       ],
       blockingReasons: ["Disk space below minimum", "Last backup failed", "License is expired"],
       createdByUserId: "usr_admin"
@@ -2001,7 +2157,12 @@ async function main() {
       checks: [
         { name: "Disk space", passed: false, observed: "20GB", required: ">=100GB" },
         { name: "Last backup", passed: false, observed: "failed", required: "succeeded" },
-        { name: "License status", passed: false, observed: "expired", required: "active or warning" }
+        {
+          name: "License status",
+          passed: false,
+          observed: "expired",
+          required: "active or warning"
+        }
       ],
       blockingReasons: ["Disk space below minimum", "Last backup failed", "License is expired"],
       createdByUserId: "usr_admin",
@@ -2105,7 +2266,13 @@ async function main() {
       allowed: false,
       status: "expired",
       reasons: ["License expired beyond grace period", "Existing app data must be preserved"],
-      restrictedActions: ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"],
+      restrictedActions: [
+        "publish",
+        "ai_generation",
+        "new_app",
+        "new_external_invite",
+        "activate_user"
+      ],
       preserveExistingData: true,
       checkedAt: new Date("2027-02-01T00:00:00.000Z")
     },
@@ -2117,7 +2284,13 @@ async function main() {
       allowed: false,
       status: "expired",
       reasons: ["License expired beyond grace period", "Existing app data must be preserved"],
-      restrictedActions: ["publish", "ai_generation", "new_app", "new_external_invite", "activate_user"],
+      restrictedActions: [
+        "publish",
+        "ai_generation",
+        "new_app",
+        "new_external_invite",
+        "activate_user"
+      ],
       preserveExistingData: true,
       checkedAt: new Date("2027-02-01T00:00:00.000Z")
     }
@@ -2128,10 +2301,20 @@ async function main() {
     update: {
       status: "blocked",
       tlsEnforced: true,
-      sessionPolicy: { idleTimeoutMinutes: 30, absoluteTimeoutMinutes: 480, rememberMeAllowed: false },
+      sessionPolicy: {
+        idleTimeoutMinutes: 30,
+        absoluteTimeoutMinutes: 480,
+        rememberMeAllowed: false
+      },
       secretRedactionPassed: true,
-      uploadPolicy: { allowedMimeTypes: ["application/pdf", "text/markdown"], maxSizeBytes: 10000000, quarantineOnPending: true },
-      releaseChecklist: { requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"] },
+      uploadPolicy: {
+        allowedMimeTypes: ["application/pdf", "text/markdown"],
+        maxSizeBytes: 10000000,
+        quarantineOnPending: true
+      },
+      releaseChecklist: {
+        requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"]
+      },
       rtmRegression: { p0RequirementsTotal: 42, p0RequirementsPassed: 42, exceptionsApproved: 0 },
       createdByUserId: "usr_admin"
     },
@@ -2139,10 +2322,20 @@ async function main() {
       id: "sec_readiness_release_001",
       status: "blocked",
       tlsEnforced: true,
-      sessionPolicy: { idleTimeoutMinutes: 30, absoluteTimeoutMinutes: 480, rememberMeAllowed: false },
+      sessionPolicy: {
+        idleTimeoutMinutes: 30,
+        absoluteTimeoutMinutes: 480,
+        rememberMeAllowed: false
+      },
       secretRedactionPassed: true,
-      uploadPolicy: { allowedMimeTypes: ["application/pdf", "text/markdown"], maxSizeBytes: 10000000, quarantineOnPending: true },
-      releaseChecklist: { requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"] },
+      uploadPolicy: {
+        allowedMimeTypes: ["application/pdf", "text/markdown"],
+        maxSizeBytes: 10000000,
+        quarantineOnPending: true
+      },
+      releaseChecklist: {
+        requiredChecks: ["auth", "permissions", "domain", "tls", "data_classification", "audit"]
+      },
       rtmRegression: { p0RequirementsTotal: 42, p0RequirementsPassed: 42, exceptionsApproved: 0 },
       createdByUserId: "usr_admin",
       createdAt: new Date("2026-10-10T08:00:00.000Z")
@@ -2211,9 +2404,16 @@ async function main() {
       releaseBlocked: true,
       requiredChecks: [
         { name: "TLS", status: "fail", action: "TLS is required before public exposure" },
-        { name: "Data Classification", status: "fail", action: "Confidential data cannot be public" }
+        {
+          name: "Data Classification",
+          status: "fail",
+          action: "Confidential data cannot be public"
+        }
       ],
-      blockingReasons: ["TLS is required before public exposure", "Confidential data cannot be public"],
+      blockingReasons: [
+        "TLS is required before public exposure",
+        "Confidential data cannot be public"
+      ],
       dataClassification: "Confidential",
       createdByUserId: "usr_admin"
     },
@@ -2224,9 +2424,16 @@ async function main() {
       releaseBlocked: true,
       requiredChecks: [
         { name: "TLS", status: "fail", action: "TLS is required before public exposure" },
-        { name: "Data Classification", status: "fail", action: "Confidential data cannot be public" }
+        {
+          name: "Data Classification",
+          status: "fail",
+          action: "Confidential data cannot be public"
+        }
       ],
-      blockingReasons: ["TLS is required before public exposure", "Confidential data cannot be public"],
+      blockingReasons: [
+        "TLS is required before public exposure",
+        "Confidential data cannot be public"
+      ],
       dataClassification: "Confidential",
       createdByUserId: "usr_admin",
       createdAt: new Date("2026-10-10T08:03:00.000Z")
@@ -2238,7 +2445,13 @@ async function main() {
     update: {
       classification: "Restricted",
       surface: "prompt_ticket_request",
-      redactionRulesApplied: ["secret_key", "password", "payment_card", "national_id", "sensitive_request_key"],
+      redactionRulesApplied: [
+        "secret_key",
+        "password",
+        "payment_card",
+        "national_id",
+        "sensitive_request_key"
+      ],
       redactedPayload: {
         prompt: "Summarize payroll export using [REDACTED_SECRET_KEY]",
         ticketDescription: "password [REDACTED] and card [REDACTED_PAYMENT_CARD]",
@@ -2250,7 +2463,13 @@ async function main() {
       id: "redaction_evidence_restricted_001",
       classification: "Restricted",
       surface: "prompt_ticket_request",
-      redactionRulesApplied: ["secret_key", "password", "payment_card", "national_id", "sensitive_request_key"],
+      redactionRulesApplied: [
+        "secret_key",
+        "password",
+        "payment_card",
+        "national_id",
+        "sensitive_request_key"
+      ],
       redactedPayload: {
         prompt: "Summarize payroll export using [REDACTED_SECRET_KEY]",
         ticketDescription: "password [REDACTED] and card [REDACTED_PAYMENT_CARD]",

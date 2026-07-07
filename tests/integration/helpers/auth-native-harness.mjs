@@ -39,8 +39,13 @@ export function buildTestExecutor(options = {}) {
 
   return {
     services,
-    asAdmin: (opts) => request({ ...opts, headers: { ...opts.headers, "x-mock-user-email": "admin@company.com" } }),
-    asCreator: (opts) => request({ ...opts, headers: { ...opts.headers, "x-mock-user-email": "creator@company.com" } }),
+    asAdmin: (opts) =>
+      request({ ...opts, headers: { ...opts.headers, "x-mock-user-email": "admin@company.com" } }),
+    asCreator: (opts) =>
+      request({
+        ...opts,
+        headers: { ...opts.headers, "x-mock-user-email": "creator@company.com" }
+      }),
     anon: (opts) => request(opts),
     withToken: (token, opts) =>
       request({ ...opts, headers: { ...opts.headers, authorization: `Bearer ${token}` } })

@@ -36,40 +36,80 @@ export function createActionRunner(deps: {
 
       if (action.type === "file") {
         if (isLockedFile(input.template, action.filePath)) {
-          return { ok: false, error: `refusing to write locked file '${action.filePath}'`, stdout: "", stderr: "", exitCode: -1 };
+          return {
+            ok: false,
+            error: `refusing to write locked file '${action.filePath}'`,
+            stdout: "",
+            stderr: "",
+            exitCode: -1
+          };
         }
         const encoded = Buffer.from(action.content, "utf8").toString("base64");
-        const dir = action.filePath.includes("/") ? action.filePath.slice(0, action.filePath.lastIndexOf("/")) : ".";
+        const dir = action.filePath.includes("/")
+          ? action.filePath.slice(0, action.filePath.lastIndexOf("/"))
+          : ".";
         const script = `mkdir -p ${dir} && echo ${encoded} | base64 -d > ${action.filePath}`;
         if (!input.containerId) {
           return { ok: false, error: "missing containerId", stdout: "", stderr: "", exitCode: -1 };
         }
         const result = await deps.docker.execInContainer(input.containerId, ["sh", "-c", script]);
         if (result.exitCode !== 0) {
-          return { ok: false, error: "file write failed", stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+          return {
+            ok: false,
+            error: "file write failed",
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode
+          };
         }
         return { ok: true, stdout: result.stdout };
       }
 
       if (action.type === "shell") {
-        const result = await deps.docker.execInContainer(input.containerId, ["sh", "-c", action.command]);
+        const result = await deps.docker.execInContainer(input.containerId, [
+          "sh",
+          "-c",
+          action.command
+        ]);
         if (result.exitCode !== 0) {
-          return { ok: false, error: `shell command exited ${result.exitCode}`, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+          return {
+            ok: false,
+            error: `shell command exited ${result.exitCode}`,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode
+          };
         }
         return { ok: true, stdout: result.stdout };
       }
 
       // migration — execute the SQL against the project's real Postgres schema, then record it.
       if (deps.runMigrationSql) {
-        const envResult = await deps.docker.execInContainer(input.containerId, ["sh", "-c", 'printf %s "$DATABASE_URL"']);
+        const envResult = await deps.docker.execInContainer(input.containerId, [
+          "sh",
+          "-c",
+          'printf %s "$DATABASE_URL"'
+        ]);
         const databaseUrl = (envResult.stdout ?? "").trim();
         if (!databaseUrl) {
-          return { ok: false, error: "DATABASE_URL is not set in the workspace container; cannot run migration", stdout: "", stderr: "", exitCode: 1 };
+          return {
+            ok: false,
+            error: "DATABASE_URL is not set in the workspace container; cannot run migration",
+            stdout: "",
+            stderr: "",
+            exitCode: 1
+          };
         }
         try {
           await deps.runMigrationSql(databaseUrl, action.sql);
         } catch (error) {
-          return { ok: false, error: `migration failed: ${(error as Error).message}`, stdout: "", stderr: (error as Error).message, exitCode: 1 };
+          return {
+            ok: false,
+            error: `migration failed: ${(error as Error).message}`,
+            stdout: "",
+            stderr: (error as Error).message,
+            exitCode: 1
+          };
         }
       }
       deps.migrations.recordMigration({

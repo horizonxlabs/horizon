@@ -1,5 +1,9 @@
 import { createMessageParser } from "./message-parser";
-import { createMemoryLlmCompletionClient, createLiteLlmCompletionClient, type LlmCompletionClient } from "./llm-client";
+import {
+  createMemoryLlmCompletionClient,
+  createLiteLlmCompletionClient,
+  type LlmCompletionClient
+} from "./llm-client";
 import { createMemoryChatHistoryStore } from "./chat-history-store";
 import { createActionRunner } from "./action-runner";
 import { createMemoryCheckpointStore } from "./checkpoint-store";
@@ -19,7 +23,11 @@ export { createMessageParser };
 
 export function createDefaultGenerationService(opts: {
   orchestrator: WorkspaceOrchestrator;
-  onAudit?: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
+  onAudit?: (event: {
+    action: string;
+    projectId: string;
+    metadata?: Record<string, unknown>;
+  }) => void;
   env?: Record<string, string | undefined>;
   // Optional real DockerEngine instance to execute actions against. When omitted,
   // falls back to a placeholder that throws on use — see the app-factory.ts wiring
@@ -33,7 +41,9 @@ export function createDefaultGenerationService(opts: {
   const llmClient: LlmCompletionClient =
     mode === "real" && hasLiteLlmConfig
       ? createLiteLlmCompletionClient({ baseUrl: env.EVCP_LITELLM_BASE_URL as string })
-      : createMemoryLlmCompletionClient(["(memory llm stub — configure EVCP_LITELLM_BASE_URL for real completions)"]);
+      : createMemoryLlmCompletionClient([
+          "(memory llm stub — configure EVCP_LITELLM_BASE_URL for real completions)"
+        ]);
 
   // Real mode: a fresh socket engine (stateless over /var/run/docker.sock, equivalent to the
   // orchestrator's). Memory/omitted: a throwing placeholder that never runs in the mem tests.
@@ -60,7 +70,9 @@ export function createDefaultGenerationService(opts: {
       ...(mode === "real" ? { runMigrationSql: createPgMigrationRunner().run } : {})
     }),
     errorFeedback: createErrorFeedbackTracker(),
-    template: env.EVCP_TEMPLATE_DIR ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR) : loadGoldenTemplate(),
+    template: env.EVCP_TEMPLATE_DIR
+      ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR)
+      : loadGoldenTemplate(),
     // MVP: authenticate to LiteLLM with the master key server-side. Never surfaced to the Creator.
     // Per-project virtual-key budgets are a follow-up.
     getApiKey: () => env.EVCP_LITELLM_MASTER_KEY ?? "",
