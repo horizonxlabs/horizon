@@ -46,7 +46,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import "@evcp/ui/styles.css";
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  await import("@evcp/ui/styles.css");
+}
 
 type CreatorProjectView = {
   id: string;
@@ -193,6 +196,137 @@ const creatorPageCopy: Record<CreatorPage, { eyebrow: string; title: string; des
 
 function platformSessionToken(): string | undefined {
   return createPlatformSessionStore(window.localStorage).getToken();
+}
+
+// --- Native login + change-password gate ---
+type NativeLoginResult = { token: string; expiresAt: string; mustChangePassword: boolean };
+
+export function persistLoginSession(
+  res: NativeLoginResult,
+  storage: { setItem: (k: string, v: string) => void } = window.localStorage
+): void {
+  storage.setItem("evcp_session", res.token);
+  storage.setItem("evcp_session_expires_at", res.expiresAt);
+}
+
+export function needsPasswordChange(res: { mustChangePassword: boolean }): boolean {
+  return res.mustChangePassword === true;
+}
+
+function clearLoginSession(storage: { removeItem: (k: string) => void } = window.localStorage): void {
+  storage.removeItem("evcp_session");
+  storage.removeItem("evcp_session_expires_at");
+}
+
+async function nativeLogin(email: string, password: string): Promise<NativeLoginResult> {
+  const base = apiBaseUrl() ?? "/api";
+  const response = await fetch(`${base}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  const body = (await response.json().catch(() => null)) as
+    | { ok: true; data: NativeLoginResult }
+    | { ok: false; error: { code: string; message: string } }
+    | null;
+  if (!body || body.ok !== true) {
+    throw new Error(body && "error" in body ? body.error.message : "Invalid email or password");
+  }
+  return body.data;
+}
+
+async function nativeChangePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const base = apiBaseUrl() ?? "/api";
+  const response = await fetch(`${base}/auth/change-password`, {
+    method: "POST",
+    headers: vibeAuthHeaders(),
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+  const body = (await response.json().catch(() => null)) as
+    | { ok: true; data: { ok: true } }
+    | { ok: false; error: { code: string; message: string } }
+    | null;
+  if (!body || body.ok !== true) {
+    throw new Error(body && "error" in body ? body.error.message : "Change password failed");
+  }
+}
+
+// --- Live "vibe coding" via the /chat SSE generation loop ---
+function vibeAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const token = platformSessionToken();
+  if (token) headers["authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  return headers;
+}
+
+// Ensure the project has a running dev container before chatting. Idempotent: an
+// already-provisioned workspace (409 / "already") is treated as success.
+async function ensureVibeWorkspace(projectId: string, slug: string): Promise<void> {
+  const base = apiBaseUrl() ?? "/api";
+  const containerUrl = `${base}/projects/${encodeURIComponent(projectId)}/workspace/container`;
+  const readState = async (): Promise<string | undefined> => {
+    const res = await fetch(containerUrl, { headers: vibeAuthHeaders() });
+    if (!res.ok) return undefined;
+    const body = (await res.json().catch(() => null)) as { data?: { workspace?: { state?: string } }; workspace?: { state?: string } } | null;
+    return body?.data?.workspace?.state ?? body?.workspace?.state;
+  };
+  // Already running/idle → nothing to do.
+  const current = await readState();
+  if (current === "running" || current === "idle") return;
+  // Otherwise provision. Treat "already provisioned" (any non-fresh outcome where a
+  // workspace ends up present) as success.
+  const res = await fetch(containerUrl, {
+    method: "POST",
+    headers: vibeAuthHeaders(),
+    body: JSON.stringify({ projectId, slug })
+  });
+  if (res.ok || res.status === 409) return;
+  const after = await readState();
+  if (after) return;
+  throw new Error(`Provisioning workspace failed (${res.status})`);
+}
+
+// Stream a chat turn: POST the prompt and parse the text/event-stream response,
+// invoking onEvent(type, data) for each SSE frame (token | action_result | commit | error | done).
+async function streamVibeChat(
+  projectId: string,
+  prompt: string,
+  onEvent: (type: string, data: unknown) => void
+): Promise<void> {
+  const base = apiBaseUrl() ?? "/api";
+  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat`, {
+    method: "POST",
+    headers: vibeAuthHeaders(),
+    body: JSON.stringify({ prompt })
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Chat request failed (${response.status})`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const lines = frame.split("\n");
+      const eventLine = lines.find((line) => line.startsWith("event:"));
+      const dataLine = lines.find((line) => line.startsWith("data:"));
+      if (!dataLine) continue;
+      const type = eventLine ? eventLine.slice("event:".length).trim() : "message";
+      const raw = dataLine.slice("data:".length).trim();
+      let data: unknown = raw;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        /* keep raw string */
+      }
+      onEvent(type, data);
+    }
+  }
 }
 
 function createCreatorPlatformClient() {
@@ -439,7 +573,162 @@ const mvpDemoSteps = [
   "Review MVP Monitoring and Audit Filters"
 ];
 
-function CreatorApp() {
+function hasValidSession(): boolean {
+  const token = platformSessionToken();
+  if (!token) return false;
+  const expiresAt = window.localStorage.getItem("evcp_session_expires_at");
+  if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) return false;
+  return true;
+}
+
+function LoginScreen({ onLoggedIn }: { onLoggedIn: (res: NativeLoginResult) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(undefined);
+    try {
+      const result = await nativeLogin(email.trim(), password);
+      persistLoginSession(result);
+      onLoggedIn(result);
+    } catch {
+      setErrorMessage("Invalid email or password");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="creator-auth-screen">
+      <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Creator login">
+        <h1>Creator Sign In</h1>
+        <label>
+          Email
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="username"
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </label>
+        {errorMessage ? <p role="alert" className="creator-auth-error">{errorMessage}</p> : null}
+        <button type="submit" disabled={isSubmitting}>
+          <LockKeyhole size={16} />
+          {isSubmitting ? "Signing in" : "Sign In"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ChangePasswordScreen({ onChanged }: { onChanged: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setErrorMessage("New password and confirmation do not match");
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMessage(undefined);
+    try {
+      await nativeChangePassword(currentPassword, newPassword);
+      onChanged();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Change password failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="creator-auth-screen">
+      <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Change password">
+        <h1>Set a New Password</h1>
+        <label>
+          Current password
+          <input
+            type="password"
+            required
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </label>
+        <label>
+          New password
+          <input
+            type="password"
+            required
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        <label>
+          Confirm new password
+          <input
+            type="password"
+            required
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        {errorMessage ? <p role="alert" className="creator-auth-error">{errorMessage}</p> : null}
+        <button type="submit" disabled={isSubmitting}>
+          <ShieldCheck size={16} />
+          {isSubmitting ? "Saving" : "Save New Password"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function CreatorAuthGate() {
+  const [authStage, setAuthStage] = useState<"login" | "change-password" | "workspace">(
+    hasValidSession() ? "workspace" : "login"
+  );
+
+  function handleLoggedIn(result: NativeLoginResult) {
+    setAuthStage(needsPasswordChange(result) ? "change-password" : "workspace");
+  }
+
+  function handleLogout() {
+    clearLoginSession();
+    setAuthStage("login");
+  }
+
+  if (authStage === "login") {
+    return <LoginScreen onLoggedIn={handleLoggedIn} />;
+  }
+  if (authStage === "change-password") {
+    return <ChangePasswordScreen onChanged={() => setAuthStage("workspace")} />;
+  }
+  return <CreatorApp onLogout={handleLogout} />;
+}
+
+function CreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
@@ -459,6 +748,13 @@ function CreatorApp() {
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  type VibeAction = { id: string; type: string; label: string; ok: boolean };
+  type VibeMessage = { id: string; role: "user" | "assistant"; text: string; actions: VibeAction[]; commitSha?: string };
+  const [vibeMessages, setVibeMessages] = useState<VibeMessage[]>([]);
+  const [vibeStatus, setVibeStatus] = useState("");
+  const [isVibing, setIsVibing] = useState(false);
+  const [vibePreviewKey, setVibePreviewKey] = useState(0);
+  const [vibeTab, setVibeTab] = useState<"preview" | "code">("preview");
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const [isInvitingUser, setIsInvitingUser] = useState(false);
   const [isApprovingAccess, setIsApprovingAccess] = useState(false);
@@ -569,6 +865,32 @@ function CreatorApp() {
     setPrdVersionList([]);
   }
 
+  // Restore the chat thread from the server so a browser refresh doesn't lose history.
+  useEffect(() => {
+    const pid = selectedProject?.id;
+    if (!pid) return;
+    const base = apiBaseUrl() ?? "/api";
+    fetch(`${base}/projects/${encodeURIComponent(pid)}/chat/history`, { headers: vibeAuthHeaders() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { messages?: Array<{ id: string; role: string; content: string; actions?: VibeAction[]; commitSha?: string | null }> } | null) => {
+        const messages = data?.messages;
+        if (!Array.isArray(messages) || messages.length === 0) return;
+        setVibeMessages(
+          messages
+            .filter((message) => message.role === "user" || message.role === "assistant")
+            .map((message) => ({
+              id: message.id,
+              role: message.role === "user" ? "user" : "assistant",
+              text: message.content,
+              actions: Array.isArray(message.actions) ? message.actions : [],
+              commitSha: message.commitSha ?? undefined
+            }))
+        );
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id]);
+
   useEffect(() => {
     loadCreatorBootstrap()
       .then(async (nextBootstrap) => {
@@ -622,6 +944,8 @@ function CreatorApp() {
     resetProjectRuntimeState();
     setWorkspaceMessage("Using deterministic local workspace evidence until the Platform API is configured.");
     setPublishMessage("Using deterministic local publish evidence until the Platform API is configured.");
+    clearLoginSession();
+    onLogout?.();
   }
 
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
@@ -733,6 +1057,50 @@ function CreatorApp() {
       },
       tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
     };
+  }
+
+  async function handleVibeChat() {
+    if (!selectedProject || !promptDraft.trim()) return;
+    const prompt = promptDraft.trim();
+    const assistantId = `a-${Date.now()}`;
+    setVibeMessages((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: "user", text: prompt, actions: [] },
+      { id: assistantId, role: "assistant", text: "", actions: [] }
+    ]);
+    setPromptDraft("");
+    setIsVibing(true);
+    setVibeStatus("Provisioning workspace…");
+    const patchAssistant = (fn: (m: VibeMessage) => VibeMessage) =>
+      setVibeMessages((prev) => prev.map((m) => (m.id === assistantId ? fn(m) : m)));
+    try {
+      await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
+      setVibeStatus("AI is working…");
+      await streamVibeChat(selectedProject.id, prompt, (type, data) => {
+        const field = (key: string): string =>
+          data && typeof data === "object" && key in data ? String((data as Record<string, unknown>)[key]) : typeof data === "string" ? data : "";
+        if (type === "token") {
+          patchAssistant((m) => ({ ...m, text: m.text + field("content") }));
+        } else if (type === "action_result") {
+          const ok = data && typeof data === "object" && "ok" in data ? Boolean((data as { ok: boolean }).ok) : false;
+          patchAssistant((m) => ({ ...m, actions: [...m.actions, { id: field("actionId"), type: field("actionType") || "file", label: field("label"), ok }] }));
+        } else if (type === "commit") {
+          const sha = field("sha");
+          patchAssistant((m) => ({ ...m, commitSha: sha }));
+          setVibeStatus(`Committed ${sha.slice(0, 8)}`);
+          setVibePreviewKey((k) => k + 1);
+        } else if (type === "error") {
+          patchAssistant((m) => ({ ...m, text: m.text + `\n\n⚠️ ${field("message")}` }));
+        } else if (type === "done") {
+          setVibeStatus((prev) => (prev.startsWith("Committed") ? prev : "Done"));
+        }
+      });
+    } catch (error) {
+      patchAssistant((m) => ({ ...m, text: m.text + `\n\n⚠️ ${(error as Error).message}` }));
+      setVibeStatus(`Error: ${(error as Error).message}`);
+    } finally {
+      setIsVibing(false);
+    }
   }
 
   async function handleSubmitPrompt() {
@@ -1046,141 +1414,85 @@ function CreatorApp() {
   }
 
   if (creatorPage === "workspace") {
-    return renderCreatorShell(
-      <section className="ag-workspace" aria-label="Antigravity style workspace">
-        <aside className="ag-rail" aria-label="Workspace conversations and projects">
-          <button type="button" className="ag-new-conversation">
-            <span>+</span>
-            New Conversation
-          </button>
-          <nav className="ag-rail-nav" aria-label="Workspace quick links">
-            <a href="#conversation-history"><History size={16} />Conversation History</a>
-            <a href="#scheduled-tasks"><ClipboardCheck size={16} />Scheduled Tasks</a>
-          </nav>
-          <div className="ag-rail-section">
-            <header><span>Projects</span><small>Filter</small></header>
-            {bootstrap.projects.map((project) => (
-              <article className={project.id === selectedProject.id ? "active" : ""} key={project.id}>
-                <div><FileText size={15} /><strong>{project.slug}</strong></div>
-                <button type="button" onClick={() => void handleSelectProject(project, "workspace")}>{project.name}</button>
-                <small>{project.id === selectedProject.id ? "now" : project.status}</small>
-              </article>
-            ))}
-          </div>
-          <div className="ag-rail-section">
-            <header><span>Conversations</span></header>
-            {[
-              ["Create leave request workflow", "active"],
-              ["Review PRD baseline", "5h"],
-              ["Prepare publish checklist", "1d"]
-            ].map(([label, meta]) => (
-              <button type="button" key={label}>
-                <span>{label}</span>
-                <small>{meta}</small>
+    const previewSrc = `/preview/${selectedProject.slug}?token=${encodeURIComponent(platformSessionToken() ?? "")}`;
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 40, display: "flex", flexDirection: "column", background: "#fff", color: "#1f2937", fontFamily: "inherit" }}>
+        <header style={{ height: 52, flexShrink: 0, borderBottom: "1px solid #ececed", display: "flex", alignItems: "center", gap: 14, padding: "0 16px" }}>
+          <a href="/creator/projects" style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", color: "#6b7280", fontSize: 13, fontWeight: 500 }}>‹ Projects</a>
+          <div style={{ width: 1, height: 20, background: "#ececed" }} />
+          <strong style={{ fontSize: 14, color: "#111827" }}>{selectedProject.name}</strong>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: isVibing ? "#f59e0b" : "#22c55e" }} />
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>{vibeStatus || "ready"}</span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 2, background: "#f3f4f6", borderRadius: 10, padding: 3 }}>
+            {(["preview", "code"] as const).map((tab) => (
+              <button key={tab} type="button" onClick={() => setVibeTab(tab)} style={{ fontSize: 13, fontWeight: 500, padding: "5px 16px", borderRadius: 8, border: 0, cursor: "pointer", background: vibeTab === tab ? "#fff" : "transparent", color: vibeTab === tab ? "#111827" : "#6b7280", boxShadow: vibeTab === tab ? "0 1px 2px rgba(0,0,0,0.06)" : "none" }}>
+                {tab === "preview" ? "Preview" : "Code"}
               </button>
             ))}
           </div>
-          <div className="ag-rail-footer">
-            <ShieldCheck size={15} />
-            <div><strong>Enterprise Lock</strong><span>Auth, data, secrets locked by IT</span></div>
-          </div>
-        </aside>
-
-        <main className="ag-stage">
-          <div className="ag-stage-top">
-            <div>
-              <FileText size={16} />
-              <strong>{selectedProject.slug}</strong>
-            </div>
-            <ToneBadge tone={latestTask?.status === "blocked" ? "warning" : "success"}>{latestTask?.status ?? "ready"}</ToneBadge>
-          </div>
-
-          <section className="ag-composer-card" aria-label="AI builder command composer">
-            <textarea aria-label="Prompt" value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} placeholder="Ask anything, @ to mention, / for actions" />
-            <div className="ag-composer-actions">
-              <button type="button" className="ghost-button">+</button>
-              <button type="button" className="ghost-button">External AI Route</button>
-              <button type="button" className="ghost-button">New Worktree</button>
-              <button type="button" className="ghost-button">main</button>
-              <button type="button" onClick={handleSubmitPrompt} disabled={isSubmittingPrompt || !promptDraft.trim()}>
-                <Send size={15} />
-                {isSubmittingPrompt ? "Sending" : "Run"}
-              </button>
-            </div>
-          </section>
-
-          <div className="ag-suggestion-row" aria-label="Prompt suggestions">
-            {["Generate PRD change", "Build UI preview", "Run policy check", "Prepare publish evidence"].map((suggestion) => (
-              <button type="button" className="ghost-button" key={suggestion} onClick={() => setPromptDraft(suggestion)}>{suggestion}</button>
-            ))}
-          </div>
-
-          <section className="ag-left-workbench" aria-label="Current build context">
-            <article>
-              <span className="eyebrow">Current Run</span>
-              <strong>{latestTask?.status ?? "Ready for prompt"}</strong>
-              <p>{workspaceMessage}</p>
-            </article>
-            <article>
-              <span className="eyebrow">Build Steps</span>
-              <div className="ag-step-strip">
-                {visibleTaskSteps.slice(0, 3).map((step) => (
-                  <div key={step.label}><CheckCircle2 size={14} /><span>{step.label}</span></div>
-                ))}
-              </div>
-            </article>
-            <article className="wide">
-              <span className="eyebrow">Output Path</span>
-              <strong>PRD → Preview → Governance → Publish</strong>
-              <p>ทุก prompt ต้องสร้าง artifact ที่ตรวจได้ก่อนส่งต่อไป App Store ภายในองค์กร</p>
-            </article>
-          </section>
-
-          <section className="ag-worktree-menu" aria-label="Worktree menu preview">
-            <button type="button"><Monitor size={15} /> Local</button>
-            <button type="button"><GitBranch size={15} /> New Worktree</button>
-          </section>
-
-          <section className="ag-lower-dock" aria-label="Workspace evidence and artifacts">
-            <article className="ag-dock-card">
-              <span className="eyebrow">Agent Runs</span>
-              <div className="ag-agent-list">
-                {[
-                  ["Coordinator", "Plan and split tasks", "running"],
-                  ["Frontend Agent", "Preview artifact", "ready"],
-                  ["Policy Agent", "Platform boundary", workspaceResult?.guardrail.decision ?? "allow"]
-                ].map(([name, detail, status]) => (
-                  <div key={name}><strong>{name}</strong><span>{detail}</span><ToneBadge tone={status === "running" ? "info" : "success"}>{status}</ToneBadge></div>
-                ))}
-              </div>
-            </article>
-            <article className="ag-dock-card ag-preview-dock">
-              <span className="eyebrow">Selected Artifact</span>
-              <div className="ag-preview-summary">
-                <div>
-                  <strong>{visiblePreview.screenTitle}</strong>
-                  <p>{visiblePreview.summary}</p>
+          <button type="button" onClick={() => setVibePreviewKey((key) => key + 1)} title="Refresh preview" style={{ fontSize: 13, border: "1px solid #e5e7eb", background: "#fff", borderRadius: 8, padding: "5px 11px", cursor: "pointer", color: "#374151" }}>↻</button>
+          <a href={previewSrc} target="_blank" rel="noreferrer" style={{ fontSize: 13, border: "1px solid #e5e7eb", background: "#fff", borderRadius: 8, padding: "5px 11px", cursor: "pointer", color: "#374151", textDecoration: "none" }}>Open ↗</a>
+          <button type="button" title="Publish to production (Plan 5 pipeline)" style={{ fontSize: 13, border: "1px solid #2563eb", background: "#2563eb", borderRadius: 8, padding: "5px 14px", cursor: "pointer", color: "#fff", fontWeight: 600 }}>Publish</button>
+        </header>
+        <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(340px, 34%) 1fr" }}>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: 0, borderRight: "1px solid #ececed" }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 16, minHeight: 0 }}>
+              {vibeMessages.length === 0 && !isVibing && (
+                <div style={{ margin: "auto", textAlign: "center", color: "#9ca3af", fontSize: 13, maxWidth: 300 }}>
+                  <div style={{ fontSize: 34, marginBottom: 10 }}>✨</div>
+                  <div style={{ fontWeight: 600, color: "#4b5563", marginBottom: 4, fontSize: 15 }}>Build with AI</div>
+                  Describe what you want. The AI writes code into your live app, runs it, and commits each change.
                 </div>
-                <button type="button" className="ghost-button" onClick={handleRefreshPreview} disabled={isRefreshingPreview}><RefreshCw size={15} /> {isRefreshingPreview ? "Refreshing" : "Refresh"}</button>
+              )}
+              {vibeMessages.map((message) =>
+                message.role === "user" ? (
+                  <div key={message.id} style={{ alignSelf: "flex-end", maxWidth: "88%", background: "#f4f1fe", color: "#4c1d95", padding: "9px 13px", borderRadius: "14px 14px 4px 14px", fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.text}</div>
+                ) : (
+                  <div key={message.id} style={{ alignSelf: "flex-start", maxWidth: "96%", color: "#1f2937", fontSize: 14, lineHeight: 1.6 }}>
+                    <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.text || (isVibing ? "▋" : "")}</div>
+                    {message.actions.length > 0 && (
+                      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {message.actions.map((action, index) => (
+                          <span key={index} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontFamily: "ui-monospace, monospace", color: action.ok ? "#059669" : "#dc2626", background: action.ok ? "#ecfdf5" : "#fef2f2", border: action.ok ? "1px solid #a7f3d0" : "1px solid #fecaca", padding: "2px 9px", borderRadius: 8 }}>{action.ok ? "✓" : "✗"} {action.type === "file" ? "Create" : action.type === "shell" ? "Run" : "Migrate"} {action.label || action.id}</span>
+                        ))}
+                      </div>
+                    )}
+                    {message.commitSha && (<div style={{ marginTop: 8, fontSize: 12, color: "#7c3aed", fontFamily: "ui-monospace, monospace" }}>⑂ committed {message.commitSha.slice(0, 8)}</div>)}
+                  </div>
+                )
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 18px 8px" }}>
+              {["Add an about page", "Make it dark mode", "Add a contact form"].map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => setPromptDraft(suggestion)} style={{ fontSize: 12, color: "#374151", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 999, padding: "4px 12px", cursor: "pointer" }}>{suggestion}</button>
+              ))}
+            </div>
+            <div style={{ padding: "0 18px 18px" }}>
+              <div style={{ border: "1px solid #e0e0e6", borderRadius: 14, padding: 8, display: "flex", alignItems: "flex-end", gap: 8, background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                <textarea aria-label="Ask AI to build" value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!isVibing && promptDraft.trim()) void handleVibeChat(); } }} placeholder="Ask AI to build…" rows={1} style={{ flex: 1, resize: "none", border: 0, outline: "none", fontSize: 14, lineHeight: 1.5, background: "transparent", color: "#1f2937", maxHeight: 140, fontFamily: "inherit" }} />
+                <button type="button" onClick={handleVibeChat} disabled={isVibing || !promptDraft.trim()} aria-label="Send prompt" style={{ width: 34, height: 34, borderRadius: "50%", border: 0, background: isVibing || !promptDraft.trim() ? "#d1d5db" : "#111827", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: isVibing || !promptDraft.trim() ? "default" : "pointer", flexShrink: 0 }}><Send size={16} /></button>
               </div>
-              <div className="ag-mini-preview">
-                {visibleHighlights.map((highlight) => <span key={highlight}>{highlight}</span>)}
+            </div>
+          </div>
+          <div style={{ minHeight: 0, background: "#fafafa", display: "flex", flexDirection: "column" }}>
+            {vibeTab === "preview" ? (
+              <iframe key={vibePreviewKey} title="Live preview" src={previewSrc} style={{ flex: 1, border: 0, width: "100%", background: "#fff", minHeight: 0 }} />
+            ) : (
+              <div style={{ flex: 1, overflowY: "auto", padding: 24, fontSize: 13, color: "#374151" }}>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>Changes this session</div>
+                {vibeMessages.flatMap((message) => message.actions).length === 0 ? (
+                  <div style={{ color: "#9ca3af" }}>No changes yet. Ask the AI to build something.</div>
+                ) : (
+                  vibeMessages.flatMap((message) => message.actions).map((action, index) => (
+                    <div key={index} style={{ padding: "4px 0", fontFamily: "ui-monospace, monospace", color: action.ok ? "#059669" : "#dc2626" }}>{action.ok ? "✓" : "✗"} {action.type === "file" ? "Create" : action.type === "shell" ? "Run" : "Migrate"} {action.label || action.id}</div>
+                  ))
+                )}
+                <div style={{ marginTop: 20, color: "#9ca3af", fontSize: 12 }}>A full file browser is on the roadmap — use the Preview tab to see the running app.</div>
               </div>
-            </article>
-            <article className="ag-dock-card">
-              <span className="eyebrow">Governance</span>
-              <div className="ag-policy-list">
-                {[
-                  ["PRD", workspaceSnapshot?.baseline.version ? `Baseline v${workspaceSnapshot.baseline.version}` : "Baseline v1.0"],
-                  ["Auth", "Platform Auth / IdP"],
-                  ["Database", `app_${selectedProject.slug.replaceAll("-", "_")}`],
-                  ["Quota", `${visibleTokenBudget.remainingToday} today`]
-                ].map(([label, value]) => <div key={label}><strong>{label}</strong><span>{value}</span></div>)}
-              </div>
-            </article>
-          </section>
-        </main>
-      </section>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1938,4 +2250,6 @@ function CreatorApp() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<CreatorApp />);
+if (typeof document !== "undefined") {
+  createRoot(document.getElementById("root")!).render(<CreatorAuthGate />);
+}
