@@ -2134,8 +2134,17 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     // alternative for browser preview embedding. (Local MVP: token appears in the URL —
     // switch to an httpOnly session cookie for production.)
     const queryToken = (req.url ?? "").match(/[?&]token=([^&]+)/)?.[1];
-    const previewHeaders = queryToken
-      ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(queryToken)}` }
+    // Iframe subresources (/_next/*, images) can't carry ?token=, so on the first (page)
+    // request persist the token as a short-lived cookie scoped to this project's preview path;
+    // subsequent asset requests carry the cookie and authenticate. (Local MVP — production
+    // should mint an httpOnly, Secure cookie server-side rather than echo the session token.)
+    const cookieToken = String(req.headers.cookie ?? "").match(/(?:^|;\s*)evcp_preview_token=([^;]+)/)?.[1];
+    const previewToken = queryToken ?? cookieToken;
+    if (queryToken) {
+      res.setHeader("Set-Cookie", `evcp_preview_token=${queryToken}; Path=/preview/${slug}; HttpOnly; SameSite=Lax`);
+    }
+    const previewHeaders = previewToken
+      ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(previewToken)}` }
       : req.headers;
     const decision = await resolvePreviewProxyDecision(services, previewHeaders, slug);
     if ("status" in decision) {
@@ -2143,8 +2152,9 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
       return;
     }
     const target = new URL(decision.upstream);
-    const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const forwardPath = req.originalUrl.replace(new RegExp(`^/preview/${escapedSlug}`), "") || "/";
+    // basePath mode: the workspace Next app runs with basePath=/preview/<slug>, so forward
+    // the FULL path (no prefix strip) — routes AND _next assets resolve back through this proxy.
+    const forwardPath = req.originalUrl || "/";
     const forwardHeaders: Record<string, string | string[] | undefined> = { ...req.headers, host: target.host };
     for (const key of Object.keys(forwardHeaders)) {
       if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {

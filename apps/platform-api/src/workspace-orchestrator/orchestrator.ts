@@ -130,7 +130,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         const spec = buildDevContainerSpec({
           slug: input.slug,
           image,
-          env: deps.secrets.resolveEnv(input.projectId),
+          env: { ...deps.secrets.resolveEnv(input.projectId), EVCP_PREVIEW_BASE: `/preview/${input.slug}` },
           cpuCores,
           memoryMb,
           network,
