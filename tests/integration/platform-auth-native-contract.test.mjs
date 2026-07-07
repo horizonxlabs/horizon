@@ -75,7 +75,7 @@ test("login with wrong password and login with unknown email return a uniform 40
   assert.equal(wrongPassword.status, 401);
   assert.equal(unknownEmail.status, 401);
   assert.deepEqual(wrongPassword.body, unknownEmail.body);
-  assert.equal(wrongPassword.body.error, "invalid_credentials");
+  assert.equal(wrongPassword.body.error.code, "invalid_credentials");
 });
 
 test("change-password with the native session token updates the password and clears mustChangePassword", async () => {

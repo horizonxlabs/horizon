@@ -513,12 +513,12 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       const role = body.role ? String(body.role) : "creator";
 
       if (!email || !name || !tempPassword) {
-        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: "invalid_input" } };
+        return { status: HttpStatus.BAD_REQUEST, body: failure("invalid_input", "Email and name are required") };
       }
 
       const existing = await corePersistenceClient.platformUser.findUnique({ where: { email } });
       if (existing) {
-        return { status: HttpStatus.CONFLICT, body: { ok: false, error: "email_exists" } };
+        return { status: HttpStatus.CONFLICT, body: failure("email_exists", "That email already exists") };
       }
 
       const id = `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -526,7 +526,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
 
       const passwordResult = await credentialService.setPassword(created.id, tempPassword, { mustChange: true });
       if (!passwordResult.ok) {
-        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: passwordResult.reason } };
+        return { status: HttpStatus.BAD_REQUEST, body: failure("weak_password", "Temporary password must be at least 8 characters") };
       }
 
       services.identity.registerUser({
@@ -556,14 +556,10 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
 
       const verified = await credentialService.verifyLogin(email, password);
       if (!verified) {
-        return { status: HttpStatus.UNAUTHORIZED, body: { ok: false, error: "invalid_credentials" } };
+        return { status: HttpStatus.UNAUTHORIZED, body: failure("invalid_credentials", "Invalid email or password") };
       }
 
       const user = services.identity.getUserByEmail(email.trim().toLowerCase());
-      if (!user) {
-        return { status: HttpStatus.UNAUTHORIZED, body: { ok: false, error: "invalid_credentials" } };
-      }
-
       const session = services.authSso.issueNativeSession(user);
       return {
         status: HttpStatus.OK,
@@ -584,7 +580,10 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
 
       const result = await credentialService.changePassword(actor.id, currentPassword, newPassword);
       if (!result.ok) {
-        return { status: HttpStatus.BAD_REQUEST, body: { ok: false, error: result.reason } };
+        if (result.reason === "weak_password") {
+          return { status: HttpStatus.BAD_REQUEST, body: failure("weak_password", "New password must be at least 8 characters") };
+        }
+        return { status: HttpStatus.BAD_REQUEST, body: failure("invalid_credentials", "Invalid email or password") };
       }
 
       return { status: HttpStatus.OK, body: success({ ok: true }) };
