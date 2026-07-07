@@ -128,7 +128,7 @@ services:
     <<: *evcp-node-service
     container_name: evcp-admin-web
     restart: unless-stopped
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/admin-web dev -- --host 0.0.0.0 --port 4100"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/admin-web exec vite --host 0.0.0.0 --port 4100"
     ports:
       - "${EVCP_ADMIN_PORT:-4100}:4100"
     depends_on:

@@ -324,6 +324,21 @@ async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServi
   return services.auth.resolveCurrentUser(headers);
 }
 
+// Resolve the workspace auth context (user + project membership) for workspace/chat/preview
+// routes. When core persistence is on (the pilot), the user and their projects live in Postgres,
+// so we MUST derive membership from corePersistence — the legacy in-memory `services.projects`
+// does not contain Postgres-created projects, which is why natively-created Creators hit 403.
+async function resolveWorkspaceAuth(
+  services: PersistenceAwarePlatformApiServices,
+  headers: HeaderBag
+): Promise<WorkspaceAuthContext> {
+  const user = await resolvePersistenceUser(services, headers);
+  const projectIds = services.corePersistence
+    ? (await services.corePersistence.listProjects(user)).map((project) => project.id)
+    : services.projects.listProjects(user).map((project) => project.id);
+  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+}
+
 async function resolvePersistenceProject(services: PersistenceAwarePlatformApiServices, actor: Awaited<ReturnType<typeof resolvePersistenceUser>>, projectId: string): Promise<PlatformProject> {
   if (!services.corePersistence) throw new Error("Core persistence service is not configured");
   const project = (await services.corePersistence.listProjects(actor)).find((candidate) => candidate.id === projectId);
@@ -456,9 +471,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     try {
       const projectId = containerMatch[1];
       const action = containerMatch[2];
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const projectIds = services.projects.listProjects(user).map((project) => project.id);
-      const auth = { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+      const auth = await resolveWorkspaceAuth(services, request.headers ?? {});
       const routes = createWorkspaceRoutes({ orchestrator: services.workspaceOrchestrator });
       let result;
       if (request.method === "POST" && !action) {
