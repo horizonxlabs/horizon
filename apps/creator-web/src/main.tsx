@@ -168,8 +168,8 @@ const creatorPageCopy: Record<CreatorPage, { eyebrow: string; title: string; des
     description: "เลือก project หรือเริ่มสร้างแอปใหม่จาก business problem"
   },
   workspace: {
-    eyebrow: "AI Workspace",
-    title: "AI Workspace: Leave Management",
+    eyebrow: "Creator Workspace",
+    title: "Creator Workspace: Leave Management",
     description: "ใช้ prompt เพื่อสร้างหรือแก้ frontend preview หลังจากมี PRD draft/baseline ของ project ที่เลือก"
   },
   prd: {
@@ -1394,7 +1394,7 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
           <DefinitionGrid items={[{ label: "PRD", value: currentPrdVersion ? `v${currentPrdVersion.version} ${currentPrdVersion.status}` : "draft pending" }, { label: "Frontend", value: selectedProject.frontendVersion }, { label: "Access", value: "Owner" }, { label: "Health", value: <ToneBadge tone="success">healthy</ToneBadge> }]} />
           <div className="creator-card-actions">
             <button type="button" onClick={() => void handleSelectProject(selectedProject, "prd")}>Review PRD</button>
-            <button type="button" className="ghost-button" onClick={() => void handleSelectProject(selectedProject, "workspace")}>Open AI Workspace</button>
+            <button type="button" className="ghost-button" onClick={() => void handleSelectProject(selectedProject, "workspace")}>Open Creator Workspace</button>
           </div>
         </SectionCard>
         <SectionCard eyebrow="Create Project Wizard" title="Generate PRD">

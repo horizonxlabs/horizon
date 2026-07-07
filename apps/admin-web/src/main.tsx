@@ -233,13 +233,6 @@ const operationsRecoveryKpis = [
   { label: "Restore Drill", value: "passed", detail: "RPO 60m / RTO 120m", icon: CheckCircle2, tone: "success" }
 ] satisfies Array<{ label: string; value: string; detail: string; icon: ComponentType<{ size?: number }>; tone: BadgeTone }>;
 
-const preflightRows = [
-  { check: "CPU", required: ">= 4 cores", observed: "8 cores", status: "pass", action: "-" },
-  { check: "RAM", required: ">= 8 GB", observed: "32 GB", status: "pass", action: "-" },
-  { check: "Docker", required: "installed", observed: "26.1.0", status: "pass", action: "-" },
-  { check: "Ports", required: "80/443/5432/6379/9000", observed: "all available", status: "pass", action: "-" }
-];
-
 const composeReadinessRows = [
   { service: "platform-api", status: "healthy", signal: "health endpoint ready" },
   { service: "admin-web", status: "healthy", signal: "admin bundle ready" },

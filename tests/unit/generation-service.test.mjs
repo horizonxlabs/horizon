@@ -64,7 +64,7 @@ test("successful file-action turn streams tokens, action_result, commit, then do
 test("retries failing shell action stops after 2 failed rounds, surfacing an error event", async () => {
   const docker = createMemoryDockerEngine();
   let execAttempts = 0;
-  docker.execInContainer = async (containerId, cmd) => {
+  docker.execInContainer = async (_containerId, _cmd) => {
     execAttempts += 1;
     return { stdout: "", stderr: "boom\n", exitCode: 1 };
   };

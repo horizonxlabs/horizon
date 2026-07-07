@@ -1142,17 +1142,6 @@ async function main() {
     }
   });
 
-  const mvpDemoChecklist = [
-    "Admin configures AI provider, quota and guardrail",
-    "Creator creates Leave Management and confirms PRD baseline",
-    "Creator prompts WFH leave change and publishes",
-    "End User submits ticket TKT-0001",
-    "Creator converts ticket to PRD change",
-    "Creator approves PRD change and reviews traceability",
-    "Admin approves public domain request",
-    "Admin reviews MVP Monitoring and Audit Filters"
-  ];
-
   await prisma.prdVersion.upsert({
     where: { id: "prdver_prj_leave_management_change_01" },
     update: {

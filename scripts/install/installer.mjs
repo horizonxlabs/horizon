@@ -2,11 +2,10 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { evaluateInstallContract, loadEnvFile, maskSecret } from "./preflight.mjs";
+import { evaluateInstallContract, loadEnvFile } from "./preflight.mjs";
 
-const INSTALL_STAGES = ["preflight", "configure", "write_config_evidence", "deploy_compose", "migrate_seed", "verify_health"];
 const CORE_SERVICES = ["platform-api", "admin-web", "creator-web", "app-store-pwa", "postgres", "redis", "minio", "keycloak", "caddy"];
 const SECRET_KEYS = ["password", "secret", "api_key", "apikey", "token", "client_secret", "access_key"];
 

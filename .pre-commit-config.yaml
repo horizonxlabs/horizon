@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '^(docs/assets/screenshots/|.*\.snap$)'
+      - id: end-of-file-fixer
+        exclude: '^(docs/assets/screenshots/|.*\.snap$)'
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+        args: [--severity=error]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: evcp-staged-quality
+        name: evcp staged quality
+        entry: pnpm check:staged
+        language: system
+        pass_filenames: false

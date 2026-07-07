@@ -4,7 +4,6 @@
 // LiteLLM running, and platform-api recreated. Skipped unless EVCP_VIBE_LIVE=1.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { createDefaultWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/factory.ts";
 import { createDefaultGenerationService } from "../../apps/platform-api/src/generation-loop/factory.ts";
 import { createDockerSocketEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-socket-engine.ts";

@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 const REQUIRED_ENV = [
   "EVCP_ORG_NAME",
@@ -145,7 +145,7 @@ function hasStrongEnoughSecret(value) {
 function runVersion(command, args) {
   try {
     return execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  } catch (error) {
+  } catch {
     return "";
   }
 }

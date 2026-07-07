@@ -12,6 +12,7 @@ import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
+import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
 import {
   createPlatformApiServices,
@@ -365,6 +366,38 @@ function buildAuditFilterInput(body: Record<string, unknown> | undefined) {
   };
 }
 
+type SimulatedPlatformSession = {
+  claims?: {
+    email?: string;
+    name?: string;
+    platformRoles?: string[];
+  };
+};
+
+function roleFromPlatformRoles(roles: string[] | undefined): PlatformUser["role"] {
+  if (roles?.includes("admin")) return "admin";
+  if (roles?.includes("creator")) return "creator";
+  return "end_user";
+}
+
+async function ensureCoreUserForSimulatedSession(
+  corePersistenceClient: CorePersistenceClient,
+  session: SimulatedPlatformSession
+): Promise<void> {
+  const email = session.claims?.email?.trim().toLowerCase();
+  if (!email) return;
+
+  const existing = await corePersistenceClient.platformUser.findUnique({ where: { email } });
+  if (existing) return;
+
+  await createUserWithRole(corePersistenceClient, {
+    id: `usr_sso_${createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
+    email,
+    name: session.claims?.name?.trim() || email,
+    role: roleFromPlatformRoles(session.claims?.platformRoles)
+  });
+}
+
 function buildPersistencePrdPrompt(project: PlatformProject): string {
   return [
     `Create a PRD for ${project.name}.`,
@@ -507,6 +540,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
   const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
   const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
   const useNativeAuth = Boolean(corePersistenceClient && credentialService && isNativeAuthRoute(request));
+  const useSimulatedAuth = Boolean(corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login");
   if (
     !useCorePersistence &&
     !useAiGovernancePersistence &&
@@ -514,10 +548,19 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     !useWorkspacePersistence &&
     !usePublishStorePersistence &&
     !useGeneratedRuntimePersistence &&
-    !useNativeAuth
+    !useNativeAuth &&
+    !useSimulatedAuth
   ) return executePlatformApiRequest(services, request);
 
   try {
+    if (corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login") {
+      const response = executePlatformApiRequest(services, request);
+      if (response.status === HttpStatus.CREATED && response.body.ok === true) {
+        await ensureCoreUserForSimulatedSession(corePersistenceClient, response.body.data as SimulatedPlatformSession);
+      }
+      return response;
+    }
+
     if (corePersistenceClient && credentialService && request.method === "POST" && request.path === "/admin/users") {
       const actor = await resolvePersistenceUser(services, request.headers ?? {});
       services.auth.requireRole(actor, ["admin"]);

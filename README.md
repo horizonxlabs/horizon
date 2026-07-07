@@ -10,6 +10,9 @@ Sprint 0 foundation through Sprint 14 Security Release Readiness are implemented
 
 ```bash
 pnpm install
+pnpm check
+pnpm check:changed --base origin/main
+pnpm check:ci
 pnpm install:preflight:example
 pnpm verify:install
 pnpm typecheck
