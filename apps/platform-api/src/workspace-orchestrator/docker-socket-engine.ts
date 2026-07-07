@@ -49,6 +49,7 @@ function nodeSocketRequest(socketPath: string): DockerRequestFn {
             const text = Buffer.concat(chunks).toString("utf8");
             resolve({
               status: res.statusCode ?? 0,
+              text,
               json: async () => (text ? JSON.parse(text) : {})
             });
           });
@@ -115,7 +116,7 @@ export function createDockerSocketEngine(opts: {
       const create = await request({
         method: "POST",
         path: `/containers/${containerId}/exec`,
-        body: { Cmd: cmd, AttachStdout: true, AttachStderr: true }
+        body: { Cmd: cmd, AttachStdout: true, AttachStderr: true, Tty: true }
       });
       await expect("exec-create", create, [201]);
       const { Id: execId } = await create.json();
@@ -123,7 +124,7 @@ export function createDockerSocketEngine(opts: {
       const start = await request({
         method: "POST",
         path: `/exec/${execId}/start`,
-        body: { Detach: false, Tty: false }
+        body: { Detach: false, Tty: true }
       });
       await expect("exec-start", start, [200]);
       const stdout = start.text ?? "";
