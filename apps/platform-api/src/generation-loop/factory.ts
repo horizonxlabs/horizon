@@ -10,6 +10,8 @@ import { loadGoldenTemplate } from "../workspace-orchestrator/template";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
+import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
+import { createContainerGitCommitter } from "./container-git";
 
 export { createMessageParser };
 
@@ -31,13 +33,19 @@ export function createDefaultGenerationService(opts: {
       ? createLiteLlmCompletionClient({ baseUrl: env.EVCP_LITELLM_BASE_URL as string })
       : createMemoryLlmCompletionClient(["(memory llm stub — configure EVCP_LITELLM_BASE_URL for real completions)"]);
 
+  // Real mode: a fresh socket engine (stateless over /var/run/docker.sock, equivalent to the
+  // orchestrator's). Memory/omitted: a throwing placeholder that never runs in the mem tests.
   const docker: DockerEngine =
     opts.docker ??
-    ({
-      execInContainer: async () => {
-        throw new Error("docker engine not wired — pass a real DockerEngine via opts in production wiring");
-      }
-    } as unknown as DockerEngine);
+    (mode === "real"
+      ? createDockerSocketEngine()
+      : ({
+          execInContainer: async () => {
+            throw new Error("docker engine not wired (memory mode)");
+          }
+        } as unknown as DockerEngine));
+
+  const gitCommitter = createContainerGitCommitter(docker);
 
   return createGenerationService({
     llmClient,
@@ -49,7 +57,9 @@ export function createDefaultGenerationService(opts: {
     }),
     errorFeedback: createErrorFeedbackTracker(),
     template: loadGoldenTemplate(),
-    getApiKey: (projectId) => opts.orchestrator.getWorkspace(projectId)?.id ?? "",
+    // MVP: authenticate to LiteLLM with the master key server-side. Never surfaced to the Creator.
+    // Per-project virtual-key budgets are a follow-up.
+    getApiKey: () => env.EVCP_LITELLM_MASTER_KEY ?? "",
     getContainerId: (projectId) => {
       const workspace = opts.orchestrator.getWorkspace(projectId);
       if (!workspace?.containerId) {
@@ -57,12 +67,14 @@ export function createDefaultGenerationService(opts: {
       }
       return workspace.containerId;
     },
-    commitAllChanges: async (projectId) => {
+    commitAllChanges: async (projectId, message) => {
       opts.orchestrator.markActivity(projectId);
-      // TODO: wire to the real git-commit-in-container flow once available; for now
-      // this returns a placeholder sha so the turn can complete and be audited.
-      const sha = "unimplemented-commit-sha";
-      return sha;
+      const workspace = opts.orchestrator.getWorkspace(projectId);
+      if (!workspace?.containerId) {
+        // No container (e.g. memory tests): return a sentinel so the turn still completes.
+        return "no-container-commit";
+      }
+      return gitCommitter.commit(workspace.containerId, message);
     },
     onAudit: opts.onAudit
   });
