@@ -25,6 +25,8 @@ interface PlatformUserRecord {
   name: string;
   status: UserStatus;
   roles?: PlatformUserRoleRecord[];
+  passwordHash?: string | null;
+  mustChangePassword?: boolean;
 }
 
 interface ProjectRecord {
@@ -95,9 +97,29 @@ interface FindManyAuditArgs {
   orderBy?: { occurredAt?: "asc" | "desc" };
 }
 
+interface CredentialUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  passwordHash: string | null;
+  mustChangePassword: boolean;
+}
+
+interface UpdateUserCredentialArgs {
+  where: { id: string };
+  data: { passwordHash?: string; mustChangePassword?: boolean; passwordUpdatedAt?: Date };
+}
+
+interface CreateUserArgs {
+  data: { id: string; email: string; name: string; status?: string };
+}
+
 export interface CorePersistenceClient {
   platformUser: {
-    findUnique(args: FindUniqueUserArgs): Promise<PlatformUserRecord | null>;
+    findUnique(args: FindUniqueUserArgs): Promise<(PlatformUserRecord & Partial<CredentialUserRecord>) | null>;
+    update(args: UpdateUserCredentialArgs): Promise<{ id: string }>;
+    create(args: CreateUserArgs): Promise<{ id: string; email: string; name: string; status: string }>;
   };
   project: {
     findMany(args: FindManyProjectArgs): Promise<ProjectRecord[]>;
@@ -254,7 +276,35 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
     this.audits = seed.audits ?? [];
 
     this.platformUser = {
-      findUnique: async ({ where }) => this.users.find((user) => matchesUniqueUser(user, where)) ?? null
+      findUnique: async ({ where }) => {
+        const user = this.users.find((candidate) => matchesUniqueUser(candidate, where));
+        if (!user) return null;
+        return {
+          ...user,
+          passwordHash: user.passwordHash ?? null,
+          mustChangePassword: user.mustChangePassword ?? false
+        };
+      },
+      update: async ({ where, data }) => {
+        const user = this.users.find((candidate) => candidate.id === where.id);
+        if (!user) throw new ValidationError(`Unknown platform user: ${where.id}`);
+        if (data.passwordHash !== undefined) user.passwordHash = data.passwordHash;
+        if (data.mustChangePassword !== undefined) user.mustChangePassword = data.mustChangePassword;
+        return { id: user.id };
+      },
+      create: async ({ data }) => {
+        const status = (data.status ?? "active") as UserStatus;
+        const created: PlatformUserRecord = {
+          id: data.id,
+          email: data.email,
+          name: data.name,
+          status,
+          passwordHash: null,
+          mustChangePassword: false
+        };
+        this.users.push(created);
+        return { id: created.id, email: created.email, name: created.name, status: created.status };
+      }
     };
     this.project = {
       findMany: async ({ where, orderBy }) => sortByCreatedAt(this.projects.filter((project) => {
