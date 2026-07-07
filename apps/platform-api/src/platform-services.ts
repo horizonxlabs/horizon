@@ -1798,6 +1798,26 @@ export class MockAuthService {
     return this.resolve(headers).user;
   }
 
+  /**
+   * Resolves the session/header claims (mode + email + session metadata) WITHOUT looking the user
+   * up in the in-memory `IdentityService`. Token verification is signature/expiry based only, so
+   * this succeeds for a user that lives solely in core-persistence (Postgres) — e.g. after a
+   * process restart clears the mock identity seed. Callers back the returned email with a
+   * persistence read (`corePersistence.getUserByEmail`) so login/change-password no longer depend
+   * on the mock identity store.
+   */
+  resolveSessionClaims(headers: HeaderBag): { mode: AuthMode; email: string; sessionId?: string; expiresAt?: string } {
+    const bearer = this.extractBearer(headers);
+    if (bearer) {
+      const session = this.verifyPlatformSessionToken(bearer);
+      return { mode: "platform_session", email: session.email, sessionId: session.sessionId, expiresAt: session.expiresAt };
+    }
+
+    const email = normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email) throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    return { mode: "mock_header", email };
+  }
+
   requireRole(user: PlatformUser, roles: PlatformRole[]): void {
     if (!roles.includes(user.role)) {
       throw new PermissionError(`Role ${user.role} cannot access this resource`);

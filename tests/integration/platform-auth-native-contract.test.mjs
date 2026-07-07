@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTestExecutor } from "./helpers/auth-native-harness.mjs";
+import { buildTestExecutor, createNativeAuthServices } from "./helpers/auth-native-harness.mjs";
+import { executePlatformApiRequestAsync } from "../../apps/platform-api/src/app-factory.ts";
+import { createUserWithRole } from "../../apps/platform-api/src/auth/prisma-credential-store.ts";
 
 test("admin can create a native platform user with a temp password", async () => {
   const exec = buildTestExecutor();
@@ -133,6 +135,72 @@ test("created native user is persisted with the creator role visible via /auth/m
 
   assert.equal(me.status, 200);
   assert.equal(me.body.data.user.email, "role.check@company.com");
+  assert.equal(me.body.data.user.role, "creator");
+});
+
+test("login and change-password source from core-persistence even when the in-memory identity does not know the user (post-restart durability)", async () => {
+  const services = createNativeAuthServices();
+
+  // Provision a user DIRECTLY into core-persistence + credentials, bypassing the /admin/users
+  // route so the in-memory identity dual-write (registerUser) never runs. This reproduces the
+  // post-restart condition: the Postgres (core-persistence) row survives while the mock identity
+  // seed — reseeded to 3 users every process start — has no knowledge of the user.
+  const email = "restart.survivor@company.com";
+  const created = await createUserWithRole(services.corePersistenceClient, {
+    id: "usr_restart_1",
+    email,
+    name: "Restart Survivor",
+    role: "creator"
+  });
+  await services.credentialService.setPassword(created.id, "Temp1234!", { mustChange: true });
+
+  // Precondition: the in-memory identity genuinely does NOT know this user.
+  assert.throws(() => services.identity.getUserByEmail(email));
+
+  // Login still succeeds, sourcing the session subject from core-persistence.
+  const login = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/auth/login",
+    headers: {},
+    body: { email, password: "Temp1234!" }
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.ok, true);
+  assert.match(login.body.data.token, /^evcp_session\./);
+  assert.equal(login.body.data.mustChangePassword, true);
+  const token = login.body.data.token;
+
+  // Change-password with the native token also succeeds, resolved via the persistence auth path.
+  const changed = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/auth/change-password",
+    headers: { authorization: `Bearer ${token}` },
+    body: { currentPassword: "Temp1234!", newPassword: "NewStrongPass1!" }
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.body.ok, true);
+
+  // The identity STILL does not know the user — proving neither path depended on it.
+  assert.throws(() => services.identity.getUserByEmail(email));
+
+  // Re-login reflects the flipped mustChangePassword flag read back from core-persistence.
+  const reLogin = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/auth/login",
+    headers: {},
+    body: { email, password: "NewStrongPass1!" }
+  });
+  assert.equal(reLogin.status, 200);
+  assert.equal(reLogin.body.data.mustChangePassword, false);
+
+  // /auth/me resolves the same Postgres-only user with the creator role from the join.
+  const me = await executePlatformApiRequestAsync(services, {
+    method: "GET",
+    path: "/auth/me",
+    headers: { authorization: `Bearer ${reLogin.body.data.token}` }
+  });
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.user.email, email);
   assert.equal(me.body.data.user.role, "creator");
 });
 

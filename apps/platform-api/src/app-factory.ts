@@ -306,11 +306,16 @@ export async function resolvePreviewProxyDecision(
 
 async function resolvePersistenceAuth(services: PersistenceAwarePlatformApiServices, headers: HeaderBag): Promise<AuthResolution> {
   if (!services.corePersistence) throw new Error("Core persistence service is not configured");
-  const resolution = services.auth.resolve(headers);
-  if (resolution.mode === "platform_session") return resolution;
+  // Resolve claims from the signed session token (or mock header) WITHOUT the in-memory identity,
+  // then load the user from core-persistence (Postgres). This is what lets a Postgres-only user
+  // (e.g. one created via /admin/users, after a process restart clears the mock identity seed)
+  // authenticate on session-backed routes and /auth/change-password.
+  const claims = services.auth.resolveSessionClaims(headers);
   return {
-    ...resolution,
-    user: await services.corePersistence.getUserByEmail(resolution.user.email)
+    user: await services.corePersistence.getUserByEmail(claims.email),
+    mode: claims.mode,
+    sessionId: claims.sessionId,
+    expiresAt: claims.expiresAt
   };
 }
 
@@ -559,7 +564,12 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
         return { status: HttpStatus.UNAUTHORIZED, body: failure("invalid_credentials", "Invalid email or password") };
       }
 
-      const user = services.identity.getUserByEmail(email.trim().toLowerCase());
+      // Source the session subject from core-persistence (Postgres) — NOT the in-memory identity —
+      // so login works for a Postgres-only user after a process restart. `getUserByEmail` returns
+      // the role resolved from the platform_user_roles join; issueNativeSession signs email+role.
+      const user = corePersistence
+        ? await corePersistence.getUserByEmail(email.trim().toLowerCase())
+        : services.identity.getUserByEmail(email.trim().toLowerCase());
       const session = services.authSso.issueNativeSession(user);
       return {
         status: HttpStatus.OK,
@@ -572,8 +582,13 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     }
 
     if (credentialService && request.method === "POST" && request.path === "/auth/change-password") {
-      const actorResolution = services.auth.resolve(request.headers ?? {});
-      const actor = actorResolution.user;
+      // Resolve the caller from the signed session token via core-persistence (Postgres), NOT the
+      // mock identity — the native token issued by issueNativeSession must authenticate a
+      // Postgres-only user even after a restart. Falls back to the mock resolver only when
+      // core-persistence is not configured.
+      const actor = corePersistence
+        ? (await resolvePersistenceAuth(services, request.headers ?? {})).user
+        : services.auth.resolve(request.headers ?? {}).user;
       const body = (request.body ?? {}) as Record<string, unknown>;
       const currentPassword = String(body.currentPassword ?? "");
       const newPassword = String(body.newPassword ?? "");
@@ -2159,6 +2174,24 @@ function registerPlatformRoutes(app: INestApplication, services: PersistenceAwar
     sendPlatformResponseAsync(
       response,
       executePlatformApiRequestAsync(services, { method: "POST", path: "/projects", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/admin/users", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, { method: "POST", path: "/admin/users", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/auth/login", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, { method: "POST", path: "/auth/login", headers: request.headers, body: request.body })
+    )
+  );
+  routes.post("/auth/change-password", (request, response) =>
+    sendPlatformResponseAsync(
+      response,
+      executePlatformApiRequestAsync(services, { method: "POST", path: "/auth/change-password", headers: request.headers, body: request.body })
     )
   );
   routes.get("/audit-logs", (request, response) =>

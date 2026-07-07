@@ -111,8 +111,17 @@ interface UpdateUserCredentialArgs {
   data: { passwordHash?: string; mustChangePassword?: boolean; passwordUpdatedAt?: Date };
 }
 
+/**
+ * Canonical Prisma nested-relation write for a user's role join, e.g.
+ * `roles: { create: [{ role: { connect: { key: "creator" } } }] }`. This is the shape the REAL
+ * `PrismaClient` requires and the shape `createUserWithRole` now emits for BOTH backends.
+ */
+interface NestedRolesCreate {
+  create: Array<{ role: { connect: { key: string } } }>;
+}
+
 interface CreateUserArgs {
-  data: { id: string; email: string; name: string; status?: string; roles?: PlatformUserRoleRecord[] };
+  data: { id: string; email: string; name: string; status?: string; roles?: PlatformUserRoleRecord[] | NestedRolesCreate };
 }
 
 export interface CorePersistenceClient {
@@ -301,7 +310,7 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
           status,
           passwordHash: null,
           mustChangePassword: false,
-          roles: data.roles
+          roles: normalizeCreateRoles(data.roles)
         };
         this.users.push(created);
         return { id: created.id, email: created.email, name: created.name, status: created.status };
@@ -439,6 +448,19 @@ const ROLE_RECORD_NAMES: Record<PlatformRole, string> = {
  * the seed pattern in `defaultUsers()`. Used to persist a newly created platform user's role
  * onto the `roles` join array on `PlatformUserRecord`, since role is not a scalar column.
  */
+/**
+ * Translates the `data.roles` passed to `platformUser.create` into the memory client's internal
+ * `PlatformUserRoleRecord[]` join representation. Accepts BOTH the canonical Prisma nested write
+ * (`{ create: [{ role: { connect: { key } } }] }`, now emitted by `createUserWithRole`) and, for
+ * backward-compat, a bare `PlatformUserRoleRecord[]`. Nested `connect` keys are resolved to full
+ * role records via `buildPlatformUserRoleRecords` (the same seed map used for default users).
+ */
+function normalizeCreateRoles(roles: CreateUserArgs["data"]["roles"]): PlatformUserRoleRecord[] | undefined {
+  if (!roles) return undefined;
+  if (Array.isArray(roles)) return roles;
+  return roles.create.map((entry) => buildPlatformUserRoleRecords(entry.role.connect.key)[0]);
+}
+
 export function buildPlatformUserRoleRecords(role: string | undefined): PlatformUserRoleRecord[] {
   const normalized = normalizeRole(role);
   return [
