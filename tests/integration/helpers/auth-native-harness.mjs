@@ -17,11 +17,24 @@ export function createNativeAuthServices() {
   };
 }
 
-export function buildTestExecutor() {
+export function buildTestExecutor(options = {}) {
   const services = createNativeAuthServices();
+  const envOverrides = options.env ?? {};
 
-  function request({ method, path, headers = {}, body }) {
-    return executePlatformApiRequestAsync(services, { method, path, headers, body });
+  async function request({ method, path, headers = {}, body }) {
+    const previous = {};
+    for (const key of Object.keys(envOverrides)) {
+      previous[key] = process.env[key];
+      process.env[key] = envOverrides[key];
+    }
+    try {
+      return await executePlatformApiRequestAsync(services, { method, path, headers, body });
+    } finally {
+      for (const key of Object.keys(envOverrides)) {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+      }
+    }
   }
 
   return {

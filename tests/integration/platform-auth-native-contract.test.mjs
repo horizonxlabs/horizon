@@ -135,3 +135,14 @@ test("created native user is persisted with the creator role visible via /auth/m
   assert.equal(me.body.data.user.email, "role.check@company.com");
   assert.equal(me.body.data.user.role, "creator");
 });
+
+test("simulate-login is disabled when EVCP_ALLOW_SIMULATE_LOGIN=0", async () => {
+  const exec = await buildTestExecutor({ env: { EVCP_ALLOW_SIMULATE_LOGIN: "0" } });
+  const res = await exec.asAdmin({
+    method: "POST",
+    path: "/admin/auth/simulate-login",
+    body: { providerId: "authprov_keycloak_default_001", subject: "s", email: "creator@company.com", name: "C", groups: ["evcp-creators"] }
+  });
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error.code, "simulate_login_disabled");
+});

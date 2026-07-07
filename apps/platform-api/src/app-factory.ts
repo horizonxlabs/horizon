@@ -1918,6 +1918,9 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     }
 
     if (request.method === "POST" && request.path === "/admin/auth/simulate-login") {
+      if (String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "1") === "0") {
+        return { status: HttpStatus.FORBIDDEN, body: failure("simulate_login_disabled", "Simulate-login is disabled") };
+      }
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const session = services.authSso.simulateLogin(user, {
         providerId: String(request.body?.providerId ?? ""),

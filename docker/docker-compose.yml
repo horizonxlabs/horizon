@@ -111,6 +111,7 @@ services:
       EVCP_S3_SSL: "false"
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      EVCP_ALLOW_SIMULATE_LOGIN: "0"
     networks:
       - evcp-internal
     depends_on:
