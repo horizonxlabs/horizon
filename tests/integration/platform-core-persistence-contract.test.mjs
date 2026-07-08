@@ -7,7 +7,13 @@ const seed = readFileSync("apps/platform-api/prisma/seed.ts", "utf8");
 const repositories = readFileSync("apps/platform-api/src/persistence/core-repositories.ts", "utf8");
 
 test("core persistence contract matches Prisma user project and audit models", () => {
-  for (const model of ["model PlatformUser", "model PlatformRole", "model PlatformUserRole", "model Project", "model AuditLog"]) {
+  for (const model of [
+    "model PlatformUser",
+    "model PlatformRole",
+    "model PlatformUserRole",
+    "model Project",
+    "model AuditLog"
+  ]) {
     assert.match(schema, new RegExp(model));
   }
 

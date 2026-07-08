@@ -4,7 +4,17 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
+    "prepare": "node scripts/quality/prepare-git-hooks.mjs",
+    "check": "node scripts/quality/check.mjs",
+    "check:ci": "node scripts/quality/check.mjs --ci",
+    "check:changed": "node scripts/quality/check-changed.mjs",
+    "check:staged": "node scripts/quality/check-changed.mjs --staged",
+    "check:no-conflict-markers": "node scripts/quality/check-no-conflict-markers.mjs",
+    "check:workspace-scripts": "node scripts/quality/check-workspace-scripts.mjs",
     "dev": "pnpm --parallel --filter @evcp/admin-web --filter @evcp/creator-web --filter @evcp/app-store-pwa dev",
     "dev:admin": "pnpm --filter @evcp/admin-web dev",
     "dev:api": "pnpm --filter @evcp/platform-api dev",
@@ -12,7 +22,12 @@
     "dev:store": "pnpm --filter @evcp/app-store-pwa dev",
     "build": "pnpm -r --filter './packages/*' --filter './apps/*' build",
     "typecheck": "pnpm -r --filter './packages/*' --filter './apps/*' typecheck",
-    "lint": "node scripts/lint-sprint-0.mjs",
+    "lint": "pnpm lint:repo && pnpm lint:code",
+    "lint:repo": "node scripts/lint-sprint-0.mjs",
+    "lint:code": "oxlint --deny-warnings apps packages tests scripts",
+    "format": "prettier --write \"**/*.{js,cjs,mjs,ts,tsx,json,css,html,md,yml,yaml}\"",
+    "format:check": "node scripts/quality/check-changed.mjs --format-only",
+    "format:check:all": "prettier --check \"**/*.{js,cjs,mjs,ts,tsx,json,css,html,md,yml,yaml}\"",
     "test": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
     "test:unit": "node --import tsx --test tests/unit/*.test.mjs",
     "test:integration": "node --import tsx --test tests/integration/*.test.mjs",
@@ -24,6 +39,7 @@
     "install:real:example": "node scripts/install/installer.mjs --env .env.example --compose docker/docker-compose.yml --allow-example-secrets",
     "verify:install": "pnpm install:preflight:example && node --test tests/unit/install-preflight.test.mjs && node --test tests/integration/install-contract.test.mjs && node --test tests/e2e/install-preflight-cli.test.mjs",
     "verify:installer": "pnpm install:real:example && node --test tests/unit/install-installer.test.mjs && node --test tests/integration/install-installer-contract.test.mjs && node --test tests/e2e/install-installer-cli.test.mjs",
+    "verify:workspace": "node --import tsx --test tests/unit/workspace-*.test.mjs tests/integration/workspace-compose-contract.test.mjs",
     "verify:sprint0": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint1": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint2": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
@@ -46,9 +62,12 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "oxlint": "1.28.0",
+    "prettier": "3.6.2",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
     "@evcp/api-client": "workspace:*",

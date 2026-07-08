@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$root_dir"
+
+git_dir="$(git rev-parse --git-dir 2>/dev/null || true)"
+if [[ -n "$git_dir" ]] && {
+  [[ -f "$git_dir/MERGE_HEAD" ]] ||
+  [[ -f "$git_dir/CHERRY_PICK_HEAD" ]] ||
+  [[ -f "$git_dir/REVERT_HEAD" ]] ||
+  [[ -f "$git_dir/REBASE_HEAD" ]] ||
+  [[ -d "$git_dir/rebase-merge" ]] ||
+  [[ -d "$git_dir/rebase-apply" ]]
+}; then
+  exit 0
+fi
+
+pnpm check:staged

@@ -19,7 +19,9 @@ const adminActor = {
 };
 
 test("AI governance persistence service creates and lists masked governance records", async () => {
-  const service = createAiGovernanceRepositoryBackedService(new MemoryAiGovernancePersistenceClient());
+  const service = createAiGovernanceRepositoryBackedService(
+    new MemoryAiGovernancePersistenceClient()
+  );
 
   const provider = await service.createProvider(adminActor, {
     name: "OpenAI Persisted",
@@ -77,8 +79,11 @@ test("AI governance persistence service creates and lists masked governance reco
 
 test("runtime persistence wiring exposes AI governance service and routes", () => {
   assert.match(appFactory, /aiGovernancePersistence\?: AiGovernanceRepositoryBackedService/);
-  assert.match(appFactory, /createAiGovernanceRepositoryBackedService\(new MemoryAiGovernancePersistenceClient\(\)\)/);
-  assert.match(appFactory, /createPrismaAiGovernancePersistence\(env\.DATABASE_URL\)/);
+  assert.match(
+    appFactory,
+    /createAiGovernanceRepositoryBackedService\(\s*new MemoryAiGovernancePersistenceClient\(\)\s*\)/
+  );
+  assert.match(appFactory, /createPrismaAiGovernancePersistence\(\s*env\.DATABASE_URL\s*\)/);
   assert.match(appFactory, /isPersistenceAiGovernanceRoute/);
   assert.match(persistenceDoc, /AI Governance Route-Level Coverage/);
 });

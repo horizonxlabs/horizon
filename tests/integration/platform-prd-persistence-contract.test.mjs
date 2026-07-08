@@ -53,15 +53,27 @@ test("PRD persistence service generates baseline and lists persisted sections", 
   assert.equal(baseline.version, "1.0");
   assert.equal(baseline.isBaseline, true);
   assert.equal(current.id, baseline.id);
-  assert.equal(versions.some((version) => version.id === draft.id), true);
-  assert.equal(versions.some((version) => version.id === baseline.id), true);
-  assert.equal(baseline.sections.every((section) => section.id.includes(baseline.id)), true);
+  assert.equal(
+    versions.some((version) => version.id === draft.id),
+    true
+  );
+  assert.equal(
+    versions.some((version) => version.id === baseline.id),
+    true
+  );
+  assert.equal(
+    baseline.sections.every((section) => section.id.includes(baseline.id)),
+    true
+  );
 });
 
 test("runtime persistence wiring exposes PRD service and routes", () => {
   assert.match(appFactory, /prdPersistence\?: PrdRepositoryBackedService/);
-  assert.match(appFactory, /createPrdRepositoryBackedService\(new MemoryPrdPersistenceClient\(\)\)/);
-  assert.match(appFactory, /createPrismaPrdPersistence\(env\.DATABASE_URL\)/);
+  assert.match(
+    appFactory,
+    /createPrdRepositoryBackedService\(\s*new MemoryPrdPersistenceClient\(\)\s*\)/
+  );
+  assert.match(appFactory, /createPrismaPrdPersistence\(\s*env\.DATABASE_URL\s*\)/);
   assert.match(appFactory, /isPersistencePrdRoute/);
   assert.match(persistenceDoc, /PRD Route-Level Coverage/);
 });

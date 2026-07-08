@@ -133,7 +133,7 @@ Sprint 12 implementation evidence:
 | --- | --- | --- | --- | --- |
 | FR-DATA-001 to FR-DATA-005 | US-CRE-001, US-ADM-003 | Data classification drives access, schema and approval | TC-DATA-001 to TC-DATA-004 | P0 |
 | FR-PRD-001 to FR-PRD-005 | US-CRE-001, US-END-003 | PRD lifecycle and ticket-to-PRD traceability | TC-PRD-001 to TC-PRD-005 | P0 |
-| FR-CRE-001 to FR-CRE-007 | US-CRE-001, US-CRE-002, US-DEV-001 | Creator workspace, preview, database, restore, code governance | TC-CRE-001 to TC-CRE-007 | P0 |
+| FR-CRE-001 to FR-CRE-010 | US-CRE-001, US-CRE-002, US-DEV-001 | Creator workspace, Bolt-like vibe coding loop, preview, database, restore, code governance and IT-owned boundaries | TC-CRE-001 to TC-CRE-010 | P0 |
 
 #### Test Cases
 
@@ -155,6 +155,9 @@ Sprint 12 implementation evidence:
 | TC-CRE-005 | Frontend checkpoint exists | Creator restores old frontend | Only frontend changes; backend, DB, auth, roles, membership and domain remain unchanged | Diff/audit |
 | TC-CRE-006 | Developer edits generated code | Developer submits publish | Code edit is scoped, audited and routed through review/build/test gate | Audit, approval request |
 | TC-CRE-007 | Generated app is created | Artifact generation completes | Stack is React/Vite/TypeScript + NestJS/Prisma + Platform Auth SDK | Generated app manifest |
+| TC-CRE-008 | Creator opens vibe coding workspace | Creator prompts and inspects generated output | Workspace exposes prompt thread, file/code view, AI diff, terminal/build/test logs, live preview and snapshot/restore controls in one scoped browser UI | UI screenshot, workspace contract |
+| TC-CRE-009 | AI generates or edits app code | Artifact validation runs | Code uses platform-provided auth, app role, DB schema, storage, route and secret refs and does not create independent auth/user DB/infra/secrets | Artifact validation report |
+| TC-CRE-010 | Creator asks to change infra/auth/database boundary | Workspace/AI task evaluates request | Change is blocked or converted into governed admin/policy request; no global infra, auth provider, user directory, DB server or secret material is mutated directly | Policy decision, audit event |
 
 ### 4.5 Generated Runtime, Deployment, Domain
 
@@ -291,6 +294,7 @@ Sprint 14 implementation evidence:
 | Direct IdP vs broker routing detail | FR-AUTH-004, FR-AUTH-005 | Architecture | Unblocked in Sprint 9 | ADR-005 accepted: Keycloak default broker, direct IdP optional through Platform Auth boundary |
 | Compliance templates for data classification | FR-DATA, SEC, policy approval | Security / Product | Blocks policy defaults | Need default rules per Public/Internal/Confidential/Restricted |
 | Developer code workflow detail | FR-CRE-006, TC-CRE-006 | Product / Engineering / Security | Blocks code editor implementation | Need final decision on branch/review mechanics |
+| Bolt-like workspace implementation depth | FR-CRE-008 to FR-CRE-010, TC-CRE-008 to TC-CRE-010 | Product / Engineering / Security | Blocks full vibe coding implementation | Requirement is accepted: UX should resemble a browser full-stack AI coding workspace, but platform-owned auth/data/infra boundaries are mandatory and must be validated before publish |
 | Email provider default | FR-NOTI-003, TC-NOTI-002 | Engineering / IT | Does not block core platform | SMTP-only may be enough for v1 |
 
 ## 6. Validation Sign-Off Checklist

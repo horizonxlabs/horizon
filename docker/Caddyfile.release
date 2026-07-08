@@ -1,0 +1,31 @@
+:80 {
+	encode zstd gzip
+
+	handle_path /api/* {
+		reverse_proxy platform-api:3100
+	}
+
+	redir /creator /creator/ 308
+	redir /store /store/ 308
+
+	handle /creator* {
+		reverse_proxy creator-web:80
+	}
+
+	handle /apps/* {
+		rewrite * /store{uri}
+		reverse_proxy app-store-pwa:80
+	}
+
+	handle /store* {
+		reverse_proxy app-store-pwa:80
+	}
+
+	handle /preview/* {
+		reverse_proxy platform-api:3100
+	}
+
+	handle {
+		reverse_proxy admin-web:80
+	}
+}

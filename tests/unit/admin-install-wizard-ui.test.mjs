@@ -64,3 +64,14 @@ test("admin install wizard can show ready and blocked preflight states", () => {
   assert.match(adminSource, /Install blocked by failed preflight checks/);
   assert.match(adminSource, /Install can proceed after setup review/);
 });
+
+test("admin first-run setup gates the console until first admin setup is complete", () => {
+  assert.match(adminSource, /firstRunSetupStorageKey/);
+  assert.match(adminSource, /function FirstRunSetupScreen/);
+  assert.match(adminSource, /firstRunSetupComplete/);
+  assert.match(adminSource, /markFirstRunSetupComplete/);
+  assert.match(adminSource, /Create admin & finish setup/);
+  assert.match(adminSource, /Enter Admin Console/);
+  assert.match(adminSource, /temporaryPassword: form\.firstAdminTemporaryPassword/);
+  assert.match(adminSource, /firstAdminTemporaryPassword: ""/);
+});

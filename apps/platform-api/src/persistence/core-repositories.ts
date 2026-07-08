@@ -1,6 +1,12 @@
 import { getMockPermissions } from "@evcp/auth-sdk";
 import type { PlatformRole } from "@evcp/types";
-import type { AuditEvent, AuditFilterInput, CreateProjectInput, PlatformProject, PlatformUser } from "../platform-services";
+import type {
+  AuditEvent,
+  AuditFilterInput,
+  CreateProjectInput,
+  PlatformProject,
+  PlatformUser
+} from "../platform-services";
 import { PermissionError, ValidationError } from "../platform-services";
 
 type JsonRecord = Record<string, unknown>;
@@ -25,6 +31,8 @@ interface PlatformUserRecord {
   name: string;
   status: UserStatus;
   roles?: PlatformUserRoleRecord[];
+  passwordHash?: string | null;
+  mustChangePassword?: boolean;
 }
 
 interface ProjectRecord {
@@ -95,9 +103,48 @@ interface FindManyAuditArgs {
   orderBy?: { occurredAt?: "asc" | "desc" };
 }
 
+interface CredentialUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  passwordHash: string | null;
+  mustChangePassword: boolean;
+}
+
+interface UpdateUserCredentialArgs {
+  where: { id: string };
+  data: { passwordHash?: string; mustChangePassword?: boolean; passwordUpdatedAt?: Date };
+}
+
+/**
+ * Canonical Prisma nested-relation write for a user's role join, e.g.
+ * `roles: { create: [{ role: { connect: { key: "creator" } } }] }`. This is the shape the REAL
+ * `PrismaClient` requires and the shape `createUserWithRole` now emits for BOTH backends.
+ */
+interface NestedRolesCreate {
+  create: Array<{ role: { connect: { key: string } } }>;
+}
+
+interface CreateUserArgs {
+  data: {
+    id: string;
+    email: string;
+    name: string;
+    status?: string;
+    roles?: PlatformUserRoleRecord[] | NestedRolesCreate;
+  };
+}
+
 export interface CorePersistenceClient {
   platformUser: {
-    findUnique(args: FindUniqueUserArgs): Promise<PlatformUserRecord | null>;
+    findUnique(
+      args: FindUniqueUserArgs
+    ): Promise<(PlatformUserRecord & Partial<CredentialUserRecord>) | null>;
+    update(args: UpdateUserCredentialArgs): Promise<{ id: string }>;
+    create(
+      args: CreateUserArgs
+    ): Promise<{ id: string; email: string; name: string; status: string }>;
   };
   project: {
     findMany(args: FindManyProjectArgs): Promise<ProjectRecord[]>;
@@ -157,7 +204,8 @@ export class ProjectRepository {
       status: "draft" as const,
       ownerUserId: input.actor.id,
       appType: input.appType ?? "Workflow App",
-      businessProblem: input.businessProblem ?? "Capture the business problem before PRD generation.",
+      businessProblem:
+        input.businessProblem ?? "Capture the business problem before PRD generation.",
       targetDepartment: input.targetDepartment ?? "Business Team",
       intendedUsers: input.intendedUsers ?? ["Business User"],
       dataSensitivity: input.dataSensitivity ?? "internal",
@@ -179,7 +227,10 @@ export class ProjectRepository {
 export class AuditLogRepository {
   constructor(private readonly client: CorePersistenceClient) {}
 
-  async record(input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> & Partial<Pick<AuditEvent, "severity" | "metadata">>): Promise<AuditEvent> {
+  async record(
+    input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> &
+      Partial<Pick<AuditEvent, "severity" | "metadata">>
+  ): Promise<AuditEvent> {
     const record = await this.client.auditLog.create({
       data: {
         id: `aud_${Date.now().toString(36)}_${slugToId(input.resourceId).slice(0, 20)}`,
@@ -200,16 +251,25 @@ export class AuditLogRepository {
         actorUserId: input.actorId,
         action: input.action,
         severity: input.severity,
-        occurredAt: input.dateFrom || input.dateTo ? {
-          gte: input.dateFrom ? new Date(input.dateFrom) : undefined,
-          lte: input.dateTo ? new Date(input.dateTo) : undefined
-        } : undefined
+        occurredAt:
+          input.dateFrom || input.dateTo
+            ? {
+                gte: input.dateFrom ? new Date(input.dateFrom) : undefined,
+                lte: input.dateTo ? new Date(input.dateTo) : undefined
+              }
+            : undefined
       },
       orderBy: { occurredAt: "asc" }
     });
     return records.map(mapAudit).filter((event) => {
-      if (input.projectId && event.resourceId !== input.projectId && event.metadata.projectId !== input.projectId) return false;
-      if (input.appId && event.resourceId !== input.appId && event.metadata.appId !== input.appId) return false;
+      if (
+        input.projectId &&
+        event.resourceId !== input.projectId &&
+        event.metadata.projectId !== input.projectId
+      )
+        return false;
+      if (input.appId && event.resourceId !== input.appId && event.metadata.appId !== input.appId)
+        return false;
       return true;
     });
   }
@@ -230,7 +290,10 @@ export class CoreRepositoryBackedService {
     return this.repositories.projects.listForActor(actor);
   }
 
-  recordAudit(input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> & Partial<Pick<AuditEvent, "severity" | "metadata">>): Promise<AuditEvent> {
+  recordAudit(
+    input: Omit<AuditEvent, "id" | "occurredAt" | "severity" | "metadata"> &
+      Partial<Pick<AuditEvent, "severity" | "metadata">>
+  ): Promise<AuditEvent> {
     return this.repositories.audits.record(input);
   }
 
@@ -248,19 +311,59 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
   private readonly projects: ProjectRecord[];
   private readonly audits: AuditLogRecord[];
 
-  constructor(seed: { users?: PlatformUserRecord[]; projects?: ProjectRecord[]; audits?: AuditLogRecord[] } = {}) {
+  constructor(
+    seed: {
+      users?: PlatformUserRecord[];
+      projects?: ProjectRecord[];
+      audits?: AuditLogRecord[];
+    } = {}
+  ) {
     this.users = seed.users ?? defaultUsers();
     this.projects = seed.projects ?? [];
     this.audits = seed.audits ?? [];
 
     this.platformUser = {
-      findUnique: async ({ where }) => this.users.find((user) => matchesUniqueUser(user, where)) ?? null
+      findUnique: async ({ where }) => {
+        const user = this.users.find((candidate) => matchesUniqueUser(candidate, where));
+        if (!user) return null;
+        return {
+          ...user,
+          passwordHash: user.passwordHash ?? null,
+          mustChangePassword: user.mustChangePassword ?? false
+        };
+      },
+      update: async ({ where, data }) => {
+        const user = this.users.find((candidate) => candidate.id === where.id);
+        if (!user) throw new ValidationError(`Unknown platform user: ${where.id}`);
+        if (data.passwordHash !== undefined) user.passwordHash = data.passwordHash;
+        if (data.mustChangePassword !== undefined)
+          user.mustChangePassword = data.mustChangePassword;
+        return { id: user.id };
+      },
+      create: async ({ data }) => {
+        const status = (data.status ?? "active") as UserStatus;
+        const created: PlatformUserRecord = {
+          id: data.id,
+          email: data.email,
+          name: data.name,
+          status,
+          passwordHash: null,
+          mustChangePassword: false,
+          roles: normalizeCreateRoles(data.roles)
+        };
+        this.users.push(created);
+        return { id: created.id, email: created.email, name: created.name, status: created.status };
+      }
     };
     this.project = {
-      findMany: async ({ where, orderBy }) => sortByCreatedAt(this.projects.filter((project) => {
-        if (!where?.ownerUserId) return true;
-        return project.ownerUserId === where.ownerUserId;
-      }), orderBy?.createdAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByCreatedAt(
+          this.projects.filter((project) => {
+            if (!where?.ownerUserId) return true;
+            return project.ownerUserId === where.ownerUserId;
+          }),
+          orderBy?.createdAt
+        ),
       upsert: async ({ where, update, create }) => {
         const existingIndex = this.projects.findIndex((project) => project.slug === where.slug);
         if (existingIndex >= 0) {
@@ -279,7 +382,11 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
         this.audits.push(record);
         return record;
       },
-      findMany: async ({ where, orderBy }) => sortByOccurredAt(this.audits.filter((audit) => matchesAudit(audit, where)), orderBy?.occurredAt)
+      findMany: async ({ where, orderBy }) =>
+        sortByOccurredAt(
+          this.audits.filter((audit) => matchesAudit(audit, where)),
+          orderBy?.occurredAt
+        )
     };
   }
 }
@@ -292,13 +399,21 @@ export function createCoreRepositories(client: CorePersistenceClient): CoreRepos
   };
 }
 
-export function createCoreRepositoryBackedService(client: CorePersistenceClient = new MemoryCorePersistenceClient()): CoreRepositoryBackedService {
+export function createCoreRepositoryBackedService(
+  client: CorePersistenceClient = new MemoryCorePersistenceClient()
+): CoreRepositoryBackedService {
   return new CoreRepositoryBackedService(createCoreRepositories(client));
 }
 
-export async function createPrismaCorePersistence(databaseUrl = process.env.DATABASE_URL): Promise<{ client: CorePersistenceClient; repositories: CoreRepositories; service: CoreRepositoryBackedService }> {
+export async function createPrismaCorePersistence(databaseUrl = process.env.DATABASE_URL): Promise<{
+  client: CorePersistenceClient;
+  repositories: CoreRepositories;
+  service: CoreRepositoryBackedService;
+}> {
   const { PrismaClient } = await import("@prisma/client");
-  const client = new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined) as unknown as CorePersistenceClient;
+  const client = new PrismaClient(
+    databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined
+  ) as unknown as CorePersistenceClient;
   const repositories = createCoreRepositories(client);
   return {
     client,
@@ -329,7 +444,8 @@ function mapProject(record: ProjectRecord): PlatformProject {
     status: record.status,
     ownerUserId: record.ownerUserId,
     appType: record.appType ?? "Workflow App",
-    businessProblem: record.businessProblem ?? "Capture the business problem before PRD generation.",
+    businessProblem:
+      record.businessProblem ?? "Capture the business problem before PRD generation.",
     targetDepartment: record.targetDepartment ?? "Business Team",
     intendedUsers: record.intendedUsers,
     dataSensitivity: normalizeSensitivity(record.dataSensitivity),
@@ -354,15 +470,48 @@ function mapAudit(record: AuditLogRecord): AuditEvent {
 
 function defaultUsers(): PlatformUserRecord[] {
   const roles: Record<PlatformRole, PlatformRoleRecord> = {
-    admin: { id: "role_admin", key: "admin", name: "Platform Admin", permissions: getMockPermissions("admin") },
-    creator: { id: "role_creator", key: "creator", name: "Creator", permissions: getMockPermissions("creator") },
-    end_user: { id: "role_end_user", key: "end_user", name: "End User", permissions: getMockPermissions("end_user") }
+    admin: {
+      id: "role_admin",
+      key: "admin",
+      name: "Platform Admin",
+      permissions: getMockPermissions("admin")
+    },
+    creator: {
+      id: "role_creator",
+      key: "creator",
+      name: "Creator",
+      permissions: getMockPermissions("creator")
+    },
+    end_user: {
+      id: "role_end_user",
+      key: "end_user",
+      name: "End User",
+      permissions: getMockPermissions("end_user")
+    }
   };
 
   return [
-    { id: "usr_admin", email: "admin@company.com", name: "Admin User", status: "active", roles: [{ role: roles.admin }] },
-    { id: "usr_creator", email: "creator@company.com", name: "Creator User", status: "active", roles: [{ role: roles.creator }] },
-    { id: "usr_end_user", email: "user@company.com", name: "End User", status: "active", roles: [{ role: roles.end_user }] }
+    {
+      id: "usr_admin",
+      email: "admin@company.com",
+      name: "Admin User",
+      status: "active",
+      roles: [{ role: roles.admin }]
+    },
+    {
+      id: "usr_creator",
+      email: "creator@company.com",
+      name: "Creator User",
+      status: "active",
+      roles: [{ role: roles.creator }]
+    },
+    {
+      id: "usr_end_user",
+      email: "user@company.com",
+      name: "End User",
+      status: "active",
+      roles: [{ role: roles.end_user }]
+    }
   ];
 }
 
@@ -371,8 +520,60 @@ function normalizeRole(role: string | undefined): PlatformRole {
   return "end_user";
 }
 
+const ROLE_RECORD_IDS: Record<PlatformRole, string> = {
+  admin: "role_admin",
+  creator: "role_creator",
+  end_user: "role_end_user"
+};
+
+const ROLE_RECORD_NAMES: Record<PlatformRole, string> = {
+  admin: "Platform Admin",
+  creator: "Creator",
+  end_user: "End User"
+};
+
+/**
+ * Builds the role-join record (`{ role: PlatformRoleRecord }`) for a given role key, mirroring
+ * the seed pattern in `defaultUsers()`. Used to persist a newly created platform user's role
+ * onto the `roles` join array on `PlatformUserRecord`, since role is not a scalar column.
+ */
+/**
+ * Translates the `data.roles` passed to `platformUser.create` into the memory client's internal
+ * `PlatformUserRoleRecord[]` join representation. Accepts BOTH the canonical Prisma nested write
+ * (`{ create: [{ role: { connect: { key } } }] }`, now emitted by `createUserWithRole`) and, for
+ * backward-compat, a bare `PlatformUserRoleRecord[]`. Nested `connect` keys are resolved to full
+ * role records via `buildPlatformUserRoleRecords` (the same seed map used for default users).
+ */
+function normalizeCreateRoles(
+  roles: CreateUserArgs["data"]["roles"]
+): PlatformUserRoleRecord[] | undefined {
+  if (!roles) return undefined;
+  if (Array.isArray(roles)) return roles;
+  return roles.create.map((entry) => buildPlatformUserRoleRecords(entry.role.connect.key)[0]);
+}
+
+export function buildPlatformUserRoleRecords(role: string | undefined): PlatformUserRoleRecord[] {
+  const normalized = normalizeRole(role);
+  return [
+    {
+      role: {
+        id: ROLE_RECORD_IDS[normalized],
+        key: normalized,
+        name: ROLE_RECORD_NAMES[normalized],
+        permissions: getMockPermissions(normalized)
+      }
+    }
+  ];
+}
+
 function normalizeSensitivity(value: string | null): PlatformProject["dataSensitivity"] {
-  if (value === "public" || value === "internal" || value === "confidential" || value === "restricted") return value;
+  if (
+    value === "public" ||
+    value === "internal" ||
+    value === "confidential" ||
+    value === "restricted"
+  )
+    return value;
   return "internal";
 }
 
@@ -391,16 +592,30 @@ function matchesAudit(audit: AuditLogRecord, where: FindManyAuditArgs["where"]):
   if (where.resourceId && audit.resourceId !== where.resourceId) return false;
   if (where.occurredAt?.gte && new Date(audit.occurredAt) < where.occurredAt.gte) return false;
   if (where.occurredAt?.lte && new Date(audit.occurredAt) > where.occurredAt.lte) return false;
-  if (where.metadata?.path?.length === 1 && String(toJsonRecord(audit.metadata)[where.metadata.path[0]]) !== where.metadata.equals) return false;
+  if (
+    where.metadata?.path?.length === 1 &&
+    String(toJsonRecord(audit.metadata)[where.metadata.path[0]]) !== where.metadata.equals
+  )
+    return false;
   return true;
 }
 
-function sortByCreatedAt(records: ProjectRecord[], direction: "asc" | "desc" = "asc"): ProjectRecord[] {
-  return [...records].sort((left, right) => compareDate(left.createdAt, right.createdAt, direction));
+function sortByCreatedAt(
+  records: ProjectRecord[],
+  direction: "asc" | "desc" = "asc"
+): ProjectRecord[] {
+  return [...records].sort((left, right) =>
+    compareDate(left.createdAt, right.createdAt, direction)
+  );
 }
 
-function sortByOccurredAt(records: AuditLogRecord[], direction: "asc" | "desc" = "asc"): AuditLogRecord[] {
-  return [...records].sort((left, right) => compareDate(left.occurredAt, right.occurredAt, direction));
+function sortByOccurredAt(
+  records: AuditLogRecord[],
+  direction: "asc" | "desc" = "asc"
+): AuditLogRecord[] {
+  return [...records].sort((left, right) =>
+    compareDate(left.occurredAt, right.occurredAt, direction)
+  );
 }
 
 function compareDate(left: Date | string, right: Date | string, direction: "asc" | "desc"): number {
@@ -418,5 +633,8 @@ function toIsoString(value: Date | string): string {
 }
 
 function slugToId(slug: string): string {
-  return slug.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  return slug
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 }

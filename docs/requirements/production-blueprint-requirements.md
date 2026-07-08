@@ -1,7 +1,7 @@
 # Enterprise Vibe Coding Platform - Production Blueprint Requirements
 
-Version: 0.2
-Date: 2026-07-03  
+Version: 0.3
+Date: 2026-07-05  
 Status: Validated Requirements Baseline Draft
 Language: Thai primary with English technical terms  
 Scope: Production Blueprint for Single Enterprise / Private Server
@@ -115,6 +115,8 @@ NG7. Creator ไม่สามารถใช้ raw SQL editor หรือ by
 ### 7.2 Creator App
 
 ต้องเป็น web desktop application สำหรับสร้างและดูแล app ผ่าน AI ได้แก่ project picker, create project, prompt builder, live preview, PRD lifecycle, database view, frontend version restore, code editor สำหรับ Developer role, app users/roles, publish request, token usage และ ticket inbox
+
+ส่วน vibe coding ต้องให้ประสบการณ์ใกล้เคียง browser-based full-stack AI coding workspace แบบ Bolt-like ได้แก่ prompt, file tree/code view, diff, terminal/build/test logs, live preview, snapshot/restore และ publish handoff อยู่ใน workspace เดียว แต่ต้องต่างจาก consumer/self-serve coding tool ตรงที่ infrastructure, database, user directory, authentication, app roles, secrets, network routes และ deployment policy ถูก provision และ lock โดยระบบที่ IT ควบคุม ไม่ใช่สิ่งที่ Creator เลือกหรือ bypass เอง
 
 ### 7.3 End User App Store PWA
 
@@ -259,6 +261,35 @@ flowchart LR
 | FR-CRE-005 | Frontend restore ต้องกระทบเฉพาะ frontend | P0 | Restore ไม่เปลี่ยน backend, database, auth, app roles, membership, domain, PRD baseline เว้นแต่ confirm |
 | FR-CRE-006 | Developer role ต้องใช้ code editor ได้ภายใต้ governance | P0 | Code edit ถูกจำกัด project scope, audit, review/build/test gate และห้าม bypass auth/permission |
 | FR-CRE-007 | Generated app stack v1 ต้องเป็นมาตรฐานเดียว | P0 | React + Vite + TypeScript, NestJS + Prisma, PostgreSQL schema per app, Platform Auth SDK |
+| FR-CRE-008 | Vibe coding workspace ต้องรองรับ Bolt-like full-stack coding loop ใน browser | P0 | Workspace แสดง prompt thread, project files/code view, AI diff, terminal/build/test logs, live preview, snapshot/restore และ publish handoff โดยไม่ต้องติดตั้ง local dev environment |
+| FR-CRE-009 | AI-generated code ต้องถูก constrain ด้วย platform context ที่ IT provision ให้ | P0 | Generation context มี app manifest, Platform Auth SDK, app roles, DB schema contract, storage/route refs, policy และ secret references; artifact validation block code ที่สร้าง auth store, user DB, secret handling หรือ infrastructure เอง |
+| FR-CRE-010 | Infrastructure, database, user directory และ authentication ของ generated app ต้องเป็น IT-owned boundaries | P0 | Creator/Developer ไม่สามารถสร้างหรือเปลี่ยน global infra, database server, platform user directory, auth provider, network route หรือ secret material จาก workspace; ขอเปลี่ยนต้องผ่าน policy/admin workflow |
+
+#### 8.8.1 Enterprise Vibe Coding Boundary
+
+```mermaid
+flowchart LR
+  Creator["Creator / Developer"] --> Workspace["Vibe Coding Workspace"]
+  Workspace --> Prompt["Prompt + Code/Diff + Terminal + Preview"]
+  Workspace --> Publish["Publish Request"]
+
+  subgraph Locked["IT-Controlled Locked Boundaries"]
+    Auth["Platform Auth / IdP / User Directory"]
+    DB["PostgreSQL Server + Schema per App"]
+    Infra["Containers / Routes / TLS / Storage"]
+    Secrets["Provider Keys + Runtime Secrets"]
+    Policy["Guardrail + Approval + Audit Policy"]
+  end
+
+  Prompt --> Contract["Generated App Contract"]
+  Contract --> Auth
+  Contract --> DB
+  Contract --> Infra
+  Contract --> Secrets
+  Publish --> Policy
+
+  Workspace -. "cannot bypass or self-provision" .-> Locked
+```
 
 ### 8.9 Generated App Runtime, Deployment, Domain
 
@@ -371,9 +402,9 @@ US-SEC-002: As a Security Admin, I want audit logs for AI, access, domain, publi
 ### Creator / Developer / App Owner
 
 US-CRE-001: As a Creator, I want to create a project and generate a PRD draft so that the app has a source of truth before generation.  
-US-CRE-002: As a Creator, I want to prompt AI and preview the app live so that I can iterate without local installation.  
+US-CRE-002: As a Creator, I want to prompt AI, inspect code/diff/logs and preview the app live in a Bolt-like browser workspace so that I can iterate without local installation while IT-owned auth, data and infrastructure boundaries remain enforced.  
 US-CRE-003: As a Creator, I want to invite users and assign app roles so that my app can be used by the right people.  
-US-DEV-001: As a Developer, I want to edit generated app code under project scope so that edge cases can be handled without bypassing governance.  
+US-DEV-001: As a Developer, I want to edit generated app code under project scope so that edge cases can be handled without bypassing platform auth, database, infrastructure, secret or publish governance.  
 US-OWN-001: As an App Owner, I want to approve access and low-risk publish requests so that business apps can move forward without making IT approve everything.
 
 ### End User
@@ -440,7 +471,7 @@ sequenceDiagram
 
 | Goal | Related Requirements | Validation |
 | --- | --- | --- |
-| G1 Productivity | FR-CRE-001 to FR-CRE-007, FR-PRD-001 to FR-PRD-005 | Creator can create PRD, prompt, preview, invite, publish request |
+| G1 Productivity | FR-CRE-001 to FR-CRE-010, FR-PRD-001 to FR-PRD-005 | Creator can create PRD, prompt, inspect code/diff/logs, preview, invite, publish request |
 | G2 Reduce IT backlog | FR-ACCESS-003, FR-RUN-006, FR-TKT-005 | App Owner approves low-risk work; tickets convert to PRD changes |
 | G3 Governance | FR-AUTH, FR-ACCESS, FR-AI, FR-GRD, FR-DATA, FR-AUD | Security/admin policy tests and audit review |
 | G4 Production app runtime | FR-RUN-001 to FR-RUN-006, FR-DATA-004 | Generated app deploys as separate container with schema isolation |

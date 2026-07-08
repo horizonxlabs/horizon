@@ -9,13 +9,34 @@ test("core API persistence wiring keeps async executor and legacy executor avail
   assert.match(appFactory, /export async function executePlatformApiRequestAsync/);
   assert.match(appFactory, /export function executePlatformApiRequest/);
   assert.match(appFactory, /corePersistence\?: CoreRepositoryBackedService/);
-  assert.match(appFactory, /const useCorePersistence = Boolean\(corePersistence && isPersistenceCoreRoute\(request\)\)/);
-  assert.match(appFactory, /const useAiGovernancePersistence = Boolean\(aiGovernancePersistence && isPersistenceAiGovernanceRoute\(request\)\)/);
-  assert.match(appFactory, /const usePrdPersistence = Boolean\(corePersistence && prdPersistence && isPersistencePrdRoute\(request\)\)/);
-  assert.match(appFactory, /const useWorkspacePersistence = Boolean\(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute\(request\)\)/);
-  assert.match(appFactory, /const usePublishStorePersistence = Boolean\(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute\(request\)\)/);
-  assert.match(appFactory, /const useGeneratedRuntimePersistence = Boolean\(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute\(request\)\)/);
-  assert.match(appFactory, /!useGeneratedRuntimePersistence[\s\S]+return executePlatformApiRequest\(services, request\)/);
+  assert.match(
+    appFactory,
+    /const useCorePersistence = Boolean\(\s*corePersistence\s*&&\s*isPersistenceCoreRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /const useAiGovernancePersistence = Boolean\(\s*aiGovernancePersistence\s*&&\s*isPersistenceAiGovernanceRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /const usePrdPersistence = Boolean\(\s*corePersistence\s*&&\s*prdPersistence\s*&&\s*isPersistencePrdRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /const useWorkspacePersistence = Boolean\(\s*corePersistence\s*&&\s*prdPersistence\s*&&\s*workspacePersistence\s*&&\s*isPersistenceWorkspaceRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /const usePublishStorePersistence = Boolean\(\s*corePersistence\s*&&\s*prdPersistence\s*&&\s*workspacePersistence\s*&&\s*publishStorePersistence\s*&&\s*isPersistencePublishStoreRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /const useGeneratedRuntimePersistence = Boolean\(\s*corePersistence\s*&&\s*publishStorePersistence\s*&&\s*generatedRuntimePersistence\s*&&\s*isPersistenceGeneratedRuntimeRoute\(request\)\s*\)/
+  );
+  assert.match(
+    appFactory,
+    /!useGeneratedRuntimePersistence[\s\S]+return executePlatformApiRequest\(services, request\)/
+  );
 });
 
 test("core API persistence wiring covers auth project and audit routes", () => {
@@ -30,6 +51,21 @@ test("core API persistence wiring covers auth project and audit routes", () => {
   assert.match(appFactory, /corePersistence\.recordAudit/);
   assert.match(appFactory, /corePersistence\.filterAudit/);
   assert.match(appFactory, /sendPlatformResponseAsync/);
+});
+
+test("PRD express routes use async persistence executor", () => {
+  for (const route of [
+    'routes.post("/projects/:projectId/prd/generate"',
+    'routes.post("/projects/:projectId/prd/baseline"',
+    'routes.get("/projects/:projectId/prd/versions"',
+    'routes.get("/projects/:projectId/prd"'
+  ]) {
+    const index = appFactory.indexOf(route);
+    assert.notEqual(index, -1, `${route} should exist`);
+    const routeBlock = appFactory.slice(index, index + 420);
+    assert.match(routeBlock, /sendPlatformResponseAsync/);
+    assert.match(routeBlock, /executePlatformApiRequestAsync/);
+  }
 });
 
 test("persistence operations doc names route-level wiring as current coverage", () => {

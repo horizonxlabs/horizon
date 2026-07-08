@@ -29,6 +29,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - evcp-internal
 
   redis:
     image: redis:7-alpine
@@ -60,6 +62,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - evcp-internal
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -73,7 +77,11 @@ services:
     ports:
       - "8081:8080"
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"]
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
+        ]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -82,9 +90,34 @@ services:
     <<: *evcp-node-service
     container_name: evcp-platform-api
     restart: unless-stopped
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api exec prisma generate --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
     ports:
       - "${EVCP_API_PORT:-3100}:3100"
+    volumes:
+      - ..:/workspace
+      - evcp_pnpm_store:/workspace/.pnpm-store
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      EVCP_LITELLM_BASE_URL: http://litellm:4000
+      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
+      EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+      EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
+      EVCP_WORKSPACE_NETWORK: docker_evcp-internal
+      EVCP_WORKSPACE_REAL_ADAPTERS: "1"
+      EVCP_PG_HOST: postgres
+      EVCP_PG_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      EVCP_S3_HOST: minio
+      EVCP_S3_PORT: "9000"
+      EVCP_S3_SSL: "false"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      EVCP_ALLOW_SIMULATE_LOGIN: "0"
+    networks:
+      - evcp-internal
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,27 +125,31 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      litellm:
+        condition: service_started
 
   admin-web:
     <<: *evcp-node-service
     container_name: evcp-admin-web
     restart: unless-stopped
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/admin-web dev -- --host 0.0.0.0 --port 4100"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/admin-web exec vite --host 0.0.0.0 --port 4100"
     ports:
       - "${EVCP_ADMIN_PORT:-4100}:4100"
     depends_on:
       - platform-api
-
+    networks:
+      - evcp-internal
   creator-web:
     <<: *evcp-node-service
     container_name: evcp-creator-web
     restart: unless-stopped
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/creator-web dev -- --host 0.0.0.0 --port 4101"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/creator-web exec vite --host 0.0.0.0 --port 4101"
     ports:
       - "${EVCP_CREATOR_PORT:-4101}:4101"
     depends_on:
       - platform-api
-
+    networks:
+      - evcp-internal
   app-store-pwa:
     <<: *evcp-node-service
     container_name: evcp-app-store-pwa
@@ -122,7 +159,8 @@ services:
       - "${EVCP_STORE_PORT:-4102}:4102"
     depends_on:
       - platform-api
-
+    networks:
+      - evcp-internal
   caddy:
     image: caddy:2.8-alpine
     container_name: evcp-caddy
@@ -142,6 +180,25 @@ services:
       - admin-web
       - creator-web
       - app-store-pwa
+    networks:
+      - evcp-internal
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: evcp-litellm
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: ["--config", "/etc/litellm/litellm-config.yaml"]
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    networks:
+      - evcp-internal
 
 volumes:
   evcp_postgres_data:
@@ -149,3 +206,7 @@ volumes:
   evcp_caddy_data:
   evcp_caddy_config:
   evcp_pnpm_store:
+
+networks:
+  evcp-internal:
+    driver: bridge

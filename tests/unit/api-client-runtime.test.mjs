@@ -12,6 +12,37 @@ function createMemoryStorage() {
   };
 }
 
+test("platform API client binds the default browser fetch implementation", async () => {
+  const originalFetch = globalThis.fetch;
+  let observedThis;
+  globalThis.fetch = async function (_url, init) {
+    observedThis = this;
+    assert.equal(init.headers.get("x-mock-user-email"), "admin@company.com");
+    return new Response(
+      JSON.stringify(
+        success({
+          user: { id: "usr_admin", name: "Admin User", email: "admin@company.com", role: "admin" },
+          permissions: ["platform:admin"],
+          auth: { mode: "mock_header", legacyMockFallback: true }
+        })
+      ),
+      { status: 200 }
+    );
+  };
+  try {
+    const client = createPlatformApiClient({
+      baseUrl: "https://platform.example/api",
+      legacyUserEmail: "admin@company.com"
+    });
+    const currentUser = await client.getCurrentUser();
+
+    assert.equal(observedThis, globalThis);
+    assert.equal(currentUser.user.email, "admin@company.com");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("platform API client sends bearer session tokens", async () => {
   let observedAuthorization = "";
   const client = createPlatformApiClient({
@@ -58,6 +89,59 @@ test("platform API client sends explicit legacy mock header only when configured
   assert.equal(observedUser, "creator@company.com");
   assert.equal(observedAuthorization, "");
   assert.equal(projects[0].name, "Leave Management");
+});
+
+test("platform API client creates projects and generates PRD drafts", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "creator@company.com",
+    fetcher: async (url, init) => {
+      observed.push({ url: String(url), method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (String(url) === "https://platform.example/api/projects") {
+        return new Response(JSON.stringify(success({
+          id: "prj_expense_approval",
+          slug: "expense-approval",
+          name: "Expense Approval",
+          status: "draft",
+          ownerUserId: "usr_creator",
+          appType: "Workflow App",
+          businessProblem: "Reduce manual approvals",
+          targetDepartment: "Finance",
+          intendedUsers: ["Employee", "Manager"],
+          dataSensitivity: "internal",
+          createdAt: "2026-07-05T00:00:00.000Z"
+        })), { status: 201 });
+      }
+      if (String(url) === "https://platform.example/api/projects/prj_expense_approval/prd/generate") {
+        return new Response(JSON.stringify(success({
+          id: "prdver_prj_expense_approval_01",
+          projectId: "prj_expense_approval",
+          version: "0.1",
+          status: "draft",
+          changeSummary: "Generated initial PRD draft for Expense Approval",
+          sections: [{ key: "overview", title: "Overview", body: "Draft", order: 1 }]
+        })), { status: 201 });
+      }
+      throw new Error(`Unexpected request ${url}`);
+    }
+  });
+
+  const project = await client.createProject({
+    name: "Expense Approval",
+    slug: "expense-approval",
+    appType: "Workflow App",
+    businessProblem: "Reduce manual approvals",
+    targetDepartment: "Finance",
+    intendedUsers: ["Employee", "Manager"],
+    dataSensitivity: "internal"
+  });
+  const draft = await client.generatePrdDraft(project.id);
+
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.slug, "expense-approval");
+  assert.equal(observed[1].method, "POST");
+  assert.equal(draft.sections[0].title, "Overview");
 });
 
 test("platform API client installs and uninstalls App Store apps", async () => {

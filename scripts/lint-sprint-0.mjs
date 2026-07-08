@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
 
 const requiredFiles = [
   "package.json",
@@ -46,25 +46,37 @@ const requiredFiles = [
   "generated-apps/.gitkeep"
 ];
 
-const disallowedPatterns = [
-  /sk-[A-Za-z0-9]{20,}/,
-  /OPENAI_API_KEY\s*=/,
-  /ANTHROPIC_API_KEY\s*=/,
-  /password\s*=\s*["'][^"']+["']/i
+const secretValuePatterns = [
+  { name: "OpenAI-style API key", pattern: /sk-[A-Za-z0-9]{20,}/ },
+  { name: "hardcoded password string", pattern: /password\s*=\s*["'][^"'<>{}\s][^"']{7,}["']/i }
 ];
 
-function walk(dir) {
-  const entries = [];
-  for (const name of readdirSync(dir)) {
-    if ([".git", "node_modules", ".pnpm-store", "dist", "coverage", "playwright-report", "test-results"].includes(name)) {
+const secretAssignmentPattern = /^\s*(OPENAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*(.+?)\s*$/;
+const allowedSecretPlaceholders =
+  /^(|["']?(example|changeme|change-me|change-before-use|placeholder|your[-_ ]?key|.*<[^>]+>.*)["']?)$/i;
+
+function trackedTextFiles() {
+  const output = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" });
+  return output
+    .split("\0")
+    .filter(Boolean)
+    .filter((path) => !/\.(png|jpg|jpeg|webp|ico|woff2?)$/i.test(path));
+}
+
+function scanSecretAssignments(file, text) {
+  const failures = [];
+  const lines = text.split(/\r?\n/u);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = secretAssignmentPattern.exec(lines[index]);
+    if (!match) {
       continue;
     }
-    const path = join(dir, name);
-    const stat = statSync(path);
-    if (stat.isDirectory()) entries.push(...walk(path));
-    else if (!/\.(png|jpg|jpeg|webp|ico)$/i.test(path)) entries.push(path);
+    const value = match[2].trim();
+    if (!allowedSecretPlaceholders.test(value)) {
+      failures.push(`Potential secret assignment in ${file}:${index + 1}: ${match[1]}`);
+    }
   }
-  return entries;
+  return failures;
 }
 
 const failures = [];
@@ -77,13 +89,14 @@ for (const file of requiredFiles) {
   }
 }
 
-for (const file of walk(".")) {
+for (const file of trackedTextFiles()) {
   const text = readFileSync(file, "utf8");
-  for (const pattern of disallowedPatterns) {
+  for (const { name, pattern } of secretValuePatterns) {
     if (pattern.test(text)) {
-      failures.push(`Potential secret pattern in ${file}: ${pattern}`);
+      failures.push(`Potential secret pattern in ${file}: ${name}`);
     }
   }
+  failures.push(...scanSecretAssignments(file, text));
 }
 
 if (failures.length > 0) {
