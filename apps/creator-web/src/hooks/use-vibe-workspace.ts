@@ -18,24 +18,8 @@ import {
   readWorkspaceMode
 } from "../lib/workspace-mode";
 import type { CreatorProjectView } from "../types";
+import { extractedTextFor, sha256Hex } from "../lib/project-file-upload";
 import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "./creator-app-helpers";
-
-async function sha256Hex(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function extractedTextFor(file: File): Promise<string> {
-  if (
-    file.type.startsWith("text/") ||
-    file.type === "application/json" ||
-    file.name.toLowerCase().endsWith(".md") ||
-    file.name.toLowerCase().endsWith(".csv")
-  ) {
-    return file.text();
-  }
-  return `Uploaded file ${file.name} (${file.type || "unknown type"}, ${file.size} bytes).`;
-}
 
 function browserStorage() {
   return typeof window === "undefined" ? undefined : window.localStorage;
