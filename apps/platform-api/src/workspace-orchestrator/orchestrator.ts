@@ -147,7 +147,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
         const llmKey = await deps.llmGateway.createVirtualKey({
           projectId: input.projectId,
-          slug: input.slug
+          slug: resourceKey
         });
         llmKeyIds.set(input.projectId, llmKey.keyId);
         rollbacks.push(() => deps.llmGateway.revokeVirtualKey(llmKey.keyId));
