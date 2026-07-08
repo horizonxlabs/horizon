@@ -44,7 +44,7 @@ test("admin install wizard uses EVCP operational UI classes and responsive styli
 
 test("admin first-run screen behaves like an initial product setup gate", () => {
   assert.match(adminSource, /First-run Setup/);
-  assert.match(adminSource, /ตั้งค่า Enterprise Vibe Coding Platform/);
+  assert.match(adminSource, /ตั้งค่า Horizon/);
   assert.match(adminSource, /Platform Admin คนแรก/);
   assert.match(adminSource, /firstRunSetupIsComplete/);
   assert.match(adminSource, /Create admin & finish setup/);

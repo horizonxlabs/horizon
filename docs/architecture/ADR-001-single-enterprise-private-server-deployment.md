@@ -6,7 +6,7 @@
 
 ## Context
 
-Enterprise Vibe Coding Platform is intended to run as a private AI application builder for one organization at a time. The production blueprint baseline chooses a Single Enterprise / Private Server deployment, Online Private Server networking, Docker Compose for production v1, and a migration-ready path to Kubernetes later.
+Horizon is intended to run as a private AI application builder for one organization at a time. The production blueprint baseline chooses a Single Enterprise / Private Server deployment, Online Private Server networking, Docker Compose for production v1, and a migration-ready path to Kubernetes later.
 
 The platform must be easy to install and operate on a private server while still supporting enterprise controls: SSO, AI provider governance, generated app containers, schema isolation, backup, restore, audit, license enforcement, and monitoring.
 
@@ -22,12 +22,12 @@ The architecture must avoid business logic that depends on Docker Compose-specif
 
 ### Option A: Single Enterprise / Private Server with Docker Compose
 
-| Dimension | Assessment |
-| --- | --- |
-| Complexity | Medium |
-| Cost | Low to medium |
-| Scalability | Fits pilot and early production private server targets |
-| Team familiarity | High |
+| Dimension        | Assessment                                             |
+| ---------------- | ------------------------------------------------------ |
+| Complexity       | Medium                                                 |
+| Cost             | Low to medium                                          |
+| Scalability      | Fits pilot and early production private server targets |
+| Team familiarity | High                                                   |
 
 **Pros:** Simple install path, strong organization isolation, matches private server requirement, simpler backup/restore, easier enterprise procurement.
 
@@ -35,12 +35,12 @@ The architecture must avoid business logic that depends on Docker Compose-specif
 
 ### Option B: Multi-tenant SaaS
 
-| Dimension | Assessment |
-| --- | --- |
-| Complexity | High |
-| Cost | High |
-| Scalability | High |
-| Team familiarity | Medium |
+| Dimension        | Assessment |
+| ---------------- | ---------- |
+| Complexity       | High       |
+| Cost             | High       |
+| Scalability      | High       |
+| Team familiarity | Medium     |
 
 **Pros:** Centralized operations, easier fleet updates, SaaS business model ready.
 
@@ -48,12 +48,12 @@ The architecture must avoid business logic that depends on Docker Compose-specif
 
 ### Option C: Kubernetes-first Private Deployment
 
-| Dimension | Assessment |
-| --- | --- |
-| Complexity | High |
-| Cost | Medium to high |
-| Scalability | High |
-| Team familiarity | Medium |
+| Dimension        | Assessment     |
+| ---------------- | -------------- |
+| Complexity       | High           |
+| Cost             | Medium to high |
+| Scalability      | High           |
+| Team familiarity | Medium         |
 
 **Pros:** Better orchestration and scaling, standard enterprise platform for larger organizations.
 

@@ -1,3 +1,4 @@
+import * as React from "react";
 import type { ReactNode } from "react";
 
 // Dependency-free inline glyph set for the shared AppShell sidebar. Each entry is the inner

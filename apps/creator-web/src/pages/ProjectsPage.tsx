@@ -4,15 +4,13 @@ import { CreatorShell } from "../components/CreatorShell";
 import type { useCreatorApp } from "../hooks/use-creator-app";
 import type { CreatorPage, CreatorProjectView } from "../types";
 
-// Deterministic brand gradient per project (we have no stored preview thumbnails yet), so the same
-// project always renders the same colors across sessions and environments.
-function projectGradient(seed: string): string {
+// Deterministic tone per project until stored preview thumbnails are available.
+function projectToneClass(seed: string): string {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
     hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
   }
-  const hue = hash % 360;
-  return `linear-gradient(135deg, hsl(${hue} 72% 56%), hsl(${(hue + 42) % 360} 74% 44%))`;
+  return `hz-thumb-tone-${hash % 6}`;
 }
 
 function initials(text: string): string {
@@ -81,7 +79,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                     onClick={() => void handleSelectProject(project, "projects" as CreatorPage)}
                     aria-current={isActive ? "true" : undefined}
                   >
-                    <div className="hz-thumb" style={{ background: projectGradient(project.id) }}>
+                    <div className={`hz-thumb ${projectToneClass(project.id)}`}>
                       <span className="hz-badge">{project.status}</span>
                       <span className="hz-thumb-glyph">{initials(project.name)}</span>
                     </div>

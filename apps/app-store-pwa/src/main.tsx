@@ -11,7 +11,24 @@ import {
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { AppCard, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
-import { ArrowLeft, Bell, Bug, CalendarCheck2, CheckCircle2, Clock3, Download, MessageSquare, Plus, Search, Send, ShieldCheck, Store, Trash2, UserCheck, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  Bug,
+  CalendarCheck2,
+  CheckCircle2,
+  Clock3,
+  Download,
+  MessageSquare,
+  Plus,
+  Search,
+  Send,
+  ShieldCheck,
+  Store,
+  Trash2,
+  UserCheck,
+  WifiOff
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@evcp/ui/styles.css";
@@ -29,7 +46,8 @@ const fallbackStoreApps: AppStoreItem[] = [
     id: "app_leave_management",
     slug: "leave-management",
     name: "Leave Management",
-    description: "Submit, approve and track leave requests inside the private enterprise app store.",
+    description:
+      "Submit, approve and track leave requests inside the private enterprise app store.",
     owner: "Creator User",
     route: "/apps/leave-management",
     myRole: "Employee",
@@ -102,7 +120,9 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
 
 async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
   const client = createStorePlatformClient();
-  const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all([client.getCurrentUser(), client.listStoreApps()]);
+  const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all(
+    [client.getCurrentUser(), client.listStoreApps()]
+  );
   return {
     userName: storeHome.profile.userName || currentUser.user.name,
     email: storeHome.profile.email || currentUser.user.email,
@@ -129,7 +149,11 @@ function clearStoreSessionBridge(): StoreBootstrapState {
   return initialStoreBootstrap;
 }
 
-function fallbackAccessRequest(appSlug: string, requestedRoleKey: string, reason: string): StoreAccessRequestResponse {
+function fallbackAccessRequest(
+  appSlug: string,
+  requestedRoleKey: string,
+  reason: string
+): StoreAccessRequestResponse {
   return {
     id: "local_access_request_001",
     appSlug,
@@ -142,7 +166,10 @@ function fallbackAccessRequest(appSlug: string, requestedRoleKey: string, reason
   };
 }
 
-function fallbackInstallation(appSlug: string, status: "active" | "disabled"): StoreAppInstallationResponse {
+function fallbackInstallation(
+  appSlug: string,
+  status: "active" | "disabled"
+): StoreAppInstallationResponse {
   return {
     id: "local_install_001",
     appSlug,
@@ -152,7 +179,12 @@ function fallbackInstallation(appSlug: string, status: "active" | "disabled"): S
   };
 }
 
-function fallbackTicket(appSlug: string, title: string, description: string, deviceInfo: string): StoreTicketResponse {
+function fallbackTicket(
+  appSlug: string,
+  title: string,
+  description: string,
+  deviceInfo: string
+): StoreTicketResponse {
   return {
     id: "local_ticket_0001",
     ticketNumber: "TKT-LOCAL",
@@ -224,7 +256,11 @@ function GeneratedLeaveManagementApp() {
   }
 
   function approveRequest(requestId: string) {
-    setRequests((current) => current.map((request) => request.id === requestId ? { ...request, status: "approved" } : request));
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === requestId ? { ...request, status: "approved" } : request
+      )
+    );
   }
 
   return (
@@ -232,7 +268,7 @@ function GeneratedLeaveManagementApp() {
       <header className="generated-app-header">
         <a className="button-link secondary-link" href="/store">
           <ArrowLeft size={15} />
-          App Store
+          Horizon Store
         </a>
         <div>
           <span className="eyebrow">Generated App Runtime</span>
@@ -274,17 +310,29 @@ function GeneratedLeaveManagementApp() {
             </label>
             <label>
               Start date
-              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
             </label>
             <label>
               End date
-              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
             </label>
             <label>
               Reason
               <input value={reason} onChange={(event) => setReason(event.target.value)} />
             </label>
-            <button type="button" onClick={handleSubmitLeaveRequest} disabled={!reason.trim() || !startDate || !endDate}>
+            <button
+              type="button"
+              onClick={handleSubmitLeaveRequest}
+              disabled={!reason.trim() || !startDate || !endDate}
+            >
               <Plus size={15} />
               Submit request
             </button>
@@ -294,7 +342,9 @@ function GeneratedLeaveManagementApp() {
               <CheckCircle2 size={18} />
               <div>
                 <strong>{lastSubmitted.id} submitted</strong>
-                <span>{lastSubmitted.leaveType} · {lastSubmitted.startDate} to {lastSubmitted.endDate}</span>
+                <span>
+                  {lastSubmitted.leaveType} · {lastSubmitted.startDate} to {lastSubmitted.endDate}
+                </span>
               </div>
               <ToneBadge tone="warning">pending</ToneBadge>
             </div>
@@ -306,12 +356,23 @@ function GeneratedLeaveManagementApp() {
             {requests.map((request) => (
               <article key={request.id}>
                 <div>
-                  <strong>{request.id} · {request.employee}</strong>
-                  <span>{request.leaveType} · {request.startDate} to {request.endDate}</span>
+                  <strong>
+                    {request.id} · {request.employee}
+                  </strong>
+                  <span>
+                    {request.leaveType} · {request.startDate} to {request.endDate}
+                  </span>
                   <small>{request.reason}</small>
                 </div>
-                <ToneBadge tone={request.status === "approved" ? "success" : "warning"}>{request.status}</ToneBadge>
-                <button type="button" className="secondary-button" onClick={() => approveRequest(request.id)} disabled={request.status === "approved"}>
+                <ToneBadge tone={request.status === "approved" ? "success" : "warning"}>
+                  {request.status}
+                </ToneBadge>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => approveRequest(request.id)}
+                  disabled={request.status === "approved"}
+                >
                   Approve
                 </button>
               </article>
@@ -362,7 +423,8 @@ function installJourneyStatus(
   if (!hasAccess) return "pending";
   if (isInstalled) return "complete";
   if (isRemoved) return stepId === "install_record" ? "current" : "pending";
-  if (isInstallingApp) return stepId === "manifest_validation" || stepId === "install_record" ? "current" : "pending";
+  if (isInstallingApp)
+    return stepId === "manifest_validation" || stepId === "install_record" ? "current" : "pending";
   if (stepId === "manifest_validation") return "current";
   return "pending";
 }
@@ -373,10 +435,16 @@ function StoreApp() {
   const [requestedRole, setRequestedRole] = useState("manager");
   const [requestReason, setRequestReason] = useState("Need approval queue access");
   const [ticketType, setTicketType] = useState<"bug" | "feedback" | "feature_request">("bug");
-  const [ticketDescription, setTicketDescription] = useState("WFH leave type not visible on mobile");
+  const [ticketDescription, setTicketDescription] = useState(
+    "WFH leave type not visible on mobile"
+  );
   const [ticketDevice, setTicketDevice] = useState("iPhone Safari");
-  const [accessRequestResult, setAccessRequestResult] = useState<StoreAccessRequestResponse | undefined>(undefined);
-  const [installResult, setInstallResult] = useState<StoreAppInstallationResponse | undefined>(undefined);
+  const [accessRequestResult, setAccessRequestResult] = useState<
+    StoreAccessRequestResponse | undefined
+  >(undefined);
+  const [installResult, setInstallResult] = useState<StoreAppInstallationResponse | undefined>(
+    undefined
+  );
   const [ticketResult, setTicketResult] = useState<StoreTicketResponse | undefined>(undefined);
   const [ticketStatus, setTicketStatus] = useState<StoreTicketResponse | undefined>(undefined);
   const [isRequestingAccess, setIsRequestingAccess] = useState(false);
@@ -467,7 +535,7 @@ function StoreApp() {
 
   async function handleSubmitTicket() {
     setIsSubmittingTicket(true);
-    const title = ticketDescription.split(".")[0] || "App Store feedback";
+    const title = ticketDescription.split(".")[0] || "Horizon Store feedback";
     try {
       const client = createStorePlatformClient();
       const submitted = await client.submitStoreTicket(selectedApp.slug, {
@@ -498,12 +566,21 @@ function StoreApp() {
       <header className="store-mobile-header">
         <div>
           <span className="eyebrow">Private PWA</span>
-          <h1>App Store</h1>
-          <p>{bootstrap.userName} · {bootstrap.email}</p>
+          <h1>Horizon Store</h1>
+          <p>
+            {bootstrap.userName} · {bootstrap.email}
+          </p>
         </div>
         <div className="store-header-actions">
-          <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>{bootstrap.source}</ToneBadge>
-          <button type="button" className="secondary-button" onClick={handleSignInBridge} disabled={isSigningIn}>
+          <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>
+            {bootstrap.source}
+          </ToneBadge>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleSignInBridge}
+            disabled={isSigningIn}
+          >
             <ShieldCheck size={15} />
             {isSigningIn ? "Signing in" : "Demo Sign in"}
           </button>
@@ -565,22 +642,59 @@ function StoreApp() {
             items={[
               { label: "Owner", value: selectedApp.owner },
               { label: "Role", value: selectedApp.myRole ?? "Access required" },
-              { label: "Install", value: <ToneBadge tone={selectedApp.installStatus === "installed" ? "success" : "neutral"}>{selectedApp.installStatus ?? "not_installed"}</ToneBadge> },
-              { label: "Health", value: <ToneBadge tone="success">{selectedApp.health}</ToneBadge> },
+              {
+                label: "Install",
+                value: (
+                  <ToneBadge
+                    tone={selectedApp.installStatus === "installed" ? "success" : "neutral"}
+                  >
+                    {selectedApp.installStatus ?? "not_installed"}
+                  </ToneBadge>
+                )
+              },
+              {
+                label: "Health",
+                value: <ToneBadge tone="success">{selectedApp.health}</ToneBadge>
+              },
               { label: "Route", value: `/apps/${selectedApp.slug}` }
             ]}
           />
           <div className="store-action-row">
-            <button type="button" onClick={handleOpenSelectedApp} disabled={selectedApp.accessStatus !== "active"}>Open</button>
-            <button type="button" className="secondary-button" onClick={handleInstallApp} disabled={isInstallingApp || selectedApp.installStatus === "installed" || selectedApp.accessStatus !== "active"}>
+            <button
+              type="button"
+              onClick={handleOpenSelectedApp}
+              disabled={selectedApp.accessStatus !== "active"}
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleInstallApp}
+              disabled={
+                isInstallingApp ||
+                selectedApp.installStatus === "installed" ||
+                selectedApp.accessStatus !== "active"
+              }
+            >
               <Download size={15} />
               {isInstallingApp ? "Installing" : "Install"}
             </button>
-            <button type="button" className="secondary-button" onClick={handleUninstallApp} disabled={isUninstallingApp || selectedApp.installStatus !== "installed"}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleUninstallApp}
+              disabled={isUninstallingApp || selectedApp.installStatus !== "installed"}
+            >
               <Trash2 size={15} />
               {isUninstallingApp ? "Removing" : "Remove"}
             </button>
-            <button type="button" className="secondary-button" onClick={handleSubmitTicket} disabled={isSubmittingTicket}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleSubmitTicket}
+              disabled={isSubmittingTicket}
+            >
               <Bug size={15} />
               {isSubmittingTicket ? "Submitting" : "Submit Ticket"}
             </button>
@@ -593,15 +707,31 @@ function StoreApp() {
                   <strong>{step.label}</strong>
                   <small>{step.detail}</small>
                 </div>
-                <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : step.status === "current" ? "info" : "neutral"}>{step.status}</ToneBadge>
+                <ToneBadge
+                  tone={
+                    step.status === "complete"
+                      ? "success"
+                      : step.status === "blocked"
+                        ? "danger"
+                        : step.status === "current"
+                          ? "info"
+                          : "neutral"
+                  }
+                >
+                  {step.status}
+                </ToneBadge>
               </li>
             ))}
           </ol>
           {installResult ? (
             <div className="store-action-evidence" aria-label="Install result">
               <strong>{installResult.status === "active" ? "App installed" : "App removed"}</strong>
-              <span>{installResult.appSlug} · {installResult.installedAt}</span>
-              <ToneBadge tone={installResult.status === "active" ? "success" : "neutral"}>{installResult.status}</ToneBadge>
+              <span>
+                {installResult.appSlug} · {installResult.installedAt}
+              </span>
+              <ToneBadge tone={installResult.status === "active" ? "success" : "neutral"}>
+                {installResult.status}
+              </ToneBadge>
             </div>
           ) : null}
         </SectionCard>
@@ -610,11 +740,17 @@ function StoreApp() {
           <div className="store-form">
             <label>
               Requested role
-              <input value={requestedRole} onChange={(event) => setRequestedRole(event.target.value)} />
+              <input
+                value={requestedRole}
+                onChange={(event) => setRequestedRole(event.target.value)}
+              />
             </label>
             <label>
               Reason
-              <input value={requestReason} onChange={(event) => setRequestReason(event.target.value)} />
+              <input
+                value={requestReason}
+                onChange={(event) => setRequestReason(event.target.value)}
+              />
             </label>
             <button type="button" onClick={handleRequestAccess} disabled={isRequestingAccess}>
               <Send size={15} />
@@ -623,7 +759,9 @@ function StoreApp() {
             {accessRequestResult ? (
               <div className="store-action-evidence" aria-label="Access request result">
                 <strong>Access request pending</strong>
-                <span>{accessRequestResult.requestedRoleKey} · {accessRequestResult.requesterEmail}</span>
+                <span>
+                  {accessRequestResult.requestedRoleKey} · {accessRequestResult.requesterEmail}
+                </span>
                 <ToneBadge tone="warning">{accessRequestResult.status}</ToneBadge>
               </div>
             ) : null}
@@ -634,7 +772,12 @@ function StoreApp() {
           <div className="store-form">
             <label>
               Type
-              <select value={ticketType} onChange={(event) => setTicketType(event.target.value as "bug" | "feedback" | "feature_request")}>
+              <select
+                value={ticketType}
+                onChange={(event) =>
+                  setTicketType(event.target.value as "bug" | "feedback" | "feature_request")
+                }
+              >
                 <option value="bug">Bug</option>
                 <option value="feedback">Feedback</option>
                 <option value="feature_request">Feature request</option>
@@ -642,11 +785,17 @@ function StoreApp() {
             </label>
             <label>
               Description
-              <input value={ticketDescription} onChange={(event) => setTicketDescription(event.target.value)} />
+              <input
+                value={ticketDescription}
+                onChange={(event) => setTicketDescription(event.target.value)}
+              />
             </label>
             <label>
               Device
-              <input value={ticketDevice} onChange={(event) => setTicketDevice(event.target.value)} />
+              <input
+                value={ticketDevice}
+                onChange={(event) => setTicketDevice(event.target.value)}
+              />
             </label>
             <button type="button" onClick={handleSubmitTicket} disabled={isSubmittingTicket}>
               <Bug size={15} />
@@ -657,13 +806,25 @@ function StoreApp() {
 
         <SectionCard eyebrow="Ticket Status" title={visibleTicket?.ticketNumber ?? "No ticket yet"}>
           <div className="ticket-timeline">
-            {visibleTimeline.length ? visibleTimeline.map((item) => (
-              <div key={item.id ?? item.label}>
-                <MessageSquare size={16} />
-                <span>{item.label}</span>
-                <ToneBadge tone={item.status === "submitted" ? "success" : item.status === "planned" ? "info" : "warning"}>{item.status}</ToneBadge>
-              </div>
-            )) : (
+            {visibleTimeline.length ? (
+              visibleTimeline.map((item) => (
+                <div key={item.id ?? item.label}>
+                  <MessageSquare size={16} />
+                  <span>{item.label}</span>
+                  <ToneBadge
+                    tone={
+                      item.status === "submitted"
+                        ? "success"
+                        : item.status === "planned"
+                          ? "info"
+                          : "warning"
+                    }
+                  >
+                    {item.status}
+                  </ToneBadge>
+                </div>
+              ))
+            ) : (
               <div>
                 <MessageSquare size={16} />
                 <span>Submit a ticket to start the support timeline.</span>
@@ -678,4 +839,6 @@ function StoreApp() {
 }
 
 const currentPath = window.location.pathname;
-createRoot(document.getElementById("root")!).render(currentPath.startsWith("/apps/leave-management") ? <GeneratedLeaveManagementApp /> : <StoreApp />);
+createRoot(document.getElementById("root")!).render(
+  currentPath.startsWith("/apps/leave-management") ? <GeneratedLeaveManagementApp /> : <StoreApp />
+);

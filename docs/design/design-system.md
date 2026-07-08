@@ -1,117 +1,111 @@
-# EVCP Design System
+# Horizon Design System
 
-ระบบกลางสำหรับงาน UI ของ Enterprise Vibe Coding Platform ทุก surface: Admin, Creator และ App Store PWA
+Status: governed MVP baseline
+Owner: `@evcp/ui` maintainers
+Applies to: `apps/admin-web`, `apps/creator-web`, `apps/app-store-pwa`, and generated app runtime surfaces
 
-## Direction
+## Principles
 
-- Tone: professional, quiet, data-dense, enterprise-grade
-- Language: user-facing copy ใช้ภาษาไทยเป็นหลัก ยกเว้น technical noun ที่ทีมใช้จริง เช่น Provider, API Key, Guardrail, Route
-- Layout: หน้าปฏิบัติงานต้องเริ่มด้วย task surface ทันที ไม่ทำ landing page
-- Density: ใช้ card เฉพาะ repeated item, panel, modal หรือ framed tool เท่านั้น
-- Radius: card/control ใช้ 8px เพื่อให้ดูเป็น enterprise tool ไม่ใช่ marketing page
+Horizon UI should feel trustworthy, calm, governed, efficient, and Thai-first. Admin and Creator surfaces are operational tools: keep them dense but readable, status-led, and optimized for repeated work. The Store PWA is end-user facing: keep it simpler, mobile-friendly, and action-focused.
+
+## Ownership Model
+
+`@evcp/ui` is the single UI system entrypoint. Shared components live in `packages/ui/src/index.tsx`; shared CSS, tokens, and surface patterns live in `packages/ui/styles.css`.
+
+Application code must compose existing `@evcp/ui` components before creating new UI. Application code must not own visual tokens, local stylesheets, hardcoded colors, or inline visual styles. When a new pattern is needed, add the class/component to `@evcp/ui`, document its intended use here, and consume it from the app.
+
+Icons use `lucide-react`. Prefer recognizable icon buttons for common tools and include accessible labels or titles when the icon is not self-explanatory.
 
 ## Tokens
 
-Tokens อยู่ใน [packages/ui/styles.css](/Users/artizno/0xlabs/EnterpriseVibeCodingPlatform/packages/ui/styles.css)
+| Category  | Tokens                                                                             | Usage                                              |
+| --------- | ---------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Brand     | `--evcp-color-primary`, `--evcp-color-primary-strong`, `--evcp-color-primary-soft` | Primary actions, shell highlights, selected states |
+| Surface   | `--evcp-color-page`, `--evcp-color-surface`, `--evcp-color-surface-muted`          | Page backgrounds, panels, tables, framed tools     |
+| Border    | `--evcp-color-border`, `--evcp-color-border-soft`                                  | Card borders, row dividers, controls               |
+| Text      | `--evcp-color-text`, `--evcp-color-muted`                                          | Body copy, headings, secondary labels              |
+| Status    | success/warning/danger/info bg/text pairs                                          | Badges, status pills, policy decisions             |
+| Code/Diff | `--evcp-color-code-*`, `--evcp-color-diff-*`                                       | Vibe action logs and code diff previews            |
+| Spacing   | `--evcp-space-1` through `--evcp-space-7`                                          | Component padding and layout gaps                  |
+| Shape     | `--evcp-radius-control`, `--evcp-radius-card`, `--evcp-radius-pill`                | Controls, panels, badges                           |
+| Elevation | `--evcp-shadow-card`                                                               | Important panels only                              |
 
-| Category | Token | Usage |
-| --- | --- | --- |
-| Brand | `--evcp-color-primary`, `--evcp-color-primary-strong` | primary actions, admin shell, page header |
-| Surface | `--evcp-color-page`, `--evcp-color-surface`, `--evcp-color-surface-muted` | page background, cards, table headers |
-| Border | `--evcp-color-border`, `--evcp-color-border-soft` | card borders, row dividers, framed tools |
-| Text | `--evcp-color-text`, `--evcp-color-muted` | body copy, secondary labels, captions |
-| Status | success/warning/danger/info token pairs | badges, status pills, warning rails |
-| Spacing | `--evcp-space-1` through `--evcp-space-7` | component gaps and padding |
-| Shape | `--evcp-radius-control`, `--evcp-radius-card`, `--evcp-radius-pill` | controls, cards, status pills |
-| Elevation | `--evcp-shadow-card` | important panels only |
+Rules:
+
+- Define raw color values only in `packages/ui/styles.css`.
+- Use token names for semantic intent, not visual appearance.
+- Keep cards and controls at `8px` radius unless a component has a documented format reason.
+- Do not scale type with viewport width. Use stable text sizes and responsive layout constraints.
 
 ## Components
 
-Exports อยู่ใน [packages/ui/src/index.tsx](/Users/artizno/0xlabs/EnterpriseVibeCodingPlatform/packages/ui/src/index.tsx)
+| Component                  | Use When                                     | Contract                                                                             |
+| -------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `AppShell`                 | Admin and Creator application chrome         | Owns sidebar, topbar, current user, environment context                              |
+| `PageHeader`               | Screen-level title, description, and actions | One per primary screen; use `tone="surface"` for quieter pages                       |
+| `SectionCard`              | A bounded operational panel                  | Do not nest cards inside cards; use full-width bands or unframed layouts around them |
+| `MetricCard`               | KPI/status summary                           | Always provide a short label, value, and optional detail                             |
+| `DataTable`                | Small to medium operational tables           | Use semantic `ToneBadge` only for status-like cells                                  |
+| `DefinitionGrid`           | Label/value metadata                         | Use for fingerprints, versions, owners, policy metadata                              |
+| `DecisionPanel`            | Validation, policy, or AI decision result    | Tone must match severity                                                             |
+| `WorkflowRail`             | Multi-step process context                   | Use when sequence state helps users orient                                           |
+| `ServiceStrip`             | Compact readiness/health row                 | Use for service or environment summaries                                             |
+| `ToneBadge` / `StatusPill` | Semantic labels                              | Allowed tones: `success`, `warning`, `danger`, `neutral`, `info`                     |
+| `AppCard`                  | Storefront app card                          | Owns access/install action copy and health display                                   |
 
-| Component | Use When | Notes |
-| --- | --- | --- |
-| `AppShell` | Shared app chrome with sidebar/topbar | ใช้กับ Admin และ Creator web |
-| `PageHeader` | Screen-level title and primary actions | `tone="primary"` สำหรับ operational command center, `surface` สำหรับ quieter screens |
-| `MetricCard` | KPI summary | ส่ง `icon`, `tone`, `detail` ได้ |
-| `SectionCard` | A bounded tool section | มี eyebrow/title/action slot |
-| `DataTable` | Small to medium operational data table | Supports tone badge per column |
-| `DefinitionGrid` | Label/value metadata | ใช้กับ detail panels เช่น key fingerprint |
-| `DecisionPanel` | Result, validation, policy decision | ใช้ tone ให้ตรง severity |
-| `WorkflowRail` | Left-side process/context rail | ใช้กับ flows ที่มี state sequence |
-| `ServiceStrip` | Compact service readiness list | เหมาะกับท้าย dashboard/health summary |
-| `ToneBadge` / `StatusPill` | Status and semantic labels | success, warning, danger, neutral, info |
+New components must document variants, states, accessibility behavior, and token usage before broad reuse.
 
-## Patterns
+## Surface Patterns
 
-### Admin / Governance
+Admin surfaces should favor tables, status cards, audit trails, filters, and configuration panels. Creator surfaces should favor guided workflow, review states, workspace panels, preview/code toggles, and publish readiness. Store surfaces should favor search, app cards, access requests, install state, and ticket submission.
 
-- ใช้ `PageHeader` + `MetricCard` เพื่อสรุป state ล่าสุด
-- ใช้ `WorkflowRail` เมื่อหน้ามี process/context ที่ต้องเห็นตลอด
-- ใช้ `SectionCard` + `DataTable` สำหรับ provider, route, quota, guardrail และ event log
-- ใช้ `admin-monitoring-shell` สำหรับ MVP Monitoring ที่ต้องรวม Service Health, Ticket Counts, Domain Requests และ Audit Filters ในหน้าเดียว
-- ใช้ `auth-policy-shell` สำหรับ Auth/SSO production readiness ที่ต้องแสดง provider registry, role mapping, Platform Auth session evidence, break-glass และ policy templates ใน context เดียวกัน
-- ใช้ `runtime-hardening-shell` สำหรับ generated app runtime evidence ที่ต้องแสดง container contract, schema isolation, health/readiness, structured logs, metrics, OpenAPI และ migration dry-run ใน context เดียวกัน
-- ใช้ `knowledge-skill-governance-shell` สำหรับ governance dashboard ที่ต้องแสดง Knowledge Library, Version Approval, Scoped Retrieval, Skill Library, Skill Versioning, Skill Assignment และ Workspace Context ใน context เดียวกัน
-- ใช้ `operations-recovery-shell` สำหรับ operations dashboard ที่ต้องแสดง Installer Preflight, Setup Wizard, Backup Schedule, Backup Runs, PostgreSQL PITR และ Restore Drill ใน context เดียวกัน
-- ใช้ `observability-license-shell` สำหรับ production control dashboard ที่ต้องแสดง Service Health, Generated App Health, Queue Backpressure, Telemetry Export, Upgrade Compatibility, Rollback Report, License Validation และ License Enforcement ใน context เดียวกัน
-- ใช้ `security-release-shell` สำหรับ release readiness dashboard ที่ต้องแสดง TLS, Session Policy, Secret Redaction, Upload Validation, Public/External Checklist, Sensitive Log Redaction และ RTM Regression ใน context เดียวกัน
-- ใช้ `backup-restore-mobile-list` สำหรับ mobile replacement ของตาราง backup/run/check ที่มี artifact URI, checksum, audit id หรือ timestamp ยาว ๆ
-- ใช้ `license-enforcement-mobile-list` สำหรับ mobile replacement ของตาราง license enforcement ที่มี action, decision, reason และ data-continuity copy ยาว ๆ
-- ใช้ `security-release-mobile-list` สำหรับ mobile replacement ของตาราง public/external checklist ที่มี blocker text ยาวและต้องอ่านได้โดยไม่ล้น card
-- ใช้ `scope-filter-bar` สำหรับ filter ชุด actor/project/app/department/agent/scenario ใน retrieval simulator และ workflow governance tools
-- ใช้ `governance-mobile-list` แทน dense tables บน mobile โดยต้องคง label/status text และไม่ truncate audit/version identifiers
-- ห้ามแสดง plaintext secret; ใช้ masked value หรือ fingerprint เท่านั้น
+Generated app runtime screens must stay visually compatible with Horizon, but should use constrained runtime patterns rather than full admin/creator chrome.
 
-### Creator
+## Code Rules
 
-- ใช้ `PageHeader tone="surface"` เพื่อไม่แข่งกับ canvas/live preview
-- ใช้ `SectionCard` สำหรับ Project Picker, Create Project Wizard, PRD Viewer, database schema, version/remix controls
-- ใช้ `WorkflowRail` สำหรับ flow ที่ต้องเห็นลำดับชัด เช่น project input -> governed generation -> draft -> baseline
-- ใช้ `DecisionPanel` สำหรับ PRD governance readiness, baseline immutability, publish readiness, validation และ failed generation
-- ใช้ `DataTable` สำหรับ PRD Version History, frontend checkpoints และ restore history
-- ใช้ workspace layout แบบ data-dense สำหรับ Prompt Composer, Task Progress, Live Preview, Token Remaining และ Usage Log โดยไม่ซ่อน guardrail/token state ออกจากหน้าหลัก
-- ใช้ database/restore layout แบบ split view: table rail + schema/sample/migration detail + checkpoint side panel พร้อม boundary copy ว่า restore กระทบเฉพาะ frontend
-- ใช้ app users/publish layout แบบ split operational view: users/members/invites/access requests/roles เป็น main panel และ manifest/readiness/deployment เป็น side panel เพื่อให้ publish decision เห็น access state ใน context เดียวกัน
-- ใช้ `sprint8-shell` สำหรับ feedback/domain hardening ที่ต้องเห็น Ticket-to-PRD, PRD Change Requests, Domain Settings, Deployment Traceability และ MVP Demo Checklist ใน context เดียวกัน
+Allowed in app code:
 
-### App Store PWA
+- Importing components from `@evcp/ui`.
+- Importing `@evcp/ui/styles.css`.
+- Applying documented class names from `packages/ui/styles.css`.
+- Passing semantic props such as `tone`, `status`, `icon`, `actions`, and `columns`.
 
-- ใช้ `MetricCard` อย่างประหยัด เพราะ mobile surface แคบ
-- ใช้ `SectionCard` สำหรับ app detail, request access, feedback, bug report และ ticket status
-- ใช้ `StatusPill` สำหรับ app health และ access status
-- ใช้ `store-status-strip` สำหรับ summary ที่ต้อง scan ได้ใน mobile เช่น My Apps, SSO, Offline
-- ใช้ `ticket-timeline` สำหรับ ticket submitted/in review/planned/resolved state โดยต้องมี badge text ไม่พึ่งสีอย่างเดียว
-- ใช้ Creator `creator-ticket-inbox-shell` เมื่อ feedback จาก End User ต้องถูกแปลงเป็น PRD change หรือ AI prompt ต่อ
+Not allowed in app code:
 
-## Accessibility
+- `style={{ ... }}` for visual presentation.
+- Hardcoded colors such as `#1553a6`, `rgb(...)`, `rgba(...)`, `hsl(...)`, or `hsla(...)`.
+- Local app stylesheets under `apps/*/src`.
+- New visual variants that bypass `@evcp/ui`.
 
-- Buttons must have visible text or familiar icon plus accessible label.
-- Tables must keep header cells in `thead`.
-- Status cannot rely on color alone; badge text must describe state.
-- Focusable controls must remain native `button`, `a`, `input`, or equivalent semantic elements.
-- Mobile breakpoint must collapse multi-column grids to one column at `760px`.
+If runtime sizing is unavoidable, prefer native elements such as `progress` or add a documented component API in `@evcp/ui`.
 
-## Contribution Rules
+## Enforcement
 
-- New UI in sprint work should first reuse `@evcp/ui`.
-- Add a new primitive only when at least two surfaces or sprint screens can reuse it.
-- New hardcoded color, spacing, radius, or shadow should become a token first.
-- New primitive must include CSS class under `ds-*`, props in `packages/ui/src/index.tsx`, and a test in `tests/unit/ui-design-system.test.mjs`.
+Run:
 
-## Component Library Decision
+```bash
+pnpm check:design-system
+```
 
-EVCP uses `@evcp/ui` as the product design system and component library. The project should not adopt a large opinionated visual framework as the main UI layer because Admin, Creator and App Store need one enterprise product language.
+The full quality gate runs this automatically:
 
-Allowed supporting libraries for future work:
+```bash
+pnpm check
+```
 
-| Library Type | Preferred Choice | Use For |
-| --- | --- | --- |
-| Icons | `lucide-react` | Action and status icons inside buttons, cards and dashboards |
-| Headless accessibility primitives | Radix UI or equivalent | Dialog, dropdown, tooltip, select, popover, tabs when native controls are not enough |
-| Complex tables | TanStack Table or equivalent | Sorting, filtering, pagination and column state for large enterprise tables |
-| Forms and validation | React Hook Form + Zod or equivalent | Provider config, domain requests, guardrail policy and invite forms |
+Changed-file checks also run design-system governance when app source files change:
 
-Visual styling remains owned by `@evcp/ui` tokens, CSS and reusable primitives.
+```bash
+pnpm check:changed --base origin/main
+pnpm check:staged
+```
 
-Decision for Sprint 9 onward: use `@evcp/ui` as the internal component library, add Radix/shadcn-style headless primitives only where interaction complexity requires them, and keep enterprise visual styling in EVCP tokens rather than adopting a large opinionated dashboard framework. Sprint 10 confirms this approach for runtime dashboards: use EVCP shells, metrics, tables, definition grids and decision panels instead of importing a large visual UI framework. Sprint 11 extends the same approach for knowledge/skill governance with `knowledge-skill-governance-shell`, `scope-filter-bar` and `governance-mobile-list`.
+The governance check scans `apps/*/src` and fails on app-local stylesheets, inline visual styles, hardcoded colors, and local CSS imports outside `@evcp/ui/styles.css`.
+
+## Change Process
+
+1. Try the existing `@evcp/ui` component first.
+2. If a pattern is missing, add or extend it in `packages/ui`.
+3. Document the component contract or pattern in this file.
+4. Run `pnpm check:design-system` and relevant type/test checks.
+5. Include screenshots for user-facing surface changes when behavior or layout changes materially.

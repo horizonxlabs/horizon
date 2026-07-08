@@ -45,6 +45,7 @@ const steps = [
   { name: "repository hygiene", command: "pnpm", args: ["lint:repo"] },
   { name: "conflict markers", command: "pnpm", args: ["check:no-conflict-markers"] },
   { name: "workspace package scripts", command: "pnpm", args: ["check:workspace-scripts"] },
+  { name: "design system governance", command: "pnpm", args: ["check:design-system"] },
   { name: "code lint", command: "pnpm", args: ["lint:code"] },
   { name: "typecheck", command: "pnpm", args: ["typecheck"] },
   { name: "unit tests", command: "pnpm", args: ["test:unit"] }

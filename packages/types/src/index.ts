@@ -3,13 +3,7 @@ export type Surface = "admin" | "creator" | "store";
 export type PlatformRole = "admin" | "creator" | "end_user";
 
 export type Status =
-  | "healthy"
-  | "warning"
-  | "degraded"
-  | "down"
-  | "draft"
-  | "published"
-  | "pending";
+  "healthy" | "warning" | "degraded" | "down" | "draft" | "published" | "pending";
 
 export interface MockUser {
   id: string;

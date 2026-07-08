@@ -1,4 +1,4 @@
-# Enterprise Vibe Coding Platform — MVP Redesign (Creator-First)
+# Horizon — MVP Redesign (Creator-First)
 
 Version: 1.0
 Date: 2026-07-06
@@ -34,19 +34,19 @@ Base: ตัด scope จาก `docs/requirements/production-blueprint-requirem
 
 ## 2. Baseline decisions
 
-| Area | Decision |
-| --- | --- |
-| ฐาน scope | ตัดจาก production blueprint v0.3, reuse codebase/monorepo เดิม |
-| เป้าหมายแรก | Pilot จริง 1 องค์กร (real install, real auth, real AI) |
-| Execution model | Server-side Docker container ต่อ project (ตาม ADR-003) ไม่ใช้ WebContainer |
-| Reference architecture | bolt.diy — ยืม artifact/action streaming protocol, message parser, action runner, workbench UI structure, context management |
-| Multi-provider LLM | LiteLLM (self-hosted, open source) เป็น AI Gateway — virtual key/quota/usage log ต่อ project |
-| Agentic engine | เริ่มจาก harness แบบ bolt.diy (system prompt + artifact protocol) ฝั่ง server; ประเมิน OpenHands SDK เป็น option เสริมภายหลัง |
-| Generated app stack | **Next.js (App Router) + TypeScript + Prisma + Tailwind ตัวเดียว** (ปรับจาก FR-CRE-007 เดิมที่แยก React+NestJS) |
-| Version control | git ต่อ project ซ่อนใต้ Checkpoint UX, ไม่ rewrite history |
-| Preview/Publish access | URL ผ่าน Caddy + Platform Auth เท่านั้น ไม่ expose port |
-| Governance ขั้นต่ำ | Auth (Keycloak) + สิทธิ์ db/storage ต่อ project + audit log |
-| Secrets | Platform จัดการทั้งหมด Creator ไม่เห็น/ไม่ต้องจัดการ key เอง |
+| Area                   | Decision                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| ฐาน scope              | ตัดจาก production blueprint v0.3, reuse codebase/monorepo เดิม                                                                |
+| เป้าหมายแรก            | Pilot จริง 1 องค์กร (real install, real auth, real AI)                                                                        |
+| Execution model        | Server-side Docker container ต่อ project (ตาม ADR-003) ไม่ใช้ WebContainer                                                    |
+| Reference architecture | bolt.diy — ยืม artifact/action streaming protocol, message parser, action runner, workbench UI structure, context management  |
+| Multi-provider LLM     | LiteLLM (self-hosted, open source) เป็น AI Gateway — virtual key/quota/usage log ต่อ project                                  |
+| Agentic engine         | เริ่มจาก harness แบบ bolt.diy (system prompt + artifact protocol) ฝั่ง server; ประเมิน OpenHands SDK เป็น option เสริมภายหลัง |
+| Generated app stack    | **Next.js (App Router) + TypeScript + Prisma + Tailwind ตัวเดียว** (ปรับจาก FR-CRE-007 เดิมที่แยก React+NestJS)               |
+| Version control        | git ต่อ project ซ่อนใต้ Checkpoint UX, ไม่ rewrite history                                                                    |
+| Preview/Publish access | URL ผ่าน Caddy + Platform Auth เท่านั้น ไม่ expose port                                                                       |
+| Governance ขั้นต่ำ     | Auth (Keycloak) + สิทธิ์ db/storage ต่อ project + audit log                                                                   |
+| Secrets                | Platform จัดการทั้งหมด Creator ไม่เห็น/ไม่ต้องจัดการ key เอง                                                                  |
 
 ## 3. High-Level Architecture
 
@@ -145,12 +145,12 @@ Module ใหม่ใน platform-api (ไม่แยก service) คุยก
 
 ### 4.4 Container lifecycle + resource limits
 
-| State | ความหมาย | Transition |
-| --- | --- | --- |
-| `provisioning` | กำลังสร้างทรัพยากร | → running / failed |
-| `running` | dev server ทำงาน | → idle (ไม่มี activity 30 นาที) |
-| `idle` | container stop, volume/ข้อมูลครบ | → running (wake ~10-20 วิ ตอนเปิด workspace) |
-| `archived` | project archive | volume เก็บไว้ ทรัพยากรอื่นหยุด |
+| State          | ความหมาย                         | Transition                                   |
+| -------------- | -------------------------------- | -------------------------------------------- |
+| `provisioning` | กำลังสร้างทรัพยากร               | → running / failed                           |
+| `running`      | dev server ทำงาน                 | → idle (ไม่มี activity 30 นาที)              |
+| `idle`         | container stop, volume/ข้อมูลครบ | → running (wake ~10-20 วิ ตอนเปิด workspace) |
+| `archived`     | project archive                  | volume เก็บไว้ ทรัพยากรอื่นหยุด              |
 
 - Default limit ต่อ dev container (config ได้): CPU 1 core, RAM 2GB, disk quota 2GB
 - Admin service health dashboard เดิม เพิ่มรายการ container ต่อ project
@@ -197,11 +197,11 @@ Action Runner → exec ใน dev container:
 
 ### 5.3 Error feedback loop
 
-| จุดดัก | วิธี | UX |
-| --- | --- | --- |
-| Shell/build fail | exit code + stderr จาก action runner | AI เห็น error ใน turn เดียวกัน แก้เองสูงสุด 2 รอบ แล้วหยุดถาม Creator |
-| Dev server crash / compile error | อ่าน log stream ของ `next dev` | Banner ใน preview + ปุ่ม "Fix with AI" |
-| Runtime error ใน browser | overlay script ใน preview iframe จับ `window.onerror` + `console.error` | ปุ่ม "Fix with AI" ส่ง error เข้า prompt |
+| จุดดัก                           | วิธี                                                                    | UX                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Shell/build fail                 | exit code + stderr จาก action runner                                    | AI เห็น error ใน turn เดียวกัน แก้เองสูงสุด 2 รอบ แล้วหยุดถาม Creator |
+| Dev server crash / compile error | อ่าน log stream ของ `next dev`                                          | Banner ใน preview + ปุ่ม "Fix with AI"                                |
+| Runtime error ใน browser         | overlay script ใน preview iframe จับ `window.onerror` + `console.error` | ปุ่ม "Fix with AI" ส่ง error เข้า prompt                              |
 
 ### 5.4 Chat history ฝั่ง server
 
@@ -241,19 +241,19 @@ Creator กด Publish
 
 ## 7. Components สรุป
 
-| Component | สถานะ | งาน |
-| --- | --- | --- |
-| creator-web Workbench | ปรับใหม่ | Chat panel + file tree/code view + diff + terminal log + preview iframe + checkpoint timeline (โครง UI จาก bolt.diy stores pattern) |
-| platform-api Chat route | ใหม่ | SSE endpoint, system prompt assembly, summary, context selection |
-| Message Parser + Action Runner | ใหม่ (port จาก bolt.diy) | แกะ artifact stream, execute ใน container, relay events |
-| Workspace Orchestrator | ใหม่ | Docker lifecycle, provisioning, secrets injection, route registration |
-| Golden template | ใหม่ | Next.js + Prisma + Auth SDK + locked files |
-| LiteLLM | นำเข้า (OSS) | compose service ใหม่ + virtual key per project |
-| Preview/Apps proxy | ใหม่ | auth-checked reverse proxy ใน platform-api + Caddy config |
-| Publish pipeline | ใหม่ | build image, production container, deployment record |
-| Keycloak auth | มีอยู่ | ต่อ OIDC browser flow จริงให้จบ (แทน simulated SSO bridge) |
-| Audit log | มีอยู่ | เพิ่ม event types ใหม่ (chat, action, commit, rollback, publish, provision) |
-| Postgres/MinIO/Caddy/compose | มีอยู่ | เพิ่ม LiteLLM service + Docker socket access ให้ platform-api |
+| Component                      | สถานะ                    | งาน                                                                                                                                 |
+| ------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| creator-web Workbench          | ปรับใหม่                 | Chat panel + file tree/code view + diff + terminal log + preview iframe + checkpoint timeline (โครง UI จาก bolt.diy stores pattern) |
+| platform-api Chat route        | ใหม่                     | SSE endpoint, system prompt assembly, summary, context selection                                                                    |
+| Message Parser + Action Runner | ใหม่ (port จาก bolt.diy) | แกะ artifact stream, execute ใน container, relay events                                                                             |
+| Workspace Orchestrator         | ใหม่                     | Docker lifecycle, provisioning, secrets injection, route registration                                                               |
+| Golden template                | ใหม่                     | Next.js + Prisma + Auth SDK + locked files                                                                                          |
+| LiteLLM                        | นำเข้า (OSS)             | compose service ใหม่ + virtual key per project                                                                                      |
+| Preview/Apps proxy             | ใหม่                     | auth-checked reverse proxy ใน platform-api + Caddy config                                                                           |
+| Publish pipeline               | ใหม่                     | build image, production container, deployment record                                                                                |
+| Keycloak auth                  | มีอยู่                   | ต่อ OIDC browser flow จริงให้จบ (แทน simulated SSO bridge)                                                                          |
+| Audit log                      | มีอยู่                   | เพิ่ม event types ใหม่ (chat, action, commit, rollback, publish, provision)                                                         |
+| Postgres/MinIO/Caddy/compose   | มีอยู่                   | เพิ่ม LiteLLM service + Docker socket access ให้ platform-api                                                                       |
 
 ## 8. Data model เพิ่มใหม่ (platform schema)
 
@@ -275,13 +275,13 @@ Creator กด Publish
 
 ## 10. Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Shell ไม่มี allowlist (accepted) | non-root + internal network + egress npm เท่านั้น; backlog อันดับต้น |
-| LLM output ไม่ตรง artifact format | ยืม parser + prompt ที่ผ่านการพิสูจน์จาก bolt.diy, มี retry/error path |
-| Container หนักเกิน server | resource limits + idle timeout ตั้งแต่วันแรก |
-| dev/prod ใช้ DB เดียวกัน | ระบุเป็นข้อจำกัดที่สื่อสารกับ pilot ชัดเจน; Environment record เตรียมโครงแยกไว้แล้ว |
-| Keycloak OIDC จริงยังไม่เคย wire จบ | เป็นงานชิ้นแรกๆ ใน plan เพราะทุก surface พึ่ง auth |
+| Risk                                | Mitigation                                                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| Shell ไม่มี allowlist (accepted)    | non-root + internal network + egress npm เท่านั้น; backlog อันดับต้น                |
+| LLM output ไม่ตรง artifact format   | ยืม parser + prompt ที่ผ่านการพิสูจน์จาก bolt.diy, มี retry/error path              |
+| Container หนักเกิน server           | resource limits + idle timeout ตั้งแต่วันแรก                                        |
+| dev/prod ใช้ DB เดียวกัน            | ระบุเป็นข้อจำกัดที่สื่อสารกับ pilot ชัดเจน; Environment record เตรียมโครงแยกไว้แล้ว |
+| Keycloak OIDC จริงยังไม่เคย wire จบ | เป็นงานชิ้นแรกๆ ใน plan เพราะทุก surface พึ่ง auth                                  |
 
 ## 11. อ้างอิง
 

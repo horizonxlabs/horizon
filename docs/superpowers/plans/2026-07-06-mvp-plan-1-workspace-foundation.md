@@ -25,11 +25,13 @@
 ### Task 1: Workspace domain types + lifecycle state machine
 
 **Files:**
+
 - Modify: `packages/types/src/index.ts` (append)
 - Create: `apps/platform-api/src/workspace-orchestrator/state.ts`
 - Test: `tests/unit/workspace-orchestrator-state.test.mjs`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: types `WorkspaceState`, `WorkspaceContainerRecord`, `ProjectResourceRecord`, `ProjectSecretRecord`, `EnvironmentName`; function `canTransition(from: WorkspaceState, to: WorkspaceState): boolean`; function `assertTransition(from, to): void` (throws `WorkspaceStateError`).
 
@@ -62,7 +64,10 @@ test("rejects undocumented transitions", () => {
 test("assertTransition throws WorkspaceStateError with both states in message", () => {
   assert.throws(
     () => assertTransition("archived", "running"),
-    (err) => err instanceof WorkspaceStateError && /archived/.test(err.message) && /running/.test(err.message)
+    (err) =>
+      err instanceof WorkspaceStateError &&
+      /archived/.test(err.message) &&
+      /running/.test(err.message)
   );
 });
 ```
@@ -166,10 +171,12 @@ git commit -m "feat(workspace): add workspace domain types and lifecycle state m
 ### Task 2: Slug validation + Postgres provisioning SQL builder
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts`
 - Test: `tests/unit/workspace-postgres-provisioner.test.mjs`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `assertValidProjectSlug(slug: string): void` (throws `ValidationError`-style `Error`), `buildProvisionSchemaSql(slug: string, password: string): string[]`, `buildReleaseSchemaSql(slug: string): string[]`, `schemaNameFor(slug): string`, `roleNameFor(slug): string`, and interface `PostgresProvisioner { provisionSchema(slug): Promise<{ schemaName: string; roleName: string; password: string }>; releaseSchema(slug): Promise<void>; }` plus `createPgClientPostgresProvisioner(runSql: (sql: string) => Promise<void>): PostgresProvisioner`.
 
@@ -192,7 +199,11 @@ const {
 test("accepts valid slugs and rejects invalid ones", () => {
   assertValidProjectSlug("leave-tracker-01");
   for (const bad of ["ab", "UPPER", "has_underscore", "a".repeat(41), "semi;colon", "sp ace", ""]) {
-    assert.throws(() => assertValidProjectSlug(bad), /slug/i, `expected rejection for ${JSON.stringify(bad)}`);
+    assert.throws(
+      () => assertValidProjectSlug(bad),
+      /slug/i,
+      `expected rejection for ${JSON.stringify(bad)}`
+    );
   }
 });
 
@@ -277,7 +288,9 @@ export function buildReleaseSchemaSql(slug: string): string[] {
 }
 
 export interface PostgresProvisioner {
-  provisionSchema(slug: string): Promise<{ schemaName: string; roleName: string; password: string }>;
+  provisionSchema(
+    slug: string
+  ): Promise<{ schemaName: string; roleName: string; password: string }>;
   releaseSchema(slug: string): Promise<void>;
 }
 
@@ -318,10 +331,12 @@ git commit -m "feat(workspace): add postgres schema provisioner with isolated ro
 ### Task 3: Object storage (MinIO) + LiteLLM virtual key provisioner ports
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/resource-ports.ts`
 - Test: `tests/unit/workspace-resource-ports.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `assertValidProjectSlug` from Task 2.
 - Produces:
   - `bucketNameFor(slug): string`
@@ -362,7 +377,11 @@ test("memory object storage provisions and releases buckets", async () => {
 
 test("memory llm gateway issues and revokes virtual keys", async () => {
   const gateway = createMemoryLlmGatewayAdmin();
-  const issued = await gateway.createVirtualKey({ projectId: "p1", slug: "leave-tracker", maxBudgetUsd: 25 });
+  const issued = await gateway.createVirtualKey({
+    projectId: "p1",
+    slug: "leave-tracker",
+    maxBudgetUsd: 25
+  });
   assert.match(issued.key, /^sk-/);
   assert.equal(gateway.state.keys.length, 1);
   await gateway.revokeVirtualKey(issued.keyId);
@@ -373,14 +392,20 @@ test("litellm admin client calls /key/generate with master key auth", async () =
   const calls = [];
   const fakeFetch = async (url, init) => {
     calls.push({ url: String(url), init });
-    return new Response(JSON.stringify({ key: "sk-litellm-abc", token_id: "tok_1" }), { status: 200 });
+    return new Response(JSON.stringify({ key: "sk-litellm-abc", token_id: "tok_1" }), {
+      status: 200
+    });
   };
   const gateway = createLiteLlmGatewayAdmin({
     baseUrl: "http://litellm:4000",
     masterKey: "sk-master",
     fetchImpl: fakeFetch
   });
-  const issued = await gateway.createVirtualKey({ projectId: "p1", slug: "leave-tracker", maxBudgetUsd: 25 });
+  const issued = await gateway.createVirtualKey({
+    projectId: "p1",
+    slug: "leave-tracker",
+    maxBudgetUsd: 25
+  });
   assert.equal(issued.key, "sk-litellm-abc");
   assert.equal(issued.keyId, "tok_1");
   assert.equal(calls[0].url, "http://litellm:4000/key/generate");
@@ -461,7 +486,9 @@ export interface LlmGatewayAdmin {
 export function createMemoryLlmGatewayAdmin(): LlmGatewayAdmin & {
   state: { keys: Array<{ keyId: string; key: string; slug: string; revoked: boolean }> };
 } {
-  const state = { keys: [] as Array<{ keyId: string; key: string; slug: string; revoked: boolean }> };
+  const state = {
+    keys: [] as Array<{ keyId: string; key: string; slug: string; revoked: boolean }>
+  };
   return {
     state,
     async createVirtualKey(input) {
@@ -541,10 +568,12 @@ git commit -m "feat(workspace): add object storage and litellm virtual key provi
 ### Task 4: Encrypted project secret store (names-only listing)
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/secret-store.ts`
 - Test: `tests/unit/workspace-secret-store.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `ProjectSecretRecord` type from Task 1.
 - Produces: `createProjectSecretStore(opts: { encryptionKeyHex: string })` returning `{ put(projectId, name, value): void; listNames(projectId): string[]; resolveEnv(projectId): Record<string, string>; rotate(projectId, name, value): void; removeAll(projectId): void }`. `resolveEnv` is the ONLY way plaintext leaves the store (used for container env injection). AES-256-GCM.
 
@@ -587,7 +616,10 @@ test("rotate replaces value and stamps rotatedAt; removeAll clears project", () 
 });
 
 test("rejects invalid encryption key", () => {
-  assert.throws(() => createProjectSecretStore({ encryptionKeyHex: "too-short" }), /encryption key/i);
+  assert.throws(
+    () => createProjectSecretStore({ encryptionKeyHex: "too-short" }),
+    /encryption key/i
+  );
 });
 ```
 
@@ -706,10 +738,12 @@ git commit -m "feat(workspace): add AES-256-GCM project secret store with names-
 ### Task 5: Docker engine port + container spec builder
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/docker-engine.ts`
 - Test: `tests/unit/workspace-docker-engine.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `assertValidProjectSlug` (Task 2).
 - Produces:
   - `buildDevContainerSpec(input: { slug: string; image: string; env: Record<string, string>; cpuCores: number; memoryMb: number; network: string; workspaceVolume: string }): DevContainerSpec` — pure; output shape `{ name, image, env: string[], hostConfig: { NanoCpus, Memory, NetworkMode, Binds }, labels, exposedPort: 3000, publishPorts: false }`.
@@ -833,7 +867,9 @@ interface MemoryContainer {
   status: "created" | "running" | "stopped";
 }
 
-export function createMemoryDockerEngine(): DockerEngine & { state: { containers: MemoryContainer[] } } {
+export function createMemoryDockerEngine(): DockerEngine & {
+  state: { containers: MemoryContainer[] };
+} {
   const state = { containers: [] as MemoryContainer[] };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
@@ -880,10 +916,12 @@ git commit -m "feat(workspace): add docker engine port and dev container spec bu
 ### Task 6: Workspace Orchestrator — atomic provisioning with rollback
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/orchestrator.ts`
 - Test: `tests/unit/workspace-orchestrator.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `PostgresProvisioner` (Task 2), `ObjectStorageProvisioner` + `LlmGatewayAdmin` (Task 3), `ProjectSecretStore` (Task 4), `DockerEngine` + `buildDevContainerSpec` (Task 5), `assertTransition` (Task 1).
 - Produces: `createWorkspaceOrchestrator(deps)` returning:
   - `provisionWorkspace(input: { projectId: string; slug: string }): Promise<WorkspaceContainerRecord>`
@@ -946,12 +984,18 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.ok(executedSql.some((sql) => sql.includes("CREATE SCHEMA")));
   assert.deepEqual(deps.objectStorage.state.buckets, ["proj-leave-tracker"]);
   assert.equal(deps.llmGateway.state.keys.length, 1);
-  assert.deepEqual(
-    orchestrator.listSecretNames("p1").sort(),
-    ["DATABASE_URL", "LLM_GATEWAY_KEY", "S3_ACCESS_KEY", "S3_BUCKET", "S3_ENDPOINT", "S3_SECRET_KEY"]
-  );
+  assert.deepEqual(orchestrator.listSecretNames("p1").sort(), [
+    "DATABASE_URL",
+    "LLM_GATEWAY_KEY",
+    "S3_ACCESS_KEY",
+    "S3_BUCKET",
+    "S3_ENDPOINT",
+    "S3_SECRET_KEY"
+  ]);
   assert.equal(deps.docker.state.containers[0].status, "running");
-  assert.ok(deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL=")));
+  assert.ok(
+    deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL="))
+  );
   assert.ok(audits.some((event) => event.action === "workspace.provisioned"));
 });
 
@@ -1096,7 +1140,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
     },
 
-    async provisionWorkspace(input: { projectId: string; slug: string }): Promise<WorkspaceContainerRecord> {
+    async provisionWorkspace(input: {
+      projectId: string;
+      slug: string;
+    }): Promise<WorkspaceContainerRecord> {
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
         throw new Error(`workspace already provisioned for project '${input.projectId}'`);
@@ -1156,7 +1203,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
         assertTransition(record.state, "running");
         record = save({ ...record, state: "running", containerId });
-        audit({ action: "workspace.provisioned", projectId: input.projectId, metadata: { slug: input.slug } });
+        audit({
+          action: "workspace.provisioned",
+          projectId: input.projectId,
+          metadata: { slug: input.slug }
+        });
         return record;
       } catch (error) {
         for (const rollback of rollbacks.reverse()) {
@@ -1170,7 +1221,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         audit({
           action: "workspace.provision_failed",
           projectId: input.projectId,
-          metadata: { slug: input.slug, error: error instanceof Error ? error.message : String(error) }
+          metadata: {
+            slug: input.slug,
+            error: error instanceof Error ? error.message : String(error)
+          }
         });
         throw error;
       }
@@ -1244,6 +1298,7 @@ git commit -m "feat(workspace): add orchestrator with atomic provisioning and ro
 ### Task 7: Golden Next.js template + locked-files manifest
 
 **Files:**
+
 - Create: `templates/nextjs-base/template.json`
 - Create: `templates/nextjs-base/package.json`
 - Create: `templates/nextjs-base/platform.config.ts`
@@ -1255,6 +1310,7 @@ git commit -m "feat(workspace): add orchestrator with atomic provisioning and ro
 - Test: `tests/unit/workspace-golden-template.test.mjs`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `loadGoldenTemplate(rootDir?: string): GoldenTemplate` where `GoldenTemplate = { name: string; lockedFiles: string[]; files: Array<{ path: string; content: string }> }`; `isLockedFile(template, path): boolean`. Plan 2's action runner will call `isLockedFile` to reject AI writes.
 
@@ -1347,7 +1403,7 @@ Expected: FAIL (module not found).
 `templates/nextjs-base/platform.config.ts`:
 
 ```ts
-// LOCKED FILE — provisioned by Enterprise Vibe Coding Platform. Do not edit.
+// LOCKED FILE — provisioned by Horizon. Do not edit.
 export const platformConfig = {
   databaseUrl: process.env.DATABASE_URL!,
   s3: {
@@ -1425,7 +1481,10 @@ function walk(dir: string, root: string, out: Array<{ path: string; content: str
     if (statSync(full).isDirectory()) {
       walk(full, root, out);
     } else {
-      out.push({ path: relative(root, full).replaceAll("\\", "/"), content: readFileSync(full, "utf8") });
+      out.push({
+        path: relative(root, full).replaceAll("\\", "/"),
+        content: readFileSync(full, "utf8")
+      });
     }
   }
 }
@@ -1470,12 +1529,14 @@ git commit -m "feat(workspace): add golden nextjs template with locked-files man
 ### Task 8: LiteLLM compose service + workspace runtime wiring in docker-compose
 
 **Files:**
+
 - Modify: `docker/docker-compose.yml`
 - Create: `docker/litellm-config.yaml`
 - Modify: `.env.example` (append)
 - Test: `tests/integration/workspace-compose-contract.test.mjs`
 
 **Interfaces:**
+
 - Consumes: compose services already defined (`postgres`, `minio`, `platform-api`, `caddy`).
 - Produces: compose service `litellm` on the internal network; `platform-api` gains Docker socket mount + env vars `EVCP_LITELLM_BASE_URL`, `EVCP_LITELLM_MASTER_KEY`, `EVCP_WORKSPACE_SECRET_KEY`, `EVCP_WORKSPACE_IMAGE`; named network `evcp-internal` declared.
 
@@ -1488,7 +1549,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
-const compose = parse(readFileSync(new URL("../../docker/docker-compose.yml", import.meta.url), "utf8"));
+const compose = parse(
+  readFileSync(new URL("../../docker/docker-compose.yml", import.meta.url), "utf8")
+);
 
 test("declares litellm service on internal network without published LLM admin port", () => {
   const litellm = compose.services.litellm;
@@ -1522,10 +1585,16 @@ test("evcp-internal network is declared and used by workspace-facing services", 
 });
 
 test("litellm config file routes at least one provider via env-referenced key", () => {
-  const config = parse(readFileSync(new URL("../../docker/litellm-config.yaml", import.meta.url), "utf8"));
+  const config = parse(
+    readFileSync(new URL("../../docker/litellm-config.yaml", import.meta.url), "utf8")
+  );
   assert.ok(Array.isArray(config.model_list) && config.model_list.length >= 1);
   const first = config.model_list[0];
-  assert.match(String(first.litellm_params.api_key), /^os\.environ\//, "keys must come from env, not literals");
+  assert.match(
+    String(first.litellm_params.api_key),
+    /^os\.environ\//,
+    "keys must come from env, not literals"
+  );
 });
 ```
 
@@ -1560,35 +1629,35 @@ general_settings:
 Add under `services:` (keep existing services untouched; add `networks: [evcp-internal]` to `postgres`, `minio`, `caddy`, `platform-api` alongside any existing networks):
 
 ```yaml
-  litellm:
-    image: ghcr.io/berriai/litellm:main-stable
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    environment:
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    command: ["--config", "/etc/litellm/litellm-config.yaml"]
-    volumes:
-      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
-    networks:
-      - evcp-internal
+litellm:
+  image: ghcr.io/berriai/litellm:main-stable
+  restart: unless-stopped
+  depends_on:
+    - postgres
+  environment:
+    LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+    LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  command: ["--config", "/etc/litellm/litellm-config.yaml"]
+  volumes:
+    - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+  networks:
+    - evcp-internal
 ```
 
 Extend the existing `platform-api` service:
 
 ```yaml
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      EVCP_LITELLM_BASE_URL: http://litellm:4000
-      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
-      EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
-    networks:
-      - evcp-internal
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+environment:
+  EVCP_LITELLM_BASE_URL: http://litellm:4000
+  EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+  EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
+  EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+networks:
+  - evcp-internal
 ```
 
 Add at file bottom (merge with existing top-level keys if present):
@@ -1628,12 +1697,14 @@ git commit -m "feat(workspace): add litellm gateway service and workspace runtim
 ### Task 9: Workspace API routes + auth-checked preview proxy resolution
 
 **Files:**
+
 - Create: `apps/platform-api/src/workspace-orchestrator/routes.ts`
 - Modify: `apps/platform-api/src/app-factory.ts` (wire module into request dispatch; follow the pattern of existing service route blocks in `executePlatformApiRequest`)
 - Modify: `docker/Caddyfile` (route `/preview/*` to platform-api)
 - Test: `tests/unit/workspace-routes.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `WorkspaceOrchestrator` (Task 6), existing auth resolution (`AuthResolution` with roles/permissions from `platform-services.ts`), existing audit service.
 - Produces HTTP-agnostic handlers (same `PlatformRequest`/`PlatformResponse` convention as `executePlatformApiRequest`):
   - `POST /projects/{projectId}/workspace` → provision (creator/owner of project only)
@@ -1713,9 +1784,18 @@ test("preview target resolves for members, wakes idle workspaces, rejects others
   assert.equal(woken.ok, true);
   assert.equal(orchestrator.getWorkspace("p1").state, "running");
 
-  assert.deepEqual(await resolvePreviewTarget(orchestrator, outsider, "leave-tracker"), { ok: false, status: 403 });
-  assert.deepEqual(await resolvePreviewTarget(orchestrator, null, "leave-tracker"), { ok: false, status: 401 });
-  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "no-such-app"), { ok: false, status: 404 });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, outsider, "leave-tracker"), {
+    ok: false,
+    status: 403
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, null, "leave-tracker"), {
+    ok: false,
+    status: 401
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "no-such-app"), {
+    ok: false,
+    status: 404
+  });
 });
 ```
 
@@ -1776,19 +1856,27 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
       if (!isMember(auth, input.projectId)) {
         return { status: 403, body: { error: "forbidden" } };
       }
-      return { status: 200, body: { workspace: await orchestrator.stopWorkspace(input.projectId) } };
+      return {
+        status: 200,
+        body: { workspace: await orchestrator.stopWorkspace(input.projectId) }
+      };
     },
 
     async wake(auth: WorkspaceAuthContext, input: { projectId: string }): Promise<RouteResponse> {
       if (!isMember(auth, input.projectId)) {
         return { status: 403, body: { error: "forbidden" } };
       }
-      return { status: 200, body: { workspace: await orchestrator.wakeWorkspace(input.projectId) } };
+      return {
+        status: 200,
+        body: { workspace: await orchestrator.wakeWorkspace(input.projectId) }
+      };
     }
   };
 }
 
-export type PreviewResolution = { ok: true; upstream: string } | { ok: false; status: 401 | 403 | 404 | 503 };
+export type PreviewResolution =
+  | { ok: true; upstream: string }
+  | { ok: false; status: 401 | 403 | 404 | 503 };
 
 export async function resolvePreviewTarget(
   orchestrator: WorkspaceOrchestrator,
@@ -1872,11 +1960,13 @@ git commit -m "feat(workspace): add workspace API routes and auth-checked previe
 ### Task 10: Idle sweep scheduler + workspace verify script
 
 **Files:**
+
 - Modify: `apps/platform-api/src/main.ts` (start idle sweep interval)
 - Modify: `package.json` (add `verify:workspace` script)
 - Test: `tests/unit/workspace-idle-sweep.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `stopIdleWorkspaces` (Task 6).
 - Produces: `startIdleSweep(orchestrator, { intervalMs }): { stop(): void }` exported from `apps/platform-api/src/workspace-orchestrator/orchestrator.ts`; script `pnpm verify:workspace` running all Plan-1 tests.
 

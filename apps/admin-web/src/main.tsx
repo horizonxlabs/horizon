@@ -203,7 +203,7 @@ const serviceHealthRows = [
 ];
 
 const ticketCountRows = [
-  { metric: "Submitted", value: "1", trend: "from App Store feedback" },
+  { metric: "Submitted", value: "1", trend: "from Horizon Store feedback" },
   { metric: "Planned", value: "1", trend: "converted to PRD change" },
   { metric: "Resolved", value: "0", trend: "awaiting pilot validation" }
 ];
@@ -1543,7 +1543,7 @@ function FirstRunSetupScreen({
       <section className="first-run-hero">
         <div>
           <span className="eyebrow">First-run Setup</span>
-          <h1>ตั้งค่า Enterprise Vibe Coding Platform</h1>
+          <h1>ตั้งค่า Horizon</h1>
           <p>ตั้งค่าระบบ private server และสร้าง Platform Admin คนแรกก่อนเปิด Admin Console</p>
         </div>
         <ToneBadge
@@ -2289,7 +2289,7 @@ function AdminApp() {
 
   const renderAdminShell = (content: ReactNode) => (
     <AppShell
-      title="EVCP Admin"
+      title="Horizon Admin"
       navItems={navigation.admin}
       userName={bootstrap.userName}
       environmentLabel="Online Private Server"
@@ -2333,7 +2333,7 @@ function AdminApp() {
             { name: "Admin Console", detail: "First-run setup gate ready", status: "healthy" },
             { name: "Creator Workspace", detail: "Route-scoped pages active", status: "healthy" },
             {
-              name: "App Store Runtime",
+              name: "Horizon Store Runtime",
               detail: "/apps/leave-management opens generated app",
               status: "healthy"
             }
@@ -2841,7 +2841,7 @@ function AdminApp() {
 
   return (
     <AppShell
-      title="EVCP Admin"
+      title="Horizon Admin"
       navItems={navigation.admin}
       userName={bootstrap.userName}
       environmentLabel="Online Private Server"
@@ -3775,15 +3775,15 @@ function AdminApp() {
                       {latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit}
                     </strong>
                   </div>
-                  <div className="ds-meter-track">
-                    <span
-                      style={{
-                        width: latestAiQuota
-                          ? `${Math.min((latestAiQuota.usedToday / Math.max(latestAiQuota.dailyLimit, 1)) * 100, 100)}%`
-                          : "0%"
-                      }}
-                    />
-                  </div>
+                  <progress
+                    className="ds-meter-progress"
+                    value={latestAiQuota?.usedToday ?? 0}
+                    max={Math.max(
+                      Number(latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit),
+                      1
+                    )}
+                    aria-label="Daily token quota used"
+                  />
                   <small>Hard stop blocks before provider call.</small>
                 </div>
                 <div className="ai-governance-action-panel compact">
