@@ -1,5 +1,6 @@
 import { AppShell, PageHeader } from "@evcp/ui";
 import { GitBranch, WandSparkles } from "lucide-react";
+import { HorizonLogo } from "../components/HorizonLogo";
 import { DefaultDatabaseVersionsSection } from "./default/DefaultDatabaseVersionsSection";
 import { DefaultProjectsPrdSection } from "./default/DefaultProjectsPrdSection";
 import { DefaultTicketsTraceSection } from "./default/DefaultTicketsTraceSection";
@@ -18,7 +19,8 @@ export function DefaultPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
   } = app;
   return (
     <AppShell
-      title="Creator App"
+      title="Horizon"
+      logo={<HorizonLogo />}
       navItems={creatorNavItems}
       userName={bootstrap.userName}
       session={creatorSessionControls}

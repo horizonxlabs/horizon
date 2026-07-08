@@ -53,6 +53,8 @@ export interface ServiceStatus {
 export interface NavItem {
   label: string;
   route: string;
+  /** Icon key resolved by the shared AppShell to an inline glyph (see packages/ui nav-icons). */
+  icon?: string;
 }
 
 // --- MVP Plan 1: Workspace Foundation ---
