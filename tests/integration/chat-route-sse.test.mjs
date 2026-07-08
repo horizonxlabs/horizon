@@ -95,6 +95,30 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
   }
 });
 
+test("POST /projects/:projectId/chat in Plan mode streams guidance without write actions", async () => {
+  const { server, port } = await setup(
+    () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }),
+    {
+      llmClient: createMemoryLlmCompletionClient([
+        "Plan: inspect app/page.tsx first, then list the smallest implementation steps."
+      ])
+    }
+  );
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "plan the home page update",
+      agentMode: "plan"
+    });
+    assert.equal(raw.statusCode, 200);
+    assert.match(raw.body, /event: token/);
+    assert.match(raw.body, /event: done/);
+    assert.doesNotMatch(raw.body, /event: action_result/);
+    assert.doesNotMatch(raw.body, /event: commit/);
+  } finally {
+    server.close();
+  }
+});
+
 test("POST /projects/:projectId/chat returns 403 when caller is not a member of the project", async () => {
   const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
 

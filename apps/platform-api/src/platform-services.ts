@@ -1,7 +1,7 @@
 import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-client";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
-import type { MockUser, PlatformRole, Status } from "@evcp/types";
+import type { MockUser, PlatformRole, Status, WorkspaceAgentMode } from "@evcp/types";
 import { createHash, createHmac } from "node:crypto";
 import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
@@ -8123,7 +8123,7 @@ export class WorkspaceService {
   submitPrompt(
     actor: PlatformUser,
     projectId: string,
-    input: { prompt: string; attachmentIds?: string[] }
+    input: { prompt: string; attachmentIds?: string[]; agentMode?: WorkspaceAgentMode }
   ): WorkspacePromptResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
@@ -8162,6 +8162,13 @@ export class WorkspaceService {
         preview: this.latestPreview(project.id),
         tokenBudget: this.buildTokenBudget(0)
       };
+    }
+
+    if (input.agentMode === "plan") {
+      const plannedTask = this.createTask(project.id, actor.id, prompt, "blocked", guardrail, now, "done");
+      this.tasks.push(plannedTask);
+      this.audit.record({ actorId: actor.id, action: "workspace.prompt.plan_only", resourceType: "workspace_task", resourceId: plannedTask.id, severity: "info", metadata: { projectId: project.id } });
+      return { guardrail, task: plannedTask, preview: this.latestPreview(project.id), tokenBudget: this.buildTokenBudget(0) };
     }
 
     const skillSelection = this.resolveWorkspaceSkill(actor, project);

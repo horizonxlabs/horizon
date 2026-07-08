@@ -283,9 +283,12 @@ export type GuardrailResultDto = {
   reason?: string;
 };
 
+export type WorkspaceAgentMode = "plan" | "build";
+
 export type WorkspacePromptInput = {
   prompt: string;
   attachmentIds?: string[];
+  agentMode?: WorkspaceAgentMode;
 };
 
 export type WorkspacePromptResultDto = {

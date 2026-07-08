@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
+import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
@@ -83,10 +84,12 @@ export function createChatSseHandler(deps: {
 
     let prompt = "";
     let attachmentIds: string[] = [];
+    let agentMode = resolveWorkspaceAgentMode(undefined);
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
+      agentMode = resolveWorkspaceAgentMode(parsed);
       attachmentIds = Array.isArray(parsed?.attachmentIds)
         ? parsed.attachmentIds.map(String).filter(Boolean)
         : [];
@@ -129,7 +132,7 @@ export function createChatSseHandler(deps: {
     });
 
     try {
-      for await (const event of deps.generationService.runTurn({ projectId, prompt })) {
+      for await (const event of deps.generationService.runTurn({ projectId, prompt, agentMode })) {
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
     } catch (error) {

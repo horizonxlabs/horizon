@@ -1,4 +1,4 @@
-import type { WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
+import type { WorkspaceAgentMode, WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
 import { createMessageParser, type ActionType } from "./message-parser";
 import type { LlmCompletionClient } from "./llm-client";
@@ -6,7 +6,7 @@ import type { ChatHistoryStore } from "./chat-history-store";
 import type { ActionRunner, RunnableAction } from "./action-runner";
 import type { createErrorFeedbackTracker } from "./error-feedback";
 import { selectContextFiles } from "./context-selector";
-import { buildSystemPrompt } from "./system-prompt";
+import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 
 export type ActionActionType = "file" | "edit" | "shell" | "migration";
 
@@ -106,12 +106,18 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       const containerId = deps.getContainerId(projectId);
       return deps.readWorkspaceFiles ? deps.readWorkspaceFiles(containerId) : [];
     },
-    async *runTurn(input: { projectId: string; prompt: string }): AsyncIterable<ChatStreamEvent> {
+    async *runTurn(input: {
+      projectId: string;
+      prompt: string;
+      agentMode?: WorkspaceAgentMode;
+    }): AsyncIterable<ChatStreamEvent> {
+      const agentMode: WorkspaceAgentMode = input.agentMode === "plan" ? "plan" : "build";
       const userMessage: WorkspaceChatMessage = {
         id: nextMessageId(),
         projectId: input.projectId,
         role: "user",
         content: input.prompt,
+        agentMode,
         artifactActionIds: [],
         commitSha: null,
         tokenUsage: null,
@@ -140,11 +146,13 @@ export function createGenerationService(deps: GenerationServiceDeps) {
 
         const contextFiles =
           liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
-        const systemPrompt = buildSystemPrompt({
+        const promptInput = {
           template: deps.template,
           contextFiles,
           rollingSummary: deps.chatHistory.getSummary(input.projectId)?.summary ?? null
-        });
+        };
+        const systemPrompt =
+          agentMode === "plan" ? buildPlanSystemPrompt(promptInput) : buildSystemPrompt(promptInput);
 
         const priorMessages = deps.chatHistory
           .listMessages(input.projectId)
@@ -159,6 +167,14 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           systemPrompt,
           messages: [...priorMessages, { role: "user" as const, content: prompt }]
         };
+
+        if (agentMode === "plan") {
+          for await (const token of deps.llmClient.streamChat(chatInput)) {
+            assistantText += token;
+            yield { type: "token", content: token };
+          }
+          break roundLoop;
+        }
 
         for await (const token of deps.llmClient.streamChat(chatInput)) {
           for (const event of parser.push(token)) {
@@ -296,6 +312,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         projectId: input.projectId,
         role: "assistant",
         content: assistantText,
+        agentMode,
         artifactActionIds: actionIds,
         actions: turnActions,
         commitSha: null,
@@ -303,7 +320,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         createdAt: new Date().toISOString()
       };
 
-      if (!turnFailed) {
+      if (!turnFailed && agentMode === "build") {
         const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
         assistantMessage.commitSha = sha;
         deps.onAudit?.({

@@ -1,4 +1,5 @@
-import { Send } from "lucide-react";
+import { ClipboardList, Hammer, Send } from "lucide-react";
+import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { VibeActionRow } from "../components/VibeActionRow";
 import { WorkspaceCodePanel } from "../components/WorkspaceCodePanel";
 import { WorkspaceDatabasePanel } from "../components/WorkspaceDatabasePanel";
@@ -10,6 +11,21 @@ const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
   preview: "Preview",
   code: "Code",
   database: "Database"
+};
+
+const MODE_OPTIONS: Array<{
+  value: WorkspaceAgentMode;
+  label: string;
+  description: string;
+  Icon: typeof ClipboardList;
+}> = [
+  { value: "plan", label: "Plan", description: "Read-only analysis", Icon: ClipboardList },
+  { value: "build", label: "Build", description: "Apply changes", Icon: Hammer }
+];
+
+const SUGGESTIONS: Record<WorkspaceAgentMode, string[]> = {
+  plan: ["Review current workspace", "Draft an implementation plan", "List delivery risks"],
+  build: ["Add an about page", "Make it dark mode", "Add a contact form"]
 };
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
@@ -30,7 +46,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     isUploadingProjectFile,
     projectFileMessage,
     toggleProjectFileAttachment,
-    handleUploadProjectFiles
+    handleUploadProjectFiles,
+    workspaceMode,
+    setWorkspaceMode
   } = app;
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
@@ -46,6 +64,21 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <strong className="vibe-live-project-name">{selectedProject.name}</strong>
         <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
         <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
+        <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
+          {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
+              onClick={() => setWorkspaceMode(value)}
+              aria-pressed={workspaceMode === value}
+              title={description}
+            >
+              <Icon size={14} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
         <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
           {WORKSPACE_TABS.map((tab) => (
             <button
@@ -75,6 +108,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           type="button"
           title="Publish to production (Plan 5 pipeline)"
           className="vibe-live-control vibe-live-control-primary"
+          disabled={workspaceMode === "plan"}
         >
           Publish
         </button>
@@ -84,10 +118,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-thread">
             {vibeMessages.length === 0 && !isVibing && (
               <div className="vibe-live-empty">
-                <div className="vibe-live-empty-icon">✨</div>
-                <div className="vibe-live-empty-title">Build with AI</div>
-                Describe what you want. The AI writes code into your live app, runs it, and commits
-                each change.
+                <div className="vibe-live-empty-title">
+                  {workspaceMode === "plan" ? "Plan with AI" : "Build with AI"}
+                </div>
+                {workspaceMode === "plan"
+                  ? "Ask analysis, tradeoffs, and implementation steps before changes are applied."
+                  : "Describe what you want. The AI writes code into your live app, runs it, and commits each change."}
               </div>
             )}
             {vibeMessages.map((message) =>
@@ -115,7 +151,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             )}
           </div>
           <div className="vibe-live-suggestions">
-            {["Add an about page", "Make it dark mode", "Add a contact form"].map((suggestion) => (
+            {SUGGESTIONS[workspaceMode].map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
@@ -168,7 +204,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <textarea
-                aria-label="Ask AI to build"
+                aria-label={workspaceMode === "plan" ? "Ask AI to plan" : "Ask AI to build"}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -177,7 +213,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (!isVibing && promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder="Ask AI to build…"
+                placeholder={workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"}
                 rows={1}
                 className="vibe-live-input"
               />
