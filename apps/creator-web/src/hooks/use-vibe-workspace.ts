@@ -26,7 +26,7 @@ function browserStorage() {
 }
 
 export function useVibeWorkspace({ selectedProject }: { selectedProject: CreatorProjectView }) {
-  const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
+  const [promptDraft, setPromptDraft] = useState("");
   const [workspaceSnapshot, setWorkspaceSnapshot] = useState<WorkspaceSnapshotResponse | undefined>(
     undefined
   );
