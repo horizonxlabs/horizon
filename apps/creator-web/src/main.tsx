@@ -2015,7 +2015,9 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
                               ? "Create"
                               : action.type === "shell"
                                 ? "Run"
-                                : "Migrate"}{" "}
+                                : action.type === "edit"
+                                  ? "Edit"
+                                  : "Migrate"}{" "}
                             {action.label || action.id}
                           </span>
                         ))}
@@ -2160,9 +2162,11 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
                         {action.ok ? "✓" : "✗"}{" "}
                         {action.type === "file"
                           ? "Create"
-                          : action.type === "shell"
-                            ? "Run"
-                            : "Migrate"}{" "}
+                          : action.type === "edit"
+                            ? "Edit"
+                            : action.type === "shell"
+                              ? "Run"
+                              : "Migrate"}{" "}
                         {action.label || action.id}
                       </div>
                     ))

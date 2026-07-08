@@ -10,7 +10,13 @@ import { buildSystemPrompt } from "./system-prompt";
 
 export type ChatStreamEvent =
   | { type: "token"; content: string }
-  | { type: "action_result"; actionId: string; actionType: "file" | "shell" | "migration"; label: string; ok: boolean }
+  | {
+      type: "action_result";
+      actionId: string;
+      actionType: "file" | "edit" | "shell" | "migration";
+      label: string;
+      ok: boolean;
+    }
   | { type: "commit"; sha: string }
   | { type: "error"; message: string }
   | { type: "done" };
@@ -25,7 +31,11 @@ export interface GenerationServiceDeps {
   getContainerId: (projectId: string) => string;
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   commitAllChanges: (projectId: string, message: string) => Promise<string>;
-  onAudit?: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
+  onAudit?: (event: {
+    action: string;
+    projectId: string;
+    metadata?: Record<string, unknown>;
+  }) => void;
 }
 
 interface OpenAction {
@@ -41,8 +51,24 @@ const MAX_ROUNDS = 3;
 
 function describeRunnable(action: RunnableAction): string {
   if (action.type === "shell") return action.command;
-  if (action.type === "file") return action.filePath;
+  if (action.type === "file" || action.type === "edit") return action.filePath;
   return action.name;
+}
+
+// An <action type="edit"> body carries an aider/opencode-style search/replace block:
+//   <<<<<<< SEARCH
+//   {exact snippet to find}
+//   =======
+//   {replacement}
+//   >>>>>>> REPLACE
+// A malformed body yields an empty find, which the runner rejects as not_found (never a
+// silent whole-file overwrite).
+function parseEditBody(body: string): { find: string; replace: string } {
+  const match = body.match(
+    /<{3,}\s*SEARCH\s*\n([\s\S]*?)\n={3,}[^\n]*\n([\s\S]*?)\n>{3,}\s*REPLACE/
+  );
+  if (match) return { find: match[1], replace: match[2] };
+  return { find: "", replace: "" };
 }
 
 export function createGenerationService(deps: GenerationServiceDeps) {
@@ -88,7 +114,8 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const openActions = new Map<string, OpenAction>();
         let roundFailed = false;
 
-        const contextFiles = liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
+        const contextFiles =
+          liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
         const systemPrompt = buildSystemPrompt({
           template: deps.template,
           contextFiles,
@@ -135,12 +162,31 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               if (!open) continue;
               actionIds.push(open.id);
 
+              const editParsed = open.type === "edit" ? parseEditBody(open.content) : null;
               const runnable: RunnableAction =
                 open.type === "file"
-                  ? { id: open.id, type: "file", filePath: open.filePath ?? "", content: open.content }
-                  : open.type === "shell"
-                    ? { id: open.id, type: "shell", command: open.content }
-                    : { id: open.id, type: "migration", name: open.filePath ?? open.id, sql: open.content };
+                  ? {
+                      id: open.id,
+                      type: "file",
+                      filePath: open.filePath ?? "",
+                      content: open.content
+                    }
+                  : open.type === "edit"
+                    ? {
+                        id: open.id,
+                        type: "edit",
+                        filePath: open.filePath ?? "",
+                        find: editParsed?.find ?? "",
+                        replace: editParsed?.replace ?? ""
+                      }
+                    : open.type === "shell"
+                      ? { id: open.id, type: "shell", command: open.content }
+                      : {
+                          id: open.id,
+                          type: "migration",
+                          name: open.filePath ?? open.id,
+                          sql: open.content
+                        };
 
               const result = await deps.actionRunner.runAction({
                 containerId,
@@ -155,7 +201,13 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               });
               const actionLabel = describeRunnable(runnable);
               turnActions.push({ id: open.id, type: open.type, label: actionLabel, ok: result.ok });
-              yield { type: "action_result", actionId: open.id, actionType: open.type, label: actionLabel, ok: result.ok };
+              yield {
+                type: "action_result",
+                actionId: open.id,
+                actionType: open.type,
+                label: actionLabel,
+                ok: result.ok
+              };
 
               if (!result.ok) {
                 if (deps.errorFeedback.shouldRetry(open.id)) {
@@ -205,7 +257,11 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       if (!turnFailed) {
         const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
         assistantMessage.commitSha = sha;
-        deps.onAudit?.({ action: "generation.commit_created", projectId: input.projectId, metadata: { sha } });
+        deps.onAudit?.({
+          action: "generation.commit_created",
+          projectId: input.projectId,
+          metadata: { sha }
+        });
         deps.chatHistory.appendMessage(assistantMessage);
         yield { type: "commit", sha };
       } else {

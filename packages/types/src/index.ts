@@ -108,7 +108,7 @@ export type ChatMessageRole = "user" | "assistant" | "system";
 
 export interface WorkspaceChatAction {
   id: string;
-  type: "file" | "shell" | "migration";
+  type: "file" | "edit" | "shell" | "migration";
   label: string;
   ok: boolean;
 }

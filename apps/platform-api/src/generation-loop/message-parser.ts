@@ -1,4 +1,4 @@
-export type ActionType = "file" | "shell" | "migration";
+export type ActionType = "file" | "edit" | "shell" | "migration";
 
 export type ParsedEvent =
   | { type: "text"; content: string }
@@ -6,7 +6,7 @@ export type ParsedEvent =
   | { type: "action_chunk"; actionId: string; content: string }
   | { type: "action_end"; actionId: string };
 
-const ACTION_TYPES: ActionType[] = ["file", "shell", "migration"];
+const ACTION_TYPES: ActionType[] = ["file", "edit", "shell", "migration"];
 
 interface ParserState {
   buffer: string;

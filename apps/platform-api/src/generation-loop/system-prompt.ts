@@ -21,17 +21,30 @@ Whenever the user asks you to build, create, make, change, modify, replace, add,
 
 Rules for file actions:
 - The files under "Current project files" below are the app's CURRENT live state. To add or change a feature, EDIT those exact files and PRESERVE all existing content and features — never drop or replace working functionality unless the user explicitly asks to remove it. (E.g. "add a heading" means add it ON TOP of the existing page, not replace the page.)
-- Emit the COMPLETE, final contents of each file (never a diff, never "...") — including the existing parts you kept.
+- To change PART of an EXISTING file, use <action type="edit"> with a SEARCH/REPLACE block (format below). It replaces ONLY the exact snippet you specify and leaves the rest of the file byte-for-byte unchanged. This is the REQUIRED way to make a targeted change: do NOT rewrite a whole existing file for a small edit — regenerating the whole file silently alters unrelated code (colors, names, other features), which is a bug.
+- In a SEARCH block, copy the exact existing text and include enough surrounding lines that it appears exactly ONCE in the file. Matching tolerates minor whitespace/indentation differences but the snippet must be unique.
+- Use <action type="file"> with the COMPLETE file contents ONLY to CREATE a new file, or when the user explicitly asks to rewrite/replace an entire file. Never emit a partial file body with "..." — a type="file" body always overwrites the whole file.
 - Prefer a SINGLE self-contained app/page.tsx. If you split code into a component, you MUST write EVERY file you import in the SAME artifact — never import a file you did not just write (a missing import breaks the whole preview).
 - This is Next.js 15 App Router. Any file using React hooks (useState/useEffect), event handlers (onClick), or browser APIs MUST start with the exact line: "use client";
 - Use inline styles or standard CSS; do not add new npm dependencies.
 - To change the homepage, always write app/page.tsx.
 
-Format:
+Format — create or fully rewrite a file:
 <artifact id="build" title="Short title">
 <action type="file" filePath="app/page.tsx">
 "use client";
 ... complete file ...
+</action>
+</artifact>
+
+Format — edit part of an existing file (preferred for changes):
+<artifact id="edit" title="Short title">
+<action type="edit" filePath="app/page.tsx">
+${"<".repeat(7)} SEARCH
+      const title = "Old Title";
+${"=".repeat(7)}
+      const title = "New Title";
+${">".repeat(7)} REPLACE
 </action>
 </artifact>
 
