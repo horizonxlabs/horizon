@@ -45,11 +45,12 @@ test("creator navigation matches the real app creation lifecycle", () => {
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
 });
 
-test("creator project actions follow PRD before AI workspace generation", () => {
+test("creator project cards open the editing workspace and lifecycle pages exist", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
-  assert.match(creatorSource, /Review PRD/);
-  assert.match(creatorSource, /Open Creator Workspace/);
+  // Clicking a project card opens the editing workspace directly.
+  assert.match(creatorSource, /handleSelectProject\(project, "workspace"/);
+  // Lifecycle pages remain reachable via navigation and page copy.
   assert.match(creatorSource, /Creator Workspace: Leave Management/);
   assert.match(creatorSource, /Publish & Registry/);
   assert.match(creatorSource, /Tickets & Changes/);

@@ -25,7 +25,8 @@ export function CreatorShell({
     isCreatingProject,
     createProjectForm,
     handleCreateProjectField,
-    createProjectMessage
+    createProjectMessage,
+    isEnteringWorkspace
   } = app;
   return (
     <AppShell
@@ -35,6 +36,15 @@ export function CreatorShell({
       userName={bootstrap.userName}
       session={creatorSessionControls}
     >
+      {isEnteringWorkspace ? (
+        <div className="hz-loading-backdrop" role="status" aria-live="polite">
+          <div className="hz-loading-card">
+            <span className="hz-spinner" aria-hidden="true" />
+            <strong>กำลังเริ่ม workspace</strong>
+            <span>กำลัง start sandbox/container ของโปรเจกต์ — อาจใช้เวลาสักครู่</span>
+          </div>
+        </div>
+      ) : null}
       {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"

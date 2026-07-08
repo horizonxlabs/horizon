@@ -34,3 +34,52 @@ export function createPgRunSql(opts: PgRunSqlOptions): (sql: string) => Promise<
     }
   };
 }
+
+export interface PgQueryField {
+  name: string;
+  dataTypeID: number;
+}
+
+export interface PgQueryResult {
+  rows: Record<string, unknown>[];
+  fields: PgQueryField[];
+  rowCount: number;
+}
+
+/**
+ * Like createPgRunSql but returns rows/fields, and accepts bound parameters ($1, $2, …).
+ * Used by the project database browser to run parameterized (never string-interpolated)
+ * statements against the caller-supplied connection — which MUST be the per-project scoped
+ * role so Postgres itself enforces schema isolation. Opens/closes a fresh Client per call.
+ */
+export function createPgQuery(
+  opts: PgRunSqlOptions
+): (sql: string, params?: unknown[]) => Promise<PgQueryResult> {
+  const config = opts.connectionString
+    ? { connectionString: opts.connectionString }
+    : {
+        host: opts.host,
+        port: opts.port,
+        user: opts.user,
+        password: opts.password,
+        database: opts.database
+      };
+
+  return async (sql: string, params: unknown[] = []): Promise<PgQueryResult> => {
+    const client = new Client(config);
+    await client.connect();
+    try {
+      const result = await client.query(sql, params);
+      return {
+        rows: result.rows as Record<string, unknown>[],
+        fields: (result.fields ?? []).map((field) => ({
+          name: field.name,
+          dataTypeID: field.dataTypeID
+        })),
+        rowCount: result.rowCount ?? result.rows.length
+      };
+    } finally {
+      await client.end();
+    }
+  };
+}
