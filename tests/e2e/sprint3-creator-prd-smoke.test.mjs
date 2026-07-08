@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -87,9 +89,20 @@ test("Sprint 3 API smoke creates project generates PRD draft and confirms baseli
   assert.equal(draft.status, 201);
   assert.equal(draft.body.data.version, "0.1");
   assert.ok(draft.body.data.sections.length >= 6);
-  assert.equal(draft.body.data.generatedBy.providerId, services.aiGovernance.resolveRoute("prd_generation").primary.providerId);
-  assert.ok(draft.body.data.sections.find((section) => section.key === "overview")?.body.includes("AI Gateway Summary"));
-  assert.ok(services.aiGovernance.listUsageLogs().some((usage) => usage.scenario === "prd_generation" && usage.status === "succeeded"));
+  assert.equal(
+    draft.body.data.generatedBy.providerId,
+    services.aiGovernance.resolveRoute("prd_generation").primary.providerId
+  );
+  assert.ok(
+    draft.body.data.sections
+      .find((section) => section.key === "overview")
+      ?.body.includes("AI Gateway Summary")
+  );
+  assert.ok(
+    services.aiGovernance
+      .listUsageLogs()
+      .some((usage) => usage.scenario === "prd_generation" && usage.status === "succeeded")
+  );
 
   const baseline = executePlatformApiRequest(services, {
     method: "POST",
@@ -126,7 +139,7 @@ test("Sprint 3 API denies end user project and PRD access", () => {
 });
 
 test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and baseline flow", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
     "โปรเจกต์ของฉัน",
@@ -140,7 +153,14 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const component of ["PageHeader", "SectionCard", "DataTable", "DefinitionGrid", "DecisionPanel", "ToneBadge"]) {
+  for (const component of [
+    "PageHeader",
+    "SectionCard",
+    "DataTable",
+    "DefinitionGrid",
+    "DecisionPanel",
+    "ToneBadge"
+  ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }
 });

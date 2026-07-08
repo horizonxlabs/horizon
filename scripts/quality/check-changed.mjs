@@ -31,7 +31,6 @@ const LARGE_FILE_ALLOWLIST = new Set([
   "apps/platform-api/src/platform-services.ts",
   "apps/admin-web/src/main.tsx",
   "apps/platform-api/src/app-factory.ts",
-  "apps/creator-web/src/main.tsx",
   "apps/platform-api/prisma/seed.ts",
   "apps/platform-api/src/persistence/publish-store-repositories.ts",
   "packages/api-client/src/index.ts",

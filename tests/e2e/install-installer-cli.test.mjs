@@ -10,7 +10,17 @@ test("real installer CLI dry-run succeeds and writes report for checked-in examp
   try {
     const result = spawnSync(
       "node",
-      ["scripts/install/installer.mjs", "--env", ".env.example", "--compose", "docker/docker-compose.yml", "--report-dir", reportDir, "--allow-example-secrets", "--text"],
+      [
+        "scripts/install/installer.mjs",
+        "--env",
+        ".env.example",
+        "--compose",
+        "docker/docker-compose.yml",
+        "--report-dir",
+        reportDir,
+        "--allow-example-secrets",
+        "--text"
+      ],
       { cwd: process.cwd(), encoding: "utf8" }
     );
 
@@ -34,7 +44,16 @@ test("real installer CLI fails dry-run when example secrets are not explicitly a
   try {
     const result = spawnSync(
       "node",
-      ["scripts/install/installer.mjs", "--env", ".env.example", "--compose", "docker/docker-compose.yml", "--report-dir", reportDir, "--text"],
+      [
+        "scripts/install/installer.mjs",
+        "--env",
+        ".env.example",
+        "--compose",
+        "docker/docker-compose.yml",
+        "--report-dir",
+        reportDir,
+        "--text"
+      ],
       { cwd: process.cwd(), encoding: "utf8" }
     );
 

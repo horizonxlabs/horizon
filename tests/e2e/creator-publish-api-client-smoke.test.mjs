@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { createPlatformApiClient, PlatformApiError } = await import("../../packages/api-client/src/index.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiClient, PlatformApiError } = await import(
+  "../../packages/api-client/src/index.ts"
+);
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
@@ -46,7 +50,14 @@ function createCreatorPublishFixture() {
     method: "POST",
     path: "/ai/quotas",
     headers: adminHeaders,
-    body: { scope: "creator", dailyLimit: 1000, monthlyLimit: 5000, warningThreshold: 800, hardStop: true, usedToday: 0 }
+    body: {
+      scope: "creator",
+      dailyLimit: 1000,
+      monthlyLimit: 5000,
+      warningThreshold: 800,
+      hardStop: true,
+      usedToday: 0
+    }
   });
   const project = executePlatformApiRequest(services, {
     method: "POST",
@@ -123,7 +134,11 @@ test("Creator publish API client actions invite approve publish and list registr
   assert.equal(approved.status, "approved");
 
   const afterAccess = await client.getAppAccessSnapshot(projectId);
-  assert.ok(afterAccess.members.some((member) => member.email === pending.requesterEmail && member.roleKey === "manager"));
+  assert.ok(
+    afterAccess.members.some(
+      (member) => member.email === pending.requesterEmail && member.roleKey === "manager"
+    )
+  );
 
   const review = await client.getPublishReview(projectId);
   assert.equal(review.ready, true);

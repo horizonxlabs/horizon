@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -70,11 +72,21 @@ test("Sprint 12 API supports installer preflight and setup wizard", () => {
     body: {
       domain: "platform.company.test",
       databaseUrl: "postgresql://evcp:secret@postgres:5432/evcp",
-      storage: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-backups", secretAccessKey: "secret" },
+      storage: {
+        provider: "minio",
+        endpoint: "http://minio:9000",
+        bucket: "evcp-backups",
+        secretAccessKey: "secret"
+      },
       auth: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
       ai: { providerId: "aip_openai", model: "gpt-4.1" },
       guardrail: { defaultPolicy: "enterprise-default", blockHighRisk: true },
-      backup: { schedule: "0 2 * * *", retentionDays: 30, encryptionMode: "kms", encryptionKeyRef: "kms://evcp/backup" },
+      backup: {
+        schedule: "0 2 * * *",
+        retentionDays: 30,
+        encryptionMode: "kms",
+        encryptionKeyRef: "kms://evcp/backup"
+      },
       firstAdmin: { email: "admin@company.com", displayName: "Platform Admin" }
     }
   });

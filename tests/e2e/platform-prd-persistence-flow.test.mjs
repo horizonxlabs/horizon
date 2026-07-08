@@ -114,8 +114,17 @@ test("runtime memory persistence keeps PRD draft and baseline across service rec
 
   assert.equal(current.status, 200);
   assert.equal(current.body.data.id, baseline.body.data.id);
-  assert.equal(current.body.data.sections.some((section) => section.body.includes("AI Gateway Summary")), true);
+  assert.equal(
+    current.body.data.sections.some((section) => section.body.includes("AI Gateway Summary")),
+    true
+  );
   assert.equal(versions.status, 200);
-  assert.equal(versions.body.data.some((version) => version.id === draft.body.data.id), true);
-  assert.equal(versions.body.data.some((version) => version.id === baseline.body.data.id), true);
+  assert.equal(
+    versions.body.data.some((version) => version.id === draft.body.data.id),
+    true
+  );
+  assert.equal(
+    versions.body.data.some((version) => version.id === baseline.body.data.id),
+    true
+  );
 });

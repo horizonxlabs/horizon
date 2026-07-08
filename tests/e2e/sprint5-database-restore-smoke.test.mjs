@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -110,7 +112,9 @@ test("Sprint 5 API exposes read-only database metadata and denies raw SQL", () =
   assert.equal(database.status, 200);
   assert.equal(database.body.data.readOnly, true);
   assert.ok(database.body.data.tables.some((table) => table.key === "leave_requests"));
-  assert.ok(database.body.data.sampleRecords.some((record) => record.tableKey === "leave_requests"));
+  assert.ok(
+    database.body.data.sampleRecords.some((record) => record.tableKey === "leave_requests")
+  );
 
   const rawSql = executePlatformApiRequest(services, {
     method: "POST",
@@ -147,14 +151,19 @@ test("Sprint 5 API restores frontend checkpoint only and audits result", () => {
     path: `/projects/${projectId}/frontend/checkpoints`,
     headers: creatorHeaders
   });
-  const oldCheckpoint = checkpoints.body.data.checkpoints.find((checkpoint) => checkpoint.version === "fe-0001");
+  const oldCheckpoint = checkpoints.body.data.checkpoints.find(
+    (checkpoint) => checkpoint.version === "fe-0001"
+  );
   assert.ok(oldCheckpoint);
 
   const compare = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${projectId}/frontend/compare`,
     headers: creatorHeaders,
-    body: { fromCheckpointId: oldCheckpoint.id, toCheckpointId: checkpoints.body.data.activeCheckpoint.id }
+    body: {
+      fromCheckpointId: oldCheckpoint.id,
+      toCheckpointId: checkpoints.body.data.activeCheckpoint.id
+    }
   });
   assert.equal(compare.status, 200);
   assert.ok(compare.body.data.changedAreas.includes("UI components"));
@@ -172,7 +181,7 @@ test("Sprint 5 API restores frontend checkpoint only and audits result", () => {
 });
 
 test("Sprint 5 Creator UI exposes database view frontend versions compare and restore boundary", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
     "Database View",
@@ -191,7 +200,13 @@ test("Sprint 5 Creator UI exposes database view frontend versions compare and re
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const component of ["PageHeader", "SectionCard", "DataTable", "DecisionPanel", "ToneBadge"]) {
+  for (const component of [
+    "PageHeader",
+    "SectionCard",
+    "DataTable",
+    "DecisionPanel",
+    "ToneBadge"
+  ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }
 });

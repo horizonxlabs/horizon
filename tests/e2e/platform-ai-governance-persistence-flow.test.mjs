@@ -59,19 +59,37 @@ test("runtime memory persistence keeps AI governance state across service recrea
     method: "POST",
     path: "/ai/routes",
     headers: adminHeaders,
-    body: { scenario: "prd_generation", primaryProviderId: provider.body.data.id, primaryModel: "gpt-4.1-mini" }
+    body: {
+      scenario: "prd_generation",
+      primaryProviderId: provider.body.data.id,
+      primaryModel: "gpt-4.1-mini"
+    }
   });
   await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
     path: "/ai/quotas",
     headers: adminHeaders,
-    body: { scope: "creator", dailyLimit: 1000, monthlyLimit: 30000, warningThreshold: 900, hardStop: true, usedToday: 0 }
+    body: {
+      scope: "creator",
+      dailyLimit: 1000,
+      monthlyLimit: 30000,
+      warningThreshold: 900,
+      hardStop: true,
+      usedToday: 0
+    }
   });
   await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
     path: "/guardrails/rules",
     headers: adminHeaders,
-    body: { name: "Block payroll export", type: "keyword", pattern: "payroll export", severity: "high", action: "block", scope: "organization" }
+    body: {
+      name: "Block payroll export",
+      type: "keyword",
+      pattern: "payroll export",
+      severity: "high",
+      action: "block",
+      scope: "organization"
+    }
   });
   await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
@@ -98,7 +116,22 @@ test("runtime memory persistence keeps AI governance state across service recrea
   });
 
   assert.equal(providers.status, 200);
-  assert.equal(providers.body.data.some((record) => record.name === "OpenAI Restart Safe"), true);
-  assert.equal(apiKeys.body.data.some((record) => record.name === "Restart Safe Key" && !JSON.stringify(record).includes("secret-that-must-not-return")), true);
-  assert.equal(events.body.data.some((record) => record.decision === "block" && record.matchedRuleName === "Block payroll export"), true);
+  assert.equal(
+    providers.body.data.some((record) => record.name === "OpenAI Restart Safe"),
+    true
+  );
+  assert.equal(
+    apiKeys.body.data.some(
+      (record) =>
+        record.name === "Restart Safe Key" &&
+        !JSON.stringify(record).includes("secret-that-must-not-return")
+    ),
+    true
+  );
+  assert.equal(
+    events.body.data.some(
+      (record) => record.decision === "block" && record.matchedRuleName === "Block payroll export"
+    ),
+    true
+  );
 });

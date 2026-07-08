@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -266,7 +269,7 @@ test("Sprint 8 API exposes monitoring dashboard and filtered audit log", () => {
 });
 
 test("Sprint 8 UI exposes ticket-to-PRD domain traceability monitoring and demo surfaces", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
   const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 
   for (const text of [
@@ -282,7 +285,13 @@ test("Sprint 8 UI exposes ticket-to-PRD domain traceability monitoring and demo 
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const text of ["MVP Monitoring", "Service Health", "Audit Filters", "Domain Requests", "Ticket Counts"]) {
+  for (const text of [
+    "MVP Monitoring",
+    "Service Health",
+    "Audit Filters",
+    "Domain Requests",
+    "Ticket Counts"
+  ]) {
     assert.match(adminSource, new RegExp(text));
   }
 });

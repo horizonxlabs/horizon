@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 test("Live OpenAI-compatible adapter path completes through injected provider fetcher", () => {
   const calls = [];
@@ -54,6 +56,8 @@ test("Live OpenAI-compatible adapter path completes through injected provider fe
   assert.equal(calls[0].body.model, "gpt-4.1-mini");
   assert.equal(calls[0].body.messages[0].content, "Create a production-ready PRD section");
   assert.equal(JSON.stringify(result).includes("sk-live-secret"), false);
-  assert.equal(JSON.stringify(services.aiGovernance.listUsageLogs()).includes("sk-live-secret"), false);
+  assert.equal(
+    JSON.stringify(services.aiGovernance.listUsageLogs()).includes("sk-live-secret"),
+    false
+  );
 });
-

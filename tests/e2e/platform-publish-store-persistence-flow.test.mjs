@@ -27,7 +27,13 @@ const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 const endUserHeaders = { "x-mock-user-email": "user@company.com" };
 
-function createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient) {
+function createPersistentServices(
+  coreClient,
+  aiClient,
+  prdClient,
+  workspaceClient,
+  publishStoreClient
+) {
   const services = {
     ...createPlatformApiServices(),
     corePersistence: createCoreRepositoryBackedService(coreClient),
@@ -121,7 +127,13 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   const prdClient = new MemoryPrdPersistenceClient();
   const workspaceClient = new MemoryWorkspacePersistenceClient();
   const publishStoreClient = new MemoryPublishStorePersistenceClient();
-  const firstServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient);
+  const firstServices = createPersistentServices(
+    coreClient,
+    aiClient,
+    prdClient,
+    workspaceClient,
+    publishStoreClient
+  );
   const project = await createProjectBaselineAndPreview(firstServices);
 
   const accessSnapshot = await executePlatformApiRequestAsync(firstServices, {
@@ -171,7 +183,13 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   assert.equal(ticket.status, 201);
   assert.equal(JSON.stringify(ticket.body).includes("secret-that-must-not-return"), false);
 
-  const recreatedServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient);
+  const recreatedServices = createPersistentServices(
+    coreClient,
+    aiClient,
+    prdClient,
+    workspaceClient,
+    publishStoreClient
+  );
   const registry = await executePlatformApiRequestAsync(recreatedServices, {
     method: "GET",
     path: "/app-store/registry",
@@ -201,8 +219,16 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   assert.equal(registry.status, 200);
   assert.ok(registry.body.data.some((entry) => entry.slug === "leave-publish-persisted"));
   assert.equal(storeHome.status, 200);
-  assert.ok(storeHome.body.data.availableApps.some((app) => app.slug === "leave-publish-persisted" && app.accessStatus === "active"));
-  assert.ok(recreatedAccessSnapshot.body.data.accessRequests.some((request) => request.id === access.body.data.id && request.status === "pending"));
+  assert.ok(
+    storeHome.body.data.availableApps.some(
+      (app) => app.slug === "leave-publish-persisted" && app.accessStatus === "active"
+    )
+  );
+  assert.ok(
+    recreatedAccessSnapshot.body.data.accessRequests.some(
+      (request) => request.id === access.body.data.id && request.status === "pending"
+    )
+  );
   assert.equal(ticketStatus.status, 200);
   assert.equal(ticketStatus.body.data.ticketNumber, "TKT-0001");
   assert.ok(ticketStatus.body.data.timeline.some((entry) => entry.status === "submitted"));

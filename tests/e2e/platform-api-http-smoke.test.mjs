@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createPlatformApiApp, executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiApp, executePlatformApiRequest } = await import(
+  "../../apps/platform-api/src/app-factory.ts"
+);
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 test("platform API health and auth/me return shared success envelopes", async () => {
   const services = createPlatformApiServices();

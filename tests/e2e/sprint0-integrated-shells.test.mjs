@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const adminApp = readFileSync("apps/admin-web/src/main.tsx", "utf8");
-const creatorApp = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+const creatorApp = readAllSourceFiles("apps/creator-web/src");
 const storeApp = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
 const navigation = readFileSync("packages/config/src/index.ts", "utf8");
 

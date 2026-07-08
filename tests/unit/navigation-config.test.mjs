@@ -1,6 +1,22 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+
+function readAllSourceFiles(dir) {
+  const entries = readdirSync(dir);
+  let combined = "";
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      combined += readAllSourceFiles(fullPath);
+    } else if (/\.(tsx?|jsx?)$/.test(entry)) {
+      combined += readFileSync(fullPath, "utf8");
+    }
+  }
+  return combined;
+}
 
 test("creator navigation matches the real app creation lifecycle", () => {
   const configSource = readFileSync("packages/config/src/index.ts", "utf8");
@@ -30,9 +46,7 @@ test("creator navigation matches the real app creation lifecycle", () => {
 });
 
 test("creator project actions follow PRD before AI workspace generation", () => {
-  const creatorSource =
-    readFileSync("apps/creator-web/src/main.tsx", "utf8") +
-    readFileSync("apps/creator-web/src/lib/routing.ts", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   assert.match(creatorSource, /Review PRD/);
   assert.match(creatorSource, /Open Creator Workspace/);

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { createPlatformApiClient } = await import("../../packages/api-client/src/index.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
@@ -46,7 +48,14 @@ function createWorkspaceActionsFixture() {
     method: "POST",
     path: "/ai/quotas",
     headers: adminHeaders,
-    body: { scope: "creator", dailyLimit: 1000, monthlyLimit: 5000, warningThreshold: 800, hardStop: true, usedToday: 0 }
+    body: {
+      scope: "creator",
+      dailyLimit: 1000,
+      monthlyLimit: 5000,
+      warningThreshold: 800,
+      hardStop: true,
+      usedToday: 0
+    }
   });
   const project = executePlatformApiRequest(services, {
     method: "POST",
@@ -132,7 +141,9 @@ test("Creator workspace API client blocked prompt keeps existing preview evidenc
     }
   });
 
-  const result = await client.submitWorkspacePrompt(projectId, { prompt: "Add payroll export button" });
+  const result = await client.submitWorkspacePrompt(projectId, {
+    prompt: "Add payroll export button"
+  });
 
   assert.equal(result.guardrail.decision, "block");
   assert.equal(result.task.status, "blocked");

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { createRuntimePlatformApiServices, executePlatformApiRequestAsync } = await import("../../apps/platform-api/src/app-factory.ts");
+const { createRuntimePlatformApiServices, executePlatformApiRequestAsync } = await import(
+  "../../apps/platform-api/src/app-factory.ts"
+);
 
 test("runtime memory persistence accepts signed Platform Auth bearer sessions across core routes", async () => {
   const services = await createRuntimePlatformApiServices({ EVCP_CORE_PERSISTENCE: "memory" });
@@ -61,9 +63,11 @@ test("runtime memory persistence accepts signed Platform Auth bearer sessions ac
   assert.equal(me.body.data.auth.legacyMockFallback, false);
   assert.equal(created.status, 201);
   assert.equal(created.body.data.id, "prj_runtime_session_project");
-  assert.deepEqual(listed.body.data.map((project) => project.slug), ["runtime-session-project"]);
+  assert.deepEqual(
+    listed.body.data.map((project) => project.slug),
+    ["runtime-session-project"]
+  );
   assert.equal(audit.status, 200);
   assert.equal(audit.body.data.length, 1);
   assert.equal(audit.body.data[0].metadata.slug, "runtime-session-project");
 });
-
