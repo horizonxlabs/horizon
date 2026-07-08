@@ -1,5 +1,7 @@
 :root {
-  --evcp-font-thai: "LINE Seed Sans TH", "Noto Sans Thai", "IBM Plex Sans Thai", "Sarabun", "Thonburi", "Leelawadee UI";
+  --evcp-font-thai:
+    "LINE Seed Sans TH", "Noto Sans Thai", "IBM Plex Sans Thai", "Sarabun", "Thonburi",
+    "Leelawadee UI";
   --evcp-font-latin: Inter, "SF Pro Text", "Segoe UI", system-ui;
   --evcp-font-sans: var(--evcp-font-thai), var(--evcp-font-latin), sans-serif;
   --evcp-color-page: #eef3f8;
@@ -30,7 +32,7 @@
   --evcp-radius-control: 8px;
   --evcp-radius-card: 8px;
   --evcp-radius-pill: 999px;
-  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, .05);
+  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 html {
@@ -59,12 +61,12 @@ table {
 
 .app-shell {
   background:
-    linear-gradient(180deg, rgba(219, 234, 254, .42), rgba(238, 243, 248, 0) 260px),
+    linear-gradient(180deg, rgba(219, 234, 254, 0.42), rgba(238, 243, 248, 0) 260px),
     var(--evcp-color-page);
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns .18s ease;
+  transition: grid-template-columns 0.18s ease;
 }
 
 .app-shell-collapsed {
@@ -73,7 +75,7 @@ table {
 
 .sidebar {
   background: #071831;
-  border-right: 1px solid rgba(148, 163, 184, .18);
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
   box-sizing: border-box;
   color: white;
   display: flex;
@@ -83,12 +85,12 @@ table {
   padding: var(--evcp-space-5);
   position: sticky;
   top: 0;
-  transition: padding .18s ease;
+  transition: padding 0.18s ease;
 }
 
 .sidebar-brand {
   align-items: center;
-  border-bottom: 1px solid rgba(226, 232, 240, .14);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.14);
   display: grid;
   gap: var(--evcp-space-3);
   grid-template-columns: 46px minmax(0, 1fr) auto;
@@ -98,16 +100,16 @@ table {
 .sidebar-mark {
   align-items: center;
   background: linear-gradient(135deg, #1d4ed8, #38bdf8);
-  border: 1px solid rgba(255, 255, 255, .18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
-  box-shadow: 0 16px 34px rgba(2, 132, 199, .24);
+  box-shadow: 0 16px 34px rgba(2, 132, 199, 0.24);
   color: white;
   display: inline-flex;
   font-size: 14px;
   font-weight: 900;
   height: 46px;
   justify-content: center;
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
   width: 46px;
 }
 
@@ -136,8 +138,8 @@ table {
 
 .sidebar-toggle {
   align-items: center;
-  background: rgba(255, 255, 255, .08);
-  border: 1px solid rgba(226, 232, 240, .14);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.14);
   border-radius: var(--evcp-radius-control);
   color: #e2e8f0;
   display: inline-flex;
@@ -145,13 +147,16 @@ table {
   justify-content: center;
   min-height: 34px;
   padding: 0;
-  transition: background .16s ease, border-color .16s ease, color .16s ease;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
   width: 34px;
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255, 255, 255, .14);
-  border-color: rgba(226, 232, 240, .24);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(226, 232, 240, 0.24);
   color: #ffffff;
 }
 
@@ -178,11 +183,15 @@ table {
   min-height: 44px;
   padding: 0 var(--evcp-space-3);
   text-decoration: none;
-  transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
 .sidebar-nav a::before {
-  background: rgba(148, 163, 184, .42);
+  background: rgba(148, 163, 184, 0.42);
   border-radius: 999px;
   content: "";
   display: block;
@@ -202,15 +211,15 @@ table {
 }
 
 .sidebar-nav a:hover {
-  background: rgba(255, 255, 255, .08);
-  border-color: rgba(226, 232, 240, .12);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(226, 232, 240, 0.12);
   color: #f8fafc;
 }
 
 .sidebar-nav a.active {
   background: #ffffff;
-  border-color: rgba(255, 255, 255, .34);
-  box-shadow: 0 16px 32px rgba(2, 6, 23, .22);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.22);
   color: #0f172a;
 }
 
@@ -219,8 +228,8 @@ table {
 }
 
 .sidebar-footer {
-  background: rgba(15, 23, 42, .7);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: 4px;
@@ -295,7 +304,7 @@ table {
   font-weight: 900;
   height: 100%;
   justify-content: center;
-  letter-spacing: .02em;
+  letter-spacing: 0.02em;
   width: 100%;
 }
 
@@ -329,10 +338,10 @@ table {
 }
 
 .topbar {
-  background: rgba(255, 255, 255, .84);
-  border: 1px solid rgba(203, 213, 225, .78);
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(203, 213, 225, 0.78);
   border-radius: var(--evcp-radius-card);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
   color: var(--evcp-color-muted);
   font-size: 13px;
   gap: var(--evcp-space-4);
@@ -358,7 +367,7 @@ table {
   color: var(--evcp-color-muted);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -935,7 +944,7 @@ th {
   align-items: start;
   display: grid;
   gap: var(--evcp-space-4);
-  grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
 }
 
 .generated-request-form {
@@ -1050,7 +1059,7 @@ th {
   color: var(--evcp-color-muted);
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: .04em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -1215,7 +1224,7 @@ button {
   display: inline-block;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1362,7 +1371,7 @@ button {
   border-bottom: 1px solid #dbe3ee;
   color: var(--evcp-color-muted);
   font-size: 11px;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
 }
 
 .ds-data-table td {
@@ -1490,7 +1499,7 @@ button {
 .creator-summary-grid {
   display: grid;
   gap: var(--evcp-space-4);
-  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   margin-bottom: var(--evcp-space-5);
 }
 
@@ -1574,7 +1583,7 @@ button {
 
 .creator-dialog-backdrop {
   align-items: center;
-  background: rgba(15, 23, 42, .48);
+  background: rgba(15, 23, 42, 0.48);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -1587,7 +1596,7 @@ button {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-card);
-  box-shadow: 0 28px 70px rgba(15, 23, 42, .28);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
   box-sizing: border-box;
   display: grid;
   gap: var(--evcp-space-4);
@@ -1735,7 +1744,7 @@ button {
 
 .agent-manager-board {
   background: #0f172a;
-  border: 1px solid rgba(148, 163, 184, .28);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: var(--evcp-radius-card);
   color: #e2e8f0;
   display: grid;
@@ -1776,8 +1785,8 @@ button {
 }
 
 .agent-lane-card {
-  background: rgba(255, 255, 255, .06);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: 6px;
@@ -1793,8 +1802,8 @@ button {
 
 .agent-lane-card > div > span:first-child {
   align-items: center;
-  background: rgba(59, 130, 246, .16);
-  border: 1px solid rgba(147, 197, 253, .22);
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(147, 197, 253, 0.22);
   border-radius: var(--evcp-radius-control);
   color: #bfdbfe;
   display: inline-flex;
@@ -1816,7 +1825,7 @@ button {
 }
 
 .agent-lane-progress {
-  background: rgba(148, 163, 184, .24);
+  background: rgba(148, 163, 184, 0.24);
   border-radius: var(--evcp-radius-pill);
   height: 6px;
   overflow: hidden;
@@ -1850,15 +1859,13 @@ button {
 
 .agent-manager-surface {
   align-items: stretch;
-  background:
-    linear-gradient(135deg, rgba(15, 23, 42, .98), rgba(30, 64, 175, .92)),
-    #0f172a;
-  border: 1px solid rgba(191, 219, 254, .22);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 64, 175, 0.92)), #0f172a;
+  border: 1px solid rgba(191, 219, 254, 0.22);
   border-radius: var(--evcp-radius-card);
   color: #e2e8f0;
   display: grid;
   gap: var(--evcp-space-3);
-  grid-template-columns: minmax(280px, .95fr) minmax(360px, 1.35fr) minmax(260px, .8fr);
+  grid-template-columns: minmax(280px, 0.95fr) minmax(360px, 1.35fr) minmax(260px, 0.8fr);
   margin-bottom: var(--evcp-space-4);
   min-width: 0;
   padding: var(--evcp-space-3);
@@ -1899,8 +1906,8 @@ button {
 
 .mission-objective-card {
   align-items: start;
-  background: rgba(255, 255, 255, .08);
-  border: 1px solid rgba(226, 232, 240, .14);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.14);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: var(--evcp-space-3);
@@ -1918,7 +1925,7 @@ button {
   display: block;
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1935,8 +1942,8 @@ button {
 
 .mission-command-bar {
   align-items: end;
-  background: rgba(15, 23, 42, .48);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: var(--evcp-space-2);
@@ -1951,8 +1958,8 @@ button {
 }
 
 .mission-command-bar input {
-  background: rgba(255, 255, 255, .94);
-  border-color: rgba(255, 255, 255, .28);
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.28);
   color: var(--evcp-color-text);
   margin-top: 6px;
 }
@@ -1963,8 +1970,8 @@ button {
 
 .agent-run-list,
 .artifact-review-panel {
-  background: rgba(248, 250, 252, .08);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(248, 250, 252, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: var(--evcp-space-2);
@@ -1989,8 +1996,8 @@ button {
 
 .agent-run-card {
   align-items: center;
-  background: rgba(255, 255, 255, .08);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: var(--evcp-space-3);
@@ -2000,8 +2007,8 @@ button {
 
 .agent-run-icon {
   align-items: center;
-  background: rgba(59, 130, 246, .2);
-  border: 1px solid rgba(147, 197, 253, .24);
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(147, 197, 253, 0.24);
   border-radius: var(--evcp-radius-control);
   color: #bfdbfe;
   display: inline-flex;
@@ -2023,8 +2030,8 @@ button {
 
 .artifact-review-panel article {
   align-items: center;
-  background: rgba(255, 255, 255, .07);
-  border: 1px solid rgba(226, 232, 240, .12);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(226, 232, 240, 0.12);
   border-radius: var(--evcp-radius-card);
   display: grid;
   gap: var(--evcp-space-2);
@@ -2033,13 +2040,13 @@ button {
 }
 
 .artifact-review-panel article.selected {
-  background: rgba(219, 234, 254, .18);
-  border-color: rgba(147, 197, 253, .4);
+  background: rgba(219, 234, 254, 0.18);
+  border-color: rgba(147, 197, 253, 0.4);
 }
 
 .artifact-review-panel article > span {
   align-items: center;
-  background: rgba(255, 255, 255, .13);
+  background: rgba(255, 255, 255, 0.13);
   border-radius: var(--evcp-radius-control);
   color: #bfdbfe;
   display: inline-flex;
@@ -2147,8 +2154,8 @@ button {
 }
 
 .ag-new-conversation {
-  background: rgba(255, 255, 255, .72);
-  border: 1px solid rgba(220, 220, 220, .8);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(220, 220, 220, 0.8);
   border-radius: 7px;
   color: #2f3338;
   font-weight: 700;
@@ -2188,7 +2195,7 @@ button {
 
 .ag-rail-nav a:hover,
 .ag-rail-section button:hover {
-  background: rgba(255, 255, 255, .5);
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .ag-rail-section {
@@ -2222,7 +2229,7 @@ button {
 }
 
 .ag-rail-section article.active {
-  background: rgba(255, 255, 255, .52);
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .ag-rail-section article div,
@@ -2255,7 +2262,7 @@ button {
 
 .ag-rail-footer {
   align-items: start;
-  border-top: 1px solid rgba(194, 194, 194, .55);
+  border-top: 1px solid rgba(194, 194, 194, 0.55);
   color: #6f747a;
   display: grid;
   gap: 8px;
@@ -2276,8 +2283,7 @@ button {
 
 .ag-stage {
   background:
-    radial-gradient(circle at 38% 22%, rgba(37, 99, 235, .045), transparent 30%),
-    #fbfcfe;
+    radial-gradient(circle at 38% 22%, rgba(37, 99, 235, 0.045), transparent 30%), #fbfcfe;
   display: grid;
   gap: 12px;
   grid-template-areas:
@@ -2285,7 +2291,7 @@ button {
     "composer dock"
     "suggestions dock"
     "workbench dock";
-  grid-template-columns: minmax(360px, 1fr) minmax(280px, .48fr);
+  grid-template-columns: minmax(360px, 1fr) minmax(280px, 0.48fr);
   grid-template-rows: auto auto auto minmax(0, 1fr);
   align-content: start;
   min-width: 0;
@@ -2318,7 +2324,7 @@ button {
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-card);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, .08);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
   display: grid;
   grid-area: composer;
   max-width: none;
@@ -2371,7 +2377,7 @@ button {
   gap: 6px;
   grid-area: suggestions;
   max-width: none;
-  opacity: .82;
+  opacity: 0.82;
   overflow: hidden;
   position: static;
   transform: none;
@@ -2379,8 +2385,8 @@ button {
 }
 
 .ag-suggestion-row button {
-  background: rgba(255, 255, 255, .58);
-  border-color: rgba(218, 220, 224, .78);
+  background: rgba(255, 255, 255, 0.58);
+  border-color: rgba(218, 220, 224, 0.78);
   color: #6f747a;
   min-height: 28px;
   flex: 0 0 auto;
@@ -2397,8 +2403,8 @@ button {
 }
 
 .ag-left-workbench article {
-  background: rgba(255, 255, 255, .82);
-  border: 1px solid rgba(218, 220, 224, .72);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(218, 220, 224, 0.72);
   border-radius: 12px;
   display: grid;
   gap: 8px;
@@ -2448,10 +2454,10 @@ button {
 }
 
 .ag-worktree-menu {
-  background: rgba(255, 255, 255, .9);
-  border: 1px solid rgba(218, 220, 224, .9);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(218, 220, 224, 0.9);
   border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(60, 64, 67, .12);
+  box-shadow: 0 10px 24px rgba(60, 64, 67, 0.12);
   display: none;
   gap: 2px;
   left: calc(50% - 270px);
@@ -2484,8 +2490,8 @@ button {
 }
 
 .ag-dock-card {
-  background: rgba(255, 255, 255, .82);
-  border: 1px solid rgba(218, 220, 224, .72);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(218, 220, 224, 0.72);
   border-radius: 12px;
   display: grid;
   gap: 8px;
@@ -2505,7 +2511,7 @@ button {
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) auto;
 }
 
 .ag-agent-list strong,
@@ -2546,8 +2552,8 @@ button {
 }
 
 .ag-mini-preview span {
-  background: rgba(248, 250, 252, .9);
-  border: 1px solid rgba(218, 220, 224, .78);
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(218, 220, 224, 0.78);
   border-radius: 8px;
   color: #5f6368;
   font-size: 12px;
@@ -2735,7 +2741,7 @@ button {
 
 .vibe-file-tree {
   background: #0f172a;
-  border: 1px solid rgba(148, 163, 184, .28);
+  border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: var(--evcp-radius-card);
   color: #e2e8f0;
   display: grid;
@@ -2747,7 +2753,7 @@ button {
 
 .vibe-file-tree > div {
   align-items: center;
-  border-bottom: 1px solid rgba(226, 232, 240, .14);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.14);
   display: flex;
   gap: var(--evcp-space-2);
   grid-column: 1 / -1;
@@ -2755,8 +2761,8 @@ button {
 }
 
 .vibe-file-tree button {
-  background: rgba(255, 255, 255, .1);
-  border-color: rgba(226, 232, 240, .16);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(226, 232, 240, 0.16);
   color: #f8fafc;
   font-size: 12px;
   justify-content: flex-start;
@@ -2787,7 +2793,7 @@ button {
 
 .live-preview-frame {
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, .96), rgba(239, 246, 255, .96)),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(239, 246, 255, 0.96)),
     var(--evcp-color-surface);
   border: 1px solid #bfdbfe;
   border-radius: var(--evcp-radius-card);
@@ -2880,7 +2886,7 @@ button {
 .vibe-bottom-grid {
   display: grid;
   gap: var(--evcp-space-3);
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
 }
 
 .vibe-code-panel,
@@ -2933,7 +2939,7 @@ button {
   align-items: stretch;
   display: grid;
   gap: var(--evcp-space-4);
-  grid-template-columns: minmax(0, 1.2fr) minmax(260px, .6fr) minmax(260px, .8fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.6fr) minmax(260px, 0.8fr);
 }
 
 .vibe-boundary-panel .ds-decision-panel {
@@ -3174,7 +3180,7 @@ button {
 }
 
 .publish-checklist div {
-  grid-template-columns: auto 1fr minmax(90px, .7fr) auto;
+  grid-template-columns: auto 1fr minmax(90px, 0.7fr) auto;
 }
 
 .publish-checklist svg,
@@ -3214,7 +3220,7 @@ button {
 }
 
 .sprint8-subgrid {
-  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
 }
 
 .sprint8-conversion-grid {
@@ -3445,7 +3451,7 @@ button {
   align-items: stretch;
   display: grid;
   gap: var(--evcp-space-4);
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
 }
 
 .provider-test-call-summary {
@@ -3708,7 +3714,7 @@ button {
 
 button:disabled {
   cursor: not-allowed;
-  opacity: .58;
+  opacity: 0.58;
 }
 
 .operations-recovery-shell .ds-definition-grid {
@@ -3857,7 +3863,7 @@ button:disabled {
   }
 
   .sidebar {
-    border-bottom: 1px solid rgba(148, 163, 184, .22);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
     border-right: 0;
     height: auto;
     position: static;
@@ -3923,23 +3929,23 @@ button:disabled {
   .ai-governance-action-panel.compact,
   .admin-monitoring-kpis,
   .admin-monitoring-grid,
-    .auth-kpi-grid,
-    .auth-policy-grid,
-    .runtime-kpi-grid,
-    .runtime-hardening-layout,
-    .runtime-hardening-grid,
-    .knowledge-skill-kpi-grid,
-    .knowledge-skill-layout,
-    .knowledge-skill-grid,
-    .operations-recovery-kpi-grid,
-    .operations-recovery-layout,
-    .operations-recovery-grid,
-    .observability-license-kpi-grid,
-    .observability-license-layout,
-    .observability-license-grid,
-    .security-release-kpi-grid,
-    .security-release-layout,
-    .security-release-grid,
+  .auth-kpi-grid,
+  .auth-policy-grid,
+  .runtime-kpi-grid,
+  .runtime-hardening-layout,
+  .runtime-hardening-grid,
+  .knowledge-skill-kpi-grid,
+  .knowledge-skill-layout,
+  .knowledge-skill-grid,
+  .operations-recovery-kpi-grid,
+  .operations-recovery-layout,
+  .operations-recovery-grid,
+  .observability-license-kpi-grid,
+  .observability-license-layout,
+  .observability-license-grid,
+  .security-release-kpi-grid,
+  .security-release-layout,
+  .security-release-grid,
   .creator-summary-grid,
   .creator-prd-layout,
   .creator-prd-workbench,
@@ -4141,13 +4147,13 @@ button:disabled {
   .store-app-card,
   .generated-app-header,
   .generated-app-kpis,
-    .generated-app-grid,
-    .generated-request-list article,
-    .first-run-hero,
-    .first-run-layout,
-    .first-run-form,
-    .first-run-subgrid,
-    .creator-project-form {
+  .generated-app-grid,
+  .generated-request-list article,
+  .first-run-hero,
+  .first-run-layout,
+  .first-run-form,
+  .first-run-subgrid,
+  .creator-project-form {
     grid-template-columns: 1fr;
   }
 
@@ -4242,4 +4248,30 @@ button:disabled {
   .prompt-composer {
     display: grid;
   }
+}
+
+/* Vibe chat: shimmering "in progress" action title (opencode/lovable style). */
+@keyframes vibe-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+.vibe-shimmer {
+  background: linear-gradient(
+    90deg,
+    #9ca3af 0%,
+    #9ca3af 40%,
+    #111827 50%,
+    #9ca3af 60%,
+    #9ca3af 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: vibe-shimmer 1.4s linear infinite;
 }

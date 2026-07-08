@@ -8,18 +8,34 @@ import type { createErrorFeedbackTracker } from "./error-feedback";
 import { selectContextFiles } from "./context-selector";
 import { buildSystemPrompt } from "./system-prompt";
 
+export type ActionActionType = "file" | "edit" | "shell" | "migration";
+
 export type ChatStreamEvent =
   | { type: "token"; content: string }
+  // Emitted when an action begins so the UI can show a live "in progress" row (shimmer).
+  | { type: "action_start"; actionId: string; actionType: ActionActionType; label: string }
+  // Emitted when the action finishes. Carries a preview the UI can expand: find/replace for an
+  // edit (rendered as a diff), body for file/shell/migration, or error text on failure.
   | {
       type: "action_result";
       actionId: string;
-      actionType: "file" | "edit" | "shell" | "migration";
+      actionType: ActionActionType;
       label: string;
       ok: boolean;
+      find?: string;
+      replace?: string;
+      body?: string;
+      error?: string;
     }
   | { type: "commit"; sha: string }
   | { type: "error"; message: string }
   | { type: "done" };
+
+// Preview payloads can be large (whole files); cap them so the SSE stream stays lean.
+const PREVIEW_MAX = 4000;
+function clip(text: string): string {
+  return text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX)}\n… (truncated)` : text;
+}
 
 export interface GenerationServiceDeps {
   llmClient: LlmCompletionClient;
@@ -150,6 +166,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 filePath: event.filePath,
                 content: ""
               });
+              yield {
+                type: "action_start",
+                actionId: event.actionId,
+                actionType: event.actionType,
+                label: event.filePath ?? ""
+              };
               continue;
             }
             if (event.type === "action_chunk") {
@@ -201,12 +223,31 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               });
               const actionLabel = describeRunnable(runnable);
               turnActions.push({ id: open.id, type: open.type, label: actionLabel, ok: result.ok });
+              // Build an expandable preview: a diff for edits, otherwise the written body / command
+              // / SQL; the error text when the action failed.
+              const preview: { find?: string; replace?: string; body?: string; error?: string } =
+                {};
+              if (!result.ok) {
+                preview.error = result.error;
+              } else if (runnable.type === "edit") {
+                preview.find = clip(runnable.find);
+                preview.replace = clip(runnable.replace);
+              } else if (runnable.type === "file") {
+                preview.body = clip(runnable.content);
+              } else if (runnable.type === "shell") {
+                preview.body = clip(
+                  `$ ${runnable.command}\n${result.ok ? result.stdout : ""}`.trim()
+                );
+              } else if (runnable.type === "migration") {
+                preview.body = clip(runnable.sql);
+              }
               yield {
                 type: "action_result",
                 actionId: open.id,
                 actionType: open.type,
                 label: actionLabel,
-                ok: result.ok
+                ok: result.ok,
+                ...preview
               };
 
               if (!result.ok) {

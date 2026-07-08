@@ -280,6 +280,135 @@ function vibeAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+// A single AI action shown in the vibe chat: live "running" while the AI streams/executes it,
+// then "done"/"failed", expandable to the diff (edit), written body (file), command/SQL, or error.
+type VibeAction = {
+  id: string;
+  type: string;
+  label: string;
+  status: "running" | "done" | "failed";
+  find?: string;
+  replace?: string;
+  body?: string;
+  error?: string;
+};
+
+const VIBE_ACTION_VERBS: Record<string, [string, string]> = {
+  file: ["Creating", "Created"],
+  edit: ["Editing", "Edited"],
+  shell: ["Running", "Ran"],
+  migration: ["Migrating", "Migrated"]
+};
+
+function vibeActionVerb(type: string, status: string): string {
+  if (status === "failed") return "Failed";
+  const [active, done] = VIBE_ACTION_VERBS[type] ?? ["Working", "Done"];
+  return status === "running" ? active : done;
+}
+
+function vibeActionIcon(type: string): string {
+  return type === "file"
+    ? "📄"
+    : type === "edit"
+      ? "✏️"
+      : type === "shell"
+        ? "⚡"
+        : type === "migration"
+          ? "🗄️"
+          : "•";
+}
+
+function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
+  const [open, setOpen] = useState(false);
+  const hasBody = Boolean(action.find || action.replace || action.body || action.error);
+  const running = action.status === "running";
+  const failed = action.status === "failed";
+  const accent = running ? "#6b7280" : failed ? "#dc2626" : "#059669";
+  const bg = running ? "#f9fafb" : failed ? "#fef2f2" : "#f0fdf4";
+  const border = running ? "#e5e7eb" : failed ? "#fecaca" : "#bbf7d0";
+  const isDiff = action.find !== undefined || action.replace !== undefined;
+  return (
+    <div
+      style={{
+        border: `1px solid ${border}`,
+        background: bg,
+        borderRadius: 8,
+        overflow: "hidden",
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 12
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => hasBody && setOpen((o) => !o)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          width: "100%",
+          background: "none",
+          border: "none",
+          padding: "5px 9px",
+          cursor: hasBody ? "pointer" : "default",
+          color: accent,
+          textAlign: "left"
+        }}
+      >
+        <span aria-hidden>{vibeActionIcon(action.type)}</span>
+        <span className={running ? "vibe-shimmer" : ""} style={{ fontWeight: 600 }}>
+          {running ? "" : failed ? "✗ " : "✓ "}
+          {vibeActionVerb(action.type, action.status)}
+        </span>
+        <span
+          style={{
+            color: "#374151",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            flex: 1
+          }}
+        >
+          {action.label}
+        </span>
+        {hasBody && <span style={{ color: "#9ca3af" }}>{open ? "▾" : "▸"}</span>}
+      </button>
+      {open && hasBody && (
+        <div
+          style={{
+            borderTop: "1px solid #e5e7eb",
+            background: "#0b1021",
+            color: "#e5e7eb",
+            padding: 10,
+            maxHeight: 320,
+            overflow: "auto"
+          }}
+        >
+          {action.error ? (
+            <pre style={{ margin: 0, color: "#fca5a5", whiteSpace: "pre-wrap" }}>
+              {action.error}
+            </pre>
+          ) : isDiff ? (
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+              {(action.find ?? "").split("\n").map((line, i) => (
+                <div key={`f${i}`} style={{ color: "#fca5a5" }}>
+                  - {line}
+                </div>
+              ))}
+              {(action.replace ?? "").split("\n").map((line, i) => (
+                <div key={`r${i}`} style={{ color: "#86efac" }}>
+                  + {line}
+                </div>
+              ))}
+            </pre>
+          ) : (
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{action.body}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Ensure the project has a running dev container before chatting. Idempotent: an
 // already-provisioned workspace (409 / "already") is treated as success.
 async function ensureVibeWorkspace(projectId: string, slug: string): Promise<void> {
@@ -892,7 +1021,6 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  type VibeAction = { id: string; type: string; label: string; ok: boolean };
   type VibeMessage = {
     id: string;
     role: "user" | "assistant";
@@ -1058,7 +1186,7 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
               id: string;
               role: string;
               content: string;
-              actions?: VibeAction[];
+              actions?: Array<{ id: string; type: string; label: string; ok?: boolean }>;
               commitSha?: string | null;
             }>;
           } | null
@@ -1072,7 +1200,14 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
                 id: message.id,
                 role: message.role === "user" ? "user" : "assistant",
                 text: message.content,
-                actions: Array.isArray(message.actions) ? message.actions : [],
+                actions: Array.isArray(message.actions)
+                  ? message.actions.map((a) => ({
+                      id: a.id,
+                      type: a.type,
+                      label: a.label,
+                      status: (a.ok === false ? "failed" : "done") as VibeAction["status"]
+                    }))
+                  : [],
                 commitSha: message.commitSha ?? undefined
               }))
           );
@@ -1294,22 +1429,43 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
               : "";
         if (type === "token") {
           patchAssistant((m) => ({ ...m, text: m.text + field("content") }));
+        } else if (type === "action_start") {
+          const id = field("actionId");
+          patchAssistant((m) => ({
+            ...m,
+            actions: m.actions.some((a) => a.id === id)
+              ? m.actions
+              : [
+                  ...m.actions,
+                  {
+                    id,
+                    type: field("actionType") || "file",
+                    label: field("label"),
+                    status: "running" as const
+                  }
+                ]
+          }));
+          setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
         } else if (type === "action_result") {
           const ok =
             data && typeof data === "object" && "ok" in data
               ? Boolean((data as { ok: boolean }).ok)
               : false;
+          const id = field("actionId");
+          const patch = {
+            type: field("actionType") || "file",
+            label: field("label"),
+            status: (ok ? "done" : "failed") as VibeAction["status"],
+            find: field("find") || undefined,
+            replace: field("replace") || undefined,
+            body: field("body") || undefined,
+            error: field("error") || undefined
+          };
           patchAssistant((m) => ({
             ...m,
-            actions: [
-              ...m.actions,
-              {
-                id: field("actionId"),
-                type: field("actionType") || "file",
-                label: field("label"),
-                ok
-              }
-            ]
+            actions: m.actions.some((a) => a.id === id)
+              ? m.actions.map((a) => (a.id === id ? { ...a, ...patch } : a))
+              : [...m.actions, { id, ...patch }]
           }));
         } else if (type === "commit") {
           const sha = field("sha");
@@ -1993,33 +2149,11 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
                       {message.text || (isVibing ? "▋" : "")}
                     </div>
                     {message.actions.length > 0 && (
-                      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {message.actions.map((action, index) => (
-                          <span
-                            key={index}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 5,
-                              fontSize: 12,
-                              fontFamily: "ui-monospace, monospace",
-                              color: action.ok ? "#059669" : "#dc2626",
-                              background: action.ok ? "#ecfdf5" : "#fef2f2",
-                              border: action.ok ? "1px solid #a7f3d0" : "1px solid #fecaca",
-                              padding: "2px 9px",
-                              borderRadius: 8
-                            }}
-                          >
-                            {action.ok ? "✓" : "✗"}{" "}
-                            {action.type === "file"
-                              ? "Create"
-                              : action.type === "shell"
-                                ? "Run"
-                                : action.type === "edit"
-                                  ? "Edit"
-                                  : "Migrate"}{" "}
-                            {action.label || action.id}
-                          </span>
+                      <div
+                        style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}
+                      >
+                        {message.actions.map((action) => (
+                          <VibeActionRow key={action.id} action={action} />
                         ))}
                       </div>
                     )}
@@ -2148,28 +2282,13 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
                     No changes yet. Ask the AI to build something.
                   </div>
                 ) : (
-                  vibeMessages
-                    .flatMap((message) => message.actions)
-                    .map((action, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          padding: "4px 0",
-                          fontFamily: "ui-monospace, monospace",
-                          color: action.ok ? "#059669" : "#dc2626"
-                        }}
-                      >
-                        {action.ok ? "✓" : "✗"}{" "}
-                        {action.type === "file"
-                          ? "Create"
-                          : action.type === "edit"
-                            ? "Edit"
-                            : action.type === "shell"
-                              ? "Run"
-                              : "Migrate"}{" "}
-                        {action.label || action.id}
-                      </div>
-                    ))
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {vibeMessages
+                      .flatMap((message) => message.actions)
+                      .map((action, index) => (
+                        <VibeActionRow key={`${action.id}-${index}`} action={action} />
+                      ))}
+                  </div>
                 )}
                 <div style={{ marginTop: 20, color: "#9ca3af", fontSize: 12 }}>
                   A full file browser is on the roadmap — use the Preview tab to see the running
