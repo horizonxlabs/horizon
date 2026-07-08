@@ -3800,11 +3800,28 @@ function registerPlatformRoutes(
   );
   registerProjectDbRoutes({
     get: (path, handler) => routes.get(path, handler),
+    post: (path, handler) => routes.post(path, handler),
     resolveAccessibleProjectIds: async (headers) => {
       const { user } = await resolvePersistenceAuth(services, headers);
       return (await services.corePersistence!.listProjects(user)).map((project) => project.id);
     },
     getDatabaseUrl: (projectId) => services.workspaceOrchestrator.getProjectDatabaseUrl(projectId),
+    audit: (headers, projectId, action, detail) => {
+      void (async () => {
+        try {
+          const { user } = await resolvePersistenceAuth(services, headers);
+          await services.corePersistence?.recordAudit({
+            actorId: user.id,
+            action,
+            resourceType: "project_database",
+            resourceId: projectId,
+            metadata: { table: detail }
+          });
+        } catch {
+          /* audit is best-effort; never block or fail a completed write */
+        }
+      })();
+    },
     ok: (response, body) =>
       sendPlatformResponse(response, { status: HttpStatus.OK, body: success(body) }),
     fail: (response, status, code, message) =>

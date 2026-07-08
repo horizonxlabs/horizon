@@ -155,6 +155,98 @@ export function createProjectQuery(connectionString: string): QueryFn {
   return createPgQuery({ connectionString });
 }
 
+// --- Writes: structured, by primary key, every value bound as a parameter ---
+
+function assertKnownColumns(table: ProjectDbTable, keys: string[]): void {
+  const known = new Set(table.columns.map((column) => column.name));
+  for (const key of keys) {
+    if (!known.has(key)) throw new ProjectDbError(`Unknown column: ${key}`, 400);
+  }
+}
+
+function primaryKeyColumns(table: ProjectDbTable): string[] {
+  return table.columns.filter((column) => column.isPrimaryKey).map((column) => column.name);
+}
+
+function requirePrimaryKeyValues(table: ProjectDbTable, pk: Record<string, unknown>): string[] {
+  const pkColumns = primaryKeyColumns(table);
+  if (pkColumns.length === 0) {
+    throw new ProjectDbError(
+      `Table "${table.name}" has no primary key; row edits are disabled`,
+      400
+    );
+  }
+  assertKnownColumns(table, Object.keys(pk));
+  for (const column of pkColumns) {
+    if (!(column in pk)) throw new ProjectDbError(`Missing primary key value: ${column}`, 400);
+  }
+  return pkColumns;
+}
+
+export async function insertRow(
+  query: QueryFn,
+  schema: string,
+  table: string,
+  values: Record<string, unknown>,
+  snapshot?: ProjectDbSchema
+): Promise<Record<string, unknown> | null> {
+  const definition = requireTable(snapshot ?? (await introspectSchema(query, schema)), table);
+  const keys = Object.keys(values ?? {});
+  if (keys.length === 0) throw new ProjectDbError("No values provided", 400);
+  assertKnownColumns(definition, keys);
+  const columns = keys.map(quoteIdent).join(", ");
+  const placeholders = keys.map((_, index) => `$${index + 1}`).join(", ");
+  const result = await query(
+    `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns}) VALUES (${placeholders}) RETURNING *`,
+    keys.map((key) => values[key])
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function updateRow(
+  query: QueryFn,
+  schema: string,
+  table: string,
+  pk: Record<string, unknown>,
+  changes: Record<string, unknown>,
+  snapshot?: ProjectDbSchema
+): Promise<Record<string, unknown>> {
+  const definition = requireTable(snapshot ?? (await introspectSchema(query, schema)), table);
+  const pkColumns = requirePrimaryKeyValues(definition, pk);
+  const changeKeys = Object.keys(changes ?? {});
+  if (changeKeys.length === 0) throw new ProjectDbError("No changes provided", 400);
+  assertKnownColumns(definition, changeKeys);
+  const setClause = changeKeys.map((key, index) => `${quoteIdent(key)} = $${index + 1}`).join(", ");
+  const whereClause = pkColumns
+    .map((column, index) => `${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
+    .join(" AND ");
+  const result = await query(
+    `UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} SET ${setClause} WHERE ${whereClause} RETURNING *`,
+    [...changeKeys.map((key) => changes[key]), ...pkColumns.map((column) => pk[column])]
+  );
+  if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
+  return result.rows[0];
+}
+
+export async function deleteRow(
+  query: QueryFn,
+  schema: string,
+  table: string,
+  pk: Record<string, unknown>,
+  snapshot?: ProjectDbSchema
+): Promise<void> {
+  const definition = requireTable(snapshot ?? (await introspectSchema(query, schema)), table);
+  const pkColumns = requirePrimaryKeyValues(definition, pk);
+  const whereClause = pkColumns
+    .map((column, index) => `${quoteIdent(column)} = $${index + 1}`)
+    .join(" AND ");
+  const result = await query(
+    `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} WHERE ${whereClause}`,
+    pkColumns.map((column) => pk[column])
+  );
+  if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
+}
+
 // --- HTTP route registration (kept here to keep app-factory small) ---
 
 interface DbRouteResponse {
@@ -164,26 +256,33 @@ interface DbRouteResponse {
 interface DbRouteRequest {
   headers: Record<string, string | string[] | undefined>;
   params?: Record<string, string>;
+  body?: Record<string, unknown>;
 }
+type DbRouteHandler = (request: DbRouteRequest, response: DbRouteResponse) => void | Promise<void>;
 
 export interface ProjectDbRouteDeps {
-  get: (
-    path: string,
-    handler: (request: DbRouteRequest, response: DbRouteResponse) => void | Promise<void>
-  ) => void;
+  get: (path: string, handler: DbRouteHandler) => void;
+  post: (path: string, handler: DbRouteHandler) => void;
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => string | undefined;
+  /** Record a mutation for compliance (who/what/when). Called only after a write succeeds. */
+  audit: (
+    headers: DbRouteRequest["headers"],
+    projectId: string,
+    action: string,
+    detail: string
+  ) => void;
   ok: (response: DbRouteResponse, body: unknown) => void;
   fail: (response: DbRouteResponse, status: number, code: string, message: string) => void;
 }
 
-/** Registers the per-project database browser routes onto the platform HTTP router. */
+/** Registers the per-project database browser + editor routes onto the platform HTTP router. */
 export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   const withDb = async (
     request: DbRouteRequest,
     response: DbRouteResponse,
-    run: (query: QueryFn, schema: string) => Promise<unknown>
+    run: (query: QueryFn, schema: string, projectId: string) => Promise<unknown>
   ) => {
     try {
       const projectId = String(request.params?.projectId ?? "");
@@ -192,19 +291,57 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const url = deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
-      deps.ok(response, await run(createProjectQuery(url), schemaFromConnectionString(url)));
+      deps.ok(
+        response,
+        await run(createProjectQuery(url), schemaFromConnectionString(url), projectId)
+      );
     } catch (error) {
       const status = error instanceof ProjectDbError ? error.status : 500;
       deps.fail(response, status, "DATABASE_BROWSE_ERROR", (error as Error).message);
     }
   };
 
+  const tableOf = (request: DbRouteRequest) => String(request.params?.table ?? "");
+  const asRecord = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
   deps.get("/projects/:projectId/db/schema", (request, response) =>
     withDb(request, response, (query, schema) => introspectSchema(query, schema))
   );
   deps.get("/projects/:projectId/db/tables/:table", (request, response) =>
     withDb(request, response, (query, schema) =>
-      readTablePage(query, schema, String(request.params?.table ?? ""), 100, 0)
+      readTablePage(query, schema, tableOf(request), 100, 0)
     )
+  );
+
+  // Single write endpoint (the router exposes GET/POST only); the op selects the mutation. Every
+  // op goes through the validated, parameterized, primary-key-targeted helpers above.
+  deps.post("/projects/:projectId/db/tables/:table/mutate", (request, response) =>
+    withDb(request, response, async (query, schema, projectId) => {
+      const table = tableOf(request);
+      const op = String(request.body?.op ?? "");
+      if (op === "insert") {
+        const row = await insertRow(query, schema, table, asRecord(request.body?.values));
+        deps.audit(request.headers, projectId, "database.row.insert", table);
+        return { row };
+      }
+      if (op === "update") {
+        const row = await updateRow(
+          query,
+          schema,
+          table,
+          asRecord(request.body?.pk),
+          asRecord(request.body?.changes)
+        );
+        deps.audit(request.headers, projectId, "database.row.update", table);
+        return { row };
+      }
+      if (op === "delete") {
+        await deleteRow(query, schema, table, asRecord(request.body?.pk));
+        deps.audit(request.headers, projectId, "database.row.delete", table);
+        return { deleted: true };
+      }
+      throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
+    })
   );
 }
