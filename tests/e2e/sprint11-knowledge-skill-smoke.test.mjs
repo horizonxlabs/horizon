@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -350,7 +352,9 @@ test("Sprint 11 workspace prompt returns governed knowledge and skill metadata",
   });
 
   assert.equal(prompt.status, 201);
-  assert.deepEqual(prompt.body.data.knowledgeRetrieval.matchedVersionIds, [knowledgeVersion.body.data.id]);
+  assert.deepEqual(prompt.body.data.knowledgeRetrieval.matchedVersionIds, [
+    knowledgeVersion.body.data.id
+  ]);
   assert.equal(prompt.body.data.skillSelection.skillVersionId, skillVersion.body.data.id);
   assert.deepEqual(prompt.body.data.task.knowledgeVersionIds, [knowledgeVersion.body.data.id]);
 });

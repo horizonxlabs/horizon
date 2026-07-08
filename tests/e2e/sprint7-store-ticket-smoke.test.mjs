@@ -1,9 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -192,11 +195,14 @@ test("Sprint 7 API routes tickets to Creator inbox and denies invisible ticket s
 
 test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow", () => {
   const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   assert.equal(existsSync("apps/app-store-pwa/public/manifest.webmanifest"), true);
   assert.equal(existsSync("apps/app-store-pwa/public/offline.html"), true);
-  assert.match(readFileSync("apps/app-store-pwa/public/manifest.webmanifest", "utf8"), /Enterprise App Store/);
+  assert.match(
+    readFileSync("apps/app-store-pwa/public/manifest.webmanifest", "utf8"),
+    /Enterprise App Store/
+  );
 
   for (const text of [
     "App Store",
@@ -213,7 +219,12 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
     assert.match(storeSource, new RegExp(text));
   }
 
-  for (const text of ["Creator Ticket Inbox", "Convert to PRD Change", "Convert to AI Prompt", "Resolve"]) {
+  for (const text of [
+    "Creator Ticket Inbox",
+    "Convert to PRD Change",
+    "Convert to AI Prompt",
+    "Resolve"
+  ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 });

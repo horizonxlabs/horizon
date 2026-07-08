@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -108,7 +110,12 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
     method: "POST",
     path: `/projects/${projectId}/app/invitations`,
     headers: creatorHeaders,
-    body: { email: "user@company.com", roleKey: "manager", userType: "internal", note: "Join manager queue" }
+    body: {
+      email: "user@company.com",
+      roleKey: "manager",
+      userType: "internal",
+      note: "Join manager queue"
+    }
   });
   assert.equal(invite.status, 201);
   assert.equal(invite.body.data.status, "pending");
@@ -117,7 +124,11 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
     method: "POST",
     path: `/projects/${projectId}/app/access-requests`,
     headers: creatorHeaders,
-    body: { requesterEmail: "manager@company.com", requestedRoleKey: "manager", reason: "Approval queue" }
+    body: {
+      requesterEmail: "manager@company.com",
+      requestedRoleKey: "manager",
+      reason: "Approval queue"
+    }
   });
   assert.equal(request.status, 201);
 
@@ -181,7 +192,7 @@ test("Sprint 6 API blocks incomplete publish and denies end user creator-side ma
 });
 
 test("Sprint 6 Creator UI exposes app users roles invite access manifest publish deployment and registry", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
     "App Users",
@@ -200,7 +211,14 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const component of ["PageHeader", "SectionCard", "DataTable", "DefinitionGrid", "DecisionPanel", "ToneBadge"]) {
+  for (const component of [
+    "PageHeader",
+    "SectionCard",
+    "DataTable",
+    "DefinitionGrid",
+    "DecisionPanel",
+    "ToneBadge"
+  ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }
 });

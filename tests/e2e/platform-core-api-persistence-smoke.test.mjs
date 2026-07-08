@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { executePlatformApiRequestAsync } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
-const { MemoryCorePersistenceClient, createCoreRepositoryBackedService } = await import("../../apps/platform-api/src/persistence/core-repositories.ts");
+const { executePlatformApiRequestAsync } = await import(
+  "../../apps/platform-api/src/app-factory.ts"
+);
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
+const { MemoryCorePersistenceClient, createCoreRepositoryBackedService } = await import(
+  "../../apps/platform-api/src/persistence/core-repositories.ts"
+);
 
 test("core API persistence mode runs auth project and audit routes as one request flow", async () => {
   const services = {
@@ -46,5 +52,8 @@ test("core API persistence mode runs auth project and audit routes as one reques
   assert.equal(projects.body.ok, true);
   assert.equal(projects.body.data.length, 1);
   assert.equal(filteredAudit.body.ok, true);
-  assert.deepEqual(filteredAudit.body.data.map((event) => event.action), ["project.created"]);
+  assert.deepEqual(
+    filteredAudit.body.data.map((event) => event.action),
+    ["project.created"]
+  );
 });

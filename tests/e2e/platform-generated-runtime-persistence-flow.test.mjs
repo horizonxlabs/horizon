@@ -30,7 +30,14 @@ import {
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 
-function createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient, runtimeClient) {
+function createPersistentServices(
+  coreClient,
+  aiClient,
+  prdClient,
+  workspaceClient,
+  publishStoreClient,
+  runtimeClient
+) {
   const services = {
     ...createPlatformApiServices(),
     corePersistence: createCoreRepositoryBackedService(coreClient),
@@ -133,7 +140,14 @@ test("runtime memory persistence keeps generated runtime evidence across service
   const workspaceClient = new MemoryWorkspacePersistenceClient();
   const publishStoreClient = new MemoryPublishStorePersistenceClient();
   const runtimeClient = new MemoryGeneratedRuntimePersistenceClient();
-  const firstServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient, runtimeClient);
+  const firstServices = createPersistentServices(
+    coreClient,
+    aiClient,
+    prdClient,
+    workspaceClient,
+    publishStoreClient,
+    runtimeClient
+  );
   const project = await createPublishedRuntimeProject(firstServices);
 
   const overview = await executePlatformApiRequestAsync(firstServices, {
@@ -168,7 +182,14 @@ test("runtime memory persistence keeps generated runtime evidence across service
   assert.equal(dryRun.status, 200);
   assert.equal(dryRun.body.data.status, "blocked");
 
-  const recreatedServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient, publishStoreClient, runtimeClient);
+  const recreatedServices = createPersistentServices(
+    coreClient,
+    aiClient,
+    prdClient,
+    workspaceClient,
+    publishStoreClient,
+    runtimeClient
+  );
   const health = await executePlatformApiRequestAsync(recreatedServices, {
     method: "GET",
     path: `/admin/runtime/projects/${project.id}/health`,
@@ -200,5 +221,8 @@ test("runtime memory persistence keeps generated runtime evidence across service
   assert.equal(recreatedOverview.body.data.migrationDryRun.migrationId, "mig_drop_leave_balance");
   assert.equal(recreatedOverview.body.data.migrationDryRun.status, "blocked");
   assert.equal(creatorDenied.status, 403);
-  assert.equal(JSON.stringify(recreatedOverview.body).includes("secret-that-must-not-return"), false);
+  assert.equal(
+    JSON.stringify(recreatedOverview.body).includes("secret-that-must-not-return"),
+    false
+  );
 });

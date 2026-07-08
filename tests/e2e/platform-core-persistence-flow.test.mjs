@@ -29,7 +29,10 @@ test("repository-backed core flow can create list and audit project through API 
   const projects = await service.listProjects(actor);
   const auditEvents = await service.filterAudit({ actorId: actor.id, projectId: project.id });
 
-  const response = success({ project, projects, audit, auditEvents }, { persistence: "core-repository-backed" });
+  const response = success(
+    { project, projects, audit, auditEvents },
+    { persistence: "core-repository-backed" }
+  );
 
   assert.equal(response.ok, true);
   assert.equal(response.meta.persistence, "core-repository-backed");

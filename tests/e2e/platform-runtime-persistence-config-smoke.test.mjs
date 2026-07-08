@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { createRuntimePlatformApiServices, executePlatformApiRequestAsync } = await import("../../apps/platform-api/src/app-factory.ts");
+const { createRuntimePlatformApiServices, executePlatformApiRequestAsync } = await import(
+  "../../apps/platform-api/src/app-factory.ts"
+);
 
 test("runtime memory persistence mode serves core API flow through startup services", async () => {
   const services = await createRuntimePlatformApiServices({ EVCP_CORE_PERSISTENCE: "memory" });
@@ -31,7 +33,10 @@ test("runtime memory persistence mode serves core API flow through startup servi
 
   assert.equal(me.body.data.user.email, "creator@company.com");
   assert.equal(created.body.data.id, "prj_runtime_startup_project");
-  assert.deepEqual(listed.body.data.map((project) => project.slug), ["runtime-startup-project"]);
+  assert.deepEqual(
+    listed.body.data.map((project) => project.slug),
+    ["runtime-startup-project"]
+  );
   assert.equal(audit.body.data.length, 1);
   assert.equal(audit.body.data[0].action, "project.created");
 });

@@ -1,9 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -141,7 +143,7 @@ test("Sprint 4 API smoke blocks guardrail prompt before preview update", () => {
 });
 
 test("Sprint 4 Creator workspace UI exposes prompt progress token preview and logs", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
     "Creator Workspace",
@@ -156,7 +158,14 @@ test("Sprint 4 Creator workspace UI exposes prompt progress token preview and lo
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const component of ["PageHeader", "SectionCard", "WorkflowRail", "DataTable", "DecisionPanel", "ToneBadge"]) {
+  for (const component of [
+    "PageHeader",
+    "SectionCard",
+    "WorkflowRail",
+    "DataTable",
+    "DecisionPanel",
+    "ToneBadge"
+  ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }
 });

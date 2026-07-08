@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } = await import(
+  "../../apps/platform-api/src/platform-services.ts"
+);
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -149,7 +151,11 @@ test("Sprint 2 API supports admin AI provider test-call workflow", () => {
     method: "POST",
     path: "/ai/routes",
     headers: adminHeaders,
-    body: { scenario: "prd_generation", primaryProviderId: provider.body.data.id, primaryModel: "gpt-4.1-mini" }
+    body: {
+      scenario: "prd_generation",
+      primaryProviderId: provider.body.data.id,
+      primaryModel: "gpt-4.1-mini"
+    }
   });
 
   const result = executePlatformApiRequest(services, {

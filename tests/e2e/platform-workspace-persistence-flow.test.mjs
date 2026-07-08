@@ -120,7 +120,12 @@ test("runtime memory persistence keeps workspace task preview and usage across s
   assert.equal(prompt.body.data.usage.tokensUsed, 120);
   assert.equal(JSON.stringify(prompt.body).includes("secret-that-must-not-return"), false);
 
-  const recreatedServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient);
+  const recreatedServices = createPersistentServices(
+    coreClient,
+    aiClient,
+    prdClient,
+    workspaceClient
+  );
   const snapshot = await executePlatformApiRequestAsync(recreatedServices, {
     method: "GET",
     path: `/projects/${project.id}/workspace`,
@@ -134,7 +139,13 @@ test("runtime memory persistence keeps workspace task preview and usage across s
 
   assert.equal(snapshot.status, 200);
   assert.match(snapshot.body.data.preview.summary, /WFH leave type/);
-  assert.equal(snapshot.body.data.tasks.some((task) => task.id === prompt.body.data.task.id), true);
-  assert.equal(snapshot.body.data.usage.some((usage) => usage.id === prompt.body.data.usage.id), true);
+  assert.equal(
+    snapshot.body.data.tasks.some((task) => task.id === prompt.body.data.task.id),
+    true
+  );
+  assert.equal(
+    snapshot.body.data.usage.some((usage) => usage.id === prompt.body.data.usage.id),
+    true
+  );
   assert.equal(refreshed.body.data.id, snapshot.body.data.preview.id);
 });
