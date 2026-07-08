@@ -36,15 +36,20 @@ function createDeps(overrides = {}) {
 test("provisionWorkspace creates schema, bucket, llm key, secrets and running container", async () => {
   const { deps, executedSql, audits } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  const record = await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
+  const record = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
 
   assert.equal(record.state, "running");
   assert.equal(record.slug, "leave-tracker");
+  assert.equal(record.id, "ws-prj-leave-tracker");
   assert.ok(record.containerId);
   assert.ok(executedSql.some((sql) => sql.includes("CREATE SCHEMA")));
-  assert.deepEqual(deps.objectStorage.state.buckets, ["proj-leave-tracker"]);
+  assert.ok(executedSql.some((sql) => sql.includes("app_prj_leave_tracker")));
+  assert.deepEqual(deps.objectStorage.state.buckets, ["proj-prj-leave-tracker"]);
   assert.equal(deps.llmGateway.state.keys.length, 1);
-  assert.deepEqual(orchestrator.listSecretNames("p1").sort(), [
+  assert.deepEqual(orchestrator.listSecretNames("prj-leave-tracker").sort(), [
     "DATABASE_URL",
     "LLM_GATEWAY_KEY",
     "S3_ACCESS_KEY",
@@ -53,8 +58,14 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
     "S3_SECRET_KEY"
   ]);
   assert.equal(deps.docker.state.containers[0].status, "running");
+  assert.equal(deps.docker.state.containers[0].spec.name, "evcp-ws-prj-leave-tracker");
   assert.ok(
     deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL="))
+  );
+  assert.ok(
+    deps.docker.state.containers[0].spec.env.some((entry) =>
+      entry.includes("/preview/prj-leave-tracker")
+    )
   );
   assert.ok(audits.some((event) => event.action === "workspace.provisioned"));
 });
@@ -66,36 +77,47 @@ test("provisioning rolls back everything when container start fails", async () =
   };
   const orchestrator = createWorkspaceOrchestrator(deps);
   await assert.rejects(
-    () => orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" }),
+    () =>
+      orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" }),
     /docker daemon exploded/
   );
   assert.deepEqual(deps.objectStorage.state.buckets, [], "bucket must be rolled back");
   assert.equal(deps.llmGateway.state.keys[0].revoked, true, "llm key must be revoked");
-  assert.deepEqual(orchestrator.listSecretNames("p1"), [], "secrets must be cleared");
-  const record = orchestrator.getWorkspace("p1");
+  assert.deepEqual(
+    orchestrator.listSecretNames("prj-leave-tracker"),
+    [],
+    "secrets must be cleared"
+  );
+  const record = orchestrator.getWorkspace("prj-leave-tracker");
   assert.equal(record.state, "failed");
 });
 
 test("duplicate provisioning for same project is idempotent (returns the existing workspace)", async () => {
   const { deps } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  const first = await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
-  const second = await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
+  const first = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+  const second = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
   assert.equal(second.id, first.id);
   assert.equal(second.containerId, first.containerId);
-  assert.equal(second.projectId, "p1");
+  assert.equal(second.projectId, "prj-leave-tracker");
 });
 
 test("provision self-heals to the existing container after a restart (empty records, same docker)", async () => {
   const { deps } = createDeps();
   const first = await createWorkspaceOrchestrator(deps).provisionWorkspace({
-    projectId: "p1",
+    projectId: "prj-leave-tracker",
     slug: "leave-tracker"
   });
   // Simulate a platform-api restart: a fresh orchestrator (empty in-memory records) sharing the
   // same docker engine (the container is still running). Provision must re-attach, not re-provision.
   const healed = await createWorkspaceOrchestrator(deps).provisionWorkspace({
-    projectId: "p1",
+    projectId: "prj-leave-tracker",
     slug: "leave-tracker"
   });
   assert.equal(healed.containerId, first.containerId);
@@ -105,10 +127,10 @@ test("provision self-heals to the existing container after a restart (empty reco
 test("stop/wake cycle follows state machine and audits", async () => {
   const { deps, audits } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
-  const idle = await orchestrator.stopWorkspace("p1");
+  await orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
+  const idle = await orchestrator.stopWorkspace("prj-leave-tracker");
   assert.equal(idle.state, "idle");
-  const awake = await orchestrator.wakeWorkspace("p1");
+  const awake = await orchestrator.wakeWorkspace("prj-leave-tracker");
   assert.equal(awake.state, "running");
   assert.ok(audits.some((event) => event.action === "workspace.stopped"));
   assert.ok(audits.some((event) => event.action === "workspace.started"));
@@ -117,19 +139,19 @@ test("stop/wake cycle follows state machine and audits", async () => {
 test("stopIdleWorkspaces stops containers idle for 30+ minutes", async () => {
   const { deps } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
+  await orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
   const future = new Date(Date.now() + 31 * 60 * 1000);
   const stopped = await orchestrator.stopIdleWorkspaces(future);
-  assert.deepEqual(stopped, ["p1"]);
-  assert.equal(orchestrator.getWorkspace("p1").state, "idle");
+  assert.deepEqual(stopped, ["prj-leave-tracker"]);
+  assert.equal(orchestrator.getWorkspace("prj-leave-tracker").state, "idle");
 });
 
 test("archiveWorkspace stops container but keeps volume resources", async () => {
   const { deps } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  await orchestrator.provisionWorkspace({ projectId: "p1", slug: "leave-tracker" });
-  const record = await orchestrator.archiveWorkspace("p1");
+  await orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
+  const record = await orchestrator.archiveWorkspace("prj-leave-tracker");
   assert.equal(record.state, "archived");
   assert.equal(deps.docker.state.containers.length, 0, "container removed");
-  assert.deepEqual(deps.objectStorage.state.buckets, ["proj-leave-tracker"], "bucket retained");
+  assert.deepEqual(deps.objectStorage.state.buckets, ["proj-prj-leave-tracker"], "bucket retained");
 });

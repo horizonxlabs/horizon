@@ -12,6 +12,7 @@ COPY packages/mock-data/package.json packages/mock-data/package.json
 COPY packages/types/package.json packages/types/package.json
 COPY packages/ui/package.json packages/ui/package.json
 COPY apps/platform-api/package.json apps/platform-api/package.json
+COPY scripts/quality/prepare-git-hooks.mjs scripts/quality/prepare-git-hooks.mjs
 
 RUN corepack enable && pnpm install --frozen-lockfile
 

@@ -19,6 +19,7 @@ COPY packages/ui/package.json packages/ui/package.json
 COPY apps/admin-web/package.json apps/admin-web/package.json
 COPY apps/creator-web/package.json apps/creator-web/package.json
 COPY apps/app-store-pwa/package.json apps/app-store-pwa/package.json
+COPY scripts/quality/prepare-git-hooks.mjs scripts/quality/prepare-git-hooks.mjs
 
 RUN corepack enable && pnpm install --frozen-lockfile
 

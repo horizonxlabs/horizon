@@ -13,7 +13,10 @@ test("adapter mode defaults to memory and flips to real via env", () => {
 
 test("memory mode still provisions against fakes (no infra)", async () => {
   const orchestrator = createDefaultWorkspaceOrchestrator();
-  const record = await orchestrator.provisionWorkspace({ projectId: "p1", slug: "demo-app" });
+  const record = await orchestrator.provisionWorkspace({
+    projectId: "prj-demo-app",
+    slug: "demo-app"
+  });
   assert.equal(record.state, "running");
 });
 

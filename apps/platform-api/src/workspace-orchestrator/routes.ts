@@ -1,4 +1,5 @@
 import type { WorkspaceOrchestrator } from "./orchestrator";
+import { resourceKeyForProject } from "./resource-ports";
 
 export interface WorkspaceAuthContext {
   userId: string;
@@ -47,40 +48,52 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
       if (!isMember(auth, input.projectId)) {
         return { status: 403, body: { error: "forbidden" } };
       }
-      return { status: 200, body: { workspace: await orchestrator.stopWorkspace(input.projectId) } };
+      return {
+        status: 200,
+        body: { workspace: await orchestrator.stopWorkspace(input.projectId) }
+      };
     },
 
     async wake(auth: WorkspaceAuthContext, input: { projectId: string }): Promise<RouteResponse> {
       if (!isMember(auth, input.projectId)) {
         return { status: 403, body: { error: "forbidden" } };
       }
-      return { status: 200, body: { workspace: await orchestrator.wakeWorkspace(input.projectId) } };
+      return {
+        status: 200,
+        body: { workspace: await orchestrator.wakeWorkspace(input.projectId) }
+      };
     }
   };
 }
 
-export type PreviewResolution = { ok: true; upstream: string } | { ok: false; status: 401 | 403 | 404 | 503 };
+export type PreviewResolution =
+  | { ok: true; upstream: string }
+  | { ok: false; status: 401 | 403 | 404 | 503 };
 
 export async function resolvePreviewTarget(
   orchestrator: WorkspaceOrchestrator,
   auth: WorkspaceAuthContext | null,
-  slug: string
+  // The preview path segment is the id-derived resource key (e.g. `prj-team-time-off`), not the
+  // public slug — so a rename never changes a project's preview URL.
+  key: string
 ): Promise<PreviewResolution> {
   if (!auth) {
     return { ok: false, status: 401 };
   }
-  // find workspace record by slug
+  // find the caller's workspace whose id-derived key matches
   let record: ReturnType<WorkspaceOrchestrator["getWorkspace"]> = null;
   for (const projectId of auth.projectIds) {
+    if (resourceKeyForProject(projectId) !== key) continue;
     const candidate = orchestrator.getWorkspace(projectId);
-    if (candidate?.slug === slug) {
+    if (candidate) {
       record = candidate;
       break;
     }
   }
   if (!record) {
-    // Not one of the caller's workspaces: 403 if the slug exists at all (someone else's), else 404.
-    const anyWorkspace = orchestrator.findBySlug(slug);
+    // Not one of the caller's workspaces: 403 if it exists at all (someone else's), else 404. The
+    // project id is recoverable from the key because project ids never contain hyphens.
+    const anyWorkspace = orchestrator.getWorkspace(key.replaceAll("-", "_"));
     return anyWorkspace ? { ok: false, status: 403 } : { ok: false, status: 404 };
   }
   if (record.state === "idle") {
@@ -89,5 +102,5 @@ export async function resolvePreviewTarget(
     return { ok: false, status: 503 };
   }
   orchestrator.markActivity(record.projectId);
-  return { ok: true, upstream: `http://evcp-ws-${slug}:3000` };
+  return { ok: true, upstream: `http://evcp-ws-${key}:3000` };
 }

@@ -166,7 +166,7 @@ function slugifyProjectName(name: string): string {
 }
 
 function createCreatorNavigation(project: CreatorProjectView) {
-  const projectBaseRoute = `/creator/projects/${project.slug}`;
+  const projectBaseRoute = `/creator/projects/${project.id}`;
   return navigation.creator.map((item) => {
     if (!item.route.includes("/creator/projects/leave-management")) return item;
     return {
@@ -1292,7 +1292,7 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
   ) {
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
-    const routeBase = `/creator/projects/${project.slug}`;
+    const routeBase = `/creator/projects/${project.id}`;
     const routeByPage: Record<CreatorPage, string> = {
       projects: "/creator/",
       workspace: routeBase,
@@ -1353,7 +1353,7 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
         `สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`
       );
       setIsCreateProjectDialogOpen(false);
-      window.history.pushState({}, "", `/creator/projects/${project.slug}/prd`);
+      window.history.pushState({}, "", `/creator/projects/${project.id}/prd`);
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
@@ -1939,7 +1939,10 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   if (creatorPage === "workspace") {
-    const previewSrc = `/preview/${selectedProject.slug}?token=${encodeURIComponent(platformSessionToken() ?? "")}`;
+    // Preview is addressed by the id-derived resource key (matches the container name), not the
+    // public slug, so it survives a rename. Project ids never contain hyphens.
+    const previewKey = selectedProject.id.replaceAll("_", "-");
+    const previewSrc = `/preview/${previewKey}?token=${encodeURIComponent(platformSessionToken() ?? "")}`;
     return (
       <div
         style={{

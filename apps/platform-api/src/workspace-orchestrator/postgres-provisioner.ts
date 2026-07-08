@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 
-const SLUG_PATTERN = /^[a-z0-9-]{3,40}$/;
+// Max 60 (not 40) to accommodate the id-derived resource key `prj-<slug>`, which prefixes the slug.
+const SLUG_PATTERN = /^[a-z0-9-]{3,60}$/;
 
 export function assertValidProjectSlug(slug: string): void {
   if (!SLUG_PATTERN.test(slug)) {
-    throw new Error(`invalid project slug '${slug}': must match [a-z0-9-]{3,40}`);
+    throw new Error(`invalid project slug '${slug}': must match [a-z0-9-]{3,60}`);
   }
 }
 
@@ -38,12 +39,14 @@ export function buildReleaseSchemaSql(slug: string): string[] {
 }
 
 export interface PostgresProvisioner {
-  provisionSchema(slug: string): Promise<{ schemaName: string; roleName: string; password: string }>;
+  provisionSchema(
+    slug: string
+  ): Promise<{ schemaName: string; roleName: string; password: string }>;
   releaseSchema(slug: string): Promise<void>;
 }
 
 export function createPgClientPostgresProvisioner(
-  runSql: (sql: string) => Promise<void>,
+  runSql: (sql: string) => Promise<void>
 ): PostgresProvisioner {
   return {
     async provisionSchema(slug) {
@@ -57,6 +60,6 @@ export function createPgClientPostgresProvisioner(
       for (const statement of buildReleaseSchemaSql(slug)) {
         await runSql(statement);
       }
-    },
+    }
   };
 }

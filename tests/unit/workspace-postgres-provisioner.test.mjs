@@ -13,8 +13,12 @@ const {
 
 test("accepts valid slugs and rejects invalid ones", () => {
   assertValidProjectSlug("leave-tracker-01");
-  for (const bad of ["ab", "UPPER", "has_underscore", "a".repeat(41), "semi;colon", "sp ace", ""]) {
-    assert.throws(() => assertValidProjectSlug(bad), /slug/i, `expected rejection for ${JSON.stringify(bad)}`);
+  for (const bad of ["ab", "UPPER", "has_underscore", "a".repeat(61), "semi;colon", "sp ace", ""]) {
+    assert.throws(
+      () => assertValidProjectSlug(bad),
+      /slug/i,
+      `expected rejection for ${JSON.stringify(bad)}`
+    );
   }
 });
 

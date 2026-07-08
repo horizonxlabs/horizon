@@ -1,6 +1,7 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import { assertTransition } from "./state";
 import { schemaNameFor, roleNameFor, type PostgresProvisioner } from "./postgres-provisioner";
+import { resourceKeyForProject } from "./resource-ports";
 import type { ObjectStorageProvisioner, LlmGatewayAdmin } from "./resource-ports";
 import type { ProjectSecretStore } from "./secret-store";
 import { buildDevContainerSpec, type DockerEngine } from "./docker-engine";
@@ -86,6 +87,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       projectId: string;
       slug: string;
     }): Promise<WorkspaceContainerRecord> {
+      // Physical resources are named by the immutable id-derived key, never the mutable slug, so a
+      // rename never orphans them. The slug is kept only as a display field on the record.
+      const resourceKey = resourceKeyForProject(input.projectId);
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
         // Idempotent: already provisioned in this process — return it instead of erroring.
@@ -95,13 +99,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       // Self-heal: after a platform-api restart the in-memory record is gone, but the container
       // (and its pg schema / bucket) usually still exist. Re-attach to the running container
       // rather than re-provisioning, which would collide with the orphaned resources (500).
-      const found = await deps.docker.inspectContainer(`evcp-ws-${input.slug}`);
+      const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
       if (found) {
         if (!found.running) {
           await deps.docker.startContainer(found.containerId).catch(() => undefined);
         }
         const healed = save({
-          id: `ws-${input.slug}`,
+          id: `ws-${resourceKey}`,
           projectId: input.projectId,
           slug: input.slug,
           state: "running",
@@ -121,7 +125,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
 
       let record: WorkspaceContainerRecord = save({
-        id: `ws-${input.slug}`,
+        id: `ws-${resourceKey}`,
         projectId: input.projectId,
         slug: input.slug,
         state: "provisioning",
@@ -135,11 +139,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
       const rollbacks: Array<() => Promise<void>> = [];
       try {
-        const pg = await deps.postgres.provisionSchema(input.slug);
-        rollbacks.push(() => deps.postgres.releaseSchema(input.slug));
+        const pg = await deps.postgres.provisionSchema(resourceKey);
+        rollbacks.push(() => deps.postgres.releaseSchema(resourceKey));
 
-        const bucket = await deps.objectStorage.provisionBucket(input.slug);
-        rollbacks.push(() => deps.objectStorage.releaseBucket(input.slug));
+        const bucket = await deps.objectStorage.provisionBucket(resourceKey);
+        rollbacks.push(() => deps.objectStorage.releaseBucket(resourceKey));
 
         const llmKey = await deps.llmGateway.createVirtualKey({
           projectId: input.projectId,
@@ -161,16 +165,16 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         rollbacks.push(async () => deps.secrets.removeAll(input.projectId));
 
         const spec = buildDevContainerSpec({
-          slug: input.slug,
+          slug: resourceKey,
           image,
           env: {
             ...deps.secrets.resolveEnv(input.projectId),
-            EVCP_PREVIEW_BASE: `/preview/${input.slug}`
+            EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
           },
           cpuCores,
           memoryMb,
           network,
-          workspaceVolume: `evcp-ws-${input.slug}-data`
+          workspaceVolume: `evcp-ws-${resourceKey}-data`
         });
 
         const { containerId } = await deps.docker.createContainer(spec);
@@ -243,8 +247,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.stopContainer(record.containerId).catch(() => undefined);
         await deps.docker.removeContainer(record.containerId).catch(() => undefined);
       }
-      await deps.postgres.releaseSchema(record.slug).catch(() => undefined);
-      await deps.objectStorage.releaseBucket(record.slug).catch(() => undefined);
+      const releaseKey = resourceKeyForProject(record.projectId);
+      await deps.postgres.releaseSchema(releaseKey).catch(() => undefined);
+      await deps.objectStorage.releaseBucket(releaseKey).catch(() => undefined);
       const keyId = llmKeyIds.get(projectId);
       if (keyId) {
         await deps.llmGateway.revokeVirtualKey(keyId).catch(() => undefined);
