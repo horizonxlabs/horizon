@@ -10,7 +10,7 @@ import { PublishPage } from "./pages/PublishPage";
 import { TicketsPage } from "./pages/TicketsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
-import { clearLoginSession, hasValidSession, needsPasswordChange } from "./lib/session";
+import { clearLoginSession, hasValidSession } from "./lib/session";
 import type { NativeLoginResult } from "./types";
 
 if (typeof window !== "undefined") {
@@ -23,8 +23,11 @@ function CreatorAuthGate() {
     hasValidSession() ? "workspace" : "login"
   );
 
-  function handleLoggedIn(result: NativeLoginResult) {
-    setAuthStage(needsPasswordChange(result) ? "change-password" : "workspace");
+  function handleLoggedIn(_result: NativeLoginResult) {
+    // "Set a New Password" gate temporarily disabled — go straight to the workspace even when the
+    // account is flagged mustChangePassword. Re-enable by restoring the needsPasswordChange(result)
+    // check here (and its import from ./lib/session).
+    setAuthStage("workspace");
   }
 
   function handleLogout() {
