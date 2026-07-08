@@ -1,7 +1,41 @@
-import { Send } from "lucide-react";
+import { ClipboardList, ExternalLink, Hammer, RefreshCw, Send } from "lucide-react";
+import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { VibeActionRow } from "../components/VibeActionRow";
-import { platformSessionToken } from "../lib/session";
+import { WorkspaceDatabasePanel } from "../components/WorkspaceDatabasePanel";
 import type { useCreatorApp } from "../hooks/use-creator-app";
+import { platformSessionToken } from "../lib/session";
+
+const WORKSPACE_TABS = ["preview", "code", "database"] as const;
+const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
+  preview: "Preview",
+  code: "Code",
+  database: "Database"
+};
+
+const MODE_OPTIONS: Array<{
+  value: WorkspaceAgentMode;
+  label: string;
+  description: string;
+  Icon: typeof ClipboardList;
+}> = [
+  {
+    value: "plan",
+    label: "Plan",
+    description: "Read-only analysis",
+    Icon: ClipboardList
+  },
+  {
+    value: "build",
+    label: "Build",
+    description: "Apply changes",
+    Icon: Hammer
+  }
+];
+
+const SUGGESTIONS: Record<WorkspaceAgentMode, string[]> = {
+  plan: ["Review current workspace", "Draft an implementation plan", "List delivery risks"],
+  build: ["Add an about page", "Make it dark mode", "Add a contact form"]
+};
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -15,24 +49,46 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     promptDraft,
     setPromptDraft,
     handleVibeChat,
-    vibePreviewKey
+    vibePreviewKey,
+    workspaceMode,
+    setWorkspaceMode
   } = app;
+
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
   const previewKey = selectedProject.id.replaceAll("_", "-");
   const previewSrc = `/preview/${previewKey}?token=${encodeURIComponent(platformSessionToken() ?? "")}`;
+  const flattenedActions = vibeMessages.flatMap((message) => message.actions);
+
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
         <a className="vibe-live-back-link" href="/creator/projects">
-          ‹ Projects
+          &lt; Projects
         </a>
         <div className="vibe-live-divider" />
         <strong className="vibe-live-project-name">{selectedProject.name}</strong>
         <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
         <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
+
+        <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
+          {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
+              onClick={() => setWorkspaceMode(value)}
+              aria-pressed={workspaceMode === value}
+              title={description}
+            >
+              <Icon size={14} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
-          {(["preview", "code"] as const).map((tab) => (
+          {WORKSPACE_TABS.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -41,40 +97,47 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               role="tab"
               aria-selected={vibeTab === tab}
             >
-              {tab === "preview" ? "Preview" : "Code"}
+              {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
+
         <button
           type="button"
           onClick={() => setVibePreviewKey((key) => key + 1)}
           title="Refresh preview"
           className="vibe-live-control"
         >
-          ↻
+          <RefreshCw size={15} />
         </button>
         <a href={previewSrc} target="_blank" rel="noreferrer" className="vibe-live-control">
-          Open ↗
+          <ExternalLink size={15} />
+          Open
         </a>
         <button
           type="button"
-          title="Publish to production (Plan 5 pipeline)"
+          title="Publish to production"
           className="vibe-live-control vibe-live-control-primary"
+          disabled={workspaceMode === "plan"}
         >
           Publish
         </button>
       </header>
+
       <div className="vibe-live-body">
         <div className="vibe-live-chat-panel">
           <div className="vibe-live-thread">
             {vibeMessages.length === 0 && !isVibing && (
               <div className="vibe-live-empty">
-                <div className="vibe-live-empty-icon">✨</div>
-                <div className="vibe-live-empty-title">Build with AI</div>
-                Describe what you want. The AI writes code into your live app, runs it, and commits
-                each change.
+                <div className="vibe-live-empty-title">
+                  {workspaceMode === "plan" ? "Plan with AI" : "Build with AI"}
+                </div>
+                {workspaceMode === "plan"
+                  ? "Ask for analysis, tradeoffs, and implementation steps before changes are applied."
+                  : "Describe what you want. The AI writes code into your live app and commits each change."}
               </div>
             )}
+
             {vibeMessages.map((message) =>
               message.role === "user" ? (
                 <div key={message.id} className="vibe-message vibe-message-user">
@@ -82,7 +145,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 </div>
               ) : (
                 <div key={message.id} className="vibe-message vibe-message-assistant">
-                  <div className="vibe-message-text">{message.text || (isVibing ? "▋" : "")}</div>
+                  <div className="vibe-message-text">{message.text || (isVibing ? "|" : "")}</div>
                   {message.actions.length > 0 && (
                     <div className="vibe-message-actions">
                       {message.actions.map((action) => (
@@ -92,15 +155,16 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   )}
                   {message.commitSha && (
                     <div className="vibe-commit-chip">
-                      ⑂ committed {message.commitSha.slice(0, 8)}
+                      committed {message.commitSha.slice(0, 8)}
                     </div>
                   )}
                 </div>
               )
             )}
           </div>
+
           <div className="vibe-live-suggestions">
-            {["Add an about page", "Make it dark mode", "Add a contact form"].map((suggestion) => (
+            {SUGGESTIONS[workspaceMode].map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
@@ -111,10 +175,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </button>
             ))}
           </div>
+
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <textarea
-                aria-label="Ask AI to build"
+                aria-label={workspaceMode === "plan" ? "Ask AI plan" : "Ask AI build"}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -123,7 +188,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (!isVibing && promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder="Ask AI to build…"
+                placeholder={
+                  workspaceMode === "plan" ? "Ask for a plan or review..." : "Ask AI build..."
+                }
                 rows={1}
                 className="vibe-live-input"
               />
@@ -139,6 +206,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             </div>
           </div>
         </div>
+
         <div className="vibe-live-preview-panel">
           {vibeTab === "preview" ? (
             <iframe
@@ -147,24 +215,26 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               src={previewSrc}
               className="vibe-live-iframe"
             />
+          ) : vibeTab === "database" ? (
+            <WorkspaceDatabasePanel projectId={selectedProject.id} />
           ) : (
             <div className="vibe-live-code-panel">
-              <div className="vibe-live-code-title">Changes this session</div>
-              {vibeMessages.flatMap((message) => message.actions).length === 0 ? (
+              <div className="vibe-live-code-title">Changes session</div>
+              {flattenedActions.length === 0 ? (
                 <div className="vibe-live-code-empty">
-                  No changes yet. Ask the AI to build something.
+                  {workspaceMode === "plan"
+                    ? "No changes in Plan mode."
+                    : "No changes yet. Ask AI to build something."}
                 </div>
               ) : (
                 <div className="vibe-live-action-stack">
-                  {vibeMessages
-                    .flatMap((message) => message.actions)
-                    .map((action, index) => (
-                      <VibeActionRow key={`${action.id}-${index}`} action={action} />
-                    ))}
+                  {flattenedActions.map((action, index) => (
+                    <VibeActionRow key={`${action.id}-${index}`} action={action} />
+                  ))}
                 </div>
               )}
               <div className="vibe-live-code-note">
-                A full file browser is on the roadmap — use the Preview tab to see the running app.
+                A full file browser is on the roadmap. Use Preview to see the running app.
               </div>
             </div>
           )}

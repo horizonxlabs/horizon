@@ -13,7 +13,7 @@ import { createErrorFeedbackTracker } from "../../apps/platform-api/src/generati
 
 const template = { name: "nextjs-base", lockedFiles: ["package.json"], files: [] };
 
-async function setup(resolveAuth) {
+async function setup(resolveAuth, scriptedReplyOverride) {
   const docker = createMemoryDockerEngine();
   const { containerId } = await docker.createContainer({
     name: "evcp-ws-demo",
@@ -26,9 +26,10 @@ async function setup(resolveAuth) {
   });
 
   const scriptedReply =
+    scriptedReplyOverride ??
     'Sure thing.\n<artifact id="a1" title="add page">' +
-    '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
-    "</artifact>";
+      '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
+      "</artifact>";
 
   const generationService = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([scriptedReply]),
@@ -65,11 +66,23 @@ async function setup(resolveAuth) {
 async function postChat(port, path, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { host: "127.0.0.1", port, path, method: "POST", headers: { "content-type": "application/json" } },
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      },
       (res) => {
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
+        res.on("end", () =>
+          resolve({
+            statusCode: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("utf8")
+          })
+        );
       }
     );
     req.on("error", reject);
@@ -78,7 +91,11 @@ async function postChat(port, path, body) {
 }
 
 test("POST /projects/:projectId/chat streams SSE events for an authorized member", async () => {
-  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
+  const { server, port } = await setup(() => ({
+    userId: "u1",
+    roles: ["member"],
+    projectIds: ["p1"]
+  }));
 
   try {
     const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
@@ -94,8 +111,39 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
   }
 });
 
+test("POST /projects/:projectId/chat in Plan mode streams guidance without write actions", async () => {
+  const { server, port } = await setup(
+    () => ({
+      userId: "u1",
+      roles: ["member"],
+      projectIds: ["p1"]
+    }),
+    "Read-only plan: inspect app/page.tsx, outline changes, then switch to Build."
+  );
+
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "add home page",
+      agentMode: "plan"
+    });
+
+    assert.equal(raw.statusCode, 200);
+    assert.match(raw.headers["content-type"], /text\/event-stream/);
+    assert.match(raw.body, /Read-only plan/);
+    assert.doesNotMatch(raw.body, /event: action_result/);
+    assert.doesNotMatch(raw.body, /event: commit/);
+    assert.match(raw.body, /event: done/);
+  } finally {
+    server.close();
+  }
+});
+
 test("POST /projects/:projectId/chat returns 403 when caller is not a member of the project", async () => {
-  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
+  const { server, port } = await setup(() => ({
+    userId: "u1",
+    roles: ["member"],
+    projectIds: ["p1"]
+  }));
 
   try {
     const raw = await postChat(port, "/projects/p2/chat", { prompt: "add home page" });

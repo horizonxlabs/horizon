@@ -1,3 +1,6 @@
+import type { DatabaseViewSnapshotDto } from "./workspace-database";
+export type { AppDatabaseColumnDto, AppDatabaseRelationshipDto, AppDatabaseSampleRecordDto, AppDatabaseTableDto, DatabaseViewSnapshotDto } from "./workspace-database";
+
 export type ApiSuccess<T> = {
   ok: true;
   data: T;
@@ -276,15 +279,13 @@ export type WorkspaceTokenBudgetDto = {
   requestEstimate: number;
 };
 
-export type GuardrailResultDto = {
-  decision: "allow" | "warn" | "block";
-  eventId: string;
-  matchedRuleIds?: string[];
-  reason?: string;
-};
+export type GuardrailResultDto = { decision: "allow" | "warn" | "block"; eventId: string; matchedRuleIds?: string[]; reason?: string };
+
+export type WorkspaceAgentMode = "plan" | "build";
 
 export type WorkspacePromptInput = {
   prompt: string;
+  agentMode?: WorkspaceAgentMode;
 };
 
 export type WorkspacePromptResultDto = {
@@ -299,16 +300,7 @@ export type WorkspacePromptResultDto = {
 
 export type WorkspaceSnapshotResponse = {
   project: PlatformProjectDto;
-  baseline: {
-    id: string;
-    projectId: string;
-    version: string;
-    title?: string;
-    status?: string;
-    summary?: string;
-    isBaseline: boolean;
-    createdAt?: string;
-  };
+  baseline: { id: string; projectId: string; version: string; title?: string; status?: string; summary?: string; isBaseline: boolean; createdAt?: string };
   preview: PreviewVersionDto;
   tasks: WorkspaceTaskDto[];
   usage: AiUsageLogDto[];
@@ -862,6 +854,10 @@ export class PlatformApiClient {
     return this.request<WorkspaceSnapshotResponse>(
       `/projects/${encodeURIComponent(projectId)}/workspace`
     );
+  }
+
+  getDatabaseView(projectId: string): Promise<DatabaseViewSnapshotDto> {
+    return this.request<DatabaseViewSnapshotDto>(`/projects/${encodeURIComponent(projectId)}/database`);
   }
 
   submitWorkspacePrompt(

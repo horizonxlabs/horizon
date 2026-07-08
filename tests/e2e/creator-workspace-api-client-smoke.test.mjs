@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { createPlatformApiClient } = await import("../../packages/api-client/src/index.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
@@ -121,6 +120,29 @@ test("Creator workspace API client actions submit prompt refresh preview and rea
   assert.equal(snapshot.preview.version, result.preview.version);
   assert.ok(snapshot.tasks.some((task) => task.id === result.task.id));
   assert.ok(snapshot.usage.some((entry) => entry.taskId === result.task.id));
+});
+
+test("Creator workspace API client Plan mode records read-only evidence without preview mutation", async () => {
+  const { services, projectId } = createWorkspaceActionsFixture();
+  const client = createApiClientForServices(services);
+
+  const initial = await client.getWorkspace(projectId);
+  assert.equal(initial.preview.version, "preview-0000");
+
+  const result = await client.submitWorkspacePrompt(projectId, {
+    prompt: "Plan how to add WFH leave type",
+    agentMode: "plan"
+  });
+
+  assert.equal(result.guardrail.decision, "allow");
+  assert.equal(result.task.status, "blocked");
+  assert.equal(result.preview.version, "preview-0000");
+  assert.equal(result.usage, undefined);
+
+  const snapshot = await client.getWorkspace(projectId);
+  assert.equal(snapshot.preview.version, "preview-0000");
+  assert.equal(snapshot.usage.length, 0);
+  assert.ok(snapshot.tasks.some((task) => task.id === result.task.id));
 });
 
 test("Creator workspace API client blocked prompt keeps existing preview evidence", async () => {

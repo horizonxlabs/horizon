@@ -1,7 +1,7 @@
 import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-client";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
-import type { MockUser, PlatformRole, Status } from "@evcp/types";
+import type { MockUser, PlatformRole, Status, WorkspaceAgentMode } from "@evcp/types";
 import { createHash, createHmac } from "node:crypto";
 import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
@@ -935,13 +935,7 @@ export type StoreAppAccessStatus = "active" | "available" | "pending";
 export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
 export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType =
-  | "bug"
-  | "feedback"
-  | "feature"
-  | "access_issue"
-  | "data_issue"
-  | "performance"
-  | "other";
+  "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
 
@@ -1067,11 +1061,7 @@ export interface InAppNotification {
 
 export type PrdChangeSourceType = "ticket" | "prompt" | "manual";
 export type PrdChangeStatus =
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "rejected"
-  | "changes_requested";
+  "draft" | "pending_approval" | "approved" | "rejected" | "changes_requested";
 export type PrdChangeRiskLevel = "low" | "medium" | "high" | "critical";
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
@@ -3035,8 +3025,7 @@ class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
           const shouldRetry = isRetryableProviderStatus(response.status, this.runtime);
           if (shouldRetry && attempt < maxAttempts) continue;
           const errorBody = response.body as
-            | { error?: { message?: unknown; type?: unknown } }
-            | undefined;
+            { error?: { message?: unknown; type?: unknown } } | undefined;
           const providerMessage = sanitizeProviderError(
             String(errorBody?.error?.message ?? `HTTP ${response.status}`),
             secret
@@ -7683,7 +7672,7 @@ export class WorkspaceService {
   submitPrompt(
     actor: PlatformUser,
     projectId: string,
-    input: { prompt: string }
+    input: { prompt: string; agentMode?: WorkspaceAgentMode }
   ): WorkspacePromptResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
@@ -7722,6 +7711,13 @@ export class WorkspaceService {
         preview: this.latestPreview(project.id),
         tokenBudget: this.buildTokenBudget(0)
       };
+    }
+
+    if (input.agentMode === "plan") {
+      const plannedTask = this.createTask(project.id, actor.id, prompt, "blocked", guardrail, now, "done");
+      this.tasks.push(plannedTask);
+      this.audit.record({ actorId: actor.id, action: "workspace.prompt.plan_only", resourceType: "workspace_task", resourceId: plannedTask.id, severity: "info", metadata: { projectId: project.id } });
+      return { guardrail, task: plannedTask, preview: this.latestPreview(project.id), tokenBudget: this.buildTokenBudget(0) };
     }
 
     const skillSelection = this.resolveWorkspaceSkill(actor, project);

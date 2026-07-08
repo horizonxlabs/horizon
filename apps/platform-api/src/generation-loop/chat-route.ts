@@ -1,9 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { WorkspaceAgentMode } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
   return auth.projectIds.includes(projectId);
+}
+
+function resolveAgentMode(input: unknown): WorkspaceAgentMode {
+  if (!input || typeof input !== "object") return "build";
+  const body = input as { agentMode?: unknown; workspaceMode?: unknown };
+  return body.agentMode === "plan" || body.workspaceMode === "plan" ? "plan" : "build";
 }
 
 // Reads the raw request body. If an upstream middleware (e.g. Nest's global
@@ -75,10 +82,12 @@ export function createChatSseHandler(deps: {
     }
 
     let prompt = "";
+    let agentMode: WorkspaceAgentMode = "build";
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
+      agentMode = resolveAgentMode(parsed);
     } catch {
       res.writeHead(400, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "invalid_body" }));
@@ -92,7 +101,7 @@ export function createChatSseHandler(deps: {
     });
 
     try {
-      for await (const event of deps.generationService.runTurn({ projectId, prompt })) {
+      for await (const event of deps.generationService.runTurn({ projectId, prompt, agentMode })) {
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
     } catch (error) {

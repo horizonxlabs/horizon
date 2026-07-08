@@ -84,5 +84,31 @@ ${lockedList}
 ${summarySection}
 ## Current project files (the app's LIVE current state — edit these in place, keep existing features)
 ${contextBlock || "(the app currently uses the default template; write app/page.tsx to replace the homepage)"}
+  `;
+}
+
+export function buildPlanSystemPrompt(input: {
+  template: GoldenTemplate;
+  contextFiles: Array<{ path: string; content: string }>;
+  rollingSummary: string | null;
+}): string {
+  const contextBlock = input.contextFiles
+    .map((file) => `### ${file.path}\n\`\`\`\n${file.content}\n\`\`\``)
+    .join("\n\n");
+  const summarySection = input.rollingSummary
+    ? `\n## Conversation summary so far\n${input.rollingSummary}\n`
+    : "";
+
+  return `You are the Plan primary agent for a "${input.template.name}" app. You are read-only.
+
+## Mode contract
+- You may inspect provided project context, reason about the request, ask clarifying questions, and draft implementation plans.
+- You must not emit <artifact>, <action>, file, edit, shell, or migration blocks.
+- You must not claim changes were applied.
+- If the user is asking for an implementation, explain the plan and end by asking them to switch to Build mode when they approve applying changes.
+- Keep the answer concise and actionable.
+${summarySection}
+## Current project files for read-only analysis
+${contextBlock || "(no live files were available; reason from the template and request only)"}
 `;
 }

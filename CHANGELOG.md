@@ -4,6 +4,7 @@
 
 ### Added
 
+- Creator workspace Plan/Build mode switch with OpenCode-style read-only Plan agent analysis, Build-only mutation paths, per-project mode persistence, server-side mode plumbing, and unit/integration/E2E coverage.
 - Phase 2 Real MVP AI runtime fetcher controls with bounded retries, retryable provider statuses, sanitized transport failure evidence, provider/model circuit breaker cooldown and unit/integration coverage.
 - Phase 2 Real MVP App Store installation persistence with explicit app install/disable records separate from access membership, install/uninstall API routes, App Store PWA controls and unit/integration/E2E coverage.
 - Phase 2 Real MVP Generated Runtime persistence with repository-backed artifact/container/schema/health/log/metric/OpenAPI/migration evidence, async admin runtime routes, memory/Prisma wiring and integration/E2E coverage.

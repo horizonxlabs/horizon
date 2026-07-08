@@ -11,6 +11,7 @@ import { createPublishRoutes, resolveAppsTarget } from "./publish/routes";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
+import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
@@ -613,39 +614,13 @@ export async function executePlatformApiRequestAsync(
   const corePersistenceClient = services.corePersistenceClient;
   const credentialService = services.credentialService;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
-  const useAiGovernancePersistence = Boolean(
-    aiGovernancePersistence && isPersistenceAiGovernanceRoute(request)
-  );
-  const usePrdPersistence = Boolean(
-    corePersistence && prdPersistence && isPersistencePrdRoute(request)
-  );
-  const useWorkspacePersistence = Boolean(
-    corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      isPersistenceWorkspaceRoute(request)
-  );
-  const usePublishStorePersistence = Boolean(
-    corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      publishStorePersistence &&
-      isPersistencePublishStoreRoute(request)
-  );
-  const useGeneratedRuntimePersistence = Boolean(
-    corePersistence &&
-      publishStorePersistence &&
-      generatedRuntimePersistence &&
-      isPersistenceGeneratedRuntimeRoute(request)
-  );
-  const useNativeAuth = Boolean(
-    corePersistenceClient && credentialService && isNativeAuthRoute(request)
-  );
-  const useSimulatedAuth = Boolean(
-    corePersistenceClient &&
-      request.method === "POST" &&
-      request.path === "/admin/auth/simulate-login"
-  );
+  const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
+  const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
+  const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
+  const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
+  const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
+  const useNativeAuth = Boolean(corePersistenceClient && credentialService && isNativeAuthRoute(request));
+  const useSimulatedAuth = Boolean(corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login");
   if (
     !useCorePersistence &&
     !useAiGovernancePersistence &&
@@ -1111,6 +1086,7 @@ export async function executePlatformApiRequestAsync(
       const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
       const prompt = String(request.body?.prompt ?? "");
+      const agentMode = resolveWorkspaceAgentMode(request.body);
       const guardrail = services.guardrails.evaluatePrompt(user, {
         prompt,
         scenario: "frontend_coding"
@@ -1132,6 +1108,12 @@ export async function executePlatformApiRequestAsync(
           metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
         });
         return { status: HttpStatus.OK, body: success(blocked) };
+      }
+
+      if (agentMode === "plan") {
+        const planned = await workspacePersistence.planPrompt(user, { project, baseline, prompt, guardrail });
+        await corePersistence.recordAudit({ actorId: user.id, action: "workspace.prompt.plan_only", resourceType: "workspace_task", resourceId: planned.task.id, severity: "info", metadata: { projectId: project.id } });
+        return { status: HttpStatus.OK, body: success(planned) };
       }
 
       const route = services.aiGovernance.resolveRoute("frontend_coding");
@@ -1826,9 +1808,7 @@ export function executePlatformApiRequest(
     const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
     if (request.method === "POST" && workspacePromptMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.workspace.submitPrompt(user, workspacePromptMatch[1], {
-        prompt: String(request.body?.prompt ?? "")
-      });
+      const result = services.workspace.submitPrompt(user, workspacePromptMatch[1], { prompt: String(request.body?.prompt ?? ""), agentMode: resolveWorkspaceAgentMode(request.body) });
       return {
         status: result.guardrail.decision === "block" ? HttpStatus.OK : HttpStatus.CREATED,
         body: success(result)

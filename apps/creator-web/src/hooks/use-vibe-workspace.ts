@@ -1,5 +1,6 @@
 import {
   type PreviewVersionDto,
+  type WorkspaceAgentMode,
   type WorkspacePromptResultDto,
   type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
@@ -10,8 +11,17 @@ import { apiBaseUrl } from "../lib/routing";
 import { vibeAuthHeaders } from "../lib/session";
 import { vibeActionVerb, type VibeAction } from "../lib/vibe-actions";
 import { applyVibeEvent, type VibeMessage } from "../lib/vibe-stream";
+import {
+  normalizeWorkspaceMode,
+  persistWorkspaceMode,
+  readWorkspaceMode
+} from "../lib/workspace-mode";
 import type { CreatorProjectView } from "../types";
 import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "./creator-app-helpers";
+
+function browserStorage() {
+  return typeof window === "undefined" ? undefined : window.localStorage;
+}
 
 export function useVibeWorkspace({ selectedProject }: { selectedProject: CreatorProjectView }) {
   const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
@@ -30,7 +40,10 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
   const [vibeStatus, setVibeStatus] = useState("");
   const [isVibing, setIsVibing] = useState(false);
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
-  const [vibeTab, setVibeTab] = useState<"preview" | "code">("preview");
+  const [vibeTab, setVibeTab] = useState<"preview" | "code" | "database">("preview");
+  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceAgentMode>(() =>
+    readWorkspaceMode(browserStorage(), selectedProject.id)
+  );
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
 
   const selectedFallbackPreview: PreviewVersionDto = {
@@ -74,6 +87,16 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setWorkspaceResult(undefined);
     setPreviewOverride(undefined);
   }
+
+  function setWorkspaceMode(mode: WorkspaceAgentMode) {
+    const nextMode = normalizeWorkspaceMode(mode);
+    persistWorkspaceMode(browserStorage(), selectedProject.id, nextMode);
+    setWorkspaceModeState(nextMode);
+  }
+
+  useEffect(() => {
+    setWorkspaceModeState(readWorkspaceMode(browserStorage(), selectedProject.id));
+  }, [selectedProject.id]);
 
   // Restore the chat thread from the server so a browser refresh doesn't lose history.
   useEffect(() => {
@@ -171,13 +194,15 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     ]);
     setPromptDraft("");
     setIsVibing(true);
-    setVibeStatus("Provisioning workspace…");
+    setVibeStatus(workspaceMode === "plan" ? "Planning..." : "Provisioning workspace...");
     const patchAssistant = (fn: (m: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) => prev.map((m) => (m.id === assistantId ? fn(m) : m)));
     try {
-      await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
-      setVibeStatus("AI is working…");
-      await streamVibeChat(selectedProject.id, prompt, (type, data) => {
+      if (workspaceMode === "build") {
+        await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
+      }
+      setVibeStatus(workspaceMode === "plan" ? "Plan mode: read-only" : "AI is working...");
+      await streamVibeChat(selectedProject.id, prompt, workspaceMode, (type, data) => {
         const field = (key: string): string =>
           data && typeof data === "object" && key in data
             ? String((data as Record<string, unknown>)[key])
@@ -192,7 +217,9 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
           setVibeStatus(`Committed ${sha.slice(0, 8)}`);
           setVibePreviewKey((k) => k + 1);
         } else if (type === "done") {
-          setVibeStatus((prev) => (prev.startsWith("Committed") ? prev : "Done"));
+          setVibeStatus((prev) =>
+            workspaceMode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
+          );
         }
       });
     } catch (error) {
@@ -207,7 +234,8 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setIsSubmittingPrompt(true);
     try {
       const result = await createCreatorPlatformClient().submitWorkspacePrompt(selectedProject.id, {
-        prompt: promptDraft
+        prompt: promptDraft,
+        agentMode: workspaceMode
       });
       setWorkspaceResult(result);
       setPreviewOverride(undefined);
@@ -278,6 +306,8 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setVibePreviewKey,
     vibeTab,
     setVibeTab,
+    workspaceMode,
+    setWorkspaceMode,
     isRefreshingPreview,
     setIsRefreshingPreview,
     selectedFallbackPreview,

@@ -1,6 +1,5 @@
 import { type PrdVersionDto } from "@evcp/api-client";
-import { ToneBadge } from "@evcp/ui";
-import { FolderPlus, LockKeyhole, RotateCcw } from "lucide-react";
+import { FolderPlus, RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   initialCreateProjectForm,
@@ -18,6 +17,7 @@ import {
 import { clearLoginSession } from "../lib/session";
 import type { CreateProjectFormState, CreatorPage, CreatorProjectView } from "../types";
 import {
+  ensureVibeWorkspace,
   loadCreatorBootstrap,
   loadPrdState,
   loadWorkspaceState,
@@ -29,6 +29,7 @@ import { useVibeWorkspace } from "./use-vibe-workspace";
 export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isEnteringWorkspace, setIsEnteringWorkspace] = useState(false);
   const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
@@ -88,6 +89,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   useEffect(() => {
+    // Direct navigation / reload onto a workspace URL must also provision the sandbox container
+    // (the card-click path does this via handleSelectProject; a fresh page load does not).
+    const onWorkspace = creatorPage === "workspace";
+    if (onWorkspace) setIsEnteringWorkspace(true);
     loadCreatorBootstrap()
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
@@ -98,6 +103,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           setPrdVersionList([]);
         }
         try {
+          if (onWorkspace) {
+            await ensureVibeWorkspace(
+              nextBootstrap.selectedProject.id,
+              nextBootstrap.selectedProject.slug
+            );
+          }
           vibeWorkspace.setWorkspaceSnapshot(
             await loadWorkspaceState(nextBootstrap.selectedProject.id)
           );
@@ -116,6 +127,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       })
       .finally(() => {
         setIsSigningIn(false);
+        if (onWorkspace) setIsEnteringWorkspace(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -188,21 +200,32 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       tickets: `${routeBase}/tickets`
     };
     window.history.pushState({}, "", routeByPage[targetPage]);
+    // Entering the workspace provisions/starts the project's sandbox container, which can take a
+    // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
+    const enteringWorkspace = targetPage === "workspace";
+    if (enteringWorkspace) setIsEnteringWorkspace(true);
     try {
-      await refreshPrdState(project.id);
-    } catch {
-      setCurrentPrdVersion(undefined);
-      setPrdVersionList([]);
-    }
-    try {
-      vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
-      await publishAccess.refreshCreatorPublishState(project.id);
-      vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
-    } catch {
-      vibeWorkspace.setWorkspaceSnapshot(undefined);
-      vibeWorkspace.setWorkspaceMessage(
-        "Project selected. Confirm PRD baseline before workspace generation."
-      );
+      try {
+        await refreshPrdState(project.id);
+      } catch {
+        setCurrentPrdVersion(undefined);
+        setPrdVersionList([]);
+      }
+      try {
+        if (enteringWorkspace) {
+          await ensureVibeWorkspace(project.id, project.slug);
+        }
+        vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
+        await publishAccess.refreshCreatorPublishState(project.id);
+        vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
+      } catch {
+        vibeWorkspace.setWorkspaceSnapshot(undefined);
+        vibeWorkspace.setWorkspaceMessage(
+          "Project selected. Confirm PRD baseline before workspace generation."
+        );
+      }
+    } finally {
+      if (enteringWorkspace) setIsEnteringWorkspace(false);
     }
   }
 
@@ -254,24 +277,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   const creatorSessionControls = (
-    <>
-      <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>
-        Bootstrap: {bootstrap.source}
-      </ToneBadge>
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={handleSignInBridge}
-        disabled={isSigningIn}
-      >
-        <LockKeyhole size={16} />
-        {isSigningIn ? "Signing in" : "Demo Sign in"}
-      </button>
-      <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
-        <RotateCcw size={16} />
-        Logout
-      </button>
-    </>
+    <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+      <RotateCcw size={16} />
+      Logout
+    </button>
   );
   const creatorPageActions =
     creatorPage === "projects" ? (
@@ -285,6 +294,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     bootstrap,
     setBootstrap,
     isSigningIn,
+    isEnteringWorkspace,
     isCreateProjectDialogOpen,
     setIsCreateProjectDialogOpen,
     createProjectForm,
