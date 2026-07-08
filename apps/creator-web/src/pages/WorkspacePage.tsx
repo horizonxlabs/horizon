@@ -1,8 +1,12 @@
 import { Send } from "lucide-react";
+import { Suspense, lazy } from "react";
 import { VibeActionRow } from "../components/VibeActionRow";
-import { WorkspaceDatabasePanel } from "../components/WorkspaceDatabasePanel";
 import { platformSessionToken } from "../lib/session";
 import type { useCreatorApp } from "../hooks/use-creator-app";
+
+// react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
+// Node test environments (render-smoke) never pulls in the CSS/grid module.
+const WorkspaceDatabasePanel = lazy(() => import("../components/WorkspaceDatabasePanel"));
 
 const WORKSPACE_TABS = ["preview", "code", "database"] as const;
 const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
@@ -156,7 +160,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               className="vibe-live-iframe"
             />
           ) : vibeTab === "database" ? (
-            <WorkspaceDatabasePanel projectId={selectedProject.id} />
+            <Suspense fallback={<div className="hz-db-empty">กำลังโหลด Database…</div>}>
+              <WorkspaceDatabasePanel projectId={selectedProject.id} />
+            </Suspense>
           ) : (
             <div className="vibe-live-code-panel">
               <div className="vibe-live-code-title">Changes this session</div>

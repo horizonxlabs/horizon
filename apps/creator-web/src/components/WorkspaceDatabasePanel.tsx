@@ -1,13 +1,24 @@
-import { useEffect, useState } from "react";
+import { RotateCcw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DataGrid,
+  SelectColumn,
+  renderTextEditor,
+  type Column,
+  type RowsChangeData
+} from "react-data-grid";
 import {
   fetchProjectDbSchema,
   fetchProjectDbTable,
-  type ProjectDbSchema,
-  type ProjectDbTablePage
+  mutateProjectDbRow,
+  type ProjectDbColumn,
+  type ProjectDbSchema
 } from "../lib/project-db";
 
+type Row = Record<string, unknown>;
+
 function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
@@ -17,15 +28,51 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [schema, setSchema] = useState<ProjectDbSchema | undefined>(undefined);
   const [schemaError, setSchemaError] = useState<string | undefined>(undefined);
   const [activeTable, setActiveTable] = useState<string | undefined>(undefined);
-  const [page, setPage] = useState<ProjectDbTablePage | undefined>(undefined);
-  const [pageError, setPageError] = useState<string | undefined>(undefined);
+  const [columns, setColumns] = useState<ProjectDbColumn[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [total, setTotal] = useState(0);
+  const [dataError, setDataError] = useState<string | undefined>(undefined);
+  const [writeError, setWriteError] = useState<string | undefined>(undefined);
+  const [loadingRows, setLoadingRows] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+
+  const pkColumns = useMemo(
+    () => columns.filter((c) => c.isPrimaryKey).map((c) => c.name),
+    [columns]
+  );
+  const editable = pkColumns.length > 0;
+
+  const rowKeyGetter = useCallback(
+    (row: Row) =>
+      pkColumns.length ? pkColumns.map((c) => String(row[c])).join("|") : JSON.stringify(row),
+    [pkColumns]
+  );
+
+  const loadTable = useCallback(
+    async (table: string) => {
+      setLoadingRows(true);
+      setDataError(undefined);
+      setWriteError(undefined);
+      setSelected(new Set());
+      try {
+        const page = await fetchProjectDbTable(projectId, table);
+        setColumns(page.columns);
+        setRows(page.rows);
+        setTotal(page.total);
+      } catch (error) {
+        setDataError((error as Error).message);
+      } finally {
+        setLoadingRows(false);
+      }
+    },
+    [projectId]
+  );
 
   useEffect(() => {
     let cancelled = false;
     setSchema(undefined);
     setSchemaError(undefined);
     setActiveTable(undefined);
-    setPage(undefined);
     fetchProjectDbSchema(projectId)
       .then((snapshot) => {
         if (cancelled) return;
@@ -41,21 +88,49 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
+    if (activeTable) void loadTable(activeTable);
+  }, [activeTable, loadTable]);
+
+  const gridColumns = useMemo<Column<Row>[]>(() => {
+    const dataColumns: Column<Row>[] = columns.map((column) => ({
+      key: column.name,
+      name: column.name,
+      resizable: true,
+      editable: editable && !column.isPrimaryKey,
+      renderEditCell: editable && !column.isPrimaryKey ? renderTextEditor : undefined,
+      renderCell: ({ row }) => formatCell(row[column.name])
+    }));
+    return editable ? [SelectColumn, ...dataColumns] : dataColumns;
+  }, [columns, editable]);
+
+  function handleRowsChange(nextRows: Row[], data: RowsChangeData<Row>) {
     if (!activeTable) return;
-    let cancelled = false;
-    setPage(undefined);
-    setPageError(undefined);
-    fetchProjectDbTable(projectId, activeTable)
-      .then((result) => {
-        if (!cancelled) setPage(result);
-      })
-      .catch((error: Error) => {
-        if (!cancelled) setPageError(error.message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, activeTable]);
+    setRows(nextRows);
+    const changed = nextRows[data.indexes[0]];
+    const columnKey = data.column.key;
+    const pk = Object.fromEntries(pkColumns.map((c) => [c, changed[c]]));
+    mutateProjectDbRow(projectId, activeTable, {
+      op: "update",
+      pk,
+      changes: { [columnKey]: changed[columnKey] }
+    }).catch((error: Error) => setWriteError(error.message));
+  }
+
+  async function deleteSelected() {
+    if (!activeTable || selected.size === 0) return;
+    setWriteError(undefined);
+    try {
+      for (const key of selected) {
+        const row = rows.find((candidate) => rowKeyGetter(candidate) === key);
+        if (!row) continue;
+        const pk = Object.fromEntries(pkColumns.map((c) => [c, row[c]]));
+        await mutateProjectDbRow(projectId, activeTable, { op: "delete", pk });
+      }
+      await loadTable(activeTable);
+    } catch (error) {
+      setWriteError((error as Error).message);
+    }
+  }
 
   if (schemaError) return <div className="hz-db-empty">โหลด schema ไม่สำเร็จ: {schemaError}</div>;
   if (!schema) return <div className="hz-db-empty">กำลังโหลด schema…</div>;
@@ -80,53 +155,51 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
         ))}
       </aside>
       <div className="hz-db-data">
-        {pageError ? (
-          <div className="hz-db-empty">โหลดข้อมูลไม่สำเร็จ: {pageError}</div>
-        ) : !page ? (
+        <div className="hz-db-data-head">
+          <strong>{activeTable}</strong>
+          <span>{total} rows</span>
+          {!editable ? <span className="hz-db-flag">read-only (ไม่มี primary key)</span> : null}
+          <div className="hz-db-actions">
+            {editable ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => void deleteSelected()}
+                disabled={selected.size === 0}
+              >
+                <Trash2 size={14} /> ลบ ({selected.size})
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => activeTable && void loadTable(activeTable)}
+            >
+              <RotateCcw size={14} /> รีเฟรช
+            </button>
+          </div>
+        </div>
+        {writeError ? <div className="hz-db-error">เขียนไม่สำเร็จ: {writeError}</div> : null}
+        {dataError ? (
+          <div className="hz-db-empty">โหลดข้อมูลไม่สำเร็จ: {dataError}</div>
+        ) : loadingRows ? (
           <div className="hz-db-empty">กำลังโหลด {activeTable}…</div>
+        ) : rows.length === 0 ? (
+          <div className="hz-db-empty">ไม่มีข้อมูลในตารางนี้</div>
         ) : (
-          <>
-            <div className="hz-db-data-head">
-              <strong>{page.table}</strong>
-              <span>{page.total} rows</span>
-            </div>
-            <div className="hz-db-scroll">
-              <table className="hz-db-grid">
-                <thead>
-                  <tr>
-                    {page.columns.map((column) => (
-                      <th key={column.name}>
-                        {column.name}
-                        <em>
-                          {column.dataType}
-                          {column.isPrimaryKey ? " · pk" : ""}
-                        </em>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {page.rows.length === 0 ? (
-                    <tr>
-                      <td className="hz-db-norows" colSpan={Math.max(1, page.columns.length)}>
-                        ไม่มีข้อมูลในตารางนี้
-                      </td>
-                    </tr>
-                  ) : (
-                    page.rows.map((row, index) => (
-                      <tr key={index}>
-                        {page.columns.map((column) => (
-                          <td key={column.name}>{formatCell(row[column.name])}</td>
-                        ))}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
+          <DataGrid
+            className="hz-db-rdg rdg-light"
+            columns={gridColumns}
+            rows={rows}
+            rowKeyGetter={rowKeyGetter}
+            onRowsChange={handleRowsChange}
+            selectedRows={selected}
+            onSelectedRowsChange={setSelected}
+          />
         )}
       </div>
     </div>
   );
 }
+
+export default WorkspaceDatabasePanel;

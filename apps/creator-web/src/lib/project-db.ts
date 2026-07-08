@@ -29,9 +29,20 @@ export interface ProjectDbTablePage {
   offset: number;
 }
 
-async function getJson<T>(path: string): Promise<T> {
+export type ProjectDbMutation =
+  | { op: "insert"; values: Record<string, unknown> }
+  | { op: "update"; pk: Record<string, unknown>; changes: Record<string, unknown> }
+  | { op: "delete"; pk: Record<string, unknown> };
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const base = apiBaseUrl() ?? "/api";
-  const response = await fetch(`${base}${path}`, { headers: vibeAuthHeaders() });
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      ...vibeAuthHeaders(),
+      ...(init?.body ? { "content-type": "application/json" } : {})
+    }
+  });
   const body = (await response.json().catch(() => null)) as {
     ok?: boolean;
     data?: T;
@@ -44,11 +55,22 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 export function fetchProjectDbSchema(projectId: string): Promise<ProjectDbSchema> {
-  return getJson(`/projects/${encodeURIComponent(projectId)}/db/schema`);
+  return request(`/projects/${encodeURIComponent(projectId)}/db/schema`);
 }
 
 export function fetchProjectDbTable(projectId: string, table: string): Promise<ProjectDbTablePage> {
-  return getJson(
+  return request(
     `/projects/${encodeURIComponent(projectId)}/db/tables/${encodeURIComponent(table)}`
+  );
+}
+
+export function mutateProjectDbRow(
+  projectId: string,
+  table: string,
+  mutation: ProjectDbMutation
+): Promise<unknown> {
+  return request(
+    `/projects/${encodeURIComponent(projectId)}/db/tables/${encodeURIComponent(table)}/mutate`,
+    { method: "POST", body: JSON.stringify(mutation) }
   );
 }
