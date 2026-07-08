@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
-import { extname } from "node:path";
+import { extname, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const FORMAT_EXTENSIONS = new Set([
@@ -24,23 +25,21 @@ const FORMAT_EXCLUDES = new Set(["pnpm-lock.yaml"]);
 const LARGE_FILE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs"]);
 const LARGE_FILE_LINE_LIMIT = 400;
 
-// Pre-existing files over the line limit at the time this gate was introduced.
-// Grandfathered so this check only blocks *new* large files; splitting these up
-// is tracked separately and not required to pass this gate.
-const LARGE_FILE_ALLOWLIST = new Set([
-  "apps/platform-api/src/platform-services.ts",
-  "apps/admin-web/src/main.tsx",
-  "apps/platform-api/src/app-factory.ts",
-  "apps/platform-api/prisma/seed.ts",
-  "apps/platform-api/src/persistence/publish-store-repositories.ts",
-  "packages/api-client/src/index.ts",
-  "apps/app-store-pwa/src/main.tsx",
-  "apps/platform-api/src/persistence/core-repositories.ts",
-  "apps/platform-api/src/persistence/generated-runtime-repositories.ts",
-  "apps/platform-api/src/persistence/ai-governance-repositories.ts",
-  "apps/platform-api/src/persistence/workspace-repositories.ts",
-  "packages/ui/src/index.tsx"
-]);
+// Ratchet baseline: pre-existing files already over the line limit, recorded at their length when
+// last re-baselined. This gate GRANDFATHERS them (they don't have to be ≤400 yet) but RATCHETS
+// them (they may not grow past the recorded ceiling) — so the debt can only shrink, never grow, and
+// any brand-new file over the limit is blocked outright. Regenerate with
+// `node scripts/quality/update-large-file-baseline.mjs` after you intentionally shrink one.
+const LARGE_FILE_BASELINE = loadLargeFileBaseline();
+
+function loadLargeFileBaseline() {
+  const baselinePath = resolve(dirname(fileURLToPath(import.meta.url)), "large-file-baseline.json");
+  try {
+    return JSON.parse(readFileSync(baselinePath, "utf8"));
+  } catch {
+    return {};
+  }
+}
 
 function parseArgs(argv) {
   const args = {
@@ -154,13 +153,24 @@ function checkLargeFiles(files) {
     const lineCount = countLines(file);
     if (lineCount <= LARGE_FILE_LINE_LIMIT) continue;
 
-    if (LARGE_FILE_ALLOWLIST.has(file)) {
-      notes.push(
-        `[quality:changed] note: ${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) — grandfathered, not blocking`
-      );
-    } else {
+    const ceiling = LARGE_FILE_BASELINE[file];
+    if (ceiling === undefined) {
+      // Brand-new (or newly-grown) file over the limit — always blocked.
       violations.push(
         `${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) — split it into focused modules`
+      );
+    } else if (lineCount > ceiling) {
+      // Grandfathered, but it grew past its recorded ceiling — the ratchet only allows shrinking.
+      violations.push(
+        `${file} grew to ${lineCount} lines (ceiling ${ceiling}, limit ${LARGE_FILE_LINE_LIMIT}) — this file may only shrink; move new code into a focused module`
+      );
+    } else if (lineCount < ceiling) {
+      notes.push(
+        `[quality:changed] note: ${file} shrank to ${lineCount} lines (was ${ceiling}) — run \`node scripts/quality/update-large-file-baseline.mjs\` to lock the lower ceiling`
+      );
+    } else {
+      notes.push(
+        `[quality:changed] note: ${file} is ${lineCount} lines (grandfathered ceiling ${ceiling}, limit ${LARGE_FILE_LINE_LIMIT}) — not blocking, but may not grow`
       );
     }
   }
