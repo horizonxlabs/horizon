@@ -7,6 +7,10 @@ import {
 } from "../../apps/platform-api/src/persistence/workspace-repositories.ts";
 
 const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
+const workspaceFilesRoute = readFileSync(
+  "apps/platform-api/src/generation-loop/workspace-files-route.ts",
+  "utf8"
+);
 const persistenceDoc = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 
 const creatorActor = {
@@ -142,5 +146,7 @@ test("runtime persistence wiring exposes Workspace service and routes", () => {
   );
   assert.match(appFactory, /createPrismaWorkspacePersistence\(\s*env\.DATABASE_URL\s*\)/);
   assert.match(appFactory, /isPersistenceWorkspaceRoute/);
+  assert.match(workspaceFilesRoute, /\/projects\/:projectId\/workspace\/files/);
+  assert.match(workspaceFilesRoute, /listWorkspaceFiles/);
   assert.match(persistenceDoc, /Workspace Route-Level Coverage/);
 });

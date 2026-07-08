@@ -30,7 +30,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
   const [vibeStatus, setVibeStatus] = useState("");
   const [isVibing, setIsVibing] = useState(false);
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
-  const [vibeTab, setVibeTab] = useState<"preview" | "code">("preview");
+  const [vibeTab, setVibeTab] = useState<"preview" | "code" | "database">("preview");
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
 
   const selectedFallbackPreview: PreviewVersionDto = {
