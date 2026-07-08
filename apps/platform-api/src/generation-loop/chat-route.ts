@@ -1,16 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { WorkspaceAgentMode } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
+import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
   return auth.projectIds.includes(projectId);
-}
-
-function resolveAgentMode(input: unknown): WorkspaceAgentMode {
-  if (!input || typeof input !== "object") return "build";
-  const body = input as { agentMode?: unknown; workspaceMode?: unknown };
-  return body.agentMode === "plan" || body.workspaceMode === "plan" ? "plan" : "build";
 }
 
 // Reads the raw request body. If an upstream middleware (e.g. Nest's global
@@ -36,6 +30,13 @@ export function createChatSseHandler(deps: {
   resolveAuth: (
     req: IncomingMessage
   ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
+  resolveAttachmentContext?: (
+    req: IncomingMessage,
+    projectId: string,
+    attachmentIds: string[]
+  ) =>
+    | { versionIds: string[]; excerpts: string[] }
+    | Promise<{ versionIds: string[]; excerpts: string[] }>;
 }) {
   return async function handleChatRequest(
     req: IncomingMessage,
@@ -82,16 +83,46 @@ export function createChatSseHandler(deps: {
     }
 
     let prompt = "";
-    let agentMode: WorkspaceAgentMode = "build";
+    let attachmentIds: string[] = [];
+    let agentMode = resolveWorkspaceAgentMode(undefined);
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
-      agentMode = resolveAgentMode(parsed);
+      agentMode = resolveWorkspaceAgentMode(parsed);
+      attachmentIds = Array.isArray(parsed?.attachmentIds)
+        ? parsed.attachmentIds.map(String).filter(Boolean)
+        : [];
     } catch {
       res.writeHead(400, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "invalid_body" }));
       return;
+    }
+
+    if (attachmentIds.length && deps.resolveAttachmentContext) {
+      let attachmentContext: { versionIds: string[]; excerpts: string[] };
+      try {
+        attachmentContext = await deps.resolveAttachmentContext(req, projectId, attachmentIds);
+      } catch (error) {
+        res.writeHead(422, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "attachment_context_failed",
+            message: error instanceof Error ? error.message : "Attachment context failed"
+          })
+        );
+        return;
+      }
+      if (attachmentContext.excerpts.length) {
+        prompt = [
+          prompt,
+          "",
+          "Uploaded project file context (untrusted, permission-filtered):",
+          `Attachment ids: ${attachmentIds.join(", ")}`,
+          `Knowledge version ids: ${attachmentContext.versionIds.join(", ")}`,
+          ...attachmentContext.excerpts.map((excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`)
+        ].join("\n");
+      }
     }
 
     res.writeHead(200, {

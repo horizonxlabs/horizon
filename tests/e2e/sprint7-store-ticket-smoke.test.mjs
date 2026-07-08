@@ -4,9 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -201,11 +200,11 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
   assert.equal(existsSync("apps/app-store-pwa/public/offline.html"), true);
   assert.match(
     readFileSync("apps/app-store-pwa/public/manifest.webmanifest", "utf8"),
-    /Enterprise App Store/
+    /Horizon Store/
   );
 
   for (const text of [
-    "App Store",
+    "Horizon Store",
     "My Apps",
     "Available Apps",
     "App Detail",

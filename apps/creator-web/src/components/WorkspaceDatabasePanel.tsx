@@ -1,4 +1,4 @@
-import type { DatabaseViewSnapshotDto } from "@evcp/api-client";
+import { getDatabaseView, type DatabaseViewSnapshotDto } from "@evcp/api-client";
 import { useEffect, useState } from "react";
 import { createCreatorPlatformClient } from "../lib/creator-client";
 
@@ -17,8 +17,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     let cancelled = false;
     setView(undefined);
     setErrorText(undefined);
-    createCreatorPlatformClient()
-      .getDatabaseView(projectId)
+    getDatabaseView(createCreatorPlatformClient(), projectId)
       .then((snapshot) => {
         if (cancelled) return;
         setView(snapshot);

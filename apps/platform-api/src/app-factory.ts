@@ -11,6 +11,7 @@ import { createPublishRoutes, resolveAppsTarget } from "./publish/routes";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
+import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import { createHash } from "node:crypto";
@@ -182,6 +183,9 @@ export interface PlatformRequest {
     | `/creator/projects/${string}/prd/changes`
     | `/creator/projects/${string}/prd/changes/from-ticket`
     | `/creator/projects/${string}/prd/changes/decision`
+    | `/creator/projects/${string}/files`
+    | `/creator/projects/${string}/files/init`
+    | `/creator/projects/${string}/files/${string}/complete`
     | `/creator/projects/${string}/domains`
     | `/creator/projects/${string}/domains/requests`
     | `/creator/projects/${string}/traceability`
@@ -614,13 +618,39 @@ export async function executePlatformApiRequestAsync(
   const corePersistenceClient = services.corePersistenceClient;
   const credentialService = services.credentialService;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
-  const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
-  const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
-  const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
-  const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
-  const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
-  const useNativeAuth = Boolean(corePersistenceClient && credentialService && isNativeAuthRoute(request));
-  const useSimulatedAuth = Boolean(corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login");
+  const useAiGovernancePersistence = Boolean(
+    aiGovernancePersistence && isPersistenceAiGovernanceRoute(request)
+  );
+  const usePrdPersistence = Boolean(
+    corePersistence && prdPersistence && isPersistencePrdRoute(request)
+  );
+  const useWorkspacePersistence = Boolean(
+    corePersistence &&
+      prdPersistence &&
+      workspacePersistence &&
+      isPersistenceWorkspaceRoute(request)
+  );
+  const usePublishStorePersistence = Boolean(
+    corePersistence &&
+      prdPersistence &&
+      workspacePersistence &&
+      publishStorePersistence &&
+      isPersistencePublishStoreRoute(request)
+  );
+  const useGeneratedRuntimePersistence = Boolean(
+    corePersistence &&
+      publishStorePersistence &&
+      generatedRuntimePersistence &&
+      isPersistenceGeneratedRuntimeRoute(request)
+  );
+  const useNativeAuth = Boolean(
+    corePersistenceClient && credentialService && isNativeAuthRoute(request)
+  );
+  const useSimulatedAuth = Boolean(
+    corePersistenceClient &&
+      request.method === "POST" &&
+      request.path === "/admin/auth/simulate-login"
+  );
   if (
     !useCorePersistence &&
     !useAiGovernancePersistence &&
@@ -1808,7 +1838,10 @@ export function executePlatformApiRequest(
     const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
     if (request.method === "POST" && workspacePromptMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.workspace.submitPrompt(user, workspacePromptMatch[1], { prompt: String(request.body?.prompt ?? ""), agentMode: resolveWorkspaceAgentMode(request.body) });
+      const result = services.workspace.submitPrompt(user, workspacePromptMatch[1], {
+        prompt: String(request.body?.prompt ?? ""),
+        agentMode: resolveWorkspaceAgentMode(request.body)
+      });
       return {
         status: result.guardrail.decision === "block" ? HttpStatus.OK : HttpStatus.CREATED,
         body: success(result)
@@ -2448,6 +2481,50 @@ export function executePlatformApiRequest(
       return { status: HttpStatus.OK, body: success(result) };
     }
 
+    const projectFilesMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/files$/);
+    if (request.method === "GET" && projectFilesMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(services.projectFiles.listProjectFiles(user, projectFilesMatch[1]))
+      };
+    }
+
+    const projectFileInitMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/files\/init$/);
+    if (request.method === "POST" && projectFileInitMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.projectFiles.initializeUpload(user, projectFileInitMatch[1], {
+        fileName: String(request.body?.fileName ?? ""),
+        mimeType: String(request.body?.mimeType ?? ""),
+        sizeBytes: Number(request.body?.sizeBytes ?? 0),
+        sha256: String(request.body?.sha256 ?? ""),
+        purpose: request.body?.purpose ? (String(request.body.purpose) as never) : undefined,
+        includeByDefault:
+          request.body?.includeByDefault === undefined
+            ? undefined
+            : Boolean(request.body.includeByDefault)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    const projectFileCompleteMatch = request.path.match(
+      /^\/creator\/projects\/([^/]+)\/files\/([^/]+)\/complete$/
+    );
+    if (request.method === "POST" && projectFileCompleteMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.projectFiles.completeUpload(
+        user,
+        projectFileCompleteMatch[1],
+        projectFileCompleteMatch[2],
+        {
+          scanStatus: request.body?.scanStatus ? (String(request.body.scanStatus) as never) : undefined,
+          extractedText: request.body?.extractedText ? String(request.body.extractedText) : undefined,
+          excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
+        }
+      );
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
@@ -3078,14 +3155,8 @@ function registerPlatformRoutes(
   rawApp.all("/preview/:slug", previewHandler);
   rawApp.all("/preview/:slug/*splat", previewHandler);
 
-  // NOTE (Task 9 deviation, DONE_WITH_CONCERNS): the shared DockerEngine instance is
-  // constructed inside workspace-orchestrator/factory.ts and is never exposed on
-  // WorkspaceOrchestrator or PersistenceAwarePlatformApiServices, so it cannot be
-  // reached cleanly from here. createDefaultGenerationService's optional `docker`
-  // param is therefore left unset, meaning generated `shell`/`file`/`migration`
-  // actions will hit the throwing placeholder engine until a real engine is
-  // threaded through (e.g. by having createDefaultWorkspaceOrchestrator return it,
-  // or constructing a second engine instance here).
+  // NOTE: the shared DockerEngine is not exposed from the orchestrator yet, so
+  // generated shell/file/migration actions still use the generation placeholder.
   const generationService = createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     onAudit: (event) =>
@@ -3097,6 +3168,11 @@ function registerPlatformRoutes(
         metadata: event.metadata
       })
   });
+  registerWorkspaceFilesRoute({
+    rawApp,
+    generationService,
+    resolveAuth: async (req) => resolveWorkspaceAuth(services, req.headers ?? {})
+  });
   const chatSseHandler = createChatSseHandler({
     generationService,
     resolveAuth: async (req) => {
@@ -3105,6 +3181,30 @@ function registerPlatformRoutes(
       } catch {
         return null;
       }
+    },
+    resolveAttachmentContext: async (req, projectId, attachmentIds) => {
+      const user = services.auth.resolveCurrentUser((req as { headers?: HeaderBag }).headers ?? {});
+      const project = services.projects.getProjectForActor(user, projectId);
+      const attachmentSelection = services.projectFiles.resolveAttachmentSources(
+        user,
+        project.id,
+        attachmentIds
+      );
+      const retrieval = services.knowledge.retrieve(user, {
+        projectId: project.id,
+        appId: project.appId,
+        department: project.targetDepartment,
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding",
+        query: `workspace chat attachments ${attachmentIds.join(" ")}`,
+        requiredKnowledgeSourceIds: attachmentSelection.sourceIds
+      });
+      return {
+        versionIds: retrieval.matchedVersionIds,
+        excerpts: retrieval.sources.flatMap((source) =>
+          source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`)
+        )
+      };
     }
   });
   rawApp.all(
@@ -3241,6 +3341,39 @@ function registerPlatformRoutes(
   };
   rawApp.all("/apps/:slug", appsProdHandler);
   rawApp.all("/apps/:slug/*splat", appsProdHandler);
+
+  routes.get("/creator/projects/:projectId/files", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/files/init", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files/init`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/files/:uploadId/complete", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files/${String(request.params?.uploadId ?? "")}/complete`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
 
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(

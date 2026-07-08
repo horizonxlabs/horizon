@@ -1,5 +1,14 @@
 import type { PlatformProjectDto } from "./index";
 
+export type WorkspaceFileDto = {
+  path: string;
+  content: string;
+};
+
+export type WorkspaceFilesResponse = {
+  files: WorkspaceFileDto[];
+};
+
 export type AppDatabaseColumnDto = {
   id: string;
   tableKey: string;
@@ -47,3 +56,25 @@ export type DatabaseViewSnapshotDto = {
   relationships: AppDatabaseRelationshipDto[];
   sampleRecords: AppDatabaseSampleRecordDto[];
 };
+
+type RequestClient = {
+  request<T>(path: string, init?: RequestInit): Promise<T>;
+};
+
+export function getWorkspaceFiles(
+  client: RequestClient,
+  projectId: string
+): Promise<WorkspaceFilesResponse> {
+  return client.request<WorkspaceFilesResponse>(
+    `/projects/${encodeURIComponent(projectId)}/workspace/files`
+  );
+}
+
+export function getDatabaseView(
+  client: RequestClient,
+  projectId: string
+): Promise<DatabaseViewSnapshotDto> {
+  return client.request<DatabaseViewSnapshotDto>(
+    `/projects/${encodeURIComponent(projectId)}/database`
+  );
+}

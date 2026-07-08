@@ -2,9 +2,32 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 
 const MARKER = "===EVCPFILE:";
 const MAX_FILE_CHARS = 12000;
+const MAX_WORKSPACE_FILE_CHARS = 120000;
 
 export interface ContainerFileReader {
   read(containerId: string): Promise<Array<{ path: string; content: string }>>;
+}
+
+export interface WorkspaceFileBrowserReader {
+  read(containerId: string): Promise<Array<{ path: string; content: string }>>;
+}
+
+function parseMarkedFiles(
+  stdout: string,
+  maxFileChars: number
+): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = [];
+  // split keeps the captured path as every odd element: [before, path, body, path, body, ...]
+  const parts = stdout.split(new RegExp(`${MARKER}(.+?)===\\n`));
+  for (let i = 1; i < parts.length; i += 2) {
+    const path = (parts[i] ?? "").trim();
+    let content = (parts[i + 1] ?? "").replace(/\n$/, "");
+    if (content.length > maxFileChars) {
+      content = `${content.slice(0, maxFileChars)}\n/* …truncated… */`;
+    }
+    if (path) files.push({ path, content });
+  }
+  return files;
 }
 
 // Reads the project's live source files from the running container so the AI edits the
@@ -37,18 +60,42 @@ export function createContainerFileReader(docker: DockerEngine): ContainerFileRe
         return [];
       }
 
-      const files: Array<{ path: string; content: string }> = [];
-      // split keeps the captured path as every odd element: [before, path, body, path, body, ...]
-      const parts = stdout.split(new RegExp(`${MARKER}(.+?)===\\n`));
-      for (let i = 1; i < parts.length; i += 2) {
-        const path = (parts[i] ?? "").trim();
-        let content = (parts[i + 1] ?? "").replace(/\n$/, "");
-        if (content.length > MAX_FILE_CHARS) {
-          content = `${content.slice(0, MAX_FILE_CHARS)}\n/* …truncated… */`;
-        }
-        if (path) files.push({ path, content });
+      return parseMarkedFiles(stdout, MAX_FILE_CHARS);
+    }
+  };
+}
+
+// Reads the workspace file tree for the Creator Code tab. This deliberately differs from
+// createContainerFileReader above, which is capped to a tiny prompt context for AI edits.
+export function createWorkspaceFileBrowserReader(docker: DockerEngine): WorkspaceFileBrowserReader {
+  return {
+    async read(containerId: string): Promise<Array<{ path: string; content: string }>> {
+      const script = [
+        "cd /workspace 2>/dev/null || exit 0",
+        "find . \\( -path './node_modules' -o -path './.next' -o -path './.git' -o -path './dist' -o -path './build' -o -path './coverage' \\) -prune -o -type f \\( -name '*.tsx' -o -name '*.ts' -o -name '*.jsx' -o -name '*.js' -o -name '*.css' -o -name '*.json' -o -name '*.md' -o -name '*.html' -o -name '*.mjs' -o -name '*.cjs' \\) -print 2>/dev/null | sort | while IFS= read -r f; do",
+        '  path="${f#./}";',
+        `  echo "${MARKER}$path===";`,
+        `  size=$(wc -c < "$f" 2>/dev/null || echo 0);`,
+        `  if [ "$size" -gt ${MAX_WORKSPACE_FILE_CHARS} ]; then`,
+        `    head -c ${MAX_WORKSPACE_FILE_CHARS} "$f";`,
+        '    echo "";',
+        '    echo "/* …truncated… */";',
+        "  else",
+        '    cat "$f";',
+        "  fi",
+        '  echo "";',
+        "done"
+      ].join("\n");
+
+      let stdout = "";
+      try {
+        const result = await docker.execInContainer(containerId, ["sh", "-c", script]);
+        stdout = (result.stdout ?? "").replace(/\r\n/g, "\n");
+      } catch {
+        return [];
       }
-      return files;
+
+      return parseMarkedFiles(stdout, MAX_WORKSPACE_FILE_CHARS + 100);
     }
   };
 }

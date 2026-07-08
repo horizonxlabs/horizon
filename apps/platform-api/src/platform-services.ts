@@ -935,7 +935,13 @@ export type StoreAppAccessStatus = "active" | "available" | "pending";
 export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
 export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType =
-  "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
+  | "bug"
+  | "feedback"
+  | "feature"
+  | "access_issue"
+  | "data_issue"
+  | "performance"
+  | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
 
@@ -1061,7 +1067,11 @@ export interface InAppNotification {
 
 export type PrdChangeSourceType = "ticket" | "prompt" | "manual";
 export type PrdChangeStatus =
-  "draft" | "pending_approval" | "approved" | "rejected" | "changes_requested";
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "changes_requested";
 export type PrdChangeRiskLevel = "low" | "medium" | "high" | "critical";
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
@@ -1287,7 +1297,14 @@ export type AgentRoleKey =
 export type GuardrailDecision = "allow" | "warn" | "block";
 export type GuardrailRuleType = "keyword" | "regex" | "policy";
 
-export type KnowledgeSourceType = "pdf" | "markdown" | "text" | "word" | "excel" | "openapi_json";
+export type KnowledgeSourceType =
+  | "pdf"
+  | "markdown"
+  | "text"
+  | "word"
+  | "excel"
+  | "image"
+  | "openapi_json";
 export type KnowledgeSourceStatus = "draft" | "active" | "deprecated" | "archived";
 export type KnowledgeUploadStatus = "pending" | "uploaded" | "failed";
 export type KnowledgeIndexStatus = "pending" | "indexed" | "failed";
@@ -1376,6 +1393,43 @@ export interface KnowledgeRetrievalResult {
   deniedReasons: string[];
   sources: KnowledgeRetrievalSource[];
   retrievalLogId: string;
+}
+
+export type ProjectFilePurpose = "ai_context" | "app_asset";
+export type ProjectFileScanStatus = "pending" | "clean" | "failed" | "malicious" | "quarantined";
+export type ProjectFileExtractionStatus = "pending" | "indexed" | "failed";
+
+export interface ProjectFileUpload {
+  id: string;
+  projectId: string;
+  sourceId: string;
+  versionId: string;
+  ownerUserId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  bucket: string;
+  objectKey: string;
+  purpose: ProjectFilePurpose;
+  uploadStatus: KnowledgeUploadStatus;
+  scanStatus: ProjectFileScanStatus;
+  indexStatus: KnowledgeIndexStatus;
+  extractionStatus: ProjectFileExtractionStatus;
+  includeByDefault: boolean;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectFileUploadInitResult {
+  uploadId: string;
+  sourceId: string;
+  versionId: string;
+  objectKey: string;
+  uploadUrl: string;
+  expiresAt: string;
+  file: ProjectFileUpload;
 }
 
 export type SkillStatus = "draft" | "active" | "disabled" | "deprecated";
@@ -3025,7 +3079,8 @@ class OpenAiCompatibleCompletionAdapter implements AiCompletionAdapter {
           const shouldRetry = isRetryableProviderStatus(response.status, this.runtime);
           if (shouldRetry && attempt < maxAttempts) continue;
           const errorBody = response.body as
-            { error?: { message?: unknown; type?: unknown } } | undefined;
+            | { error?: { message?: unknown; type?: unknown } }
+            | undefined;
           const providerMessage = sanitizeProviderError(
             String(errorBody?.error?.message ?? `HTTP ${response.status}`),
             secret
@@ -3792,6 +3847,115 @@ export class KnowledgeGovernanceService {
     return [...this.sources];
   }
 
+  createProjectFileDraft(
+    actor: PlatformUser,
+    project: PlatformProject,
+    input: {
+      sourceId: string;
+      versionId: string;
+      title: string;
+      sourceType: KnowledgeSourceType;
+      contentHash: string;
+      tags?: string[];
+    }
+  ): { source: KnowledgeSource; version: KnowledgeVersion } {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, project.id);
+    if (!input.title.trim()) throw new ValidationError("Project file title is required");
+    if (!input.contentHash.trim()) throw new ValidationError("Project file content hash is required");
+
+    const now = new Date().toISOString();
+    const source: KnowledgeSource = {
+      id: input.sourceId,
+      title: input.title,
+      sourceType: input.sourceType,
+      ownerUserId: actor.id,
+      scope: {
+        visibility: "project",
+        department: project.targetDepartment,
+        projectIds: [project.id],
+        appIds: project.appId ? [project.appId] : [],
+        agentRoles: ["requirement_analyst", "frontend_developer", "backend_developer", "technical_writer"],
+        scenarios: ["requirement_analysis", "frontend_coding", "backend_coding", "documentation"]
+      },
+      uploadStatus: "pending",
+      indexStatus: "pending",
+      status: "draft",
+      tags: [...(input.tags ?? []), "project-upload"],
+      createdAt: now,
+      updatedAt: now
+    };
+    const version: KnowledgeVersion = {
+      id: input.versionId,
+      sourceId: source.id,
+      version: "v1",
+      contentHash: input.contentHash,
+      changelog: "Creator project file upload initialized",
+      chunkCount: 0,
+      excerpts: [],
+      approvalStatus: "pending",
+      lifecycleStatus: "pending",
+      isActive: false,
+      createdByUserId: actor.id,
+      createdAt: now
+    };
+
+    this.sources.push(source);
+    this.versions.push(version);
+    this.audit.record({
+      actorId: actor.id,
+      action: "knowledge.project_file.draft_created",
+      resourceType: "knowledge_source",
+      resourceId: source.id,
+      metadata: { projectId: project.id, versionId: version.id, sourceType: source.sourceType }
+    });
+    return { source, version };
+  }
+
+  completeProjectFileVersion(
+    actor: PlatformUser,
+    input: {
+      sourceId: string;
+      versionId: string;
+      excerpts: string[];
+      clean: boolean;
+      failureReason?: string;
+    }
+  ): KnowledgeVersion {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const source = this.requireSource(input.sourceId);
+    const version = this.requireVersion(input.versionId);
+    if (version.sourceId !== source.id) {
+      throw new ValidationError(`Knowledge version ${version.id} does not belong to source ${source.id}`);
+    }
+
+    const now = new Date().toISOString();
+    source.uploadStatus = input.clean ? "uploaded" : "failed";
+    source.indexStatus = input.clean ? "indexed" : "failed";
+    source.status = input.clean ? "active" : "draft";
+    source.updatedAt = now;
+    version.excerpts = [...input.excerpts];
+    version.chunkCount = input.excerpts.length;
+    version.changelog = input.clean
+      ? "Creator project file uploaded, scanned, and indexed"
+      : `Creator project file rejected: ${input.failureReason ?? "scan failed"}`;
+    version.approvalStatus = input.clean ? "approved" : "rejected";
+    version.lifecycleStatus = input.clean ? "active" : "rejected";
+    version.isActive = input.clean;
+    version.approvedByUserId = input.clean ? actor.id : undefined;
+    version.approvedAt = input.clean ? now : undefined;
+
+    this.audit.record({
+      actorId: actor.id,
+      action: input.clean ? "knowledge.project_file.activated" : "knowledge.project_file.rejected",
+      resourceType: "knowledge_version",
+      resourceId: version.id,
+      severity: input.clean ? "info" : "warning",
+      metadata: { sourceId: source.id, failureReason: input.failureReason }
+    });
+    return version;
+  }
+
   submitVersion(
     actor: PlatformUser,
     sourceId: string,
@@ -4042,6 +4206,292 @@ export class KnowledgeGovernanceService {
     const version = this.versions.find((candidate) => candidate.id === versionId);
     if (!version) throw new ValidationError(`Unknown knowledge version: ${versionId}`);
     return version;
+  }
+}
+
+const PROJECT_FILE_BUCKET = "project-file-uploads";
+const PROJECT_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024;
+const PROJECT_FILE_ALLOWED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+  "application/yaml",
+  "text/yaml",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+]);
+
+export class ProjectFileService {
+  private readonly files: ProjectFileUpload[] = [];
+
+  constructor(
+    private readonly auth: MockAuthService,
+    private readonly audit: AuditService,
+    private readonly projects: ProjectService,
+    private readonly knowledge: KnowledgeGovernanceService
+  ) {}
+
+  initializeUpload(
+    actor: PlatformUser,
+    projectId: string,
+    input: {
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      sha256: string;
+      purpose?: ProjectFilePurpose;
+      includeByDefault?: boolean;
+    }
+  ): ProjectFileUploadInitResult {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    this.validateUploadMetadata(input);
+
+    const now = new Date().toISOString();
+    const uploadId = `upl_${Date.now().toString(36)}_${String(this.files.length + 1).padStart(4, "0")}`;
+    const sourceId = `knsrc_${uploadId}`;
+    const versionId = `${sourceId}_v1`;
+    const objectKey = [
+      "projects",
+      project.id,
+      "knowledge",
+      sourceId,
+      versionId,
+      this.sanitizeFileName(input.fileName)
+    ].join("/");
+
+    this.knowledge.createProjectFileDraft(actor, project, {
+      sourceId,
+      versionId,
+      title: input.fileName,
+      sourceType: this.sourceTypeFor(input.fileName, input.mimeType),
+      contentHash: `sha256:${input.sha256}`,
+      tags: ["creator-upload", input.purpose ?? "ai_context"]
+    });
+
+    const file: ProjectFileUpload = {
+      id: uploadId,
+      projectId: project.id,
+      sourceId,
+      versionId,
+      ownerUserId: actor.id,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      sha256: input.sha256,
+      bucket: PROJECT_FILE_BUCKET,
+      objectKey,
+      purpose: input.purpose ?? "ai_context",
+      uploadStatus: "pending",
+      scanStatus: "pending",
+      indexStatus: "pending",
+      extractionStatus: "pending",
+      includeByDefault: input.includeByDefault ?? true,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.files.push(file);
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "project_file.upload_initialized",
+      resourceType: "project_file_upload",
+      resourceId: file.id,
+      metadata: {
+        projectId: project.id,
+        sourceId,
+        versionId,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes
+      }
+    });
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    return {
+      uploadId,
+      sourceId,
+      versionId,
+      objectKey,
+      uploadUrl: `memory://${PROJECT_FILE_BUCKET}/${objectKey}`,
+      expiresAt,
+      file: { ...file }
+    };
+  }
+
+  completeUpload(
+    actor: PlatformUser,
+    projectId: string,
+    uploadId: string,
+    input: {
+      scanStatus?: ProjectFileScanStatus;
+      extractedText?: string;
+      excerpts?: string[];
+    } = {}
+  ): { file: ProjectFileUpload } {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const file = this.requireProjectFile(uploadId);
+    if (file.projectId !== project.id) {
+      throw new PermissionError(`Project file ${uploadId} does not belong to this project`);
+    }
+    if (file.archivedAt) throw new ValidationError(`Project file ${uploadId} is archived`);
+
+    const scanStatus = input.scanStatus ?? "clean";
+    const clean = scanStatus === "clean";
+    const excerpts = clean ? this.excerptsFor(file, input) : [];
+    const now = new Date().toISOString();
+
+    file.uploadStatus = clean ? "uploaded" : "failed";
+    file.scanStatus = clean ? "clean" : scanStatus;
+    file.indexStatus = clean ? "indexed" : "failed";
+    file.extractionStatus = clean ? "indexed" : "failed";
+    file.updatedAt = now;
+
+    this.knowledge.completeProjectFileVersion(actor, {
+      sourceId: file.sourceId,
+      versionId: file.versionId,
+      excerpts,
+      clean,
+      failureReason: clean ? undefined : `scan status ${scanStatus}`
+    });
+
+    this.audit.record({
+      actorId: actor.id,
+      action: "project_file.upload_completed",
+      resourceType: "project_file_upload",
+      resourceId: file.id,
+      severity: clean ? "info" : "warning",
+      metadata: {
+        projectId: project.id,
+        sourceId: file.sourceId,
+        versionId: file.versionId,
+        scanStatus: file.scanStatus,
+        indexStatus: file.indexStatus
+      }
+    });
+    return { file: { ...file } };
+  }
+
+  listProjectFiles(actor: PlatformUser, projectId: string): ProjectFileUpload[] {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    return this.files
+      .filter((file) => file.projectId === project.id && !file.archivedAt)
+      .map((file) => ({ ...file }));
+  }
+
+  resolveAttachmentSources(
+    actor: PlatformUser,
+    projectId: string,
+    attachmentIds: string[] | undefined
+  ): { sourceIds: string[]; versionIds: string[]; files: ProjectFileUpload[] } {
+    if (!attachmentIds?.length) return { sourceIds: [], versionIds: [], files: [] };
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const files = attachmentIds.map((id) => this.requireProjectFile(id));
+    for (const file of files) {
+      if (file.projectId !== project.id) {
+        throw new PermissionError(`Project file ${file.id} does not belong to this project`);
+      }
+      if (
+        file.archivedAt ||
+        file.uploadStatus !== "uploaded" ||
+        file.scanStatus !== "clean" ||
+        file.indexStatus !== "indexed" ||
+        file.extractionStatus !== "indexed"
+      ) {
+        throw new ValidationError(`Project file ${file.fileName} is not ready for AI context`);
+      }
+    }
+    return {
+      sourceIds: files.map((file) => file.sourceId),
+      versionIds: files.map((file) => file.versionId),
+      files: files.map((file) => ({ ...file }))
+    };
+  }
+
+  archiveProjectFile(actor: PlatformUser, projectId: string, uploadId: string): ProjectFileUpload {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    const project = this.projects.getProjectForActor(actor, projectId);
+    const file = this.requireProjectFile(uploadId);
+    if (file.projectId !== project.id) {
+      throw new PermissionError(`Project file ${uploadId} does not belong to this project`);
+    }
+    const now = new Date().toISOString();
+    file.archivedAt = now;
+    file.updatedAt = now;
+    this.audit.record({
+      actorId: actor.id,
+      action: "project_file.archived",
+      resourceType: "project_file_upload",
+      resourceId: file.id,
+      metadata: { projectId: project.id, sourceId: file.sourceId, versionId: file.versionId }
+    });
+    return { ...file };
+  }
+
+  private validateUploadMetadata(input: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string;
+  }): void {
+    if (!input.fileName.trim()) throw new ValidationError("Upload fileName required");
+    if (!PROJECT_FILE_ALLOWED_MIME_TYPES.has(input.mimeType)) {
+      throw new ValidationError(`Upload mime type ${input.mimeType} is not allowed`);
+    }
+    if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0) {
+      throw new ValidationError("Upload file size must be greater than zero");
+    }
+    if (input.sizeBytes > PROJECT_FILE_MAX_SIZE_BYTES) {
+      throw new ValidationError(
+        `Upload file size ${input.sizeBytes} exceeds ${PROJECT_FILE_MAX_SIZE_BYTES} bytes`
+      );
+    }
+    if (!/^[a-f0-9]{64}$/i.test(input.sha256)) {
+      throw new ValidationError("Upload sha256 must be a 64 character hex digest");
+    }
+  }
+
+  private requireProjectFile(uploadId: string): ProjectFileUpload {
+    const file = this.files.find((candidate) => candidate.id === uploadId);
+    if (!file) throw new ValidationError(`Unknown project file upload: ${uploadId}`);
+    return file;
+  }
+
+  private sourceTypeFor(fileName: string, mimeType: string): KnowledgeSourceType {
+    const lower = fileName.toLowerCase();
+    if (mimeType.startsWith("image/")) return "image";
+    if (mimeType === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+    if (mimeType === "text/markdown" || lower.endsWith(".md") || lower.endsWith(".markdown"))
+      return "markdown";
+    if (mimeType.includes("wordprocessingml")) return "word";
+    if (mimeType.includes("spreadsheetml") || lower.endsWith(".csv")) return "excel";
+    if (lower.includes("openapi") && (lower.endsWith(".json") || lower.endsWith(".yaml")))
+      return "openapi_json";
+    return "text";
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const sanitized = fileName.trim().replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "");
+    return sanitized || "upload";
+  }
+
+  private excerptsFor(
+    file: ProjectFileUpload,
+    input: { extractedText?: string; excerpts?: string[] }
+  ): string[] {
+    if (input.excerpts?.length) return input.excerpts.map((excerpt) => excerpt.trim()).filter(Boolean);
+    const text = input.extractedText?.trim();
+    if (!text) return [`Uploaded ${file.fileName} (${file.mimeType}, ${file.sizeBytes} bytes).`];
+    const chunks = text.match(/[\s\S]{1,800}/g) ?? [text];
+    return chunks.slice(0, 8).map((chunk) => chunk.trim()).filter(Boolean);
   }
 }
 
@@ -7652,6 +8102,7 @@ export class WorkspaceService {
     private readonly guardrails: GuardrailService,
     private readonly frontendVersions: FrontendVersionService,
     private readonly knowledge: KnowledgeGovernanceService,
+    private readonly projectFiles: ProjectFileService,
     private readonly skills: SkillGovernanceService
   ) {}
 
@@ -7672,7 +8123,7 @@ export class WorkspaceService {
   submitPrompt(
     actor: PlatformUser,
     projectId: string,
-    input: { prompt: string; agentMode?: WorkspaceAgentMode }
+    input: { prompt: string; attachmentIds?: string[]; agentMode?: WorkspaceAgentMode }
   ): WorkspacePromptResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const project = this.projects.getProjectForActor(actor, projectId);
@@ -7721,6 +8172,11 @@ export class WorkspaceService {
     }
 
     const skillSelection = this.resolveWorkspaceSkill(actor, project);
+    const attachmentSelection = this.projectFiles.resolveAttachmentSources(
+      actor,
+      project.id,
+      input.attachmentIds
+    );
     const knowledgeRetrieval = this.knowledge.retrieve(actor, {
       projectId: project.id,
       appId: project.appId,
@@ -7728,7 +8184,12 @@ export class WorkspaceService {
       agentRole: "frontend_developer",
       scenario: "frontend_coding",
       query: prompt,
-      requiredKnowledgeSourceIds: skillSelection.requiredKnowledgeSourceIds
+      requiredKnowledgeSourceIds: [
+        ...new Set([
+          ...skillSelection.requiredKnowledgeSourceIds,
+          ...attachmentSelection.sourceIds
+        ])
+      ]
     });
     const route = this.aiGovernance.resolveRoute("frontend_coding");
     const requestEstimate = 120;
@@ -7951,6 +8412,7 @@ export interface PlatformApiServices {
   aiGovernance: AiGovernanceService;
   guardrails: GuardrailService;
   knowledge: KnowledgeGovernanceService;
+  projectFiles: ProjectFileService;
   skills: SkillGovernanceService;
   prds: PrdService;
   workspace: WorkspaceService;
@@ -7994,6 +8456,7 @@ export function createPlatformApiServices(
   const aiGovernance = new AiGovernanceService(auth, audit, options.aiGateway);
   const guardrails = new GuardrailService(auth, audit);
   const knowledge = new KnowledgeGovernanceService(auth, audit, projects);
+  const projectFiles = new ProjectFileService(auth, audit, projects, knowledge);
   const skills = new SkillGovernanceService(auth, audit, projects);
   const prds = new PrdService(auth, audit, projects, aiGovernance, guardrails);
   const databaseView = new DatabaseViewService(projects);
@@ -8049,6 +8512,7 @@ export function createPlatformApiServices(
     guardrails,
     frontendVersions,
     knowledge,
+    projectFiles,
     skills
   );
   const workspaceOrchestrator = createDefaultWorkspaceOrchestrator({
@@ -8070,6 +8534,7 @@ export function createPlatformApiServices(
     aiGovernance,
     guardrails,
     knowledge,
+    projectFiles,
     skills,
     prds,
     workspace,

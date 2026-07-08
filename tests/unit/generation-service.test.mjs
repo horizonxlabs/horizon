@@ -168,3 +168,30 @@ test("retries failing shell action stops after 2 failed rounds, surfacing an err
   assert.equal(events.at(-1).type, "done");
   assert.equal(execAttempts, 3, "expected exactly 3 attempts (initial + 2 retries)");
 });
+
+test("listWorkspaceFiles uses the dedicated workspace file reader", async () => {
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([]),
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: createActionRunner({
+      docker: createMemoryDockerEngine(),
+      checkpoints: createMemoryCheckpointStore(),
+      migrations: createMemoryMigrationStore()
+    }),
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => "container-1",
+    readContextFiles: async () => {
+      throw new Error("context reader should not be used for file browser");
+    },
+    readWorkspaceFiles: async (containerId) => [
+      { path: "app/page.tsx", content: `// ${containerId}` }
+    ],
+    commitAllChanges: async () => "commit-sha-3"
+  });
+
+  const files = await service.listWorkspaceFiles("p1");
+
+  assert.deepEqual(files, [{ path: "app/page.tsx", content: "// container-1" }]);
+});

@@ -127,3 +127,114 @@ test("workspace requires confirmed PRD baseline before accepting prompts", () =>
 
   assert.throws(() => services.workspace.submitPrompt(creator, project.id, { prompt: "Add dashboard" }), /PRD baseline/);
 });
+
+test("creator project file upload creates clean indexed project knowledge for workspace attachments", () => {
+  const { services, creator, project } = createBaselineWorkspaceFixture();
+
+  const initialized = services.projectFiles.initializeUpload(creator, project.id, {
+    fileName: "brand-guidelines.md",
+    mimeType: "text/markdown",
+    sizeBytes: 512,
+    sha256: "a".repeat(64),
+    includeByDefault: true
+  });
+
+  assert.equal(initialized.file.uploadStatus, "pending");
+  assert.equal(initialized.file.scanStatus, "pending");
+  assert.match(initialized.uploadUrl, /^memory:\/\/project-file-uploads\//);
+
+  const completed = services.projectFiles.completeUpload(creator, project.id, initialized.uploadId, {
+    scanStatus: "clean",
+    extractedText: "# Brand\nUse the uploaded teal logo and compact dashboard layout."
+  });
+
+  assert.equal(completed.file.uploadStatus, "uploaded");
+  assert.equal(completed.file.scanStatus, "clean");
+  assert.equal(completed.file.indexStatus, "indexed");
+
+  const files = services.projectFiles.listProjectFiles(creator, project.id);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].fileName, "brand-guidelines.md");
+
+  const result = services.workspace.submitPrompt(creator, project.id, {
+    prompt: "Use the uploaded brand guide on the home page",
+    attachmentIds: [initialized.uploadId]
+  });
+
+  assert.deepEqual(result.task.knowledgeVersionIds, [completed.file.versionId]);
+  assert.deepEqual(result.knowledgeRetrieval.matchedVersionIds, [completed.file.versionId]);
+  assert.equal(result.knowledgeRetrieval.sources[0].title, "brand-guidelines.md");
+});
+
+test("creator project image upload is indexed as image knowledge metadata", () => {
+  const { services, creator, project } = createBaselineWorkspaceFixture();
+
+  const initialized = services.projectFiles.initializeUpload(creator, project.id, {
+    fileName: "logo.png",
+    mimeType: "image/png",
+    sizeBytes: 1024,
+    sha256: "e".repeat(64)
+  });
+  const completed = services.projectFiles.completeUpload(creator, project.id, initialized.uploadId, {
+    scanStatus: "clean"
+  });
+
+  const result = services.workspace.submitPrompt(creator, project.id, {
+    prompt: "Use the uploaded logo",
+    attachmentIds: [completed.file.id]
+  });
+
+  assert.equal(result.knowledgeRetrieval.sources[0].sourceType, "image");
+  assert.match(result.knowledgeRetrieval.sources[0].excerpts[0], /Uploaded logo.png/);
+});
+
+test("workspace attachments reject files from another project and files that are not ready", () => {
+  const { services, creator, project } = createBaselineWorkspaceFixture();
+  const otherProject = services.projects.createProject({
+    actor: creator,
+    name: "Other Workspace",
+    slug: "other-workspace",
+    appType: "Workflow App",
+    businessProblem: "Separate project",
+    targetDepartment: "Finance Department",
+    intendedUsers: ["Analyst"],
+    dataSensitivity: "internal"
+  });
+
+  const pending = services.projectFiles.initializeUpload(creator, project.id, {
+    fileName: "pending-notes.txt",
+    mimeType: "text/plain",
+    sizeBytes: 256,
+    sha256: "b".repeat(64)
+  });
+
+  assert.throws(
+    () =>
+      services.workspace.submitPrompt(creator, project.id, {
+        prompt: "Use the pending notes",
+        attachmentIds: [pending.uploadId]
+      }),
+    /not ready for AI context/
+  );
+
+  const otherUpload = services.projectFiles.initializeUpload(creator, otherProject.id, {
+    fileName: "other-project.md",
+    mimeType: "text/markdown",
+    sizeBytes: 256,
+    sha256: "c".repeat(64)
+  });
+
+  services.projectFiles.completeUpload(creator, otherProject.id, otherUpload.uploadId, {
+    scanStatus: "clean",
+    extractedText: "Other project content"
+  });
+
+  assert.throws(
+    () =>
+      services.workspace.submitPrompt(creator, project.id, {
+        prompt: "Use another project file",
+        attachmentIds: [otherUpload.uploadId]
+      }),
+    /does not belong to this project/
+  );
+});
