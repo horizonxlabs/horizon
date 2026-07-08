@@ -1,10 +1,29 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+function readAllSourceFiles(dir) {
+  const entries = readdirSync(dir);
+  let combined = "";
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      combined += readAllSourceFiles(fullPath);
+    } else if (/\.(tsx?|jsx?)$/.test(entry)) {
+      combined += readFileSync(fullPath, "utf8");
+    }
+  }
+  return combined;
+}
+
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
-const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+// The creator-web CreatorApp component was split across hooks/, pages/, and
+// components/ files as a pure restructure; concatenate the whole src tree so
+// source-content assertions below still see every identifier/behavior.
+const creatorSource = readAllSourceFiles("apps/creator-web/src");
 const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
 const appConfig = readFileSync("packages/config/src/index.ts", "utf8");
@@ -47,16 +66,38 @@ test("Admin AI provider test call is API-client backed", () => {
 });
 
 test("Admin AI governance actions are API-client backed", () => {
-  for (const method of ["listAiProviders", "listAiApiKeys", "createAiProvider", "createAiApiKey", "configureAiRoute", "configureAiQuota", "createGuardrailRule", "listGuardrailEvents"]) {
+  for (const method of [
+    "listAiProviders",
+    "listAiApiKeys",
+    "createAiProvider",
+    "createAiApiKey",
+    "configureAiRoute",
+    "configureAiQuota",
+    "createGuardrailRule",
+    "listGuardrailEvents"
+  ]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
     assert.match(adminSource, new RegExp(method));
   }
 
-  for (const handler of ["loadAiGovernanceState", "handleCreateAiProvider", "handleSaveAiApiKey", "handleConfigureAiRoute", "handleConfigureAiQuota", "handleCreateGuardrailRule"]) {
+  for (const handler of [
+    "loadAiGovernanceState",
+    "handleCreateAiProvider",
+    "handleSaveAiApiKey",
+    "handleConfigureAiRoute",
+    "handleConfigureAiQuota",
+    "handleCreateGuardrailRule"
+  ]) {
     assert.match(adminSource, new RegExp(handler));
   }
 
-  for (const label of ["Create Provider", "Save Masked Key", "Configure Route", "Configure Quota", "Add Guardrail Rule"]) {
+  for (const label of [
+    "Create Provider",
+    "Save Masked Key",
+    "Configure Route",
+    "Configure Quota",
+    "Add Guardrail Rule"
+  ]) {
     assert.match(adminSource, new RegExp(label));
   }
 
@@ -96,13 +137,26 @@ test("Admin and Creator shells render separate page branches instead of one comb
   assert.match(adminSource, /adminPageFromPath/);
   assert.match(adminSource, /renderAdminShell/);
   assert.match(adminSource, /adminPageCopy/);
-  for (const branch of ['adminPage === "dashboard"', 'adminPage === "services"', 'adminPage === "ai-providers"', 'adminPage === "guardrails"', 'adminPage === "audit-logs"']) {
+  for (const branch of [
+    'adminPage === "dashboard"',
+    'adminPage === "services"',
+    'adminPage === "ai-providers"',
+    'adminPage === "guardrails"',
+    'adminPage === "audit-logs"'
+  ]) {
     assert.match(adminSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(creatorSource, /creatorPageFromPath/);
-  assert.match(creatorSource, /renderCreatorShell/);
+  assert.match(creatorSource, /CreatorShell/);
   assert.match(creatorSource, /creatorPageCopy/);
-  for (const branch of ['creatorPage === "projects"', 'creatorPage === "workspace"', 'creatorPage === "prd"', 'creatorPage === "users"', 'creatorPage === "publish"', 'creatorPage === "tickets"']) {
+  for (const branch of [
+    'creatorPage === "projects"',
+    'creatorPage === "workspace"',
+    'creatorPage === "prd"',
+    'creatorPage === "users"',
+    'creatorPage === "publish"',
+    'creatorPage === "tickets"'
+  ]) {
     assert.match(creatorSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(uiStyles, /\.admin-page-stack/);
@@ -170,8 +224,17 @@ test("published app route opens a usable generated Leave Management runtime", ()
   assert.match(storeSource, /GeneratedLeaveManagementApp/);
   assert.match(storeSource, /currentPath\.startsWith\("\/apps\/leave-management"\)/);
   assert.match(storeSource, /handleOpenSelectedApp/);
-  assert.match(storeSource, /window\.location\.assign\(selectedApp\.route \?\? `\/apps\/\$\{selectedApp\.slug\}`\)/);
-  for (const text of ["New leave request", "Submit request", "Approval queue", "approveRequest", "Last submitted request"]) {
+  assert.match(
+    storeSource,
+    /window\.location\.assign\(selectedApp\.route \?\? `\/apps\/\$\{selectedApp\.slug\}`\)/
+  );
+  for (const text of [
+    "New leave request",
+    "Submit request",
+    "Approval queue",
+    "approveRequest",
+    "Last submitted request"
+  ]) {
     assert.match(storeSource, new RegExp(text));
   }
 });
@@ -220,7 +283,12 @@ test("Creator app users and publish actions are API-client backed", () => {
     assert.match(creatorSource, new RegExp(method));
   }
 
-  for (const handler of ["loadCreatorPublishState", "handleInviteUser", "handleApproveAccessRequest", "handlePublishProject"]) {
+  for (const handler of [
+    "loadCreatorPublishState",
+    "handleInviteUser",
+    "handleApproveAccessRequest",
+    "handlePublishProject"
+  ]) {
     assert.match(creatorSource, new RegExp(handler));
   }
 
