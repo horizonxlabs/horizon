@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -20,6 +20,28 @@ const FORMAT_EXTENSIONS = new Set([
 const LINT_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".ts", ".tsx"]);
 
 const FORMAT_EXCLUDES = new Set(["pnpm-lock.yaml"]);
+
+const LARGE_FILE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs"]);
+const LARGE_FILE_LINE_LIMIT = 400;
+
+// Pre-existing files over the line limit at the time this gate was introduced.
+// Grandfathered so this check only blocks *new* large files; splitting these up
+// is tracked separately and not required to pass this gate.
+const LARGE_FILE_ALLOWLIST = new Set([
+  "apps/platform-api/src/platform-services.ts",
+  "apps/admin-web/src/main.tsx",
+  "apps/platform-api/src/app-factory.ts",
+  "apps/creator-web/src/main.tsx",
+  "apps/platform-api/prisma/seed.ts",
+  "apps/platform-api/src/persistence/publish-store-repositories.ts",
+  "packages/api-client/src/index.ts",
+  "apps/app-store-pwa/src/main.tsx",
+  "apps/platform-api/src/persistence/core-repositories.ts",
+  "apps/platform-api/src/persistence/generated-runtime-repositories.ts",
+  "apps/platform-api/src/persistence/ai-governance-repositories.ts",
+  "apps/platform-api/src/persistence/workspace-repositories.ts",
+  "packages/ui/src/index.tsx"
+]);
 
 function parseArgs(argv) {
   const args = {
@@ -110,6 +132,53 @@ function isLintTarget(file) {
   return LINT_EXTENSIONS.has(extname(file));
 }
 
+function isLargeFileTarget(file) {
+  return LARGE_FILE_EXTENSIONS.has(extname(file));
+}
+
+function countLines(file) {
+  const content = readFileSync(file, "utf8");
+  if (content.length === 0) return 0;
+  const lines = content.split("\n");
+  // A trailing newline produces one empty trailing element; don't count it as a line.
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines.length;
+}
+
+function checkLargeFiles(files) {
+  const violations = [];
+  const notes = [];
+
+  for (const file of files) {
+    const lineCount = countLines(file);
+    if (lineCount <= LARGE_FILE_LINE_LIMIT) continue;
+
+    if (LARGE_FILE_ALLOWLIST.has(file)) {
+      notes.push(
+        `[quality:changed] note: ${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) — grandfathered, not blocking`
+      );
+    } else {
+      violations.push(
+        `${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) — split it into focused modules`
+      );
+    }
+  }
+
+  for (const note of notes) {
+    console.error(note);
+  }
+
+  if (violations.length > 0) {
+    console.error("[quality:changed] large-file check failed");
+    for (const violation of violations) {
+      console.error(`  ${violation}`);
+    }
+    process.exit(1);
+  }
+}
+
 const args = parseArgs(process.argv.slice(2));
 const changedFiles = getChangedFiles(args);
 
@@ -120,11 +189,16 @@ if (changedFiles.length === 0) {
 
 const formatFiles = changedFiles.filter(isFormatTarget);
 const lintFiles = changedFiles.filter(isLintTarget);
+const largeFileTargets = changedFiles.filter(isLargeFileTarget);
 
 runCommand("conflict marker scan", "node", [
   "scripts/quality/check-no-conflict-markers.mjs",
   ...changedFiles
 ]);
+
+if (!args.formatOnly && largeFileTargets.length > 0) {
+  checkLargeFiles(largeFileTargets);
+}
 
 if (args.format && formatFiles.length > 0) {
   runCommand("format check", "pnpm", ["exec", "prettier", "--check", ...formatFiles]);

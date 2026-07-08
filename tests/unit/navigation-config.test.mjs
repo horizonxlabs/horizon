@@ -30,7 +30,9 @@ test("creator navigation matches the real app creation lifecycle", () => {
 });
 
 test("creator project actions follow PRD before AI workspace generation", () => {
-  const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
+  const creatorSource =
+    readFileSync("apps/creator-web/src/main.tsx", "utf8") +
+    readFileSync("apps/creator-web/src/lib/routing.ts", "utf8");
 
   assert.match(creatorSource, /Review PRD/);
   assert.match(creatorSource, /Open Creator Workspace/);

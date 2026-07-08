@@ -1,0 +1,35 @@
+import type { CreateProjectInput } from "@evcp/api-client";
+
+export type CreatorProjectView = {
+  id: string;
+  slug: string;
+  name: string;
+  appType: string;
+  status: string;
+  owner: string;
+  prdVersion: string;
+  frontendVersion: string;
+  tokenUsedThisMonth: number;
+};
+
+export type CreatorBootstrapState = {
+  userName: string;
+  selectedProject: CreatorProjectView;
+  projects: CreatorProjectView[];
+  source: "Platform API" | "local fallback";
+};
+
+export type CreateProjectFormState = {
+  name: string;
+  slug: string;
+  appType: string;
+  businessProblem: string;
+  targetDepartment: string;
+  intendedUsers: string;
+  dataSensitivity: CreateProjectInput["dataSensitivity"];
+};
+
+export type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
+
+// --- Native login + change-password gate ---
+export type NativeLoginResult = { token: string; expiresAt: string; mustChangePassword: boolean };
