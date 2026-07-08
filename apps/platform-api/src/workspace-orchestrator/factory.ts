@@ -6,6 +6,7 @@ import {
   createLiteLlmGatewayAdmin
 } from "./resource-ports";
 import { createProjectSecretStore } from "./secret-store";
+import { createPgSecretPersistence } from "./secret-persistence";
 import { createMemoryDockerEngine } from "./docker-engine";
 import { createDockerSocketEngine } from "./docker-socket-engine";
 import { createPgRunSql } from "./pg-runner";
@@ -19,11 +20,17 @@ export function resolveWorkspaceAdapterMode(
   return env.EVCP_WORKSPACE_REAL_ADAPTERS === "1" ? "real" : "memory";
 }
 
-export function createDefaultWorkspaceOrchestrator(opts: {
-  secretKeyHex?: string;
-  onAudit?: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
-  env?: Record<string, string | undefined>;
-} = {}): WorkspaceOrchestrator {
+export function createDefaultWorkspaceOrchestrator(
+  opts: {
+    secretKeyHex?: string;
+    onAudit?: (event: {
+      action: string;
+      projectId: string;
+      metadata?: Record<string, unknown>;
+    }) => void;
+    env?: Record<string, string | undefined>;
+  } = {}
+): WorkspaceOrchestrator {
   const env = opts.env ?? process.env;
   const encryptionKeyHex = opts.secretKeyHex ?? env.EVCP_WORKSPACE_SECRET_KEY ?? DEV_SECRET_KEY;
   const mode = resolveWorkspaceAdapterMode(env);
@@ -51,6 +58,20 @@ export function createDefaultWorkspaceOrchestrator(opts: {
         `MinIO=real (${env.EVCP_S3_HOST ?? "minio"}), LiteLLM=${hasLiteLlmConfig ? "real" : "memory-stub (litellm not configured)"}.`
     );
 
+    // Persist secrets encrypted-at-rest so per-project DATABASE_URL (etc.) survive restarts.
+    const secretUser = encodeURIComponent(env.POSTGRES_USER ?? "evcp");
+    const secretPass = encodeURIComponent(env.POSTGRES_PASSWORD ?? "");
+    const secretHost = env.EVCP_PG_HOST ?? "postgres";
+    const secretPort = Number(env.EVCP_PG_PORT ?? 5432);
+    const secretDb = env.POSTGRES_DB ?? "evcp";
+    const secrets = createProjectSecretStore({
+      encryptionKeyHex,
+      persistence: createPgSecretPersistence(
+        `postgresql://${secretUser}:${secretPass}@${secretHost}:${secretPort}/${secretDb}`
+      )
+    });
+    void secrets.hydrate();
+
     return createWorkspaceOrchestrator({
       postgres: createPgClientPostgresProvisioner(pgRunSql),
       objectStorage,
@@ -60,7 +81,7 @@ export function createDefaultWorkspaceOrchestrator(opts: {
             masterKey: env.EVCP_LITELLM_MASTER_KEY as string
           })
         : createMemoryLlmGatewayAdmin(),
-      secrets: createProjectSecretStore({ encryptionKeyHex }),
+      secrets,
       docker: createDockerSocketEngine(),
       onAudit: opts.onAudit
     });
