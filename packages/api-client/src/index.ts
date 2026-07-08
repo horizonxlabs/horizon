@@ -25,7 +25,7 @@ export function failure(code: string, message: string, traceId?: string): ApiFai
     error: { code, message, traceId }
   };
 }
-
+export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources"; export type { AppDatabaseColumnDto, AppDatabaseRelationshipDto, AppDatabaseSampleRecordDto, AppDatabaseTableDto, DatabaseViewSnapshotDto, WorkspaceFileDto, WorkspaceFilesResponse } from "./workspace-resources";
 export type PlatformUserDto = {
   id: string;
   name: string;

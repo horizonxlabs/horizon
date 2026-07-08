@@ -89,10 +89,8 @@ test("AppShell provides a professional persistent navigation layout", () => {
     "sidebar-nav-short",
     "sidebar-nav-label",
     "sidebar-footer",
-    "topbar-context",
-    "topbar-user",
-    "topbar-session",
-    "topbar-avatar"
+    "sidebar-user-avatar",
+    "sidebar-session"
   ]) {
     assert.match(uiSource, new RegExp(shellClass));
     assert.match(css, new RegExp(`\\.${shellClass}`));

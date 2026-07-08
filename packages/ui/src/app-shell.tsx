@@ -112,27 +112,17 @@ export function AppShell({
           })}
         </nav>
         <div className="sidebar-footer">
-          <span>Environment</span>
-          <strong>{environmentLabel}</strong>
-        </div>
-      </aside>
-      <main className="content">
-        <header className="topbar">
-          <div className="topbar-context">
-            <span>Current area</span>
-            <strong>{activeNavItem?.label ?? "Overview"}</strong>
-          </div>
-          <div className="topbar-user">
-            <span className="topbar-env">{environmentLabel}</span>
-            {session ? <div className="topbar-session">{session}</div> : null}
-            <span className="topbar-avatar" aria-hidden="true">
-              {userInitials}
-            </span>
+          <span className="sidebar-user-avatar" aria-hidden="true">
+            {userInitials}
+          </span>
+          <div className="sidebar-user-meta">
             <strong>{userName}</strong>
+            <span>{environmentLabel}</span>
           </div>
-        </header>
-        {children}
-      </main>
+        </div>
+        {session ? <div className="sidebar-session">{session}</div> : null}
+      </aside>
+      <main className="content">{children}</main>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { createPublishRoutes, resolveAppsTarget } from "./publish/routes";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
+import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
@@ -3145,14 +3146,8 @@ function registerPlatformRoutes(
   rawApp.all("/preview/:slug", previewHandler);
   rawApp.all("/preview/:slug/*splat", previewHandler);
 
-  // NOTE (Task 9 deviation, DONE_WITH_CONCERNS): the shared DockerEngine instance is
-  // constructed inside workspace-orchestrator/factory.ts and is never exposed on
-  // WorkspaceOrchestrator or PersistenceAwarePlatformApiServices, so it cannot be
-  // reached cleanly from here. createDefaultGenerationService's optional `docker`
-  // param is therefore left unset, meaning generated `shell`/`file`/`migration`
-  // actions will hit the throwing placeholder engine until a real engine is
-  // threaded through (e.g. by having createDefaultWorkspaceOrchestrator return it,
-  // or constructing a second engine instance here).
+  // NOTE: the shared DockerEngine is not exposed from the orchestrator yet, so
+  // generated shell/file/migration actions still use the generation placeholder.
   const generationService = createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     onAudit: (event) =>
@@ -3163,6 +3158,11 @@ function registerPlatformRoutes(
         resourceId: event.projectId,
         metadata: event.metadata
       })
+  });
+  registerWorkspaceFilesRoute({
+    rawApp,
+    generationService,
+    resolveAuth: async (req) => resolveWorkspaceAuth(services, req.headers ?? {})
   });
   const chatSseHandler = createChatSseHandler({
     generationService,

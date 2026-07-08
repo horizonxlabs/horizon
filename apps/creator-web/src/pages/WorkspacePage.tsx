@@ -1,7 +1,16 @@
 import { Send } from "lucide-react";
 import { VibeActionRow } from "../components/VibeActionRow";
+import { WorkspaceCodePanel } from "../components/WorkspaceCodePanel";
+import { WorkspaceDatabasePanel } from "../components/WorkspaceDatabasePanel";
 import { platformSessionToken } from "../lib/session";
 import type { useCreatorApp } from "../hooks/use-creator-app";
+
+const WORKSPACE_TABS = ["preview", "code", "database"] as const;
+const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
+  preview: "Preview",
+  code: "Code",
+  database: "Database"
+};
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -38,7 +47,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
         <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
         <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
-          {(["preview", "code"] as const).map((tab) => (
+          {WORKSPACE_TABS.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -47,7 +56,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               role="tab"
               aria-selected={vibeTab === tab}
             >
-              {tab === "preview" ? "Preview" : "Code"}
+              {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
@@ -192,26 +201,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               src={previewSrc}
               className="vibe-live-iframe"
             />
+          ) : vibeTab === "database" ? (
+            <WorkspaceDatabasePanel projectId={selectedProject.id} />
           ) : (
-            <div className="vibe-live-code-panel">
-              <div className="vibe-live-code-title">Changes this session</div>
-              {vibeMessages.flatMap((message) => message.actions).length === 0 ? (
-                <div className="vibe-live-code-empty">
-                  No changes yet. Ask the AI to build something.
-                </div>
-              ) : (
-                <div className="vibe-live-action-stack">
-                  {vibeMessages
-                    .flatMap((message) => message.actions)
-                    .map((action, index) => (
-                      <VibeActionRow key={`${action.id}-${index}`} action={action} />
-                    ))}
-                </div>
-              )}
-              <div className="vibe-live-code-note">
-                A full file browser is on the roadmap — use the Preview tab to see the running app.
-              </div>
-            </div>
+            <WorkspaceCodePanel projectId={selectedProject.id} projectSlug={selectedProject.slug} />
           )}
         </div>
       </div>

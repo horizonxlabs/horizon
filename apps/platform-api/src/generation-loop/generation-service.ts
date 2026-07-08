@@ -46,6 +46,7 @@ export interface GenerationServiceDeps {
   getApiKey: (projectId: string) => string;
   getContainerId: (projectId: string) => string;
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
+  readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   commitAllChanges: (projectId: string, message: string) => Promise<string>;
   onAudit?: (event: {
     action: string;
@@ -100,6 +101,10 @@ export function createGenerationService(deps: GenerationServiceDeps) {
   return {
     history(projectId: string): WorkspaceChatMessage[] {
       return deps.chatHistory.listMessages(projectId);
+    },
+    async listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>> {
+      const containerId = deps.getContainerId(projectId);
+      return deps.readWorkspaceFiles ? deps.readWorkspaceFiles(containerId) : [];
     },
     async *runTurn(input: { projectId: string; prompt: string }): AsyncIterable<ChatStreamEvent> {
       const userMessage: WorkspaceChatMessage = {
