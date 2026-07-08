@@ -4,19 +4,13 @@ import {
   type AppAccessSnapshotResponse,
   type AppInvitationDto,
   type AppStoreRegistryEntryDto,
-  type CreateProjectInput,
-  type CurrentUserResponse,
-  type PlatformProjectDto,
   type PrdVersionDto,
   type PreviewVersionDto,
   type PublishResultResponse,
   type PublishReviewResponse,
-  type SimulatedSsoLoginInput,
   type WorkspacePromptResultDto,
-  type WorkspaceSnapshotResponse,
-  type WorkspaceTaskStepDto
+  type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
-import { navigation } from "@evcp/config";
 import {
   AppShell,
   DataTable,
@@ -55,358 +49,66 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { ChangePasswordScreen } from "./components/ChangePasswordScreen";
+import { LoginScreen } from "./components/LoginScreen";
+import { VibeActionRow } from "./components/VibeActionRow";
+import {
+  accessRequests,
+  appMembers,
+  appRoles,
+  checkpointRows,
+  creatorSessionBridgeProfile,
+  creatorTickets,
+  databaseTables,
+  fallbackPreview,
+  fallbackSelectedProject,
+  fallbackTaskSteps,
+  initialCreateProjectForm,
+  initialCreatorBootstrap,
+  migrationRows,
+  mvpDemoSteps,
+  pendingInvites,
+  prdChangeRows,
+  prdSections,
+  publishChecklist,
+  sampleRecords,
+  traceRows,
+  usageRows,
+  versionRows,
+  wizardSteps
+} from "./data/mock-data";
+import {
+  clearCreatorSessionBridge,
+  createCreatorPlatformClient,
+  projectToView
+} from "./lib/creator-client";
+import {
+  apiBaseUrl,
+  createCreatorNavigation,
+  creatorPageCopy,
+  creatorPageFromPath,
+  projectRouteSegmentFromPath,
+  slugifyProjectName
+} from "./lib/routing";
+import {
+  clearLoginSession,
+  hasValidSession,
+  needsPasswordChange,
+  platformSessionToken,
+  vibeAuthHeaders
+} from "./lib/session";
+import { vibeActionVerb, type VibeAction } from "./lib/vibe-actions";
+import { applyVibeEvent, type VibeMessage } from "./lib/vibe-stream";
+import type {
+  CreateProjectFormState,
+  CreatorBootstrapState,
+  CreatorPage,
+  CreatorProjectView,
+  NativeLoginResult
+} from "./types";
 if (typeof window !== "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   await import("@evcp/ui/styles.css");
-}
-
-type CreatorProjectView = {
-  id: string;
-  slug: string;
-  name: string;
-  appType: string;
-  status: string;
-  owner: string;
-  prdVersion: string;
-  frontendVersion: string;
-  tokenUsedThisMonth: number;
-};
-
-type CreatorBootstrapState = {
-  userName: string;
-  selectedProject: CreatorProjectView;
-  projects: CreatorProjectView[];
-  source: "Platform API" | "local fallback";
-};
-
-type CreateProjectFormState = {
-  name: string;
-  slug: string;
-  appType: string;
-  businessProblem: string;
-  targetDepartment: string;
-  intendedUsers: string;
-  dataSensitivity: CreateProjectInput["dataSensitivity"];
-};
-
-const fallbackSelectedProject: CreatorProjectView = {
-  id: "proj_leave_management",
-  slug: "leave-management",
-  name: "Leave Management",
-  appType: "Workflow App",
-  status: "draft",
-  owner: "Creator User",
-  prdVersion: "1.0",
-  frontendVersion: "preview-0001",
-  tokenUsedThisMonth: 120
-};
-
-const initialCreatorBootstrap: CreatorBootstrapState = {
-  userName: "Creator User",
-  selectedProject: fallbackSelectedProject,
-  projects: [fallbackSelectedProject],
-  source: "local fallback"
-};
-
-const initialCreateProjectForm: CreateProjectFormState = {
-  name: "Expense Approval",
-  slug: "expense-approval",
-  appType: "Workflow App",
-  businessProblem: "ลดเวลาการอนุมัติค่าใช้จ่ายและทำให้ผู้จัดการเห็นรายการค้างอนุมัติในที่เดียว",
-  targetDepartment: "Finance",
-  intendedUsers: "Employee, Manager, Finance Admin",
-  dataSensitivity: "internal"
-};
-
-const creatorSessionBridgeProfile: SimulatedSsoLoginInput = {
-  subject: "keycloak-creator-ui-bridge",
-  email: "creator@company.com",
-  name: "Creator User",
-  groups: ["evcp-creators"],
-  appRoles: { "leave-management": ["HR Admin"] }
-};
-
-function apiBaseUrl(): string | undefined {
-  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
-  if (
-    (!configured || configured === "/api") &&
-    typeof window !== "undefined" &&
-    window.location.port === "4101"
-  ) {
-    return "http://127.0.0.1:3100";
-  }
-  if (!configured && import.meta.env.DEV) return undefined;
-  return (configured || "/api").replace(/\/$/, "");
-}
-
-type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
-
-function creatorPageFromPath(pathname: string): CreatorPage {
-  if (pathname.endsWith("/prd")) return "prd";
-  if (pathname.endsWith("/users")) return "users";
-  if (pathname.endsWith("/publish")) return "publish";
-  if (pathname.endsWith("/tickets")) return "tickets";
-  if (pathname.includes("/creator/projects/")) return "workspace";
-  return "projects";
-}
-
-function projectRouteSegmentFromPath(pathname: string): string | undefined {
-  return pathname.match(/\/creator\/projects\/([^/]+)/)?.[1];
-}
-
-function slugifyProjectName(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 64) || "untitled-project"
-  );
-}
-
-function createCreatorNavigation(project: CreatorProjectView) {
-  const projectBaseRoute = `/creator/projects/${project.id}`;
-  return navigation.creator.map((item) => {
-    if (!item.route.includes("/creator/projects/leave-management")) return item;
-    return {
-      ...item,
-      route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
-    };
-  });
-}
-
-const creatorPageCopy: Record<
-  CreatorPage,
-  { eyebrow: string; title: string; description: string }
-> = {
-  projects: {
-    eyebrow: "Creator Projects",
-    title: "Projects",
-    description: "เลือก project หรือเริ่มสร้างแอปใหม่จาก business problem"
-  },
-  workspace: {
-    eyebrow: "Creator Workspace",
-    title: "Creator Workspace: Leave Management",
-    description:
-      "ใช้ prompt เพื่อสร้างหรือแก้ frontend preview หลังจากมี PRD draft/baseline ของ project ที่เลือก"
-  },
-  prd: {
-    eyebrow: "PRD Baseline",
-    title: "PRD Review: Leave Management",
-    description: "ตรวจ PRD sections, version history และ confirm baseline ก่อน generate app"
-  },
-  users: {
-    eyebrow: "Access Management",
-    title: "Users & Roles",
-    description: "จัดการ app members, invitations, access requests และ role permission matrix"
-  },
-  publish: {
-    eyebrow: "Publish & Registry",
-    title: "Publish & Registry",
-    description: "ตรวจ manifest, readiness checklist และลงทะเบียนแอปก่อนเปิดให้ end user ใช้งาน"
-  },
-  tickets: {
-    eyebrow: "Feedback Loop",
-    title: "Tickets & Changes",
-    description: "รับ bug/feedback จาก App Store แล้วแปลงเป็น PRD change หรือ AI prompt"
-  }
-};
-
-function platformSessionToken(): string | undefined {
-  return createPlatformSessionStore(window.localStorage).getToken();
-}
-
-// --- Native login + change-password gate ---
-type NativeLoginResult = { token: string; expiresAt: string; mustChangePassword: boolean };
-
-export function persistLoginSession(
-  res: NativeLoginResult,
-  storage: { setItem: (k: string, v: string) => void } = window.localStorage
-): void {
-  storage.setItem("evcp_session", res.token);
-  storage.setItem("evcp_session_expires_at", res.expiresAt);
-}
-
-export function needsPasswordChange(res: { mustChangePassword: boolean }): boolean {
-  return res.mustChangePassword === true;
-}
-
-function clearLoginSession(
-  storage: { removeItem: (k: string) => void } = window.localStorage
-): void {
-  storage.removeItem("evcp_session");
-  storage.removeItem("evcp_session_expires_at");
-}
-
-async function nativeLogin(email: string, password: string): Promise<NativeLoginResult> {
-  const base = apiBaseUrl() ?? "/api";
-  const response = await fetch(`${base}/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password })
-  });
-  const body = (await response.json().catch(() => null)) as
-    | { ok: true; data: NativeLoginResult }
-    | { ok: false; error: { code: string; message: string } }
-    | null;
-  if (!body || body.ok !== true) {
-    throw new Error(body && "error" in body ? body.error.message : "Invalid email or password");
-  }
-  return body.data;
-}
-
-async function nativeChangePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const base = apiBaseUrl() ?? "/api";
-  const response = await fetch(`${base}/auth/change-password`, {
-    method: "POST",
-    headers: vibeAuthHeaders(),
-    body: JSON.stringify({ currentPassword, newPassword })
-  });
-  const body = (await response.json().catch(() => null)) as
-    | { ok: true; data: { ok: true } }
-    | { ok: false; error: { code: string; message: string } }
-    | null;
-  if (!body || body.ok !== true) {
-    throw new Error(body && "error" in body ? body.error.message : "Change password failed");
-  }
-}
-
-// --- Live "vibe coding" via the /chat SSE generation loop ---
-function vibeAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  const token = platformSessionToken();
-  if (token) headers["authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
-  return headers;
-}
-
-// A single AI action shown in the vibe chat: live "running" while the AI streams/executes it,
-// then "done"/"failed", expandable to the diff (edit), written body (file), command/SQL, or error.
-type VibeAction = {
-  id: string;
-  type: string;
-  label: string;
-  status: "running" | "done" | "failed";
-  find?: string;
-  replace?: string;
-  body?: string;
-  error?: string;
-};
-
-const VIBE_ACTION_VERBS: Record<string, [string, string]> = {
-  file: ["Creating", "Created"],
-  edit: ["Editing", "Edited"],
-  shell: ["Running", "Ran"],
-  migration: ["Migrating", "Migrated"]
-};
-
-function vibeActionVerb(type: string, status: string): string {
-  if (status === "failed") return "Failed";
-  const [active, done] = VIBE_ACTION_VERBS[type] ?? ["Working", "Done"];
-  return status === "running" ? active : done;
-}
-
-function vibeActionIcon(type: string): string {
-  return type === "file"
-    ? "📄"
-    : type === "edit"
-      ? "✏️"
-      : type === "shell"
-        ? "⚡"
-        : type === "migration"
-          ? "🗄️"
-          : "•";
-}
-
-function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
-  const [open, setOpen] = useState(false);
-  const hasBody = Boolean(action.find || action.replace || action.body || action.error);
-  const running = action.status === "running";
-  const failed = action.status === "failed";
-  const accent = running ? "#6b7280" : failed ? "#dc2626" : "#059669";
-  const bg = running ? "#f9fafb" : failed ? "#fef2f2" : "#f0fdf4";
-  const border = running ? "#e5e7eb" : failed ? "#fecaca" : "#bbf7d0";
-  const isDiff = action.find !== undefined || action.replace !== undefined;
-  return (
-    <div
-      style={{
-        border: `1px solid ${border}`,
-        background: bg,
-        borderRadius: 8,
-        overflow: "hidden",
-        fontFamily: "ui-monospace, monospace",
-        fontSize: 12
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => hasBody && setOpen((o) => !o)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          width: "100%",
-          background: "none",
-          border: "none",
-          padding: "5px 9px",
-          cursor: hasBody ? "pointer" : "default",
-          color: accent,
-          textAlign: "left"
-        }}
-      >
-        <span aria-hidden>{vibeActionIcon(action.type)}</span>
-        <span className={running ? "vibe-shimmer" : ""} style={{ fontWeight: 600 }}>
-          {running ? "" : failed ? "✗ " : "✓ "}
-          {vibeActionVerb(action.type, action.status)}
-        </span>
-        <span
-          style={{
-            color: "#374151",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            flex: 1
-          }}
-        >
-          {action.label}
-        </span>
-        {hasBody && <span style={{ color: "#9ca3af" }}>{open ? "▾" : "▸"}</span>}
-      </button>
-      {open && hasBody && (
-        <div
-          style={{
-            borderTop: "1px solid #e5e7eb",
-            background: "#0b1021",
-            color: "#e5e7eb",
-            padding: 10,
-            maxHeight: 320,
-            overflow: "auto"
-          }}
-        >
-          {action.error ? (
-            <pre style={{ margin: 0, color: "#fca5a5", whiteSpace: "pre-wrap" }}>
-              {action.error}
-            </pre>
-          ) : isDiff ? (
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-              {(action.find ?? "").split("\n").map((line, i) => (
-                <div key={`f${i}`} style={{ color: "#fca5a5" }}>
-                  - {line}
-                </div>
-              ))}
-              {(action.replace ?? "").split("\n").map((line, i) => (
-                <div key={`r${i}`} style={{ color: "#86efac" }}>
-                  + {line}
-                </div>
-              ))}
-            </pre>
-          ) : (
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{action.body}</pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // Ensure the project has a running dev container before chatting. Idempotent: an
@@ -482,33 +184,6 @@ async function streamVibeChat(
   }
 }
 
-function createCreatorPlatformClient() {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  return createPlatformApiClient({
-    baseUrl,
-    sessionToken: platformSessionToken(),
-    legacyUserEmail: "creator@company.com"
-  });
-}
-
-function projectToView(
-  project: PlatformProjectDto,
-  currentUser: CurrentUserResponse
-): CreatorProjectView {
-  return {
-    id: project.id,
-    slug: project.slug,
-    name: project.name,
-    appType: project.appType,
-    status: project.status,
-    owner: currentUser.user.name,
-    prdVersion: project.status === "published" ? "1.0" : "0.1",
-    frontendVersion: project.activeFrontendCheckpointId ?? "preview-pending",
-    tokenUsedThisMonth: 0
-  };
-}
-
 async function loadCreatorBootstrap(
   selectedProjectKey = projectRouteSegmentFromPath(window.location.pathname)
 ): Promise<CreatorBootstrapState> {
@@ -569,402 +244,6 @@ async function signInCreatorSessionBridge(): Promise<CreatorBootstrapState> {
   return loadCreatorBootstrap();
 }
 
-function clearCreatorSessionBridge(): CreatorBootstrapState {
-  createPlatformSessionStore(window.localStorage).clearSession();
-  return initialCreatorBootstrap;
-}
-
-const wizardSteps = [
-  {
-    title: "1. App Basics",
-    detail: "ชื่อแอป, business problem, app type, target department",
-    status: "complete"
-  },
-  {
-    title: "2. Users and Access",
-    detail: "Employee, Manager, HR Admin และ default roles",
-    status: "complete"
-  },
-  {
-    title: "3. Data and Risk",
-    detail: "internal data sensitivity พร้อม governance warning",
-    status: "ready"
-  }
-];
-
-const prdSections = [
-  [
-    "overview",
-    "Overview",
-    "Leave Management เป็น Workflow App สำหรับ HR Department เพื่อจัดการคำขอลางานตั้งแต่สร้างคำขอจนถึงอนุมัติ"
-  ],
-  [
-    "business_objective",
-    "Business Objective",
-    "ลดงาน manual ของ HR และทำให้ manager เห็นคำขอที่ต้องอนุมัติในที่เดียว"
-  ],
-  [
-    "users_roles",
-    "Users and Roles",
-    "Employee สร้างคำขอ, Manager อนุมัติ, HR Admin ดูภาพรวมและตั้งค่านโยบาย"
-  ],
-  [
-    "core_flows",
-    "Core Flows",
-    "Create leave request, manager approval, status tracking, audit event"
-  ],
-  [
-    "data_model",
-    "Data Model",
-    "Employee, Leave Request, Approval Step, Attachment, Notification, Audit Event"
-  ],
-  [
-    "permissions",
-    "Permissions",
-    "ผู้ใช้เห็นเฉพาะข้อมูลของตนเอง manager เห็นทีม HR เห็นข้อมูลทั้งระบบ"
-  ],
-  [
-    "nfr",
-    "Non-Functional Requirements",
-    "Authenticated access, audit log, token quota guard และ guardrail ก่อน generate"
-  ],
-  [
-    "acceptance_criteria",
-    "Acceptance Criteria",
-    "Creator review PRD แล้วกด Confirm Baseline v1.0 ก่อนเข้าสู่ app generation"
-  ]
-].map(([key, title, body], index) => ({ key, title, body, order: String(index + 1) }));
-
-const versionRows = [
-  {
-    version: "0.1",
-    status: "draft",
-    summary: "Initial PRD draft generated from wizard input",
-    author: "Creator User"
-  },
-  {
-    version: "1.0",
-    status: "baseline",
-    summary: "Baseline v1.0 confirmed and immutable",
-    author: "Creator User"
-  }
-];
-
-const fallbackPreview: PreviewVersionDto = {
-  id: "preview_local_0001",
-  projectId: fallbackSelectedProject.id,
-  version: "preview-0001",
-  summary: "Updating Leave Management preview with WFH leave type and manager approval visibility.",
-  device: "desktop",
-  screenTitle: "Leave Management",
-  highlights: ["WFH leave type", "Manager approval queue", "HR policy visibility"],
-  createdAt: "2026-07-04T00:00:00.000Z"
-};
-
-const fallbackTaskSteps: WorkspaceTaskStepDto[] = [
-  "Understanding request",
-  "Loading PRD baseline",
-  "Guardrail pre-check",
-  "Selecting skill",
-  "Generating frontend",
-  "Applying auth/role rules",
-  "Building preview",
-  "Running checks",
-  "Ready"
-].map((label, index) => ({
-  id: `local_step_${index + 1}`,
-  label,
-  status: (index < 9 ? "done" : "pending") as WorkspaceTaskStepDto["status"],
-  order: index + 1
-}));
-
-const usageRows = [
-  {
-    prompt: "Add WFH leave type",
-    scenario: "frontend_coding",
-    tokens: "120",
-    result: "preview-0001"
-  }
-];
-
-const databaseTables = [
-  { table: "employees", type: "generated", columns: "3 columns", records: "2 sample rows" },
-  { table: "leave_requests", type: "generated", columns: "4 columns", records: "2 sample rows" },
-  { table: "approval_steps", type: "generated", columns: "4 columns", records: "1 sample row" }
-];
-
-const sampleRecords = [
-  { id: "lr_1001", leaveType: "WFH", status: "pending", owner: "Somchai P." },
-  { id: "lr_1002", leaveType: "annual", status: "approved", owner: "Nalida K." }
-];
-
-const migrationRows = [
-  {
-    migration: "2026081001_leave_management_base",
-    status: "applied",
-    prd: "Baseline v1.0",
-    checkpoint: "fe-0001"
-  }
-];
-
-const checkpointRows = [
-  {
-    version: "fe-0002",
-    status: "current",
-    summary: "Improve manager dashboard",
-    preview: "preview-0002"
-  },
-  { version: "fe-0001", status: "previous", summary: "Add WFH leave type", preview: "preview-0001" }
-];
-
-const appMembers = [
-  {
-    user: "Creator User",
-    type: "internal",
-    role: "HR Admin",
-    status: "active",
-    lastAccess: "2026-08-20"
-  },
-  {
-    user: "End User",
-    type: "internal",
-    role: "Employee",
-    status: "active",
-    lastAccess: "2026-08-20"
-  }
-];
-
-const pendingInvites = [
-  {
-    email: "manager@company.com",
-    role: "Manager",
-    invitedBy: "Creator User",
-    expires: "2026-09-01",
-    status: "pending"
-  },
-  {
-    email: "vendor@example.com",
-    role: "Employee",
-    invitedBy: "Creator User",
-    expires: "2026-09-01",
-    status: "approval_required"
-  }
-];
-
-const accessRequests = [
-  {
-    requester: "manager@company.com",
-    role: "Manager",
-    reason: "Needs approval queue access",
-    submitted: "2026-08-17",
-    status: "pending"
-  }
-];
-
-const appRoles = [
-  {
-    role: "Employee",
-    permissions: "leave:request, leave:view-own",
-    members: "1",
-    status: "active"
-  },
-  { role: "Manager", permissions: "leave:approve, leave:view-team", members: "0", status: "ready" },
-  { role: "HR Admin", permissions: "leave:admin, leave:report", members: "1", status: "active" }
-];
-
-const publishChecklist = [
-  { check: "PRD baseline", state: "pass", detail: "Baseline v1.0" },
-  { check: "Active frontend checkpoint", state: "pass", detail: "fe-0001" },
-  { check: "App roles", state: "pass", detail: "Employee, Manager, HR Admin" },
-  { check: "At least one owner", state: "pass", detail: "Creator User" },
-  { check: "No blocking guardrail event", state: "pass", detail: "clear" }
-];
-
-const creatorTickets = [
-  {
-    ticket: "TKT-0001",
-    type: "bug",
-    submitter: "user@company.com",
-    app: "Leave Management",
-    summary: "WFH leave type missing on mobile",
-    priority: "high",
-    status: "submitted"
-  }
-];
-
-const prdChangeRows = [
-  {
-    change: "CR-0001",
-    source: "TKT-0001",
-    risk: "medium",
-    status: "approved",
-    requestedBy: "Creator User",
-    updated: "2026-08-18"
-  }
-];
-
-const traceRows = [
-  { link: "Ticket", value: "TKT-0001 · WFH leave type missing" },
-  { link: "PRD Change", value: "CR-0001 · approved" },
-  { link: "PRD Version", value: "1.1" },
-  { link: "Frontend", value: "fe-0001" },
-  { link: "Manifest", value: "manifest v1" },
-  { link: "Deployment", value: "dep_leave_management_001" },
-  { link: "Domain", value: "leave.company.example" }
-];
-
-const mvpDemoSteps = [
-  "Admin configures AI provider/key and guardrail",
-  "Creator creates Leave Management and confirms PRD",
-  "Creator prompts WFH leave change and publishes",
-  "End User submits ticket",
-  "Creator converts ticket to PRD change",
-  "Approve PRD Change and review traceability",
-  "Request and approve public domain",
-  "Review MVP Monitoring and Audit Filters"
-];
-
-function hasValidSession(): boolean {
-  const token = platformSessionToken();
-  if (!token) return false;
-  const expiresAt = window.localStorage.getItem("evcp_session_expires_at");
-  if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now())
-    return false;
-  return true;
-}
-
-function LoginScreen({ onLoggedIn }: { onLoggedIn: (res: NativeLoginResult) => void }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage(undefined);
-    try {
-      const result = await nativeLogin(email.trim(), password);
-      persistLoginSession(result);
-      onLoggedIn(result);
-    } catch {
-      setErrorMessage("Invalid email or password");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="creator-auth-screen">
-      <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Creator login">
-        <h1>Creator Sign In</h1>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="username"
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-        {errorMessage ? (
-          <p role="alert" className="creator-auth-error">
-            {errorMessage}
-          </p>
-        ) : null}
-        <button type="submit" disabled={isSubmitting}>
-          <LockKeyhole size={16} />
-          {isSubmitting ? "Signing in" : "Sign In"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function ChangePasswordScreen({ onChanged }: { onChanged: () => void }) {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setErrorMessage("New password and confirmation do not match");
-      return;
-    }
-    setIsSubmitting(true);
-    setErrorMessage(undefined);
-    try {
-      await nativeChangePassword(currentPassword, newPassword);
-      onChanged();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Change password failed");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="creator-auth-screen">
-      <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Change password">
-        <h1>Set a New Password</h1>
-        <label>
-          Current password
-          <input
-            type="password"
-            required
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-        <label>
-          New password
-          <input
-            type="password"
-            required
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-        <label>
-          Confirm new password
-          <input
-            type="password"
-            required
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-        {errorMessage ? (
-          <p role="alert" className="creator-auth-error">
-            {errorMessage}
-          </p>
-        ) : null}
-        <button type="submit" disabled={isSubmitting}>
-          <ShieldCheck size={16} />
-          {isSubmitting ? "Saving" : "Save New Password"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
 function CreatorAuthGate() {
   const [authStage, setAuthStage] = useState<"login" | "change-password" | "workspace">(
     hasValidSession() ? "workspace" : "login"
@@ -1021,13 +300,6 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  type VibeMessage = {
-    id: string;
-    role: "user" | "assistant";
-    text: string;
-    actions: VibeAction[];
-    commitSha?: string;
-  };
   const [vibeMessages, setVibeMessages] = useState<VibeMessage[]>([]);
   const [vibeStatus, setVibeStatus] = useState("");
   const [isVibing, setIsVibing] = useState(false);
@@ -1427,53 +699,13 @@ function CreatorApp({ onLogout }: { onLogout?: () => void }) {
             : typeof data === "string"
               ? data
               : "";
-        if (type === "token") {
-          patchAssistant((m) => ({ ...m, text: m.text + field("content") }));
-        } else if (type === "action_start") {
-          const id = field("actionId");
-          patchAssistant((m) => ({
-            ...m,
-            actions: m.actions.some((a) => a.id === id)
-              ? m.actions
-              : [
-                  ...m.actions,
-                  {
-                    id,
-                    type: field("actionType") || "file",
-                    label: field("label"),
-                    status: "running" as const
-                  }
-                ]
-          }));
+        patchAssistant((m) => applyVibeEvent(m, type, data as Record<string, unknown>));
+        if (type === "action_start") {
           setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
-        } else if (type === "action_result") {
-          const ok =
-            data && typeof data === "object" && "ok" in data
-              ? Boolean((data as { ok: boolean }).ok)
-              : false;
-          const id = field("actionId");
-          const patch = {
-            type: field("actionType") || "file",
-            label: field("label"),
-            status: (ok ? "done" : "failed") as VibeAction["status"],
-            find: field("find") || undefined,
-            replace: field("replace") || undefined,
-            body: field("body") || undefined,
-            error: field("error") || undefined
-          };
-          patchAssistant((m) => ({
-            ...m,
-            actions: m.actions.some((a) => a.id === id)
-              ? m.actions.map((a) => (a.id === id ? { ...a, ...patch } : a))
-              : [...m.actions, { id, ...patch }]
-          }));
         } else if (type === "commit") {
           const sha = field("sha");
-          patchAssistant((m) => ({ ...m, commitSha: sha }));
           setVibeStatus(`Committed ${sha.slice(0, 8)}`);
           setVibePreviewKey((k) => k + 1);
-        } else if (type === "error") {
-          patchAssistant((m) => ({ ...m, text: m.text + `\n\n⚠️ ${field("message")}` }));
         } else if (type === "done") {
           setVibeStatus((prev) => (prev.startsWith("Committed") ? prev : "Done"));
         }
