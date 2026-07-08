@@ -1,6 +1,7 @@
 import { AppShell, DecisionPanel, PageHeader } from "@evcp/ui";
 import { WandSparkles } from "lucide-react";
 import type { ReactNode } from "react";
+import { HorizonLogo } from "./HorizonLogo";
 import type { useCreatorApp } from "../hooks/use-creator-app";
 
 export function CreatorShell({
@@ -28,12 +29,13 @@ export function CreatorShell({
   } = app;
   return (
     <AppShell
-      title="Horizon Creator"
+      title="Horizon"
+      logo={<HorizonLogo />}
       navItems={creatorNavItems}
       userName={bootstrap.userName}
       session={creatorSessionControls}
     >
-      {creatorPage === "workspace" ? null : (
+      {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"
           eyebrow={pageCopy.eyebrow}

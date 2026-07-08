@@ -3,13 +3,7 @@ export type Surface = "admin" | "creator" | "store";
 export type PlatformRole = "admin" | "creator" | "end_user";
 
 export type Status =
-  | "healthy"
-  | "warning"
-  | "degraded"
-  | "down"
-  | "draft"
-  | "published"
-  | "pending";
+  "healthy" | "warning" | "degraded" | "down" | "draft" | "published" | "pending";
 
 export interface MockUser {
   id: string;
@@ -53,6 +47,8 @@ export interface ServiceStatus {
 export interface NavItem {
   label: string;
   route: string;
+  /** Icon key resolved by the shared AppShell to an inline glyph (see packages/ui nav-icons). */
+  icon?: string;
 }
 
 // --- MVP Plan 1: Workspace Foundation ---

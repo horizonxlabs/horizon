@@ -1,10 +1,23 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+// The UI package is split across src/** (index.tsx primitives, app-shell.tsx, nav-icons.tsx),
+// so assertions read the whole tree rather than a single file.
+function readUiSource(dir = "packages/ui/src") {
+  let combined = "";
+  for (const entry of readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    if (statSync(fullPath).isDirectory()) combined += readUiSource(fullPath);
+    else if (/\.(tsx?|jsx?)$/.test(entry)) combined += readFileSync(fullPath, "utf8");
+  }
+  return combined;
+}
+
 test("shared UI package exposes production design system primitives", () => {
-  const uiSource = readFileSync("packages/ui/src/index.tsx", "utf8");
+  const uiSource = readUiSource();
 
   for (const exportName of [
     "AppShell",
@@ -64,7 +77,7 @@ test("apps preload LINE Seed Thai fonts before React renders", () => {
 });
 
 test("AppShell provides a professional persistent navigation layout", () => {
-  const uiSource = readFileSync("packages/ui/src/index.tsx", "utf8");
+  const uiSource = readUiSource();
   const css = readFileSync("packages/ui/styles.css", "utf8");
 
   for (const shellClass of [
@@ -155,6 +168,7 @@ test.skip("creator AI workspace exposes Antigravity-style command workspace", ()
   assert.doesNotMatch(css, /\.app-shell:has\(\.ag-workspace\) > \.sidebar/);
   assert.match(css, /\.ag-workspace\s*\{[^}]*width: 100%/s);
 });
+
 test("design-system governance rejects app-layer visual styling", () => {
   const fixturePath = "apps/creator-web/src/__design_system_violation.fixture.tsx";
   writeFileSync(
