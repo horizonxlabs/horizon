@@ -6,6 +6,7 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { createPublishRoutes, resolveAppsTarget } from "./publish/routes";
 import { createDefaultPublishStack } from "./publish/factory";
@@ -626,30 +627,30 @@ export async function executePlatformApiRequestAsync(
   );
   const useWorkspacePersistence = Boolean(
     corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      isPersistenceWorkspaceRoute(request)
+    prdPersistence &&
+    workspacePersistence &&
+    isPersistenceWorkspaceRoute(request)
   );
   const usePublishStorePersistence = Boolean(
     corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      publishStorePersistence &&
-      isPersistencePublishStoreRoute(request)
+    prdPersistence &&
+    workspacePersistence &&
+    publishStorePersistence &&
+    isPersistencePublishStoreRoute(request)
   );
   const useGeneratedRuntimePersistence = Boolean(
     corePersistence &&
-      publishStorePersistence &&
-      generatedRuntimePersistence &&
-      isPersistenceGeneratedRuntimeRoute(request)
+    publishStorePersistence &&
+    generatedRuntimePersistence &&
+    isPersistenceGeneratedRuntimeRoute(request)
   );
   const useNativeAuth = Boolean(
     corePersistenceClient && credentialService && isNativeAuthRoute(request)
   );
   const useSimulatedAuth = Boolean(
     corePersistenceClient &&
-      request.method === "POST" &&
-      request.path === "/admin/auth/simulate-login"
+    request.method === "POST" &&
+    request.path === "/admin/auth/simulate-login"
   );
   if (
     !useCorePersistence &&
@@ -1866,25 +1867,6 @@ export function executePlatformApiRequest(
         status: HttpStatus.OK,
         body: success(services.workspace.getWorkspace(user, workspaceMatch[1]))
       };
-    }
-
-    const databaseMatch = request.path.match(/^\/projects\/([^/]+)\/database$/);
-    if (request.method === "GET" && databaseMatch) {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(services.databaseView.getDatabaseView(user, databaseMatch[1]))
-      };
-    }
-
-    const databaseSqlMatch = request.path.match(/^\/projects\/([^/]+)\/database\/sql$/);
-    if (request.method === "POST" && databaseSqlMatch) {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      services.databaseView.executeRawSql(
-        user,
-        databaseSqlMatch[1],
-        String(request.body?.sql ?? "")
-      );
     }
 
     const frontendCheckpointsMatch = request.path.match(
@@ -3929,27 +3911,35 @@ function registerPlatformRoutes(
       })
     )
   );
-  routes.get("/projects/:projectId/database", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "GET",
-        path: `/projects/${String(request.params?.projectId ?? "")}/database`,
-        headers: request.headers
-      })
-    )
-  );
-  routes.post("/projects/:projectId/database/sql", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: `/projects/${String(request.params?.projectId ?? "")}/database/sql`,
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
+  registerProjectDbRoutes({
+    get: (path, handler) => routes.get(path, handler),
+    post: (path, handler) => routes.post(path, handler),
+    resolveAccessibleProjectIds: async (headers) => {
+      const { user } = await resolvePersistenceAuth(services, headers);
+      return (await services.corePersistence!.listProjects(user)).map((project) => project.id);
+    },
+    getDatabaseUrl: (projectId) => services.workspaceOrchestrator.getProjectDatabaseUrl(projectId),
+    audit: (headers, projectId, action, detail) => {
+      void (async () => {
+        try {
+          const { user } = await resolvePersistenceAuth(services, headers);
+          await services.corePersistence?.recordAudit({
+            actorId: user.id,
+            action,
+            resourceType: "project_database",
+            resourceId: projectId,
+            metadata: { table: detail }
+          });
+        } catch {
+          /* audit is best-effort; never block or fail a completed write */
+        }
+      })();
+    },
+    ok: (response, body) =>
+      sendPlatformResponse(response, { status: HttpStatus.OK, body: success(body) }),
+    fail: (response, status, code, message) =>
+      sendPlatformResponse(response, { status, body: failure(code, message) })
+  });
   routes.get("/projects/:projectId/frontend/checkpoints", (request, response) =>
     sendPlatformResponse(
       response,

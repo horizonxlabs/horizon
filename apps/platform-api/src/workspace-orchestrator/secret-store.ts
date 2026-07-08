@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import type { SecretPersistence } from "./secret-persistence";
 
 interface StoredSecret {
   name: string;
@@ -15,14 +16,28 @@ export interface ProjectSecretStore {
   resolveEnv(projectId: string): Record<string, string>;
   rotate(projectId: string, name: string, value: string): void;
   removeAll(projectId: string): void;
+  /** Load persisted (encrypted) secrets from the at-rest store into memory. Awaited at startup. */
+  hydrate(): Promise<void>;
 }
 
-export function createProjectSecretStore(opts: { encryptionKeyHex: string }): ProjectSecretStore {
+export function createProjectSecretStore(opts: {
+  encryptionKeyHex: string;
+  persistence?: SecretPersistence;
+}): ProjectSecretStore {
   if (!/^[0-9a-f]{64}$/i.test(opts.encryptionKeyHex)) {
     throw new Error("encryption key must be 32 bytes hex (64 hex chars)");
   }
   const key = Buffer.from(opts.encryptionKeyHex, "hex");
+  const persistence = opts.persistence;
   const byProject = new Map<string, Map<string, StoredSecret>>();
+
+  // Write-through to the at-rest store is best-effort: the in-memory Map is authoritative for the
+  // running process; persistence is the restart backup. Failures are logged, never thrown.
+  const persist = (projectId: string, secret: StoredSecret) => {
+    void persistence?.upsert({ projectId, ...secret }).catch((error: unknown) => {
+      console.warn(`[secret-store] persist failed for ${projectId}/${secret.name}:`, error);
+    });
+  };
 
   const encrypt = (value: string) => {
     const iv = randomBytes(12);
@@ -40,7 +55,7 @@ export function createProjectSecretStore(opts: { encryptionKeyHex: string }): Pr
     decipher.setAuthTag(Buffer.from(secret.authTag, "base64"));
     return Buffer.concat([
       decipher.update(Buffer.from(secret.ciphertext, "base64")),
-      decipher.final(),
+      decipher.final()
     ]).toString("utf8");
   };
 
@@ -55,12 +70,14 @@ export function createProjectSecretStore(opts: { encryptionKeyHex: string }): Pr
 
   return {
     put(projectId, name, value) {
-      bucketFor(projectId).set(name, {
+      const secret: StoredSecret = {
         name,
         ...encrypt(value),
         rotatedAt: null,
-        createdAt: new Date().toISOString(),
-      });
+        createdAt: new Date().toISOString()
+      };
+      bucketFor(projectId).set(name, secret);
+      persist(projectId, secret);
     },
     listNames(projectId) {
       return [...bucketFor(projectId).keys()];
@@ -74,15 +91,37 @@ export function createProjectSecretStore(opts: { encryptionKeyHex: string }): Pr
     },
     rotate(projectId, name, value) {
       const existing = bucketFor(projectId).get(name);
-      bucketFor(projectId).set(name, {
+      const secret: StoredSecret = {
         name,
         ...encrypt(value),
         rotatedAt: new Date().toISOString(),
-        createdAt: existing?.createdAt ?? new Date().toISOString(),
-      });
+        createdAt: existing?.createdAt ?? new Date().toISOString()
+      };
+      bucketFor(projectId).set(name, secret);
+      persist(projectId, secret);
     },
     removeAll(projectId) {
       byProject.delete(projectId);
+      void persistence?.deleteAll(projectId).catch((error: unknown) => {
+        console.warn(`[secret-store] delete failed for ${projectId}:`, error);
+      });
     },
+    async hydrate() {
+      if (!persistence) return;
+      try {
+        for (const row of await persistence.loadAll()) {
+          bucketFor(row.projectId).set(row.name, {
+            name: row.name,
+            ciphertext: row.ciphertext,
+            iv: row.iv,
+            authTag: row.authTag,
+            rotatedAt: row.rotatedAt,
+            createdAt: row.createdAt
+          });
+        }
+      } catch (error) {
+        console.warn("[secret-store] hydrate failed:", error);
+      }
+    }
   };
 }

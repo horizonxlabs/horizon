@@ -1,10 +1,14 @@
 import { ClipboardList, Hammer, Send } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
+import { Suspense, lazy } from "react";
 import { VibeActionRow } from "../components/VibeActionRow";
 import { WorkspaceCodePanel } from "../components/WorkspaceCodePanel";
-import { WorkspaceDatabasePanel } from "../components/WorkspaceDatabasePanel";
 import { platformSessionToken } from "../lib/session";
 import type { useCreatorApp } from "../hooks/use-creator-app";
+
+// react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
+// Node test environments (render-smoke) never pulls in the CSS/grid module.
+const WorkspaceDatabasePanel = lazy(() => import("../components/WorkspaceDatabasePanel"));
 
 const WORKSPACE_TABS = ["preview", "code", "database"] as const;
 const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
@@ -27,7 +31,6 @@ const SUGGESTIONS: Record<WorkspaceAgentMode, string[]> = {
   plan: ["Review current workspace", "Draft an implementation plan", "List delivery risks"],
   build: ["Add an about page", "Make it dark mode", "Add a contact form"]
 };
-
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
@@ -168,14 +171,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 type="file"
                 multiple
                 onChange={(event) => {
-                  if (event.currentTarget.files) void handleUploadProjectFiles(event.currentTarget.files);
+                  if (event.currentTarget.files)
+                    void handleUploadProjectFiles(event.currentTarget.files);
                   event.currentTarget.value = "";
                 }}
                 disabled={isUploadingProjectFile}
               />
               <span>Attach files</span>
             </label>
-            {projectFileMessage && <span className="vibe-live-file-message">{projectFileMessage}</span>}
+            {projectFileMessage && (
+              <span className="vibe-live-file-message">{projectFileMessage}</span>
+            )}
             {projectFiles.length > 0 && (
               <div className="vibe-live-file-list" aria-label="Project files">
                 {projectFiles.map((file) => {
@@ -213,7 +219,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (!isVibing && promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder={workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"}
+                placeholder={
+                  workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"
+                }
                 rows={1}
                 className="vibe-live-input"
               />
@@ -238,7 +246,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               className="vibe-live-iframe"
             />
           ) : vibeTab === "database" ? (
-            <WorkspaceDatabasePanel projectId={selectedProject.id} />
+            <Suspense fallback={<div className="hz-db-empty">กำลังโหลด Database…</div>}>
+              <WorkspaceDatabasePanel projectId={selectedProject.id} />
+            </Suspense>
           ) : (
             <WorkspaceCodePanel projectId={selectedProject.id} projectSlug={selectedProject.slug} />
           )}

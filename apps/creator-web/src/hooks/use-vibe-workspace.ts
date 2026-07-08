@@ -18,24 +18,8 @@ import {
   readWorkspaceMode
 } from "../lib/workspace-mode";
 import type { CreatorProjectView } from "../types";
+import { extractedTextFor, sha256Hex } from "../lib/project-file-upload";
 import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "./creator-app-helpers";
-
-async function sha256Hex(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function extractedTextFor(file: File): Promise<string> {
-  if (
-    file.type.startsWith("text/") ||
-    file.type === "application/json" ||
-    file.name.toLowerCase().endsWith(".md") ||
-    file.name.toLowerCase().endsWith(".csv")
-  ) {
-    return file.text();
-  }
-  return `Uploaded file ${file.name} (${file.type || "unknown type"}, ${file.size} bytes).`;
-}
 
 function browserStorage() {
   return typeof window === "undefined" ? undefined : window.localStorage;
@@ -127,14 +111,14 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     try {
       createCreatorPlatformClient()
         .listProjectFiles(pid)
-      .then((files) => {
-        setProjectFiles(files);
-        setProjectFileMessage(files.length ? "Project files ready for AI context." : "");
-      })
-      .catch(() => {
-        setProjectFiles([]);
-        setProjectFileMessage("");
-      });
+        .then((files) => {
+          setProjectFiles(files);
+          setProjectFileMessage(files.length ? "Project files ready for AI context." : "");
+        })
+        .catch(() => {
+          setProjectFiles([]);
+          setProjectFileMessage("");
+        });
     } catch {
       setProjectFiles([]);
       setProjectFileMessage("");
@@ -228,9 +212,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
 
   function toggleProjectFileAttachment(uploadId: string) {
     setSelectedAttachmentIds((current) =>
-      current.includes(uploadId)
-        ? current.filter((id) => id !== uploadId)
-        : [...current, uploadId]
+      current.includes(uploadId) ? current.filter((id) => id !== uploadId) : [...current, uploadId]
     );
   }
 
@@ -280,9 +262,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
       ]);
       setProjectFileMessage("Project files ready for AI context.");
     } catch (error) {
-      setProjectFileMessage(
-        error instanceof Error ? error.message : "Project file upload failed."
-      );
+      setProjectFileMessage(error instanceof Error ? error.message : "Project file upload failed.");
     } finally {
       setIsUploadingProjectFile(false);
     }
@@ -309,28 +289,35 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     const patchAssistant = (fn: (m: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) => prev.map((m) => (m.id === assistantId ? fn(m) : m)));
     try {
-      if (workspaceMode === "build") await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
+      if (workspaceMode === "build")
+        await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
       setVibeStatus(workspaceMode === "plan" ? "Plan mode: read-only" : "AI is working…");
-      await streamVibeChat(selectedProject.id, prompt, attachmentIds, workspaceMode, (type, data) => {
-        const field = (key: string): string =>
-          data && typeof data === "object" && key in data
-            ? String((data as Record<string, unknown>)[key])
-            : typeof data === "string"
-              ? data
-              : "";
-        patchAssistant((m) => applyVibeEvent(m, type, data as Record<string, unknown>));
-        if (type === "action_start") {
-          setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
-        } else if (type === "commit") {
-          const sha = field("sha");
-          setVibeStatus(`Committed ${sha.slice(0, 8)}`);
-          setVibePreviewKey((k) => k + 1);
-        } else if (type === "done") {
-          setVibeStatus((prev) =>
-            workspaceMode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
-          );
+      await streamVibeChat(
+        selectedProject.id,
+        prompt,
+        attachmentIds,
+        workspaceMode,
+        (type, data) => {
+          const field = (key: string): string =>
+            data && typeof data === "object" && key in data
+              ? String((data as Record<string, unknown>)[key])
+              : typeof data === "string"
+                ? data
+                : "";
+          patchAssistant((m) => applyVibeEvent(m, type, data as Record<string, unknown>));
+          if (type === "action_start") {
+            setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
+          } else if (type === "commit") {
+            const sha = field("sha");
+            setVibeStatus(`Committed ${sha.slice(0, 8)}`);
+            setVibePreviewKey((k) => k + 1);
+          } else if (type === "done") {
+            setVibeStatus((prev) =>
+              workspaceMode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
+            );
+          }
         }
-      });
+      );
     } catch (error) {
       patchAssistant((m) => ({ ...m, text: m.text + `\n\n⚠️ ${(error as Error).message}` }));
       setVibeStatus(`Error: ${(error as Error).message}`);

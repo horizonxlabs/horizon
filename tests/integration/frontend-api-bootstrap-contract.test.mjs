@@ -124,9 +124,12 @@ test("frontend shells expose Platform Auth sign-in and logout bridge controls", 
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.match(source, /createPlatformSessionStore/);
     assert.match(source, /simulateSsoLogin/);
-    assert.match(source, /Sign in|Refresh Session/);
     assert.match(source, /Logout/);
   }
+  // Admin and store keep a visible session sign-in/refresh control. The creator shell dropped its
+  // "Demo Sign in" button (it uses native login + the automatic session bridge), keeping only logout.
+  assert.match(adminSource, /Sign in|Refresh Session/);
+  assert.match(storeSource, /Sign in|Refresh Session/);
 
   assert.match(adminSource, /adminSessionBridgeProfile/);
   assert.match(creatorSource, /creatorSessionBridgeProfile/);

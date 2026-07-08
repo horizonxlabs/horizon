@@ -146,6 +146,9 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.7
+      react-data-grid:
+        specifier: 7.0.0-beta.59
+        version: 7.0.0-beta.59(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-dom:
         specifier: ^19.0.0
         version: 19.2.7(react@19.2.7)
@@ -248,6 +251,9 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.7
+      react-data-grid:
+        specifier: 7.0.0-beta.59
+        version: 7.0.0-beta.59(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
 packages:
 
@@ -1368,6 +1374,12 @@ packages:
 
   rc9@2.1.2:
     resolution: {integrity: sha512-btXCnMmRIBINM2LDZoEmOogIZU7Qe7zn4BpomSKZ/ykbLObuBdvG+mFq11DL6fjH1DRwHhrlgtYWG96bJiC7Cg==}
+
+  react-data-grid@7.0.0-beta.59:
+    resolution: {integrity: sha512-iAp/UYWjfmXYFsyKDtGDMP1IvhwtQSjCP6G/wFEbMNuumWGOEZF8Ut1S2Bp4XxVpOrBkEVKXn+QC3rs14AcB7A==}
+    peerDependencies:
+      react: ^19.2
+      react-dom: ^19.2
 
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
@@ -2548,6 +2560,11 @@ snapshots:
     dependencies:
       defu: 6.1.7
       destr: 2.0.5
+
+  react-data-grid@7.0.0-beta.59(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:
