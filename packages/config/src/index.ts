@@ -8,25 +8,33 @@ export const surfaceRoutes: Record<Surface, string> = {
 
 export const navigation: Record<Surface, NavItem[]> = {
   admin: [
-    { label: "Dashboard", route: "/admin" },
-    { label: "Services", route: "/admin/services" },
-    { label: "AI Providers", route: "/admin/ai-providers" },
-    { label: "Guardrails", route: "/admin/guardrails" },
-    { label: "Audit Logs", route: "/admin/audit-logs" },
-    { label: "Users", route: "/admin/users" }
+    { label: "Dashboard", route: "/admin", icon: "dashboard" },
+    { label: "Services", route: "/admin/services", icon: "services" },
+    { label: "AI Providers", route: "/admin/ai-providers", icon: "ai" },
+    { label: "Guardrails", route: "/admin/guardrails", icon: "shield" },
+    { label: "Audit Logs", route: "/admin/audit-logs", icon: "logs" },
+    { label: "Users", route: "/admin/users", icon: "users" }
   ],
   creator: [
-    { label: "Projects", route: "/creator/" },
-    { label: "PRD Review", route: "/creator/projects/leave-management/prd" },
-    { label: "Creator Workspace", route: "/creator/projects/leave-management" },
-    { label: "Users & Roles", route: "/creator/projects/leave-management/users" },
-    { label: "Publish & Registry", route: "/creator/projects/leave-management/publish" },
-    { label: "Tickets & Changes", route: "/creator/projects/leave-management/tickets" }
+    { label: "Projects", route: "/creator/", icon: "projects" },
+    { label: "PRD Review", route: "/creator/projects/leave-management/prd", icon: "prd" },
+    { label: "Creator Workspace", route: "/creator/projects/leave-management", icon: "workspace" },
+    { label: "Users & Roles", route: "/creator/projects/leave-management/users", icon: "users" },
+    {
+      label: "Publish & Registry",
+      route: "/creator/projects/leave-management/publish",
+      icon: "publish"
+    },
+    {
+      label: "Tickets & Changes",
+      route: "/creator/projects/leave-management/tickets",
+      icon: "tickets"
+    }
   ],
   store: [
-    { label: "My Apps", route: "/store/" },
-    { label: "Available Apps", route: "/store/available" },
-    { label: "Tickets", route: "/store/tickets" },
-    { label: "Profile", route: "/store/profile" }
+    { label: "My Apps", route: "/store/", icon: "apps" },
+    { label: "Available Apps", route: "/store/available", icon: "grid" },
+    { label: "Tickets", route: "/store/tickets", icon: "tickets" },
+    { label: "Profile", route: "/store/profile", icon: "profile" }
   ]
 };
