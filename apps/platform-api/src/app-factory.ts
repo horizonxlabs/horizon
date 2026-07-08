@@ -181,6 +181,9 @@ export interface PlatformRequest {
     | `/creator/projects/${string}/prd/changes`
     | `/creator/projects/${string}/prd/changes/from-ticket`
     | `/creator/projects/${string}/prd/changes/decision`
+    | `/creator/projects/${string}/files`
+    | `/creator/projects/${string}/files/init`
+    | `/creator/projects/${string}/files/${string}/complete`
     | `/creator/projects/${string}/domains`
     | `/creator/projects/${string}/domains/requests`
     | `/creator/projects/${string}/traceability`
@@ -2468,6 +2471,50 @@ export function executePlatformApiRequest(
       return { status: HttpStatus.OK, body: success(result) };
     }
 
+    const projectFilesMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/files$/);
+    if (request.method === "GET" && projectFilesMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      return {
+        status: HttpStatus.OK,
+        body: success(services.projectFiles.listProjectFiles(user, projectFilesMatch[1]))
+      };
+    }
+
+    const projectFileInitMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/files\/init$/);
+    if (request.method === "POST" && projectFileInitMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.projectFiles.initializeUpload(user, projectFileInitMatch[1], {
+        fileName: String(request.body?.fileName ?? ""),
+        mimeType: String(request.body?.mimeType ?? ""),
+        sizeBytes: Number(request.body?.sizeBytes ?? 0),
+        sha256: String(request.body?.sha256 ?? ""),
+        purpose: request.body?.purpose ? (String(request.body.purpose) as never) : undefined,
+        includeByDefault:
+          request.body?.includeByDefault === undefined
+            ? undefined
+            : Boolean(request.body.includeByDefault)
+      });
+      return { status: HttpStatus.CREATED, body: success(result) };
+    }
+
+    const projectFileCompleteMatch = request.path.match(
+      /^\/creator\/projects\/([^/]+)\/files\/([^/]+)\/complete$/
+    );
+    if (request.method === "POST" && projectFileCompleteMatch) {
+      const user = services.auth.resolveCurrentUser(request.headers ?? {});
+      const result = services.projectFiles.completeUpload(
+        user,
+        projectFileCompleteMatch[1],
+        projectFileCompleteMatch[2],
+        {
+          scanStatus: request.body?.scanStatus ? (String(request.body.scanStatus) as never) : undefined,
+          extractedText: request.body?.extractedText ? String(request.body.extractedText) : undefined,
+          excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
+        }
+      );
+      return { status: HttpStatus.OK, body: success(result) };
+    }
+
     if (request.method === "GET" && request.path === "/admin/monitoring") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return { status: HttpStatus.OK, body: success(services.monitoring.getDashboard(user)) };
@@ -3125,6 +3172,30 @@ function registerPlatformRoutes(
       } catch {
         return null;
       }
+    },
+    resolveAttachmentContext: async (req, projectId, attachmentIds) => {
+      const user = services.auth.resolveCurrentUser((req as { headers?: HeaderBag }).headers ?? {});
+      const project = services.projects.getProjectForActor(user, projectId);
+      const attachmentSelection = services.projectFiles.resolveAttachmentSources(
+        user,
+        project.id,
+        attachmentIds
+      );
+      const retrieval = services.knowledge.retrieve(user, {
+        projectId: project.id,
+        appId: project.appId,
+        department: project.targetDepartment,
+        agentRole: "frontend_developer",
+        scenario: "frontend_coding",
+        query: `workspace chat attachments ${attachmentIds.join(" ")}`,
+        requiredKnowledgeSourceIds: attachmentSelection.sourceIds
+      });
+      return {
+        versionIds: retrieval.matchedVersionIds,
+        excerpts: retrieval.sources.flatMap((source) =>
+          source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`)
+        )
+      };
     }
   });
   rawApp.all(
@@ -3261,6 +3332,39 @@ function registerPlatformRoutes(
   };
   rawApp.all("/apps/:slug", appsProdHandler);
   rawApp.all("/apps/:slug/*splat", appsProdHandler);
+
+  routes.get("/creator/projects/:projectId/files", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "GET",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files`,
+        headers: request.headers
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/files/init", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files/init`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
+  routes.post("/creator/projects/:projectId/files/:uploadId/complete", (request, response) =>
+    sendPlatformResponse(
+      response,
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/creator/projects/${String(request.params?.projectId ?? "")}/files/${String(request.params?.uploadId ?? "")}/complete`,
+        headers: request.headers,
+        body: request.body
+      })
+    )
+  );
 
   routes.get("/admin/knowledge/sources", (request, response) =>
     sendPlatformResponse(

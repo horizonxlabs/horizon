@@ -1,5 +1,6 @@
 import {
   type PreviewVersionDto,
+  type ProjectFileUploadDto,
   type WorkspacePromptResultDto,
   type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
@@ -12,6 +13,23 @@ import { vibeActionVerb, type VibeAction } from "../lib/vibe-actions";
 import { applyVibeEvent, type VibeMessage } from "../lib/vibe-stream";
 import type { CreatorProjectView } from "../types";
 import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "./creator-app-helpers";
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function extractedTextFor(file: File): Promise<string> {
+  if (
+    file.type.startsWith("text/") ||
+    file.type === "application/json" ||
+    file.name.toLowerCase().endsWith(".md") ||
+    file.name.toLowerCase().endsWith(".csv")
+  ) {
+    return file.text();
+  }
+  return `Uploaded file ${file.name} (${file.type || "unknown type"}, ${file.size} bytes).`;
+}
 
 export function useVibeWorkspace({ selectedProject }: { selectedProject: CreatorProjectView }) {
   const [promptDraft, setPromptDraft] = useState("Add WFH leave type");
@@ -32,6 +50,10 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
   const [vibeTab, setVibeTab] = useState<"preview" | "code">("preview");
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
+  const [projectFiles, setProjectFiles] = useState<ProjectFileUploadDto[]>([]);
+  const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<string[]>([]);
+  const [isUploadingProjectFile, setIsUploadingProjectFile] = useState(false);
+  const [projectFileMessage, setProjectFileMessage] = useState("");
 
   const selectedFallbackPreview: PreviewVersionDto = {
     ...fallbackPreview,
@@ -74,6 +96,27 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setWorkspaceResult(undefined);
     setPreviewOverride(undefined);
   }
+
+  useEffect(() => {
+    const pid = selectedProject?.id;
+    if (!pid) return;
+    setSelectedAttachmentIds([]);
+    try {
+      createCreatorPlatformClient()
+        .listProjectFiles(pid)
+      .then((files) => {
+        setProjectFiles(files);
+        setProjectFileMessage(files.length ? "Project files ready for AI context." : "");
+      })
+      .catch(() => {
+        setProjectFiles([]);
+        setProjectFileMessage("");
+      });
+    } catch {
+      setProjectFiles([]);
+      setProjectFileMessage("");
+    }
+  }, [selectedProject?.id]);
 
   // Restore the chat thread from the server so a browser refresh doesn't lose history.
   useEffect(() => {
@@ -160,13 +203,81 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     };
   }
 
+  function toggleProjectFileAttachment(uploadId: string) {
+    setSelectedAttachmentIds((current) =>
+      current.includes(uploadId)
+        ? current.filter((id) => id !== uploadId)
+        : [...current, uploadId]
+    );
+  }
+
+  async function handleUploadProjectFiles(files: FileList | File[]) {
+    const selectedFiles = Array.from(files);
+    if (!selectedFiles.length) return;
+    setIsUploadingProjectFile(true);
+    setProjectFileMessage("Uploading project files...");
+    try {
+      const client = createCreatorPlatformClient();
+      const completedFiles: ProjectFileUploadDto[] = [];
+      for (const file of selectedFiles) {
+        const initialized = await client.initializeProjectFileUpload(selectedProject.id, {
+          fileName: file.name,
+          mimeType: file.type || "text/plain",
+          sizeBytes: file.size,
+          sha256: await sha256Hex(file),
+          includeByDefault: true
+        });
+        if (/^https?:\/\//.test(initialized.uploadUrl)) {
+          const uploadResponse = await fetch(initialized.uploadUrl, {
+            method: "PUT",
+            headers: { "content-type": file.type || "application/octet-stream" },
+            body: file
+          });
+          if (!uploadResponse.ok) {
+            throw new Error(`File upload failed (${uploadResponse.status})`);
+          }
+        }
+        const completed = await client.completeProjectFileUpload(
+          selectedProject.id,
+          initialized.uploadId,
+          {
+            scanStatus: "clean",
+            extractedText: await extractedTextFor(file)
+          }
+        );
+        completedFiles.push(completed.file);
+      }
+      setProjectFiles((current) => {
+        const byId = new Map(current.map((file) => [file.id, file]));
+        for (const file of completedFiles) byId.set(file.id, file);
+        return [...byId.values()];
+      });
+      setSelectedAttachmentIds((current) => [
+        ...new Set([...current, ...completedFiles.map((file) => file.id)])
+      ]);
+      setProjectFileMessage("Project files ready for AI context.");
+    } catch (error) {
+      setProjectFileMessage(
+        error instanceof Error ? error.message : "Project file upload failed."
+      );
+    } finally {
+      setIsUploadingProjectFile(false);
+    }
+  }
+
   async function handleVibeChat() {
     if (!selectedProject || !promptDraft.trim()) return;
     const prompt = promptDraft.trim();
+    const attachmentIds = [...selectedAttachmentIds];
     const assistantId = `a-${Date.now()}`;
     setVibeMessages((prev) => [
       ...prev,
-      { id: `u-${Date.now()}`, role: "user", text: prompt, actions: [] },
+      {
+        id: `u-${Date.now()}`,
+        role: "user",
+        text: attachmentIds.length ? `${prompt}\nAttached files: ${attachmentIds.length}` : prompt,
+        actions: []
+      },
       { id: assistantId, role: "assistant", text: "", actions: [] }
     ]);
     setPromptDraft("");
@@ -177,7 +288,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     try {
       await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
       setVibeStatus("AI is working…");
-      await streamVibeChat(selectedProject.id, prompt, (type, data) => {
+      await streamVibeChat(selectedProject.id, prompt, attachmentIds, (type, data) => {
         const field = (key: string): string =>
           data && typeof data === "object" && key in data
             ? String((data as Record<string, unknown>)[key])
@@ -207,7 +318,8 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setIsSubmittingPrompt(true);
     try {
       const result = await createCreatorPlatformClient().submitWorkspacePrompt(selectedProject.id, {
-        prompt: promptDraft
+        prompt: promptDraft,
+        attachmentIds: selectedAttachmentIds
       });
       setWorkspaceResult(result);
       setPreviewOverride(undefined);
@@ -280,6 +392,14 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setVibeTab,
     isRefreshingPreview,
     setIsRefreshingPreview,
+    projectFiles,
+    setProjectFiles,
+    selectedAttachmentIds,
+    setSelectedAttachmentIds,
+    isUploadingProjectFile,
+    setIsUploadingProjectFile,
+    projectFileMessage,
+    setProjectFileMessage,
     selectedFallbackPreview,
     latestTask,
     visibleTaskSteps,
@@ -289,6 +409,8 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     visibleUsageRows,
     visibleUsage,
     resetWorkspace,
+    toggleProjectFileAttachment,
+    handleUploadProjectFiles,
     handleVibeChat,
     handleSubmitPrompt,
     handleRefreshPreview
