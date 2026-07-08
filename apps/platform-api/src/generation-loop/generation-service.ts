@@ -80,8 +80,11 @@ function describeRunnable(action: RunnableAction): string {
 // A malformed body yields an empty find, which the runner rejects as not_found (never a
 // silent whole-file overwrite).
 function parseEditBody(body: string): { find: string; replace: string } {
+  // The trailing newlines around the REPLACE body are optional so a DELETE (empty REPLACE, i.e.
+  // `=======` immediately followed by `>>>>>>> REPLACE`) still parses instead of yielding an empty
+  // find that the runner rejects.
   const match = body.match(
-    /<{3,}\s*SEARCH\s*\n([\s\S]*?)\n={3,}[^\n]*\n([\s\S]*?)\n>{3,}\s*REPLACE/
+    /<{3,}\s*SEARCH\s*\n([\s\S]*?)\n={3,}[^\n]*\n?([\s\S]*?)\n?>{3,}\s*REPLACE/
   );
   if (match) return { find: match[1], replace: match[2] };
   return { find: "", replace: "" };

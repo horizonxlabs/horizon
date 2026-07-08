@@ -53,3 +53,10 @@ test("block-anchor strategy: matches a multi-line block by its first/last lines"
   assert.equal(result.ok, true);
   assert.match(result.content, /const a = 10;\n  const c = 30;/);
 });
+
+test("empty replace deletes the matched snippet (a 'delete this' edit)", () => {
+  const src = "  a\n  <h1>Title</h1>\n  b\n";
+  const result = applyFindReplace(src, "  <h1>Title</h1>\n", "");
+  assert.equal(result.ok, true);
+  assert.equal(result.content, "  a\n  b\n");
+});

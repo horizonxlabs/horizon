@@ -20,12 +20,19 @@ export function createContainerFileReader(docker: DockerEngine): ContainerFileRe
         '  cat "$f";',
         '  echo "";',
         "done"
-      ].join(" ");
+        // Join with newlines, NOT spaces: `|| exit 0` and `for … do` are separate statements, so
+        // a space join produces `|| exit 0 for … do` — a shell syntax error that returns no files,
+        // silently feeding the AI the empty starter instead of the live app (the cause of every
+        // "edit didn't match / rewrote the whole file" drift).
+      ].join("\n");
 
       let stdout = "";
       try {
         const result = await docker.execInContainer(containerId, ["sh", "-c", script]);
-        stdout = result.stdout ?? "";
+        // The Docker exec stream returns CRLF line endings. Normalize to LF so (a) the file-marker
+        // regex matches and (b) the content we show the AI is byte-identical to the LF file on disk
+        // — otherwise the AI's edit SEARCH (copied from CRLF context) never matches the LF file.
+        stdout = (result.stdout ?? "").replace(/\r\n/g, "\n");
       } catch {
         return [];
       }
