@@ -1,4 +1,4 @@
-import { RotateCcw, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DataGrid,
@@ -35,6 +35,8 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [writeError, setWriteError] = useState<string | undefined>(undefined);
   const [loadingRows, setLoadingRows] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [adding, setAdding] = useState(false);
+  const [newRow, setNewRow] = useState<Record<string, string>>({});
 
   const pkColumns = useMemo(
     () => columns.filter((c) => c.isPrimaryKey).map((c) => c.name),
@@ -54,6 +56,8 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
       setDataError(undefined);
       setWriteError(undefined);
       setSelected(new Set());
+      setAdding(false);
+      setNewRow({});
       try {
         const page = await fetchProjectDbTable(projectId, table);
         setColumns(page.columns);
@@ -132,6 +136,27 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleAddRow() {
+    if (!activeTable) return;
+    setWriteError(undefined);
+    const values: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(newRow)) {
+      if (value !== "") values[key] = value;
+    }
+    if (Object.keys(values).length === 0) {
+      setWriteError("กรอกอย่างน้อย 1 ช่อง");
+      return;
+    }
+    try {
+      await mutateProjectDbRow(projectId, activeTable, { op: "insert", values });
+      setAdding(false);
+      setNewRow({});
+      await loadTable(activeTable);
+    } catch (error) {
+      setWriteError((error as Error).message);
+    }
+  }
+
   if (schemaError) return <div className="hz-db-empty">โหลด schema ไม่สำเร็จ: {schemaError}</div>;
   if (!schema) return <div className="hz-db-empty">กำลังโหลด schema…</div>;
   if (schema.tables.length === 0) {
@@ -164,6 +189,15 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 className="ghost-button"
+                onClick={() => setAdding((value) => !value)}
+              >
+                <Plus size={14} /> แถวใหม่
+              </button>
+            ) : null}
+            {editable ? (
+              <button
+                type="button"
+                className="ghost-button"
                 onClick={() => void deleteSelected()}
                 disabled={selected.size === 0}
               >
@@ -179,6 +213,40 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
             </button>
           </div>
         </div>
+        {adding ? (
+          <div className="hz-db-addrow">
+            {columns.map((column) => (
+              <label key={column.name}>
+                <span>
+                  {column.name}
+                  {column.isPrimaryKey ? " · pk" : ""}
+                </span>
+                <input
+                  value={newRow[column.name] ?? ""}
+                  onChange={(event) =>
+                    setNewRow((current) => ({ ...current, [column.name]: event.target.value }))
+                  }
+                  placeholder={column.dataType}
+                />
+              </label>
+            ))}
+            <div className="hz-db-addrow-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setAdding(false);
+                  setNewRow({});
+                }}
+              >
+                ยกเลิก
+              </button>
+              <button type="button" onClick={() => void handleAddRow()}>
+                เพิ่มแถว
+              </button>
+            </div>
+          </div>
+        ) : null}
         {writeError ? <div className="hz-db-error">เขียนไม่สำเร็จ: {writeError}</div> : null}
         {dataError ? (
           <div className="hz-db-empty">โหลดข้อมูลไม่สำเร็จ: {dataError}</div>
