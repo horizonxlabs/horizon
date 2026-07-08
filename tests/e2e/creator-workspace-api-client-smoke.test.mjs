@@ -153,3 +153,39 @@ test("Creator workspace API client blocked prompt keeps existing preview evidenc
   assert.ok(snapshot.tasks.some((task) => task.status === "blocked"));
   assert.equal(snapshot.preview.version, "preview-0000");
 });
+
+test("Creator workspace API client uploads a project file and attaches it to a prompt", async () => {
+  const { services, projectId } = createWorkspaceActionsFixture();
+  const client = createApiClientForServices(services);
+
+  const initialized = await client.initializeProjectFileUpload(projectId, {
+    fileName: "brand-guide.md",
+    mimeType: "text/markdown",
+    sizeBytes: 512,
+    sha256: "d".repeat(64),
+    includeByDefault: true
+  });
+
+  assert.equal(initialized.file.uploadStatus, "pending");
+  assert.match(initialized.uploadUrl, /^memory:\/\//);
+
+  const completed = await client.completeProjectFileUpload(projectId, initialized.uploadId, {
+    scanStatus: "clean",
+    extractedText: "Use a teal logo and compact approval cards."
+  });
+
+  assert.equal(completed.file.scanStatus, "clean");
+  assert.equal(completed.file.indexStatus, "indexed");
+
+  const files = await client.listProjectFiles(projectId);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].fileName, "brand-guide.md");
+
+  const result = await client.submitWorkspacePrompt(projectId, {
+    prompt: "Apply the uploaded brand guide",
+    attachmentIds: [initialized.uploadId]
+  });
+
+  assert.deepEqual(result.task.knowledgeVersionIds, [completed.file.versionId]);
+  assert.equal(result.knowledgeRetrieval.matchedVersionIds[0], completed.file.versionId);
+});

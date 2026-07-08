@@ -15,7 +15,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     promptDraft,
     setPromptDraft,
     handleVibeChat,
-    vibePreviewKey
+    vibePreviewKey,
+    projectFiles,
+    selectedAttachmentIds,
+    isUploadingProjectFile,
+    projectFileMessage,
+    toggleProjectFileAttachment,
+    handleUploadProjectFiles
   } = app;
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
@@ -110,6 +116,45 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 {suggestion}
               </button>
             ))}
+          </div>
+          <div className="vibe-live-files">
+            <label className="vibe-live-file-upload">
+              <input
+                type="file"
+                multiple
+                onChange={(event) => {
+                  if (event.currentTarget.files) void handleUploadProjectFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+                disabled={isUploadingProjectFile}
+              />
+              <span>Attach files</span>
+            </label>
+            {projectFileMessage && <span className="vibe-live-file-message">{projectFileMessage}</span>}
+            {projectFiles.length > 0 && (
+              <div className="vibe-live-file-list" aria-label="Project files">
+                {projectFiles.map((file) => {
+                  const selected = selectedAttachmentIds.includes(file.id);
+                  const ready =
+                    file.uploadStatus === "uploaded" &&
+                    file.scanStatus === "clean" &&
+                    file.indexStatus === "indexed";
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      className={`vibe-live-file-chip ${selected ? "is-selected" : ""}`.trim()}
+                      onClick={() => toggleProjectFileAttachment(file.id)}
+                      disabled={!ready}
+                      title={ready ? "Attach to next prompt" : "File is not ready yet"}
+                    >
+                      <span>{file.fileName}</span>
+                      <small>{ready ? "ready" : file.indexStatus}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">

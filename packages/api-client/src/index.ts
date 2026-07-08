@@ -285,6 +285,7 @@ export type GuardrailResultDto = {
 
 export type WorkspacePromptInput = {
   prompt: string;
+  attachmentIds?: string[];
 };
 
 export type WorkspacePromptResultDto = {
@@ -296,6 +297,64 @@ export type WorkspacePromptResultDto = {
   skillSelection?: unknown;
   tokenBudget: WorkspaceTokenBudgetDto;
 };
+
+export type ProjectFilePurposeDto = "ai_context" | "app_asset";
+export type ProjectFileScanStatusDto =
+  | "pending"
+  | "clean"
+  | "failed"
+  | "malicious"
+  | "quarantined";
+
+export type ProjectFileUploadDto = {
+  id: string;
+  projectId: string;
+  sourceId: string;
+  versionId: string;
+  ownerUserId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  bucket: string;
+  objectKey: string;
+  purpose: ProjectFilePurposeDto;
+  uploadStatus: "pending" | "uploaded" | "failed";
+  scanStatus: ProjectFileScanStatusDto;
+  indexStatus: "pending" | "indexed" | "failed";
+  extractionStatus: "pending" | "indexed" | "failed";
+  includeByDefault: boolean;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectFileUploadInitInput = {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  purpose?: ProjectFilePurposeDto;
+  includeByDefault?: boolean;
+};
+
+export type ProjectFileUploadInitResponse = {
+  uploadId: string;
+  sourceId: string;
+  versionId: string;
+  objectKey: string;
+  uploadUrl: string;
+  expiresAt: string;
+  file: ProjectFileUploadDto;
+};
+
+export type ProjectFileUploadCompleteInput = {
+  scanStatus?: ProjectFileScanStatusDto;
+  extractedText?: string;
+  excerpts?: string[];
+};
+
+export type ProjectFileUploadCompleteResponse = { file: ProjectFileUploadDto };
 
 export type WorkspaceSnapshotResponse = {
   project: PlatformProjectDto;
@@ -314,6 +373,7 @@ export type WorkspaceSnapshotResponse = {
   usage: AiUsageLogDto[];
   tokenBudget: WorkspaceTokenBudgetDto;
 };
+
 
 export type ManagedAppDto = {
   id: string;
@@ -861,6 +921,42 @@ export class PlatformApiClient {
   getWorkspace(projectId: string): Promise<WorkspaceSnapshotResponse> {
     return this.request<WorkspaceSnapshotResponse>(
       `/projects/${encodeURIComponent(projectId)}/workspace`
+    );
+  }
+
+
+  listProjectFiles(projectId: string): Promise<ProjectFileUploadDto[]> {
+    return this.request<ProjectFileUploadDto[]>(
+      `/creator/projects/${encodeURIComponent(projectId)}/files`
+    );
+  }
+
+  initializeProjectFileUpload(
+    projectId: string,
+    input: ProjectFileUploadInitInput
+  ): Promise<ProjectFileUploadInitResponse> {
+    return this.request<ProjectFileUploadInitResponse>(
+      `/creator/projects/${encodeURIComponent(projectId)}/files/init`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
+  }
+
+  completeProjectFileUpload(
+    projectId: string,
+    uploadId: string,
+    input: ProjectFileUploadCompleteInput = {}
+  ): Promise<ProjectFileUploadCompleteResponse> {
+    return this.request<ProjectFileUploadCompleteResponse>(
+      `/creator/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(uploadId)}/complete`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
     );
   }
 

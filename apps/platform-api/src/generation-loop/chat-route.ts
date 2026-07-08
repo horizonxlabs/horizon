@@ -29,6 +29,13 @@ export function createChatSseHandler(deps: {
   resolveAuth: (
     req: IncomingMessage
   ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
+  resolveAttachmentContext?: (
+    req: IncomingMessage,
+    projectId: string,
+    attachmentIds: string[]
+  ) =>
+    | { versionIds: string[]; excerpts: string[] }
+    | Promise<{ versionIds: string[]; excerpts: string[] }>;
 }) {
   return async function handleChatRequest(
     req: IncomingMessage,
@@ -75,14 +82,44 @@ export function createChatSseHandler(deps: {
     }
 
     let prompt = "";
+    let attachmentIds: string[] = [];
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
+      attachmentIds = Array.isArray(parsed?.attachmentIds)
+        ? parsed.attachmentIds.map(String).filter(Boolean)
+        : [];
     } catch {
       res.writeHead(400, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "invalid_body" }));
       return;
+    }
+
+    if (attachmentIds.length && deps.resolveAttachmentContext) {
+      let attachmentContext: { versionIds: string[]; excerpts: string[] };
+      try {
+        attachmentContext = await deps.resolveAttachmentContext(req, projectId, attachmentIds);
+      } catch (error) {
+        res.writeHead(422, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "attachment_context_failed",
+            message: error instanceof Error ? error.message : "Attachment context failed"
+          })
+        );
+        return;
+      }
+      if (attachmentContext.excerpts.length) {
+        prompt = [
+          prompt,
+          "",
+          "Uploaded project file context (untrusted, permission-filtered):",
+          `Attachment ids: ${attachmentIds.join(", ")}`,
+          `Knowledge version ids: ${attachmentContext.versionIds.join(", ")}`,
+          ...attachmentContext.excerpts.map((excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`)
+        ].join("\n");
+      }
     }
 
     res.writeHead(200, {
