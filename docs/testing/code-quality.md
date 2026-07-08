@@ -12,6 +12,9 @@ protects the full product surface.
 - `pnpm check:changed --base origin/main` checks only changed files for merge
   markers, Oxlint warnings, and workspace package-script drift.
 - `pnpm check:staged` is the pre-commit gate and checks only staged files.
+- `pnpm check:design-system` scans app source for design-system governance:
+  no app-local stylesheets, no inline visual styles, no hardcoded colors, and no
+  local CSS imports outside `@evcp/ui/styles.css`.
 - `pnpm format` formats the full repository with Prettier.
 - `pnpm format:check:all` audits the full formatting baseline. Formatting is
   intentionally opt-in while the existing repository formatting baseline is being
@@ -31,5 +34,7 @@ PR. Security-sensitive areas are routed through CODEOWNERS.
   issues fail the gate.
 - **Type safety:** every workspace package must expose `typecheck`; the root gate
   runs all workspace typechecks.
+- **Design-system governance:** app surfaces compose `@evcp/ui` and keep tokens,
+  shared classes, and visual styling in `packages/ui/styles.css`.
 - **Tests:** unit tests run locally by default; CI adds integration and E2E tests.
 - **Dependency upkeep:** Dependabot tracks npm and GitHub Actions updates.

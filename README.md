@@ -1,4 +1,4 @@
-# Enterprise Vibe Coding Platform
+# Horizon
 
 Private AI application builder for organizations.
 

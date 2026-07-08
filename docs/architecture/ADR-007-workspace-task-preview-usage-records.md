@@ -8,7 +8,7 @@
 
 Sprint 4 introduces the Creator Workspace where a prompt creates an AI task, updates a live preview and consumes governed AI quota. Sprint 5 will use preview output for frontend version restore, and Sprint 8 will need traceability from ticket or prompt through PRD, preview and deployment.
 
-The product direction for vibe coding is a Bolt-like browser workspace: Creator/Developer should be able to prompt, inspect generated files, view AI diffs, see terminal/build/test output, preview the running app and hand off to publish without a local development setup. Unlike a consumer self-serve coding workspace, Enterprise Vibe Coding Platform must keep infrastructure, database, user directory, authentication, secrets, routes and deployment policy as IT-controlled boundaries.
+The product direction for vibe coding is a Bolt-like browser workspace: Creator/Developer should be able to prompt, inspect generated files, view AI diffs, see terminal/build/test output, preview the running app and hand off to publish without a local development setup. Unlike a consumer self-serve coding workspace, Horizon must keep infrastructure, database, user directory, authentication, secrets, routes and deployment policy as IT-controlled boundaries.
 
 ## Decision
 
@@ -52,11 +52,11 @@ sequenceDiagram
 
 ## Alternatives Considered
 
-| Option | Pros | Cons | Verdict |
-| --- | --- | --- | --- |
-| Keep workspace state only in frontend mock data | Fast UI build | No API contract, no usage/audit trail, Sprint 5 cannot consume output | Rejected |
-| Store one JSON blob per workspace | Simple schema | Harder query and traceability, weak version boundary | Rejected |
-| Store task, step, preview and usage records | Clear flow evidence, supports restore/traceability, testable deny paths | More tables and service code | Accepted |
+| Option                                          | Pros                                                                    | Cons                                                                  | Verdict  |
+| ----------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- | -------- |
+| Keep workspace state only in frontend mock data | Fast UI build                                                           | No API contract, no usage/audit trail, Sprint 5 cannot consume output | Rejected |
+| Store one JSON blob per workspace               | Simple schema                                                           | Harder query and traceability, weak version boundary                  | Rejected |
+| Store task, step, preview and usage records     | Clear flow evidence, supports restore/traceability, testable deny paths | More tables and service code                                          | Accepted |
 
 ## Consequences
 

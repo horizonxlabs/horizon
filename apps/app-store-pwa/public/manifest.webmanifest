@@ -1,6 +1,6 @@
 {
-  "name": "Enterprise App Store",
-  "short_name": "EVCP Store",
+  "name": "Horizon Store",
+  "short_name": "Horizon",
   "description": "Private enterprise app store for published internal AI-built applications.",
   "start_url": "/",
   "scope": "/",

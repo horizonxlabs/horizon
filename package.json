@@ -15,6 +15,7 @@
     "check:staged": "node scripts/quality/check-changed.mjs --staged",
     "check:no-conflict-markers": "node scripts/quality/check-no-conflict-markers.mjs",
     "check:workspace-scripts": "node scripts/quality/check-workspace-scripts.mjs",
+    "check:design-system": "node scripts/quality/check-design-system.mjs",
     "dev": "pnpm --parallel --filter @evcp/admin-web --filter @evcp/creator-web --filter @evcp/app-store-pwa dev",
     "dev:admin": "pnpm --filter @evcp/admin-web dev",
     "dev:api": "pnpm --filter @evcp/platform-api dev",

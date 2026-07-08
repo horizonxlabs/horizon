@@ -82,6 +82,6 @@ export const creatorPageCopy: Record<
   tickets: {
     eyebrow: "Feedback Loop",
     title: "Tickets & Changes",
-    description: "รับ bug/feedback จาก App Store แล้วแปลงเป็น PRD change หรือ AI prompt"
+    description: "รับ bug/feedback จาก Horizon Store แล้วแปลงเป็น PRD change หรือ AI prompt"
   }
 };

@@ -18,6 +18,16 @@ const FORMAT_EXTENSIONS = new Set([
 ]);
 
 const LINT_EXTENSIONS = new Set([".cjs", ".js", ".mjs", ".ts", ".tsx"]);
+const DESIGN_SYSTEM_EXTENSIONS = new Set([
+  ".css",
+  ".js",
+  ".jsx",
+  ".less",
+  ".sass",
+  ".scss",
+  ".ts",
+  ".tsx"
+]);
 
 const FORMAT_EXCLUDES = new Set(["pnpm-lock.yaml"]);
 
@@ -135,6 +145,14 @@ function isLargeFileTarget(file) {
   return LARGE_FILE_EXTENSIONS.has(extname(file));
 }
 
+function isDesignSystemTarget(file) {
+  return (
+    file.startsWith("apps/") &&
+    file.includes("/src/") &&
+    DESIGN_SYSTEM_EXTENSIONS.has(extname(file))
+  );
+}
+
 function countLines(file) {
   const content = readFileSync(file, "utf8");
   if (content.length === 0) return 0;
@@ -189,6 +207,7 @@ if (changedFiles.length === 0) {
 const formatFiles = changedFiles.filter(isFormatTarget);
 const lintFiles = changedFiles.filter(isLintTarget);
 const largeFileTargets = changedFiles.filter(isLargeFileTarget);
+const designSystemTargets = changedFiles.filter(isDesignSystemTarget);
 
 runCommand("conflict marker scan", "node", [
   "scripts/quality/check-no-conflict-markers.mjs",
@@ -197,6 +216,13 @@ runCommand("conflict marker scan", "node", [
 
 if (!args.formatOnly && largeFileTargets.length > 0) {
   checkLargeFiles(largeFileTargets);
+}
+
+if (!args.formatOnly && designSystemTargets.length > 0) {
+  runCommand("design system governance", "node", [
+    "scripts/quality/check-design-system.mjs",
+    ...designSystemTargets
+  ]);
 }
 
 if (args.format && formatFiles.length > 0) {

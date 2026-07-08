@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -51,7 +52,7 @@ test("apps preload LINE Seed Thai fonts before React renders", () => {
     const html = readFileSync(htmlPath, "utf8");
     assert.match(
       html,
-      /rel="preload" href="fonts\/LINESeedSansTH_W_Rg\.woff2" as="font" type="font\/woff2" crossorigin/
+      /<link\s+[^>]*rel="preload"[\s\S]*?href="fonts\/LINESeedSansTH_W_Rg\.woff2"[\s\S]*?as="font"[\s\S]*?type="font\/woff2"[\s\S]*?crossorigin[\s\S]*?\/?>/
     );
     assert.match(html, /font-family: "LINE Seed Sans TH"/);
     assert.match(html, /font-display: block/);
@@ -153,4 +154,39 @@ test.skip("creator AI workspace exposes Antigravity-style command workspace", ()
 
   assert.doesNotMatch(css, /\.app-shell:has\(\.ag-workspace\) > \.sidebar/);
   assert.match(css, /\.ag-workspace\s*\{[^}]*width: 100%/s);
+});
+test("design-system governance rejects app-layer visual styling", () => {
+  const fixturePath = "apps/creator-web/src/__design_system_violation.fixture.tsx";
+  writeFileSync(
+    fixturePath,
+    'export function BadFixture() { return <div style={{ color: "#ffffff" }} />; }\n'
+  );
+
+  try {
+    const result = spawnSync("node", ["scripts/quality/check-design-system.mjs", fixturePath], {
+      encoding: "utf8"
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /inline visual style detected/);
+    assert.match(result.stderr, /hardcoded color detected/);
+  } finally {
+    rmSync(fixturePath, { force: true });
+  }
+});
+
+test("design-system governance accepts the shared UI stylesheet import", () => {
+  const fixturePath = "apps/creator-web/src/__design_system_allowed.fixture.tsx";
+  writeFileSync(
+    fixturePath,
+    'import "@evcp/ui/styles.css";\nexport const allowedFixture = true;\n'
+  );
+
+  try {
+    const result = spawnSync("node", ["scripts/quality/check-design-system.mjs", fixturePath], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(fixturePath, { force: true });
+  }
 });

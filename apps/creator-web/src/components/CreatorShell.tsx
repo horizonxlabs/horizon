@@ -28,7 +28,7 @@ export function CreatorShell({
   } = app;
   return (
     <AppShell
-      title="Creator App"
+      title="Horizon Creator"
       navItems={creatorNavItems}
       userName={bootstrap.userName}
       session={creatorSessionControls}
