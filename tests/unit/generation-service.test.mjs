@@ -61,6 +61,67 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   assert.equal(events.at(-1).type, "done");
 });
 
+test("plan mode streams read-only LLM analysis without running actions or committing", async () => {
+  const chatHistory = createMemoryChatHistoryStore();
+  let actionAttempts = 0;
+  let commitAttempts = 0;
+  let containerLookups = 0;
+  let readContextAttempts = 0;
+
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([
+      "I would inspect the app/page.tsx entrypoint, then plan the contact form state and validation before switching to Build."
+    ]),
+    chatHistory,
+    actionRunner: {
+      runAction: async () => {
+        actionAttempts += 1;
+        return { ok: true, stdout: "" };
+      }
+    },
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => {
+      containerLookups += 1;
+      return "container-plan-mode";
+    },
+    readContextFiles: async () => {
+      readContextAttempts += 1;
+      return [{ path: "app/page.tsx", content: "export default function Home(){ return null; }" }];
+    },
+    commitAllChanges: async () => {
+      commitAttempts += 1;
+      return "commit-sha-plan";
+    }
+  });
+
+  const events = await collect(
+    service.runTurn({ projectId: "p1", prompt: "plan the home page", agentMode: "plan" })
+  );
+
+  assert.equal(containerLookups, 1);
+  assert.equal(readContextAttempts, 1);
+  assert.equal(actionAttempts, 0);
+  assert.equal(commitAttempts, 0);
+  assert.equal(
+    events.some((event) => event.type === "action_result" || event.type === "commit"),
+    false
+  );
+  assert.match(
+    events
+      .filter((event) => event.type === "token")
+      .map((event) => event.content)
+      .join(""),
+    /inspect the app\/page\.tsx entrypoint/
+  );
+  assert.equal(events.at(-1).type, "done");
+  assert.deepEqual(
+    chatHistory.listMessages("p1").map((message) => message.agentMode),
+    ["plan", "plan"]
+  );
+});
+
 test("retries failing shell action stops after 2 failed rounds, surfacing an error event", async () => {
   const docker = createMemoryDockerEngine();
   let execAttempts = 0;
@@ -106,4 +167,31 @@ test("retries failing shell action stops after 2 failed rounds, surfacing an err
   );
   assert.equal(events.at(-1).type, "done");
   assert.equal(execAttempts, 3, "expected exactly 3 attempts (initial + 2 retries)");
+});
+
+test("listWorkspaceFiles uses the dedicated workspace file reader", async () => {
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([]),
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: createActionRunner({
+      docker: createMemoryDockerEngine(),
+      checkpoints: createMemoryCheckpointStore(),
+      migrations: createMemoryMigrationStore()
+    }),
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => "container-1",
+    readContextFiles: async () => {
+      throw new Error("context reader should not be used for file browser");
+    },
+    readWorkspaceFiles: async (containerId) => [
+      { path: "app/page.tsx", content: `// ${containerId}` }
+    ],
+    commitAllChanges: async () => "commit-sha-3"
+  });
+
+  const files = await service.listWorkspaceFiles("p1");
+
+  assert.deepEqual(files, [{ path: "app/page.tsx", content: "// container-1" }]);
 });

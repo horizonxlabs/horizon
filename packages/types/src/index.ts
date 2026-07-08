@@ -100,6 +100,8 @@ export interface EnvironmentRecord {
 
 // --- MVP Plan 4: AI Generation Loop ---
 
+export type WorkspaceAgentMode = "plan" | "build";
+
 export type ChatMessageRole = "user" | "assistant" | "system";
 
 export interface WorkspaceChatAction {
@@ -113,6 +115,7 @@ export interface WorkspaceChatMessage {
   id: string;
   projectId: string;
   role: ChatMessageRole;
+  agentMode?: WorkspaceAgentMode;
   content: string;
   artifactActionIds: string[];
   actions?: WorkspaceChatAction[];

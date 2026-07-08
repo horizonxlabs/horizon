@@ -5,6 +5,7 @@ import {
   type AppStoreRegistryEntryDto,
   type PrdVersionDto,
   type PublishReviewResponse,
+  type WorkspaceAgentMode,
   type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
 import { creatorSessionBridgeProfile, fallbackSelectedProject } from "../data/mock-data";
@@ -46,13 +47,15 @@ export async function ensureVibeWorkspace(projectId: string, slug: string): Prom
 export async function streamVibeChat(
   projectId: string,
   prompt: string,
+  attachmentIds: string[],
+  agentMode: WorkspaceAgentMode,
   onEvent: (type: string, data: unknown) => void
 ): Promise<void> {
   const base = apiBaseUrl() ?? "/api";
   const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat`, {
     method: "POST",
     headers: vibeAuthHeaders(),
-    body: JSON.stringify({ prompt })
+    body: JSON.stringify({ prompt, attachmentIds, agentMode })
   });
   if (!response.ok || !response.body) {
     throw new Error(`Chat request failed (${response.status})`);

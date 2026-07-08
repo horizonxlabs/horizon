@@ -1,6 +1,8 @@
-import { Send } from "lucide-react";
+import { ClipboardList, Hammer, Send } from "lucide-react";
+import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { Suspense, lazy } from "react";
 import { VibeActionRow } from "../components/VibeActionRow";
+import { WorkspaceCodePanel } from "../components/WorkspaceCodePanel";
 import { platformSessionToken } from "../lib/session";
 import type { useCreatorApp } from "../hooks/use-creator-app";
 
@@ -15,6 +17,20 @@ const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
   database: "Database"
 };
 
+const MODE_OPTIONS: Array<{
+  value: WorkspaceAgentMode;
+  label: string;
+  description: string;
+  Icon: typeof ClipboardList;
+}> = [
+  { value: "plan", label: "Plan", description: "Read-only analysis", Icon: ClipboardList },
+  { value: "build", label: "Build", description: "Apply changes", Icon: Hammer }
+];
+
+const SUGGESTIONS: Record<WorkspaceAgentMode, string[]> = {
+  plan: ["Review current workspace", "Draft an implementation plan", "List delivery risks"],
+  build: ["Add an about page", "Make it dark mode", "Add a contact form"]
+};
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
@@ -27,7 +43,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     promptDraft,
     setPromptDraft,
     handleVibeChat,
-    vibePreviewKey
+    vibePreviewKey,
+    projectFiles,
+    selectedAttachmentIds,
+    isUploadingProjectFile,
+    projectFileMessage,
+    toggleProjectFileAttachment,
+    handleUploadProjectFiles,
+    workspaceMode,
+    setWorkspaceMode
   } = app;
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
@@ -43,6 +67,21 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <strong className="vibe-live-project-name">{selectedProject.name}</strong>
         <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
         <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
+        <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
+          {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
+              onClick={() => setWorkspaceMode(value)}
+              aria-pressed={workspaceMode === value}
+              title={description}
+            >
+              <Icon size={14} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
         <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
           {WORKSPACE_TABS.map((tab) => (
             <button
@@ -72,6 +111,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           type="button"
           title="Publish to production (Plan 5 pipeline)"
           className="vibe-live-control vibe-live-control-primary"
+          disabled={workspaceMode === "plan"}
         >
           Publish
         </button>
@@ -81,10 +121,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-thread">
             {vibeMessages.length === 0 && !isVibing && (
               <div className="vibe-live-empty">
-                <div className="vibe-live-empty-icon">✨</div>
-                <div className="vibe-live-empty-title">Build with AI</div>
-                Describe what you want. The AI writes code into your live app, runs it, and commits
-                each change.
+                <div className="vibe-live-empty-title">
+                  {workspaceMode === "plan" ? "Plan with AI" : "Build with AI"}
+                </div>
+                {workspaceMode === "plan"
+                  ? "Ask analysis, tradeoffs, and implementation steps before changes are applied."
+                  : "Describe what you want. The AI writes code into your live app, runs it, and commits each change."}
               </div>
             )}
             {vibeMessages.map((message) =>
@@ -112,7 +154,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             )}
           </div>
           <div className="vibe-live-suggestions">
-            {["Add an about page", "Make it dark mode", "Add a contact form"].map((suggestion) => (
+            {SUGGESTIONS[workspaceMode].map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
@@ -123,10 +165,52 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </button>
             ))}
           </div>
+          <div className="vibe-live-files">
+            <label className="vibe-live-file-upload">
+              <input
+                type="file"
+                multiple
+                onChange={(event) => {
+                  if (event.currentTarget.files)
+                    void handleUploadProjectFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+                disabled={isUploadingProjectFile}
+              />
+              <span>Attach files</span>
+            </label>
+            {projectFileMessage && (
+              <span className="vibe-live-file-message">{projectFileMessage}</span>
+            )}
+            {projectFiles.length > 0 && (
+              <div className="vibe-live-file-list" aria-label="Project files">
+                {projectFiles.map((file) => {
+                  const selected = selectedAttachmentIds.includes(file.id);
+                  const ready =
+                    file.uploadStatus === "uploaded" &&
+                    file.scanStatus === "clean" &&
+                    file.indexStatus === "indexed";
+                  return (
+                    <button
+                      key={file.id}
+                      type="button"
+                      className={`vibe-live-file-chip ${selected ? "is-selected" : ""}`.trim()}
+                      onClick={() => toggleProjectFileAttachment(file.id)}
+                      disabled={!ready}
+                      title={ready ? "Attach to next prompt" : "File is not ready yet"}
+                    >
+                      <span>{file.fileName}</span>
+                      <small>{ready ? "ready" : file.indexStatus}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <textarea
-                aria-label="Ask AI to build"
+                aria-label={workspaceMode === "plan" ? "Ask AI to plan" : "Ask AI to build"}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -135,7 +219,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (!isVibing && promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder="Ask AI to build…"
+                placeholder={
+                  workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"
+                }
                 rows={1}
                 className="vibe-live-input"
               />
@@ -164,25 +250,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               <WorkspaceDatabasePanel projectId={selectedProject.id} />
             </Suspense>
           ) : (
-            <div className="vibe-live-code-panel">
-              <div className="vibe-live-code-title">Changes this session</div>
-              {vibeMessages.flatMap((message) => message.actions).length === 0 ? (
-                <div className="vibe-live-code-empty">
-                  No changes yet. Ask the AI to build something.
-                </div>
-              ) : (
-                <div className="vibe-live-action-stack">
-                  {vibeMessages
-                    .flatMap((message) => message.actions)
-                    .map((action, index) => (
-                      <VibeActionRow key={`${action.id}-${index}`} action={action} />
-                    ))}
-                </div>
-              )}
-              <div className="vibe-live-code-note">
-                A full file browser is on the roadmap — use the Preview tab to see the running app.
-              </div>
-            </div>
+            <WorkspaceCodePanel projectId={selectedProject.id} projectSlug={selectedProject.slug} />
           )}
         </div>
       </div>
