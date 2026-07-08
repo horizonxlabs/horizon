@@ -4,9 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -45,7 +44,9 @@ test("frontend source exposes API bootstrap state without direct mock-data impor
   const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
 
   assert.match(adminSource, /Session: \{bootstrap\.source\}/);
-  assert.match(creatorSource, /Bootstrap: \{bootstrap\.source\}/);
+  // The creator "Bootstrap: <source>" badge was removed in the UI cleanup, but the bootstrap state
+  // still derives its source from the real Platform API auth mode (vs local fallback).
+  assert.match(creatorSource, /source: currentUser\.auth\.mode === "platform_session"/);
   assert.match(storeSource, /loadStoreBootstrap/);
   assert.doesNotMatch(`${adminSource}\n${creatorSource}\n${storeSource}`, /@evcp\/mock-data/);
 });
