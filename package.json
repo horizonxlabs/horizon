@@ -59,7 +59,7 @@
     "verify:real-mvp-install": "pnpm lint && pnpm typecheck && pnpm build && pnpm verify:install && pnpm verify:installer && pnpm test"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.3",
