@@ -8,7 +8,7 @@ test("creator navigation matches the real app creation lifecycle", () => {
   const expectedOrder = [
     "Projects",
     "PRD Review",
-    "AI Workspace",
+    "Creator Workspace",
     "Users & Roles",
     "Publish & Registry",
     "Tickets & Changes"
@@ -33,8 +33,8 @@ test("creator project actions follow PRD before AI workspace generation", () => 
   const creatorSource = readFileSync("apps/creator-web/src/main.tsx", "utf8");
 
   assert.match(creatorSource, /Review PRD/);
-  assert.match(creatorSource, /Open AI Workspace/);
-  assert.match(creatorSource, /AI Workspace: Leave Management/);
+  assert.match(creatorSource, /Open Creator Workspace/);
+  assert.match(creatorSource, /Creator Workspace: Leave Management/);
   assert.match(creatorSource, /Publish & Registry/);
   assert.match(creatorSource, /Tickets & Changes/);
 });

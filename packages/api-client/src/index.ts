@@ -34,6 +34,22 @@ export type PlatformUserDto = {
   permissions?: string[];
 };
 
+export type CreatePlatformUserInput = {
+  email: string;
+  name: string;
+  role: string;
+  tempPassword: string;
+};
+
+export type PlatformUserSummary = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  mustChangePassword: boolean;
+};
+
 export type PlatformAuthEvidenceDto = {
   mode: "platform_session" | "mock_header";
   sessionId?: string;
@@ -135,7 +151,15 @@ export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
   accessMode: string;
   releaseNotes: string[];
   supportContact: string;
-  actions: Array<"open" | "install" | "uninstall" | "request_access" | "submit_ticket" | "send_feedback" | "view_status">;
+  actions: Array<
+    | "open"
+    | "install"
+    | "uninstall"
+    | "request_access"
+    | "submit_ticket"
+    | "send_feedback"
+    | "view_status"
+  >;
 };
 
 export type StoreAppInstallationResponse = {
@@ -551,7 +575,13 @@ export type AiProviderTestCallResponse = {
 };
 
 export type AiProviderAdapterDto = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
-export type AiScenarioDto = "prd_generation" | "requirement_analysis" | "frontend_coding" | "backend_coding" | "review" | "documentation";
+export type AiScenarioDto =
+  | "prd_generation"
+  | "requirement_analysis"
+  | "frontend_coding"
+  | "backend_coding"
+  | "review"
+  | "documentation";
 export type AiUsageModeDto = "production" | "development" | "fallback";
 
 export type AiProviderDto = {
@@ -784,24 +814,36 @@ export class PlatformApiClient {
     return this.request<StorefrontAppDetailResponse>(`/store/apps/${encodeURIComponent(appSlug)}`);
   }
 
-  requestStoreAccess(appSlug: string, input: StoreAccessRequestInput): Promise<StoreAccessRequestResponse> {
-    return this.request<StoreAccessRequestResponse>(`/store/apps/${encodeURIComponent(appSlug)}/access-requests`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+  requestStoreAccess(
+    appSlug: string,
+    input: StoreAccessRequestInput
+  ): Promise<StoreAccessRequestResponse> {
+    return this.request<StoreAccessRequestResponse>(
+      `/store/apps/${encodeURIComponent(appSlug)}/access-requests`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
   installStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
-    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/install`, {
-      method: "POST"
-    });
+    return this.request<StoreAppInstallationResponse>(
+      `/store/apps/${encodeURIComponent(appSlug)}/install`,
+      {
+        method: "POST"
+      }
+    );
   }
 
   uninstallStoreApp(appSlug: string): Promise<StoreAppInstallationResponse> {
-    return this.request<StoreAppInstallationResponse>(`/store/apps/${encodeURIComponent(appSlug)}/uninstall`, {
-      method: "POST"
-    });
+    return this.request<StoreAppInstallationResponse>(
+      `/store/apps/${encodeURIComponent(appSlug)}/uninstall`,
+      {
+        method: "POST"
+      }
+    );
   }
 
   submitStoreTicket(appSlug: string, input: StoreTicketInput): Promise<StoreTicketResponse> {
@@ -817,51 +859,78 @@ export class PlatformApiClient {
   }
 
   getWorkspace(projectId: string): Promise<WorkspaceSnapshotResponse> {
-    return this.request<WorkspaceSnapshotResponse>(`/projects/${encodeURIComponent(projectId)}/workspace`);
+    return this.request<WorkspaceSnapshotResponse>(
+      `/projects/${encodeURIComponent(projectId)}/workspace`
+    );
   }
 
-  submitWorkspacePrompt(projectId: string, input: WorkspacePromptInput): Promise<WorkspacePromptResultDto> {
-    return this.request<WorkspacePromptResultDto>(`/projects/${encodeURIComponent(projectId)}/workspace/prompts`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+  submitWorkspacePrompt(
+    projectId: string,
+    input: WorkspacePromptInput
+  ): Promise<WorkspacePromptResultDto> {
+    return this.request<WorkspacePromptResultDto>(
+      `/projects/${encodeURIComponent(projectId)}/workspace/prompts`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
   refreshWorkspacePreview(projectId: string): Promise<PreviewVersionDto> {
-    return this.request<PreviewVersionDto>(`/projects/${encodeURIComponent(projectId)}/workspace/preview/refresh`, {
-      method: "POST"
-    });
+    return this.request<PreviewVersionDto>(
+      `/projects/${encodeURIComponent(projectId)}/workspace/preview/refresh`,
+      {
+        method: "POST"
+      }
+    );
   }
 
   getAppAccessSnapshot(projectId: string): Promise<AppAccessSnapshotResponse> {
-    return this.request<AppAccessSnapshotResponse>(`/projects/${encodeURIComponent(projectId)}/app/users`);
+    return this.request<AppAccessSnapshotResponse>(
+      `/projects/${encodeURIComponent(projectId)}/app/users`
+    );
   }
 
   createAppInvitation(projectId: string, input: AppInvitationInput): Promise<AppInvitationDto> {
-    return this.request<AppInvitationDto>(`/projects/${encodeURIComponent(projectId)}/app/invitations`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.request<AppInvitationDto>(
+      `/projects/${encodeURIComponent(projectId)}/app/invitations`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
-  decideAppAccessRequest(projectId: string, input: AppAccessDecisionInput): Promise<AppAccessRequestDto> {
-    return this.request<AppAccessRequestDto>(`/projects/${encodeURIComponent(projectId)}/app/access-requests/decision`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+  decideAppAccessRequest(
+    projectId: string,
+    input: AppAccessDecisionInput
+  ): Promise<AppAccessRequestDto> {
+    return this.request<AppAccessRequestDto>(
+      `/projects/${encodeURIComponent(projectId)}/app/access-requests/decision`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
   getPublishReview(projectId: string): Promise<PublishReviewResponse> {
-    return this.request<PublishReviewResponse>(`/projects/${encodeURIComponent(projectId)}/publish/review`);
+    return this.request<PublishReviewResponse>(
+      `/projects/${encodeURIComponent(projectId)}/publish/review`
+    );
   }
 
   publishProject(projectId: string): Promise<PublishResultResponse> {
-    return this.request<PublishResultResponse>(`/projects/${encodeURIComponent(projectId)}/publish`, {
-      method: "POST"
-    });
+    return this.request<PublishResultResponse>(
+      `/projects/${encodeURIComponent(projectId)}/publish`,
+      {
+        method: "POST"
+      }
+    );
   }
 
   listAppStoreRegistry(): Promise<AppStoreRegistryEntryDto[]> {
@@ -886,6 +955,14 @@ export class PlatformApiClient {
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
     return this.request<InstallerReportDto[]>("/admin/installer/reports");
+  }
+
+  createUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
+    return this.request<PlatformUserSummary>("/admin/users", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   listAiProviders(): Promise<AiProviderDto[]> {

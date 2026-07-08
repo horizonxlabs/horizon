@@ -12,12 +12,13 @@ export const navigation: Record<Surface, NavItem[]> = {
     { label: "Services", route: "/admin/services" },
     { label: "AI Providers", route: "/admin/ai-providers" },
     { label: "Guardrails", route: "/admin/guardrails" },
-    { label: "Audit Logs", route: "/admin/audit-logs" }
+    { label: "Audit Logs", route: "/admin/audit-logs" },
+    { label: "Users", route: "/admin/users" }
   ],
   creator: [
     { label: "Projects", route: "/creator/" },
     { label: "PRD Review", route: "/creator/projects/leave-management/prd" },
-    { label: "AI Workspace", route: "/creator/projects/leave-management" },
+    { label: "Creator Workspace", route: "/creator/projects/leave-management" },
     { label: "Users & Roles", route: "/creator/projects/leave-management/users" },
     { label: "Publish & Registry", route: "/creator/projects/leave-management/publish" },
     { label: "Tickets & Changes", route: "/creator/projects/leave-management/tickets" }

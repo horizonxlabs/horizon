@@ -33,7 +33,12 @@ function partialTagOverlap(buffer: string, tag: string): number {
 }
 
 export function createMessageParser() {
-  const state: ParserState = { buffer: "", inArtifact: false, currentAction: null, actionCounter: 0 };
+  const state: ParserState = {
+    buffer: "",
+    inArtifact: false,
+    currentAction: null,
+    actionCounter: 0
+  };
 
   function drain(): ParsedEvent[] {
     const events: ParsedEvent[] = [];
@@ -42,9 +47,11 @@ export function createMessageParser() {
       if (!state.inArtifact) {
         const start = state.buffer.indexOf("<artifact");
         if (start === -1) {
-          if (state.buffer.length > 0) {
-            events.push({ type: "text", content: state.buffer });
-            state.buffer = "";
+          const holdBack = partialTagOverlap(state.buffer, "<artifact");
+          const emitLen = state.buffer.length - holdBack;
+          if (emitLen > 0) {
+            events.push({ type: "text", content: state.buffer.slice(0, emitLen) });
+            state.buffer = state.buffer.slice(emitLen);
           }
           return events;
         }
@@ -88,7 +95,12 @@ export function createMessageParser() {
         state.actionCounter += 1;
         const actionId = `act-${state.actionCounter}`;
         state.currentAction = { actionId, actionType };
-        events.push({ type: "action_start", actionId, actionType, ...(filePath ? { filePath } : {}) });
+        events.push({
+          type: "action_start",
+          actionId,
+          actionType,
+          ...(filePath ? { filePath } : {})
+        });
         state.buffer = state.buffer.slice(tagEnd + 1);
         continue;
       }
@@ -99,13 +111,21 @@ export function createMessageParser() {
         const holdBack = partialTagOverlap(state.buffer, "</action>");
         const emitLen = state.buffer.length - holdBack;
         if (emitLen > 0) {
-          events.push({ type: "action_chunk", actionId: state.currentAction.actionId, content: state.buffer.slice(0, emitLen) });
+          events.push({
+            type: "action_chunk",
+            actionId: state.currentAction.actionId,
+            content: state.buffer.slice(0, emitLen)
+          });
           state.buffer = state.buffer.slice(emitLen);
         }
         return events;
       }
       if (closeIdx > 0) {
-        events.push({ type: "action_chunk", actionId: state.currentAction.actionId, content: state.buffer.slice(0, closeIdx) });
+        events.push({
+          type: "action_chunk",
+          actionId: state.currentAction.actionId,
+          content: state.buffer.slice(0, closeIdx)
+        });
       }
       events.push({ type: "action_end", actionId: state.currentAction.actionId });
       state.buffer = state.buffer.slice(closeIdx + "</action>".length);

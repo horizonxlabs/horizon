@@ -1,0 +1,288 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Existing release tag to publish, for example v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  quality:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify install contract
+        run: pnpm install:preflight:example
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+  publish:
+    name: Publish signed release
+    runs-on: ubuntu-latest
+    needs: quality
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        run: |
+          set -euo pipefail
+          case "${RELEASE_VERSION}" in
+            v*.*.*) ;;
+            *) echo "RELEASE_VERSION must look like v1.2.3, got ${RELEASE_VERSION}" >&2; exit 1 ;;
+          esac
+          git rev-parse "${RELEASE_VERSION}^{commit}" >/dev/null
+
+      - name: Resolve image repository
+        id: release
+        run: |
+          set -euo pipefail
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          image_repository="ghcr.io/${owner}"
+          echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "image_repository=${image_repository}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push platform-api
+        id: platform_api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/platform-api.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-platform-api:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-platform-api:${{ github.sha }}
+
+      - name: Build and push admin-web
+        id: admin_web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web-app.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            APP_PACKAGE=@evcp/admin-web
+            APP_DIR=apps/admin-web
+            STATIC_PREFIX=
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-admin-web:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-admin-web:${{ github.sha }}
+
+      - name: Build and push creator-web
+        id: creator_web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web-app.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            APP_PACKAGE=@evcp/creator-web
+            APP_DIR=apps/creator-web
+            STATIC_PREFIX=/creator
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-creator-web:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-creator-web:${{ github.sha }}
+
+      - name: Build and push app-store-pwa
+        id: app_store_pwa
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web-app.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            APP_PACKAGE=@evcp/app-store-pwa
+            APP_DIR=apps/app-store-pwa
+            STATIC_PREFIX=/store
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-app-store-pwa:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-app-store-pwa:${{ github.sha }}
+
+      - name: Build and push workspace-next
+        id: workspace_next
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/workspace-next.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-workspace-next:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-workspace-next:${{ github.sha }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image digests
+        env:
+          IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
+          PLATFORM_API_DIGEST: ${{ steps.platform_api.outputs.digest }}
+          ADMIN_WEB_DIGEST: ${{ steps.admin_web.outputs.digest }}
+          CREATOR_WEB_DIGEST: ${{ steps.creator_web.outputs.digest }}
+          APP_STORE_PWA_DIGEST: ${{ steps.app_store_pwa.outputs.digest }}
+          WORKSPACE_NEXT_DIGEST: ${{ steps.workspace_next.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-platform-api@${PLATFORM_API_DIGEST}"
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-admin-web@${ADMIN_WEB_DIGEST}"
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-creator-web@${CREATOR_WEB_DIGEST}"
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-app-store-pwa@${APP_STORE_PWA_DIGEST}"
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-workspace-next@${WORKSPACE_NEXT_DIGEST}"
+
+      - name: Create release assets
+        env:
+          IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PLATFORM_API_DIGEST: ${{ steps.platform_api.outputs.digest }}
+          ADMIN_WEB_DIGEST: ${{ steps.admin_web.outputs.digest }}
+          CREATOR_WEB_DIGEST: ${{ steps.creator_web.outputs.digest }}
+          APP_STORE_PWA_DIGEST: ${{ steps.app_store_pwa.outputs.digest }}
+          WORKSPACE_NEXT_DIGEST: ${{ steps.workspace_next.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp docker/docker-compose.release.yml release/docker-compose.release.yml
+          cp docker/Caddyfile.release release/Caddyfile.release
+          cp docker/litellm-config.yaml release/litellm-config.yaml
+          cat > release/release-manifest.json <<JSON
+          {
+            "schemaVersion": 1,
+            "product": "Enterprise Vibe Coding Platform",
+            "version": "${VERSION}",
+            "sourceRepository": "${GITHUB_REPOSITORY}",
+            "sourceSha": "${GITHUB_SHA}",
+            "imageRepository": "${IMAGE_REPOSITORY}",
+            "images": {
+              "platform-api": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-platform-api:${VERSION}",
+                "digest": "${PLATFORM_API_DIGEST}"
+              },
+              "admin-web": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-admin-web:${VERSION}",
+                "digest": "${ADMIN_WEB_DIGEST}"
+              },
+              "creator-web": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-creator-web:${VERSION}",
+                "digest": "${CREATOR_WEB_DIGEST}"
+              },
+              "app-store-pwa": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-app-store-pwa:${VERSION}",
+                "digest": "${APP_STORE_PWA_DIGEST}"
+              },
+              "workspace-next": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-workspace-next:${VERSION}",
+                "digest": "${WORKSPACE_NEXT_DIGEST}"
+              }
+            },
+            "composeFile": "docker-compose.release.yml",
+            "signature": {
+              "type": "sigstore-keyless",
+              "imageSignatures": "stored in the container registry as cosign signatures",
+              "manifestBundle": "release-manifest.json.sigstore.json",
+              "checksumBundle": "SHA256SUMS.sigstore.json"
+            }
+          }
+          JSON
+          (cd release && sha256sum release-manifest.json docker-compose.release.yml Caddyfile.release litellm-config.yaml > SHA256SUMS)
+          cat > release/RELEASE_NOTES.md <<EOF
+          ## Enterprise Vibe Coding Platform ${VERSION}
+
+          This release publishes signed Docker image digests plus the release compose bundle.
+
+          Image repository: \`${IMAGE_REPOSITORY}\`
+          Source SHA: \`${GITHUB_SHA}\`
+
+          MVP registry visibility: set the published GHCR packages to public once from GitHub Packages settings so Droplets can pull without registry credentials.
+
+          Verify release assets with the included SHA256SUMS and Sigstore bundles.
+          EOF
+
+      - name: Sign release assets
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle release/release-manifest.json.sigstore.json release/release-manifest.json
+          cosign sign-blob --yes --bundle release/SHA256SUMS.sigstore.json release/SHA256SUMS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" release/* --clobber
+          else
+            gh release create "${VERSION}" release/* --verify-tag --title "EVCP ${VERSION}" --notes-file release/RELEASE_NOTES.md
+          fi

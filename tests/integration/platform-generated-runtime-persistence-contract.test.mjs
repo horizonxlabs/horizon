@@ -7,7 +7,10 @@ import {
 } from "../../apps/platform-api/src/persistence/generated-runtime-repositories.ts";
 
 const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
-const repositorySource = readFileSync("apps/platform-api/src/persistence/generated-runtime-repositories.ts", "utf8");
+const repositorySource = readFileSync(
+  "apps/platform-api/src/persistence/generated-runtime-repositories.ts",
+  "utf8"
+);
 const persistenceDoc = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 
 const adminActor = {
@@ -93,7 +96,9 @@ const deployment = {
 };
 
 test("Generated runtime persistence service stores overview health OpenAPI and migration reports", async () => {
-  const service = createGeneratedRuntimeRepositoryBackedService(new MemoryGeneratedRuntimePersistenceClient());
+  const service = createGeneratedRuntimeRepositoryBackedService(
+    new MemoryGeneratedRuntimePersistenceClient()
+  );
 
   const overview = await service.getRuntimeOverview(adminActor, { project, manifest, deployment });
   const health = await service.getRuntimeHealth(adminActor, { project, manifest, deployment });
@@ -106,7 +111,11 @@ test("Generated runtime persistence service stores overview health OpenAPI and m
     destructiveChanges: ["drop_column:leave_requests.balance_snapshot"],
     approvalId: ""
   });
-  const afterBlocked = await service.getRuntimeOverview(adminActor, { project, manifest, deployment });
+  const afterBlocked = await service.getRuntimeOverview(adminActor, {
+    project,
+    manifest,
+    deployment
+  });
 
   assert.equal(overview.projectId, project.id);
   assert.equal(overview.appId, project.appId);
@@ -127,7 +136,9 @@ test("Generated runtime persistence service stores overview health OpenAPI and m
 });
 
 test("Generated runtime persistence service enforces admin-only access and schema isolation", async () => {
-  const service = createGeneratedRuntimeRepositoryBackedService(new MemoryGeneratedRuntimePersistenceClient());
+  const service = createGeneratedRuntimeRepositoryBackedService(
+    new MemoryGeneratedRuntimePersistenceClient()
+  );
 
   await assert.rejects(
     () => service.getRuntimeOverview(creatorActor, { project, manifest, deployment }),
@@ -157,9 +168,15 @@ test("Generated runtime persistence service enforces admin-only access and schem
 });
 
 test("runtime persistence wiring exposes Generated Runtime service and routes", () => {
-  assert.match(appFactory, /generatedRuntimePersistence\?: GeneratedRuntimeRepositoryBackedService/);
-  assert.match(appFactory, /createGeneratedRuntimeRepositoryBackedService\(new MemoryGeneratedRuntimePersistenceClient\(\)\)/);
-  assert.match(appFactory, /createPrismaGeneratedRuntimePersistence\(env\.DATABASE_URL\)/);
+  assert.match(
+    appFactory,
+    /generatedRuntimePersistence\?: GeneratedRuntimeRepositoryBackedService/
+  );
+  assert.match(
+    appFactory,
+    /createGeneratedRuntimeRepositoryBackedService\(\s*new MemoryGeneratedRuntimePersistenceClient\(\)\s*\)/
+  );
+  assert.match(appFactory, /createPrismaGeneratedRuntimePersistence\(\s*env\.DATABASE_URL\s*\)/);
   assert.match(appFactory, /isPersistenceGeneratedRuntimeRoute/);
   assert.match(repositorySource, /generatedAppRuntime/);
   assert.match(repositorySource, /generatedAppSchemaGrant/);

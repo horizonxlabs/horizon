@@ -2,7 +2,14 @@ export type Surface = "admin" | "creator" | "store";
 
 export type PlatformRole = "admin" | "creator" | "end_user";
 
-export type Status = "healthy" | "warning" | "degraded" | "down" | "draft" | "published" | "pending";
+export type Status =
+  | "healthy"
+  | "warning"
+  | "degraded"
+  | "down"
+  | "draft"
+  | "published"
+  | "pending";
 
 export interface MockUser {
   id: string;
@@ -157,4 +164,38 @@ export interface WorkspaceDeployment {
   publishedByUserId: string;
   healthStatus: DeploymentHealthStatus;
   createdAt: string;
+}
+
+// --- Native platform auth: create user, login, change password ---
+
+export interface CreatePlatformUserRequest {
+  email: string;
+  name: string;
+  role?: string;
+  tempPassword: string;
+}
+
+export interface PlatformUserSummary {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  status: string;
+  mustChangePassword: boolean;
+}
+
+export interface NativeLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface NativeLoginResponse {
+  token: string;
+  expiresAt: string;
+  mustChangePassword: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }

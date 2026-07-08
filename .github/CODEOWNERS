@@ -1,0 +1,18 @@
+# Repository quality and release ownership.
+/.github/ @artizno
+/package.json @artizno
+/pnpm-lock.yaml @artizno
+/pnpm-workspace.yaml @artizno
+/scripts/quality/ @artizno
+/.pre-commit-config.yaml @artizno
+/.oxlintrc.json @artizno
+/.prettierrc.json @artizno
+
+# Security-sensitive platform surfaces.
+/apps/platform-api/src/auth/ @artizno
+/apps/platform-api/src/persistence/ @artizno
+/apps/platform-api/src/platform-services.ts @artizno
+/apps/platform-api/src/workspace-orchestrator/ @artizno
+/apps/platform-api/prisma/ @artizno
+/docker/ @artizno
+/.env.example @artizno

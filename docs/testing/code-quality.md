@@ -1,0 +1,35 @@
+# Code Quality Gates
+
+This project uses layered quality gates so routine work stays fast while CI still
+protects the full product surface.
+
+## Local Commands
+
+- `pnpm check` runs repository hygiene, conflict-marker scan, workspace script
+  validation, Oxlint, TypeScript typecheck, and unit tests.
+- `pnpm check:ci` adds the install contract, production build, integration tests,
+  and E2E tests. CI uses this gate.
+- `pnpm check:changed --base origin/main` checks only changed files for merge
+  markers, Oxlint warnings, and workspace package-script drift.
+- `pnpm check:staged` is the pre-commit gate and checks only staged files.
+- `pnpm format` formats the full repository with Prettier.
+- `pnpm format:check:all` audits the full formatting baseline. Formatting is
+  intentionally opt-in while the existing repository formatting baseline is being
+  normalized.
+
+## Pull Request Expectations
+
+Every non-trivial PR should include the commands or CI run used as evidence.
+User-facing or operational changes should update the relevant docs in the same
+PR. Security-sensitive areas are routed through CODEOWNERS.
+
+## Quality Layers
+
+- **Syntax and hygiene:** conflict markers, large-file/private-key checks through
+  pre-commit, and YAML/workflow linting in CI.
+- **Static analysis:** Oxlint runs with `--deny-warnings`, so new warning-level
+  issues fail the gate.
+- **Type safety:** every workspace package must expose `typecheck`; the root gate
+  runs all workspace typechecks.
+- **Tests:** unit tests run locally by default; CI adds integration and E2E tests.
+- **Dependency upkeep:** Dependabot tracks npm and GitHub Actions updates.

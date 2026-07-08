@@ -82,11 +82,44 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
     },
 
-    async provisionWorkspace(input: { projectId: string; slug: string }): Promise<WorkspaceContainerRecord> {
+    async provisionWorkspace(input: {
+      projectId: string;
+      slug: string;
+    }): Promise<WorkspaceContainerRecord> {
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
-        throw new Error(`workspace already provisioned for project '${input.projectId}'`);
+        // Idempotent: already provisioned in this process — return it instead of erroring.
+        return existing;
       }
+
+      // Self-heal: after a platform-api restart the in-memory record is gone, but the container
+      // (and its pg schema / bucket) usually still exist. Re-attach to the running container
+      // rather than re-provisioning, which would collide with the orphaned resources (500).
+      const found = await deps.docker.inspectContainer(`evcp-ws-${input.slug}`);
+      if (found) {
+        if (!found.running) {
+          await deps.docker.startContainer(found.containerId).catch(() => undefined);
+        }
+        const healed = save({
+          id: `ws-${input.slug}`,
+          projectId: input.projectId,
+          slug: input.slug,
+          state: "running",
+          containerId: found.containerId,
+          cpuCores,
+          memoryMb,
+          lastActivityAt: now(),
+          createdAt: now(),
+          updatedAt: now()
+        });
+        audit({
+          action: "workspace.reattached",
+          projectId: input.projectId,
+          metadata: { slug: input.slug }
+        });
+        return healed;
+      }
+
       let record: WorkspaceContainerRecord = save({
         id: `ws-${input.slug}`,
         projectId: input.projectId,
@@ -130,7 +163,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         const spec = buildDevContainerSpec({
           slug: input.slug,
           image,
-          env: { ...deps.secrets.resolveEnv(input.projectId), EVCP_PREVIEW_BASE: `/preview/${input.slug}` },
+          env: {
+            ...deps.secrets.resolveEnv(input.projectId),
+            EVCP_PREVIEW_BASE: `/preview/${input.slug}`
+          },
           cpuCores,
           memoryMb,
           network,
@@ -241,7 +277,7 @@ export { schemaNameFor, roleNameFor };
 
 export function startIdleSweep(
   orchestrator: Pick<WorkspaceOrchestrator, "stopIdleWorkspaces">,
-  opts: { intervalMs?: number } = {},
+  opts: { intervalMs?: number } = {}
 ): { stop(): void } {
   const intervalMs = opts.intervalMs ?? 60_000;
   const timer = setInterval(() => {
@@ -251,6 +287,6 @@ export function startIdleSweep(
   return {
     stop() {
       clearInterval(timer);
-    },
+    }
   };
 }

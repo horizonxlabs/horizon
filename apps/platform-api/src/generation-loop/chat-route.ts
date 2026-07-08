@@ -26,14 +26,19 @@ async function readBody(req: IncomingMessage): Promise<string> {
 
 export function createChatSseHandler(deps: {
   generationService: ReturnType<typeof createGenerationService>;
-  resolveAuth: (req: IncomingMessage) => WorkspaceAuthContext | null;
+  resolveAuth: (
+    req: IncomingMessage
+  ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
 }) {
-  return async function handleChatRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  return async function handleChatRequest(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
     // GET /projects/:id/chat/history — persisted chat so a browser refresh restores the thread.
     const historyMatch = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat\/history(?:\?.*)?$/);
     if (historyMatch && req.method === "GET") {
       const projectId = historyMatch[1];
-      const auth = deps.resolveAuth(req);
+      const auth = await deps.resolveAuth(req);
       if (!auth) {
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "unauthorized" }));
@@ -57,7 +62,7 @@ export function createChatSseHandler(deps: {
     }
     const projectId = match[1];
 
-    const auth = deps.resolveAuth(req);
+    const auth = await deps.resolveAuth(req);
     if (!auth) {
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "unauthorized" }));
@@ -94,7 +99,9 @@ export function createChatSseHandler(deps: {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
       }
-      res.write(`event: error\ndata: ${JSON.stringify({ type: "error", message: (error as Error).message })}\n\n`);
+      res.write(
+        `event: error\ndata: ${JSON.stringify({ type: "error", message: (error as Error).message })}\n\n`
+      );
     } finally {
       res.end();
     }

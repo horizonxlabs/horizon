@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    "eslint/no-debugger": "error",
+    "eslint/no-unused-vars": "warn"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    ".pnpm-store/",
+    "dist/",
+    ".vite/",
+    "coverage/",
+    "playwright-report/",
+    "test-results/",
+    ".evcp/",
+    "docs/assets/screenshots/"
+  ]
+}

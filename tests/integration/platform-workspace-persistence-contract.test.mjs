@@ -42,7 +42,9 @@ const baseline = {
   sourcePrompt: "Create a PRD.",
   changeSummary: "Baseline confirmed",
   generatedBy: { scenario: "prd_generation", providerId: "aip_openai", model: "gpt-4.1-mini" },
-  sections: [{ id: "prdsec_overview", key: "overview", title: "Overview", body: "Baseline PRD", order: 1 }],
+  sections: [
+    { id: "prdsec_overview", key: "overview", title: "Overview", body: "Baseline PRD", order: 1 }
+  ],
   createdByUserId: "usr_creator",
   createdAt: "2026-07-04T00:00:00.000Z"
 };
@@ -57,7 +59,17 @@ const blockGuardrail = {
   decision: "block",
   severity: "high",
   eventId: "gre_workspace_block",
-  matchedRule: { id: "grd_block_payroll", name: "Block payroll", type: "keyword", pattern: "payroll", severity: "high", action: "block", scope: "organization", status: "active", updatedAt: "2026-07-04T00:00:00.000Z" }
+  matchedRule: {
+    id: "grd_block_payroll",
+    name: "Block payroll",
+    type: "keyword",
+    pattern: "payroll",
+    severity: "high",
+    action: "block",
+    scope: "organization",
+    status: "active",
+    updatedAt: "2026-07-04T00:00:00.000Z"
+  }
 };
 
 test("Workspace persistence service stores prompt task preview and usage records", async () => {
@@ -79,8 +91,14 @@ test("Workspace persistence service stores prompt task preview and usage records
   assert.match(result.preview.summary, /WFH leave type/);
   assert.equal(result.usage.tokensUsed, 120);
   assert.equal(snapshot.preview.id, result.preview.id);
-  assert.equal(snapshot.tasks.some((task) => task.id === result.task.id), true);
-  assert.equal(snapshot.usage.some((usage) => usage.id === result.usage.id), true);
+  assert.equal(
+    snapshot.tasks.some((task) => task.id === result.task.id),
+    true
+  );
+  assert.equal(
+    snapshot.usage.some((usage) => usage.id === result.usage.id),
+    true
+  );
   assert.equal(snapshot.tokenBudget.remainingToday, 880);
 });
 
@@ -106,14 +124,23 @@ test("Workspace persistence service stores blocked task without replacing previe
   assert.equal(blocked.guardrail.decision, "block");
   assert.equal(blocked.task.status, "blocked");
   assert.match(blocked.preview.summary, /WFH leave type/);
-  assert.equal(snapshot.tasks.some((task) => task.id === blocked.task.id && task.status === "blocked"), true);
-  assert.equal(snapshot.usage.some((usage) => usage.prompt === "Add payroll export button"), false);
+  assert.equal(
+    snapshot.tasks.some((task) => task.id === blocked.task.id && task.status === "blocked"),
+    true
+  );
+  assert.equal(
+    snapshot.usage.some((usage) => usage.prompt === "Add payroll export button"),
+    false
+  );
 });
 
 test("runtime persistence wiring exposes Workspace service and routes", () => {
   assert.match(appFactory, /workspacePersistence\?: WorkspaceRepositoryBackedService/);
-  assert.match(appFactory, /createWorkspaceRepositoryBackedService\(new MemoryWorkspacePersistenceClient\(\)\)/);
-  assert.match(appFactory, /createPrismaWorkspacePersistence\(env\.DATABASE_URL\)/);
+  assert.match(
+    appFactory,
+    /createWorkspaceRepositoryBackedService\(\s*new MemoryWorkspacePersistenceClient\(\)\s*\)/
+  );
+  assert.match(appFactory, /createPrismaWorkspacePersistence\(\s*env\.DATABASE_URL\s*\)/);
   assert.match(appFactory, /isPersistenceWorkspaceRoute/);
   assert.match(persistenceDoc, /Workspace Route-Level Coverage/);
 });
