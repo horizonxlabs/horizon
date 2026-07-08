@@ -6,6 +6,12 @@ import { applyFindReplace } from "./find-replace";
 
 export { applyFindReplace };
 
+// A type="file" (whole-file) write to an EXISTING file larger than this is rejected and redirected
+// to a surgical edit. The untouched Next.js starter files are well under this, so the first build
+// (which replaces the ~115-byte starter page) still uses type="file"; once an app has real content,
+// every change must go through an edit action.
+const WHOLE_FILE_REWRITE_LIMIT = 500;
+
 export type RunnableAction =
   | { id: string; type: "file"; filePath: string; content: string }
   | { id: string; type: "edit"; filePath: string; find: string; replace: string }
@@ -47,6 +53,31 @@ export function createActionRunner(deps: {
             stderr: "",
             exitCode: -1
           };
+        }
+        // Drift guard: a whole-file write to an already-substantial existing file is the #1 cause of
+        // the model silently restyling unrelated code. Reject it and force a targeted edit. New
+        // files and the tiny starter template fall under the threshold and pass through, so the
+        // first build still works.
+        if (input.containerId) {
+          const sizeResult = await deps.docker.execInContainer(input.containerId, [
+            "sh",
+            "-c",
+            `wc -c < ${action.filePath} 2>/dev/null || echo -1`
+          ]);
+          const size = Number.parseInt((sizeResult.stdout ?? "").trim(), 10);
+          if (Number.isFinite(size) && size > WHOLE_FILE_REWRITE_LIMIT) {
+            return {
+              ok: false,
+              error:
+                `refusing to overwrite the existing file '${action.filePath}' (${size} bytes) with a whole-file write. ` +
+                `To change an existing file you MUST use an <action type="edit"> with a SEARCH/REPLACE block that ` +
+                `targets ONLY the lines to change and leaves the rest of the file identical. type="file" is only for ` +
+                `creating new files.`,
+              stdout: "",
+              stderr: "",
+              exitCode: -1
+            };
+          }
         }
         const encoded = Buffer.from(action.content, "utf8").toString("base64");
         const dir = action.filePath.includes("/")
