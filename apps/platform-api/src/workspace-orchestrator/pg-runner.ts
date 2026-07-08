@@ -22,7 +22,13 @@ export interface PgRunSqlOptions {
 export function createPgRunSql(opts: PgRunSqlOptions): (sql: string) => Promise<void> {
   const config = opts.connectionString
     ? { connectionString: opts.connectionString }
-    : { host: opts.host, port: opts.port, user: opts.user, password: opts.password, database: opts.database };
+    : {
+        host: opts.host,
+        port: opts.port,
+        user: opts.user,
+        password: opts.password,
+        database: opts.database
+      };
 
   return async (sql: string): Promise<void> => {
     const client = new Client(config);

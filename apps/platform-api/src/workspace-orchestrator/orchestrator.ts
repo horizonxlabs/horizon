@@ -76,6 +76,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return deps.secrets.listNames(projectId);
     },
 
+    /**
+     * Per-project scoped-role connection string (postgresql://<role>:<pw>@host/db?schema=<app_schema>)
+     * for internal server-side use only — never surfaced to the Creator. Postgres enforces schema
+     * isolation via this role. Undefined until the workspace has been provisioned.
+     */
+    getProjectDatabaseUrl(projectId: string): string | undefined {
+      return deps.secrets.resolveEnv(projectId).DATABASE_URL;
+    },
+
     markActivity(projectId: string): void {
       const record = records.get(projectId);
       if (record) {

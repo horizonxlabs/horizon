@@ -3,9 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -101,45 +100,35 @@ function createSprint5ApiFixture() {
   return { services, projectId: project.body.data.id };
 }
 
-test("Sprint 5 API exposes read-only database metadata and denies raw SQL", () => {
+// The read-only databaseView (seed metadata) is now consumed at the service level; the old
+// /projects/:id/database HTTP routes were replaced by the scoped /db/* browser (integration-only,
+// needs live Postgres). These assert the same read-only + deny-raw-SQL guarantees on the service.
+test("Sprint 5 exposes read-only database metadata and denies raw SQL", () => {
   const { services, projectId } = createSprint5ApiFixture();
+  const creator = services.auth.resolveCurrentUser(creatorHeaders);
 
-  const database = executePlatformApiRequest(services, {
-    method: "GET",
-    path: `/projects/${projectId}/database`,
-    headers: creatorHeaders
-  });
-  assert.equal(database.status, 200);
-  assert.equal(database.body.data.readOnly, true);
-  assert.ok(database.body.data.tables.some((table) => table.key === "leave_requests"));
-  assert.ok(
-    database.body.data.sampleRecords.some((record) => record.tableKey === "leave_requests")
+  const database = services.databaseView.getDatabaseView(creator, projectId);
+  assert.equal(database.readOnly, true);
+  assert.ok(database.tables.some((table) => table.key === "leave_requests"));
+  assert.ok(database.sampleRecords.some((record) => record.tableKey === "leave_requests"));
+
+  assert.throws(
+    () => services.databaseView.executeRawSql(creator, projectId, "DROP TABLE leave_requests"),
+    /Raw SQL is not available/
   );
-
-  const rawSql = executePlatformApiRequest(services, {
-    method: "POST",
-    path: `/projects/${projectId}/database/sql`,
-    headers: creatorHeaders,
-    body: { sql: "DROP TABLE leave_requests" }
-  });
-  assert.equal(rawSql.status, 403);
 });
 
 test("Sprint 5 API denies end user database and checkpoint access", () => {
   const { services, projectId } = createSprint5ApiFixture();
+  const endUser = services.auth.resolveCurrentUser(endUserHeaders);
 
-  const database = executePlatformApiRequest(services, {
-    method: "GET",
-    path: `/projects/${projectId}/database`,
-    headers: endUserHeaders
-  });
+  assert.throws(() => services.databaseView.getDatabaseView(endUser, projectId), /cannot access/i);
+
   const checkpoints = executePlatformApiRequest(services, {
     method: "GET",
     path: `/projects/${projectId}/frontend/checkpoints`,
     headers: endUserHeaders
   });
-
-  assert.equal(database.status, 403);
   assert.equal(checkpoints.status, 403);
 });
 
