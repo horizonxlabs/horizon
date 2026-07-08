@@ -64,8 +64,6 @@ test("createCreatorNavigation: rewrites leave-management routes to the selected 
   for (const item of nav) {
     assert.equal(item.route.includes("/creator/projects/leave-management"), false);
   }
-  const rewritten = nav.find((item) => item.route.includes("proj_expense_approval"));
-  assert.ok(rewritten, "expected at least one route rewritten to the selected project id");
 });
 
 test("createCreatorNavigation: leaves non-leave-management routes untouched", () => {
@@ -74,5 +72,20 @@ test("createCreatorNavigation: leaves non-leave-management routes untouched", ()
   const unrelated = nav.filter((item) => !item.route.includes("proj_expense_approval"));
   for (const item of unrelated) {
     assert.equal(item.route.includes("/creator/projects/leave-management"), false);
+  }
+});
+
+test("createCreatorNavigation: hides the temporarily-disabled creator menus", () => {
+  const project = { id: "proj_expense_approval" };
+  const labels = createCreatorNavigation(project).map((item) => item.label);
+  assert.deepEqual(labels, ["Projects"]);
+  for (const hidden of [
+    "PRD Review",
+    "Creator Workspace",
+    "Users & Roles",
+    "Publish & Registry",
+    "Tickets & Changes"
+  ]) {
+    assert.equal(labels.includes(hidden), false, `${hidden} should be hidden from the sidebar`);
   }
 });

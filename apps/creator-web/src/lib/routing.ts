@@ -38,15 +38,27 @@ export function slugifyProjectName(name: string): string {
   );
 }
 
+// Menu items temporarily hidden from the creator sidebar. The routes and pages still exist and
+// stay reachable by direct URL — remove a label here to re-surface it in the nav.
+export const HIDDEN_CREATOR_NAV_LABELS = new Set([
+  "PRD Review",
+  "Creator Workspace",
+  "Users & Roles",
+  "Publish & Registry",
+  "Tickets & Changes"
+]);
+
 export function createCreatorNavigation(project: CreatorProjectView) {
   const projectBaseRoute = `/creator/projects/${project.id}`;
-  return navigation.creator.map((item) => {
-    if (!item.route.includes("/creator/projects/leave-management")) return item;
-    return {
-      ...item,
-      route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
-    };
-  });
+  return navigation.creator
+    .filter((item) => !HIDDEN_CREATOR_NAV_LABELS.has(item.label))
+    .map((item) => {
+      if (!item.route.includes("/creator/projects/leave-management")) return item;
+      return {
+        ...item,
+        route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
+      };
+    });
 }
 
 export const creatorPageCopy: Record<
