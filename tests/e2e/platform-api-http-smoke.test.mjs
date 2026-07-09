@@ -45,13 +45,13 @@ test("platform API rejects missing mock auth and audits project creation", async
     method: "POST",
     path: "/projects",
     headers: { "x-mock-user-email": "creator@company.com" },
-    body: { name: "Leave Management", slug: "leave-management-sprint-1" }
+    body: { name: "Leave Management" }
   });
   const createdJson = created.body;
 
   assert.equal(created.status, 201);
   assert.equal(createdJson.ok, true);
-  assert.equal(createdJson.data.slug, "leave-management-sprint-1");
+  assert.match(createdJson.data.id, /^prj_[0-9a-f]{32}$/);
 
   const audit = executePlatformApiRequest(services, {
     method: "GET",

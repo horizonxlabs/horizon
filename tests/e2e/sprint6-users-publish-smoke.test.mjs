@@ -68,7 +68,6 @@ function createSprint6ApiFixture() {
     headers: creatorHeaders,
     body: {
       name: "Leave Management",
-      slug: "leave-management-sprint6",
       appType: "Workflow App",
       businessProblem: "Employees need leave requests",
       intendedUsers: ["Employee", "Manager"]
@@ -92,11 +91,11 @@ function createSprint6ApiFixture() {
     body: { prompt: "Add WFH leave type" }
   });
 
-  return { services, projectId: project.body.data.id };
+  return { services, projectId: project.body.data.id, appSlug: project.body.data.appId };
 }
 
 test("Sprint 6 API invites users approves access publishes and exposes registry", () => {
-  const { services, projectId } = createSprint6ApiFixture();
+  const { services, projectId, appSlug } = createSprint6ApiFixture();
 
   const snapshot = executePlatformApiRequest(services, {
     method: "GET",
@@ -163,7 +162,7 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
     headers: creatorHeaders
   });
   assert.equal(registry.status, 200);
-  assert.ok(registry.body.data.some((entry) => entry.slug === "leave-management-sprint6"));
+  assert.ok(registry.body.data.some((entry) => entry.slug === appSlug));
 });
 
 test("Sprint 6 API blocks incomplete publish and denies end user creator-side management", () => {

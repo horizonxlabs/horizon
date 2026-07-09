@@ -266,7 +266,7 @@ test("Creator project wizard creates a real project and generated PRD draft", ()
   assert.match(creatorSource, /Create Project \+ Generate PRD/);
   assert.match(creatorSource, /client\.createProject/);
   assert.match(creatorSource, /client\.generatePrdDraft/);
-  assert.match(creatorSource, /loadCreatorBootstrap\(project\.slug\)/);
+  assert.match(creatorSource, /loadCreatorBootstrap\(project\.id\)/);
   assert.match(creatorSource, /setCurrentPrdVersion\(draft\)/);
   assert.match(creatorSource, /creator-project-dialog/);
   assert.match(creatorSource, /createCreatorNavigation/);

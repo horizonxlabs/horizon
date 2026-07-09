@@ -91,7 +91,6 @@ async function createPublishedRuntimeProject(services) {
     headers: creatorHeaders,
     body: {
       name: "Leave Runtime Persisted",
-      slug: "leave-runtime-persisted",
       appType: "Workflow App",
       businessProblem: "Employees need persisted runtime evidence",
       targetDepartment: "HR Department",
@@ -156,9 +155,9 @@ test("runtime memory persistence keeps generated runtime evidence across service
     headers: adminHeaders
   });
   assert.equal(overview.status, 200);
-  assert.equal(overview.body.data.artifactContract.root, "generated-apps/leave-runtime-persisted");
+  assert.equal(overview.body.data.artifactContract.root, `generated-apps/${project.appId}`);
   assert.equal(overview.body.data.container.status, "running");
-  assert.equal(overview.body.data.schemaIsolation.schemaName, "app_leave_runtime_persisted");
+  assert.equal(overview.body.data.schemaIsolation.schemaName, `app_${project.id}`);
 
   const deniedSchema = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",

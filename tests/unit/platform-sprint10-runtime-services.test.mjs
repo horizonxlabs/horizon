@@ -41,7 +41,6 @@ function createSprint10Fixture() {
   const project = services.projects.createProject({
     actor: creator,
     name: "Leave Management Runtime",
-    slug: "leave-management-runtime",
     appType: "Workflow App",
     businessProblem: "Employees need production leave workflow",
     targetDepartment: "HR Department",
@@ -64,7 +63,7 @@ test("runtime overview exposes generated app artifact container schema health Op
   assert.equal(runtime.projectId, project.id);
   assert.equal(runtime.appId, publish.manifest.appId);
   assert.equal(runtime.deploymentId, publish.deployment.id);
-  assert.equal(runtime.artifactContract.root, "generated-apps/leave-management-runtime");
+  assert.equal(runtime.artifactContract.root, `generated-apps/${project.appId}`);
   assert.deepEqual(runtime.artifactContract.requiredPaths, [
     "app.manifest.json",
     "package.json",
@@ -76,14 +75,14 @@ test("runtime overview exposes generated app artifact container schema health Op
     "README.md"
   ]);
   assert.equal(runtime.container.status, "running");
-  assert.match(runtime.container.containerName, /^evcp-app-leave-management-runtime-/);
-  assert.match(runtime.container.imageTag, /^leave-management-runtime:/);
-  assert.equal(runtime.container.healthEndpoint, "/apps/leave-management-runtime/health");
-  assert.equal(runtime.container.readyEndpoint, "/apps/leave-management-runtime/ready");
-  assert.equal(runtime.container.metricsEndpoint, "/apps/leave-management-runtime/metrics");
-  assert.equal(runtime.schemaIsolation.schemaName, "app_leave_management_runtime");
-  assert.equal(runtime.schemaIsolation.dbUser, "app_user_leave_management_runtime");
-  assert.deepEqual(runtime.schemaIsolation.allowedSchemas, ["app_leave_management_runtime"]);
+  assert.match(runtime.container.containerName, new RegExp(`^evcp-app-${project.appId}-`));
+  assert.match(runtime.container.imageTag, new RegExp(`^${project.appId}:`));
+  assert.equal(runtime.container.healthEndpoint, `/apps/${project.appId}/health`);
+  assert.equal(runtime.container.readyEndpoint, `/apps/${project.appId}/ready`);
+  assert.equal(runtime.container.metricsEndpoint, `/apps/${project.appId}/metrics`);
+  assert.equal(runtime.schemaIsolation.schemaName, `app_${project.id}`);
+  assert.equal(runtime.schemaIsolation.dbUser, `app_user_${project.appId}`);
+  assert.deepEqual(runtime.schemaIsolation.allowedSchemas, [`app_${project.id}`]);
   assert.ok(runtime.schemaIsolation.deniedSchemas.includes("app_payroll"));
   assert.equal(runtime.health.status, "healthy");
   assert.equal(runtime.readiness.ready, true);
@@ -99,7 +98,7 @@ test("schema isolation check allows assigned schema and denies cross schema acce
   const { services, admin, project } = createSprint10Fixture();
 
   const allowed = services.generatedRuntime.checkSchemaAccess(admin, project.id, {
-    attemptedSchema: "app_leave_management_runtime",
+    attemptedSchema: `app_${project.id}`,
     operation: "select"
   });
   const denied = services.generatedRuntime.checkSchemaAccess(admin, project.id, {
@@ -110,7 +109,7 @@ test("schema isolation check allows assigned schema and denies cross schema acce
   assert.equal(allowed.allowed, true);
   assert.equal(denied.allowed, false);
   assert.equal(denied.reason, "cross_schema_access_denied");
-  assert.match(denied.evidence, /app_user_leave_management_runtime/);
+  assert.ok(denied.evidence.includes(`app_user_${project.appId}`));
 });
 
 test("runtime hardening evidence is restricted to platform admins", () => {

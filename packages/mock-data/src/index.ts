@@ -31,7 +31,6 @@ export const serviceStatuses: ServiceStatus[] = [
 export const projects: ProjectSummary[] = [
   {
     id: "prj_leave_management",
-    slug: "leave-management",
     name: "Leave Management",
     appType: "Workflow App",
     status: "draft",

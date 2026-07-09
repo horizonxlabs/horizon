@@ -29,7 +29,7 @@ test("core persistence repository uses Prisma delegate names and relation includ
   }
 
   assert.match(repositories, /roles: \{ include: \{ role: true \} \}/);
-  assert.match(repositories, /project\.upsert/);
+  assert.match(repositories, /project\.create/);
   assert.match(repositories, /auditLog\.create/);
   assert.match(repositories, /createPrismaCorePersistence/);
   assert.match(repositories, /MemoryCorePersistenceClient/);

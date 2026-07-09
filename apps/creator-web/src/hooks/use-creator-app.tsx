@@ -1,5 +1,5 @@
 import { type PrdVersionDto } from "@evcp/api-client";
-import { FolderPlus, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   initialCreateProjectForm,
@@ -8,12 +8,7 @@ import {
   versionRows
 } from "../data/mock-data";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "../lib/creator-client";
-import {
-  createCreatorNavigation,
-  creatorPageCopy,
-  creatorPageFromPath,
-  slugifyProjectName
-} from "../lib/routing";
+import { createCreatorNavigation, creatorPageCopy, creatorPageFromPath } from "../lib/routing";
 import { clearLoginSession } from "../lib/session";
 import type { CreateProjectFormState, CreatorPage, CreatorProjectView } from "../types";
 import {
@@ -104,10 +99,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         }
         try {
           if (onWorkspace) {
-            await ensureVibeWorkspace(
-              nextBootstrap.selectedProject.id,
-              nextBootstrap.selectedProject.slug
-            );
+            await ensureVibeWorkspace(nextBootstrap.selectedProject.id);
           }
           vibeWorkspace.setWorkspaceSnapshot(
             await loadWorkspaceState(nextBootstrap.selectedProject.id)
@@ -179,8 +171,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
     setCreateProjectForm((current) => ({
       ...current,
-      [field]: field === "slug" ? slugifyProjectName(value) : value,
-      ...(field === "name" ? { slug: slugifyProjectName(value) } : {})
+      [field]: value
     }));
   }
 
@@ -213,7 +204,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       }
       try {
         if (enteringWorkspace) {
-          await ensureVibeWorkspace(project.id, project.slug);
+          await ensureVibeWorkspace(project.id);
         }
         vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
         await publishAccess.refreshCreatorPublishState(project.id);
@@ -229,6 +220,35 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
   }
 
+  // Prompt-first flow: create a project from the home prompt box, enter its workspace, and
+  // immediately submit the prompt as the first AI build.
+  async function handleCreateFromPrompt(prompt: string) {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+    setIsEnteringWorkspace(true);
+    setCreateProjectMessage("");
+    try {
+      const name = trimmed.split("\n")[0]?.slice(0, 60).trim() || "Untitled App";
+      const project = await createCreatorPlatformClient().createProject({
+        name,
+        businessProblem: trimmed
+      });
+      const nextBootstrap = await loadCreatorBootstrap(project.id);
+      setBootstrap(nextBootstrap);
+      await handleSelectProject(nextBootstrap.selectedProject, "workspace");
+      // Explicit overrides: React has not re-rendered the vibe-workspace hook with the new
+      // project yet, so selectedProject/promptDraft/mode in its closure are still stale.
+      vibeWorkspace.setPromptDraft("");
+      await vibeWorkspace.handleVibeChat({ prompt: trimmed, projectId: project.id, mode: "build" });
+    } catch (error) {
+      setCreateProjectMessage(
+        error instanceof Error ? error.message : "สร้างโปรเจกต์ไม่สำเร็จ ลองอีกครั้ง"
+      );
+    } finally {
+      setIsEnteringWorkspace(false);
+    }
+  }
+
   async function handleCreateProjectSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsCreatingProject(true);
@@ -239,7 +259,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       const client = createCreatorPlatformClient();
       const project = await client.createProject({
         name: createProjectForm.name.trim(),
-        slug: slugifyProjectName(createProjectForm.slug || createProjectForm.name),
         appType: createProjectForm.appType.trim() || "Workflow App",
         businessProblem: createProjectForm.businessProblem.trim(),
         targetDepartment: createProjectForm.targetDepartment.trim(),
@@ -250,7 +269,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         dataSensitivity: createProjectForm.dataSensitivity
       });
       const draft = await client.generatePrdDraft(project.id);
-      const nextBootstrap = await loadCreatorBootstrap(project.slug);
+      const nextBootstrap = await loadCreatorBootstrap(project.id);
       setBootstrap(nextBootstrap);
       setCurrentPrdVersion(draft);
       setPrdVersionList([draft]);
@@ -282,13 +301,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       Logout
     </button>
   );
-  const creatorPageActions =
-    creatorPage === "projects" ? (
-      <button type="button" onClick={() => setIsCreateProjectDialogOpen(true)}>
-        <FolderPlus size={16} />
-        Create Project Wizard
-      </button>
-    ) : undefined;
+  // Project creation is prompt-first (home box) — the wizard entry points are retired.
+  const creatorPageActions = undefined;
 
   return {
     bootstrap,
@@ -313,6 +327,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleLogoutBridge,
     handleCreateProjectField,
     handleSelectProject,
+    handleCreateFromPrompt,
     handleCreateProjectSubmit,
     creatorSessionControls,
     creatorPageActions,

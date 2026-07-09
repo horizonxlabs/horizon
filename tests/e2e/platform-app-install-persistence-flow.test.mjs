@@ -86,7 +86,6 @@ async function createPublishedProject(services) {
     headers: creatorHeaders,
     body: {
       name: "Leave Install Persisted",
-      slug: "leave-install-persisted",
       appType: "Workflow App",
       businessProblem: "Employees need explicit app installation state",
       targetDepartment: "HR Department",
@@ -150,18 +149,18 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   });
   assert.equal(beforeInstall.status, 200);
   assert.equal(
-    beforeInstall.body.data.myApps.some((app) => app.slug === "leave-install-persisted"),
+    beforeInstall.body.data.myApps.some((app) => app.slug === project.appId),
     false
   );
   assert.ok(
     beforeInstall.body.data.availableApps.some(
-      (app) => app.slug === "leave-install-persisted" && app.installStatus === "not_installed"
+      (app) => app.slug === project.appId && app.installStatus === "not_installed"
     )
   );
 
   const installed = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
-    path: "/store/apps/leave-install-persisted/install",
+    path: `/store/apps/${project.appId}/install`,
     headers: endUserHeaders
   });
   assert.equal(installed.status, 201);
@@ -175,7 +174,7 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   assert.equal(afterInstall.status, 200);
   assert.ok(
     afterInstall.body.data.myApps.some(
-      (app) => app.slug === "leave-install-persisted" && app.installStatus === "installed"
+      (app) => app.slug === project.appId && app.installStatus === "installed"
     )
   );
   assert.equal(JSON.stringify(afterInstall.body).includes("secret-that-must-not-return"), false);
@@ -189,7 +188,7 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   );
   const detail = await executePlatformApiRequestAsync(recreatedServices, {
     method: "GET",
-    path: "/store/apps/leave-install-persisted",
+    path: `/store/apps/${project.appId}`,
     headers: endUserHeaders
   });
   assert.equal(detail.status, 200);
@@ -198,7 +197,7 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
 
   const uninstalled = await executePlatformApiRequestAsync(recreatedServices, {
     method: "POST",
-    path: "/store/apps/leave-install-persisted/uninstall",
+    path: `/store/apps/${project.appId}/uninstall`,
     headers: endUserHeaders
   });
   assert.equal(uninstalled.status, 200);
@@ -211,12 +210,12 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   });
   assert.equal(afterUninstall.status, 200);
   assert.equal(
-    afterUninstall.body.data.myApps.some((app) => app.slug === "leave-install-persisted"),
+    afterUninstall.body.data.myApps.some((app) => app.slug === project.appId),
     false
   );
   assert.ok(
     afterUninstall.body.data.availableApps.some(
-      (app) => app.slug === "leave-install-persisted" && app.accessStatus === "active"
+      (app) => app.slug === project.appId && app.accessStatus === "active"
     )
   );
 

@@ -86,7 +86,6 @@ async function createProjectBaselineAndPreview(services) {
     headers: creatorHeaders,
     body: {
       name: "Leave Publish Persisted",
-      slug: "leave-publish-persisted",
       appType: "Workflow App",
       businessProblem: "Employees need persisted publish and ticket state",
       targetDepartment: "HR Department",
@@ -158,11 +157,11 @@ test("runtime memory persistence keeps publish registry access and tickets acros
     headers: creatorHeaders
   });
   assert.equal(publish.status, 201);
-  assert.equal(publish.body.data.registryEntry.slug, "leave-publish-persisted");
+  assert.equal(publish.body.data.registryEntry.slug, project.appId);
 
   const access = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
-    path: "/store/apps/leave-publish-persisted/access-requests",
+    path: `/store/apps/${project.appId}/access-requests`,
     headers: endUserHeaders,
     body: { requestedRoleKey: "manager", reason: "Need approval access", department: "HR" }
   });
@@ -170,7 +169,7 @@ test("runtime memory persistence keeps publish registry access and tickets acros
 
   const ticket = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
-    path: "/store/apps/leave-publish-persisted/tickets",
+    path: `/store/apps/${project.appId}/tickets`,
     headers: endUserHeaders,
     body: {
       type: "bug",
@@ -217,11 +216,11 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   });
 
   assert.equal(registry.status, 200);
-  assert.ok(registry.body.data.some((entry) => entry.slug === "leave-publish-persisted"));
+  assert.ok(registry.body.data.some((entry) => entry.slug === project.appId));
   assert.equal(storeHome.status, 200);
   assert.ok(
     storeHome.body.data.availableApps.some(
-      (app) => app.slug === "leave-publish-persisted" && app.accessStatus === "active"
+      (app) => app.slug === project.appId && app.accessStatus === "active"
     )
   );
   assert.ok(

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { getMockPermissions } from "@evcp/auth-sdk";
 import type { PlatformRole } from "@evcp/types";
 import type {
@@ -37,7 +39,6 @@ interface PlatformUserRecord {
 
 interface ProjectRecord {
   id: string;
-  slug: string;
   name: string;
   status: ProjectStatus;
   ownerUserId: string;
@@ -73,10 +74,8 @@ interface FindManyProjectArgs {
   orderBy?: { createdAt?: "asc" | "desc" };
 }
 
-interface UpsertProjectArgs {
-  where: { slug: string };
-  update: Partial<ProjectRecord>;
-  create: ProjectRecord;
+interface CreateProjectArgs {
+  data: ProjectRecord;
   include?: { apps?: boolean };
 }
 
@@ -148,7 +147,7 @@ export interface CorePersistenceClient {
   };
   project: {
     findMany(args: FindManyProjectArgs): Promise<ProjectRecord[]>;
-    upsert(args: UpsertProjectArgs): Promise<ProjectRecord>;
+    create(args: CreateProjectArgs): Promise<ProjectRecord>;
   };
   auditLog: {
     create(args: CreateAuditArgs): Promise<AuditLogRecord>;
@@ -193,13 +192,11 @@ export class ProjectRepository {
       throw new PermissionError(`Role ${input.actor.role} cannot create projects`);
     }
     if (!input.name.trim()) throw new ValidationError("Project name is required");
-    if (!input.slug.trim()) throw new ValidationError("Project slug is required");
 
-    const id = `prj_${slugToId(input.slug)}`;
+    const id = `prj_${randomUUID().replaceAll("-", "")}`;
     const now = new Date();
     const data = {
       id,
-      slug: input.slug,
       name: input.name,
       status: "draft" as const,
       ownerUserId: input.actor.id,
@@ -213,10 +210,8 @@ export class ProjectRepository {
       createdAt: now
     };
 
-    const record = await this.client.project.upsert({
-      where: { slug: input.slug },
-      update: data,
-      create: data,
+    const record = await this.client.project.create({
+      data,
       include: { apps: true }
     });
 
@@ -364,16 +359,9 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
           }),
           orderBy?.createdAt
         ),
-      upsert: async ({ where, update, create }) => {
-        const existingIndex = this.projects.findIndex((project) => project.slug === where.slug);
-        if (existingIndex >= 0) {
-          const existing = this.projects[existingIndex];
-          const next = { ...existing, ...update, createdAt: existing.createdAt };
-          this.projects[existingIndex] = next;
-          return next;
-        }
-        this.projects.push(create);
-        return create;
+      create: async ({ data }) => {
+        this.projects.push(data);
+        return data;
       }
     };
     this.auditLog = {
@@ -436,10 +424,8 @@ function mapPlatformUser(record: PlatformUserRecord): PlatformUser {
 }
 
 function mapProject(record: ProjectRecord): PlatformProject {
-  const slugId = slugToId(record.slug);
   return {
     id: record.id,
-    slug: record.slug,
     name: record.name,
     status: record.status,
     ownerUserId: record.ownerUserId,
@@ -449,7 +435,7 @@ function mapProject(record: ProjectRecord): PlatformProject {
     targetDepartment: record.targetDepartment ?? "Business Team",
     intendedUsers: record.intendedUsers,
     dataSensitivity: normalizeSensitivity(record.dataSensitivity),
-    appId: record.apps?.[0]?.id ?? `app_${slugId}`,
+    appId: record.apps?.[0]?.id ?? `app_${slugToId(record.id)}`,
     activeFrontendCheckpointId: record.activeFrontendCheckpointId ?? undefined,
     createdAt: toIsoString(record.createdAt)
   };

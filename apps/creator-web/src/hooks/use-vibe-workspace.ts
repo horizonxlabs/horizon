@@ -268,10 +268,17 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     }
   }
 
-  async function handleVibeChat() {
-    if (!selectedProject || !promptDraft.trim()) return;
-    const prompt = promptDraft.trim();
-    const attachmentIds = [...selectedAttachmentIds];
+  // Overrides let a freshly-created project auto-submit its first build before React re-renders.
+  async function handleVibeChat(overrides?: {
+    prompt?: string;
+    projectId?: string;
+    mode?: WorkspaceAgentMode;
+  }) {
+    const projectId = overrides?.projectId ?? selectedProject?.id;
+    const prompt = (overrides?.prompt ?? promptDraft).trim();
+    const mode = overrides?.mode ?? workspaceMode;
+    if (!projectId || !prompt) return;
+    const attachmentIds = overrides?.projectId ? [] : [...selectedAttachmentIds];
     const assistantId = `a-${Date.now()}`;
     setVibeMessages((prev) => [
       ...prev,
@@ -285,39 +292,32 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     ]);
     setPromptDraft("");
     setIsVibing(true);
-    setVibeStatus(workspaceMode === "plan" ? "Planning…" : "Provisioning workspace…");
+    setVibeStatus(mode === "plan" ? "Planning…" : "Provisioning workspace…");
     const patchAssistant = (fn: (m: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) => prev.map((m) => (m.id === assistantId ? fn(m) : m)));
     try {
-      if (workspaceMode === "build")
-        await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
-      setVibeStatus(workspaceMode === "plan" ? "Plan mode: read-only" : "AI is working…");
-      await streamVibeChat(
-        selectedProject.id,
-        prompt,
-        attachmentIds,
-        workspaceMode,
-        (type, data) => {
-          const field = (key: string): string =>
-            data && typeof data === "object" && key in data
-              ? String((data as Record<string, unknown>)[key])
-              : typeof data === "string"
-                ? data
-                : "";
-          patchAssistant((m) => applyVibeEvent(m, type, data as Record<string, unknown>));
-          if (type === "action_start") {
-            setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
-          } else if (type === "commit") {
-            const sha = field("sha");
-            setVibeStatus(`Committed ${sha.slice(0, 8)}`);
-            setVibePreviewKey((k) => k + 1);
-          } else if (type === "done") {
-            setVibeStatus((prev) =>
-              workspaceMode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
-            );
-          }
+      if (mode === "build") await ensureVibeWorkspace(projectId);
+      setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "AI is working…");
+      await streamVibeChat(projectId, prompt, attachmentIds, mode, (type, data) => {
+        const field = (key: string): string =>
+          data && typeof data === "object" && key in data
+            ? String((data as Record<string, unknown>)[key])
+            : typeof data === "string"
+              ? data
+              : "";
+        patchAssistant((m) => applyVibeEvent(m, type, data as Record<string, unknown>));
+        if (type === "action_start") {
+          setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
+        } else if (type === "commit") {
+          const sha = field("sha");
+          setVibeStatus(`Committed ${sha.slice(0, 8)}`);
+          setVibePreviewKey((k) => k + 1);
+        } else if (type === "done") {
+          setVibeStatus((prev) =>
+            mode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
+          );
         }
-      );
+      });
     } catch (error) {
       patchAssistant((m) => ({ ...m, text: m.text + `\n\n⚠️ ${(error as Error).message}` }));
       setVibeStatus(`Error: ${(error as Error).message}`);

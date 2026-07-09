@@ -63,7 +63,7 @@ async function main() {
     update: {},
     create: { userId: "usr_creator", groupId: "grp_hr_department" }
   });
-
+  if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return; // demo retired; seed only when opted in
   await prisma.project.upsert({
     where: { slug: "leave-management" },
     update: {

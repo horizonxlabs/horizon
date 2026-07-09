@@ -63,7 +63,6 @@ function createStoreActionsFixture() {
     headers: creatorHeaders,
     body: {
       name: "Leave Management",
-      slug: "leave-management-store-actions",
       appType: "Workflow App",
       businessProblem: "Employees need leave requests",
       intendedUsers: ["Employee", "Manager"]
@@ -91,7 +90,7 @@ function createStoreActionsFixture() {
     path: `/projects/${project.body.data.id}/publish`,
     headers: creatorHeaders
   });
-  return services;
+  return { services, appSlug: project.body.data.appId };
 }
 
 function createApiClientForServices(services) {
@@ -113,14 +112,14 @@ function createApiClientForServices(services) {
 }
 
 test("App Store API client actions request access submit ticket and read status", async () => {
-  const services = createStoreActionsFixture();
+  const { services, appSlug } = createStoreActionsFixture();
   const client = createApiClientForServices(services);
 
-  const detail = await client.getStoreAppDetail("leave-management-store-actions");
+  const detail = await client.getStoreAppDetail(appSlug);
   assert.equal(detail.accessStatus, "active");
   assert.ok(detail.actions.includes("submit_ticket"));
 
-  const access = await client.requestStoreAccess("leave-management-store-actions", {
+  const access = await client.requestStoreAccess(appSlug, {
     requestedRoleKey: "manager",
     reason: "Need approval access",
     department: "HR"
@@ -128,7 +127,7 @@ test("App Store API client actions request access submit ticket and read status"
   assert.equal(access.status, "pending");
   assert.equal(access.requestedRoleKey, "manager");
 
-  const ticket = await client.submitStoreTicket("leave-management-store-actions", {
+  const ticket = await client.submitStoreTicket(appSlug, {
     type: "bug",
     priority: "high",
     title: "WFH leave type missing",

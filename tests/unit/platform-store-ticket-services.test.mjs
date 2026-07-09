@@ -42,7 +42,6 @@ function createSprint7Fixture() {
   const project = services.projects.createProject({
     actor: creator,
     name: "Leave Management",
-    slug: "leave-management-sprint7",
     appType: "Workflow App",
     businessProblem: "Employees need self-service leave requests",
     targetDepartment: "HR Department",
@@ -58,22 +57,22 @@ function createSprint7Fixture() {
 }
 
 test("storefront lists My Apps from registry and access policy", () => {
-  const { services, endUser } = createSprint7Fixture();
+  const { services, endUser, project } = createSprint7Fixture();
 
   const home = services.storefront.listApps(endUser);
 
-  assert.ok(home.myApps.some((app) => app.slug === "leave-management-sprint7" && app.accessStatus === "active"));
+  assert.ok(home.myApps.some((app) => app.slug === project.appId && app.accessStatus === "active"));
   assert.ok(home.myApps[0].primaryAction === "open");
   assert.ok(Array.isArray(home.availableApps));
   assert.ok(home.notifications.some((notification) => notification.type === "app_published"));
 });
 
 test("storefront returns app detail with owner role health version and actions", () => {
-  const { services, endUser } = createSprint7Fixture();
+  const { services, endUser, project } = createSprint7Fixture();
 
-  const detail = services.storefront.getAppDetail(endUser, "leave-management-sprint7");
+  const detail = services.storefront.getAppDetail(endUser, project.appId);
 
-  assert.equal(detail.slug, "leave-management-sprint7");
+  assert.equal(detail.slug, project.appId);
   assert.equal(detail.ownerName, "Creator User");
   assert.equal(detail.myRole, "Employee");
   assert.equal(detail.health, "healthy");
@@ -83,14 +82,14 @@ test("storefront returns app detail with owner role health version and actions",
 });
 
 test("request access creates pending request and returns existing pending request on duplicate", () => {
-  const { services, endUser } = createSprint7Fixture();
+  const { services, endUser, project } = createSprint7Fixture();
 
-  const first = services.storefront.requestAccess(endUser, "leave-management-sprint7", {
+  const first = services.storefront.requestAccess(endUser, project.appId, {
     requestedRoleKey: "manager",
     reason: "Need approval queue access",
     department: "HR"
   });
-  const second = services.storefront.requestAccess(endUser, "leave-management-sprint7", {
+  const second = services.storefront.requestAccess(endUser, project.appId, {
     requestedRoleKey: "manager",
     reason: "Duplicate request",
     department: "HR"
@@ -103,9 +102,9 @@ test("request access creates pending request and returns existing pending reques
 });
 
 test("ticket creation requires visible app and stores device info timeline", () => {
-  const { services, endUser } = createSprint7Fixture();
+  const { services, endUser, project } = createSprint7Fixture();
 
-  const ticket = services.tickets.createTicket(endUser, "leave-management-sprint7", {
+  const ticket = services.tickets.createTicket(endUser, project.appId, {
     type: "bug",
     priority: "high",
     title: "WFH leave type not visible",
@@ -133,7 +132,7 @@ test("ticket creation requires visible app and stores device info timeline", () 
 
 test("ticket status is scoped to submitter and creator inbox receives routed tickets", () => {
   const { services, creator, endUser, project } = createSprint7Fixture();
-  const ticket = services.tickets.createTicket(endUser, "leave-management-sprint7", {
+  const ticket = services.tickets.createTicket(endUser, project.appId, {
     type: "feedback",
     priority: "medium",
     title: "Approval queue is useful",

@@ -839,7 +839,6 @@ export async function executePlatformApiRequestAsync(
       const project = await corePersistence.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
-        slug: String(request.body?.slug ?? "untitled-project"),
         appType: request.body?.appType ? String(request.body.appType) : undefined,
         businessProblem: request.body?.businessProblem
           ? String(request.body.businessProblem)
@@ -859,7 +858,7 @@ export async function executePlatformApiRequestAsync(
         action: "project.created",
         resourceType: "project",
         resourceId: project.id,
-        metadata: { projectId: project.id, slug: project.slug }
+        metadata: { projectId: project.id }
       });
       return { status: HttpStatus.CREATED, body: success(project) };
     }
@@ -1781,7 +1780,6 @@ export function executePlatformApiRequest(
       const project = services.projects.createProject({
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
-        slug: String(request.body?.slug ?? "untitled-project"),
         appType: request.body?.appType ? String(request.body.appType) : undefined,
         businessProblem: request.body?.businessProblem
           ? String(request.body.businessProblem)

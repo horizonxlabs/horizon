@@ -17,7 +17,7 @@ test("runtime memory persistence mode serves core API flow through startup servi
     method: "POST",
     path: "/projects",
     headers: { "x-mock-user-email": "creator@company.com" },
-    body: { name: "Runtime Startup Project", slug: "runtime-startup-project" }
+    body: { name: "Runtime Startup Project" }
   });
   const listed = await executePlatformApiRequestAsync(services, {
     method: "GET",
@@ -28,14 +28,14 @@ test("runtime memory persistence mode serves core API flow through startup servi
     method: "POST",
     path: "/audit-logs/filter",
     headers: { "x-mock-user-email": "admin@company.com" },
-    body: { projectId: "prj_runtime_startup_project" }
+    body: { projectId: created.body.data.id }
   });
 
   assert.equal(me.body.data.user.email, "creator@company.com");
-  assert.equal(created.body.data.id, "prj_runtime_startup_project");
+  assert.match(created.body.data.id, /^prj_[0-9a-f]{32}$/);
   assert.deepEqual(
-    listed.body.data.map((project) => project.slug),
-    ["runtime-startup-project"]
+    listed.body.data.map((project) => project.name),
+    ["Runtime Startup Project"]
   );
   assert.equal(audit.body.data.length, 1);
   assert.equal(audit.body.data[0].action, "project.created");

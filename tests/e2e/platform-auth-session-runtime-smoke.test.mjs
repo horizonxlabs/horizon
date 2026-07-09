@@ -37,7 +37,6 @@ test("runtime memory persistence accepts signed Platform Auth bearer sessions ac
     headers: bearerHeaders,
     body: {
       name: "Runtime Session Project",
-      slug: "runtime-session-project",
       businessProblem: "Validate Platform Auth sessions against repository-backed core routes",
       intendedUsers: ["Creator", "Reviewer"],
       dataSensitivity: "internal"
@@ -52,7 +51,7 @@ test("runtime memory persistence accepts signed Platform Auth bearer sessions ac
     method: "POST",
     path: "/audit-logs/filter",
     headers: { "x-mock-user-email": "admin@company.com" },
-    body: { projectId: "prj_runtime_session_project", action: "project.created" }
+    body: { projectId: created.body.data.id, action: "project.created" }
   });
 
   assert.equal(me.status, 200);
@@ -62,12 +61,12 @@ test("runtime memory persistence accepts signed Platform Auth bearer sessions ac
   assert.equal(me.body.data.auth.sessionId, login.body.data.id);
   assert.equal(me.body.data.auth.legacyMockFallback, false);
   assert.equal(created.status, 201);
-  assert.equal(created.body.data.id, "prj_runtime_session_project");
+  assert.match(created.body.data.id, /^prj_[0-9a-f]{32}$/);
   assert.deepEqual(
-    listed.body.data.map((project) => project.slug),
-    ["runtime-session-project"]
+    listed.body.data.map((project) => project.name),
+    ["Runtime Session Project"]
   );
   assert.equal(audit.status, 200);
   assert.equal(audit.body.data.length, 1);
-  assert.equal(audit.body.data[0].metadata.slug, "runtime-session-project");
+  assert.equal(audit.body.data[0].metadata.projectId, created.body.data.id);
 });

@@ -197,7 +197,7 @@ export function DefaultUsersPublishSection({ app }: { app: ReturnType<typeof use
                 value:
                   publishReview?.manifest.app?.route ??
                   publishResult?.manifest.app?.route ??
-                  `/apps/${selectedProject.slug}`
+                  `/apps/${selectedProject.id}`
               },
               { label: "Auth", value: publishReview?.manifest.auth?.mode ?? "platform_auth_sdk" },
               {

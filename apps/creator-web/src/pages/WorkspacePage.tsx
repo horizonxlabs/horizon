@@ -227,7 +227,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               />
               <button
                 type="button"
-                onClick={handleVibeChat}
+                onClick={() => void handleVibeChat()}
                 disabled={isVibing || !promptDraft.trim()}
                 aria-label="Send prompt"
                 className="vibe-live-send"
@@ -250,7 +250,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               <WorkspaceDatabasePanel projectId={selectedProject.id} />
             </Suspense>
           ) : (
-            <WorkspaceCodePanel projectId={selectedProject.id} projectSlug={selectedProject.slug} />
+            <WorkspaceCodePanel projectId={selectedProject.id} />
           )}
         </div>
       </div>

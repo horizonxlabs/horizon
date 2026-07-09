@@ -79,7 +79,7 @@ export function usePublishAccess({
   const visibleRegistryEntry =
     publishResult?.registryEntry ??
     registryEntries.find(
-      (entry) => entry.projectId === selectedProject.id || entry.slug === selectedProject.slug
+      (entry) => entry.projectId === selectedProject.id
     );
 
   function resetPublishAccess() {
@@ -199,7 +199,7 @@ export function usePublishAccess({
             publishRequestId: "local_pubreq_0001",
             status: "published",
             environment: "app_store",
-            route: `/apps/${selectedProject.slug}`,
+            route: `/apps/${selectedProject.id}`,
             manifestVersion: "1",
             prdVersion: "1.0",
             frontendCheckpointId: visiblePreviewVersion,
@@ -207,12 +207,12 @@ export function usePublishAccess({
             publishedAt: now
           },
           registryEntry: {
-            id: `local_store_${selectedProject.slug}`,
+            id: `local_store_${selectedProject.id}`,
             appId: "local_app",
             projectId: selectedProject.id,
-            slug: selectedProject.slug,
+            slug: selectedProject.id,
             name: selectedProject.name,
-            route: `/apps/${selectedProject.slug}`,
+            route: `/apps/${selectedProject.id}`,
             status: "published",
             visibility: "restricted",
             accessMode: "membership_or_invite",
@@ -227,9 +227,9 @@ export function usePublishAccess({
             projectId: selectedProject.id,
             manifestVersion: "1",
             app: {
-              slug: selectedProject.slug,
+              slug: selectedProject.id,
               name: selectedProject.name,
-              route: `/apps/${selectedProject.slug}`,
+              route: `/apps/${selectedProject.id}`,
               status: "published"
             }
           }
