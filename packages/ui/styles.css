@@ -2317,8 +2317,7 @@ button {
 
 .vibe-mode-switch {
   background: var(--evcp-color-surface-muted);
-  border: 1px solid var(--evcp-color-border-soft);
-  border-radius: 10px;
+  border-radius: var(--evcp-radius-pill);
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -2327,23 +2326,27 @@ button {
 .vibe-mode-option {
   align-items: center;
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--evcp-radius-control);
+  border: 0;
+  border-radius: var(--evcp-radius-pill);
   color: var(--evcp-color-muted);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: 12.5px;
+  font-weight: 650;
   gap: 5px;
   min-height: 28px;
-  padding: 4px 9px;
+  padding: 4px 11px;
+  transition: color 150ms ease;
+}
+
+.vibe-mode-option:hover:not(.is-active) {
+  color: var(--evcp-color-text);
 }
 
 .vibe-mode-option.is-active {
   background: var(--evcp-color-surface);
-  border-color: var(--evcp-color-border-soft);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-  color: var(--evcp-color-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  color: var(--evcp-color-primary-strong);
 }
 
 .vibe-live-tabs {
@@ -2437,7 +2440,10 @@ button {
 }
 
 .vibe-live-control-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  /* Must re-set background: the generic .vibe-live-control:hover (light grey) would otherwise win
+     and leave white text invisible. Keep it blue and just deepen it. */
+  background: var(--evcp-color-primary-strong);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
 }
 
 .vibe-live-control-primary:disabled {
@@ -2705,7 +2711,14 @@ button {
   flex-shrink: 0;
   height: 34px;
   justify-content: center;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease;
   width: 34px;
+}
+
+.vibe-live-send:hover:not(:disabled) {
+  opacity: 0.88;
 }
 
 .vibe-live-send:disabled {
@@ -5718,7 +5731,7 @@ button:disabled {
 }
 
 .creator-auth-form label {
-  color: var(--evcp-color-text-muted, #475569);
+  color: var(--evcp-color-muted, #64748b);
   display: flex;
   flex-direction: column;
   font-size: 13px;
