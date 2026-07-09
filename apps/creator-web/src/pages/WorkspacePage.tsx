@@ -106,7 +106,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             <RotateCw size={15} />
           </button>
           <a href={previewSrc} target="_blank" rel="noreferrer" className="vibe-live-control">
-            <span>Open</span>
+            <span>Preview</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
           <button
