@@ -5,30 +5,33 @@ import type {
 } from "@evcp/api-client";
 import type { CreateProjectFormState, CreatorBootstrapState, CreatorProjectView } from "../types";
 
+// Neutral placeholder used only to satisfy the required `selectedProject` type before any project
+// is created/selected. It is never rendered as a card (the fallback projects list is empty), so a
+// fresh install shows a genuine empty state instead of demo content.
 export const fallbackSelectedProject: CreatorProjectView = {
-  id: "proj_leave_management",
-  name: "Leave Management",
+  id: "proj_placeholder",
+  name: "New project",
   appType: "Workflow App",
   status: "draft",
   owner: "Creator User",
   prdVersion: "1.0",
   frontendVersion: "preview-0001",
-  tokenUsedThisMonth: 120
+  tokenUsedThisMonth: 0
 };
 
 export const initialCreatorBootstrap: CreatorBootstrapState = {
   userName: "Creator User",
   selectedProject: fallbackSelectedProject,
-  projects: [fallbackSelectedProject],
+  projects: [],
   source: "local fallback"
 };
 
 export const initialCreateProjectForm: CreateProjectFormState = {
-  name: "Expense Approval",
+  name: "",
   appType: "Workflow App",
-  businessProblem: "ลดเวลาการอนุมัติค่าใช้จ่ายและทำให้ผู้จัดการเห็นรายการค้างอนุมัติในที่เดียว",
-  targetDepartment: "Finance",
-  intendedUsers: "Employee, Manager, Finance Admin",
+  businessProblem: "",
+  targetDepartment: "",
+  intendedUsers: "",
   dataSensitivity: "internal"
 };
 
