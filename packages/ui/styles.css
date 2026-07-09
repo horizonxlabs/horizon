@@ -2539,14 +2539,53 @@ button {
 }
 
 .vibe-live-composer {
-  align-items: flex-end;
   background: var(--evcp-color-surface);
   border: 1px solid var(--evcp-color-border);
   border-radius: 14px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   display: flex;
+  flex-direction: column;
   gap: var(--evcp-space-2);
-  padding: var(--evcp-space-2);
+  padding: 10px 12px;
+}
+
+/* Composer footer: attach on the left, mode toggle + send on the right (Lovable-style). */
+.vibe-composer-footer {
+  align-items: center;
+  display: flex;
+  gap: var(--evcp-space-2);
+  justify-content: space-between;
+}
+
+.vibe-composer-right {
+  align-items: center;
+  display: flex;
+  gap: var(--evcp-space-2);
+}
+
+.vibe-composer-attach {
+  align-items: center;
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-pill);
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  height: 34px;
+  justify-content: center;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+  width: 34px;
+}
+
+.vibe-composer-attach:hover {
+  background: var(--evcp-color-surface-muted);
+  color: var(--evcp-color-text);
+}
+
+.vibe-composer-attach input {
+  display: none;
 }
 
 .vibe-live-input {

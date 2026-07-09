@@ -8,7 +8,9 @@ const helpers = readFileSync("apps/creator-web/src/hooks/creator-app-helpers.ts"
 
 test("Creator workspace exposes project file upload controls and status chips", () => {
   assert.match(workspacePage, /type="file"/);
-  assert.match(workspacePage, /Attach files/);
+  // The attach control is a "+" icon button in the composer footer (was a labelled "Attach files").
+  assert.match(workspacePage, /vibe-composer-attach/);
+  assert.match(workspacePage, /handleUploadProjectFiles/);
   assert.match(workspacePage, /projectFiles/);
   assert.match(workspacePage, /selectedAttachmentIds/);
 });

@@ -1,4 +1,4 @@
-import { ClipboardList, Hammer, Send } from "lucide-react";
+import { ClipboardList, Hammer, Plus, Send } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { Suspense, lazy } from "react";
 import { VibeActionRow } from "../components/VibeActionRow";
@@ -67,21 +67,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <strong className="vibe-live-project-name">{selectedProject.name}</strong>
         <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
         <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
-        <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
-          {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
-            <button
-              key={value}
-              type="button"
-              className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
-              onClick={() => setWorkspaceMode(value)}
-              aria-pressed={workspaceMode === value}
-              title={description}
-            >
-              <Icon size={14} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
         <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
           {WORKSPACE_TABS.map((tab) => (
             <button
@@ -166,19 +151,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             ))}
           </div>
           <div className="vibe-live-files">
-            <label className="vibe-live-file-upload">
-              <input
-                type="file"
-                multiple
-                onChange={(event) => {
-                  if (event.currentTarget.files)
-                    void handleUploadProjectFiles(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-                disabled={isUploadingProjectFile}
-              />
-              <span>Attach files</span>
-            </label>
             {projectFileMessage && (
               <span className="vibe-live-file-message">{projectFileMessage}</span>
             )}
@@ -225,15 +197,47 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 rows={1}
                 className="vibe-live-input"
               />
-              <button
-                type="button"
-                onClick={() => void handleVibeChat()}
-                disabled={isVibing || !promptDraft.trim()}
-                aria-label="Send prompt"
-                className="vibe-live-send"
-              >
-                <Send size={16} />
-              </button>
+              <div className="vibe-composer-footer">
+                <label className="vibe-composer-attach" title="แนบไฟล์">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(event) => {
+                      if (event.currentTarget.files)
+                        void handleUploadProjectFiles(event.currentTarget.files);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={isUploadingProjectFile}
+                  />
+                  <Plus size={18} />
+                </label>
+                <div className="vibe-composer-right">
+                  <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
+                    {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
+                        onClick={() => setWorkspaceMode(value)}
+                        aria-pressed={workspaceMode === value}
+                        title={description}
+                      >
+                        <Icon size={13} />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleVibeChat()}
+                    disabled={isVibing || !promptDraft.trim()}
+                    aria-label="Send prompt"
+                    className="vibe-live-send"
+                  >
+                    <Send size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
