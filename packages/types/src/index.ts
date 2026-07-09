@@ -14,7 +14,6 @@ export interface MockUser {
 
 export interface ProjectSummary {
   id: string;
-  slug: string;
   name: string;
   appType: string;
   status: Status;

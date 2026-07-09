@@ -13,7 +13,6 @@ test("repository-backed core flow can create list and audit project through API 
   const project = await service.createProject({
     actor,
     name: "Vendor Onboarding",
-    slug: "vendor-onboarding",
     businessProblem: "Procurement needs a private workflow to qualify vendors.",
     targetDepartment: "Procurement",
     intendedUsers: ["Requester", "Approver", "Vendor Manager"],
@@ -24,7 +23,7 @@ test("repository-backed core flow can create list and audit project through API 
     action: "project.created",
     resourceType: "project",
     resourceId: project.id,
-    metadata: { projectId: project.id, slug: project.slug }
+    metadata: { projectId: project.id }
   });
   const projects = await service.listProjects(actor);
   const auditEvents = await service.filterAudit({ actorId: actor.id, projectId: project.id });
@@ -36,9 +35,9 @@ test("repository-backed core flow can create list and audit project through API 
 
   assert.equal(response.ok, true);
   assert.equal(response.meta.persistence, "core-repository-backed");
-  assert.equal(response.data.project.id, "prj_vendor_onboarding");
+  assert.match(response.data.project.id, /^prj_[0-9a-f]{32}$/);
   assert.equal(response.data.projects.length, 1);
   assert.equal(response.data.audit.resourceId, project.id);
   assert.equal(response.data.auditEvents.length, 1);
-  assert.equal(response.data.auditEvents[0].metadata.slug, "vendor-onboarding");
+  assert.equal(response.data.auditEvents[0].metadata.projectId, project.id);
 });

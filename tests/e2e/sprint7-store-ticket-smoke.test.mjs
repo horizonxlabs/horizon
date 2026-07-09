@@ -68,7 +68,6 @@ function createSprint7ApiFixture() {
     headers: creatorHeaders,
     body: {
       name: "Leave Management",
-      slug: "leave-management-sprint7",
       appType: "Workflow App",
       businessProblem: "Employees need leave requests",
       intendedUsers: ["Employee", "Manager"]
@@ -97,11 +96,11 @@ function createSprint7ApiFixture() {
     headers: creatorHeaders
   });
 
-  return { services, projectId: project.body.data.id };
+  return { services, projectId: project.body.data.id, appSlug: project.body.data.appId };
 }
 
 test("Sprint 7 API lists apps requests access submits ticket and tracks status", () => {
-  const { services } = createSprint7ApiFixture();
+  const { services, appSlug } = createSprint7ApiFixture();
 
   const home = executePlatformApiRequest(services, {
     method: "GET",
@@ -109,11 +108,11 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
     headers: endUserHeaders
   });
   assert.equal(home.status, 200);
-  assert.ok(home.body.data.myApps.some((app) => app.slug === "leave-management-sprint7"));
+  assert.ok(home.body.data.myApps.some((app) => app.slug === appSlug));
 
   const detail = executePlatformApiRequest(services, {
     method: "GET",
-    path: "/store/apps/leave-management-sprint7",
+    path: `/store/apps/${appSlug}`,
     headers: endUserHeaders
   });
   assert.equal(detail.status, 200);
@@ -121,7 +120,7 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
 
   const access = executePlatformApiRequest(services, {
     method: "POST",
-    path: "/store/apps/leave-management-sprint7/access-requests",
+    path: `/store/apps/${appSlug}/access-requests`,
     headers: endUserHeaders,
     body: { requestedRoleKey: "manager", reason: "Need approval access", department: "HR" }
   });
@@ -130,7 +129,7 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
 
   const ticket = executePlatformApiRequest(services, {
     method: "POST",
-    path: "/store/apps/leave-management-sprint7/tickets",
+    path: `/store/apps/${appSlug}/tickets`,
     headers: endUserHeaders,
     body: {
       type: "bug",
@@ -154,10 +153,10 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
 });
 
 test("Sprint 7 API routes tickets to Creator inbox and denies invisible ticket submission", () => {
-  const { services, projectId } = createSprint7ApiFixture();
+  const { services, projectId, appSlug } = createSprint7ApiFixture();
   const ticket = executePlatformApiRequest(services, {
     method: "POST",
-    path: "/store/apps/leave-management-sprint7/tickets",
+    path: `/store/apps/${appSlug}/tickets`,
     headers: endUserHeaders,
     body: {
       type: "feedback",

@@ -75,13 +75,12 @@ test("platform API records audit events for auth and project actions", () => {
   });
   const project = services.projects.createProject({
     actor,
-    name: "Leave Management",
-    slug: "leave-management"
+    name: "Leave Management"
   });
 
   const events = services.audit.list();
 
-  assert.equal(project.slug, "leave-management");
+  assert.match(project.id, /^prj_[0-9a-f]{32}$/);
   assert.ok(events.some((event) => event.action === "auth.me"));
   assert.ok(events.some((event) => event.action === "project.created" && event.resourceId === project.id));
 });

@@ -20,11 +20,9 @@ function formatBytes(text: string): string {
 }
 
 export function WorkspaceCodePanel({
-  projectId,
-  projectSlug
+  projectId
 }: {
   projectId: string;
-  projectSlug: string;
 }) {
   const [files, setFiles] = useState<WorkspaceFileDto[]>([]);
   const [activePath, setActivePath] = useState<string | undefined>(undefined);
@@ -37,7 +35,7 @@ export function WorkspaceCodePanel({
     let cancelled = false;
     setIsLoading(true);
     setErrorText(undefined);
-    ensureVibeWorkspace(projectId, projectSlug)
+    ensureVibeWorkspace(projectId)
       .then(() => getWorkspaceFiles(createCreatorPlatformClient(), projectId))
       .then((snapshot) => {
         if (cancelled) return;
@@ -58,7 +56,7 @@ export function WorkspaceCodePanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, projectSlug, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredFiles = useMemo(

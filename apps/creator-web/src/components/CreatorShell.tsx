@@ -86,14 +86,6 @@ export function CreatorShell({
                 />
               </label>
               <label>
-                Slug
-                <input
-                  required
-                  value={createProjectForm.slug}
-                  onChange={(event) => handleCreateProjectField("slug", event.target.value)}
-                />
-              </label>
-              <label>
                 App type
                 <input
                   value={createProjectForm.appType}

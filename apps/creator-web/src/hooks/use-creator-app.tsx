@@ -11,8 +11,7 @@ import { clearCreatorSessionBridge, createCreatorPlatformClient } from "../lib/c
 import {
   createCreatorNavigation,
   creatorPageCopy,
-  creatorPageFromPath,
-  slugifyProjectName
+  creatorPageFromPath
 } from "../lib/routing";
 import { clearLoginSession } from "../lib/session";
 import type { CreateProjectFormState, CreatorPage, CreatorProjectView } from "../types";
@@ -104,10 +103,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         }
         try {
           if (onWorkspace) {
-            await ensureVibeWorkspace(
-              nextBootstrap.selectedProject.id,
-              nextBootstrap.selectedProject.slug
-            );
+            await ensureVibeWorkspace(nextBootstrap.selectedProject.id);
           }
           vibeWorkspace.setWorkspaceSnapshot(
             await loadWorkspaceState(nextBootstrap.selectedProject.id)
@@ -179,8 +175,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
     setCreateProjectForm((current) => ({
       ...current,
-      [field]: field === "slug" ? slugifyProjectName(value) : value,
-      ...(field === "name" ? { slug: slugifyProjectName(value) } : {})
+      [field]: value
     }));
   }
 
@@ -213,7 +208,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       }
       try {
         if (enteringWorkspace) {
-          await ensureVibeWorkspace(project.id, project.slug);
+          await ensureVibeWorkspace(project.id);
         }
         vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
         await publishAccess.refreshCreatorPublishState(project.id);
@@ -239,7 +234,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       const client = createCreatorPlatformClient();
       const project = await client.createProject({
         name: createProjectForm.name.trim(),
-        slug: slugifyProjectName(createProjectForm.slug || createProjectForm.name),
         appType: createProjectForm.appType.trim() || "Workflow App",
         businessProblem: createProjectForm.businessProblem.trim(),
         targetDepartment: createProjectForm.targetDepartment.trim(),
@@ -250,7 +244,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         dataSensitivity: createProjectForm.dataSensitivity
       });
       const draft = await client.generatePrdDraft(project.id);
-      const nextBootstrap = await loadCreatorBootstrap(project.slug);
+      const nextBootstrap = await loadCreatorBootstrap(project.id);
       setBootstrap(nextBootstrap);
       setCurrentPrdVersion(draft);
       setPrdVersionList([draft]);

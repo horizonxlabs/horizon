@@ -25,7 +25,6 @@ export function projectToView(
 ): CreatorProjectView {
   return {
     id: project.id,
-    slug: project.slug,
     name: project.name,
     appType: project.appType,
     status: project.status,

@@ -24,26 +24,26 @@ test("core persistence creates and upserts projects scoped by actor", async () =
   const created = await service.createProject({
     actor: creator,
     name: "Expense Approval",
-    slug: "expense-approval",
     appType: "Workflow App",
     businessProblem: "Finance needs an approval workflow.",
     targetDepartment: "Finance",
     intendedUsers: ["Employee", "Manager", "Finance Admin"],
     dataSensitivity: "confidential"
   });
-  const replaced = await service.createProject({
+  const second = await service.createProject({
     actor: creator,
     name: "Expense Approval v2",
-    slug: "expense-approval",
     dataSensitivity: "restricted"
   });
 
-  assert.equal(created.id, "prj_expense_approval");
-  assert.equal(replaced.name, "Expense Approval v2");
-  assert.equal(replaced.ownerUserId, creator.id);
-  assert.equal(replaced.dataSensitivity, "restricted");
-  assert.equal((await service.listProjects(creator)).length, 1);
-  assert.equal((await service.listProjects(admin)).length, 1);
+  assert.match(created.id, /^prj_[0-9a-f]{32}$/);
+  assert.match(second.id, /^prj_[0-9a-f]{32}$/);
+  assert.notEqual(created.id, second.id);
+  assert.equal(second.name, "Expense Approval v2");
+  assert.equal(second.ownerUserId, creator.id);
+  assert.equal(second.dataSensitivity, "restricted");
+  assert.equal((await service.listProjects(creator)).length, 2);
+  assert.equal((await service.listProjects(admin)).length, 2);
 });
 
 test("core persistence denies end users from project creation", async () => {
@@ -51,7 +51,7 @@ test("core persistence denies end users from project creation", async () => {
   const endUser = await service.getUserByEmail("user@company.com");
 
   await assert.rejects(
-    () => service.createProject({ actor: endUser, name: "Blocked", slug: "blocked" }),
+    () => service.createProject({ actor: endUser, name: "Blocked" }),
     /cannot create projects/
   );
 });
@@ -59,7 +59,7 @@ test("core persistence denies end users from project creation", async () => {
 test("core persistence records and filters audit events", async () => {
   const service = createCoreRepositoryBackedService(new MemoryCorePersistenceClient());
   const creator = await service.getUserByEmail("creator@company.com");
-  const project = await service.createProject({ actor: creator, name: "Leave Extension", slug: "leave-extension" });
+  const project = await service.createProject({ actor: creator, name: "Leave Extension" });
 
   await service.recordAudit({
     actorId: creator.id,
@@ -67,7 +67,7 @@ test("core persistence records and filters audit events", async () => {
     resourceType: "project",
     resourceId: project.id,
     severity: "info",
-    metadata: { projectId: project.id, slug: project.slug }
+    metadata: { projectId: project.id }
   });
   await service.recordAudit({
     actorId: creator.id,
@@ -82,7 +82,7 @@ test("core persistence records and filters audit events", async () => {
   const warningEvents = await service.filterAudit({ severity: "warning", projectId: project.id });
 
   assert.equal(createdEvents.length, 1);
-  assert.equal(createdEvents[0].metadata.slug, "leave-extension");
+  assert.equal(createdEvents[0].metadata.projectId, project.id);
   assert.equal(warningEvents.length, 1);
   assert.equal(warningEvents[0].action, "project.security_reviewed");
 });

@@ -65,7 +65,6 @@ function createCreatorPublishFixture() {
     headers: creatorHeaders,
     body: {
       name: "Leave Management",
-      slug: "leave-management-publish-actions",
       appType: "Workflow App",
       businessProblem: "Employees need leave requests",
       intendedUsers: ["Employee", "Manager"]
@@ -88,7 +87,7 @@ function createCreatorPublishFixture() {
     headers: creatorHeaders,
     body: { prompt: "Add WFH leave type" }
   });
-  return { services, projectId: project.body.data.id };
+  return { services, projectId: project.body.data.id, appSlug: project.body.data.appId };
 }
 
 function createApiClientForServices(services) {
@@ -110,7 +109,7 @@ function createApiClientForServices(services) {
 }
 
 test("Creator publish API client actions invite approve publish and list registry", async () => {
-  const { services, projectId } = createCreatorPublishFixture();
+  const { services, projectId, appSlug } = createCreatorPublishFixture();
   const client = createApiClientForServices(services);
 
   const initial = await client.getAppAccessSnapshot(projectId);
@@ -145,10 +144,10 @@ test("Creator publish API client actions invite approve publish and list registr
 
   const publish = await client.publishProject(projectId);
   assert.equal(publish.deployment.status, "published");
-  assert.equal(publish.registryEntry.slug, "leave-management-publish-actions");
+  assert.equal(publish.registryEntry.slug, appSlug);
 
   const registry = await client.listAppStoreRegistry();
-  assert.ok(registry.some((entry) => entry.slug === "leave-management-publish-actions"));
+  assert.ok(registry.some((entry) => entry.slug === appSlug));
 });
 
 test("Creator publish API client surfaces blocked publish as typed error", async () => {
@@ -158,7 +157,7 @@ test("Creator publish API client surfaces blocked publish as typed error", async
     method: "POST",
     path: "/projects",
     headers: creatorHeaders,
-    body: { name: "Incomplete App", slug: "incomplete-publish-actions" }
+    body: { name: "Incomplete App" }
   });
 
   await assert.rejects(

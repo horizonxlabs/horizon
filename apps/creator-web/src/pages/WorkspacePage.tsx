@@ -250,7 +250,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               <WorkspaceDatabasePanel projectId={selectedProject.id} />
             </Suspense>
           ) : (
-            <WorkspaceCodePanel projectId={selectedProject.id} projectSlug={selectedProject.slug} />
+            <WorkspaceCodePanel projectId={selectedProject.id} />
           )}
         </div>
       </div>

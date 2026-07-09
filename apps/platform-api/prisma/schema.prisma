@@ -166,7 +166,6 @@ model PlatformUserRole {
 
 model Project {
   id          String          @id
-  slug        String          @unique
   name        String
   status      ProjectStatus   @default(draft)
   ownerUserId String          @map("owner_user_id")

@@ -259,8 +259,8 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
       </p>
       <StatusPill status={project.status} />
       <div className="actions">
-        <a href={`/creator/projects/${project.slug}`}>Open</a>
-        <a href={`/creator/projects/${project.slug}/prd`}>PRD</a>
+        <a href={`/creator/projects/${project.id}`}>Open</a>
+        <a href={`/creator/projects/${project.id}/prd`}>PRD</a>
       </div>
     </article>
   );

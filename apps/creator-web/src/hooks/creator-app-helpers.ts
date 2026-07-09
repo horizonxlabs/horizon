@@ -14,7 +14,8 @@ import { apiBaseUrl, projectRouteSegmentFromPath } from "../lib/routing";
 import { vibeAuthHeaders } from "../lib/session";
 import type { CreatorBootstrapState } from "../types";
 
-export async function ensureVibeWorkspace(projectId: string, slug: string): Promise<void> {
+export async function ensureVibeWorkspace(projectId: string): Promise<void> {
+  const slug = projectId;
   const base = apiBaseUrl() ?? "/api";
   const containerUrl = `${base}/projects/${encodeURIComponent(projectId)}/workspace/container`;
   const readState = async (): Promise<string | undefined> => {
@@ -96,7 +97,7 @@ export async function loadCreatorBootstrap(
   const projectViews = projects.map((project) => projectToView(project, currentUser));
   const selectedProject =
     projectViews.find(
-      (project) => project.slug === selectedProjectKey || project.id === selectedProjectKey
+      (project) => project.id === selectedProjectKey
     ) ??
     projectViews[0] ??
     fallbackSelectedProject;

@@ -45,11 +45,11 @@ test("persistence-backed project routes create list and audit through repositori
     headers: { "x-mock-user-email": "creator@company.com" },
     body: {
       name: "Procurement Intake",
-      slug: "procurement-intake",
       targetDepartment: "Procurement",
       dataSensitivity: "confidential"
     }
   });
+  const createdId = created.body.data.id;
   const listed = await executePlatformApiRequestAsync(services, {
     method: "GET",
     path: "/projects",
@@ -60,15 +60,15 @@ test("persistence-backed project routes create list and audit through repositori
     method: "POST",
     path: "/audit-logs/filter",
     headers: { "x-mock-user-email": "admin@company.com" },
-    body: { projectId: "prj_procurement_intake", action: "project.created" }
+    body: { projectId: createdId, action: "project.created" }
   });
 
   assert.equal(created.status, 201);
-  assert.equal(created.body.data.id, "prj_procurement_intake");
-  assert.deepEqual(listed.body.data.map((project) => project.slug), ["procurement-intake"]);
-  assert.equal(legacyList.some((project) => project.slug === "procurement-intake"), false);
+  assert.match(createdId, /^prj_[0-9a-f]{32}$/);
+  assert.deepEqual(listed.body.data.map((project) => project.name), ["Procurement Intake"]);
+  assert.equal(legacyList.some((project) => project.id === createdId), false);
   assert.equal(audit.body.data.length, 1);
-  assert.equal(audit.body.data[0].metadata.slug, "procurement-intake");
+  assert.equal(audit.body.data[0].metadata.projectId, createdId);
 });
 
 test("persistence-backed core routes preserve legacy role and auth failures", async () => {
@@ -79,7 +79,7 @@ test("persistence-backed core routes preserve legacy role and auth failures", as
     method: "POST",
     path: "/projects",
     headers: { "x-mock-user-email": "user@company.com" },
-    body: { name: "Blocked", slug: "blocked" }
+    body: { name: "Blocked" }
   });
 
   assert.equal(missingAuth.status, 401);

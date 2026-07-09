@@ -2,7 +2,6 @@ import type { CreateProjectInput } from "@evcp/api-client";
 
 export type CreatorProjectView = {
   id: string;
-  slug: string;
   name: string;
   appType: string;
   status: string;
@@ -21,7 +20,6 @@ export type CreatorBootstrapState = {
 
 export type CreateProjectFormState = {
   name: string;
-  slug: string;
   appType: string;
   businessProblem: string;
   targetDepartment: string;

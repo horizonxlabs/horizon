@@ -33,7 +33,6 @@ const endUserActor = {
 
 const project = {
   id: "prj_publish_persisted",
-  slug: "publish-persisted",
   name: "Publish Persisted",
   status: "draft",
   ownerUserId: "usr_creator",
@@ -105,9 +104,9 @@ test("Publish/store persistence service stores access defaults publish registry 
   const registry = await service.listRegistry(creatorActor);
   assert.equal(publish.publishRequest.status, "published");
   assert.equal(publish.deployment.status, "published");
-  assert.equal(publish.registryEntry.slug, "publish-persisted");
+  assert.equal(publish.registryEntry.slug, project.appId);
   assert.equal(
-    registry.some((entry) => entry.slug === "publish-persisted"),
+    registry.some((entry) => entry.slug === project.appId),
     true
   );
 
@@ -115,14 +114,14 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.ok(
     storeHome.availableApps.some(
       (app) =>
-        app.slug === "publish-persisted" &&
+        app.slug === project.appId &&
         app.accessStatus === "active" &&
         app.installStatus === "not_installed"
     )
   );
 
   const access = await service.requestStoreAccess(endUserActor, {
-    appSlug: "publish-persisted",
+    appSlug: project.appId,
     requestedRoleKey: "manager",
     reason: "Need manager queue",
     department: "HR"
@@ -130,7 +129,7 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.equal(access.status, "pending");
 
   const ticket = await service.createTicket(endUserActor, {
-    appSlug: "publish-persisted",
+    appSlug: project.appId,
     type: "bug",
     priority: "high",
     title: "WFH leave type missing",

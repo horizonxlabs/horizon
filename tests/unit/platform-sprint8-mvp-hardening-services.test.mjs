@@ -43,7 +43,6 @@ function createSprint8Fixture() {
   const project = services.projects.createProject({
     actor: creator,
     name: "Leave Management",
-    slug: "leave-management-sprint8",
     appType: "Workflow App",
     businessProblem: "Employees need self-service leave requests",
     targetDepartment: "HR Department",
@@ -54,7 +53,7 @@ function createSprint8Fixture() {
   services.prds.confirmBaseline(creator, project.id, draft.id);
   services.workspace.submitPrompt(creator, project.id, { prompt: "Add WFH leave type" });
   services.publish.publishApp(creator, project.id);
-  const ticket = services.tickets.createTicket(endUser, "leave-management-sprint8", {
+  const ticket = services.tickets.createTicket(endUser, project.appId, {
     type: "bug",
     priority: "high",
     title: "WFH leave type not visible",
@@ -160,7 +159,7 @@ test("Domain request approval persists domain state and audit trail", () => {
     note: "Approved for private pilot"
   });
 
-  assert.equal(settings.internalPath, "/apps/leave-management-sprint8");
+  assert.equal(settings.internalPath, `/apps/${project.id}`);
   assert.equal(decision.status, "approved");
   assert.equal(services.domains.getSettings(creator, project.id).publicDomain, "leave.company.example");
   assert.ok(services.audit.list().some((event) => event.action === "domain.request.approved" && event.resourceId === request.id));

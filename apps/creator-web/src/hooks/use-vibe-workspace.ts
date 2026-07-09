@@ -290,7 +290,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
       setVibeMessages((prev) => prev.map((m) => (m.id === assistantId ? fn(m) : m)));
     try {
       if (workspaceMode === "build")
-        await ensureVibeWorkspace(selectedProject.id, selectedProject.slug);
+        await ensureVibeWorkspace(selectedProject.id);
       setVibeStatus(workspaceMode === "plan" ? "Plan mode: read-only" : "AI is working…");
       await streamVibeChat(
         selectedProject.id,

@@ -1,10 +1,12 @@
 import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-client";
 import { getMockPermissions } from "@evcp/auth-sdk";
-import { appStoreItems, mockUsers, projects as seedProjects } from "@evcp/mock-data";
+import { mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status, WorkspaceAgentMode } from "@evcp/types";
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
+import { schemaNameFor } from "./workspace-orchestrator/postgres-provisioner";
+import { resourceKeyForProject } from "./workspace-orchestrator/resource-ports";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
@@ -22,7 +24,6 @@ export interface AuthResolution {
 
 export interface PlatformProject {
   id: string;
-  slug: string;
   name: string;
   status: Status;
   ownerUserId: string;
@@ -443,7 +444,6 @@ export interface SensitiveRedactionEvidence {
 export interface CreateProjectInput {
   actor: PlatformUser;
   name: string;
-  slug: string;
   appType?: string;
   businessProblem?: string;
   targetDepartment?: string;
@@ -2896,7 +2896,6 @@ export class PolicyTemplateService {
 export class ProjectService {
   private readonly projects: PlatformProject[] = seedProjects.map((project) => ({
     id: project.id,
-    slug: project.slug,
     name: project.name,
     status: project.status,
     ownerUserId: mockUsers.creator.id,
@@ -2905,7 +2904,7 @@ export class ProjectService {
     targetDepartment: "HR Department",
     intendedUsers: ["Employee", "Manager", "HR Admin"],
     dataSensitivity: "internal",
-    appId: appStoreItems.find((item) => item.slug === project.slug)?.id,
+    appId: project.id.replace(/^prj_/, "app_"),
     createdAt: new Date("2026-07-03T00:00:00.000Z").toISOString()
   }));
 
@@ -2922,11 +2921,10 @@ export class ProjectService {
   createProject(input: CreateProjectInput): PlatformProject {
     this.auth.requireRole(input.actor, ["admin", "creator"]);
     if (!input.name.trim()) throw new ValidationError("Project name is required");
-    if (!input.slug.trim()) throw new ValidationError("Project slug is required");
 
+    const id = `prj_${randomUUID().replaceAll("-", "")}`;
     const project: PlatformProject = {
-      id: `prj_${input.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
-      slug: input.slug,
+      id,
       name: input.name,
       status: "draft",
       ownerUserId: input.actor.id,
@@ -2936,11 +2934,11 @@ export class ProjectService {
       targetDepartment: input.targetDepartment ?? "Business Team",
       intendedUsers: input.intendedUsers ?? ["Business User"],
       dataSensitivity: input.dataSensitivity ?? "internal",
-      appId: `app_${input.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+      appId: id.replace(/^prj_/, "app_"),
       createdAt: new Date().toISOString()
     };
 
-    const existingIndex = this.projects.findIndex((candidate) => candidate.slug === project.slug);
+    const existingIndex = this.projects.findIndex((candidate) => candidate.id === project.id);
     if (existingIndex >= 0) this.projects[existingIndex] = project;
     else this.projects.push(project);
 
@@ -2949,7 +2947,7 @@ export class ProjectService {
       action: "project.created",
       resourceType: "project",
       resourceId: project.id,
-      metadata: { slug: project.slug }
+      metadata: { name: project.name }
     });
 
     return project;
@@ -5121,7 +5119,7 @@ export class DatabaseViewService {
 
     return {
       project,
-      schemaName: `app_${project.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+      schemaName: schemaNameFor(resourceKeyForProject(project.id)),
       readOnly: true,
       restrictions: [
         "No raw SQL editor",
@@ -5520,7 +5518,7 @@ export class FrontendVersionService {
       auth: "mock-auth",
       appRoles: ["employee", "manager", "hr_admin"],
       membership: [project.ownerUserId],
-      domain: `/apps/${project.slug}`,
+      domain: `/apps/${project.id}`,
       prdBaseline: baseline?.id
     };
   }
@@ -5596,7 +5594,7 @@ export class AppUserAccessService {
       key,
       name: input.name.trim() || key,
       description: input.description ?? "Custom app role",
-      permissions: input.permissions?.length ? [...input.permissions] : [`${project.slug}:read`],
+      permissions: input.permissions?.length ? [...input.permissions] : [`${project.id}:read`],
       memberCount: this.members.filter(
         (member) => member.appId === app.id && member.roleKey === key
       ).length
@@ -5797,7 +5795,7 @@ export class AppUserAccessService {
     if (existing) {
       return {
         id: existing.id,
-        appSlug: project.slug,
+        appSlug: app.slug,
         requestedRoleKey: existing.requestedRoleKey,
         requesterEmail: existing.requesterEmail,
         status: "pending",
@@ -5834,7 +5832,7 @@ export class AppUserAccessService {
 
     return {
       id: accessRequest.id,
-      appSlug: project.slug,
+      appSlug: app.slug,
       requestedRoleKey: accessRequest.requestedRoleKey,
       requesterEmail: accessRequest.requesterEmail,
       status: "pending",
@@ -5845,13 +5843,14 @@ export class AppUserAccessService {
   }
 
   private ensureApp(project: PlatformProject): ManagedApp {
+    const appId = project.appId ?? project.id.replace(/^prj_/, "app_");
     return {
-      id: project.appId ?? `app_${project.slug.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+      id: appId,
       projectId: project.id,
-      slug: project.slug,
+      slug: appId,
       name: project.name,
       status: project.status === "published" ? "published" : "draft",
-      route: `/apps/${project.slug}`
+      route: `/apps/${appId}`
     };
   }
 
@@ -6779,7 +6778,7 @@ export class PrdChangeService {
 
     const now = new Date().toISOString();
     const change: PrdChangeRequest = {
-      id: `prdchg_${project.slug}_${String(this.changes.length + 1).padStart(3, "0")}`,
+      id: `prdchg_${project.id}_${String(this.changes.length + 1).padStart(3, "0")}`,
       projectId: project.id,
       sourceType: "ticket",
       sourceTicketId: ticket.id,
@@ -6932,7 +6931,7 @@ export class DomainService {
 
     const now = new Date().toISOString();
     const request: DomainRequest = {
-      id: `domainreq_${project.slug}_public_${String(this.requests.length + 1).padStart(3, "0")}`,
+      id: `domainreq_${project.id}_public_${String(this.requests.length + 1).padStart(3, "0")}`,
       projectId: project.id,
       domain,
       reason: input.reason.trim(),
@@ -7013,9 +7012,9 @@ export class DomainService {
     const existing = this.settings.find((setting) => setting.projectId === project.id);
     if (existing) return existing;
     const setting: DomainSetting = {
-      id: `domain_${project.slug}`,
+      id: `domain_${project.id}`,
       projectId: project.id,
-      internalPath: `/apps/${project.slug}`,
+      internalPath: `/apps/${project.id}`,
       mode: "internal",
       updatedAt: new Date().toISOString()
     };
@@ -7073,7 +7072,7 @@ export class TraceabilityService {
       .map((event) => event.id);
 
     return {
-      id: `trace_${project.slug}_mvp_001`,
+      id: `trace_${project.id}_mvp_001`,
       projectId: project.id,
       ticket: {
         id: ticket.id,

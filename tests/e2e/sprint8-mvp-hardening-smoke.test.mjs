@@ -69,7 +69,6 @@ function createSprint8ApiFixture() {
     headers: creatorHeaders,
     body: {
       name: "Leave Management",
-      slug: "leave-management-sprint8",
       appType: "Workflow App",
       businessProblem: "Employees need leave requests",
       targetDepartment: "HR Department",
@@ -100,7 +99,7 @@ function createSprint8ApiFixture() {
   });
   const ticket = executePlatformApiRequest(services, {
     method: "POST",
-    path: "/store/apps/leave-management-sprint8/tickets",
+    path: `/store/apps/${project.body.data.appId}/tickets`,
     headers: endUserHeaders,
     body: {
       type: "bug",

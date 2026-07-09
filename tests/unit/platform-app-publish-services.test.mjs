@@ -42,7 +42,6 @@ function createSprint6Fixture() {
   const project = services.projects.createProject({
     actor: creator,
     name: "Leave Management",
-    slug: "leave-management-sprint6",
     appType: "Workflow App",
     businessProblem: "Employees need self-service leave requests",
     targetDepartment: "HR Department",
@@ -119,11 +118,11 @@ test("publish review manifest references PRD frontend auth roles database and ro
   const review = services.publish.getReview(creator, project.id);
 
   assert.equal(review.ready, true);
-  assert.equal(review.manifest.app.slug, "leave-management-sprint6");
+  assert.equal(review.manifest.app.slug, project.appId);
   assert.equal(review.manifest.auth.mode, "platform_auth_sdk");
   assert.equal(review.manifest.prd.version, "1.0");
   assert.match(review.manifest.frontend.checkpointId, /^fechk_/);
-  assert.equal(review.manifest.database.schemaName, "app_leave_management_sprint6");
+  assert.equal(review.manifest.database.schemaName, `app_${project.id}`);
   assert.ok(review.manifest.roles.some((role) => role.key === "employee"));
   assert.ok(review.checklist.every((item) => item.status === "pass"));
 });
@@ -136,8 +135,8 @@ test("publish creates deployment record and app store registry entry", () => {
 
   assert.equal(result.publishRequest.status, "published");
   assert.equal(result.deployment.status, "published");
-  assert.equal(result.registryEntry.slug, "leave-management-sprint6");
-  assert.ok(registry.some((entry) => entry.slug === "leave-management-sprint6"));
+  assert.equal(result.registryEntry.slug, project.appId);
+  assert.ok(registry.some((entry) => entry.slug === project.appId));
   assert.ok(services.audit.list().some((event) => event.action === "app.publish.completed" && event.resourceId === result.publishRequest.id));
 });
 
@@ -146,7 +145,6 @@ test("publish blocks missing checklist items and denies end users", () => {
   const incompleteProject = services.projects.createProject({
     actor: creator,
     name: "Incomplete App",
-    slug: "incomplete-app",
     appType: "Workflow App"
   });
 

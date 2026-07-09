@@ -65,7 +65,6 @@ export type CurrentUserResponse = {
 
 export type PlatformProjectDto = {
   id: string;
-  slug: string;
   name: string;
   status: string;
   ownerUserId: string;
@@ -81,7 +80,6 @@ export type PlatformProjectDto = {
 
 export type CreateProjectInput = {
   name: string;
-  slug: string;
   appType?: string;
   businessProblem?: string;
   targetDepartment?: string;

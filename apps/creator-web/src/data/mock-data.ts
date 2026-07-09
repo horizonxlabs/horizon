@@ -7,7 +7,6 @@ import type { CreateProjectFormState, CreatorBootstrapState, CreatorProjectView 
 
 export const fallbackSelectedProject: CreatorProjectView = {
   id: "proj_leave_management",
-  slug: "leave-management",
   name: "Leave Management",
   appType: "Workflow App",
   status: "draft",
@@ -26,7 +25,6 @@ export const initialCreatorBootstrap: CreatorBootstrapState = {
 
 export const initialCreateProjectForm: CreateProjectFormState = {
   name: "Expense Approval",
-  slug: "expense-approval",
   appType: "Workflow App",
   businessProblem: "ลดเวลาการอนุมัติค่าใช้จ่ายและทำให้ผู้จัดการเห็นรายการค้างอนุมัติในที่เดียว",
   targetDepartment: "Finance",

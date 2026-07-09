@@ -337,14 +337,14 @@ export class PublishStoreRepositoryBackedService {
       update: {
         key,
         name: input.name.trim() || key,
-        permissions: input.permissions?.length ? input.permissions : [`${input.project.slug}:read`]
+        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`]
       },
       create: {
         id: `approle_${app.id}_${key}`,
         appId: app.id,
         key,
         name: input.name.trim() || key,
-        permissions: input.permissions?.length ? input.permissions : [`${input.project.slug}:read`]
+        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`]
       }
     });
     const mapped = (await this.rolesForApp(app.id)).find((candidate) => candidate.id === role.id);
@@ -567,7 +567,7 @@ export class PublishStoreRepositoryBackedService {
   async requestStoreAccess(actor: PlatformUser, input: { appSlug: string; requestedRoleKey: string; reason: string; department?: string }): Promise<StoreAccessRequestResult> {
     requireAnyRole(actor, ["end_user"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
-    const app = await this.ensureApp({ id: entry.projectId, slug: entry.slug, name: entry.name, status: "published", ownerUserId: entry.ownerUserId, appType: "Workflow App", businessProblem: "", targetDepartment: "HR Department", intendedUsers: [], dataSensitivity: "internal", appId: entry.appId, createdAt: entry.publishedAt });
+    const app = await this.ensureApp({ id: entry.projectId, name: entry.name, status: "published", ownerUserId: entry.ownerUserId, appType: "Workflow App", businessProblem: "", targetDepartment: "HR Department", intendedUsers: [], dataSensitivity: "internal", appId: entry.appId, createdAt: entry.publishedAt });
     await this.requireRoleKey(app.id, input.requestedRoleKey);
     const existing = (await this.client.appAccessRequest.findMany({
       where: { appId: app.id, requesterEmail: actor.email, requestedRoleKey: input.requestedRoleKey, status: "pending" }
@@ -690,22 +690,22 @@ export class PublishStoreRepositoryBackedService {
   }
 
   private async ensureApp(project: PlatformProject): Promise<ManagedApp> {
-    const id = project.appId ?? `app_${slugToId(project.slug)}`;
+    const id = project.appId ?? `app_${slugToId(project.id)}`;
     const record = await this.client.app.upsert({
       where: { id },
       update: {
-        slug: project.slug,
+        slug: id,
         name: project.name,
         projectId: project.id,
-        databaseSchemaName: `app_${slugToId(project.slug)}`
+        databaseSchemaName: `app_${slugToId(project.id)}`
       },
       create: {
         id,
-        slug: project.slug,
+        slug: id,
         name: project.name,
         status: project.status === "published" ? "published" : "draft",
         projectId: project.id,
-        databaseSchemaName: `app_${slugToId(project.slug)}`
+        databaseSchemaName: `app_${slugToId(project.id)}`
       }
     });
     return mapApp(record);
@@ -714,7 +714,7 @@ export class PublishStoreRepositoryBackedService {
   private async ensureDefaults(project: PlatformProject, app: ManagedApp): Promise<void> {
     const roles = await this.client.appRole.findMany({ where: { appId: app.id } });
     if (roles.length === 0) {
-      for (const role of defaultRoles(project.slug)) {
+      for (const role of defaultRoles(project.id)) {
         await this.client.appRole.upsert({
           where: { appId_key: { appId: app.id, key: role.key } },
           update: role,
@@ -788,7 +788,7 @@ export class PublishStoreRepositoryBackedService {
         checkpointId: preview.version === "preview-0000" ? "" : preview.id,
         version: preview.version === "preview-0000" ? "" : preview.version,
         checksum: `sha256:${slugToId(preview.id).padEnd(16, "0")}`,
-        routes: [`/apps/${project.slug}`, `/apps/${project.slug}/leave-requests`]
+        routes: [`/apps/${app.slug}`, `/apps/${app.slug}/leave-requests`]
       },
       auth: {
         mode: "platform_auth_sdk",
@@ -796,7 +796,7 @@ export class PublishStoreRepositoryBackedService {
       },
       roles: roles.map((role) => ({ key: role.key, name: role.name, permissions: [...role.permissions] })),
       database: {
-        schemaName: `app_${slugToId(project.slug)}`,
+        schemaName: `app_${slugToId(project.id)}`,
         tables: ["leave_requests", "approval_steps", "leave_balances"]
       },
       generatedAt: new Date().toISOString()

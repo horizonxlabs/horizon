@@ -66,7 +66,6 @@ function createPublishedProject(services) {
     headers: creatorHeaders,
     body: {
       name: "Leave Management Runtime",
-      slug: "leave-management-runtime",
       appType: "Workflow App",
       businessProblem: "Employees need production leave workflow",
       targetDepartment: "HR Department",
@@ -109,9 +108,9 @@ test("Sprint 10 API exposes generated app runtime overview and schema isolation 
     headers: adminHeaders
   });
   assert.equal(runtime.status, 200);
-  assert.equal(runtime.body.data.artifactContract.root, "generated-apps/leave-management-runtime");
+  assert.equal(runtime.body.data.artifactContract.root, `generated-apps/${project.appId}`);
   assert.equal(runtime.body.data.container.status, "running");
-  assert.equal(runtime.body.data.schemaIsolation.schemaName, "app_leave_management_runtime");
+  assert.equal(runtime.body.data.schemaIsolation.schemaName, `app_${project.id}`);
 
   const denied = executePlatformApiRequest(services, {
     method: "POST",
