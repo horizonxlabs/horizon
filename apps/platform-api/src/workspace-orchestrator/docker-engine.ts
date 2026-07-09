@@ -1,3 +1,4 @@
+import type { EnvironmentName } from "@evcp/types";
 import { assertValidProjectSlug } from "./postgres-provisioner";
 
 export interface DevContainerSpec {
@@ -41,6 +42,46 @@ export function buildDevContainerSpec(input: {
   };
 }
 
+/**
+ * Build a deployed-app container spec for a given environment (staging or production). Each
+ * environment gets its own container name (`evcp-<env>-<slug>`), `evcp.env` label, and workspace
+ * volume (`evcp-ws-<slug>-<env>-data`) so a staging deploy can never corrupt production's disk.
+ * NODE_ENV is always "production" — the app runs its production build in every deployed tier.
+ */
+export function buildAppContainerSpec(
+  input: {
+    slug: string;
+    image: string;
+    env: Record<string, string>;
+    cpuCores?: number;
+    memoryMb?: number;
+    network: string;
+    workspaceVolume?: string;
+  },
+  environment: EnvironmentName
+): DevContainerSpec {
+  assertValidProjectSlug(input.slug);
+  const cpuCores = input.cpuCores ?? 1;
+  const memoryMb = input.memoryMb ?? 1024;
+  const env = { ...input.env, NODE_ENV: "production" };
+  const workspaceVolume = input.workspaceVolume ?? `evcp-ws-${input.slug}-${environment}-data`;
+  return {
+    name: `evcp-${environment}-${input.slug}`,
+    image: input.image,
+    env: Object.entries(env).map(([name, value]) => `${name}=${value}`),
+    hostConfig: {
+      NanoCpus: Math.round(cpuCores * 1_000_000_000),
+      Memory: memoryMb * 1024 * 1024,
+      NetworkMode: input.network,
+      Binds: [`${workspaceVolume}:/workspace`]
+    },
+    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": environment },
+    exposedPort: 3000,
+    publishPorts: false
+  };
+}
+
+/** Thin wrapper — production is the default deployed tier. */
 export function buildProdContainerSpec(input: {
   slug: string;
   image: string;
@@ -48,26 +89,9 @@ export function buildProdContainerSpec(input: {
   cpuCores?: number;
   memoryMb?: number;
   network: string;
-  workspaceVolume: string;
+  workspaceVolume?: string;
 }): DevContainerSpec {
-  assertValidProjectSlug(input.slug);
-  const cpuCores = input.cpuCores ?? 1;
-  const memoryMb = input.memoryMb ?? 1024;
-  const env = { ...input.env, NODE_ENV: "production" };
-  return {
-    name: `evcp-prod-${input.slug}`,
-    image: input.image,
-    env: Object.entries(env).map(([name, value]) => `${name}=${value}`),
-    hostConfig: {
-      NanoCpus: Math.round(cpuCores * 1_000_000_000),
-      Memory: memoryMb * 1024 * 1024,
-      NetworkMode: input.network,
-      Binds: [`${input.workspaceVolume}:/workspace`]
-    },
-    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": "production" },
-    exposedPort: 3000,
-    publishPorts: false
-  };
+  return buildAppContainerSpec(input, "production");
 }
 
 export interface DockerEngine {

@@ -7,7 +7,7 @@ import {
 import { createMemoryChatHistoryStore } from "./chat-history-store";
 import { createActionRunner } from "./action-runner";
 import { createMemoryCheckpointStore } from "./checkpoint-store";
-import { createMemoryMigrationStore } from "./migration-store";
+import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
 import { createErrorFeedbackTracker } from "./error-feedback";
 import { createGenerationService } from "./generation-service";
 import { loadGoldenTemplate } from "../workspace-orchestrator/template";
@@ -33,6 +33,9 @@ export function createDefaultGenerationService(opts: {
   // falls back to a placeholder that throws on use — see the app-factory.ts wiring
   // note for why the shared engine may not be reachable there today.
   docker?: DockerEngine;
+  // Optional shared MigrationStore. Threaded from app-factory so the publish pre-checks read the
+  // same applied-migrations record the generation loop writes. Falls back to a fresh memory store.
+  migrations?: MigrationStore;
 }) {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
@@ -67,7 +70,7 @@ export function createDefaultGenerationService(opts: {
     actionRunner: createActionRunner({
       docker,
       checkpoints: createMemoryCheckpointStore(),
-      migrations: createMemoryMigrationStore(),
+      migrations: opts.migrations ?? createMemoryMigrationStore(),
       ...(mode === "real" ? { runMigrationSql: createPgMigrationRunner().run } : {})
     }),
     errorFeedback: createErrorFeedbackTracker(),

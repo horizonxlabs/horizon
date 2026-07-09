@@ -3890,6 +3890,210 @@ button {
   padding: 10px;
 }
 
+/* --- Publish dialog: Staging/Production selector + promote --- */
+.publish-dialog-overlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 50;
+}
+
+.publish-dialog {
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 440px;
+  padding: 20px;
+  width: 100%;
+}
+
+.publish-dialog-head {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.publish-dialog-head strong {
+  color: var(--evcp-color-text);
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.publish-dialog-head span {
+  color: var(--evcp-color-muted);
+  font-size: 12.5px;
+}
+
+.publish-dialog-close {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.publish-dialog-close:hover {
+  background: var(--evcp-color-surface-muted);
+  color: var(--evcp-color-text);
+}
+
+.env-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.env-option {
+  align-items: center;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.env-option:hover {
+  background: var(--evcp-color-surface-muted);
+}
+
+.env-option.is-selected {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.env-option-radio {
+  border: 2px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-pill);
+  flex-shrink: 0;
+  height: 16px;
+  width: 16px;
+}
+
+.env-option.is-selected .env-option-radio {
+  background: radial-gradient(circle, var(--evcp-color-primary) 0 4px, transparent 5px);
+  border-color: var(--evcp-color-primary);
+}
+
+.env-option-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.env-option-body strong {
+  color: var(--evcp-color-text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.env-option-body small {
+  color: var(--evcp-color-muted);
+  font-size: 11.5px;
+}
+
+.env-option-status {
+  color: var(--evcp-color-muted);
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.env-option-status.status-healthy {
+  color: var(--evcp-color-success-text);
+}
+
+.env-option-status.status-failed {
+  color: var(--evcp-color-danger-text);
+}
+
+.env-option-status.status-pending {
+  color: var(--evcp-color-warning-text);
+}
+
+.publish-dialog-note {
+  border-radius: 8px;
+  font-size: 12.5px;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.publish-dialog-note.is-ok {
+  background: var(--evcp-color-success-bg);
+  color: var(--evcp-color-success-text);
+}
+
+.publish-dialog-note.is-error {
+  background: var(--evcp-color-danger-bg);
+  color: var(--evcp-color-danger-text);
+}
+
+.publish-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.publish-dialog-primary {
+  align-items: center;
+  background: linear-gradient(180deg, var(--evcp-color-primary), var(--evcp-color-primary-strong));
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  font-size: 13.5px;
+  font-weight: 700;
+  gap: 6px;
+  justify-content: center;
+  padding: 11px;
+}
+
+.publish-dialog-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.publish-dialog-primary:disabled,
+.publish-dialog-promote:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.publish-dialog-promote {
+  align-items: center;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: 10px;
+  color: var(--evcp-color-text);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  justify-content: center;
+  padding: 10px;
+}
+
+.publish-dialog-promote:hover:not(:disabled) {
+  background: var(--evcp-color-surface-muted);
+}
+
 .publish-checklist div {
   grid-template-columns: auto 1fr minmax(90px, 0.7fr) auto;
 }

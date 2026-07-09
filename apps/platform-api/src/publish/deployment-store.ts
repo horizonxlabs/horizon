@@ -12,7 +12,10 @@ export interface DeploymentStore {
   }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
   list(projectId: string): WorkspaceDeployment[];
-  getCurrent(slug: string): WorkspaceDeployment | null;
+  // Latest healthy deployment for a slug in a given environment. Defaults to "production" so the
+  // /apps serve path and existing callers get the live production tier. Env-awareness matters:
+  // staging and production deploy to the same slug, and the caller must resolve the right tier.
+  getCurrent(slug: string, environment?: EnvironmentName): WorkspaceDeployment | null;
 }
 
 export function createMemoryDeploymentStore(): DeploymentStore {
@@ -54,10 +57,10 @@ export function createMemoryDeploymentStore(): DeploymentStore {
         .filter((dep) => dep.projectId === projectId)
         .reverse();
     },
-    getCurrent(slug) {
+    getCurrent(slug, environment = "production") {
       for (let i = order.length - 1; i >= 0; i -= 1) {
         const dep = byId.get(order[i])!;
-        if (dep.slug === slug && dep.healthStatus === "healthy") {
+        if (dep.slug === slug && dep.environment === environment && dep.healthStatus === "healthy") {
           return dep;
         }
       }

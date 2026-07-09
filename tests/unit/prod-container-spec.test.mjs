@@ -1,16 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildProdContainerSpec } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
+import {
+  buildProdContainerSpec,
+  buildAppContainerSpec
+} from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
 
-test("prod spec uses evcp-prod- name, NODE_ENV=production, defaults CPU 1/RAM 1GB, no host ports", () => {
+test("prod spec uses evcp-production- name, NODE_ENV=production, defaults CPU 1/RAM 1GB, no host ports", () => {
   const spec = buildProdContainerSpec({
     slug: "my-app",
-    image: "evcp-prod-my-app:abc123",
+    image: "evcp-production-my-app:abc123",
     env: { DATABASE_URL: "postgres://x", S3_BUCKET: "proj-my-app" },
     network: "evcp-internal",
-    workspaceVolume: "evcp-ws-my-app-data"
+    workspaceVolume: "evcp-ws-my-app-production-data"
   });
-  assert.equal(spec.name, "evcp-prod-my-app");
+  assert.equal(spec.name, "evcp-production-my-app");
   assert.equal(spec.publishPorts, false);
   assert.equal(spec.exposedPort, 3000);
   assert.equal(spec.hostConfig.NanoCpus, 1_000_000_000);
@@ -27,4 +30,25 @@ test("prod spec honours explicit cpu/memory overrides", () => {
   });
   assert.equal(spec.hostConfig.NanoCpus, 2_000_000_000);
   assert.equal(spec.hostConfig.Memory, 2048 * 1024 * 1024);
+});
+
+test("buildAppContainerSpec parametrizes name, label, and per-env volume by environment", () => {
+  const staging = buildAppContainerSpec(
+    { slug: "my-app", image: "evcp-staging-my-app:sha", env: { DATABASE_URL: "postgres://x" }, network: "evcp-internal" },
+    "staging"
+  );
+  assert.equal(staging.name, "evcp-staging-my-app");
+  assert.equal(staging.labels["evcp.env"], "staging");
+  // default per-env volume keeps staging's disk separate from production's
+  assert.ok(staging.hostConfig.Binds.includes("evcp-ws-my-app-staging-data:/workspace"));
+  // NODE_ENV is production in every deployed tier (runs the production build)
+  assert.ok(staging.env.includes("NODE_ENV=production"));
+
+  const prod = buildAppContainerSpec(
+    { slug: "my-app", image: "img", env: {}, network: "evcp-internal" },
+    "production"
+  );
+  assert.equal(prod.name, "evcp-production-my-app");
+  assert.equal(prod.labels["evcp.env"], "production");
+  assert.ok(prod.hostConfig.Binds.includes("evcp-ws-my-app-production-data:/workspace"));
 });

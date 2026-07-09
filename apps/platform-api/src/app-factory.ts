@@ -8,10 +8,10 @@ import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
 import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
-import { createPublishRoutes, resolveAppsTarget } from "./publish/routes";
-import { createDefaultPublishStack } from "./publish/factory";
+import { registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
+import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
@@ -3137,8 +3137,12 @@ function registerPlatformRoutes(
 
   // NOTE: the shared DockerEngine is not exposed from the orchestrator yet, so
   // generated shell/file/migration actions still use the generation placeholder.
+  // Shared across the generation loop AND the publish pre-checks so publish sees the migrations the
+  // generation loop actually applied (rather than a fresh, empty store).
+  const sharedMigrationStore = createMemoryMigrationStore();
   const generationService = createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
+    migrations: sharedMigrationStore,
     onAudit: (event) =>
       services.audit.record({
         actorId: "system",
@@ -3196,14 +3200,23 @@ function registerPlatformRoutes(
     chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
   );
 
-  // NOTE (Task 9, DONE_WITH_CONCERNS): createDefaultPublishStack ships a throwing
-  // docker placeholder plus memory-backed git/migration stores — real publish needs
-  // the orchestrator's shared DockerEngine, a real GitPort, and the generation loop's
-  // shared MigrationStore threaded in (same follow-up shape as the DockerEngine note
-  // above). Routes and the /apps resolver are fully unit/integration tested regardless.
-  const { publishService, deployments: workspaceDeployments } = createDefaultPublishStack({
+  // Container-publish + /apps serve routes (staging → production). Real Docker/git/secrets are
+  // wired behind the real-adapter guard inside createDefaultPublishStack; memory mode keeps stubs.
+  registerPublishHttpRoutes({
+    rawApp,
     orchestrator: services.workspaceOrchestrator,
-    onAudit: (event) =>
+    migrations: sharedMigrationStore,
+    nodeHttp,
+    resolvePublishAuth: (headers) => {
+      try {
+        const user = services.auth.resolveCurrentUser(headers ?? {});
+        const projectIds = services.projects.listProjects(user).map((project) => project.id);
+        return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+      } catch {
+        return null;
+      }
+    },
+    recordAudit: (event) =>
       services.audit.record({
         actorId: "system",
         action: event.action,
@@ -3212,115 +3225,6 @@ function registerPlatformRoutes(
         metadata: event.metadata
       })
   });
-  const publishRoutes = createPublishRoutes({ publishService, deployments: workspaceDeployments });
-
-  const resolvePublishAuth = (req: PreviewReq): WorkspaceAuthContext | null => {
-    try {
-      const user = services.auth.resolveCurrentUser(req.headers ?? {});
-      const projectIds = services.projects.listProjects(user).map((project) => project.id);
-      return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
-    } catch {
-      return null;
-    }
-  };
-
-  const publishHandler = async (req: PreviewReq, res: PreviewRes) => {
-    const auth = resolvePublishAuth(req);
-    if (!auth) {
-      res.status(401).json({ error: "unauthorized" });
-      return;
-    }
-    const projectId = String(req.params?.projectId ?? "");
-    const slug = String((req.body as { slug?: string } | undefined)?.slug ?? "");
-    const result = await publishRoutes.publish(auth, { projectId, slug });
-    res.status(result.status).json(result.body);
-  };
-  const rollbackHandler = async (req: PreviewReq, res: PreviewRes) => {
-    const auth = resolvePublishAuth(req);
-    if (!auth) {
-      res.status(401).json({ error: "unauthorized" });
-      return;
-    }
-    const projectId = String(req.params?.projectId ?? "");
-    const body = (req.body as { slug?: string; commitSha?: string } | undefined) ?? {};
-    const slug = String(body.slug ?? "");
-    const commitSha = String(body.commitSha ?? "");
-    const result = await publishRoutes.rollback(auth, { projectId, slug, commitSha });
-    res.status(result.status).json(result.body);
-  };
-  const listDeploymentsHandler = async (req: PreviewReq, res: PreviewRes) => {
-    const auth = resolvePublishAuth(req);
-    if (!auth) {
-      res.status(401).json({ error: "unauthorized" });
-      return;
-    }
-    const projectId = String(req.params?.projectId ?? "");
-    const result = publishRoutes.list(auth, { projectId });
-    res.status(result.status).json(result.body);
-  };
-  rawApp.all("/projects/:projectId/publish", publishHandler);
-  rawApp.all("/projects/:projectId/rollback", rollbackHandler);
-  rawApp.all("/projects/:projectId/deployments", listDeploymentsHandler);
-
-  // Authenticated production reverse proxy for healthy deployments (mirrors previewHandler).
-  // NOTE (Task 9, follow-up): public Caddy routing for `/apps/*` still points at the
-  // app-store PWA (docker/Caddyfile ~line 15) and is NOT changed here — mirrors how the
-  // /preview Caddy route was handled. This handler is reachable directly on platform-api
-  // (and in tests); wiring Caddy to prefer this route for slugs with a healthy deployment
-  // is a separate follow-up, left untouched to avoid touching Caddyfile's concurrent
-  // working-tree changes.
-  const appsProdHandler = async (req: PreviewReq, res: PreviewRes) => {
-    const slug = String(req.params?.slug ?? "");
-    const auth = resolvePublishAuth(req);
-    const decision = await resolveAppsTarget(workspaceDeployments, auth, slug);
-    if (!decision.ok) {
-      res.status(decision.status).json({ error: "app_unavailable" });
-      return;
-    }
-    const target = new URL(decision.upstream);
-    const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const forwardPath = req.originalUrl.replace(new RegExp(`^/apps/${escapedSlug}`), "") || "/";
-    const forwardHeaders: Record<string, string | string[] | undefined> = {
-      ...req.headers,
-      host: target.host
-    };
-    for (const key of Object.keys(forwardHeaders)) {
-      if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {
-        delete forwardHeaders[key];
-      }
-    }
-    const proxyReq = nodeHttp.request(
-      {
-        hostname: target.hostname,
-        port: target.port || 80,
-        method: req.method,
-        path: forwardPath,
-        headers: forwardHeaders
-      },
-      (proxyRes: any) => {
-        res.statusCode = proxyRes.statusCode ?? 502;
-        for (const [key, value] of Object.entries(proxyRes.headers)) {
-          if (value !== undefined) res.setHeader(key, value as string | string[]);
-        }
-        proxyRes.pipe(res);
-      }
-    );
-    proxyReq.on("error", () => {
-      if (!res.headersSent) res.status(502).json({ error: "app_upstream_unreachable" });
-    });
-    const method = String(req.method ?? "GET").toUpperCase();
-    if (method === "GET" || method === "HEAD" || req.body === undefined || req.body === null) {
-      proxyReq.end();
-    } else {
-      const payload = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-      proxyReq.setHeader("content-type", "application/json");
-      proxyReq.setHeader("content-length", Buffer.byteLength(payload));
-      proxyReq.write(payload);
-      proxyReq.end();
-    }
-  };
-  rawApp.all("/apps/:slug", appsProdHandler);
-  rawApp.all("/apps/:slug/*splat", appsProdHandler);
 
   routes.get("/creator/projects/:projectId/files", (request, response) =>
     sendPlatformResponse(
