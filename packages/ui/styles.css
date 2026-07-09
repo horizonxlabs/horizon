@@ -5827,13 +5827,23 @@ button:disabled {
   align-items: center;
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 8px;
-  color: var(--evcp-color-text, #0f172a);
+  border-radius: var(--evcp-radius-control, 8px);
+  box-sizing: border-box;
+  color: var(--evcp-color-muted, #64748b);
   cursor: pointer;
   display: inline-flex;
-  font-weight: 650;
+  flex-shrink: 0;
+  height: 34px;
   justify-content: center;
-  min-height: 32px;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+  width: 34px;
+}
+
+.hz-code-icon-btn:hover {
+  background: var(--evcp-color-surface-muted, #f8fafc);
+  color: var(--evcp-color-text, #0f172a);
 }
 
 .hz-code-empty button {
@@ -5851,6 +5861,7 @@ button:disabled {
 }
 
 .hz-code-toolbar {
+  align-items: center;
   display: flex;
   gap: 6px;
   padding-bottom: 8px;
@@ -5860,13 +5871,15 @@ button:disabled {
   align-items: center;
   background: var(--evcp-color-surface-muted, #f8fafc);
   border: 1px solid var(--evcp-color-border-soft, #eef2f7);
-  border-radius: 8px;
+  border-radius: var(--evcp-radius-control, 8px);
+  box-sizing: border-box;
   color: #94a3b8;
   display: flex;
   flex: 1;
   gap: 6px;
+  height: 34px;
   min-width: 0;
-  padding: 0 9px;
+  padding: 0 10px;
 }
 
 .hz-code-search input {
@@ -5874,7 +5887,7 @@ button:disabled {
   border: 0;
   color: var(--evcp-color-text, #0f172a);
   font-size: 12.5px;
-  min-height: 32px;
+  height: 100%;
   min-width: 0;
   outline: none;
   width: 100%;

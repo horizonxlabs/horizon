@@ -201,23 +201,23 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
     return (
       <div className="hz-code-empty">
         <FileCode2 size={28} aria-hidden="true" />
-        <strong>โหลดไฟล์ใน workspace ไม่สำเร็จ</strong>
+        <strong>Couldn't load workspace files</strong>
         <span>{errorText}</span>
         <button type="button" onClick={() => setReloadKey((key) => key + 1)}>
-          ลองใหม่
+          Retry
         </button>
       </div>
     );
   }
   if (isLoading && files.length === 0) {
-    return <div className="hz-code-empty">กำลังโหลด Files in workspace…</div>;
+    return <div className="hz-code-empty">Loading files in workspace…</div>;
   }
   if (files.length === 0) {
     return (
       <div className="hz-code-empty">
         <FolderTree size={28} aria-hidden="true" />
-        <strong>ยังไม่มีไฟล์ใน workspace</strong>
-        <span>เริ่มจากการสั่ง AI build ในแชต แล้วกลับมาดู source code ที่นี่</span>
+        <strong>No files in this workspace yet</strong>
+        <span>Ask the AI to build in chat, then come back to view the source here.</span>
       </div>
     );
   }
@@ -231,15 +231,15 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="ค้นหาไฟล์…"
-              aria-label="ค้นหาไฟล์ใน workspace"
+              placeholder="Search files…"
+              aria-label="Search files in workspace"
             />
           </div>
           <button
             type="button"
             className="hz-code-icon-btn"
-            title="โหลดใหม่"
-            aria-label="โหลดไฟล์ใหม่"
+            title="Reload"
+            aria-label="Reload files"
             onClick={() => setReloadKey((key) => key + 1)}
           >
             <RefreshCw size={15} aria-hidden="true" />
@@ -251,7 +251,7 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
         </div>
         <div className="hz-code-tree" role="tree">
           {filteredFiles.length === 0 ? (
-            <div className="hz-code-no-results">ไม่พบไฟล์ที่ตรงกับคำค้น</div>
+            <div className="hz-code-no-results">No files match your search</div>
           ) : (
             <TreeRows
               nodes={tree}
@@ -266,7 +266,7 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
       </aside>
       <section className="hz-code-viewer" aria-label="Code viewer">
         <div className="hz-code-viewer-head">
-          <span>{activeFile ? fileName(activeFile.path) : "ไม่มีไฟล์ที่เลือก"}</span>
+          <span>{activeFile ? fileName(activeFile.path) : "No file selected"}</span>
           {activeFile ? (
             <small>
               {activeFile.path} · {lineCount} lines · {formatBytes(activeFile.content)}
