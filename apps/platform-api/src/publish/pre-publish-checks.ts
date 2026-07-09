@@ -10,9 +10,15 @@ export async function runPrePublishChecks(
 ): Promise<PrePublishResult> {
   const failures: string[] = [];
 
-  const build = await deps.docker.execInContainer(input.containerId, ["sh", "-c", "next build"]);
+  // Run the build via the project's package script so the toolchain (next/vite/etc.) resolves from
+  // node_modules/.bin — invoking `next` directly fails with exit 127 (command not found).
+  const build = await deps.docker.execInContainer(input.containerId, [
+    "sh",
+    "-c",
+    "cd /workspace && npm run build"
+  ]);
   if (build.exitCode !== 0) {
-    failures.push(`next build failed (exit ${build.exitCode}): ${build.stderr.trim()}`);
+    failures.push(`build failed (exit ${build.exitCode}): ${build.stderr.trim()}`);
   }
 
   const filesAtCommit = await deps.git.listMigrationNames(input.projectId, input.commitSha);

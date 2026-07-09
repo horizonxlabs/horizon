@@ -3,6 +3,7 @@ import type { EnvironmentName } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import type { MigrationStore } from "../generation-loop/migration-store";
+import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
 
@@ -67,7 +68,7 @@ export function registerPublishHttpRoutes(opts: {
   migrations: MigrationStore;
   nodeHttp: typeof NodeHttp;
   env?: Record<string, string | undefined>;
-  resolvePublishAuth: (headers: HeaderBag) => WorkspaceAuthContext | null;
+  resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
   recordAudit: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
 }): void {
   const { rawApp, orchestrator, nodeHttp } = opts;
@@ -80,34 +81,34 @@ export function registerPublishHttpRoutes(opts: {
   });
   const publishRoutes = createPublishRoutes({ publishService, deployments: workspaceDeployments });
 
-  // The api-client publishes with a project id + environment only; resolve the slug from the
-  // workspace record server-side (still accepts an explicit body.slug for rollback tooling).
-  const resolveSlug = (projectId: string, body: { slug?: string } | undefined): string =>
-    String(body?.slug ?? orchestrator.getWorkspace(projectId)?.slug ?? "");
+  // Publish containers are keyed by the immutable id-derived RESOURCE KEY (evcp-<env>-<resourceKey>),
+  // NOT the project slug — projects no longer carry a resource-usable slug after the slug→UUID change.
+  // This mirrors the dev container's `evcp-ws-<resourceKey>` naming so tiers line up.
+  const resolveResourceKey = (projectId: string): string => resourceKeyForProject(projectId);
 
   const publishHandler = async (req: PublishReq, res: PublishRes) => {
-    const auth = opts.resolvePublishAuth(req.headers ?? {});
+    const auth = await opts.resolvePublishAuth(req.headers ?? {});
     if (!auth) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { slug?: string; environment?: unknown } | undefined;
-    const slug = resolveSlug(projectId, body);
+    const body = req.body as { environment?: unknown } | undefined;
+    const slug = resolveResourceKey(projectId);
     const environment = normalizeEnvironment(body?.environment);
     const result = await publishRoutes.publish(auth, { projectId, slug, environment });
     res.status(result.status).json(result.body);
   };
 
   const rollbackHandler = async (req: PublishReq, res: PublishRes) => {
-    const auth = opts.resolvePublishAuth(req.headers ?? {});
+    const auth = await opts.resolvePublishAuth(req.headers ?? {});
     if (!auth) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { slug?: string; environment?: unknown; commitSha?: string } | undefined;
-    const slug = resolveSlug(projectId, body);
+    const body = req.body as { environment?: unknown; commitSha?: string } | undefined;
+    const slug = resolveResourceKey(projectId);
     const environment = normalizeEnvironment(body?.environment);
     const commitSha = String(body?.commitSha ?? "");
     const result = await publishRoutes.rollback(auth, { projectId, slug, environment, commitSha });
@@ -115,20 +116,19 @@ export function registerPublishHttpRoutes(opts: {
   };
 
   const promoteHandler = async (req: PublishReq, res: PublishRes) => {
-    const auth = opts.resolvePublishAuth(req.headers ?? {});
+    const auth = await opts.resolvePublishAuth(req.headers ?? {});
     if (!auth) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { slug?: string } | undefined;
-    const slug = resolveSlug(projectId, body);
+    const slug = resolveResourceKey(projectId);
     const result = await publishRoutes.promote(auth, { projectId, slug });
     res.status(result.status).json(result.body);
   };
 
   const listDeploymentsHandler = async (req: PublishReq, res: PublishRes) => {
-    const auth = opts.resolvePublishAuth(req.headers ?? {});
+    const auth = await opts.resolvePublishAuth(req.headers ?? {});
     if (!auth) {
       res.status(401).json({ error: "unauthorized" });
       return;
@@ -149,7 +149,7 @@ export function registerPublishHttpRoutes(opts: {
     (environment: EnvironmentName, pathPrefix: (slug: string) => string) =>
     async (req: PublishReq, res: PublishRes) => {
       const slug = String(req.params?.slug ?? "");
-      const auth = opts.resolvePublishAuth(req.headers ?? {});
+      const auth = await opts.resolvePublishAuth(req.headers ?? {});
       const decision = await resolveAppsTarget(workspaceDeployments, auth, slug, environment);
       if (!decision.ok) {
         res.status(decision.status).json({ error: "app_unavailable" });

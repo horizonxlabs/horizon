@@ -3207,11 +3207,11 @@ function registerPlatformRoutes(
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
     nodeHttp,
-    resolvePublishAuth: (headers) => {
+    // Resolve via persisted auth (resolveWorkspaceAuth handles corePersistence + memory fallback);
+    // the legacy services.projects path 401s for real Postgres-backed sessions.
+    resolvePublishAuth: async (headers) => {
       try {
-        const user = services.auth.resolveCurrentUser(headers ?? {});
-        const projectIds = services.projects.listProjects(user).map((project) => project.id);
-        return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+        return await resolveWorkspaceAuth(services, headers ?? {});
       } catch {
         return null;
       }

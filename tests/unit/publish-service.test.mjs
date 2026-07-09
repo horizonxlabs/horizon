@@ -6,6 +6,7 @@ import { createMemoryDeploymentStore } from "../../apps/platform-api/src/publish
 import { createMemoryHealthChecker } from "../../apps/platform-api/src/publish/health-checker.ts";
 import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
 import { createMemoryDockerEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
+import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts";
 
 function buildDeps({ buildExit = 0, healthy = true } = {}) {
   const docker = createMemoryDockerEngine();
@@ -128,6 +129,31 @@ test("promote: reuses the healthy staging commitSha for production WITHOUT a reb
   assert.equal(lastCommit.containerId, staging.deployment.containerId);
   assert.equal(deps.docker.state.commits.length, commitsBefore + 1);
   assert.ok(deps._audits.some((e) => e.action === "workspace.promote"));
+});
+
+test("containers are keyed by the id-derived resource key (evcp-<env>-<resourceKey>), not a slug", async () => {
+  // The publish HTTP layer feeds the resource key (projectId with `_`→`-`) as the container key,
+  // since projects no longer carry a resource-usable slug after the slug→UUID change.
+  const resourceKey = resourceKeyForProject("prj_d91441edb0024adc874d6cb80cf2c6af");
+  assert.equal(resourceKey, "prj-d91441edb0024adc874d6cb80cf2c6af");
+
+  const deps = buildDeps();
+  const service = createPublishService(deps);
+  const outcome = await service.publish({
+    projectId: "p1",
+    slug: resourceKey,
+    environment: "staging",
+    publishedByUserId: "u1"
+  });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.deployment.slug, resourceKey);
+  assert.match(outcome.deployment.imageTag, /^evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af:sha1$/);
+  const container = deps.docker.state.containers.find(
+    (c) => c.spec.name === "evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af"
+  );
+  assert.ok(container, "container name must be evcp-<env>-<resourceKey>");
+  assert.ok(container.spec.hostConfig.Binds.includes("evcp-ws-prj-d91441edb0024adc874d6cb80cf2c6af-staging-data:/workspace"));
 });
 
 test("promote: errors when there is no healthy staging deployment to promote", async () => {
