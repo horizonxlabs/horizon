@@ -1,4 +1,4 @@
-import { ArrowRight, Plus, Search, Sparkles, WandSparkles } from "lucide-react";
+import { ArrowRight, Search, Sparkles, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { CreatorShell } from "../components/CreatorShell";
 import type { useCreatorApp } from "../hooks/use-creator-app";
@@ -27,13 +27,14 @@ const PROMPT_SUGGESTIONS = [
 ];
 
 export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
-  const { bootstrap, selectedProject, handleSelectProject, setIsCreateProjectDialogOpen } = app;
+  const { bootstrap, selectedProject, handleSelectProject, handleCreateFromPrompt } = app;
   const [prompt, setPrompt] = useState("");
   const [query, setQuery] = useState("");
 
   function startFromPrompt() {
-    if (prompt.trim()) app.handleCreateProjectField("businessProblem", prompt.trim());
-    setIsCreateProjectDialogOpen(true);
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+    void handleCreateFromPrompt(trimmed);
   }
 
   const normalized = query.trim().toLowerCase();
@@ -109,14 +110,6 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                     aria-label="Search projects"
                   />
                 </div>
-                <button
-                  type="button"
-                  className="hz-btn-create"
-                  onClick={() => setIsCreateProjectDialogOpen(true)}
-                >
-                  <Plus size={16} aria-hidden="true" />
-                  สร้างใหม่
-                </button>
               </div>
             </div>
 
