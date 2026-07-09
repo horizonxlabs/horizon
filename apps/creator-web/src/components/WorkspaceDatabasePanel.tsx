@@ -144,7 +144,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
       if (value !== "") values[key] = value;
     }
     if (Object.keys(values).length === 0) {
-      setWriteError("กรอกอย่างน้อย 1 ช่อง");
+      setWriteError("Fill in at least one field");
       return;
     }
     try {
@@ -157,10 +157,10 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     }
   }
 
-  if (schemaError) return <div className="hz-db-empty">โหลด schema ไม่สำเร็จ: {schemaError}</div>;
-  if (!schema) return <div className="hz-db-empty">กำลังโหลด schema…</div>;
+  if (schemaError) return <div className="hz-db-empty">Couldn't load schema: {schemaError}</div>;
+  if (!schema) return <div className="hz-db-empty">Loading schema…</div>;
   if (schema.tables.length === 0) {
-    return <div className="hz-db-empty">ยังไม่มีตารางใน schema “{schema.schema}”</div>;
+    return <div className="hz-db-empty">No tables in schema “{schema.schema}”</div>;
   }
 
   return (
@@ -183,7 +183,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
         <div className="hz-db-data-head">
           <strong>{activeTable}</strong>
           <span>{total} rows</span>
-          {!editable ? <span className="hz-db-flag">read-only (ไม่มี primary key)</span> : null}
+          {!editable ? <span className="hz-db-flag">read-only (no primary key)</span> : null}
           <div className="hz-db-actions">
             {editable ? (
               <button
@@ -191,7 +191,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
                 className="ghost-button"
                 onClick={() => setAdding((value) => !value)}
               >
-                <Plus size={14} /> แถวใหม่
+                <Plus size={14} /> New row
               </button>
             ) : null}
             {editable ? (
@@ -201,7 +201,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
                 onClick={() => void deleteSelected()}
                 disabled={selected.size === 0}
               >
-                <Trash2 size={14} /> ลบ ({selected.size})
+                <Trash2 size={14} /> Delete ({selected.size})
               </button>
             ) : null}
             <button
@@ -209,7 +209,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
               className="ghost-button"
               onClick={() => activeTable && void loadTable(activeTable)}
             >
-              <RotateCcw size={14} /> รีเฟรช
+              <RotateCcw size={14} /> Refresh
             </button>
           </div>
         </div>
@@ -239,21 +239,21 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
                   setNewRow({});
                 }}
               >
-                ยกเลิก
+                Cancel
               </button>
               <button type="button" onClick={() => void handleAddRow()}>
-                เพิ่มแถว
+                Add row
               </button>
             </div>
           </div>
         ) : null}
-        {writeError ? <div className="hz-db-error">เขียนไม่สำเร็จ: {writeError}</div> : null}
+        {writeError ? <div className="hz-db-error">Write failed: {writeError}</div> : null}
         {dataError ? (
-          <div className="hz-db-empty">โหลดข้อมูลไม่สำเร็จ: {dataError}</div>
+          <div className="hz-db-empty">Couldn't load data: {dataError}</div>
         ) : loadingRows ? (
-          <div className="hz-db-empty">กำลังโหลด {activeTable}…</div>
+          <div className="hz-db-empty">Loading {activeTable}…</div>
         ) : rows.length === 0 ? (
-          <div className="hz-db-empty">ไม่มีข้อมูลในตารางนี้</div>
+          <div className="hz-db-empty">No rows in this table</div>
         ) : (
           <DataGrid
             className="hz-db-rdg rdg-light"

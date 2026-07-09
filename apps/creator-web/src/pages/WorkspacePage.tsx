@@ -1,4 +1,12 @@
-import { ClipboardList, Hammer, Plus, Send } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ClipboardList,
+  Hammer,
+  Plus,
+  RotateCw,
+  Send
+} from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { Suspense, lazy } from "react";
 import { VibeActionRow } from "../components/VibeActionRow";
@@ -60,46 +68,56 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
-        <a className="vibe-live-back-link" href="/creator/projects">
-          ‹ Projects
-        </a>
-        <div className="vibe-live-divider" />
-        <strong className="vibe-live-project-name">{selectedProject.name}</strong>
-        <span className={`vibe-live-status-dot ${isVibing ? "is-running" : "is-ready"}`} />
-        <span className="vibe-live-status-text">{vibeStatus || "ready"}</span>
-        <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
-          {WORKSPACE_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setVibeTab(tab)}
-              className={`vibe-live-tab ${vibeTab === tab ? "is-active" : ""}`.trim()}
-              role="tab"
-              aria-selected={vibeTab === tab}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
+        <div className="vibe-live-header-left">
+          <a className="vibe-live-back-link" href="/creator/projects">
+            <ChevronLeft size={16} aria-hidden="true" />
+            <span>Projects</span>
+          </a>
+          <div className="vibe-live-divider" />
+          <strong className="vibe-live-project-name">{selectedProject.name}</strong>
+          <span className={`vibe-live-status ${isVibing ? "is-running" : "is-ready"}`.trim()}>
+            <span className="vibe-live-status-dot" />
+            {vibeStatus || "ready"}
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setVibePreviewKey((key) => key + 1)}
-          title="Refresh preview"
-          className="vibe-live-control"
-        >
-          ↻
-        </button>
-        <a href={previewSrc} target="_blank" rel="noreferrer" className="vibe-live-control">
-          Open ↗
-        </a>
-        <button
-          type="button"
-          title="Publish to production (Plan 5 pipeline)"
-          className="vibe-live-control vibe-live-control-primary"
-          disabled={workspaceMode === "plan"}
-        >
-          Publish
-        </button>
+        <div className="vibe-live-header-right">
+          <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
+            {WORKSPACE_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setVibeTab(tab)}
+                className={`vibe-live-tab ${vibeTab === tab ? "is-active" : ""}`.trim()}
+                role="tab"
+                aria-selected={vibeTab === tab}
+              >
+                {TAB_LABELS[tab]}
+              </button>
+            ))}
+          </div>
+          <div className="vibe-live-divider" />
+          <button
+            type="button"
+            onClick={() => setVibePreviewKey((key) => key + 1)}
+            title="Refresh preview"
+            aria-label="Refresh preview"
+            className="vibe-live-icon-btn"
+          >
+            <RotateCw size={15} />
+          </button>
+          <a href={previewSrc} target="_blank" rel="noreferrer" className="vibe-live-control">
+            <span>Preview</span>
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </a>
+          <button
+            type="button"
+            title="Publish to production (Plan 5 pipeline)"
+            className="vibe-live-control vibe-live-control-primary"
+            disabled={workspaceMode === "plan"}
+          >
+            Publish
+          </button>
+        </div>
       </header>
       <div className="vibe-live-body">
         <div className="vibe-live-chat-panel">
