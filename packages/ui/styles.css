@@ -5881,65 +5881,74 @@ button:disabled {
   padding: 2px 8px 8px;
 }
 
-.hz-code-file-list {
+/* File-explorer tree (nested folders → files, VS Code-like). */
+.hz-code-tree {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 2px;
   min-height: 0;
   overflow-y: auto;
+  padding: 2px 6px 10px;
 }
 
-.hz-code-file-item {
+.hz-tree-row {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
-  color: #64748b;
+  border-radius: 7px;
+  color: var(--evcp-color-text, #0f172a);
   cursor: pointer;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 16px minmax(0, 1fr);
-  padding: 8px 10px;
+  display: flex;
+  font-size: 13px;
+  gap: 6px;
+  padding: 5px 8px;
   text-align: left;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease;
+  width: 100%;
 }
 
-.hz-code-file-item:hover {
+.hz-tree-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hz-tree-row:hover {
   background: var(--evcp-color-surface-muted, #f8fafc);
 }
 
-.hz-code-file-item.is-active {
+.hz-tree-row svg {
+  flex-shrink: 0;
+}
+
+.hz-tree-dir {
+  color: var(--evcp-color-text, #0f172a);
+  font-weight: 600;
+}
+
+.hz-tree-dir svg:first-child {
+  color: var(--evcp-color-muted, #94a3b8);
+}
+
+.hz-tree-dir svg:nth-child(2) {
+  color: var(--evcp-color-primary, #2563eb);
+}
+
+.hz-tree-file {
+  color: #475569;
+}
+
+.hz-tree-file svg {
+  color: var(--evcp-color-muted, #94a3b8);
+}
+
+.hz-tree-file.is-active {
   background: var(--evcp-color-primary-soft, #dbeafe);
   color: var(--evcp-color-primary-strong, #1d4ed8);
+  font-weight: 600;
 }
 
-.hz-code-file-item span {
-  display: grid;
-  min-width: 0;
-}
-
-.hz-code-file-item strong {
-  color: var(--evcp-color-text, #0f172a);
-  font-size: 12.5px;
-  font-weight: 650;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hz-code-file-item.is-active strong {
+.hz-tree-file.is-active svg {
   color: var(--evcp-color-primary-strong, #1d4ed8);
-}
-
-.hz-code-file-item em {
-  color: #94a3b8;
-  font-size: 10.5px;
-  font-style: normal;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .hz-code-no-results {
@@ -5997,8 +6006,24 @@ button:disabled {
   margin: 0;
   min-height: 0;
   overflow: auto;
-  padding: 16px 18px;
+  padding: 14px 16px;
   tab-size: 2;
+}
+
+.hz-code-line {
+  display: flex;
+}
+
+.hz-code-lineno {
+  color: #b0b7c3;
+  flex-shrink: 0;
+  padding-right: 16px;
+  text-align: right;
+  user-select: none;
+  width: 34px;
+}
+
+.hz-code-linebody {
   white-space: pre;
 }
 
