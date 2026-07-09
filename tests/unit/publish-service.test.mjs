@@ -11,7 +11,7 @@ import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orc
 function buildDeps({ buildExit = 0, healthy = true } = {}) {
   const docker = createMemoryDockerEngine();
   // Seed the already-running dev container (created earlier by the workspace
-  // orchestrator, not as part of the publish flow) so commitContainer can find it.
+  // orchestrator, not as part of the publish flow) so buildImage/commit can find it.
   docker.state.containers.push({
     containerId: "dev-c1",
     spec: { name: "evcp-ws-app" },
@@ -47,8 +47,18 @@ test("happy path: checks pass, image built, prod container started, healthy depl
   assert.equal(outcome.deployment.environment, "production");
   assert.equal(outcome.deployment.commitSha, "sha1");
   assert.match(outcome.deployment.imageTag, /^evcp-production-app:sha1$/);
-  // built an image and started a production container
-  assert.equal(deps.docker.state.commits.length, 1);
+  // built a REAL production image (Dockerfile /build), not a `docker commit` snapshot
+  assert.equal(deps.docker.state.builds.length, 1);
+  assert.equal(deps.docker.state.commits.length, 0);
+  assert.equal(deps.docker.state.builds[0].imageTag, "evcp-production-app:sha1");
+  // the production Dockerfile + .dockerignore are injected into the build-context tar (extraFiles),
+  // NOT written into the dev container's /workspace — writing them there would dirty the app's git
+  // tree and break the clean-tree pre-check on the next publish.
+  assert.deepEqual([...deps.docker.state.builds[0].extraFiles].sort(), [".dockerignore", "Dockerfile"]);
+  assert.ok(
+    !deps.docker.state.execCalls.some((c) => c.cmd.join(" ").includes("/workspace/Dockerfile")),
+    "must NOT write a Dockerfile into the workspace"
+  );
   assert.ok(deps.docker.state.containers.some((c) => c.spec.name === "evcp-production-app"));
   // audit events: publish + deploy
   assert.ok(deps._audits.some((e) => e.action === "workspace.publish"));
@@ -79,6 +89,7 @@ test("pre-checks fail: no image built, returns failures, no deployment recorded"
   assert.equal(outcome.ok, false);
   assert.equal(outcome.reason, "pre_checks_failed");
   assert.ok(outcome.failures.some((f) => /build/i.test(f)));
+  assert.equal(deps.docker.state.builds.length, 0);
   assert.equal(deps.docker.state.commits.length, 0);
   assert.equal(deps.deployments.list("p1").length, 0);
 });

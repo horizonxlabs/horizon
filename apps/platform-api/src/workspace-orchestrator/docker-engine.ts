@@ -1,5 +1,6 @@
 import type { EnvironmentName } from "@evcp/types";
 import { assertValidProjectSlug } from "./postgres-provisioner";
+import type { TarFile } from "./tar-inject";
 
 export interface DevContainerSpec {
   name: string;
@@ -107,6 +108,16 @@ export interface DockerEngine {
     cmd: string[]
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
   commitContainer(containerId: string, imageTag: string): Promise<{ imageId: string }>;
+  // Build a REAL production image from the container's /workspace build context. Used by publish so
+  // deployed tiers run `next start`, not `next dev`. `extraFiles` are injected into the build-context
+  // tar IN MEMORY (e.g. the Dockerfile/.dockerignore) so nothing is written into the source
+  // workspace — writing them there would dirty its git tree and break the clean-tree pre-check.
+  buildImage(
+    sourceContainerId: string,
+    imageTag: string,
+    dockerfilePath?: string,
+    extraFiles?: TarFile[]
+  ): Promise<{ imageId: string }>;
 }
 
 interface MemoryContainer {
@@ -120,12 +131,14 @@ export function createMemoryDockerEngine(): DockerEngine & {
     containers: MemoryContainer[];
     execCalls: Array<{ containerId: string; cmd: string[] }>;
     commits: Array<{ containerId: string; imageTag: string }>;
+    builds: Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>;
   };
 } {
   const state = {
     containers: [] as MemoryContainer[],
     execCalls: [] as Array<{ containerId: string; cmd: string[] }>,
-    commits: [] as Array<{ containerId: string; imageTag: string }>
+    commits: [] as Array<{ containerId: string; imageTag: string }>,
+    builds: [] as Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>
   };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
@@ -166,6 +179,16 @@ export function createMemoryDockerEngine(): DockerEngine & {
       find(containerId);
       state.commits.push({ containerId, imageTag });
       return { imageId: `mem-image-${state.commits.length}` };
+    },
+    async buildImage(containerId, imageTag, dockerfilePath, extraFiles) {
+      find(containerId);
+      state.builds.push({
+        containerId,
+        imageTag,
+        dockerfilePath: dockerfilePath ?? "Dockerfile",
+        extraFiles: (extraFiles ?? []).map((f) => f.name)
+      });
+      return { imageId: `mem-build-${state.builds.length}` };
     }
   };
 }

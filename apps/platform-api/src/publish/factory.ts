@@ -59,6 +59,9 @@ export function createDefaultPublishStack(opts: {
       commitContainer: async () => {
         throw new Error("publish docker not wired");
       },
+      buildImage: async () => {
+        throw new Error("publish docker not wired");
+      },
       createContainer: async () => {
         throw new Error("publish docker not wired");
       },
