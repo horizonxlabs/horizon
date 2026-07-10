@@ -974,25 +974,30 @@ export class PlatformApiClient {
     projectId: string,
     environment?: "staging" | "production"
   ): Promise<PublishResultResponse | WorkspacePublishResponse> {
-    return this.request<PublishResultResponse | WorkspacePublishResponse>(
-      `/projects/${encodeURIComponent(projectId)}/publish`,
-      environment
-        ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ environment }) }
-        : { method: "POST" }
-    );
+    const path = `/projects/${encodeURIComponent(projectId)}/publish`;
+    // Container publish (staging/production) is a raw-shape route; app-store publish (no env) uses
+    // the standard enveloped API.
+    return environment
+      ? this.rawRequest<WorkspacePublishResponse>(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ environment })
+        })
+      : this.request<PublishResultResponse>(path, { method: "POST" });
   }
 
   promoteDeployment(projectId: string): Promise<WorkspacePublishResponse> {
-    return this.request<WorkspacePublishResponse>(
+    return this.rawRequest<WorkspacePublishResponse>(
       `/projects/${encodeURIComponent(projectId)}/promote`,
       { method: "POST" }
     );
   }
 
-  listDeployments(projectId: string): Promise<WorkspaceDeploymentDto[]> {
-    return this.request<WorkspaceDeploymentDto[]>(
+  async listDeployments(projectId: string): Promise<WorkspaceDeploymentDto[]> {
+    const body = await this.rawRequest<{ deployments: WorkspaceDeploymentDto[] }>(
       `/projects/${encodeURIComponent(projectId)}/deployments`
     );
+    return body.deployments ?? [];
   }
 
   listAppStoreRegistry(): Promise<AppStoreRegistryEntryDto[]> {
@@ -1144,6 +1149,27 @@ export class PlatformApiClient {
       });
     }
     return envelope.data;
+  }
+
+  // The workspace container-publish routes (publish/promote/deployments) live on a separate raw
+  // Express surface that returns bare shapes ({ deployment }, { deployments }, { error: "<code>" })
+  // rather than the { ok, data, error } envelope `request` expects. Parse those directly — routing
+  // them through `request` throws "Cannot read properties of undefined (reading 'code')" on EVERY
+  // response, success included, because there is no `envelope.ok`/`envelope.error`.
+  private async rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await this.fetcher(`${this.baseUrl}${path}`, {
+      ...init,
+      headers: this.headers(init.headers)
+    });
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      const code = typeof body.error === "string" ? body.error : `HTTP_${response.status}`;
+      const failures = Array.isArray(body.failures) ? body.failures.join("; ") : undefined;
+      const message =
+        typeof body.message === "string" ? body.message : (failures ?? code.replace(/_/g, " "));
+      throw new PlatformApiError({ code, message, status: response.status });
+    }
+    return body as T;
   }
 
   private headers(input?: HeadersInit): Headers {
