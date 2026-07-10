@@ -62,3 +62,41 @@ test("non-member is forbidden", async () => {
   });
   assert.equal(res.status, 403);
 });
+
+test("provision failure returns the workspace error instead of a generic 500", async () => {
+  const services = createPlatformApiServices();
+  const creator = services.auth.resolveCurrentUser(CREATOR);
+  const projectId = services.projects.listProjects(creator)[0].id;
+  services.workspaceOrchestrator = {
+    ...services.workspaceOrchestrator,
+    async provisionWorkspace() {
+      throw new Error("docker image evcp-workspace-next:test not found");
+    },
+    getWorkspace() {
+      return {
+        id: `ws-${projectId}`,
+        projectId,
+        slug: projectId,
+        state: "failed",
+        containerId: null,
+        cpuCores: 1,
+        memoryMb: 2048,
+        lastActivityAt: new Date(0).toISOString(),
+        lastError: "docker image evcp-workspace-next:test not found",
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString()
+      };
+    }
+  };
+
+  const res = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${projectId}/workspace/container`,
+    headers: CREATOR,
+    body: { slug: projectId }
+  });
+
+  assert.equal(res.status, 503);
+  assert.equal(res.body.error.code, "WORKSPACE_PROVISION_FAILED");
+  assert.match(res.body.error.message, /evcp-workspace-next:test not found/);
+});

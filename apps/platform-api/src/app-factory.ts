@@ -629,7 +629,7 @@ export async function executePlatformApiRequestAsync(
         body:
           result.status < 400
             ? success(result.body)
-            : failure("WORKSPACE_ERROR", String(result.body.error ?? "error"))
+            : failure(String(result.body.code ?? "WORKSPACE_ERROR"), String(result.body.error ?? "error"))
       };
     } catch (error) {
       return errorResponse(error);
