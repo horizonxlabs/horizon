@@ -21,4 +21,7 @@ test("Creator workspace hook uploads files and sends selected attachment ids to 
   assert.match(vibeHook, /selectedAttachmentIds/);
   assert.match(vibeHook, /attachmentIds/);
   assert.match(helpers, /attachmentIds/);
+  assert.doesNotMatch(helpers, /if \(after\) return/);
+  assert.match(helpers, /after === "running" \|\| after === "idle"/);
+  assert.match(helpers, /state=\$\{after\}/);
 });
