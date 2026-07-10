@@ -79,12 +79,33 @@ services:
     networks:
       - evcp-internal
 
+  litellm-db-init:
+    image: postgres:16-alpine
+    container_name: evcp-litellm-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command:
+      [
+        "sh",
+        "-lc",
+        "psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -tc \"SELECT 1 FROM pg_database WHERE datname = 'litellm'\" | grep -q 1 || psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -c 'CREATE DATABASE litellm'"
+      ]
+    networks:
+      - evcp-internal
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: evcp-litellm
     restart: unless-stopped
     depends_on:
-      - postgres
+      litellm-db-init:
+        condition: service_completed_successfully
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
       LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
@@ -93,6 +114,14 @@ services:
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    networks:
+      - evcp-internal
+
+  workspace-next-image:
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION is required}
+    container_name: evcp-workspace-next-image
+    restart: "no"
+    command: ["sh", "-lc", "echo workspace-next image available"]
     networks:
       - evcp-internal
 
@@ -109,23 +138,26 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       EVCP_LITELLM_BASE_URL: http://litellm:4000
-      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
-      EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY}/evcp-workspace-next:${EVCP_VERSION}
+      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY:?EVCP_WORKSPACE_SECRET_KEY is required}
+      EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION is required}
       EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
       EVCP_WORKSPACE_NETWORK: evcp-private-server_evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"
       EVCP_PG_HOST: postgres
       EVCP_PG_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
       EVCP_S3_HOST: minio
       EVCP_S3_PORT: "9000"
       EVCP_S3_SSL: "false"
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      EVCP_ALLOW_SIMULATE_LOGIN: "0"
     depends_on:
+      workspace-next-image:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

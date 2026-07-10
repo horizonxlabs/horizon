@@ -250,3 +250,12 @@ test("simulate-login is disabled when EVCP_ALLOW_SIMULATE_LOGIN=0", async () => 
   assert.equal(res.status, 403);
   assert.equal(res.body.error.code, "simulate_login_disabled");
 });
+
+test("mock header auth is disabled when EVCP_ALLOW_SIMULATE_LOGIN=0", async () => {
+  const exec = await buildTestExecutor({ env: { EVCP_ALLOW_SIMULATE_LOGIN: "0" } });
+  const res = await exec.asCreator({ method: "GET", path: "/auth/me" });
+
+  assert.equal(res.status, 401);
+  assert.equal(res.body.error.code, "UNAUTHORIZED");
+  assert.match(res.body.error.message, /Mock header auth is disabled/);
+});
