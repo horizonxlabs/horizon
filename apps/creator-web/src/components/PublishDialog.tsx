@@ -1,5 +1,5 @@
 import { type WorkspaceDeploymentDto } from "@evcp/api-client";
-import { ArrowUpRight, Rocket, X } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Globe, Rocket, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createCreatorPlatformClient } from "../lib/creator-client";
 
@@ -9,6 +9,15 @@ const ENVIRONMENTS: Array<{ value: TargetEnv; label: string; hint: string }> = [
   { value: "staging", label: "Staging", hint: "Test build before going live" },
   { value: "production", label: "Production", hint: "Live app your users see" }
 ];
+
+// Public URL where a healthy deployment is served (reverse-proxied by platform-api through the
+// gateway): production at /api/apps/<slug>, staging at /api/apps/<slug>/staging.
+function deploymentUrl(slug: string, environment: TargetEnv): string {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  return environment === "production"
+    ? `${base}/api/apps/${slug}`
+    : `${base}/api/apps/${slug}/staging`;
+}
 
 function latestFor(
   deployments: WorkspaceDeploymentDto[],
@@ -103,24 +112,42 @@ export function PublishDialog({ projectId, onClose }: { projectId: string; onClo
           {ENVIRONMENTS.map((environment) => {
             const current = latestFor(deployments, environment.value);
             const selected = target === environment.value;
+            const url =
+              current && current.healthStatus === "healthy"
+                ? deploymentUrl(current.slug, environment.value)
+                : undefined;
             return (
-              <button
-                type="button"
-                key={environment.value}
-                role="radio"
-                aria-checked={selected}
-                className={`env-option ${selected ? "is-selected" : ""}`.trim()}
-                onClick={() => setTarget(environment.value)}
-              >
-                <span className="env-option-radio" aria-hidden="true" />
-                <span className="env-option-body">
-                  <strong>{environment.label}</strong>
-                  <small>{environment.hint}</small>
-                </span>
-                <span className={`env-option-status status-${current?.healthStatus ?? "none"}`}>
-                  {healthLabel(current)}
-                </span>
-              </button>
+              <div className="env-option-wrap" key={environment.value}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`env-option ${selected ? "is-selected" : ""}`.trim()}
+                  onClick={() => setTarget(environment.value)}
+                >
+                  <span className="env-option-radio" aria-hidden="true" />
+                  <span className="env-option-body">
+                    <strong>{environment.label}</strong>
+                    <small>{environment.hint}</small>
+                  </span>
+                  <span className={`env-option-status status-${current?.healthStatus ?? "none"}`}>
+                    {healthLabel(current)}
+                  </span>
+                </button>
+                {url ? (
+                  <a
+                    className="env-option-url"
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Globe size={12} aria-hidden="true" />
+                    <span className="env-option-url-text">{url}</span>
+                    <ExternalLink size={12} aria-hidden="true" />
+                  </a>
+                ) : null}
+              </div>
             );
           })}
         </div>
