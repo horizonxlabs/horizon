@@ -95,15 +95,22 @@ export async function resolveAppsTarget(
   slug: string,
   environment: EnvironmentName = "production"
 ): Promise<AppsResolution> {
-  if (!auth) {
-    return { ok: false, status: 401 };
-  }
   const current = deployments.getCurrent(slug, environment);
-  if (!current) {
+  // Only serve a healthy deployment (never proxy a failed/in-flight container publicly).
+  if (!current || current.healthStatus !== "healthy") {
     return { ok: false, status: 404 };
   }
-  if (!auth.projectIds.includes(current.projectId)) {
-    return { ok: false, status: 403 };
+  // Production is the PUBLIC live app — end users open it directly, and a plain browser navigation
+  // cannot carry the SPA's bearer token, so it must not be auth-gated. Staging is a gated preview:
+  // only members of the owning project may view it. (The proxy strips authorization/cookie before
+  // forwarding, so the deployed container never receives the caller's credentials either way.)
+  if (environment !== "production") {
+    if (!auth) {
+      return { ok: false, status: 401 };
+    }
+    if (!auth.projectIds.includes(current.projectId)) {
+      return { ok: false, status: 403 };
+    }
   }
   return { ok: true, upstream: `http://evcp-${environment}-${slug}:3000` };
 }

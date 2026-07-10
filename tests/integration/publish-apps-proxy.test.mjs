@@ -22,12 +22,17 @@ test("/apps/{slug} resolution gates on a healthy deployment and auth", async () 
   const resolved = await resolveAppsTarget(deployments, auth, "app");
   assert.deepEqual(resolved, { ok: true, upstream: "http://evcp-production-app:3000" });
 
-  // no auth → 401
-  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), { ok: false, status: 401 });
+  // production is the public live app — a plain browser navigation carries no session, so no auth
+  // still routes to the healthy container
+  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), {
+    ok: true, upstream: "http://evcp-production-app:3000"
+  });
 
-  // cross-tenant caller with a non-matching project → 403
+  // and a cross-tenant caller reaches it too (public)
   const otherAuth = { userId: "u2", roles: ["creator"], projectIds: ["other"] };
-  assert.deepEqual(await resolveAppsTarget(deployments, otherAuth, "app"), { ok: false, status: 403 });
+  assert.deepEqual(await resolveAppsTarget(deployments, otherAuth, "app"), {
+    ok: true, upstream: "http://evcp-production-app:3000"
+  });
 });
 
 test("/apps/{slug}/staging resolves independently from production", async () => {
