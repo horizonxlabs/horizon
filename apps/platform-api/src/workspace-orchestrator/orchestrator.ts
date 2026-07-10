@@ -76,6 +76,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return deps.secrets.resolveEnv(projectId).DATABASE_URL;
     },
 
+    /**
+     * The project's fully-resolved secret environment (DATABASE_URL, S3_*, LLM_GATEWAY_KEY, …)
+     * for internal server-side use only — never surfaced to the Creator. Used by the container
+     * publish stack to start production/staging containers with the same secrets as dev.
+     */
+    resolveEnv(projectId: string): Record<string, string> {
+      return deps.secrets.resolveEnv(projectId);
+    },
+
     markActivity(projectId: string): void {
       const record = records.get(projectId);
       if (record) {

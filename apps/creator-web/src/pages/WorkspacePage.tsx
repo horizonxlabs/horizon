@@ -8,7 +8,8 @@ import {
   Send
 } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
+import { PublishDialog } from "../components/PublishDialog";
 import { VibeActionRow } from "../components/VibeActionRow";
 import { WorkspaceCodePanel } from "../components/WorkspaceCodePanel";
 import { platformSessionToken } from "../lib/session";
@@ -61,6 +62,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     workspaceMode,
     setWorkspaceMode
   } = app;
+  const [showPublish, setShowPublish] = useState(false);
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
   const previewKey = selectedProject.id.replaceAll("_", "-");
@@ -111,9 +113,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </a>
           <button
             type="button"
-            title="Publish to production (Plan 5 pipeline)"
+            title="Publish to staging or production"
             className="vibe-live-control vibe-live-control-primary"
             disabled={workspaceMode === "plan"}
+            onClick={() => setShowPublish(true)}
           >
             Publish
           </button>
@@ -276,6 +279,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           )}
         </div>
       </div>
+      {showPublish ? (
+        <PublishDialog projectId={selectedProject.id} onClose={() => setShowPublish(false)} />
+      ) : null}
     </div>
   );
 }

@@ -25,6 +25,18 @@ export function failure(code: string, message: string, traceId?: string): ApiFai
     error: { code, message, traceId }
   };
 }
+export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
+export type {
+  AppDatabaseColumnDto,
+  AppDatabaseRelationshipDto,
+  AppDatabaseSampleRecordDto,
+  AppDatabaseTableDto,
+  DatabaseViewSnapshotDto,
+  WorkspaceFileDto,
+  WorkspaceFilesResponse
+} from "./workspace-resources";
+import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
+export type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
 export type {
   BusinessSettingsDto,
   BusinessSettingsInput,
@@ -50,16 +62,6 @@ import type {
   InstallerSetupInput,
   InstallerSetupResponse
 } from "./installer-types";
-export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
-export type {
-  AppDatabaseColumnDto,
-  AppDatabaseRelationshipDto,
-  AppDatabaseSampleRecordDto,
-  AppDatabaseTableDto,
-  DatabaseViewSnapshotDto,
-  WorkspaceFileDto,
-  WorkspaceFilesResponse
-} from "./workspace-resources";
 export type PlatformUserDto = {
   id: string;
   name: string;
@@ -536,33 +538,6 @@ export type PublishReviewResponse = {
   ready: boolean;
 };
 
-export type PublishRequestDto = {
-  id: string;
-  projectId?: string;
-  appId?: string;
-  status: "blocked" | "published";
-  requestedByUserId?: string;
-  manifestVersion: string;
-  blockingItems: string[];
-  createdAt?: string;
-  publishedAt?: string;
-};
-
-export type DeploymentRecordDto = {
-  id: string;
-  projectId?: string;
-  appId?: string;
-  publishRequestId?: string;
-  status: "published" | "failed";
-  environment?: "app_store";
-  route: string;
-  manifestVersion?: string;
-  prdVersion?: string;
-  frontendCheckpointId?: string;
-  publishedByUserId?: string;
-  publishedAt?: string;
-};
-
 export type AppStoreRegistryEntryDto = {
   id: string;
   appId?: string;
@@ -991,12 +966,32 @@ export class PlatformApiClient {
     );
   }
 
-  publishProject(projectId: string): Promise<PublishResultResponse> {
-    return this.request<PublishResultResponse>(
+  // Container publish (Staging → Production). The 2-arg overload is the current contract; the
+  // no-environment overload is retained for the legacy app-store publish caller (returns its shape).
+  publishProject(projectId: string): Promise<PublishResultResponse>;
+  publishProject(projectId: string, environment: "staging" | "production"): Promise<WorkspacePublishResponse>;
+  publishProject(
+    projectId: string,
+    environment?: "staging" | "production"
+  ): Promise<PublishResultResponse | WorkspacePublishResponse> {
+    return this.request<PublishResultResponse | WorkspacePublishResponse>(
       `/projects/${encodeURIComponent(projectId)}/publish`,
-      {
-        method: "POST"
-      }
+      environment
+        ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ environment }) }
+        : { method: "POST" }
+    );
+  }
+
+  promoteDeployment(projectId: string): Promise<WorkspacePublishResponse> {
+    return this.request<WorkspacePublishResponse>(
+      `/projects/${encodeURIComponent(projectId)}/promote`,
+      { method: "POST" }
+    );
+  }
+
+  listDeployments(projectId: string): Promise<WorkspaceDeploymentDto[]> {
+    return this.request<WorkspaceDeploymentDto[]>(
+      `/projects/${encodeURIComponent(projectId)}/deployments`
     );
   }
 

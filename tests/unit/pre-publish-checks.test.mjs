@@ -18,7 +18,7 @@ test("passes when build succeeds, migrations applied, tree clean", async () => {
   const migrations = createMemoryMigrationStore();
   migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
   const git = createMemoryGitPort({
-    p1: { clean: true, head: "s", migrationNames: { s: ["001_init"] } },
+    p1: { clean: true, head: "s", migrationNames: { s: ["001_init"] } }
   });
   const result = await runPrePublishChecks(
     { docker: dockerWithBuild(0), git, migrations },
@@ -31,7 +31,7 @@ test("fails and lists all failing checks", async () => {
   const migrations = createMemoryMigrationStore();
   migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
   const git = createMemoryGitPort({
-    p1: { clean: false, head: "s", migrationNames: { s: ["001_init", "002_users"] } },
+    p1: { clean: false, head: "s", migrationNames: { s: ["001_init", "002_users"] } }
   });
   const result = await runPrePublishChecks(
     { docker: dockerWithBuild(1), git, migrations },
@@ -44,14 +44,14 @@ test("fails and lists all failing checks", async () => {
   assert.ok(result.failures.some((f) => /pending migration/i.test(f) && /002_users/.test(f)));
 });
 
-test("runs next build in dev container", async () => {
+test("runs the project build script in dev container", async () => {
   const docker = dockerWithBuild(0);
   const git = createMemoryGitPort({ p1: { clean: true, head: "s", migrationNames: {} } });
   await runPrePublishChecks(
     { docker, git, migrations: createMemoryMigrationStore() },
     { projectId: "p1", slug: "app", containerId: "c1", commitSha: "s" }
   );
-  const buildCall = docker.state.execCalls.find((c) => c.cmd.join(" ").includes("next build"));
-  assert.ok(buildCall, "expected `next build` exec in dev container");
+  const buildCall = docker.state.execCalls.find((c) => c.cmd.join(" ").includes("npm run build"));
+  assert.ok(buildCall, "expected `npm run build` exec in dev container");
   assert.equal(buildCall.containerId, "c1");
 });

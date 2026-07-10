@@ -1,4 +1,6 @@
+import type { EnvironmentName } from "@evcp/types";
 import { assertValidProjectSlug } from "./postgres-provisioner";
+import type { TarFile } from "./tar-inject";
 
 export interface DevContainerSpec {
   name: string;
@@ -41,6 +43,46 @@ export function buildDevContainerSpec(input: {
   };
 }
 
+/**
+ * Build a deployed-app container spec for a given environment (staging or production). Each
+ * environment gets its own container name (`evcp-<env>-<slug>`), `evcp.env` label, and workspace
+ * volume (`evcp-ws-<slug>-<env>-data`) so a staging deploy can never corrupt production's disk.
+ * NODE_ENV is always "production" — the app runs its production build in every deployed tier.
+ */
+export function buildAppContainerSpec(
+  input: {
+    slug: string;
+    image: string;
+    env: Record<string, string>;
+    cpuCores?: number;
+    memoryMb?: number;
+    network: string;
+    workspaceVolume?: string;
+  },
+  environment: EnvironmentName
+): DevContainerSpec {
+  assertValidProjectSlug(input.slug);
+  const cpuCores = input.cpuCores ?? 1;
+  const memoryMb = input.memoryMb ?? 1024;
+  const env = { ...input.env, NODE_ENV: "production" };
+  const workspaceVolume = input.workspaceVolume ?? `evcp-ws-${input.slug}-${environment}-data`;
+  return {
+    name: `evcp-${environment}-${input.slug}`,
+    image: input.image,
+    env: Object.entries(env).map(([name, value]) => `${name}=${value}`),
+    hostConfig: {
+      NanoCpus: Math.round(cpuCores * 1_000_000_000),
+      Memory: memoryMb * 1024 * 1024,
+      NetworkMode: input.network,
+      Binds: [`${workspaceVolume}:/workspace`]
+    },
+    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": environment },
+    exposedPort: 3000,
+    publishPorts: false
+  };
+}
+
+/** Thin wrapper — production is the default deployed tier. */
 export function buildProdContainerSpec(input: {
   slug: string;
   image: string;
@@ -48,26 +90,9 @@ export function buildProdContainerSpec(input: {
   cpuCores?: number;
   memoryMb?: number;
   network: string;
-  workspaceVolume: string;
+  workspaceVolume?: string;
 }): DevContainerSpec {
-  assertValidProjectSlug(input.slug);
-  const cpuCores = input.cpuCores ?? 1;
-  const memoryMb = input.memoryMb ?? 1024;
-  const env = { ...input.env, NODE_ENV: "production" };
-  return {
-    name: `evcp-prod-${input.slug}`,
-    image: input.image,
-    env: Object.entries(env).map(([name, value]) => `${name}=${value}`),
-    hostConfig: {
-      NanoCpus: Math.round(cpuCores * 1_000_000_000),
-      Memory: memoryMb * 1024 * 1024,
-      NetworkMode: input.network,
-      Binds: [`${input.workspaceVolume}:/workspace`]
-    },
-    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": "production" },
-    exposedPort: 3000,
-    publishPorts: false
-  };
+  return buildAppContainerSpec(input, "production");
 }
 
 export interface DockerEngine {
@@ -83,6 +108,16 @@ export interface DockerEngine {
     cmd: string[]
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
   commitContainer(containerId: string, imageTag: string): Promise<{ imageId: string }>;
+  // Build a REAL production image from the container's /workspace build context. Used by publish so
+  // deployed tiers run `next start`, not `next dev`. `extraFiles` are injected into the build-context
+  // tar IN MEMORY (e.g. the Dockerfile/.dockerignore) so nothing is written into the source
+  // workspace — writing them there would dirty its git tree and break the clean-tree pre-check.
+  buildImage(
+    sourceContainerId: string,
+    imageTag: string,
+    dockerfilePath?: string,
+    extraFiles?: TarFile[]
+  ): Promise<{ imageId: string }>;
 }
 
 interface MemoryContainer {
@@ -96,12 +131,14 @@ export function createMemoryDockerEngine(): DockerEngine & {
     containers: MemoryContainer[];
     execCalls: Array<{ containerId: string; cmd: string[] }>;
     commits: Array<{ containerId: string; imageTag: string }>;
+    builds: Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>;
   };
 } {
   const state = {
     containers: [] as MemoryContainer[],
     execCalls: [] as Array<{ containerId: string; cmd: string[] }>,
-    commits: [] as Array<{ containerId: string; imageTag: string }>
+    commits: [] as Array<{ containerId: string; imageTag: string }>,
+    builds: [] as Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>
   };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
@@ -142,6 +179,16 @@ export function createMemoryDockerEngine(): DockerEngine & {
       find(containerId);
       state.commits.push({ containerId, imageTag });
       return { imageId: `mem-image-${state.commits.length}` };
+    },
+    async buildImage(containerId, imageTag, dockerfilePath, extraFiles) {
+      find(containerId);
+      state.builds.push({
+        containerId,
+        imageTag,
+        dockerfilePath: dockerfilePath ?? "Dockerfile",
+        extraFiles: (extraFiles ?? []).map((f) => f.name)
+      });
+      return { imageId: `mem-build-${state.builds.length}` };
     }
   };
 }
