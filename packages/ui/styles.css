@@ -3977,6 +3977,42 @@ button {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.env-option-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.env-option-wrap .env-option {
+  width: 100%;
+}
+
+.env-option-url {
+  align-items: center;
+  align-self: flex-start;
+  background: var(--evcp-color-surface-muted);
+  border-radius: 8px;
+  color: var(--evcp-color-primary);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 6px;
+  margin-left: 26px;
+  max-width: calc(100% - 26px);
+  padding: 5px 9px;
+  text-decoration: none;
+  transition: background 150ms ease;
+}
+
+.env-option-url:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.env-option-url-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .env-option-radio {
   border: 2px solid var(--evcp-color-border);
   border-radius: var(--evcp-radius-pill);
