@@ -4,6 +4,14 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
 const compose = parse(readFileSync(new URL("../../docker/docker-compose.yml", import.meta.url), "utf8"));
+const releaseCompose = parse(
+  readFileSync(new URL("../../docker/docker-compose.release.yml", import.meta.url), "utf8")
+);
+
+function environmentEntries(service) {
+  const env = service.environment ?? {};
+  return Array.isArray(env) ? env : Object.entries(env).map(([key, value]) => `${key}=${value}`);
+}
 
 test("declares litellm service on internal network without published LLM admin port", () => {
   const litellm = compose.services.litellm;
@@ -17,13 +25,44 @@ test("declares litellm service on internal network without published LLM admin p
 test("platform-api can reach docker socket and litellm", () => {
   const api = compose.services["platform-api"];
   assert.ok(api.volumes.some((volume) => volume.includes("/var/run/docker.sock")));
-  const env = api.environment ?? {};
-  const envEntries = Array.isArray(env) ? env : Object.entries(env).map(([k, v]) => `${k}=${v}`);
-  const joined = envEntries.join("\n");
+  const joined = environmentEntries(api).join("\n");
   assert.match(joined, /EVCP_LITELLM_BASE_URL/);
   assert.match(joined, /EVCP_LITELLM_MASTER_KEY/);
   assert.match(joined, /EVCP_WORKSPACE_SECRET_KEY/);
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
+});
+
+test("release compose pulls workspace image and disables dev auth bridge", () => {
+  const imageService = releaseCompose.services["workspace-next-image"];
+  assert.ok(imageService, "release compose must include a workspace image pull/cache service");
+  assert.match(
+    imageService.image,
+    /\/evcp-workspace-next:\$\{EVCP_VERSION:\?EVCP_VERSION is required\}/
+  );
+  assert.deepEqual(imageService.command, [
+    "sh",
+    "-lc",
+    "echo workspace-next image available"
+  ]);
+
+  const api = releaseCompose.services["platform-api"];
+  assert.equal(api.depends_on["workspace-next-image"].condition, "service_completed_successfully");
+  const joined = environmentEntries(api).join("\n");
+  assert.match(joined, /EVCP_WORKSPACE_IMAGE=.*evcp-workspace-next/);
+  assert.match(joined, /EVCP_ALLOW_SIMULATE_LOGIN=0/);
+});
+
+test("release compose initializes the litellm database before litellm starts", () => {
+  const init = releaseCompose.services["litellm-db-init"];
+  assert.ok(init, "release compose must create the litellm database on fresh volumes");
+  assert.equal(init.depends_on.postgres.condition, "service_healthy");
+  assert.match(init.image, /^postgres:/);
+  assert.match(init.command.join(" "), /CREATE DATABASE litellm/);
+
+  const litellm = releaseCompose.services.litellm;
+  assert.equal(litellm.depends_on["litellm-db-init"].condition, "service_completed_successfully");
+  const joined = environmentEntries(litellm).join("\n");
+  assert.match(joined, /LITELLM_DATABASE_URL=.*@postgres:5432\/litellm/);
 });
 
 test("evcp-internal network is declared and used by workspace-facing services", () => {

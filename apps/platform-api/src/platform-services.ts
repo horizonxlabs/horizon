@@ -1896,10 +1896,7 @@ export class MockAuthService {
       };
     }
 
-    const email =
-      normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email)
-      throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    const email = this.resolveMockHeaderEmail(headers);
     return { user: this.identity.getUserByEmail(email), mode: "mock_header" };
   }
 
@@ -1932,10 +1929,7 @@ export class MockAuthService {
       };
     }
 
-    const email =
-      normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email)
-      throw new MockAuthError("Missing Authorization Bearer token or x-mock-user-email header");
+    const email = this.resolveMockHeaderEmail(headers);
     return { mode: "mock_header", email };
   }
 
@@ -1949,6 +1943,12 @@ export class MockAuthService {
     const authorization = normalizeHeader(headers, "authorization");
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
     return match?.[1];
+  }
+
+  private resolveMockHeaderEmail(headers: HeaderBag): string {
+    const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "1") === "0";
+    const email = disabled ? undefined : normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
+    if (!email) throw new MockAuthError(disabled ? "Mock header auth is disabled" : "Missing Authorization Bearer token or x-mock-user-email header"); return email;
   }
 
   private verifyPlatformSessionToken(token: string): {
