@@ -20,6 +20,7 @@ function readAllSourceFiles(dir) {
 
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminClientSource = readFileSync("apps/admin-web/src/admin-client.ts", "utf8");
 // The creator-web CreatorApp component was split across hooks/, pages/, and
 // components/ files as a pure restructure; concatenate the whole src tree so
 // source-content assertions below still see every identifier/behavior.
@@ -111,9 +112,13 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.doesNotMatch(source, /@evcp\/mock-data/);
     assert.match(source, /createPlatformApiClient/);
-    assert.match(source, /platformSessionToken/);
     assert.match(source, /local fallback/);
   }
+
+  // Admin delegates platform session-token handling to its extracted admin-client module.
+  assert.match(adminClientSource, /platformSessionToken/);
+  assert.match(creatorSource, /platformSessionToken/);
+  assert.match(storeSource, /platformSessionToken/);
 
   assert.match(adminSource, /loadAdminBootstrap/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
