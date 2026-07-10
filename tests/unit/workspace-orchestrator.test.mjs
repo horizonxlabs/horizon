@@ -90,6 +90,7 @@ test("provisioning rolls back everything when container start fails", async () =
   );
   const record = orchestrator.getWorkspace("prj-leave-tracker");
   assert.equal(record.state, "failed");
+  assert.equal(record.lastError, "docker daemon exploded");
 });
 
 test("duplicate provisioning for same project is idempotent (returns the existing workspace)", async () => {

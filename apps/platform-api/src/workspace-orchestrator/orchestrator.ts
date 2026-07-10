@@ -122,6 +122,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           cpuCores,
           memoryMb,
           lastActivityAt: now(),
+          lastError: undefined,
           createdAt: now(),
           updatedAt: now()
         });
@@ -142,6 +143,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         cpuCores,
         memoryMb,
         lastActivityAt: now(),
+        lastError: undefined,
         createdAt: now(),
         updatedAt: now()
       });
@@ -191,7 +193,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.startContainer(containerId);
 
         assertTransition(record.state, "running");
-        record = save({ ...record, state: "running", containerId, lastActivityAt: now() });
+        record = save({ ...record, state: "running", containerId, lastActivityAt: now(), lastError: undefined });
         audit({
           action: "workspace.provisioned",
           projectId: input.projectId,
@@ -207,7 +209,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           }
         }
         assertTransition(record.state, "failed");
-        record = save({ ...record, state: "failed", containerId: null });
+        record = save({ ...record, state: "failed", containerId: null, lastError: (error as Error).message });
         audit({
           action: "workspace.provision_failed",
           projectId: input.projectId,
