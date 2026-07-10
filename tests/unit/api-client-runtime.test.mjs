@@ -872,3 +872,52 @@ test("platform API client reviews publishes and lists Creator registry entries",
   assert.equal(result.deployment.status, "published");
   assert.equal(registry[0].slug, "leave-management");
 });
+
+test("workspace container publish routes parse bare (non-enveloped) shapes", async () => {
+  const dep = {
+    id: "dep-1",
+    projectId: "proj_x",
+    slug: "proj-x",
+    environment: "staging",
+    commitSha: "abc1234",
+    imageTag: "evcp-staging-proj-x:abc1234",
+    containerId: "c1",
+    publishedByUserId: "usr_1",
+    healthStatus: "healthy",
+    createdAt: "2026-07-10T00:00:00.000Z"
+  };
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    fetcher: async (url, init) => {
+      const path = String(url);
+      if (path.endsWith("/deployments")) {
+        // raw shape: { deployments: [...] }, NOT the { ok, data } envelope
+        return new Response(JSON.stringify({ deployments: [dep] }), { status: 200 });
+      }
+      if (path.endsWith("/publish")) {
+        return new Response(JSON.stringify({ deployment: dep }), { status: 201 });
+      }
+      if (path.endsWith("/promote")) {
+        // bare error shape: { error: "<code>" }
+        return new Response(JSON.stringify({ error: "no_staging_deployment", message: "no healthy staging" }), {
+          status: 409
+        });
+      }
+      throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
+    }
+  });
+
+  const deployments = await client.listDeployments("proj_x");
+  assert.equal(deployments.length, 1);
+  assert.equal(deployments[0].healthStatus, "healthy");
+
+  const published = await client.publishProject("proj_x", "staging");
+  assert.equal(published.deployment.id, "dep-1");
+
+  // The bug: a bare { error } response used to throw "Cannot read properties of undefined
+  // (reading 'code')". It must now surface the route's error code.
+  await assert.rejects(
+    () => client.promoteDeployment("proj_x"),
+    (err) => err instanceof PlatformApiError && err.code === "no_staging_deployment"
+  );
+});
