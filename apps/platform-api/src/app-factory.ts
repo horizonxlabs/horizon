@@ -50,6 +50,17 @@ import {
   type AiGovernanceRepositoryBackedService
 } from "./persistence/ai-governance-repositories";
 import {
+  createBusinessSettingsRepositoryBackedService,
+  createPrismaBusinessSettingsPersistence,
+  MemoryBusinessSettingsPersistenceClient,
+  type BusinessSettingsRepositoryBackedService
+} from "./persistence/business-settings-repositories";
+import {
+  isPersistenceBusinessSettingsRoute,
+  registerSetupRoutes,
+  resolveSetupRequest
+} from "./setup-routes";
+import {
   createPrdRepositoryBackedService,
   createPrismaPrdPersistence,
   MemoryPrdPersistenceClient,
@@ -96,6 +107,10 @@ type RouteRegistry = {
     path: string,
     handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
   ) => void;
+  put: (
+    path: string,
+    handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
+  ) => void;
 };
 
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
@@ -103,6 +118,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistenceClient?: CorePersistenceClient;
   credentialService?: PlatformCredentialService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
+  businessSettingsPersistence?: BusinessSettingsRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
   workspacePersistence?: WorkspaceRepositoryBackedService;
   publishStorePersistence?: PublishStoreRepositoryBackedService;
@@ -127,6 +143,9 @@ export interface PlatformRequest {
     | "/admin/installer/preflight"
     | "/admin/installer/setup"
     | "/admin/installer/reports"
+    | "/setup/status"
+    | "/setup/initialize"
+    | "/admin/business-settings"
     | "/admin/backup/policies"
     | "/admin/backup/runs"
     | "/admin/backup/pitr"
@@ -251,6 +270,9 @@ export async function createRuntimePlatformApiServices(
       aiGovernancePersistence: createAiGovernanceRepositoryBackedService(
         new MemoryAiGovernancePersistenceClient()
       ),
+      businessSettingsPersistence: createBusinessSettingsRepositoryBackedService(
+        new MemoryBusinessSettingsPersistenceClient()
+      ),
       prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
       workspacePersistence: createWorkspaceRepositoryBackedService(
         new MemoryWorkspacePersistenceClient()
@@ -266,6 +288,9 @@ export async function createRuntimePlatformApiServices(
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
+    env.DATABASE_URL
+  );
+  const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(
     env.DATABASE_URL
   );
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
@@ -286,6 +311,7 @@ export async function createRuntimePlatformApiServices(
       createCorePersistenceCredentialStore(client)
     ),
     aiGovernancePersistence,
+    businessSettingsPersistence,
     prdPersistence,
     workspacePersistence,
     publishStorePersistence,
@@ -622,6 +648,9 @@ export async function executePlatformApiRequestAsync(
   const useAiGovernancePersistence = Boolean(
     aiGovernancePersistence && isPersistenceAiGovernanceRoute(request)
   );
+  const useBusinessSettingsPersistence = Boolean(
+    services.businessSettingsPersistence && isPersistenceBusinessSettingsRoute(request)
+  );
   const usePrdPersistence = Boolean(
     corePersistence && prdPersistence && isPersistencePrdRoute(request)
   );
@@ -655,6 +684,7 @@ export async function executePlatformApiRequestAsync(
   if (
     !useCorePersistence &&
     !useAiGovernancePersistence &&
+    !useBusinessSettingsPersistence &&
     !usePrdPersistence &&
     !useWorkspacePersistence &&
     !usePublishStorePersistence &&
@@ -987,6 +1017,11 @@ export async function executePlatformApiRequestAsync(
       };
     }
 
+    const setup = await resolveSetupRequest(request, services, () =>
+      resolvePersistenceUser(services, request.headers ?? {})
+    );
+    if (setup) return setup;
+
     const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
     if (corePersistence && prdPersistence && request.method === "POST" && prdGenerateMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
@@ -1141,8 +1176,20 @@ export async function executePlatformApiRequestAsync(
       }
 
       if (agentMode === "plan") {
-        const planned = await workspacePersistence.planPrompt(user, { project, baseline, prompt, guardrail });
-        await corePersistence.recordAudit({ actorId: user.id, action: "workspace.prompt.plan_only", resourceType: "workspace_task", resourceId: planned.task.id, severity: "info", metadata: { projectId: project.id } });
+        const planned = await workspacePersistence.planPrompt(user, {
+          project,
+          baseline,
+          prompt,
+          guardrail
+        });
+        await corePersistence.recordAudit({
+          actorId: user.id,
+          action: "workspace.prompt.plan_only",
+          resourceType: "workspace_task",
+          resourceId: planned.task.id,
+          severity: "info",
+          metadata: { projectId: project.id }
+        });
         return { status: HttpStatus.OK, body: success(planned) };
       }
 
@@ -2497,9 +2544,15 @@ export function executePlatformApiRequest(
         projectFileCompleteMatch[1],
         projectFileCompleteMatch[2],
         {
-          scanStatus: request.body?.scanStatus ? (String(request.body.scanStatus) as never) : undefined,
-          extractedText: request.body?.extractedText ? String(request.body.extractedText) : undefined,
-          excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
+          scanStatus: request.body?.scanStatus
+            ? (String(request.body.scanStatus) as never)
+            : undefined,
+          extractedText: request.body?.extractedText
+            ? String(request.body.extractedText)
+            : undefined,
+          excerpts: Array.isArray(request.body?.excerpts)
+            ? request.body.excerpts.map(String)
+            : undefined
         }
       );
       return { status: HttpStatus.OK, body: success(result) };
@@ -2944,6 +2997,9 @@ function registerPlatformRoutes(
         body: request.body
       })
     )
+  );
+  registerSetupRoutes(routes, (response, platformRequest) =>
+    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, platformRequest))
   );
   routes.post("/auth/login", (request, response) =>
     sendPlatformResponseAsync(
@@ -4147,113 +4203,34 @@ function registerPlatformRoutes(
       })
     )
   );
-  routes.get("/ai/providers", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "GET",
-        path: "/ai/providers",
-        headers: request.headers
-      })
-    )
-  );
-  routes.post("/ai/providers", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/ai/providers",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.get("/ai/api-keys", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "GET",
-        path: "/ai/api-keys",
-        headers: request.headers
-      })
-    )
-  );
-  routes.post("/ai/api-keys", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/ai/api-keys",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.post("/ai/routes", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/ai/routes",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.post("/ai/quotas", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/ai/quotas",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.post("/ai/provider-test-call", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/ai/provider-test-call",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.post("/guardrails/rules", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/guardrails/rules",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.post("/guardrails/test", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: "/guardrails/test",
-        headers: request.headers,
-        body: request.body
-      })
-    )
-  );
-  routes.get("/guardrails/events", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "GET",
-        path: "/guardrails/events",
-        headers: request.headers
-      })
-    )
-  );
+  // AI governance + guardrail routes share one dispatch shape (sync executor, success/failure
+  // envelope), so register them table-driven to keep this file focused.
+  const aiGovernanceRoutes: Array<{ method: "GET" | "POST"; path: PlatformRequest["path"] }> = [
+    { method: "GET", path: "/ai/providers" },
+    { method: "POST", path: "/ai/providers" },
+    { method: "GET", path: "/ai/api-keys" },
+    { method: "POST", path: "/ai/api-keys" },
+    { method: "POST", path: "/ai/routes" },
+    { method: "POST", path: "/ai/quotas" },
+    { method: "POST", path: "/ai/provider-test-call" },
+    { method: "POST", path: "/guardrails/rules" },
+    { method: "POST", path: "/guardrails/test" },
+    { method: "GET", path: "/guardrails/events" }
+  ];
+  for (const { method, path } of aiGovernanceRoutes) {
+    const verb = method === "GET" ? "get" : "post";
+    routes[verb](path, (request, response) =>
+      sendPlatformResponse(
+        response,
+        executePlatformApiRequest(services, {
+          method,
+          path,
+          headers: request.headers,
+          body: request.body
+        })
+      )
+    );
+  }
 }
 
 export function startWorkspaceIdleSweep(

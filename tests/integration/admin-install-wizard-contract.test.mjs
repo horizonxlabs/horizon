@@ -43,12 +43,14 @@ test("admin install wizard uses EVCP operational UI classes and responsive styli
 });
 
 test("admin first-run screen behaves like an initial product setup gate", () => {
-  assert.match(adminSource, /First-run Setup/);
-  assert.match(adminSource, /ตั้งค่า Horizon/);
-  assert.match(adminSource, /Platform Admin คนแรก/);
-  assert.match(adminSource, /firstRunSetupIsComplete/);
-  assert.match(adminSource, /Create admin & finish setup/);
-  assert.match(adminSource, /Enter Admin Console/);
+  const setupWizard = readFileSync("apps/admin-web/src/setup-wizard.tsx", "utf8");
+  const loginScreen = readFileSync("apps/admin-web/src/login-screen.tsx", "utf8");
+  assert.match(adminSource, /getSetupStatus/);
+  assert.match(adminSource, /<SetupWizard onComplete=/);
+  assert.match(adminSource, /<AdminLoginScreen onLoggedIn=/);
+  assert.match(setupWizard, /initializeSetup/);
+  assert.match(setupWizard, /businessName/);
+  assert.match(loginScreen, /auth\/login/);
   assert.match(adminSource, /firstAdminTemporaryPassword/);
 });
 

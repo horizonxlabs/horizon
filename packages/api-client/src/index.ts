@@ -25,9 +25,43 @@ export function failure(code: string, message: string, traceId?: string): ApiFai
     error: { code, message, traceId }
   };
 }
-export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources"; export type { AppDatabaseColumnDto, AppDatabaseRelationshipDto, AppDatabaseSampleRecordDto, AppDatabaseTableDto, DatabaseViewSnapshotDto, WorkspaceFileDto, WorkspaceFilesResponse } from "./workspace-resources";
+export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
+export type {
+  AppDatabaseColumnDto,
+  AppDatabaseRelationshipDto,
+  AppDatabaseSampleRecordDto,
+  AppDatabaseTableDto,
+  DatabaseViewSnapshotDto,
+  WorkspaceFileDto,
+  WorkspaceFilesResponse
+} from "./workspace-resources";
 import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
 export type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
+export type {
+  BusinessSettingsDto,
+  BusinessSettingsInput,
+  SetupInitializeInput,
+  SetupStatusDto
+} from "./setup-types";
+import type {
+  BusinessSettingsDto,
+  BusinessSettingsInput,
+  SetupInitializeInput,
+  SetupStatusDto
+} from "./setup-types";
+export type {
+  InstallerCheckDto,
+  InstallerPreflightInput,
+  InstallerReportDto,
+  InstallerSetupInput,
+  InstallerSetupResponse
+} from "./installer-types";
+import type {
+  InstallerPreflightInput,
+  InstallerReportDto,
+  InstallerSetupInput,
+  InstallerSetupResponse
+} from "./installer-types";
 export type PlatformUserDto = {
   id: string;
   name: string;
@@ -302,12 +336,7 @@ export type WorkspacePromptResultDto = {
 };
 
 export type ProjectFilePurposeDto = "ai_context" | "app_asset";
-export type ProjectFileScanStatusDto =
-  | "pending"
-  | "clean"
-  | "failed"
-  | "malicious"
-  | "quarantined";
+export type ProjectFileScanStatusDto = "pending" | "clean" | "failed" | "malicious" | "quarantined";
 
 export type ProjectFileUploadDto = {
   id: string;
@@ -376,7 +405,6 @@ export type WorkspaceSnapshotResponse = {
   usage: AiUsageLogDto[];
   tokenBudget: WorkspaceTokenBudgetDto;
 };
-
 
 export type ManagedAppDto = {
   id: string;
@@ -532,63 +560,6 @@ export type PublishResultResponse = {
   deployment: DeploymentRecordDto;
   registryEntry: AppStoreRegistryEntryDto;
   manifest: AppManifestDto;
-};
-
-export type InstallerPreflightInput = {
-  cpuCores: number;
-  memoryGb: number;
-  diskFreeGb: number;
-  os?: string;
-  dockerVersion?: string;
-  composeVersion?: string;
-  portsAvailable?: number[];
-  dnsReady?: boolean;
-  tlsReady?: boolean;
-  networkReady?: boolean;
-};
-
-export type InstallerCheckDto = {
-  name: string;
-  required: string;
-  observed: string;
-  status: "pass" | "fail";
-  action: string;
-};
-
-export type InstallerReportDto = {
-  id: string;
-  status: "passed" | "failed";
-  installBlocked: boolean;
-  reportPath: string;
-  checks: InstallerCheckDto[];
-  actionableFailures: string[];
-  composeServices?: Array<{ service: string; status: string; signal: string }>;
-  createdAt?: string;
-};
-
-export type InstallerSetupInput = {
-  domain: string;
-  databaseUrl: string;
-  storage: Record<string, string | number | boolean | undefined>;
-  auth: Record<string, unknown>;
-  ai: Record<string, unknown>;
-  guardrail: Record<string, unknown>;
-  backup: Record<string, unknown>;
-  firstAdmin: Record<string, unknown>;
-};
-
-export type InstallerSetupResponse = {
-  id: string;
-  status: "completed";
-  domain: string;
-  databaseUrlMasked: string;
-  storage: Record<string, unknown>;
-  auth: Record<string, unknown>;
-  ai: Record<string, unknown>;
-  guardrail: Record<string, unknown>;
-  backup: Record<string, unknown>;
-  firstAdmin: Record<string, unknown>;
-  createdAt?: string;
 };
 
 export type AiProviderTestCallInput = {
@@ -900,7 +871,6 @@ export class PlatformApiClient {
     );
   }
 
-
   listProjectFiles(projectId: string): Promise<ProjectFileUploadDto[]> {
     return this.request<ProjectFileUploadDto[]>(
       `/creator/projects/${encodeURIComponent(projectId)}/files`
@@ -1047,6 +1017,30 @@ export class PlatformApiClient {
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
     return this.request<InstallerReportDto[]>("/admin/installer/reports");
+  }
+
+  getSetupStatus(): Promise<SetupStatusDto> {
+    return this.request<SetupStatusDto>("/setup/status");
+  }
+
+  initializeSetup(input: SetupInitializeInput): Promise<{ setupCompleted: true }> {
+    return this.request<{ setupCompleted: true }>("/setup/initialize", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  getBusinessSettings(): Promise<BusinessSettingsDto> {
+    return this.request<BusinessSettingsDto>("/admin/business-settings");
+  }
+
+  updateBusinessSettings(input: BusinessSettingsInput): Promise<BusinessSettingsDto> {
+    return this.request<BusinessSettingsDto>("/admin/business-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   createUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {

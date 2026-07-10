@@ -43,7 +43,6 @@ import {
   KeyRound,
   ListFilter,
   LockKeyhole,
-  LogIn,
   Route,
   ServerCog,
   ShieldCheck,
@@ -52,6 +51,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { apiBaseUrl, createAdminPlatformClient, hasValidAdminSession } from "./admin-client";
+import { AdminLoginScreen } from "./login-screen";
+import { SetupWizard } from "./setup-wizard";
 
 if (typeof window !== "undefined") {
   void import("@evcp/ui/styles.css");
@@ -650,7 +652,6 @@ const initialInstallerSetupForm: InstallWizardSetupForm = {
   firstAdminTemporaryPassword: "change-me-on-first-login"
 };
 
-const firstRunSetupStorageKey = "evcp:first-run-setup-complete";
 
 const initialAiGovernanceForm: AiGovernanceForm = {
   providerName: "OpenAI Production",
@@ -849,25 +850,6 @@ function preflightRowsFromReport(
   }));
 }
 
-function apiBaseUrl(): string | undefined {
-  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
-  return (configured || "/api").replace(/\/$/, "");
-}
-
-function platformSessionToken(): string | undefined {
-  return createPlatformSessionStore(window.localStorage).getToken();
-}
-
-function createAdminPlatformClient() {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  return createPlatformApiClient({
-    baseUrl,
-    sessionToken: platformSessionToken(),
-    legacyUserEmail: "admin@company.com"
-  });
-}
-
 async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
   const client = createAdminPlatformClient();
   const currentUser: CurrentUserResponse = await client.getCurrentUser();
@@ -875,12 +857,6 @@ async function loadAdminBootstrap(): Promise<AdminBootstrapState> {
     userName: currentUser.user.name,
     source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
   };
-}
-
-async function loadOrCreateAdminSessionBridge(): Promise<AdminBootstrapState> {
-  const current = await loadAdminBootstrap().catch(() => initialAdminBootstrap);
-  if (current.source === "Platform API") return current;
-  return signInAdminSessionBridge();
 }
 
 async function signInAdminSessionBridge(): Promise<AdminBootstrapState> {
@@ -1016,16 +992,6 @@ async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<Install
     }
     throw error;
   }
-}
-
-function firstRunSetupIsComplete(): boolean {
-  return (
-    typeof window !== "undefined" && window.localStorage.getItem(firstRunSetupStorageKey) === "true"
-  );
-}
-
-function markFirstRunSetupComplete(): void {
-  window.localStorage.setItem(firstRunSetupStorageKey, "true");
 }
 
 async function listInstallerReports(): Promise<InstallerReportDto[]> {
@@ -1500,243 +1466,6 @@ const rtmRegressionRows = [
   }
 ];
 
-function FirstRunSetupScreen({
-  form,
-  installWizard,
-  savedSetup,
-  setupItems,
-  journeyRows,
-  message,
-  isRunningPreflight,
-  isCompletingSetup,
-  onFieldChange,
-  onRunPreflight,
-  onCompleteSetup,
-  onEnterConsole
-}: {
-  form: InstallWizardSetupForm;
-  installWizard: InstallWizardState;
-  savedSetup?: InstallerSetupResponse;
-  setupItems: Array<{ label: string; value: string }>;
-  journeyRows: InstallJourneyStep[];
-  message: string;
-  isRunningPreflight: boolean;
-  isCompletingSetup: boolean;
-  onFieldChange: (
-    field: keyof InstallWizardSetupForm,
-    event: ChangeEvent<HTMLInputElement>
-  ) => void;
-  onRunPreflight: () => void;
-  onCompleteSetup: () => void;
-  onEnterConsole: () => void;
-}) {
-  const visibleJourneyRows = journeyRows.filter((step) =>
-    ["preflight", "setup", "first_admin_login", "verify_health"].includes(step.id)
-  );
-  const canCompleteSetup =
-    installWizard.decision === "ready" &&
-    Boolean(
-      form.domain.trim() && form.firstAdminEmail.trim() && form.firstAdminTemporaryPassword.trim()
-    );
-  return (
-    <main className="first-run-shell">
-      <section className="first-run-hero">
-        <div>
-          <span className="eyebrow">First-run Setup</span>
-          <h1>ตั้งค่า Horizon</h1>
-          <p>ตั้งค่าระบบ private server และสร้าง Platform Admin คนแรกก่อนเปิด Admin Console</p>
-        </div>
-        <ToneBadge
-          tone={
-            savedSetup
-              ? "success"
-              : installWizard.decision === "blocked"
-                ? "danger"
-                : installWizard.decision === "ready"
-                  ? "info"
-                  : "warning"
-          }
-        >
-          {savedSetup
-            ? "setup complete"
-            : installWizard.decision === "blocked"
-              ? "blocked"
-              : installWizard.decision === "ready"
-                ? "ready"
-                : "not configured"}
-        </ToneBadge>
-      </section>
-
-      <section className="first-run-layout">
-        <aside className="first-run-progress" aria-label="First-run setup progress">
-          {visibleJourneyRows.map((step) => (
-            <article key={step.id} className={`first-run-step status-${step.status}`}>
-              <span>{step.status}</span>
-              <strong>{step.label}</strong>
-              <small>{step.owner}</small>
-            </article>
-          ))}
-        </aside>
-
-        <section className="first-run-main">
-          <SectionCard eyebrow="Private Server" title="Platform configuration">
-            <div className="first-run-form">
-              <label>
-                Platform domain
-                <input value={form.domain} onChange={(event) => onFieldChange("domain", event)} />
-              </label>
-              <label>
-                Database URL
-                <input
-                  value={form.databaseUrl}
-                  onChange={(event) => onFieldChange("databaseUrl", event)}
-                />
-              </label>
-              <label>
-                Storage endpoint
-                <input
-                  value={form.storageEndpoint}
-                  onChange={(event) => onFieldChange("storageEndpoint", event)}
-                />
-              </label>
-              <label>
-                Storage bucket
-                <input
-                  value={form.storageBucket}
-                  onChange={(event) => onFieldChange("storageBucket", event)}
-                />
-              </label>
-              <label>
-                Storage secret access key
-                <input
-                  type="password"
-                  value={form.storageSecretAccessKey}
-                  onChange={(event) => onFieldChange("storageSecretAccessKey", event)}
-                />
-              </label>
-              <label>
-                Auth issuer URL
-                <input
-                  value={form.authIssuerUrl}
-                  onChange={(event) => onFieldChange("authIssuerUrl", event)}
-                />
-              </label>
-            </div>
-          </SectionCard>
-
-          <section className="first-run-subgrid">
-            <SectionCard eyebrow="First Admin" title="Create platform admin">
-              <div className="first-run-form compact">
-                <label>
-                  Admin display name
-                  <input
-                    value={form.firstAdminName}
-                    onChange={(event) => onFieldChange("firstAdminName", event)}
-                  />
-                </label>
-                <label>
-                  Admin email
-                  <input
-                    type="email"
-                    value={form.firstAdminEmail}
-                    onChange={(event) => onFieldChange("firstAdminEmail", event)}
-                  />
-                </label>
-                <label>
-                  Temporary password
-                  <input
-                    type="password"
-                    value={form.firstAdminTemporaryPassword}
-                    onChange={(event) => onFieldChange("firstAdminTemporaryPassword", event)}
-                  />
-                </label>
-              </div>
-            </SectionCard>
-
-            <SectionCard eyebrow="AI Bootstrap" title="Default provider route">
-              <div className="first-run-form compact">
-                <label>
-                  Provider ID
-                  <input
-                    value={form.aiProviderId}
-                    onChange={(event) => onFieldChange("aiProviderId", event)}
-                  />
-                </label>
-                <label>
-                  Model
-                  <input
-                    value={form.aiModel}
-                    onChange={(event) => onFieldChange("aiModel", event)}
-                  />
-                </label>
-                <label>
-                  Guardrail policy
-                  <input
-                    value={form.guardrailPolicy}
-                    onChange={(event) => onFieldChange("guardrailPolicy", event)}
-                  />
-                </label>
-              </div>
-            </SectionCard>
-          </section>
-
-          <SectionCard eyebrow="Setup Evidence" title="Ready-to-save configuration">
-            <DefinitionGrid items={setupItems} />
-            <div className="first-run-action-row">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={onRunPreflight}
-                disabled={isRunningPreflight || isCompletingSetup}
-              >
-                <CheckCircle2 size={15} />
-                {isRunningPreflight ? "Running preflight" : "Run preflight"}
-              </button>
-              <button
-                type="button"
-                onClick={onCompleteSetup}
-                disabled={
-                  !canCompleteSetup ||
-                  isCompletingSetup ||
-                  isRunningPreflight ||
-                  Boolean(savedSetup)
-                }
-              >
-                <LockKeyhole size={15} />
-                {isCompletingSetup ? "Creating admin" : "Create admin & finish setup"}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={onEnterConsole}
-                disabled={!savedSetup}
-              >
-                <LogIn size={15} />
-                Enter Admin Console
-              </button>
-            </div>
-            <DecisionPanel
-              tone={
-                savedSetup ? "success" : installWizard.decision === "blocked" ? "danger" : "info"
-              }
-              badge={savedSetup ? "Complete" : "First-run"}
-              title={message}
-              lines={
-                savedSetup
-                  ? [
-                      "Admin Console unlocked for this browser",
-                      "Setup evidence saved with masked secrets"
-                    ]
-                  : installWizard.actionableFailures
-              }
-            />
-          </SectionCard>
-        </section>
-      </section>
-    </main>
-  );
-}
-
 function AdminApp() {
   const [bootstrap, setBootstrap] = useState(initialAdminBootstrap);
   const [installWizard, setInstallWizard] = useState(initialInstallWizardState);
@@ -1772,11 +1501,8 @@ function AdminApp() {
   const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [firstRunSetupComplete, setFirstRunSetupComplete] = useState(firstRunSetupIsComplete);
-  const [firstRunSetupMessage, setFirstRunSetupMessage] = useState(
-    "Run preflight, create the first Platform Admin, then enter the Admin Console."
-  );
-  const [isCompletingFirstRunSetup, setIsCompletingFirstRunSetup] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
+  const [sessionActive, setSessionActive] = useState<boolean>(hasValidAdminSession());
   const [createUserForm, setCreateUserForm] = useState({
     email: "",
     name: "",
@@ -1790,7 +1516,16 @@ function AdminApp() {
   >(undefined);
 
   useEffect(() => {
-    loadOrCreateAdminSessionBridge()
+    createAdminPlatformClient()
+      .getSetupStatus()
+      .then((status) => setSetupStatus(status.setupCompleted ? "complete" : "incomplete"))
+      .catch(() => setSetupStatus("incomplete"));
+  }, []);
+
+  useEffect(() => {
+    if (!sessionActive) return;
+
+    loadAdminBootstrap()
       .then(setBootstrap)
       .catch(() => setBootstrap(initialAdminBootstrap));
 
@@ -1812,7 +1547,7 @@ function AdminApp() {
         setAiGuardrailEvents([]);
         setAiGovernanceSource("local fallback");
       });
-  }, []);
+  }, [sessionActive]);
 
   useEffect(() => {
     if (bootstrap.source !== "Platform API") return;
@@ -1977,52 +1712,6 @@ function AdminApp() {
     setInstallerSetupForm((current) => ({ ...current, [field]: event.target.value }));
   }
 
-  async function handleCompleteFirstRunSetup() {
-    setIsCompletingFirstRunSetup(true);
-    setFirstRunSetupMessage(
-      "Saving setup and creating first admin evidence through the Platform API."
-    );
-    try {
-      const setup = await saveInstallerSetup(installerSetupForm);
-      setSavedInstallerSetup(setup);
-      setInstallerSetupForm((current) => ({
-        ...current,
-        domain: setup.domain,
-        databaseUrl: setup.databaseUrlMasked,
-        storageSecretAccessKey: "",
-        firstAdminTemporaryPassword: ""
-      }));
-      setInstallWizard((current) => ({
-        ...current,
-        source: "Platform API",
-        activeStep: "first_admin_login",
-        setupStatus: "saved",
-        decision: "ready",
-        actionableFailures: [
-          "Setup saved",
-          "First admin identity recorded",
-          "Admin Console can be opened"
-        ]
-      }));
-      setFirstRunSetupMessage(
-        "First-run setup complete. Enter the Admin Console with the first admin identity."
-      );
-    } catch (error) {
-      setFirstRunSetupMessage(
-        error instanceof Error
-          ? error.message
-          : "First-run setup failed. Review required fields and API connectivity."
-      );
-    } finally {
-      setIsCompletingFirstRunSetup(false);
-    }
-  }
-
-  function handleEnterAdminConsole() {
-    markFirstRunSetupComplete();
-    setFirstRunSetupComplete(true);
-  }
-
   function handleAiGovernanceField(
     field: keyof AiGovernanceForm,
     event: ChangeEvent<HTMLInputElement>
@@ -2183,23 +1872,22 @@ function AdminApp() {
     latestInstallerReport
   );
 
-  if (!firstRunSetupComplete) {
+  if (setupStatus === "loading") {
     return (
-      <FirstRunSetupScreen
-        form={installerSetupForm}
-        installWizard={installWizard}
-        savedSetup={savedInstallerSetup}
-        setupItems={installWizardSetupItems}
-        journeyRows={installJourneyRows}
-        message={firstRunSetupMessage}
-        isRunningPreflight={isRunningInstallCheck}
-        isCompletingSetup={isCompletingFirstRunSetup}
-        onFieldChange={handleInstallerSetupField}
-        onRunPreflight={() => void handleRunInstallerPreflight("ready")}
-        onCompleteSetup={() => void handleCompleteFirstRunSetup()}
-        onEnterConsole={handleEnterAdminConsole}
-      />
+      <main className="first-run-shell">
+        <section className="first-run-hero">
+          <span className="eyebrow">Loading…</span>
+        </section>
+      </main>
     );
+  }
+
+  if (setupStatus === "incomplete") {
+    return <SetupWizard onComplete={() => setSetupStatus("complete")} />;
+  }
+
+  if (!sessionActive) {
+    return <AdminLoginScreen onLoggedIn={() => setSessionActive(true)} />;
   }
 
   const aiProviderTableRows = aiProviders.length
