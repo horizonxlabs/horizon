@@ -67,17 +67,21 @@ test("promote route: 403 non-member, 409 when no staging, 201 with deployment on
   assert.equal(res.body.deployment.id, "dep-9");
 });
 
-test("resolveAppsTarget: 401 no auth, 404 no healthy deployment, 200 upstream when healthy", async () => {
+test("resolveAppsTarget: production is public — 404 until a healthy deploy, then 200 with no auth", async () => {
   const deployments = createMemoryDeploymentStore();
-  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), { ok: false, status: 401 });
-  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: [] }, "app"), { ok: false, status: 404 });
+  // No deployment yet → 404 regardless of auth (production is public, so no 401).
+  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), { ok: false, status: 404 });
 
   const dep = deployments.create({
     projectId: "p1", slug: "app", environment: "production",
     commitSha: "s", imageTag: "t", containerId: "c", publishedByUserId: "u1"
   });
+  // A pending (not-yet-healthy) deployment must not be served.
+  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), { ok: false, status: 404 });
+
   deployments.updateHealth(dep.id, "healthy");
-  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: ["p1"] }, "app"), {
+  // Healthy production → served publicly, even with NO auth (end users open the live app).
+  assert.deepEqual(await resolveAppsTarget(deployments, null, "app"), {
     ok: true, upstream: "http://evcp-production-app:3000"
   });
 });
@@ -99,14 +103,25 @@ test("resolveAppsTarget: staging environment resolves to the staging upstream, i
   assert.deepEqual(await resolveAppsTarget(deployments, auth, "app", "production"), { ok: false, status: 404 });
 });
 
-test("resolveAppsTarget: 403 when caller is not a member of the deployment's project", async () => {
+test("resolveAppsTarget: staging is member-gated (401 no auth, 403 non-member); production is public", async () => {
   const deployments = createMemoryDeploymentStore();
-  const dep = deployments.create({
-    projectId: "p1", slug: "app", environment: "production",
+  const stg = deployments.create({
+    projectId: "p1", slug: "app", environment: "staging",
     commitSha: "s", imageTag: "t", containerId: "c", publishedByUserId: "u1"
   });
-  deployments.updateHealth(dep.id, "healthy");
-  assert.deepEqual(await resolveAppsTarget(deployments, { userId: "u", roles: [], projectIds: ["other"] }, "app"), {
-    ok: false, status: 403
+  deployments.updateHealth(stg.id, "healthy");
+  const nonMember = { userId: "u", roles: [], projectIds: ["other"] };
+  // Staging preview stays gated.
+  assert.deepEqual(await resolveAppsTarget(deployments, null, "app", "staging"), { ok: false, status: 401 });
+  assert.deepEqual(await resolveAppsTarget(deployments, nonMember, "app", "staging"), { ok: false, status: 403 });
+
+  // Production is public: a non-member (and no auth) reach the healthy live app.
+  const prod = deployments.create({
+    projectId: "p1", slug: "app", environment: "production",
+    commitSha: "s", imageTag: "t", containerId: "c2", publishedByUserId: "u1"
+  });
+  deployments.updateHealth(prod.id, "healthy");
+  assert.deepEqual(await resolveAppsTarget(deployments, nonMember, "app", "production"), {
+    ok: true, upstream: "http://evcp-production-app:3000"
   });
 });
