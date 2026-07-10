@@ -37,3 +37,24 @@ test("builds a retry prompt embedding exit code and stderr", () => {
   assert.match(prompt, /exit code 1/);
   assert.match(prompt, /TS2322: type error/);
 });
+
+test("surfaces the error message when stdout/stderr are empty (e.g. the drift guard)", () => {
+  // The whole-file drift guard rejects with the instruction in `error` and empty stdout/stderr.
+  // The model must SEE that instruction to switch from a whole-file write to an edit action —
+  // otherwise it blindly retries the same rejected write until retries are exhausted.
+  const tracker = createErrorFeedbackTracker();
+  const prompt = tracker.buildRetryPrompt(
+    { id: "act-1", type: "file", filePath: "app/page.tsx" },
+    {
+      ok: false,
+      error:
+        "refusing to overwrite the existing file 'app/page.tsx' (8948 bytes) with a whole-file write. " +
+        'To change an existing file you MUST use an <action type="edit"> with a SEARCH/REPLACE block',
+      stdout: "",
+      stderr: "",
+      exitCode: -1
+    }
+  );
+  assert.match(prompt, /app\/page\.tsx/);
+  assert.match(prompt, /MUST use an <action type="edit">/);
+});

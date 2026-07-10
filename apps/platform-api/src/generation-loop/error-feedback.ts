@@ -20,7 +20,10 @@ export function createErrorFeedbackTracker(maxRounds = 2) {
           : action.type === "file" || action.type === "edit"
             ? action.filePath
             : action.name;
-      return `The previous action (${action.type}: ${command}) failed with exit code ${result.exitCode}.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}\nFix the issue and try again.`;
+      // Include `result.error` — guards (drift/locked-file) put their instruction there with empty
+      // stdout/stderr, so dropping it left the model blind to WHY it failed and it just retried the
+      // same rejected whole-file write. The error line carries the "use an <action type=edit>" steer.
+      return `The previous action (${action.type}: ${command}) failed with exit code ${result.exitCode}.\nerror:\n${result.error}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}\nFix the issue and try again.`;
     }
   };
 }
