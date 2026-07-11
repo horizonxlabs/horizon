@@ -51,6 +51,7 @@ export function buildDevContainerSpec(input: {
  */
 export function buildAppContainerSpec(
   input: {
+    projectId?: string;
     slug: string;
     image: string;
     env: Record<string, string>;
@@ -76,7 +77,12 @@ export function buildAppContainerSpec(
       NetworkMode: input.network,
       Binds: [`${workspaceVolume}:/workspace`]
     },
-    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug, "evcp.env": environment },
+    labels: {
+      "evcp.managed": "true",
+      "evcp.project-slug": input.slug,
+      "evcp.env": environment,
+      ...(input.projectId ? { "evcp.project-id": input.projectId } : {})
+    },
     exposedPort: 3000,
     publishPorts: false
   };
@@ -102,7 +108,15 @@ export interface DockerEngine {
   removeContainer(containerId: string): Promise<void>;
   // Look up an existing container by its name (e.g. "evcp-ws-<slug>"). Returns null if none.
   // Used to self-heal the orchestrator after a restart and to keep provisioning idempotent.
-  inspectContainer(name: string): Promise<{ containerId: string; running: boolean } | null>;
+  inspectContainer(
+    name: string
+  ): Promise<{
+    containerId: string;
+    running: boolean;
+    image: string;
+    labels: Record<string, string>;
+    env: string[];
+  } | null>;
   execInContainer(
     containerId: string,
     cmd: string[]
@@ -131,14 +145,24 @@ export function createMemoryDockerEngine(): DockerEngine & {
     containers: MemoryContainer[];
     execCalls: Array<{ containerId: string; cmd: string[] }>;
     commits: Array<{ containerId: string; imageTag: string }>;
-    builds: Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>;
+    builds: Array<{
+      containerId: string;
+      imageTag: string;
+      dockerfilePath: string;
+      extraFiles: TarFile[];
+    }>;
   };
 } {
   const state = {
     containers: [] as MemoryContainer[],
     execCalls: [] as Array<{ containerId: string; cmd: string[] }>,
     commits: [] as Array<{ containerId: string; imageTag: string }>,
-    builds: [] as Array<{ containerId: string; imageTag: string; dockerfilePath: string; extraFiles: string[] }>
+    builds: [] as Array<{
+      containerId: string;
+      imageTag: string;
+      dockerfilePath: string;
+      extraFiles: TarFile[];
+    }>
   };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
@@ -167,7 +191,13 @@ export function createMemoryDockerEngine(): DockerEngine & {
     async inspectContainer(name) {
       const container = state.containers.find((item) => item.spec.name === name);
       return container
-        ? { containerId: container.containerId, running: container.status === "running" }
+        ? {
+            containerId: container.containerId,
+            running: container.status === "running",
+            image: container.spec.image,
+            labels: { ...container.spec.labels },
+            env: [...container.spec.env]
+          }
         : null;
     },
     async execInContainer(containerId, cmd) {
@@ -186,7 +216,7 @@ export function createMemoryDockerEngine(): DockerEngine & {
         containerId,
         imageTag,
         dockerfilePath: dockerfilePath ?? "Dockerfile",
-        extraFiles: (extraFiles ?? []).map((f) => f.name)
+        extraFiles: (extraFiles ?? []).map((file) => ({ ...file }))
       });
       return { imageId: `mem-build-${state.builds.length}` };
     }

@@ -129,13 +129,22 @@ test("provision self-heals to the existing container after a restart (empty reco
     slug: "leave-tracker"
   });
   // Simulate a platform-api restart: a fresh orchestrator (empty in-memory records) sharing the
-  // same docker engine (the container is still running). Provision must re-attach, not re-provision.
-  const healed = await createWorkspaceOrchestrator(deps).provisionWorkspace({
+  // same docker engine (the container is still running) but an empty secret store. Provision must
+  // re-attach, not re-provision, and recover its database connection from the container env.
+  const restartedDeps = {
+    ...deps,
+    secrets: createProjectSecretStore({ encryptionKeyHex: randomBytes(32).toString("hex") })
+  };
+  const healed = await createWorkspaceOrchestrator(restartedDeps).provisionWorkspace({
     projectId: "prj-leave-tracker",
     slug: "leave-tracker"
   });
   assert.equal(healed.containerId, first.containerId);
   assert.equal(healed.state, "running");
+  assert.match(
+    createWorkspaceOrchestrator(restartedDeps).getProjectDatabaseUrl("prj-leave-tracker"),
+    /^postgresql:\/\/app_prj_leave_tracker_role:/
+  );
 });
 
 test("stop/wake cycle follows state machine and audits", async () => {

@@ -66,6 +66,41 @@ test("start/stop/remove hit the right endpoints", async () => {
   ]);
 });
 
+test("inspectContainer returns image and management labels needed to restore deployed routing", async () => {
+  const engine = createDockerSocketEngine({
+    request: async () => ({
+      status: 200,
+      json: async () => ({
+        Id: "container-123",
+        State: { Running: true },
+        Config: {
+          Image: "evcp-staging-prj-123:abc123",
+          Labels: {
+            "evcp.managed": "true",
+            "evcp.project-id": "prj_123",
+            "evcp.project-slug": "prj-123",
+            "evcp.env": "staging"
+          },
+          Env: ["NODE_ENV=production"]
+        }
+      })
+    })
+  });
+
+  assert.deepEqual(await engine.inspectContainer("evcp-staging-prj-123"), {
+    containerId: "container-123",
+    running: true,
+    image: "evcp-staging-prj-123:abc123",
+    labels: {
+      "evcp.managed": "true",
+      "evcp.project-id": "prj_123",
+      "evcp.project-slug": "prj-123",
+      "evcp.env": "staging"
+    },
+    env: ["NODE_ENV=production"]
+  });
+});
+
 test("non-2xx throws a descriptive error", async () => {
   const engine = createDockerSocketEngine({
     request: async () => ({ status: 500, json: async () => ({ message: "boom" }) })

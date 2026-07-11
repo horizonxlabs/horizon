@@ -8,6 +8,11 @@
 	redir /creator /creator/ 308
 	redir /store /store/ 308
 
+	handle /horizon-logo.png {
+		rewrite * /creator/horizon-logo.png
+		reverse_proxy creator-web:80
+	}
+
 	handle /creator* {
 		reverse_proxy creator-web:80
 	}

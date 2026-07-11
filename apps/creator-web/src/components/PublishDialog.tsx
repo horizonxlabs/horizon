@@ -2,6 +2,7 @@ import { type WorkspaceDeploymentDto } from "@evcp/api-client";
 import { ArrowUpRight, ExternalLink, Globe, Rocket, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createCreatorPlatformClient } from "../lib/creator-client";
+import { deploymentUrl } from "../lib/deployment-url";
 
 type TargetEnv = "staging" | "production";
 
@@ -9,15 +10,6 @@ const ENVIRONMENTS: Array<{ value: TargetEnv; label: string; hint: string }> = [
   { value: "staging", label: "Staging", hint: "Test build before going live" },
   { value: "production", label: "Production", hint: "Live app your users see" }
 ];
-
-// Public URL where a healthy deployment is served (reverse-proxied by platform-api through the
-// gateway): production at /api/apps/<slug>, staging at /api/apps/<slug>/staging.
-function deploymentUrl(slug: string, environment: TargetEnv): string {
-  const base = typeof window !== "undefined" ? window.location.origin : "";
-  return environment === "production"
-    ? `${base}/api/apps/${slug}`
-    : `${base}/api/apps/${slug}/staging`;
-}
 
 function latestFor(
   deployments: WorkspaceDeploymentDto[],

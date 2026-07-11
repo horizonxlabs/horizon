@@ -1,6 +1,6 @@
 # docker/workspace-next.Dockerfile
 # Dev-workspace image for AI-generated Next.js projects.
-# Non-root, EXPOSE only (the orchestrator never publishes host ports).
+# EXPOSE only (the orchestrator never publishes host ports).
 FROM node:22-alpine
 
 # git is needed for the checkpoint/version-control layer (Plan 7); curl/wget for health checks.
@@ -23,13 +23,12 @@ RUN corepack enable && npm install
 
 # Ownership to the non-root user.
 RUN chown -R evcp:evcp /workspace
-USER evcp
+
+# Mounted workspaces can contain files written by host-side tooling. Start as root only long
+# enough to repair their ownership, then the entrypoint drops to the non-root workspace user.
+COPY docker/workspace-entrypoint.sh /usr/local/bin/workspace-entrypoint
+RUN chmod 755 /usr/local/bin/workspace-entrypoint
 
 EXPOSE 3000
 
-# Default: ensure dependencies match the (possibly volume-persisted) package.json — so a new
-# dependency such as `pg`, or one the AI adds, is installed even when a pre-existing workspace
-# volume shadows the image's node_modules — then run the dev server on all interfaces on 3000.
-# The install is best-effort (|| true) so the dev server still starts if the registry is briefly
-# unreachable and node_modules is already populated.
-CMD ["sh", "-lc", "npm install --no-audit --no-fund --prefer-offline >/dev/null 2>&1 || true; npm run dev -- --hostname 0.0.0.0 --port 3000 || npx next dev --hostname 0.0.0.0 --port 3000"]
+CMD ["/usr/local/bin/workspace-entrypoint"]

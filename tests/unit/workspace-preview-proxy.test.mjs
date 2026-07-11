@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
-const { resolvePreviewProxyDecision } = await import("../../apps/platform-api/src/app-factory.ts");
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
+const { resolvePreviewProxyDecision, renderPreviewUnavailableHtml, wantsPreviewJson } =
+  await import("../../apps/platform-api/src/app-factory.ts");
 
 const CREATOR = { "x-mock-user-email": "creator@company.com" };
 
@@ -21,4 +21,17 @@ test("preview decision: 401 unauth, 404 unknown slug, upstream for member", asyn
   assert.deepEqual(await resolvePreviewProxyDecision(services, CREATOR, key), {
     upstream: `http://evcp-ws-${key}:3000`
   });
+});
+
+test("preview fallback renders a browser-friendly loading page instead of raw JSON", () => {
+  assert.equal(wantsPreviewJson({ accept: "application/json" }), true);
+  assert.equal(
+    wantsPreviewJson({ accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }),
+    false
+  );
+
+  const html = renderPreviewUnavailableHtml({ status: 503 });
+  assert.match(html, /Starting workspace preview/);
+  assert.match(html, /refresh/);
+  assert.doesNotMatch(html, /preview_upstream_unreachable/);
 });

@@ -7,14 +7,34 @@ import type { DeploymentStore } from "./deployment-store";
 import type { HealthChecker } from "./health-checker";
 import { runPrePublishChecks } from "./pre-publish-checks";
 
+// Docker builds run on the host shared by every workspace. Serialize deploy work process-wide so
+// one project's image build cannot starve another project's active development container.
+let deployQueue: Promise<void> = Promise.resolve();
+
+async function withDeployQueue<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = deployQueue;
+  let release: () => void;
+  deployQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release!();
+  }
+}
+
 // Production image recipe for the generated Next.js apps. `next build` → `next start` yields a REAL
 // prod artifact: it boots in ~1s with no install-on-start, unlike the old `docker commit` snapshot
 // of the dev container (which re-ran `npm install` + `next dev` on every boot). Written into the
 // source container's /workspace at publish time and built via the Docker Engine `/build` API.
 export const PRODUCTION_DOCKERFILE = `FROM node:20-alpine
 WORKDIR /app
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund
 COPY . .
-RUN npm ci --no-audit --no-fund && npm run build
+RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["npm","start"]
@@ -26,6 +46,17 @@ export const PRODUCTION_DOCKERIGNORE = `node_modules
 .next
 .git
 `;
+
+/**
+ * The generated app's locked next.config.js reads EVCP_PREVIEW_BASE during `next build`. Inject
+ * an environment file only into the in-memory build context so each deployment emits navigation
+ * and asset URLs that return through its proxy, without replacing user config or touching dev.
+ */
+export function buildDeploymentEnvironment(slug: string, environment: EnvironmentName): string {
+  const basePath =
+    environment === "staging" ? `/api/apps/${slug}/staging` : `/api/apps/${slug}`;
+  return `EVCP_PREVIEW_BASE=${basePath}\n`;
+}
 
 export type PublishOutcome =
   | { ok: true; deployment: WorkspaceDeployment }
@@ -41,21 +72,50 @@ export interface PublishServiceDeps {
   resolveEnv: (projectId: string) => Record<string, string>;
   getDevContainerId: (projectId: string) => string;
   network?: string;
-  onAudit?: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
+  onAudit?: (event: {
+    action: string;
+    projectId: string;
+    metadata?: Record<string, unknown>;
+  }) => void;
 }
 
 export function createPublishService(deps: PublishServiceDeps) {
   const network = deps.network ?? "evcp-internal";
+  const projectLocks = new Map<string, Promise<void>>();
   const audit = (action: string, projectId: string, metadata?: Record<string, unknown>) =>
     deps.onAudit?.({ action, projectId, metadata });
+
+  // A rollback changes the source workspace's checked-out commit, and all publish operations share
+  // the same per-project Docker resources. Keep each project's deploy lifecycle atomic in-process.
+  const withProjectLock = async <T>(projectId: string, operation: () => Promise<T>): Promise<T> => {
+    const previous = projectLocks.get(projectId) ?? Promise.resolve();
+    let release: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    projectLocks.set(projectId, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release!();
+      if (projectLocks.get(projectId) === current) projectLocks.delete(projectId);
+    }
+  };
 
   // publish builds a fresh production image from the dev container's /workspace source. The
   // Dockerfile/.dockerignore are injected into the build-context tar in memory (not written to
   // /workspace) so the app's git tree stays clean and re-publish stays idempotent.
-  const buildProductionImage = async (sourceContainerId: string, imageTag: string) => {
+  const buildProductionImage = async (
+    sourceContainerId: string,
+    imageTag: string,
+    slug: string,
+    environment: EnvironmentName
+  ) => {
     await deps.docker.buildImage(sourceContainerId, imageTag, "Dockerfile", [
       { name: "Dockerfile", content: PRODUCTION_DOCKERFILE },
-      { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE }
+      { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE },
+      { name: ".env.production", content: buildDeploymentEnvironment(slug, environment) }
     ]);
   };
 
@@ -76,19 +136,25 @@ export function createPublishService(deps: PublishServiceDeps) {
     commitSha: string;
     sourceContainerId: string;
     publishedByUserId: string;
-    prepareImage: (sourceContainerId: string, imageTag: string) => Promise<void>;
+    prepareImage: (
+      sourceContainerId: string,
+      imageTag: string,
+      slug: string,
+      environment: EnvironmentName
+    ) => Promise<void>;
   }): Promise<PublishOutcome> => {
     const { environment } = input;
 
     // Materialize the environment image from the source container, tagged to the commit.
     const imageTag = `evcp-${environment}-${input.slug}:${input.commitSha}`;
-    await input.prepareImage(input.sourceContainerId, imageTag);
+    await input.prepareImage(input.sourceContainerId, imageTag, input.slug, environment);
 
     // Start a SEPARATE container for this environment. Same secrets as dev + NODE_ENV=production.
     // DB isolation note: staging reuses the project's resolveEnv (same DATABASE_URL) but gets its
     // own container + volume — true staging-DB isolation (separate schema/database) is a follow-up.
     const spec = buildAppContainerSpec(
       {
+        projectId: input.projectId,
         slug: input.slug,
         image: imageTag,
         env: deps.resolveEnv(input.projectId),
@@ -146,43 +212,48 @@ export function createPublishService(deps: PublishServiceDeps) {
       commitSha?: string;
       publishedByUserId: string;
     }): Promise<PublishOutcome> {
-      const isRollback = Boolean(input.commitSha);
-      const devContainerId = deps.getDevContainerId(input.projectId);
+      return withProjectLock(input.projectId, async () => {
+        const isRollback = Boolean(input.commitSha);
+        const devContainerId = deps.getDevContainerId(input.projectId);
 
-      // Resolve target commit (explicit = rollback/older; else current HEAD).
-      const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
-      if (isRollback) {
-        await deps.git.checkoutCommit(input.projectId, commitSha);
-      }
+        // Resolve target commit (explicit = rollback/older; else current HEAD).
+        const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
+        if (isRollback) {
+          await deps.git.checkoutCommit(input.projectId, commitSha);
+        }
 
-      audit(isRollback ? "workspace.rollback" : "workspace.publish", input.projectId, {
-        slug: input.slug,
-        environment: input.environment,
-        commitSha
-      });
-
-      // Pre-publish checks (build, migrations, clean tree) in the dev container.
-      const checks = await runPrePublishChecks(
-        { docker: deps.docker, git: deps.git, migrations: deps.migrations },
-        { projectId: input.projectId, slug: input.slug, containerId: devContainerId, commitSha }
-      );
-      if (!checks.ok) {
-        audit("workspace.publish_rejected", input.projectId, {
+        audit(isRollback ? "workspace.rollback" : "workspace.publish", input.projectId, {
           slug: input.slug,
           environment: input.environment,
-          failures: checks.failures
+          commitSha
         });
-        return { ok: false, reason: "pre_checks_failed", failures: checks.failures };
-      }
 
-      return deployFromContainer({
-        projectId: input.projectId,
-        slug: input.slug,
-        environment: input.environment,
-        commitSha,
-        sourceContainerId: devContainerId,
-        publishedByUserId: input.publishedByUserId,
-        prepareImage: buildProductionImage
+        // Pre-publish checks are deliberately lightweight: the image build below is the single
+        // isolated build step. Never invoke `npm run build` in the active dev container.
+        const checks = await runPrePublishChecks(
+          { git: deps.git, migrations: deps.migrations },
+          { projectId: input.projectId, commitSha }
+        );
+        if (!checks.ok) {
+          audit("workspace.publish_rejected", input.projectId, {
+            slug: input.slug,
+            environment: input.environment,
+            failures: checks.failures
+          });
+          return { ok: false, reason: "pre_checks_failed", failures: checks.failures };
+        }
+
+        return withDeployQueue(() =>
+          deployFromContainer({
+            projectId: input.projectId,
+            slug: input.slug,
+            environment: input.environment,
+            commitSha,
+            sourceContainerId: devContainerId,
+            publishedByUserId: input.publishedByUserId,
+            prepareImage: buildProductionImage
+          })
+        );
       });
     },
 
@@ -194,28 +265,33 @@ export function createPublishService(deps: PublishServiceDeps) {
       slug: string;
       publishedByUserId: string;
     }): Promise<PublishOutcome> {
-      const staging = deps.deployments.getCurrent(input.slug, "staging");
-      if (!staging) {
-        throw new Error(`no healthy staging deployment to promote for slug '${input.slug}'`);
-      }
-      if (!staging.containerId) {
-        throw new Error(`staging deployment '${staging.id}' has no container to promote`);
-      }
+      return withProjectLock(input.projectId, async () => {
+        const staging = deps.deployments.getCurrent(input.slug, "staging");
+        if (!staging) {
+          throw new Error(`no healthy staging deployment to promote for slug '${input.slug}'`);
+        }
+        if (!staging.containerId) {
+          throw new Error(`staging deployment '${staging.id}' has no container to promote`);
+        }
+        const sourceContainerId = staging.containerId;
 
-      audit("workspace.promote", input.projectId, {
-        slug: input.slug,
-        commitSha: staging.commitSha,
-        fromDeploymentId: staging.id
-      });
+        audit("workspace.promote", input.projectId, {
+          slug: input.slug,
+          commitSha: staging.commitSha,
+          fromDeploymentId: staging.id
+        });
 
-      return deployFromContainer({
-        projectId: input.projectId,
-        slug: input.slug,
-        environment: "production",
-        commitSha: staging.commitSha,
-        sourceContainerId: staging.containerId,
-        publishedByUserId: input.publishedByUserId,
-        prepareImage: retagFromContainer
+        return withDeployQueue(() =>
+          deployFromContainer({
+            projectId: input.projectId,
+            slug: input.slug,
+            environment: "production",
+            commitSha: staging.commitSha,
+            sourceContainerId,
+            publishedByUserId: input.publishedByUserId,
+            prepareImage: retagFromContainer
+          })
+        );
       });
     }
   };

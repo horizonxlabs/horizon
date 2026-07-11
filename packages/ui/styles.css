@@ -122,6 +122,43 @@ table {
   width: 38px;
 }
 
+.sidebar-brand:has(.sidebar-mark-logo) {
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+}
+
+.sidebar-mark-logo {
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 9px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 3px 5px;
+  width: 72px;
+}
+
+.horizon-logo {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  user-select: none;
+}
+
+.horizon-logo-mark {
+  height: 100%;
+  width: 100%;
+}
+
+.horizon-logo-wordmark {
+  height: 38px;
+  width: 132px;
+}
+
+.horizon-logo-auth {
+  height: auto;
+  width: 154px;
+}
+
 .sidebar-title {
   display: grid;
   gap: 1px;
@@ -328,6 +365,10 @@ table {
 .app-shell-collapsed .sidebar-mark {
   height: 38px;
   width: 38px;
+}
+
+.app-shell-collapsed .sidebar-mark-logo {
+  padding: 3px;
 }
 
 .app-shell-collapsed .sidebar-title,
@@ -5981,9 +6022,9 @@ button:disabled {
     color: #fff;
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 30px;
     justify-content: space-between;
-    padding: 44px 40px;
+    padding: 42px 40px;
   }
 }
 
@@ -5993,29 +6034,23 @@ button:disabled {
   gap: 10px;
 }
 
-.creator-auth-brand-mark {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 12px;
-  display: flex;
-  height: 40px;
-  justify-content: center;
-  width: 40px;
-}
-
-.creator-auth-brand-name {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.creator-auth-brand-logo {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  box-sizing: border-box;
+  padding: 6px 9px;
+  width: 152px;
 }
 
 .creator-auth-brand-copy h2 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 680;
   letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin: 0 0 24px;
+  line-height: 1.3;
+  margin: 0 0 22px;
+  max-width: 390px;
 }
 
 .creator-auth-brand-points {
@@ -6058,21 +6093,13 @@ button:disabled {
 }
 
 .creator-auth-form-head {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  margin-bottom: 4px;
+  margin-bottom: 12px;
+  min-width: 0;
 }
 
 .creator-auth-logo {
-  align-items: center;
-  background: linear-gradient(140deg, var(--evcp-color-primary, #2563eb), #1e3a8a);
-  border-radius: 11px;
-  color: #fff;
-  display: flex;
-  height: 38px;
-  justify-content: center;
-  width: 38px;
+  height: auto;
+  width: 116px;
 }
 
 .creator-auth-form h1 {
@@ -6086,7 +6113,8 @@ button:disabled {
 .creator-auth-sub {
   color: var(--evcp-color-muted, #64748b);
   font-size: 13px;
-  margin: 2px 0 0;
+  line-height: 1.35;
+  margin: 3px 0 0;
 }
 
 .creator-auth-label {
@@ -6103,7 +6131,7 @@ button:disabled {
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
   border-radius: 11px;
-  color: var(--evcp-color-muted, #94a3b8);
+  color: #7c8799;
   display: flex;
   gap: 9px;
   padding: 0 12px;
@@ -6128,6 +6156,12 @@ button:disabled {
   padding: 11px 0;
 }
 
+.creator-auth-field input::placeholder {
+  color: #9aa5b5;
+  font-weight: 500;
+  opacity: 1;
+}
+
 .creator-auth-eye {
   align-items: center;
   background: transparent;
@@ -6145,10 +6179,10 @@ button:disabled {
 
 .creator-auth-submit {
   align-items: center;
-  background: linear-gradient(140deg, var(--evcp-color-primary, #2563eb), #1d4ed8);
+  background: linear-gradient(140deg, #2563eb, #1d4ed8);
   border: 0;
   border-radius: 11px;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -6164,8 +6198,8 @@ button:disabled {
 }
 
 .creator-auth-submit:hover:not(:disabled) {
-  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.34);
-  filter: brightness(1.05);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.26);
+  filter: brightness(1.03);
 }
 
 .creator-auth-submit:active:not(:disabled) {

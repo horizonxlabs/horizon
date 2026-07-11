@@ -68,7 +68,10 @@ export function createPublishRoutes(deps: {
         });
       } catch (error) {
         // e.g. no healthy staging deployment to promote
-        return { status: 409, body: { error: "no_staging_deployment", message: (error as Error).message } };
+        return {
+          status: 409,
+          body: { error: "no_staging_deployment", message: (error as Error).message }
+        };
       }
       if (outcome.ok) {
         return { status: 201, body: { deployment: outcome.deployment } };
@@ -87,30 +90,24 @@ export function createPublishRoutes(deps: {
   };
 }
 
-export type AppsResolution = { ok: true; upstream: string } | { ok: false; status: 401 | 403 | 404 | 503 };
+export type AppsResolution = { ok: true; upstream: string } | { ok: false; status: 404 | 503 };
 
 export async function resolveAppsTarget(
   deployments: DeploymentStore,
-  auth: WorkspaceAuthContext | null,
   slug: string,
-  environment: EnvironmentName = "production"
+  environment: EnvironmentName = "production",
+  rehydrate?: () => Promise<unknown>
 ): Promise<AppsResolution> {
-  const current = deployments.getCurrent(slug, environment);
+  let current = deployments.getCurrent(slug, environment);
+  if (!current && rehydrate) {
+    await rehydrate();
+    current = deployments.getCurrent(slug, environment);
+  }
   // Only serve a healthy deployment (never proxy a failed/in-flight container publicly).
   if (!current || current.healthStatus !== "healthy") {
     return { ok: false, status: 404 };
   }
-  // Production is the PUBLIC live app — end users open it directly, and a plain browser navigation
-  // cannot carry the SPA's bearer token, so it must not be auth-gated. Staging is a gated preview:
-  // only members of the owning project may view it. (The proxy strips authorization/cookie before
-  // forwarding, so the deployed container never receives the caller's credentials either way.)
-  if (environment !== "production") {
-    if (!auth) {
-      return { ok: false, status: 401 };
-    }
-    if (!auth.projectIds.includes(current.projectId)) {
-      return { ok: false, status: 403 };
-    }
-  }
+  // Both deployed tiers are public once healthy. Publish, rollback, promote, and deployment-list
+  // routes remain member-authorized; this route only exposes a completed app to its users.
   return { ok: true, upstream: `http://evcp-${environment}-${slug}:3000` };
 }

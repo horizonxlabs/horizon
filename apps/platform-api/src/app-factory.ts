@@ -378,6 +378,96 @@ export async function resolvePreviewProxyDecision(
   return { upstream: resolution.upstream };
 }
 
+export function wantsPreviewJson(headers: HeaderBag): boolean {
+  const rawAccept = headers.accept ?? headers.Accept;
+  const accept = Array.isArray(rawAccept) ? rawAccept.join(",") : String(rawAccept ?? "");
+  return accept.includes("application/json") && !accept.includes("text/html");
+}
+
+export function renderPreviewUnavailableHtml(input: {
+  status: number;
+  title?: string;
+  message?: string;
+}): string {
+  const title = input.title ?? "Starting workspace preview";
+  const message =
+    input.message ??
+    "The workspace container is still starting. This preview will refresh automatically.";
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="3" />
+    <title>${title}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        align-items: center;
+        background:
+          radial-gradient(720px 420px at 50% 0%, rgba(37, 99, 235, 0.12), transparent 64%),
+          #f8fafc;
+        color: #0f172a;
+        display: flex;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+      }
+      main {
+        align-items: center;
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        box-shadow: 0 22px 70px rgba(15, 23, 42, 0.12);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        max-width: 420px;
+        padding: 32px;
+        text-align: center;
+      }
+      .spinner {
+        border: 3px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 999px;
+        height: 34px;
+        width: 34px;
+        animation: spin 0.9s linear infinite;
+      }
+      h1 {
+        font-size: 20px;
+        line-height: 1.25;
+        margin: 0;
+      }
+      p {
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 0;
+      }
+      small {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <main role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>${title}</h1>
+      <p>${message}</p>
+      <small>Status ${input.status}. Retrying in a moment.</small>
+    </main>
+  </body>
+</html>`;
+}
+
 async function resolvePersistenceAuth(
   services: PersistenceAwarePlatformApiServices,
   headers: HeaderBag
@@ -629,7 +719,10 @@ export async function executePlatformApiRequestAsync(
         body:
           result.status < 400
             ? success(result.body)
-            : failure(String(result.body.code ?? "WORKSPACE_ERROR"), String(result.body.error ?? "error"))
+            : failure(
+                String(result.body.code ?? "WORKSPACE_ERROR"),
+                String(result.body.error ?? "error")
+              )
       };
     } catch (error) {
       return errorResponse(error);
@@ -3117,6 +3210,22 @@ function registerPlatformRoutes(
     ? S
     : never;
   const rawApp = app.getHttpAdapter().getInstance() as unknown as RawExpress;
+  const sendPreviewUnavailable = (
+    req: PreviewReq,
+    res: PreviewRes,
+    status: number,
+    error: string,
+    message?: string
+  ) => {
+    if (wantsPreviewJson(req.headers)) {
+      res.status(status).json({ error });
+      return;
+    }
+    res.statusCode = status;
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    res.setHeader("cache-control", "no-store");
+    res.end(renderPreviewUnavailableHtml({ status, message }));
+  };
   const previewHandler = async (req: PreviewReq, res: PreviewRes) => {
     const slug = String(req.params?.slug ?? "");
     // Iframes cannot send an Authorization header, so accept a ?token= query param as an
@@ -3142,7 +3251,7 @@ function registerPlatformRoutes(
       : req.headers;
     const decision = await resolvePreviewProxyDecision(services, previewHeaders, slug);
     if ("status" in decision) {
-      res.status(decision.status).json({ error: "preview_unavailable" });
+      sendPreviewUnavailable(req, res, decision.status, "preview_unavailable");
       return;
     }
     const target = new URL(decision.upstream);
@@ -3175,7 +3284,15 @@ function registerPlatformRoutes(
       }
     );
     proxyReq.on("error", () => {
-      if (!res.headersSent) res.status(502).json({ error: "preview_upstream_unreachable" });
+      if (!res.headersSent) {
+        sendPreviewUnavailable(
+          req,
+          res,
+          503,
+          "preview_upstream_unreachable",
+          "The workspace container is booting or installing dependencies. The preview will refresh automatically."
+        );
+      }
     });
     const method = String(req.method ?? "GET").toUpperCase();
     if (method === "GET" || method === "HEAD" || req.body === undefined || req.body === null) {

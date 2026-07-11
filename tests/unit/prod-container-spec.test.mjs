@@ -34,11 +34,18 @@ test("prod spec honours explicit cpu/memory overrides", () => {
 
 test("buildAppContainerSpec parametrizes name, label, and per-env volume by environment", () => {
   const staging = buildAppContainerSpec(
-    { slug: "my-app", image: "evcp-staging-my-app:sha", env: { DATABASE_URL: "postgres://x" }, network: "evcp-internal" },
+    {
+      projectId: "prj_123",
+      slug: "my-app",
+      image: "evcp-staging-my-app:sha",
+      env: { DATABASE_URL: "postgres://x" },
+      network: "evcp-internal"
+    },
     "staging"
   );
   assert.equal(staging.name, "evcp-staging-my-app");
   assert.equal(staging.labels["evcp.env"], "staging");
+  assert.equal(staging.labels["evcp.project-id"], "prj_123");
   // default per-env volume keeps staging's disk separate from production's
   assert.ok(staging.hostConfig.Binds.includes("evcp-ws-my-app-staging-data:/workspace"));
   // NODE_ENV is production in every deployed tier (runs the production build)

@@ -24,9 +24,20 @@ test("loads the nextjs-base template with manifest", () => {
 test("locked files include platform config, prisma datasource and storage wiring", () => {
   const template = loadGoldenTemplate();
   assert.ok(isLockedFile(template, "platform.config.ts"));
+  assert.ok(isLockedFile(template, "next.config.js"));
   assert.ok(isLockedFile(template, "prisma/schema.prisma") === false, "schema models are editable");
   assert.ok(isLockedFile(template, "lib/storage.ts"));
   assert.ok(!isLockedFile(template, "app/page.tsx"));
+});
+
+test("locked Next config derives the build-time base path from the injected deployment environment", () => {
+  const template = loadGoldenTemplate();
+  const nextConfig = template.files.find((file) => file.path === "next.config.js");
+  assert.ok(nextConfig, "next.config.js must exist in the golden template");
+  assert.match(nextConfig.content, /process\.env\.EVCP_PREVIEW_BASE/);
+  assert.match(nextConfig.content, /basePath: previewBase/);
+  assert.match(nextConfig.content, /assetPrefix: previewBase/);
+  assert.match(nextConfig.content, /NEXT_PUBLIC_BASE_PATH: previewBase \|\| ""/);
 });
 
 test("template files reference env vars, never literal secrets", () => {
@@ -34,4 +45,16 @@ test("template files reference env vars, never literal secrets", () => {
   const all = template.files.map((file) => file.content).join("\n");
   assert.ok(all.includes("process.env.DATABASE_URL") || all.includes('env("DATABASE_URL")'));
   assert.ok(!/sk-[a-zA-Z0-9]{10,}/.test(all), "no literal keys in template");
+});
+
+test("starter homepage presents the AI prompt in a centered visual layout", () => {
+  const template = loadGoldenTemplate();
+  const page = template.files.find((file) => file.path === "app/page.tsx");
+  assert.ok(page, "starter homepage exists");
+  assert.match(page.content, /Your app starts here\. Ask the AI to build a feature\./);
+  assert.match(page.content, /starter-home/);
+  assert.doesNotMatch(page.content, /style jsx/, "server-rendered starter page avoids styled-jsx");
+  const moduleCss = template.files.find((file) => file.path === "app/page.module.css");
+  assert.ok(moduleCss, "starter homepage has local styles");
+  assert.doesNotMatch(moduleCss.content, /:global/, "CSS module has only locally scoped selectors");
 });

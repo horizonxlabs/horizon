@@ -98,3 +98,21 @@ docker exec -e EVCP_VIBE_LIVE=1 -e EVCP_WORKSPACE_REAL_ADAPTERS=1 -e EVCP_TEST_S
 **MVP note:** chat authenticates to LiteLLM with the master key (server-side; never shown to the Creator).
 Per-project virtual-key budgets are a follow-up. Chat history/checkpoints are in-memory (lost on
 platform-api restart) until Postgres-backed persistence lands.
+
+## Recover a workspace preview with corrupted Next.js artifacts
+
+If a workspace preview returns a Next.js module/manifest error after an older deploy flow (for
+example `Cannot find module './873.js'`), clear only the generated `.next` directory and restart
+that workspace container. This preserves project source, `node_modules`, volumes, database data,
+and its healthy staging/production deployment.
+
+For the currently affected project `prj_8be8ec6b27724896b749e10541fd6e63`:
+
+```bash
+docker exec evcp-ws-prj-8be8ec6b27724896b749e10541fd6e63 \
+  sh -lc 'rm -rf /workspace/.next'
+docker restart evcp-ws-prj-8be8ec6b27724896b749e10541fd6e63
+```
+
+Wait for `next dev` to start, then refresh the Creator workspace preview. Do not run `npm run
+build` inside a live workspace; deploy builds now run from the isolated publish build context.

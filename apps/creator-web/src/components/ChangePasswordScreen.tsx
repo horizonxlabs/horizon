@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { ShieldCheck } from "lucide-react";
+import { AlertCircle, LockKeyhole, ShieldCheck } from "lucide-react";
+import { HorizonLogo } from "./HorizonLogo";
 import { apiBaseUrl } from "../lib/routing";
 import { vibeAuthHeaders } from "../lib/session";
 
@@ -47,43 +48,59 @@ export function ChangePasswordScreen({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="creator-auth-screen">
       <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Change password">
-        <h1>Set a New Password</h1>
-        <label>
-          Current password
-          <input
-            type="password"
-            required
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            autoComplete="current-password"
-          />
+        <div className="creator-auth-form-head">
+          <HorizonLogo variant="auth" className="creator-auth-logo" />
+          <div>
+            <h1>Set a New Password</h1>
+            <p className="creator-auth-sub">Keep your Horizon workspace secure</p>
+          </div>
+        </div>
+        <label className="creator-auth-label">
+          <span>Current password</span>
+          <div className="creator-auth-field">
+            <LockKeyhole size={16} aria-hidden="true" />
+            <input
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
         </label>
-        <label>
-          New password
-          <input
-            type="password"
-            required
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            autoComplete="new-password"
-          />
+        <label className="creator-auth-label">
+          <span>New password</span>
+          <div className="creator-auth-field">
+            <LockKeyhole size={16} aria-hidden="true" />
+            <input
+              type="password"
+              required
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
         </label>
-        <label>
-          Confirm new password
-          <input
-            type="password"
-            required
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            autoComplete="new-password"
-          />
+        <label className="creator-auth-label">
+          <span>Confirm new password</span>
+          <div className="creator-auth-field">
+            <LockKeyhole size={16} aria-hidden="true" />
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
         </label>
         {errorMessage ? (
           <p role="alert" className="creator-auth-error">
+            <AlertCircle size={15} aria-hidden="true" />
             {errorMessage}
           </p>
         ) : null}
-        <button type="submit" disabled={isSubmitting}>
+        <button type="submit" className="creator-auth-submit" disabled={isSubmitting}>
           <ShieldCheck size={16} />
           {isSubmitting ? "Saving" : "Save New Password"}
         </button>

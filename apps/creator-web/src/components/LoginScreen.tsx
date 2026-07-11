@@ -7,9 +7,9 @@ import {
   Mail,
   Rocket,
   ShieldCheck,
-  Sparkles,
   Wand2
 } from "lucide-react";
+import { HorizonLogo } from "./HorizonLogo";
 import { apiBaseUrl } from "../lib/routing";
 import { persistLoginSession } from "../lib/session";
 import type { NativeLoginResult } from "../types";
@@ -32,7 +32,7 @@ async function nativeLogin(email: string, password: string): Promise<NativeLogin
 }
 
 const BRAND_POINTS = [
-  { icon: Wand2, text: "Describe it in plain language — the workspace builds it" },
+  { icon: Wand2, text: "Describe your app in plain language, then let the workspace build it" },
   { icon: Rocket, text: "Ship to staging and production in one click" },
   { icon: ShieldCheck, text: "Secrets stay platform-managed — never in your code" }
 ];
@@ -64,10 +64,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (res: NativeLoginResul
       <div className="creator-auth-shell">
         <aside className="creator-auth-brand" aria-hidden="true">
           <div className="creator-auth-brand-top">
-            <div className="creator-auth-brand-mark">
-              <Sparkles size={20} />
-            </div>
-            <span className="creator-auth-brand-name">Horizon</span>
+            <HorizonLogo variant="auth" alt="" className="creator-auth-brand-logo" />
           </div>
           <div className="creator-auth-brand-copy">
             <h2>Build internal apps just by describing them.</h2>
@@ -85,9 +82,6 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (res: NativeLoginResul
 
         <form className="creator-auth-form" onSubmit={handleSubmit} aria-label="Creator login">
           <div className="creator-auth-form-head">
-            <div className="creator-auth-logo">
-              <Sparkles size={18} />
-            </div>
             <div>
               <h1>Welcome back</h1>
               <p className="creator-auth-sub">Sign in to your Creator workspace</p>

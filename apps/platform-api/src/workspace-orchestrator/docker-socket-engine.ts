@@ -156,7 +156,16 @@ export function createDockerSocketEngine(
       if (result.status === 404) return null;
       await expect("inspect", result, [200]);
       const payload = await result.json();
-      return { containerId: String(payload.Id), running: Boolean(payload?.State?.Running) };
+      return {
+        containerId: String(payload.Id),
+        running: Boolean(payload?.State?.Running),
+        image: String(payload?.Config?.Image ?? ""),
+        labels:
+          payload?.Config?.Labels && typeof payload.Config.Labels === "object"
+            ? Object.fromEntries(Object.entries(payload.Config.Labels).map(([key, value]) => [key, String(value)]))
+            : {},
+        env: Array.isArray(payload?.Config?.Env) ? payload.Config.Env.map(String) : []
+      };
     },
     async execInContainer(containerId, cmd) {
       return runExec(containerId, cmd);
@@ -201,7 +210,9 @@ export function createDockerSocketEngine(
         : Buffer.from(archive.text ?? "", "binary");
       const leanTar = extractFirstFileContent(outerTar);
       // Remove the temp context (best effort) so it never lingers in the workspace container.
-      await runExec(sourceContainerId, ["sh", "-lc", `rm -f ${contextPath}`]).catch(() => undefined);
+      await runExec(sourceContainerId, ["sh", "-lc", `rm -f ${contextPath}`]).catch(
+        () => undefined
+      );
 
       // Inject the Dockerfile/.dockerignore into the context tar IN MEMORY (last-wins), so publish
       // never writes them into the source workspace and dirties its git tree.

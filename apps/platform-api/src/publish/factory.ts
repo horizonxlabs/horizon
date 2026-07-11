@@ -1,4 +1,5 @@
 import { createPublishService } from "./publish-service";
+import type { EnvironmentName } from "@evcp/types";
 import { createMemoryGitPort, createDockerGitPort, type GitPort } from "./git-port";
 import { createMemoryDeploymentStore, type DeploymentStore } from "./deployment-store";
 import { createHttpHealthChecker } from "./health-checker";
@@ -10,6 +11,7 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
+import { rehydrateRunningDeployment } from "./deployment-rehydration";
 
 // Shared deployment store so routes + /apps proxy read the same deployments.
 export function createDefaultPublishStack(opts: {
@@ -23,7 +25,11 @@ export function createDefaultPublishStack(opts: {
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
-}): { publishService: ReturnType<typeof createPublishService>; deployments: DeploymentStore } {
+}): {
+  publishService: ReturnType<typeof createPublishService>;
+  deployments: DeploymentStore;
+  rehydrateDeployment: (slug: string, environment: EnvironmentName) => Promise<unknown>;
+} {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
   const deployments = createMemoryDeploymentStore();
@@ -90,5 +96,12 @@ export function createDefaultPublishStack(opts: {
     onAudit: opts.onAudit
   });
 
-  return { publishService, deployments };
+  return {
+    publishService,
+    deployments,
+    rehydrateDeployment: async (slug, environment) => {
+      if (mode !== "real") return null;
+      return rehydrateRunningDeployment({ deployments, docker, slug, environment });
+    }
+  };
 }

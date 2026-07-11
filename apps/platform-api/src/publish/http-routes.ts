@@ -36,17 +36,28 @@ export interface PublishRawExpress {
   ) => void;
 }
 
-type PublishReq = Parameters<PublishRawExpress["all"]>[1] extends (req: infer Q, res: infer _S) => void
+type PublishReq = Parameters<PublishRawExpress["all"]>[1] extends (
+  req: infer Q,
+  res: infer _S
+) => void
   ? Q
   : never;
-type PublishRes = Parameters<PublishRawExpress["all"]>[1] extends (req: infer _Q, res: infer S) => void
+type PublishRes = Parameters<PublishRawExpress["all"]>[1] extends (
+  req: infer _Q,
+  res: infer S
+) => void
   ? S
   : never;
 
 function normalizeEnvironment(value: unknown): EnvironmentName {
-  return value === "staging" || value === "dev" || value === "production"
-    ? value
-    : "production";
+  return value === "staging" || value === "dev" || value === "production" ? value : "production";
+}
+
+// Caddy's `handle_path /api/*` removes `/api` before this API sees the request. Deployed Next apps
+// are built with EVCP_PREVIEW_BASE including that prefix, so reconstruct it for the upstream page
+// and every asset request; omitting it makes Next resolve a non-existent root route and return 404.
+export function deploymentProxyPath(originalUrl: string): string {
+  return `/api${originalUrl || "/"}`;
 }
 
 /**
@@ -69,11 +80,19 @@ export function registerPublishHttpRoutes(opts: {
   nodeHttp: typeof NodeHttp;
   env?: Record<string, string | undefined>;
   resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
-  recordAudit: (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) => void;
+  recordAudit: (event: {
+    action: string;
+    projectId: string;
+    metadata?: Record<string, unknown>;
+  }) => void;
 }): void {
   const { rawApp, orchestrator, nodeHttp } = opts;
 
-  const { publishService, deployments: workspaceDeployments } = createDefaultPublishStack({
+  const {
+    publishService,
+    deployments: workspaceDeployments,
+    rehydrateDeployment
+  } = createDefaultPublishStack({
     orchestrator,
     migrations: opts.migrations,
     env: opts.env,
@@ -143,21 +162,22 @@ export function registerPublishHttpRoutes(opts: {
   rawApp.all("/projects/:projectId/promote", promoteHandler);
   rawApp.all("/projects/:projectId/deployments", listDeploymentsHandler);
 
-  // Authenticated reverse proxy to a healthy deployment for the given environment (mirrors the
-  // /preview proxy). `pathPrefix` is stripped so the container sees a root-relative path.
+  // Public reverse proxy to a healthy deployment for the given environment. Publishing endpoints
+  // above remain authenticated. Deployed apps receive their full base-path URL so Next can match
+  // the EVCP_PREVIEW_BASE that was compiled into the image.
   const makeAppsHandler =
-    (environment: EnvironmentName, pathPrefix: (slug: string) => string) =>
+    (environment: EnvironmentName) =>
     async (req: PublishReq, res: PublishRes) => {
       const slug = String(req.params?.slug ?? "");
-      const auth = await opts.resolvePublishAuth(req.headers ?? {});
-      const decision = await resolveAppsTarget(workspaceDeployments, auth, slug, environment);
+      const decision = await resolveAppsTarget(workspaceDeployments, slug, environment, () =>
+        rehydrateDeployment(slug, environment)
+      );
       if (!decision.ok) {
         res.status(decision.status).json({ error: "app_unavailable" });
         return;
       }
       const target = new URL(decision.upstream);
-      const escaped = pathPrefix(slug).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const forwardPath = req.originalUrl.replace(new RegExp(`^${escaped}`), "") || "/";
+      const forwardPath = deploymentProxyPath(req.originalUrl);
       const forwardHeaders: HeaderBag = { ...req.headers, host: target.host };
       for (const key of Object.keys(forwardHeaders)) {
         if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {
@@ -197,11 +217,11 @@ export function registerPublishHttpRoutes(opts: {
 
   // Staging serve routes must be registered BEFORE the production `/apps/:slug` routes so the more
   // specific `/apps/:slug/staging` path wins.
-  const stagingHandler = makeAppsHandler("staging", (slug) => `/apps/${slug}/staging`);
+  const stagingHandler = makeAppsHandler("staging");
   rawApp.all("/apps/:slug/staging", stagingHandler);
   rawApp.all("/apps/:slug/staging/*splat", stagingHandler);
 
-  const productionHandler = makeAppsHandler("production", (slug) => `/apps/${slug}`);
+  const productionHandler = makeAppsHandler("production");
   rawApp.all("/apps/:slug", productionHandler);
   rawApp.all("/apps/:slug/*splat", productionHandler);
 }

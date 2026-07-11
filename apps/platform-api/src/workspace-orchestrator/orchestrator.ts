@@ -115,6 +115,25 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         if (!found.running) {
           await deps.docker.startContainer(found.containerId).catch(() => undefined);
         }
+        // The original container already contains the encrypted-at-rest secrets in its runtime
+        // environment. Restore the managed values when a restart happened before they were
+        // persisted (or from an older deployment that did not persist them yet).
+        for (const entry of found.env) {
+          const separator = entry.indexOf("=");
+          if (separator <= 0) continue;
+          const name = entry.slice(0, separator);
+          if (
+            name !== "DATABASE_URL" &&
+            name !== "LLM_GATEWAY_KEY" &&
+            name !== "S3_ENDPOINT" &&
+            name !== "S3_BUCKET" &&
+            name !== "S3_ACCESS_KEY" &&
+            name !== "S3_SECRET_KEY"
+          ) {
+            continue;
+          }
+          deps.secrets.put(input.projectId, name, entry.slice(separator + 1));
+        }
         const healed = save({
           id: `ws-${resourceKey}`,
           projectId: input.projectId,
