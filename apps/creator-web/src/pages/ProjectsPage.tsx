@@ -48,15 +48,15 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
     <CreatorShell
       app={app}
       content={
-        <div className="hz-home">
+        <div className="hz-home hz-projects-studio">
           <section className="hz-hero">
             <span className="hz-hero-eyebrow">
               <Sparkles size={14} aria-hidden="true" />
               Horizon AI Builder
             </span>
-            <h1 className="hz-hero-title">อยากสร้างแอปอะไรวันนี้?</h1>
+            <h1 className="hz-hero-title">วันนี้อยากสร้างอะไร?</h1>
             <p className="hz-hero-sub">
-              อธิบายปัญหาหรือแอปที่ต้องการ แล้ว Horizon จะช่วยร่าง PRD และ generate แอปให้อัตโนมัติ
+              อธิบาย workflow ผู้ใช้งาน และผลลัพธ์ที่ต้องการ แล้วให้ Horizon ช่วยสร้างแอปภายในองค์กร
             </p>
 
             <form
@@ -73,15 +73,15 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 rows={2}
-                aria-label="Describe the app to build"
+                aria-label="อธิบายแอปที่ต้องการสร้าง"
               />
               <button type="submit" className="hz-prompt-cta">
-                <span>สร้างแอป</span>
+                <span>สร้างด้วย AI</span>
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
             </form>
 
-            <div className="hz-chips" aria-label="Prompt suggestions">
+            <div className="hz-chips" aria-label="คำแนะนำสำหรับเริ่มต้นสร้างแอป">
               {PROMPT_SUGGESTIONS.map((suggestion) => (
                 <button
                   type="button"
@@ -95,10 +95,10 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
             </div>
           </section>
 
-          <section className="hz-projects">
+          <section className="hz-projects" aria-label="รายการโปรเจกต์">
             <div className="hz-projects-head">
               <h2>
-                โปรเจกต์ของคุณ <span className="hz-count">{projects.length}</span>
+                โปรเจกต์ล่าสุด <span className="hz-count">{projects.length}</span>
               </h2>
               <div className="hz-projects-tools">
                 <div className="hz-search">
@@ -107,7 +107,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                     placeholder="ค้นหาโปรเจกต์…"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    aria-label="Search projects"
+                    aria-label="ค้นหาโปรเจกต์"
                   />
                 </div>
               </div>
@@ -115,12 +115,12 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
 
             {projects.length === 0 ? (
               <div className="hz-empty">
-                {query
-                  ? `ไม่พบโปรเจกต์ที่ตรงกับ “${query}”`
-                  : "ยังไม่มีโปรเจกต์ — เริ่มจาก prompt ด้านบน"}
+                {normalized
+                  ? `ไม่พบโปรเจกต์ที่ตรงกับ “${query.trim()}” ลองใช้คำค้นอื่น`
+                  : "ยังไม่มีโปรเจกต์ เริ่มสร้างโปรเจกต์แรกจาก prompt ด้านบนได้เลย"}
               </div>
             ) : (
-              <div className="hz-grid" aria-label="Creator projects">
+              <div className="hz-grid" aria-label="รายการโปรเจกต์">
                 {projects.map((project) => {
                   const isActive = project.id === selectedProject.id;
                   return (
@@ -132,7 +132,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                       aria-current={isActive ? "true" : undefined}
                     >
                       <div className={`hz-thumb ${projectToneClass(project.id)}`}>
-                        <span className="hz-badge">{project.status}</span>
+                        <span className="hz-project-status">{project.status}</span>
                         <span className="hz-thumb-glyph">{initials(project.name)}</span>
                       </div>
                       <div className="hz-card-meta">
