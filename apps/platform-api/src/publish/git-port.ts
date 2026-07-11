@@ -19,11 +19,33 @@ interface GitDockerEngine {
  */
 export function createDockerGitPort(
   docker: GitDockerEngine,
-  getDevContainerId: (projectId: string) => string
+  getDevContainerId: (projectId: string) => string | Promise<string>
 ): GitPort {
   const run = async (projectId: string, args: string[]) => {
-    const containerId = getDevContainerId(projectId);
-    return docker.execInContainer(containerId, ["git", "-C", "/workspace", ...args]);
+    const containerId = await getDevContainerId(projectId);
+    return docker.execInContainer(containerId, [
+      "git",
+      "-c",
+      "safe.directory=/workspace",
+      "-C",
+      "/workspace",
+      ...args
+    ]);
+  };
+  const createInitialSnapshot = async (projectId: string) => {
+    const containerId = await getDevContainerId(projectId);
+    const script = [
+      "git -c safe.directory=/workspace -C /workspace config user.email >/dev/null 2>&1 || git -c safe.directory=/workspace -C /workspace config user.email 'ai@evcp.local'",
+      "git -c safe.directory=/workspace -C /workspace config user.name >/dev/null 2>&1 || git -c safe.directory=/workspace -C /workspace config user.name 'EVCP AI'",
+      "git -c safe.directory=/workspace -C /workspace add -A",
+      "git -c safe.directory=/workspace -C /workspace commit --allow-empty -q -m 'EVCP: initial workspace snapshot'"
+    ].join(" && ");
+    const result = await docker.execInContainer(containerId, ["sh", "-c", script]);
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `git initial snapshot failed (exit ${result.exitCode}): ${result.stderr.trim()}`
+      );
+    }
   };
   return {
     async isWorkingTreeClean(projectId) {
@@ -36,7 +58,23 @@ export function createDockerGitPort(
     async currentCommit(projectId) {
       const result = await run(projectId, ["rev-parse", "HEAD"]);
       if (result.exitCode !== 0) {
-        throw new Error(`git rev-parse failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+        const noCommitYet =
+          /needed a single revision|unknown revision|does not have any commits yet/i.test(
+            result.stderr
+          );
+        if (!noCommitYet) {
+          throw new Error(
+            `git rev-parse failed (exit ${result.exitCode}): ${result.stderr.trim()}`
+          );
+        }
+        await createInitialSnapshot(projectId);
+        const initialized = await run(projectId, ["rev-parse", "HEAD"]);
+        if (initialized.exitCode !== 0) {
+          throw new Error(
+            `git rev-parse failed after initial snapshot (exit ${initialized.exitCode}): ${initialized.stderr.trim()}`
+          );
+        }
+        return initialized.stdout.trim();
       }
       return result.stdout.trim();
     },
@@ -100,6 +138,6 @@ export function createMemoryGitPort(
     },
     async listMigrationNames(projectId, commitSha) {
       return repo(projectId).migrationNames[commitSha] ?? [];
-    },
+    }
   };
 }

@@ -13,6 +13,24 @@ import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { rehydrateRunningDeployment } from "./deployment-rehydration";
 
+/**
+ * Publish routes survive a Platform API restart: the workspace record is in-memory, whereas its
+ * managed dev container continues running in Docker. Re-run the orchestrator's idempotent
+ * provision operation to attach that container (and restore its runtime secrets) before publish.
+ */
+export async function getOrRecoverDevContainerId(
+  orchestrator: Pick<WorkspaceOrchestrator, "getWorkspace" | "provisionWorkspace">,
+  projectId: string
+): Promise<string> {
+  const workspace =
+    orchestrator.getWorkspace(projectId) ??
+    (await orchestrator.provisionWorkspace({ projectId, slug: projectId }));
+  if (!workspace.containerId) {
+    throw new Error(`no dev container for project '${projectId}'`);
+  }
+  return workspace.containerId;
+}
+
 // Shared deployment store so routes + /apps proxy read the same deployments.
 export function createDefaultPublishStack(opts: {
   orchestrator: WorkspaceOrchestrator;
@@ -35,13 +53,8 @@ export function createDefaultPublishStack(opts: {
   const deployments = createMemoryDeploymentStore();
   const migrations = opts.migrations ?? createMemoryMigrationStore();
 
-  const getDevContainerId = (projectId: string): string => {
-    const workspace = opts.orchestrator.getWorkspace(projectId);
-    if (!workspace?.containerId) {
-      throw new Error(`no dev container for project '${projectId}'`);
-    }
-    return workspace.containerId;
-  };
+  const getDevContainerId = (projectId: string) =>
+    getOrRecoverDevContainerId(opts.orchestrator, projectId);
 
   let docker: DockerEngine;
   let git: GitPort;
