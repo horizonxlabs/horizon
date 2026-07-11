@@ -108,7 +108,8 @@ services:
         condition: service_completed_successfully
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
-      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
+      LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]

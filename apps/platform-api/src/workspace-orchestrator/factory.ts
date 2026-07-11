@@ -27,6 +27,7 @@ export function resolveWorkspaceRuntimeOptions(
   return {
     image: env.EVCP_WORKSPACE_IMAGE,
     network: env.EVCP_WORKSPACE_NETWORK,
+    databaseName: env.POSTGRES_DB ?? "evcp",
     postgresHost: `${env.EVCP_PG_HOST ?? "postgres"}:${env.EVCP_PG_PORT ?? "5432"}`,
     s3Endpoint: `${s3Ssl ? "https" : "http"}://${env.EVCP_S3_HOST ?? "minio"}:${env.EVCP_S3_PORT ?? "9000"}`
   };

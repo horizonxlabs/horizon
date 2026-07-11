@@ -38,6 +38,7 @@ test("real mode runtime options honor release compose workspace env", () => {
   const options = resolveWorkspaceRuntimeOptions({
     EVCP_WORKSPACE_IMAGE: "ghcr.io/0xlabsteam/evcp-workspace-next:v9.9.9",
     EVCP_WORKSPACE_NETWORK: "evcp-private-server_evcp-internal",
+    POSTGRES_DB: "tenantdb",
     EVCP_PG_HOST: "postgres",
     EVCP_PG_PORT: "5432",
     EVCP_S3_HOST: "minio",
@@ -47,6 +48,7 @@ test("real mode runtime options honor release compose workspace env", () => {
 
   assert.equal(options.image, "ghcr.io/0xlabsteam/evcp-workspace-next:v9.9.9");
   assert.equal(options.network, "evcp-private-server_evcp-internal");
+  assert.equal(options.databaseName, "tenantdb");
   assert.equal(options.postgresHost, "postgres:5432");
   assert.equal(options.s3Endpoint, "http://minio:9000");
 });
