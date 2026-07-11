@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
-const compose = parse(readFileSync(new URL("../../docker/docker-compose.yml", import.meta.url), "utf8"));
+const compose = parse(
+  readFileSync(new URL("../../docker/docker-compose.yml", import.meta.url), "utf8")
+);
 const releaseCompose = parse(
   readFileSync(new URL("../../docker/docker-compose.release.yml", import.meta.url), "utf8")
 );
@@ -39,11 +41,7 @@ test("release compose pulls workspace image and disables dev auth bridge", () =>
     imageService.image,
     /\/evcp-workspace-next:\$\{EVCP_VERSION:\?EVCP_VERSION is required\}/
   );
-  assert.deepEqual(imageService.command, [
-    "sh",
-    "-lc",
-    "echo workspace-next image available"
-  ]);
+  assert.deepEqual(imageService.command, ["sh", "-lc", "echo workspace-next image available"]);
 
   const api = releaseCompose.services["platform-api"];
   assert.equal(api.depends_on["workspace-next-image"].condition, "service_completed_successfully");
@@ -61,8 +59,16 @@ test("release compose initializes the litellm database before litellm starts", (
 
   const litellm = releaseCompose.services.litellm;
   assert.equal(litellm.depends_on["litellm-db-init"].condition, "service_completed_successfully");
+  assert.ok(litellm.healthcheck, "release litellm must expose a readiness healthcheck");
   const joined = environmentEntries(litellm).join("\n");
   assert.match(joined, /LITELLM_DATABASE_URL=.*@postgres:5432\/litellm/);
+
+  const api = releaseCompose.services["platform-api"];
+  assert.equal(
+    api.depends_on.litellm.condition,
+    "service_healthy",
+    "platform-api must not generate workspace LLM keys until litellm is ready"
+  );
 });
 
 test("evcp-internal network is declared and used by workspace-facing services", () => {
@@ -76,8 +82,14 @@ test("evcp-internal network is declared and used by workspace-facing services", 
 });
 
 test("litellm config file routes at least one provider via env-referenced key", () => {
-  const config = parse(readFileSync(new URL("../../docker/litellm-config.yaml", import.meta.url), "utf8"));
+  const config = parse(
+    readFileSync(new URL("../../docker/litellm-config.yaml", import.meta.url), "utf8")
+  );
   assert.ok(Array.isArray(config.model_list) && config.model_list.length >= 1);
   const first = config.model_list[0];
-  assert.match(String(first.litellm_params.api_key), /^os\.environ\//, "keys must come from env, not literals");
+  assert.match(
+    String(first.litellm_params.api_key),
+    /^os\.environ\//,
+    "keys must come from env, not literals"
+  );
 });

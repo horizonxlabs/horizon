@@ -94,7 +94,7 @@ services:
       [
         "sh",
         "-lc",
-        "psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -tc \"SELECT 1 FROM pg_database WHERE datname = 'litellm'\" | grep -q 1 || psql -h postgres -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -c 'CREATE DATABASE litellm'"
+        'psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
       ]
     networks:
       - evcp-internal
@@ -114,6 +114,15 @@ services:
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import socket; s=socket.create_connection((''127.0.0.1'', 4000), 3); s.close()"'
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks:
       - evcp-internal
 
@@ -165,7 +174,7 @@ services:
       minio:
         condition: service_healthy
       litellm:
-        condition: service_started
+        condition: service_healthy
     networks:
       - evcp-internal
 

@@ -20,6 +20,18 @@ export function resolveWorkspaceAdapterMode(
   return env.EVCP_WORKSPACE_REAL_ADAPTERS === "1" ? "real" : "memory";
 }
 
+export function resolveWorkspaceRuntimeOptions(
+  env: Record<string, string | undefined> = process.env
+) {
+  const s3Ssl = (env.EVCP_S3_SSL ?? "false") === "true";
+  return {
+    image: env.EVCP_WORKSPACE_IMAGE,
+    network: env.EVCP_WORKSPACE_NETWORK,
+    postgresHost: `${env.EVCP_PG_HOST ?? "postgres"}:${env.EVCP_PG_PORT ?? "5432"}`,
+    s3Endpoint: `${s3Ssl ? "https" : "http"}://${env.EVCP_S3_HOST ?? "minio"}:${env.EVCP_S3_PORT ?? "9000"}`
+  };
+}
+
 export function createDefaultWorkspaceOrchestrator(
   opts: {
     secretKeyHex?: string;
@@ -36,6 +48,7 @@ export function createDefaultWorkspaceOrchestrator(
   const mode = resolveWorkspaceAdapterMode(env);
 
   if (mode === "real") {
+    const runtimeOptions = resolveWorkspaceRuntimeOptions(env);
     const pgRunSql = createPgRunSql({
       host: env.EVCP_PG_HOST ?? "postgres",
       port: Number(env.EVCP_PG_PORT ?? 5432),
@@ -83,6 +96,7 @@ export function createDefaultWorkspaceOrchestrator(
         : createMemoryLlmGatewayAdmin(),
       secrets,
       docker: createDockerSocketEngine(),
+      ...runtimeOptions,
       onAudit: opts.onAudit
     });
   }
