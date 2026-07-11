@@ -62,6 +62,7 @@ export function AppShell({
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("evcp-sidebar-collapsed") === "true";
   });
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   function handleToggleSidebar() {
     setIsSidebarCollapsed((current) => {
@@ -74,9 +75,27 @@ export function AppShell({
 
   return (
     <div
-      className={`app-shell ${tone === "light" ? "app-shell-light" : ""} ${isSidebarCollapsed ? "app-shell-collapsed" : ""}`.trim()}
+      className={`app-shell ${tone === "light" ? "app-shell-light" : ""} ${isSidebarCollapsed ? "app-shell-collapsed" : ""} ${isMobileMenuOpen ? "app-shell-mobile-open" : ""}`.trim()}
     >
-      <aside className="sidebar" aria-label={`${title} navigation`}>
+      <button
+        type="button"
+        className="app-shell-mobile-trigger"
+        aria-expanded={isMobileMenuOpen}
+        aria-controls="app-shell-sidebar"
+        aria-label="Open navigation"
+        onClick={() => setIsMobileMenuOpen(true)}
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
+      <button
+        type="button"
+        className="app-shell-mobile-backdrop"
+        aria-label="Close navigation"
+        aria-hidden={!isMobileMenuOpen}
+        tabIndex={isMobileMenuOpen ? 0 : -1}
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+      <aside id="app-shell-sidebar" className="sidebar" aria-label={`${title} navigation`}>
         <div className="sidebar-brand">
           <span className={`sidebar-mark${logo ? " sidebar-mark-logo" : ""}`} aria-hidden="true">
             {logo ?? brandMark}
@@ -94,6 +113,14 @@ export function AppShell({
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <span aria-hidden="true">{isSidebarCollapsed ? "›" : "‹"}</span>
+          </button>
+          <button
+            type="button"
+            className="sidebar-mobile-close"
+            aria-label="Close navigation"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <span aria-hidden="true">×</span>
           </button>
         </div>
         <nav className="sidebar-nav" aria-label="Primary">
