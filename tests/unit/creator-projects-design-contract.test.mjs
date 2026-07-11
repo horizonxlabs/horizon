@@ -17,3 +17,14 @@ test("creator projects B1 styles cover studio, status, focus, and responsive lay
   assert.match(css, /@media\s*\(max-width:\s*640px\)/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
 });
+
+test("creator project status uses neutral shared tokens", () => {
+  const statusRule = css.match(/\.hz-project-status\s*\{(?<declarations>[^}]*)\}/)?.groups
+    ?.declarations;
+
+  assert.ok(statusRule, "missing .hz-project-status declaration block");
+  assert.match(statusRule, /background:\s*var\(--evcp-color-surface-muted\)/);
+  assert.match(statusRule, /border:\s*1px solid var\(--evcp-color-border\)/);
+  assert.match(statusRule, /color:\s*var\(--evcp-color-muted\)/);
+  assert.doesNotMatch(statusRule, /--evcp-color-(?:success|warning|danger)/);
+});
