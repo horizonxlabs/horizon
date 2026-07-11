@@ -117,7 +117,7 @@ test("plan mode streams read-only LLM analysis without running actions or commit
   );
   assert.equal(events.at(-1).type, "done");
   assert.deepEqual(
-    chatHistory.listMessages("p1").map((message) => message.agentMode),
+    (await chatHistory.listMessages("p1")).map((message) => message.agentMode),
     ["plan", "plan"]
   );
 });

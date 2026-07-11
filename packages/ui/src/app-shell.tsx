@@ -140,10 +140,12 @@ export function AppShell({
           <span className={`sidebar-mark${logo ? " sidebar-mark-logo" : ""}`} aria-hidden="true">
             {logo ?? brandMark}
           </span>
-          <div className="sidebar-title">
-            <strong>{title}</strong>
-            <span>{tagline}</span>
-          </div>
+          {logo ? null : (
+            <div className="sidebar-title">
+              <strong>{title}</strong>
+              <span>{tagline}</span>
+            </div>
+          )}
           <button
             type="button"
             className="sidebar-toggle"

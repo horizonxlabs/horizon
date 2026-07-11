@@ -4,7 +4,8 @@ import {
   createLiteLlmCompletionClient,
   type LlmCompletionClient
 } from "./llm-client";
-import { createMemoryChatHistoryStore } from "./chat-history-store";
+import { createMemoryChatHistoryStore, type ChatHistoryStore } from "./chat-history-store";
+import { createPrismaChatHistoryStore } from "../persistence/chat-history-repository";
 import { createActionRunner } from "./action-runner";
 import { createMemoryCheckpointStore } from "./checkpoint-store";
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
@@ -21,7 +22,7 @@ import { createPgMigrationRunner } from "./migration-runner";
 
 export { createMessageParser };
 
-export function createDefaultGenerationService(opts: {
+export async function createDefaultGenerationService(opts: {
   orchestrator: WorkspaceOrchestrator;
   onAudit?: (event: {
     action: string;
@@ -36,10 +37,19 @@ export function createDefaultGenerationService(opts: {
   // Optional shared MigrationStore. Threaded from app-factory so the publish pre-checks read the
   // same applied-migrations record the generation loop writes. Falls back to a fresh memory store.
   migrations?: MigrationStore;
+  // Optional ChatHistoryStore override (tests inject a memory store directly). Falls back to a
+  // Prisma-backed store when EVCP_CORE_PERSISTENCE=prisma, so chat history survives restarts.
+  chatHistory?: ChatHistoryStore;
 }) {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
   const hasLiteLlmConfig = Boolean(env.EVCP_LITELLM_BASE_URL);
+  const corePersistenceMode = (env.EVCP_CORE_PERSISTENCE ?? "legacy").trim().toLowerCase();
+  const chatHistory: ChatHistoryStore =
+    opts.chatHistory ??
+    (corePersistenceMode === "prisma"
+      ? await createPrismaChatHistoryStore(env.DATABASE_URL)
+      : createMemoryChatHistoryStore());
 
   const llmClient: LlmCompletionClient =
     mode === "real" && hasLiteLlmConfig
@@ -66,7 +76,7 @@ export function createDefaultGenerationService(opts: {
 
   return createGenerationService({
     llmClient,
-    chatHistory: createMemoryChatHistoryStore(),
+    chatHistory,
     actionRunner: createActionRunner({
       docker,
       checkpoints: createMemoryCheckpointStore(),

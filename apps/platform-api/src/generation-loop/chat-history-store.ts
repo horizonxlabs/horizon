@@ -1,10 +1,10 @@
 import type { WorkspaceChatMessage, WorkspaceChatSummary } from "@evcp/types";
 
 export interface ChatHistoryStore {
-  appendMessage(message: WorkspaceChatMessage): void;
-  listMessages(projectId: string): WorkspaceChatMessage[];
-  putSummary(summary: WorkspaceChatSummary): void;
-  getSummary(projectId: string): WorkspaceChatSummary | null;
+  appendMessage(message: WorkspaceChatMessage): Promise<void>;
+  listMessages(projectId: string): Promise<WorkspaceChatMessage[]>;
+  putSummary(summary: WorkspaceChatSummary): Promise<void>;
+  getSummary(projectId: string): Promise<WorkspaceChatSummary | null>;
 }
 
 export function createMemoryChatHistoryStore(): ChatHistoryStore {
@@ -12,18 +12,18 @@ export function createMemoryChatHistoryStore(): ChatHistoryStore {
   const summaryByProject = new Map<string, WorkspaceChatSummary>();
 
   return {
-    appendMessage(message) {
+    async appendMessage(message) {
       const list = messagesByProject.get(message.projectId) ?? [];
       list.push(message);
       messagesByProject.set(message.projectId, list);
     },
-    listMessages(projectId) {
+    async listMessages(projectId) {
       return [...(messagesByProject.get(projectId) ?? [])];
     },
-    putSummary(summary) {
+    async putSummary(summary) {
       summaryByProject.set(summary.projectId, summary);
     },
-    getSummary(projectId) {
+    async getSummary(projectId) {
       return summaryByProject.get(projectId) ?? null;
     }
   };

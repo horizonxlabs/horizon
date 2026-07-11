@@ -22,7 +22,7 @@ test(
   async () => {
     const env = { ...process.env, EVCP_WORKSPACE_REAL_ADAPTERS: "1" };
     const orchestrator = createDefaultWorkspaceOrchestrator({ env });
-    const gen = createDefaultGenerationService({ orchestrator, env });
+    const gen = await createDefaultGenerationService({ orchestrator, env });
 
     const slug = "vibe" + Math.floor(Number(process.env.EVCP_TEST_SEED ?? "1"));
     const projectId = `proj-${slug}`;

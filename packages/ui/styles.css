@@ -130,7 +130,6 @@ table {
   background: #fff;
   border: 1px solid rgba(226, 232, 240, 0.92);
   border-radius: 9px;
-  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
   box-sizing: border-box;
   overflow: hidden;
   padding: 3px 5px;
@@ -191,6 +190,7 @@ table {
   border-radius: 8px;
   color: #94a3b8;
   display: inline-flex;
+  grid-column: 3;
   height: 30px;
   justify-content: center;
   min-height: 30px;
@@ -377,6 +377,7 @@ table {
 }
 
 .app-shell-collapsed .sidebar-toggle {
+  grid-column: auto;
   height: 30px;
   min-height: 30px;
   width: 40px;
@@ -6269,8 +6270,10 @@ button:disabled {
 .creator-auth-shell {
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 20px;
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.16);
+  border-radius: 22px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 40px 90px rgba(15, 23, 42, 0.14);
   display: grid;
   grid-template-columns: 1fr;
   max-width: 424px;
@@ -6293,13 +6296,18 @@ button:disabled {
   .creator-auth-brand {
     background:
       radial-gradient(560px 300px at 120% -10%, rgba(255, 255, 255, 0.18), transparent 60%),
+      radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
       linear-gradient(155deg, #1d4ed8 0%, #1e3a8a 60%, #0f2167 100%);
+    background-size:
+      auto,
+      18px 18px,
+      auto;
     color: #fff;
     display: flex;
     flex-direction: column;
     gap: 30px;
     justify-content: space-between;
-    padding: 42px 40px;
+    padding: 44px 40px;
   }
 }
 
@@ -6320,10 +6328,10 @@ button:disabled {
 }
 
 .creator-auth-brand-copy h2 {
-  font-size: 24px;
-  font-weight: 680;
+  font-size: 26px;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  line-height: 1.3;
+  line-height: 1.32;
   margin: 0 0 22px;
   max-width: 390px;
 }
@@ -6353,10 +6361,12 @@ button:disabled {
 }
 
 .creator-auth-brand-foot {
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;
   letter-spacing: 0.05em;
   margin: 0;
+  padding-top: 18px;
   text-transform: uppercase;
 }
 
@@ -6379,9 +6389,9 @@ button:disabled {
 
 .creator-auth-form h1 {
   color: var(--evcp-color-text, #0f172a);
-  font-size: 20px;
-  font-weight: 680;
-  letter-spacing: -0.01em;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   margin: 0;
 }
 
@@ -6393,23 +6403,26 @@ button:disabled {
 }
 
 .creator-auth-label {
-  color: var(--evcp-color-text, #0f172a);
+  color: var(--evcp-color-muted, #64748b);
   display: flex;
   flex-direction: column;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 11.5px;
+  font-weight: 650;
   gap: 7px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .creator-auth-field {
   align-items: center;
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 11px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
   color: #7c8799;
   display: flex;
   gap: 9px;
-  padding: 0 12px;
+  padding: 0 13px;
   transition:
     border-color 150ms ease,
     box-shadow 150ms ease;
@@ -6428,7 +6441,7 @@ button:disabled {
   font-size: 14px;
   min-width: 0;
   outline: none;
-  padding: 11px 0;
+  padding: 13px 0;
 }
 
 .creator-auth-field input::placeholder {
@@ -6456,16 +6469,19 @@ button:disabled {
   align-items: center;
   background: linear-gradient(140deg, #2563eb, #1d4ed8);
   border: 0;
-  border-radius: 11px;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 6px 16px rgba(29, 78, 216, 0.24);
   color: #fff;
   cursor: pointer;
   display: flex;
   font-size: 14px;
-  font-weight: 620;
+  font-weight: 640;
   justify-content: center;
+  letter-spacing: 0.01em;
   margin-top: 4px;
-  padding: 12px 14px;
+  padding: 13px 14px;
   transition:
     filter 150ms ease,
     box-shadow 150ms ease,
@@ -6473,8 +6489,11 @@ button:disabled {
 }
 
 .creator-auth-submit:hover:not(:disabled) {
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 22px rgba(29, 78, 216, 0.3);
   filter: brightness(1.03);
+  transform: translateY(-1px);
 }
 
 .creator-auth-submit:active:not(:disabled) {
@@ -6500,9 +6519,11 @@ button:disabled {
 }
 
 .creator-auth-foot {
+  border-top: 1px solid var(--evcp-color-border-soft, #eef2f7);
   color: var(--evcp-color-muted, #94a3b8);
   font-size: 12.5px;
-  margin: 2px 0 0;
+  margin: 6px 0 0;
+  padding-top: 16px;
   text-align: center;
 }
 
