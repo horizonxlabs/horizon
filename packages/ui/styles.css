@@ -123,17 +123,19 @@ table {
 }
 
 .sidebar-brand:has(.sidebar-mark-logo) {
-  grid-template-columns: 72px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 6px 4px 18px;
 }
 
 .sidebar-mark-logo {
-  background: #fff;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  border-radius: 9px;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 3px 5px;
-  width: 72px;
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  height: 44px;
+  justify-content: flex-start;
+  width: auto;
 }
 
 .horizon-logo {
@@ -143,9 +145,24 @@ table {
   user-select: none;
 }
 
-.horizon-logo-mark {
-  height: 100%;
-  width: 100%;
+/* Sidebar brand: full wordmark expanded, icon-only mark when collapsed. */
+.horizon-logo-full {
+  height: 44px;
+  width: auto;
+}
+
+.horizon-logo-icon {
+  display: none;
+  height: 34px;
+  width: auto;
+}
+
+.app-shell-collapsed .horizon-logo-full {
+  display: none;
+}
+
+.app-shell-collapsed .horizon-logo-icon {
+  display: block;
 }
 
 .horizon-logo-wordmark {
@@ -190,7 +207,7 @@ table {
   border-radius: 8px;
   color: #94a3b8;
   display: inline-flex;
-  grid-column: 3;
+  grid-column: -1;
   height: 30px;
   justify-content: center;
   min-height: 30px;
@@ -218,7 +235,8 @@ table {
   gap: 2px;
 }
 
-.sidebar-nav a {
+.sidebar-nav a,
+.sidebar-nav .disabled {
   align-items: center;
   border-radius: 9px;
   color: #93a2b8;
@@ -234,6 +252,11 @@ table {
   transition:
     background 0.15s ease,
     color 0.15s ease;
+}
+
+.sidebar-nav .disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 /* Left accent bar — hidden by default, revealed on the active item. */
@@ -291,43 +314,68 @@ table {
   opacity: 1;
 }
 
-.sidebar-footer {
-  align-items: center;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-  color: #64748b;
-  cursor: pointer;
+.sidebar-account {
+  --sidebar-account-bg: #131a2b;
+  background: var(--sidebar-account-bg);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-top: auto;
-  padding: 12px 8px 6px;
+  padding: 10px;
+  transition:
+    background 0.18s ease,
+    padding 0.18s ease;
+}
+
+.sidebar-footer {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  gap: 10px;
 }
 
 .sidebar-user-avatar {
   align-items: center;
   background: linear-gradient(135deg, #2563eb, #38bdf8);
   border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
   color: #ffffff;
   display: inline-flex;
   flex: none;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
-  height: 32px;
+  height: 36px;
   justify-content: center;
   letter-spacing: 0.01em;
-  width: 32px;
+  position: relative;
+  width: 36px;
+}
+
+.sidebar-user-avatar[data-status]::after {
+  background: #22c55e;
+  border: 2px solid var(--sidebar-account-bg, #0b1220);
+  border-radius: 999px;
+  bottom: -1px;
+  content: "";
+  height: 10px;
+  position: absolute;
+  right: -1px;
+  width: 10px;
 }
 
 .sidebar-user-meta {
   display: grid;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .sidebar-footer strong {
   color: #e6edf7;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.25;
+  font-size: 13.5px;
+  font-weight: 680;
+  line-height: 1.2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -337,13 +385,15 @@ table {
 .sidebar-session {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  padding: 4px 8px 2px;
+  padding: 0;
 }
 
 .sidebar-session :is(button, a) {
-  font-size: 11.5px;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  justify-content: center;
 }
 
 .app-shell-collapsed .sidebar-session {
@@ -368,7 +418,9 @@ table {
 }
 
 .app-shell-collapsed .sidebar-mark-logo {
-  padding: 3px;
+  justify-content: center;
+  overflow: hidden;
+  width: 38px;
 }
 
 .app-shell-collapsed .sidebar-title,
@@ -387,7 +439,8 @@ table {
   gap: 4px;
 }
 
-.app-shell-collapsed .sidebar-nav a {
+.app-shell-collapsed .sidebar-nav a,
+.app-shell-collapsed .sidebar-nav .disabled {
   gap: 0;
   grid-template-columns: 1fr;
   justify-items: center;
@@ -401,6 +454,13 @@ table {
 
 .app-shell-collapsed .sidebar-nav-label {
   display: none;
+}
+
+.app-shell-collapsed .sidebar-account {
+  background: transparent;
+  border-color: transparent;
+  gap: 0;
+  padding: 0;
 }
 
 .app-shell-collapsed .sidebar-footer {
@@ -450,6 +510,10 @@ table {
   color: var(--evcp-color-muted, #64748b);
 }
 
+.app-shell-light .sidebar-nav .disabled {
+  color: var(--evcp-color-muted, #64748b);
+}
+
 .app-shell-light .sidebar-nav a:hover {
   background: var(--evcp-color-surface-muted, #f8fafc);
   color: var(--evcp-color-text, #0f172a);
@@ -469,8 +533,9 @@ table {
   background: var(--evcp-color-primary, #2563eb);
 }
 
-.app-shell-light .sidebar-footer {
-  border-top-color: var(--evcp-color-border, #e2e8f0);
+.app-shell-light .sidebar-account {
+  --sidebar-account-bg: var(--evcp-color-surface-muted, #f8fafc);
+  border-color: var(--evcp-color-border, #e2e8f0);
 }
 
 .app-shell-light .sidebar-footer strong {
@@ -481,6 +546,12 @@ table {
   background: var(--evcp-color-surface, #fff);
   border-color: var(--evcp-color-border, #e2e8f0);
   color: var(--evcp-color-muted, #64748b);
+}
+
+.app-shell-light .sidebar-session :is(button, a):hover {
+  background: var(--evcp-color-surface-muted, #f8fafc);
+  border-color: var(--evcp-color-primary, #2563eb);
+  color: var(--evcp-color-primary-strong, #1d4ed8);
 }
 
 .content {
@@ -5019,7 +5090,8 @@ button:disabled {
     display: inline-flex;
   }
 
-  .app-shell-collapsed .sidebar-nav a {
+  .app-shell-collapsed .sidebar-nav a,
+  .app-shell-collapsed .sidebar-nav .disabled {
     gap: 11px;
     grid-template-columns: 20px minmax(0, 1fr);
     justify-items: initial;

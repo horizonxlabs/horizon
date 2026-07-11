@@ -38,25 +38,24 @@ export function slugifyProjectName(name: string): string {
   );
 }
 
-// Menu items temporarily hidden from the creator sidebar. The routes and pages still exist and
-// stay reachable by direct URL — remove a label here to re-surface it in the nav.
-export const HIDDEN_CREATOR_NAV_LABELS = new Set([
-  "PRD Review",
-  "Creator Workspace",
-  "Users & Roles",
-  "Publish & Registry",
-  "Tickets & Changes"
-]);
+// Workspace is entered by opening a project card, so a dedicated sidebar entry is redundant.
+const EXCLUDED_CREATOR_NAV_LABELS = new Set(["Creator Workspace"]);
 
 export function createCreatorNavigation(project: CreatorProjectView) {
   const projectBaseRoute = `/creator/projects/${project.id}`;
   return navigation.creator
-    .filter((item) => !HIDDEN_CREATOR_NAV_LABELS.has(item.label))
+    .filter((item) => !EXCLUDED_CREATOR_NAV_LABELS.has(item.label))
     .map((item) => {
-      if (!item.route.includes("/creator/projects/leave-management")) return item;
+      // Only Projects ships today; the rest are surfaced as upcoming ("Soon") but non-interactive.
+      // The routes/pages still exist and stay reachable by direct URL.
+      const isProjectScoped = item.route.includes("/creator/projects/leave-management");
+      if (!isProjectScoped) return item;
       return {
         ...item,
-        route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
+        label: `${item.label} (Soon)`,
+        route: item.route.replace("/creator/projects/leave-management", projectBaseRoute),
+        disabled: true,
+        disabledReason: "เร็วๆ นี้"
       };
     });
 }

@@ -125,10 +125,16 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     }
   }, [selectedProject?.id]);
 
-  // Restore the chat thread from the server so a browser refresh doesn't lose history.
+  // Restore the chat thread from the server so a browser refresh doesn't lose history, and reset it
+  // when switching projects so the previous project's thread never lingers. `ignore` guards against
+  // out-of-order responses when the user switches projects (or navigates back/forward) quickly.
   useEffect(() => {
     const pid = selectedProject?.id;
+    // Clear immediately: a project with no saved history must show an empty thread, not the last one.
+    setVibeMessages([]);
+    setVibeStatus("");
     if (!pid) return;
+    let ignore = false;
     const base = apiBaseUrl() ?? "/api";
     fetch(`${base}/projects/${encodeURIComponent(pid)}/chat/history`, {
       headers: vibeAuthHeaders()
@@ -146,6 +152,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
             }>;
           } | null
         ) => {
+          if (ignore) return;
           const messages = data?.messages;
           if (!Array.isArray(messages) || messages.length === 0) return;
           setVibeMessages(
@@ -169,6 +176,9 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
         }
       )
       .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id]);
 

@@ -169,6 +169,26 @@ export function AppShell({
         <nav className="sidebar-nav" aria-label="Primary">
           {navItems.map((item) => {
             const isActive = normalizeRoute(item.route) === activeRoute;
+            const content = (
+              <>
+                <span className="sidebar-nav-short" aria-hidden="true">
+                  <NavGlyph name={item.icon} />
+                </span>
+                <span className="sidebar-nav-label">{item.label}</span>
+              </>
+            );
+            if (item.disabled) {
+              return (
+                <span
+                  className="disabled"
+                  key={item.route}
+                  aria-disabled="true"
+                  title={item.disabledReason ?? item.label}
+                >
+                  {content}
+                </span>
+              );
+            }
             return (
               <a
                 className={isActive ? "active" : undefined}
@@ -177,24 +197,23 @@ export function AppShell({
                 aria-current={isActive ? "page" : undefined}
                 title={item.label}
               >
-                <span className="sidebar-nav-short" aria-hidden="true">
-                  <NavGlyph name={item.icon} />
-                </span>
-                <span className="sidebar-nav-label">{item.label}</span>
+                {content}
               </a>
             );
           })}
         </nav>
-        <div className="sidebar-footer">
-          <span className="sidebar-user-avatar" aria-hidden="true">
-            {userInitials}
-          </span>
-          <div className="sidebar-user-meta">
-            <strong>{userName}</strong>
-            <span>{environmentLabel}</span>
+        <div className="sidebar-account">
+          <div className="sidebar-footer">
+            <span className="sidebar-user-avatar" data-status="online" aria-hidden="true">
+              {userInitials}
+            </span>
+            <div className="sidebar-user-meta">
+              <strong>{userName}</strong>
+              <span>{environmentLabel}</span>
+            </div>
           </div>
+          {session ? <div className="sidebar-session">{session}</div> : null}
         </div>
-        {session ? <div className="sidebar-session">{session}</div> : null}
       </aside>
       <main className="content">{children}</main>
     </div>
