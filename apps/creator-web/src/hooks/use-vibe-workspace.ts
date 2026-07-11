@@ -8,9 +8,8 @@ import {
 import { useEffect, useState } from "react";
 import { fallbackPreview, fallbackTaskSteps, usageRows } from "../data/mock-data";
 import { createCreatorPlatformClient } from "../lib/creator-client";
-import { apiBaseUrl } from "../lib/routing";
-import { vibeAuthHeaders } from "../lib/session";
-import { vibeActionVerb, type VibeAction } from "../lib/vibe-actions";
+import { fetchChatHistory } from "../lib/chat-history";
+import { vibeActionVerb } from "../lib/vibe-actions";
 import { applyVibeEvent, type VibeMessage } from "../lib/vibe-stream";
 import {
   normalizeWorkspaceMode,
@@ -135,47 +134,10 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setVibeStatus("");
     if (!pid) return;
     let ignore = false;
-    const base = apiBaseUrl() ?? "/api";
-    fetch(`${base}/projects/${encodeURIComponent(pid)}/chat/history`, {
-      headers: vibeAuthHeaders()
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then(
-        (
-          data: {
-            messages?: Array<{
-              id: string;
-              role: string;
-              content: string;
-              actions?: Array<{ id: string; type: string; label: string; ok?: boolean }>;
-              commitSha?: string | null;
-            }>;
-          } | null
-        ) => {
-          if (ignore) return;
-          const messages = data?.messages;
-          if (!Array.isArray(messages) || messages.length === 0) return;
-          setVibeMessages(
-            messages
-              .filter((message) => message.role === "user" || message.role === "assistant")
-              .map((message) => ({
-                id: message.id,
-                role: message.role === "user" ? "user" : "assistant",
-                text: message.content,
-                actions: Array.isArray(message.actions)
-                  ? message.actions.map((a) => ({
-                      id: a.id,
-                      type: a.type,
-                      label: a.label,
-                      status: (a.ok === false ? "failed" : "done") as VibeAction["status"]
-                    }))
-                  : [],
-                commitSha: message.commitSha ?? undefined
-              }))
-          );
-        }
-      )
-      .catch(() => undefined);
+    fetchChatHistory(pid).then((restored) => {
+      if (ignore || restored.length === 0) return;
+      setVibeMessages(restored);
+    });
     return () => {
       ignore = true;
     };
