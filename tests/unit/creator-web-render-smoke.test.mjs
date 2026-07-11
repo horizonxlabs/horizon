@@ -93,6 +93,11 @@ test("ProjectsPage renders the B1 AI studio inside the shared Creator shell", ()
 
   assert.match(html, /class="[^"]*hz-projects-studio/);
   assert.match(html, /class="[^"]*app-shell-light/);
+  assert.match(html, /class="app-shell-mobile-trigger"[^>]*aria-expanded="false"/);
+  assert.match(html, /aria-controls="app-shell-sidebar"/);
+  assert.match(html, /class="app-shell-mobile-backdrop"/);
+  assert.match(html, /class="sidebar-mobile-close"/);
+  assert.match(html, /<aside[^>]*id="app-shell-sidebar"/);
   assert.match(html, /วันนี้อยากสร้างอะไร/);
   assert.match(html, /สร้างด้วย AI/);
   assert.match(html, /โปรเจกต์ล่าสุด/);
