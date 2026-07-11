@@ -122,6 +122,57 @@ test("duplicate provisioning for same project is idempotent (returns the existin
   assert.equal(second.projectId, "prj-leave-tracker");
 });
 
+test("provisionWorkspace restarts a workspace container killed outside the orchestrator", async () => {
+  const { deps, audits } = createDeps();
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  const first = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+  await deps.docker.stopContainer(first.containerId);
+
+  const recovered = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+
+  assert.equal(recovered.containerId, first.containerId);
+  assert.equal(recovered.state, "running");
+  assert.equal(deps.docker.state.containers.length, 1);
+  assert.equal(deps.docker.state.containers[0].status, "running");
+  assert.ok(audits.some((event) => event.action === "workspace.recovered"));
+});
+
+test("provisionWorkspace replaces a deleted container without reprovisioning project resources", async () => {
+  const { deps, executedSql, audits } = createDeps();
+  let createCalls = 0;
+  const createContainer = deps.docker.createContainer.bind(deps.docker);
+  deps.docker.createContainer = async (spec) => {
+    createCalls += 1;
+    return createContainer(spec);
+  };
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  const first = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+  await deps.docker.removeContainer(first.containerId);
+
+  const recovered = await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+
+  assert.equal(createCalls, 2);
+  assert.equal(recovered.containerId, deps.docker.state.containers[0].containerId);
+  assert.equal(recovered.state, "running");
+  assert.equal(deps.docker.state.containers.length, 1);
+  assert.equal(executedSql.filter((sql) => sql.includes("CREATE SCHEMA")).length, 1);
+  assert.deepEqual(deps.objectStorage.state.buckets, ["proj-prj-leave-tracker"]);
+  assert.equal(deps.llmGateway.state.keys.length, 1);
+  assert.ok(audits.some((event) => event.action === "workspace.recovered"));
+});
+
 test("provision self-heals to the existing container after a restart (empty records, same docker)", async () => {
   const { deps } = createDeps();
   const first = await createWorkspaceOrchestrator(deps).provisionWorkspace({
