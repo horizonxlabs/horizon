@@ -52,6 +52,73 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     return next;
   };
 
+  const buildWorkspaceSpec = (projectId: string, resourceKey: string) =>
+    buildDevContainerSpec({
+      slug: resourceKey,
+      image,
+      env: {
+        ...deps.secrets.resolveEnv(projectId),
+        EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
+      },
+      cpuCores,
+      memoryMb,
+      network,
+      workspaceVolume: `evcp-ws-${resourceKey}-data`
+    });
+
+  const recoverExistingWorkspace = async (
+    existing: WorkspaceContainerRecord,
+    input: { projectId: string; slug: string },
+    resourceKey: string
+  ): Promise<WorkspaceContainerRecord> => {
+    const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
+    if (found) {
+      if (!found.running) await deps.docker.startContainer(found.containerId);
+      const recovered = save({
+        ...existing,
+        slug: input.slug,
+        state: "running",
+        containerId: found.containerId,
+        lastActivityAt: now(),
+        lastError: undefined
+      });
+      audit({
+        action: "workspace.recovered",
+        projectId: input.projectId,
+        metadata: { slug: input.slug, mode: found.running ? "reattached" : "restarted" }
+      });
+      return recovered;
+    }
+
+    // A deleted container is disposable: its named workspace volume and project resources remain.
+    // Load encrypted at-rest secrets first so a post-restart recovery can recreate the container
+    // without attempting to create its schema, bucket, or LLM key again.
+    await deps.secrets.hydrate();
+    if (Object.keys(deps.secrets.resolveEnv(input.projectId)).length === 0) {
+      throw new Error(
+        `cannot recover workspace '${input.projectId}': managed secrets are unavailable`
+      );
+    }
+    const { containerId } = await deps.docker.createContainer(
+      buildWorkspaceSpec(input.projectId, resourceKey)
+    );
+    await deps.docker.startContainer(containerId);
+    const recovered = save({
+      ...existing,
+      slug: input.slug,
+      state: "running",
+      containerId,
+      lastActivityAt: now(),
+      lastError: undefined
+    });
+    audit({
+      action: "workspace.recovered",
+      projectId: input.projectId,
+      metadata: { slug: input.slug, mode: "recreated" }
+    });
+    return recovered;
+  };
+
   const mustGet = (projectId: string): WorkspaceContainerRecord => {
     const record = records.get(projectId);
     if (!record) {
@@ -103,8 +170,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       const resourceKey = resourceKeyForProject(input.projectId);
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
-        // Idempotent: already provisioned in this process — return it instead of erroring.
-        return existing;
+        if (existing.state === "archived") return existing;
+        return recoverExistingWorkspace(existing, input, resourceKey);
       }
 
       // Self-heal: after a platform-api restart the in-memory record is gone, but the container
@@ -196,20 +263,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
         rollbacks.push(async () => deps.secrets.removeAll(input.projectId));
 
-        const spec = buildDevContainerSpec({
-          slug: resourceKey,
-          image,
-          env: {
-            ...deps.secrets.resolveEnv(input.projectId),
-            EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
-          },
-          cpuCores,
-          memoryMb,
-          network,
-          workspaceVolume: `evcp-ws-${resourceKey}-data`
-        });
-
-        const { containerId } = await deps.docker.createContainer(spec);
+        const { containerId } = await deps.docker.createContainer(
+          buildWorkspaceSpec(input.projectId, resourceKey)
+        );
         rollbacks.push(() => deps.docker.removeContainer(containerId));
         await deps.docker.startContainer(containerId);
 
