@@ -5308,6 +5308,14 @@ button:disabled {
   height: 38px;
   min-width: 220px;
   padding: 0 12px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.hz-search:focus-within {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 3px var(--evcp-color-primary-soft);
 }
 
 .hz-search input {
@@ -5366,7 +5374,7 @@ button:disabled {
 .hz-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 6px;
 }
 
@@ -5387,9 +5395,19 @@ button:disabled {
 }
 
 .hz-card:hover {
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.1);
+  border-color: var(--evcp-color-primary);
+  box-shadow: var(--evcp-shadow-card);
   transform: translateY(-2px);
+}
+
+.hz-card:focus-visible {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 3px var(--evcp-color-primary-soft);
+  outline: none;
+}
+
+.hz-card:active {
+  transform: translateY(0);
 }
 
 .hz-card.active {
@@ -5449,6 +5467,20 @@ button:disabled {
   position: absolute;
   text-transform: capitalize;
   top: 12px;
+}
+
+.hz-project-status {
+  background: var(--evcp-color-success-bg);
+  border-radius: var(--evcp-radius-pill);
+  color: var(--evcp-color-success-text);
+  font-size: 11px;
+  font-weight: 700;
+  left: var(--evcp-space-3);
+  line-height: 1.4;
+  padding: var(--evcp-space-1) 10px;
+  position: absolute;
+  text-transform: capitalize;
+  top: var(--evcp-space-3);
 }
 
 .hz-card-meta {
@@ -5530,23 +5562,21 @@ button:disabled {
 /* --- Creator home: prompt-first builder hero --- */
 .hz-home {
   display: grid;
-  gap: 34px;
+  gap: var(--evcp-space-7);
   margin: 0 auto;
-  max-width: 920px;
+  max-width: 1120px;
+}
+
+.hz-projects-studio {
+  width: 100%;
 }
 
 .hz-hero {
-  align-items: center;
-  background:
-    radial-gradient(120% 140% at 50% -20%, rgba(37, 99, 235, 0.08), transparent 60%),
-    var(--evcp-color-surface, #fff);
-  border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 20px;
+  align-items: start;
   display: grid;
-  gap: 14px;
-  justify-items: center;
-  padding: 40px clamp(20px, 5vw, 56px) 32px;
-  text-align: center;
+  gap: var(--evcp-space-3);
+  justify-items: start;
+  text-align: left;
 }
 
 .hz-hero-eyebrow {
@@ -5583,7 +5613,7 @@ button:disabled {
   background: var(--evcp-color-surface, #fff);
   border: 1.5px solid var(--evcp-color-border, #e2e8f0);
   border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.06);
+  box-shadow: var(--evcp-shadow-card);
   display: grid;
   gap: 10px;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -5592,12 +5622,14 @@ button:disabled {
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
-  width: min(100%, 680px);
+  width: min(100%, 760px);
 }
 
 .hz-prompt:focus-within {
   border-color: var(--evcp-color-primary, #2563eb);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  box-shadow:
+    0 0 0 4px var(--evcp-color-primary-soft),
+    var(--evcp-shadow-card);
 }
 
 .hz-prompt-icon {
@@ -5637,11 +5669,28 @@ button:disabled {
   filter: brightness(1.08);
 }
 
+.hz-prompt-cta:focus-visible,
+.hz-chip:focus-visible {
+  box-shadow: 0 0 0 3px var(--evcp-color-primary-soft);
+  outline: 2px solid var(--evcp-color-primary);
+  outline-offset: 2px;
+}
+
+.hz-prompt-cta:active {
+  filter: brightness(0.92);
+}
+
+.hz-prompt-cta:disabled {
+  cursor: not-allowed;
+  filter: none;
+  opacity: 0.55;
+}
+
 .hz-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: center;
+  justify-content: flex-start;
   margin-top: 4px;
 }
 
@@ -5701,6 +5750,62 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .hz-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .hz-home {
+    gap: var(--evcp-space-6);
+  }
+
+  .hz-prompt {
+    align-items: stretch;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .hz-prompt-cta {
+    grid-column: 1 / -1;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .hz-projects-head,
+  .hz-projects-tools,
+  .hz-search {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .hz-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hz-empty {
+    padding: var(--evcp-space-6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hz-card,
+  .hz-chip,
+  .hz-prompt,
+  .hz-prompt-cta,
+  .hz-search {
+    transition: none;
+  }
+
+  .hz-card:hover {
+    transform: none;
+  }
+
+  .hz-spinner {
+    animation: none !important;
+  }
 }
 
 /* Blocking modal while a project's sandbox/container provisions. */
