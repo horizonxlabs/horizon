@@ -5415,6 +5415,11 @@ button:disabled {
   box-shadow: 0 0 0 1px var(--evcp-color-primary, #38bdf8);
 }
 
+.hz-card.active:focus-visible {
+  outline: 2px solid var(--evcp-color-primary);
+  outline-offset: 2px;
+}
+
 .hz-thumb {
   align-items: center;
   aspect-ratio: 5 / 2;
