@@ -48,6 +48,10 @@ export interface NavItem {
   route: string;
   /** Icon key resolved by the shared AppShell to an inline glyph (see packages/ui nav-icons). */
   icon?: string;
+  /** Renders the item non-interactive (e.g. requires a selected project first). */
+  disabled?: boolean;
+  /** Tooltip shown on a disabled item explaining why it can't be opened yet. */
+  disabledReason?: string;
 }
 
 // --- MVP Plan 1: Workspace Foundation ---

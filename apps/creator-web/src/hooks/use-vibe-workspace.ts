@@ -8,9 +8,8 @@ import {
 import { useEffect, useState } from "react";
 import { fallbackPreview, fallbackTaskSteps, usageRows } from "../data/mock-data";
 import { createCreatorPlatformClient } from "../lib/creator-client";
-import { apiBaseUrl } from "../lib/routing";
-import { vibeAuthHeaders } from "../lib/session";
-import { vibeActionVerb, type VibeAction } from "../lib/vibe-actions";
+import { fetchChatHistory } from "../lib/chat-history";
+import { vibeActionVerb } from "../lib/vibe-actions";
 import { applyVibeEvent, type VibeMessage } from "../lib/vibe-stream";
 import {
   normalizeWorkspaceMode,
@@ -125,50 +124,23 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     }
   }, [selectedProject?.id]);
 
-  // Restore the chat thread from the server so a browser refresh doesn't lose history.
+  // Restore the chat thread from the server so a browser refresh doesn't lose history, and reset it
+  // when switching projects so the previous project's thread never lingers. `ignore` guards against
+  // out-of-order responses when the user switches projects (or navigates back/forward) quickly.
   useEffect(() => {
     const pid = selectedProject?.id;
+    // Clear immediately: a project with no saved history must show an empty thread, not the last one.
+    setVibeMessages([]);
+    setVibeStatus("");
     if (!pid) return;
-    const base = apiBaseUrl() ?? "/api";
-    fetch(`${base}/projects/${encodeURIComponent(pid)}/chat/history`, {
-      headers: vibeAuthHeaders()
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then(
-        (
-          data: {
-            messages?: Array<{
-              id: string;
-              role: string;
-              content: string;
-              actions?: Array<{ id: string; type: string; label: string; ok?: boolean }>;
-              commitSha?: string | null;
-            }>;
-          } | null
-        ) => {
-          const messages = data?.messages;
-          if (!Array.isArray(messages) || messages.length === 0) return;
-          setVibeMessages(
-            messages
-              .filter((message) => message.role === "user" || message.role === "assistant")
-              .map((message) => ({
-                id: message.id,
-                role: message.role === "user" ? "user" : "assistant",
-                text: message.content,
-                actions: Array.isArray(message.actions)
-                  ? message.actions.map((a) => ({
-                      id: a.id,
-                      type: a.type,
-                      label: a.label,
-                      status: (a.ok === false ? "failed" : "done") as VibeAction["status"]
-                    }))
-                  : [],
-                commitSha: message.commitSha ?? undefined
-              }))
-          );
-        }
-      )
-      .catch(() => undefined);
+    let ignore = false;
+    fetchChatHistory(pid).then((restored) => {
+      if (ignore || restored.length === 0) return;
+      setVibeMessages(restored);
+    });
+    return () => {
+      ignore = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id]);
 

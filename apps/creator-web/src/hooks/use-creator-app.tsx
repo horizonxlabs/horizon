@@ -1,6 +1,6 @@
 import { type PrdVersionDto } from "@evcp/api-client";
 import { RotateCcw } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useReducer, useState, type FormEvent } from "react";
 import {
   initialCreateProjectForm,
   initialCreatorBootstrap,
@@ -8,7 +8,12 @@ import {
   versionRows
 } from "../data/mock-data";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "../lib/creator-client";
-import { createCreatorNavigation, creatorPageCopy, creatorPageFromPath } from "../lib/routing";
+import {
+  createCreatorNavigation,
+  creatorPageCopy,
+  creatorPageFromPath,
+  projectRouteSegmentFromPath
+} from "../lib/routing";
 import { clearLoginSession } from "../lib/session";
 import type { CreateProjectFormState, CreatorPage, CreatorProjectView } from "../types";
 import {
@@ -69,6 +74,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       }));
   const creatorPage = creatorPageFromPath(window.location.pathname);
   const pageCopy = creatorPageCopy[creatorPage];
+  const [, forceRerender] = useReducer((tick: number) => tick + 1, 0);
 
   async function refreshPrdState(projectId: string) {
     const prdState = await loadPrdState(projectId);
@@ -124,6 +130,28 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Browser back/forward changes window.location without any React state change, so the page
+  // (derived from the URL) and the selected project would otherwise go stale until a manual reload.
+  useEffect(() => {
+    function onPopState() {
+      const segment = projectRouteSegmentFromPath(window.location.pathname);
+      const match = segment
+        ? bootstrap.projects.find((project) => project.id === segment)
+        : undefined;
+      if (match) {
+        void handleSelectProject(match, creatorPageFromPath(window.location.pathname), {
+          push: false
+        });
+      } else {
+        // Back to the projects list (or an unknown project): just re-render so the page re-derives.
+        forceRerender();
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrap.projects]);
+
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
@@ -177,20 +205,25 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
 
   async function handleSelectProject(
     project: CreatorProjectView,
-    targetPage: CreatorPage = creatorPage
+    targetPage: CreatorPage = creatorPage,
+    options: { push?: boolean } = {}
   ) {
+    const { push = true } = options;
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
-    const routeBase = `/creator/projects/${project.id}`;
-    const routeByPage: Record<CreatorPage, string> = {
-      projects: "/creator/",
-      workspace: routeBase,
-      prd: `${routeBase}/prd`,
-      users: `${routeBase}/users`,
-      publish: `${routeBase}/publish`,
-      tickets: `${routeBase}/tickets`
-    };
-    window.history.pushState({}, "", routeByPage[targetPage]);
+    if (push) {
+      const routeBase = `/creator/projects/${project.id}`;
+      const routeByPage: Record<CreatorPage, string> = {
+        projects: "/creator/",
+        workspace: routeBase,
+        prd: `${routeBase}/prd`,
+        users: `${routeBase}/users`,
+        publish: `${routeBase}/publish`,
+        tickets: `${routeBase}/tickets`
+      };
+      // Browser back/forward already updated the URL — only push when we initiated the navigation.
+      window.history.pushState({}, "", routeByPage[targetPage]);
+    }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
     const enteringWorkspace = targetPage === "workspace";

@@ -75,17 +75,38 @@ test("createCreatorNavigation: leaves non-leave-management routes untouched", ()
   }
 });
 
-test("createCreatorNavigation: hides the temporarily-disabled creator menus", () => {
+test("createCreatorNavigation: keeps Projects as the only interactive, unlabelled entry", () => {
+  const project = { id: "proj_expense_approval" };
+  const nav = createCreatorNavigation(project);
+  const projectsItem = nav.find((item) => item.label === "Projects");
+  assert.ok(projectsItem, "Projects should be present in the sidebar");
+  assert.equal(projectsItem.disabled, undefined, "Projects should stay interactive");
+});
+
+test("createCreatorNavigation: omits the redundant Creator Workspace entry", () => {
   const project = { id: "proj_expense_approval" };
   const labels = createCreatorNavigation(project).map((item) => item.label);
-  assert.deepEqual(labels, ["Projects"]);
-  for (const hidden of [
-    "PRD Review",
-    "Creator Workspace",
-    "Users & Roles",
-    "Publish & Registry",
-    "Tickets & Changes"
-  ]) {
-    assert.equal(labels.includes(hidden), false, `${hidden} should be hidden from the sidebar`);
+  assert.equal(
+    labels.includes("Creator Workspace"),
+    false,
+    "Creator Workspace is reachable from a project card and should not appear in the sidebar"
+  );
+});
+
+test("createCreatorNavigation: marks every non-Projects entry as a disabled (Soon) item", () => {
+  const project = { id: "proj_expense_approval" };
+  const nav = createCreatorNavigation(project);
+  for (const item of nav) {
+    if (item.label === "Projects") continue;
+    assert.match(item.label, / \(Soon\)$/, `${item.label} should be suffixed with (Soon)`);
+    assert.equal(item.disabled, true, `${item.label} should be disabled`);
+    assert.ok(item.disabledReason, `${item.label} should explain why it is disabled`);
   }
+  const soonLabels = nav.filter((i) => i.label !== "Projects").map((i) => i.label);
+  assert.deepEqual(soonLabels, [
+    "PRD Review (Soon)",
+    "Users & Roles (Soon)",
+    "Publish & Registry (Soon)",
+    "Tickets & Changes (Soon)"
+  ]);
 });
