@@ -35,6 +35,7 @@ export function CreatorShell({
       navItems={creatorNavItems}
       userName={bootstrap.userName}
       session={creatorSessionControls}
+      tone="light"
     >
       {isEnteringWorkspace ? (
         <div className="hz-loading-backdrop" role="status" aria-live="polite">

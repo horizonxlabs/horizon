@@ -92,6 +92,7 @@ test("ProjectsPage renders the B1 AI studio inside the shared Creator shell", ()
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
   assert.match(html, /class="[^"]*hz-projects-studio/);
+  assert.match(html, /class="[^"]*app-shell-light/);
   assert.match(html, /วันนี้อยากสร้างอะไร/);
   assert.match(html, /สร้างด้วย AI/);
   assert.match(html, /โปรเจกต์ล่าสุด/);

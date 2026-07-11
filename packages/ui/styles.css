@@ -411,6 +411,71 @@ table {
   display: none;
 }
 
+/* Optional light treatment for creator-facing workspaces; dark remains the shell default. */
+.app-shell-light .sidebar {
+  background: var(--evcp-color-surface, #fff);
+  border-right: 1px solid var(--evcp-color-border, #e2e8f0);
+  color: var(--evcp-color-text, #0f172a);
+}
+
+.app-shell-light .sidebar-title strong {
+  color: var(--evcp-color-text, #0f172a);
+}
+
+.app-shell-light .sidebar-title span,
+.app-shell-light .sidebar-user-meta span {
+  color: var(--evcp-color-muted, #64748b);
+}
+
+.app-shell-light .sidebar-toggle {
+  background: var(--evcp-color-surface-muted, #f8fafc);
+  border-color: var(--evcp-color-border, #e2e8f0);
+  color: var(--evcp-color-muted, #64748b);
+}
+
+.app-shell-light .sidebar-toggle:hover {
+  background: var(--evcp-color-primary-soft, #dbeafe);
+  border-color: var(--evcp-color-primary, #2563eb);
+  color: var(--evcp-color-primary-strong, #1d4ed8);
+}
+
+.app-shell-light .sidebar-nav a {
+  color: var(--evcp-color-muted, #64748b);
+}
+
+.app-shell-light .sidebar-nav a:hover {
+  background: var(--evcp-color-surface-muted, #f8fafc);
+  color: var(--evcp-color-text, #0f172a);
+}
+
+.app-shell-light .sidebar-nav a.active {
+  background: var(--evcp-color-primary-soft, #dbeafe);
+  color: var(--evcp-color-primary-strong, #1d4ed8);
+}
+
+.app-shell-light .sidebar-nav a.active .sidebar-nav-short,
+.app-shell-light .sidebar-nav a.active::before {
+  color: var(--evcp-color-primary, #2563eb);
+}
+
+.app-shell-light .sidebar-nav a.active::before {
+  background: var(--evcp-color-primary, #2563eb);
+}
+
+.app-shell-light .sidebar-footer {
+  border-top-color: var(--evcp-color-border, #e2e8f0);
+}
+
+.app-shell-light .sidebar-footer strong {
+  color: var(--evcp-color-text, #0f172a);
+}
+
+.app-shell-light .sidebar-session :is(button, a) {
+  background: var(--evcp-color-surface, #fff);
+  border-color: var(--evcp-color-border, #e2e8f0);
+  color: var(--evcp-color-muted, #64748b);
+}
+
 .content {
   box-sizing: border-box;
   min-width: 0;

@@ -70,3 +70,25 @@ test("creator project status uses neutral shared tokens", () => {
   assert.match(statusRule, /color:\s*var\(--evcp-color-muted\)/);
   assert.doesNotMatch(statusRule, /--evcp-color-(?:success|warning|danger)/);
 });
+
+test("creator light sidebar variant has concrete shared declarations", () => {
+  const sidebar = declarationBlock(".app-shell-light .sidebar");
+  assert.match(sidebar, /background:\s*var\(--evcp-color-surface/);
+  assert.match(sidebar, /border-right:\s*1px solid var\(--evcp-color-border/);
+
+  const nav = declarationBlock(".app-shell-light .sidebar-nav a");
+  assert.match(nav, /color:\s*var\(--evcp-color-muted/);
+
+  const active = declarationBlock(".app-shell-light .sidebar-nav a.active");
+  assert.match(active, /background:\s*var\(--evcp-color-primary-soft/);
+  assert.match(active, /color:\s*var\(--evcp-color-primary-strong/);
+
+  for (const selector of [
+    ".app-shell-light .sidebar-title strong",
+    ".app-shell-light .sidebar-toggle",
+    ".app-shell-light .sidebar-footer strong",
+    ".app-shell-light .sidebar-user-meta span"
+  ]) {
+    assert.ok(declarationBlock(selector), `missing light sidebar declaration: ${selector}`);
+  }
+});

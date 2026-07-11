@@ -40,6 +40,7 @@ export function AppShell({
   session,
   logo,
   tagline = "Enterprise AI Workspace",
+  tone = "dark",
   children
 }: {
   title: string;
@@ -49,6 +50,7 @@ export function AppShell({
   session?: ReactNode;
   logo?: ReactNode;
   tagline?: string;
+  tone?: "dark" | "light";
   children: ReactNode;
 }) {
   const currentPath = typeof window === "undefined" ? "" : window.location.pathname;
@@ -71,7 +73,9 @@ export function AppShell({
   }
 
   return (
-    <div className={`app-shell ${isSidebarCollapsed ? "app-shell-collapsed" : ""}`.trim()}>
+    <div
+      className={`app-shell ${tone === "light" ? "app-shell-light" : ""} ${isSidebarCollapsed ? "app-shell-collapsed" : ""}`.trim()}
+    >
       <aside className="sidebar" aria-label={`${title} navigation`}>
         <div className="sidebar-brand">
           <span className={`sidebar-mark${logo ? " sidebar-mark-logo" : ""}`} aria-hidden="true">
