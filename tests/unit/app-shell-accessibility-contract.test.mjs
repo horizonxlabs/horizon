@@ -1,0 +1,47 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AppShell } from "../../packages/ui/src/app-shell.tsx";
+
+globalThis.React = React;
+
+const source = await readFile(
+  new URL("../../packages/ui/src/app-shell.tsx", import.meta.url),
+  "utf8"
+);
+
+const shellProps = {
+  title: "Horizon",
+  navItems: [{ label: "Projects", route: "/creator/", icon: "workspace" }],
+  userName: "Creator User"
+};
+
+test("AppShell instances pair mobile triggers with unique sidebar IDs", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(AppShell, shellProps, "First"),
+      React.createElement(AppShell, shellProps, "Second")
+    )
+  );
+  const controls = [...html.matchAll(/aria-controls="([^"]+)"/g)].map((match) => match[1]);
+  const ids = [...html.matchAll(/<aside id="([^"]+)"/g)].map((match) => match[1]);
+
+  assert.equal(controls.length, 2);
+  assert.deepEqual(controls, ids);
+  assert.equal(new Set(ids).size, 2);
+});
+
+test("AppShell gates mobile hiding and manages drawer keyboard focus", () => {
+  assert.match(source, /matchMedia\(["']\(max-width: 760px\)["']\)/);
+  assert.match(source, /isMobileViewport\s*&&\s*!isMobileMenuOpen/);
+  assert.match(source, /inert=/);
+  assert.match(source, /aria-hidden=/);
+  assert.match(source, /addEventListener\(["']keydown["']/);
+  assert.match(source, /event\.key\s*===\s*["']Escape["']/);
+  assert.match(source, /closeControlRef\.current\?\.focus\(\)/);
+  assert.match(source, /mobileTriggerRef\.current\?\.focus\(\)/);
+});
