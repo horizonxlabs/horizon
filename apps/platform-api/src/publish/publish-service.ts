@@ -53,8 +53,7 @@ export const PRODUCTION_DOCKERIGNORE = `node_modules
  * and asset URLs that return through its proxy, without replacing user config or touching dev.
  */
 export function buildDeploymentEnvironment(slug: string, environment: EnvironmentName): string {
-  const basePath =
-    environment === "staging" ? `/api/apps/${slug}/staging` : `/api/apps/${slug}`;
+  const basePath = environment === "staging" ? `/api/apps/${slug}/staging` : `/api/apps/${slug}`;
   return `EVCP_PREVIEW_BASE=${basePath}\n`;
 }
 
@@ -70,7 +69,7 @@ export interface PublishServiceDeps {
   deployments: DeploymentStore;
   health: HealthChecker;
   resolveEnv: (projectId: string) => Record<string, string>;
-  getDevContainerId: (projectId: string) => string;
+  getDevContainerId: (projectId: string) => string | Promise<string>;
   network?: string;
   onAudit?: (event: {
     action: string;
@@ -214,7 +213,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     }): Promise<PublishOutcome> {
       return withProjectLock(input.projectId, async () => {
         const isRollback = Boolean(input.commitSha);
-        const devContainerId = deps.getDevContainerId(input.projectId);
+        const devContainerId = await deps.getDevContainerId(input.projectId);
 
         // Resolve target commit (explicit = rollback/older; else current HEAD).
         const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
