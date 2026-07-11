@@ -2,21 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 
-const { createWorkspaceOrchestrator } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts"
-);
-const { createPgClientPostgresProvisioner } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts"
-);
-const { createMemoryObjectStorageProvisioner, createMemoryLlmGatewayAdmin } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts"
-);
-const { createProjectSecretStore } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/secret-store.ts"
-);
-const { createMemoryDockerEngine } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts"
-);
+const { createWorkspaceOrchestrator } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts");
+const { createPgClientPostgresProvisioner } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts");
+const { createMemoryObjectStorageProvisioner, createMemoryLlmGatewayAdmin } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts");
+const { createProjectSecretStore } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/secret-store.ts");
+const { createMemoryDockerEngine } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
 
 function createDeps(overrides = {}) {
   const executedSql = [];
@@ -70,6 +65,24 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.ok(audits.some((event) => event.action === "workspace.provisioned"));
 });
 
+test("provisionWorkspace uses configured Postgres database name in workspace DATABASE_URL", async () => {
+  const { deps } = createDeps({
+    databaseName: "tenantdb",
+    postgresHost: "pg.internal:5433"
+  });
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+
+  const databaseUrl = deps.docker.state.containers[0].spec.env.find((entry) =>
+    entry.startsWith("DATABASE_URL=")
+  );
+  assert.match(databaseUrl, /^DATABASE_URL=postgresql:\/\/app_prj_leave_tracker_role:/);
+  assert.match(databaseUrl, /@pg\.internal:5433\/tenantdb\?schema=app_prj_leave_tracker$/);
+});
+
 test("provisioning rolls back everything when container start fails", async () => {
   const { deps } = createDeps();
   deps.docker.startContainer = async () => {
@@ -90,6 +103,7 @@ test("provisioning rolls back everything when container start fails", async () =
   );
   const record = orchestrator.getWorkspace("prj-leave-tracker");
   assert.equal(record.state, "failed");
+  assert.equal(record.lastError, "docker daemon exploded");
 });
 
 test("duplicate provisioning for same project is idempotent (returns the existing workspace)", async () => {

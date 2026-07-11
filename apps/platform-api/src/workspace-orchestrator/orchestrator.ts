@@ -22,6 +22,7 @@ export interface WorkspaceOrchestratorDeps {
   network?: string;
   cpuCores?: number;
   memoryMb?: number;
+  databaseName?: string;
   postgresHost?: string;
   s3Endpoint?: string;
   onAudit?: (event: WorkspaceAuditEvent) => void;
@@ -34,6 +35,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const network = deps.network ?? process.env.EVCP_WORKSPACE_NETWORK ?? "evcp-internal";
   const cpuCores = deps.cpuCores ?? Number(process.env.EVCP_WORKSPACE_CPU ?? 1);
   const memoryMb = deps.memoryMb ?? Number(process.env.EVCP_WORKSPACE_MEM_MB ?? 2048);
+  const databaseName = deps.databaseName ?? "evcp";
   const postgresHost = deps.postgresHost ?? "postgres:5432";
   const s3Endpoint = deps.s3Endpoint ?? "http://minio:9000";
   const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
@@ -122,6 +124,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           cpuCores,
           memoryMb,
           lastActivityAt: now(),
+          lastError: undefined,
           createdAt: now(),
           updatedAt: now()
         });
@@ -142,6 +145,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         cpuCores,
         memoryMb,
         lastActivityAt: now(),
+        lastError: undefined,
         createdAt: now(),
         updatedAt: now()
       });
@@ -164,7 +168,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         deps.secrets.put(
           input.projectId,
           "DATABASE_URL",
-          `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/evcp?schema=${pg.schemaName}`
+          `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`
         );
         deps.secrets.put(input.projectId, "S3_ENDPOINT", s3Endpoint);
         deps.secrets.put(input.projectId, "S3_BUCKET", bucket.bucket);
@@ -191,7 +195,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.startContainer(containerId);
 
         assertTransition(record.state, "running");
-        record = save({ ...record, state: "running", containerId, lastActivityAt: now() });
+        record = save({
+          ...record,
+          state: "running",
+          containerId,
+          lastActivityAt: now(),
+          lastError: undefined
+        });
         audit({
           action: "workspace.provisioned",
           projectId: input.projectId,
@@ -207,7 +217,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           }
         }
         assertTransition(record.state, "failed");
-        record = save({ ...record, state: "failed", containerId: null });
+        record = save({
+          ...record,
+          state: "failed",
+          containerId: null,
+          lastError: (error as Error).message
+        });
         audit({
           action: "workspace.provision_failed",
           projectId: input.projectId,

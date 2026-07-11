@@ -26,8 +26,20 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
       if (!isMember(auth, input.projectId)) {
         return { status: 403, body: { error: "forbidden" } };
       }
-      const workspace = await orchestrator.provisionWorkspace(input);
-      return { status: 201, body: { workspace } };
+      try {
+        const workspace = await orchestrator.provisionWorkspace(input);
+        return { status: 201, body: { workspace } };
+      } catch (error) {
+        const workspace = orchestrator.getWorkspace(input.projectId);
+        return {
+          status: 503,
+          body: {
+            code: "WORKSPACE_PROVISION_FAILED",
+            error: (error as Error).message,
+            workspace: workspace ?? null
+          }
+        };
+      }
     },
 
     async get(auth: WorkspaceAuthContext, input: { projectId: string }): Promise<RouteResponse> {

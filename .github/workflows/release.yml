@@ -189,6 +189,7 @@ jobs:
           POSTGRES_PASSWORD: dummy-postgres-password
           KEYCLOAK_ADMIN_PASSWORD: dummy-keycloak-password
           LITELLM_MASTER_KEY: dummy-litellm-master-key
+          LITELLM_DATABASE_URL: postgresql://evcp:dummy-postgres-password@postgres:5432/litellm
           EVCP_WORKSPACE_SECRET_KEY: 0000000000000000000000000000000000000000000000000000000000000000
           MINIO_ROOT_USER: dummy-minio-user
           MINIO_ROOT_PASSWORD: dummy-minio-password

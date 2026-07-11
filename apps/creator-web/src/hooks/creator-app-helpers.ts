@@ -39,8 +39,8 @@ export async function ensureVibeWorkspace(projectId: string): Promise<void> {
   });
   if (res.ok || res.status === 409) return;
   const after = await readState();
-  if (after) return;
-  throw new Error(`Provisioning workspace failed (${res.status})`);
+  if (after === "running" || after === "idle") return;
+  throw new Error(`Provisioning workspace failed (${res.status}${after ? `, state=${after}` : ""})`);
 }
 
 // Stream a chat turn: POST the prompt and parse the text/event-stream response,

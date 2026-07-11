@@ -65,6 +65,7 @@ export interface WorkspaceContainerRecord {
   cpuCores: number;
   memoryMb: number;
   lastActivityAt: string;
+  lastError?: string;
   createdAt: string;
   updatedAt: string;
 }

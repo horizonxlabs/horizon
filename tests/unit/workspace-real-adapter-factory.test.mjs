@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { resolveWorkspaceAdapterMode, createDefaultWorkspaceOrchestrator } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/factory.ts"
-);
+const {
+  resolveWorkspaceAdapterMode,
+  resolveWorkspaceRuntimeOptions,
+  createDefaultWorkspaceOrchestrator
+} = await import("../../apps/platform-api/src/workspace-orchestrator/factory.ts");
 
 test("adapter mode defaults to memory and flips to real via env", () => {
   assert.equal(resolveWorkspaceAdapterMode({}), "memory");
@@ -30,4 +32,23 @@ test("real mode builds an orchestrator without throwing at construction", () => 
     }
   });
   assert.equal(typeof orchestrator.provisionWorkspace, "function");
+});
+
+test("real mode runtime options honor release compose workspace env", () => {
+  const options = resolveWorkspaceRuntimeOptions({
+    EVCP_WORKSPACE_IMAGE: "ghcr.io/0xlabsteam/evcp-workspace-next:v9.9.9",
+    EVCP_WORKSPACE_NETWORK: "evcp-private-server_evcp-internal",
+    POSTGRES_DB: "tenantdb",
+    EVCP_PG_HOST: "postgres",
+    EVCP_PG_PORT: "5432",
+    EVCP_S3_HOST: "minio",
+    EVCP_S3_PORT: "9000",
+    EVCP_S3_SSL: "false"
+  });
+
+  assert.equal(options.image, "ghcr.io/0xlabsteam/evcp-workspace-next:v9.9.9");
+  assert.equal(options.network, "evcp-private-server_evcp-internal");
+  assert.equal(options.databaseName, "tenantdb");
+  assert.equal(options.postgresHost, "postgres:5432");
+  assert.equal(options.s3Endpoint, "http://minio:9000");
 });
