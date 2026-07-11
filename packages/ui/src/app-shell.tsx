@@ -1,5 +1,5 @@
 import type { NavItem } from "@evcp/types";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { NavGlyph } from "./nav-icons";
 
@@ -58,11 +58,44 @@ export function AppShell({
   const activeRoute = activeNavItem ? normalizeRoute(activeNavItem.route) : "";
   const brandMark = createInitials(title);
   const userInitials = createInitials(userName);
+  const sidebarId = `app-shell-sidebar-${useId().replace(/:/g, "")}`;
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeControlRef = useRef<HTMLButtonElement>(null);
+  const wasMobileMenuOpenRef = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("evcp-sidebar-collapsed") === "true";
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    function handleViewportChange() {
+      setIsMobileViewport(media.matches);
+      if (!media.matches) setIsMobileMenuOpen(false);
+    }
+
+    handleViewportChange();
+    media.addEventListener("change", handleViewportChange);
+    return () => media.removeEventListener("change", handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) closeControlRef.current?.focus();
+    else if (isMobileViewport && wasMobileMenuOpenRef.current) mobileTriggerRef.current?.focus();
+    wasMobileMenuOpenRef.current = isMobileMenuOpen;
+  }, [isMobileMenuOpen, isMobileViewport]);
+
+  useEffect(() => {
+    if (!isMobileViewport || !isMobileMenuOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsMobileMenuOpen(false);
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isMobileMenuOpen, isMobileViewport]);
 
   function handleToggleSidebar() {
     setIsSidebarCollapsed((current) => {
@@ -79,9 +112,10 @@ export function AppShell({
     >
       <button
         type="button"
+        ref={mobileTriggerRef}
         className="app-shell-mobile-trigger"
         aria-expanded={isMobileMenuOpen}
-        aria-controls="app-shell-sidebar"
+        aria-controls={sidebarId}
         aria-label="Open navigation"
         onClick={() => setIsMobileMenuOpen(true)}
       >
@@ -95,7 +129,13 @@ export function AppShell({
         tabIndex={isMobileMenuOpen ? 0 : -1}
         onClick={() => setIsMobileMenuOpen(false)}
       />
-      <aside id="app-shell-sidebar" className="sidebar" aria-label={`${title} navigation`}>
+      <aside
+        id={sidebarId}
+        className="sidebar"
+        aria-label={`${title} navigation`}
+        aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+        inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
+      >
         <div className="sidebar-brand">
           <span className={`sidebar-mark${logo ? " sidebar-mark-logo" : ""}`} aria-hidden="true">
             {logo ?? brandMark}
@@ -116,6 +156,7 @@ export function AppShell({
           </button>
           <button
             type="button"
+            ref={closeControlRef}
             className="sidebar-mobile-close"
             aria-label="Close navigation"
             onClick={() => setIsMobileMenuOpen(false)}
