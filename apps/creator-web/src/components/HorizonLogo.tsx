@@ -1,6 +1,8 @@
 type HorizonLogoVariant = "mark" | "wordmark" | "auth";
 
-const horizonLogoSrc = `${import.meta.env.BASE_URL}horizon-logo.png`;
+// The creator app is served at /creator/. Keep this as a plain browser-safe constant:
+// render-smoke imports components directly in Node, where Vite's import.meta.env is absent.
+const horizonLogoSrc = "/creator/horizon-logo.png";
 
 export function HorizonLogo({
   variant = "mark",

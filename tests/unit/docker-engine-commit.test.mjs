@@ -88,7 +88,7 @@ test("memory docker engine records buildImage calls and returns an image id", as
       containerId,
       imageTag: "evcp-production-demo:abc123",
       dockerfilePath: "Dockerfile",
-      extraFiles: ["Dockerfile"]
+      extraFiles: [{ name: "Dockerfile", content: "FROM node:20-alpine\n" }]
     }
   ]);
 });
