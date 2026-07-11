@@ -8,7 +8,7 @@ export type VibeMessage = {
   commitSha?: string;
 };
 
-// Applies one SSE frame (token | action_start | action_result | commit | error) to an
+// Applies one SSE frame (token | action_start | action_chunk | action_result | commit | error) to an
 // assistant message. Pure state transition, extracted from the inline handling that used
 // to live inside CreatorApp's handleVibeChat so it can be unit tested in isolation. Must
 // stay byte-identical in behavior to that inline logic.
@@ -43,6 +43,17 @@ export function applyVibeEvent(
               status: "running" as const
             }
           ]
+    };
+  }
+
+  if (type === "action_chunk") {
+    const id = field("actionId");
+    const content = field("content");
+    return {
+      ...message,
+      actions: message.actions.map((a) =>
+        a.id === id ? { ...a, body: (a.body ?? "") + content } : a
+      )
     };
   }
 

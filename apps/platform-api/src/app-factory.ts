@@ -3033,10 +3033,10 @@ export function executePlatformApiRequest(
   }
 }
 
-function registerPlatformRoutes(
+async function registerPlatformRoutes(
   app: INestApplication,
   services: PersistenceAwarePlatformApiServices
-): void {
+): Promise<void> {
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
 
   routes.get("/health", (request, response) =>
@@ -3313,7 +3313,7 @@ function registerPlatformRoutes(
   // Shared across the generation loop AND the publish pre-checks so publish sees the migrations the
   // generation loop actually applied (rather than a fresh, empty store).
   const sharedMigrationStore = createMemoryMigrationStore();
-  const generationService = createDefaultGenerationService({
+  const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
     onAudit: (event) =>
@@ -4371,7 +4371,7 @@ export async function createPlatformApiApp(
     origin: true,
     credentials: true
   });
-  registerPlatformRoutes(app, services);
+  await registerPlatformRoutes(app, services);
   startWorkspaceIdleSweep(services);
 
   return app;

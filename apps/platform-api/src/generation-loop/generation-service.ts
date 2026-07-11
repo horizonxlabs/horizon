@@ -14,6 +14,8 @@ export type ChatStreamEvent =
   | { type: "token"; content: string }
   // Emitted when an action begins so the UI can show a live "in progress" row (shimmer).
   | { type: "action_start"; actionId: string; actionType: ActionActionType; label: string }
+  // Emitted as an action's content streams in, so the UI can show it growing live.
+  | { type: "action_chunk"; actionId: string; content: string }
   // Emitted when the action finishes. Carries a preview the UI can expand: find/replace for an
   // edit (rendered as a diff), body for file/shell/migration, or error text on failure.
   | {
@@ -99,7 +101,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
   };
 
   return {
-    history(projectId: string): WorkspaceChatMessage[] {
+    history(projectId: string): Promise<WorkspaceChatMessage[]> {
       return deps.chatHistory.listMessages(projectId);
     },
     async listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>> {
@@ -123,7 +125,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         tokenUsage: null,
         createdAt: new Date().toISOString()
       };
-      deps.chatHistory.appendMessage(userMessage);
+      await deps.chatHistory.appendMessage(userMessage);
 
       const containerId = deps.getContainerId(input.projectId);
       const apiKey = deps.getApiKey(input.projectId);
@@ -149,13 +151,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const promptInput = {
           template: deps.template,
           contextFiles,
-          rollingSummary: deps.chatHistory.getSummary(input.projectId)?.summary ?? null
+          rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null
         };
         const systemPrompt =
           agentMode === "plan" ? buildPlanSystemPrompt(promptInput) : buildSystemPrompt(promptInput);
 
-        const priorMessages = deps.chatHistory
-          .listMessages(input.projectId)
+        const priorMessages = (await deps.chatHistory.listMessages(input.projectId))
           .filter((message) => message.role !== "system")
           .map((message) => ({
             role: message.role === "assistant" ? ("assistant" as const) : ("user" as const),
@@ -201,6 +202,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             if (event.type === "action_chunk") {
               const action = openActions.get(event.actionId);
               if (action) action.content += event.content;
+              yield { type: "action_chunk", actionId: event.actionId, content: event.content };
               continue;
             }
             if (event.type === "action_end") {
@@ -328,10 +330,10 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           projectId: input.projectId,
           metadata: { sha }
         });
-        deps.chatHistory.appendMessage(assistantMessage);
+        await deps.chatHistory.appendMessage(assistantMessage);
         yield { type: "commit", sha };
       } else {
-        deps.chatHistory.appendMessage(assistantMessage);
+        await deps.chatHistory.appendMessage(assistantMessage);
       }
 
       yield { type: "done" };

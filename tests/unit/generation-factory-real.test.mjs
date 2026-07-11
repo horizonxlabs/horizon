@@ -10,15 +10,15 @@ function orch(containerId) {
   };
 }
 
-test("memory mode still builds a generation service without real infra", () => {
-  const svc = createDefaultGenerationService({ orchestrator: orch("c1"), env: {} });
+test("memory mode still builds a generation service without real infra", async () => {
+  const svc = await createDefaultGenerationService({ orchestrator: orch("c1"), env: {} });
   assert.equal(typeof svc.runTurn, "function");
 });
 
-test("real mode requires no throwing docker placeholder (constructs cleanly)", () => {
+test("real mode requires no throwing docker placeholder (constructs cleanly)", async () => {
   // In real mode with a base URL set, the factory must build a real socket engine
   // internally rather than the throwing placeholder. Constructing must not throw.
-  const svc = createDefaultGenerationService({
+  const svc = await createDefaultGenerationService({
     orchestrator: orch("c1"),
     env: { EVCP_WORKSPACE_REAL_ADAPTERS: "1", EVCP_LITELLM_BASE_URL: "http://litellm:4000", EVCP_LITELLM_MASTER_KEY: "sk-master" }
   });

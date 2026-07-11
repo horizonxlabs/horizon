@@ -57,8 +57,9 @@ export function createChatSseHandler(deps: {
         res.end(JSON.stringify({ error: "forbidden" }));
         return;
       }
+      const messages = await deps.generationService.history(projectId);
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ messages: deps.generationService.history(projectId) }));
+      res.end(JSON.stringify({ messages }));
       return;
     }
 

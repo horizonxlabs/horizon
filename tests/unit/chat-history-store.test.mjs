@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryChatHistoryStore } from "../../apps/platform-api/src/generation-loop/chat-history-store.ts";
 
-test("appends messages in order and lists them per project", () => {
+test("appends messages in order and lists them per project", async () => {
   const store = createMemoryChatHistoryStore();
-  store.appendMessage({
+  await store.appendMessage({
     id: "m1",
     projectId: "p1",
     role: "user",
@@ -14,7 +14,7 @@ test("appends messages in order and lists them per project", () => {
     tokenUsage: null,
     createdAt: "2026-01-01T00:00:00.000Z"
   });
-  store.appendMessage({
+  await store.appendMessage({
     id: "m2",
     projectId: "p1",
     role: "assistant",
@@ -25,18 +25,18 @@ test("appends messages in order and lists them per project", () => {
     createdAt: "2026-01-01T00:00:01.000Z"
   });
 
-  const messages = store.listMessages("p1");
+  const messages = await store.listMessages("p1");
   assert.equal(messages.length, 2);
   assert.equal(messages[1].content, "hello");
-  assert.equal(store.listMessages("other-project").length, 0);
+  assert.equal((await store.listMessages("other-project")).length, 0);
 });
 
-test("stores and retrieves a rolling summary per project, latest write wins", () => {
+test("stores and retrieves a rolling summary per project, latest write wins", async () => {
   const store = createMemoryChatHistoryStore();
-  assert.equal(store.getSummary("p1"), null);
+  assert.equal(await store.getSummary("p1"), null);
 
-  store.putSummary({ projectId: "p1", summary: "v1", updatedAt: "2026-01-01T00:00:00.000Z" });
-  store.putSummary({ projectId: "p1", summary: "v2", updatedAt: "2026-01-01T00:00:01.000Z" });
+  await store.putSummary({ projectId: "p1", summary: "v1", updatedAt: "2026-01-01T00:00:00.000Z" });
+  await store.putSummary({ projectId: "p1", summary: "v2", updatedAt: "2026-01-01T00:00:01.000Z" });
 
-  assert.equal(store.getSummary("p1").summary, "v2");
+  assert.equal((await store.getSummary("p1")).summary, "v2");
 });

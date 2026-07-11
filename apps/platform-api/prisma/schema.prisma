@@ -203,6 +203,8 @@ model Project {
   knowledgeRetrievalLogs KnowledgeRetrievalLog[]
   skillAssignments SkillAssignment[]
   notifications InAppNotification[]
+  chatMessages ChatMessage[]
+  chatSummary ChatSummary?
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -618,6 +620,32 @@ model FrontendCheckpoint {
   @@unique([projectId, version])
   @@index([projectId, status])
   @@map("frontend_checkpoints")
+}
+
+model ChatMessage {
+  id                String   @id
+  projectId         String   @map("project_id")
+  role              String
+  agentMode         String?  @map("agent_mode")
+  content           String
+  artifactActionIds String[] @default([]) @map("artifact_action_ids")
+  actions           Json?
+  commitSha         String?  @map("commit_sha")
+  tokenUsage        Json?    @map("token_usage")
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatSummary {
+  projectId String   @id @map("project_id")
+  summary   String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("chat_summaries")
 }
 
 model AppInvitation {
