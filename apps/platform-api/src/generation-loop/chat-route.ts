@@ -129,8 +129,15 @@ export function createChatSseHandler(deps: {
     res.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
-      connection: "keep-alive"
+      connection: "keep-alive",
+      // Tell any buffering proxy (nginx/ingress) not to hold the stream — deliver events as flushed.
+      "x-accel-buffering": "no"
     });
+    // Push the headers + an SSE comment to the socket NOW. Otherwise Node holds the response until
+    // the first res.write(), and the gap before the first LLM token (several seconds) makes the
+    // reverse proxy time out the request with a 504 before the stream ever opens.
+    res.flushHeaders?.();
+    res.write(": open\n\n");
 
     try {
       for await (const event of deps.generationService.runTurn({ projectId, prompt, agentMode })) {
