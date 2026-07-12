@@ -13,15 +13,19 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
   return {
     async commit(containerId: string, message: string): Promise<string> {
       const safe = shellEscapeDouble(message);
+      // `-c safe.directory=/workspace` on every call so git never aborts with "detected dubious
+      // ownership" (exit 128) when the mounted /workspace is owned by a different uid than the exec
+      // user — which varies by host. Mirrors the publish GitPort, which already guards this.
+      const g = "git -c safe.directory=/workspace";
       // Idempotent init + identity, stage all, allow-empty commit, print HEAD.
       const script = [
         "cd /workspace",
-        "git rev-parse --is-inside-work-tree >/dev/null 2>&1 || git init -q",
-        'git config user.email >/dev/null 2>&1 || git config user.email "ai@evcp.local"',
-        'git config user.name >/dev/null 2>&1 || git config user.name "EVCP AI"',
-        "git add -A",
-        `git commit --allow-empty -q -m "${safe}"`,
-        "git rev-parse HEAD"
+        `${g} rev-parse --is-inside-work-tree >/dev/null 2>&1 || ${g} init -q`,
+        `${g} config user.email >/dev/null 2>&1 || ${g} config user.email "ai@evcp.local"`,
+        `${g} config user.name >/dev/null 2>&1 || ${g} config user.name "EVCP AI"`,
+        `${g} add -A`,
+        `${g} commit --allow-empty -q -m "${safe}"`,
+        `${g} rev-parse HEAD`
       ].join(" && ");
 
       const result = await docker.execInContainer(containerId, ["sh", "-c", script]);

@@ -1,8 +1,15 @@
 :80 {
-	encode zstd gzip
+	# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
+	# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
+	# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
+	@compressible not path /api/*
+	encode @compressible zstd gzip
 
 	handle_path /api/* {
-		reverse_proxy platform-api:3100
+		# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
+		reverse_proxy platform-api:3100 {
+			flush_interval -1
+		}
 	}
 
 	redir /creator /creator/ 308

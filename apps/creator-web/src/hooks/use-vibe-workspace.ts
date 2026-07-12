@@ -283,11 +283,11 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
         } else if (type === "commit") {
           const sha = field("sha");
           setVibeStatus(`Committed ${sha.slice(0, 8)}`);
-          setVibePreviewKey((k) => k + 1);
         } else if (type === "done") {
           setVibeStatus((prev) =>
             mode === "plan" ? "Plan ready" : prev.startsWith("Committed") ? prev : "Done"
           );
+          if (mode === "build") setVibePreviewKey((k) => k + 1); // preview reflects /workspace edits
         }
       });
     } catch (error) {

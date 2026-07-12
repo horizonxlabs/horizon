@@ -33,6 +33,10 @@ test("commit initializes the repo, stages all, commits, and returns the HEAD sha
   assert.match(script, /git commit/);
   // commit message is passed (shell-safe)
   assert.match(script, /AI: add a home page/);
+  // every git call guards against "dubious ownership" (exit 128) on differently-owned mounts
+  const gitCalls = (script.match(/git /g) ?? []).length;
+  const guarded = (script.match(/git -c safe\.directory=\/workspace /g) ?? []).length;
+  assert.equal(guarded, gitCalls, "every git invocation must set safe.directory=/workspace");
 });
 
 test("throws if the git command fails hard (non-zero on the rev-parse read)", async () => {

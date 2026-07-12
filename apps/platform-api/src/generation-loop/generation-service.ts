@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { WorkspaceAgentMode, WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
 import { createMessageParser, type ActionType } from "./message-parser";
@@ -94,11 +95,10 @@ function parseEditBody(body: string): { find: string; replace: string } {
 }
 
 export function createGenerationService(deps: GenerationServiceDeps) {
-  let messageCounter = 0;
-  const nextMessageId = () => {
-    messageCounter += 1;
-    return `msg-${messageCounter}`;
-  };
+  // Globally-unique per message. A previous in-memory counter (msg-1, msg-2, …) reset to 0 on every
+  // process restart and was shared across projects, so persisted ids collided — the chatMessage
+  // insert then failed with a unique-constraint error, aborting the turn and dropping history.
+  const nextMessageId = () => `msg-${randomUUID()}`;
 
   return {
     history(projectId: string): Promise<WorkspaceChatMessage[]> {
@@ -323,15 +323,23 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       };
 
       if (!turnFailed && agentMode === "build") {
-        const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
-        assistantMessage.commitSha = sha;
-        deps.onAudit?.({
-          action: "generation.commit_created",
-          projectId: input.projectId,
-          metadata: { sha }
-        });
-        await deps.chatHistory.appendMessage(assistantMessage);
-        yield { type: "commit", sha };
+        try {
+          const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
+          assistantMessage.commitSha = sha;
+          deps.onAudit?.({
+            action: "generation.commit_created",
+            projectId: input.projectId,
+            metadata: { sha }
+          });
+          await deps.chatHistory.appendMessage(assistantMessage);
+          yield { type: "commit", sha };
+        } catch (error) {
+          // The commit failed (e.g. git exit 128), but the AI already produced output and edits.
+          // Persist the turn anyway so the thread is never lost, then surface the failure as an
+          // event instead of throwing (which would drop the unsaved message and blank the history).
+          await deps.chatHistory.appendMessage(assistantMessage);
+          yield { type: "error", message: (error as Error).message };
+        }
       } else {
         await deps.chatHistory.appendMessage(assistantMessage);
       }

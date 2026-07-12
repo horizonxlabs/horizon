@@ -69,6 +69,24 @@ test("publish route returns 422 with failures when pre-checks fail", async () =>
   assert.deepEqual(res.body.failures, ["next build failed"]);
 });
 
+test("publish route surfaces infra failures as 500 publish_failed with the reason", async () => {
+  const routes = createPublishRoutes({
+    publishService: {
+      publish: async () => {
+        throw new Error("no dev container for project 'p1'");
+      }
+    },
+    deployments: createMemoryDeploymentStore()
+  });
+  const res = await routes.publish(
+    { userId: "u1", roles: ["creator"], projectIds: ["p1"] },
+    { projectId: "p1", slug: "app", environment: "staging" }
+  );
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error, "publish_failed");
+  assert.equal(res.body.message, "no dev container for project 'p1'");
+});
+
 test("promote route: 403 non-member, 409 when no staging, 201 with deployment on success", async () => {
   const deployments = createMemoryDeploymentStore();
   // non-member

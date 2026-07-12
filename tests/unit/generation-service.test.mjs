@@ -61,6 +61,84 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   assert.equal(events.at(-1).type, "done");
 });
 
+test("message ids are unique across service instances (survive a process restart)", async () => {
+  // Regression: nextMessageId used to be an in-memory counter (msg-1, msg-2, …) that reset on every
+  // restart and was shared across projects, so a fresh instance re-issued msg-1 and collided with a
+  // persisted row. A new service instance must never reuse an id the shared store already holds.
+  const chatHistory = createMemoryChatHistoryStore();
+  const buildService = () =>
+    createGenerationService({
+      llmClient: createMemoryLlmCompletionClient(["Just talking."]),
+      chatHistory,
+      actionRunner: createActionRunner({
+        docker: createMemoryDockerEngine(),
+        checkpoints: createMemoryCheckpointStore(),
+        migrations: createMemoryMigrationStore()
+      }),
+      errorFeedback: createErrorFeedbackTracker(),
+      template,
+      getApiKey: () => "sk-fake",
+      getContainerId: () => undefined,
+      commitAllChanges: async () => "sha"
+    });
+
+  await collect(buildService().runTurn({ projectId: "p1", prompt: "hi", agentMode: "plan" }));
+  // Second instance = simulated restart; the old counter would re-issue the same ids here.
+  await collect(buildService().runTurn({ projectId: "p1", prompt: "again", agentMode: "plan" }));
+
+  const ids = (await chatHistory.listMessages("p1")).map((message) => message.id);
+  assert.equal(new Set(ids).size, ids.length, `message ids must be unique, got ${ids.join(", ")}`);
+});
+
+test("commit failure still persists the turn and surfaces an error event (no lost history)", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await docker.createContainer({
+    name: "evcp-ws-demo",
+    image: "img",
+    env: [],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
+    labels: {},
+    exposedPort: 3000,
+    publishPorts: false
+  });
+  const chatHistory = createMemoryChatHistoryStore();
+  const scriptedReply =
+    'Adding it.\n<artifact id="a1" title="add page">' +
+    '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
+    "</artifact>";
+
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([scriptedReply]),
+    chatHistory,
+    actionRunner: createActionRunner({
+      docker,
+      checkpoints: createMemoryCheckpointStore(),
+      migrations: createMemoryMigrationStore()
+    }),
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => containerId,
+    commitAllChanges: async () => {
+      throw new Error("git commit failed (exit 128): detected dubious ownership in '/workspace'");
+    }
+  });
+
+  const events = await collect(service.runTurn({ projectId: "p1", prompt: "add home page" }));
+
+  // The commit throw must NOT abort the turn: an error event is surfaced, then done.
+  const errorEvent = events.find((event) => event.type === "error");
+  assert.match(errorEvent.message, /git commit failed \(exit 128\)/);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  assert.equal(events.at(-1).type, "done");
+  // Crucially, the assistant turn is still saved so switching projects / refreshing keeps it.
+  const saved = await chatHistory.listMessages("p1");
+  assert.equal(saved.some((message) => message.role === "assistant"), true);
+});
+
 test("plan mode streams read-only LLM analysis without running actions or committing", async () => {
   const chatHistory = createMemoryChatHistoryStore();
   let actionAttempts = 0;

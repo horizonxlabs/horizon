@@ -115,8 +115,17 @@ export function registerPublishHttpRoutes(opts: {
     const body = req.body as { environment?: unknown } | undefined;
     const slug = resolveResourceKey(projectId);
     const environment = normalizeEnvironment(body?.environment);
-    const result = await publishRoutes.publish(auth, { projectId, slug, environment });
-    res.status(result.status).json(result.body);
+    try {
+      const result = await publishRoutes.publish(auth, { projectId, slug, environment });
+      res.status(result.status).json(result.body);
+    } catch (error) {
+      // Last-resort guard so an unexpected throw becomes a labelled, logged error instead of the
+      // generic 500 the Nest filter emits (which hides the cause from prod deploy failures).
+      console.error(`[publish] ${projectId} -> ${environment} failed:`, error);
+      res
+        .status(500)
+        .json({ error: "publish_failed", message: (error as Error).message ?? "unknown error" });
+    }
   };
 
   const rollbackHandler = async (req: PublishReq, res: PublishRes) => {
