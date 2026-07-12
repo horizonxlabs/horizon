@@ -12,6 +12,15 @@ export { applyFindReplace };
 // every change must go through an edit action.
 const WHOLE_FILE_REWRITE_LIMIT = 500;
 
+// The AI's edit format uses git-conflict-style markers (<<<<<<< SEARCH / ======= / >>>>>>> REPLACE).
+// If such a marker leaks into content that gets written — a REPLACE body the model pasted with a
+// stray "=======", or a whole-file write echoing a conflict-looking block — the file is committed
+// with the marker and the app build fails with "Merge conflict marker encountered". Detect it and
+// reject the write so the model regenerates clean content instead of shipping a broken file.
+function conflictMarkerLine(text: string): string | undefined {
+  return text.match(/^(?:<{7,}|={7,}|>{7,}|\|{7,})(?:[ \t].*)?$/m)?.[0];
+}
+
 export type RunnableAction =
   | { id: string; type: "file"; filePath: string; content: string }
   | { id: string; type: "edit"; filePath: string; find: string; replace: string }
@@ -49,6 +58,19 @@ export function createActionRunner(deps: {
           return {
             ok: false,
             error: `refusing to write locked file '${action.filePath}'`,
+            stdout: "",
+            stderr: "",
+            exitCode: -1
+          };
+        }
+        const marker = conflictMarkerLine(action.content);
+        if (marker) {
+          return {
+            ok: false,
+            error:
+              `refusing to write '${action.filePath}': the content contains a git conflict ` +
+              `marker ("${marker.slice(0, 12)}"). Emit clean file content with no ` +
+              `<<<<<<< / ======= / >>>>>>> markers.`,
             stdout: "",
             stderr: "",
             exitCode: -1
@@ -105,6 +127,19 @@ export function createActionRunner(deps: {
           return {
             ok: false,
             error: `refusing to edit locked file '${action.filePath}'`,
+            stdout: "",
+            stderr: "",
+            exitCode: -1
+          };
+        }
+        const marker = conflictMarkerLine(action.replace);
+        if (marker) {
+          return {
+            ok: false,
+            error:
+              `edit of '${action.filePath}' rejected: the REPLACE text contains a git conflict ` +
+              `marker ("${marker.slice(0, 12)}"). Provide only the replacement code, with no ` +
+              `<<<<<<< / ======= / >>>>>>> markers.`,
             stdout: "",
             stderr: "",
             exitCode: -1
