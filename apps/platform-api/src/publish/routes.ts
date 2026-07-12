@@ -23,13 +23,24 @@ export function createPublishRoutes(deps: {
     if (!isMember(auth, input.projectId)) {
       return { status: 403, body: { error: "forbidden" } };
     }
-    const outcome = await deps.publishService.publish({
-      projectId: input.projectId,
-      slug: input.slug,
-      environment: input.environment,
-      commitSha: input.commitSha,
-      publishedByUserId: auth.userId
-    });
+    let outcome;
+    try {
+      outcome = await deps.publishService.publish({
+        projectId: input.projectId,
+        slug: input.slug,
+        environment: input.environment,
+        commitSha: input.commitSha,
+        publishedByUserId: auth.userId
+      });
+    } catch (error) {
+      // A thrown error here is an infrastructure failure (no dev container, empty git tree, image
+      // build/run failure, missing docker network) rather than a modelled publish outcome. Surface
+      // the reason to the client instead of a bare 500 so prod deploys are diagnosable.
+      return {
+        status: 500,
+        body: { error: "publish_failed", message: (error as Error).message }
+      };
+    }
     if (outcome.ok) {
       return { status: 201, body: { deployment: outcome.deployment } };
     }

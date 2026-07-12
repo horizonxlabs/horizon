@@ -323,15 +323,23 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       };
 
       if (!turnFailed && agentMode === "build") {
-        const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
-        assistantMessage.commitSha = sha;
-        deps.onAudit?.({
-          action: "generation.commit_created",
-          projectId: input.projectId,
-          metadata: { sha }
-        });
-        await deps.chatHistory.appendMessage(assistantMessage);
-        yield { type: "commit", sha };
+        try {
+          const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
+          assistantMessage.commitSha = sha;
+          deps.onAudit?.({
+            action: "generation.commit_created",
+            projectId: input.projectId,
+            metadata: { sha }
+          });
+          await deps.chatHistory.appendMessage(assistantMessage);
+          yield { type: "commit", sha };
+        } catch (error) {
+          // The commit failed (e.g. git exit 128), but the AI already produced output and edits.
+          // Persist the turn anyway so the thread is never lost, then surface the failure as an
+          // event instead of throwing (which would drop the unsaved message and blank the history).
+          await deps.chatHistory.appendMessage(assistantMessage);
+          yield { type: "error", message: (error as Error).message };
+        }
       } else {
         await deps.chatHistory.appendMessage(assistantMessage);
       }
