@@ -28,9 +28,10 @@ test("commit initializes the repo, stages all, commits, and returns the HEAD sha
   // one combined shell invocation into the right container
   assert.equal(docker.calls[0].containerId, "container-1");
   const script = docker.calls.map((c) => c.cmd.join(" ")).join(" | ");
-  assert.match(script, /git init/);
-  assert.match(script, /git add -A/);
-  assert.match(script, /git commit/);
+  // Subcommands are present (each git call is prefixed with -c safe.directory=/workspace).
+  assert.match(script, / init -q/);
+  assert.match(script, / add -A/);
+  assert.match(script, / commit /);
   // commit message is passed (shell-safe)
   assert.match(script, /AI: add a home page/);
   // every git call guards against "dubious ownership" (exit 128) on differently-owned mounts
