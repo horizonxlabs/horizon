@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { WorkspaceAgentMode, WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
 import { createMessageParser, type ActionType } from "./message-parser";
@@ -94,11 +95,10 @@ function parseEditBody(body: string): { find: string; replace: string } {
 }
 
 export function createGenerationService(deps: GenerationServiceDeps) {
-  let messageCounter = 0;
-  const nextMessageId = () => {
-    messageCounter += 1;
-    return `msg-${messageCounter}`;
-  };
+  // Globally-unique per message. A previous in-memory counter (msg-1, msg-2, …) reset to 0 on every
+  // process restart and was shared across projects, so persisted ids collided — the chatMessage
+  // insert then failed with a unique-constraint error, aborting the turn and dropping history.
+  const nextMessageId = () => `msg-${randomUUID()}`;
 
   return {
     history(projectId: string): Promise<WorkspaceChatMessage[]> {
