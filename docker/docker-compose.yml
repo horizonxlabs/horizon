@@ -69,13 +69,15 @@ services:
     image: quay.io/keycloak/keycloak:26.2
     container_name: evcp-keycloak
     restart: unless-stopped
-    command: start-dev --http-port=8080
+    command: start-dev --import-realm --http-port=8080
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
       KC_HEALTH_ENABLED: "true"
     ports:
       - "8081:8080"
+    volumes:
+      - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
     healthcheck:
       test:
         [
@@ -116,6 +118,13 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+      EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL}
     networks:
       - evcp-internal
     depends_on:
@@ -127,6 +136,8 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
+      keycloak:
+        condition: service_healthy
 
   admin-web:
     <<: *evcp-node-service
