@@ -19,7 +19,7 @@ test("admin user page exposes Keycloak lifecycle actions", async () => {
     "apps/admin-web/src/features/user-management/KeycloakUserManagement.tsx",
     "utf8"
   );
-  for (const label of ["Create user", "Disable", "Enable", "Reset password", "Role"])
+  for (const label of ["Create user", "Edit", "Disable", "Enable", "Reset password", "Role", "Next page"])
     assert.match(source, new RegExp(label));
 });
 

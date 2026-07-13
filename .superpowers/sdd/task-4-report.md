@@ -21,3 +21,5 @@ P1 follow-up: mock-header authentication is now opt-in (`EVCP_ALLOW_SIMULATE_LOG
 CI follow-up: replaced stale simulated-login and mock-store assertions with Keycloak redirect/session assertions.
 
 Final CI follow-up: refreshed the operational bootstrap documentation assertion for the Keycloak session handoff.
+
+P2 follow-up: Admin Keycloak users now support name/email edits and paginated navigation.

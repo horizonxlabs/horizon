@@ -17,6 +17,8 @@ export function KeycloakUserManagement({ client }: { client: PlatformApiClient }
   const [draft, setDraft] = useState<UserDraft>(emptyDraft);
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
+  const [page, setPage] = useState(0);
+  const pageSize = 10;
 
   const load = async () => {
     try { setUsers(await keycloak.list()); setError(undefined); }
@@ -43,11 +45,12 @@ export function KeycloakUserManagement({ client }: { client: PlatformApiClient }
       {error ? <DecisionPanel tone="danger" badge="error" title={error} lines={["Try the action again or review Keycloak connectivity."]} /> : null}
     </SectionCard>
     <SectionCard eyebrow="Lifecycle" title="Directory users">
-      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>User</th><th>Status</th><th>Role</th><th>Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
+      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>User</th><th>Status</th><th>Role</th><th>Actions</th></tr></thead><tbody>{users.slice(page * pageSize, (page + 1) * pageSize).map((user) => <tr key={user.id}>
         <td><strong>{user.name}</strong><br /><span>{user.email}</span></td><td>{user.enabled ? "Enabled" : "Disabled"}</td>
         <td><select aria-label={`Role for ${user.email}`} value={userRole(user)} onChange={(event) => void perform(() => keycloak.setRole(user.id, event.target.value as UserDraft["role"]), "Role updated.")}><option value="admin">Admin</option><option value="creator">Creator</option><option value="end_user">End user</option></select></td>
-        <td>{user.enabled ? <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, false), "User disabled.")}>Disable</button> : <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, true), "User enabled.")}>Enable</button>} <button type="button" className="secondary-button" onClick={() => { const temporaryPassword = window.prompt("Temporary password"); if (temporaryPassword) void perform(() => keycloak.resetPassword(user.id, temporaryPassword), "Password reset requested."); }}>Reset password</button></td>
+        <td><button type="button" className="secondary-button" onClick={() => { const name = window.prompt("Name", user.name); const email = window.prompt("Email", user.email); if (name && email) void perform(() => keycloak.update(user.id, { name, email }), "User updated."); }}>Edit</button> {user.enabled ? <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, false), "User disabled.")}>Disable</button> : <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, true), "User enabled.")}>Enable</button>} <button type="button" className="secondary-button" onClick={() => { const temporaryPassword = window.prompt("Temporary password"); if (temporaryPassword) void perform(() => keycloak.resetPassword(user.id, temporaryPassword), "Password reset requested."); }}>Reset password</button></td>
       </tr>)}</tbody></table></div>
+      <div><button type="button" className="secondary-button" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous page</button> <span>Page {page + 1}</span> <button type="button" className="secondary-button" disabled={(page + 1) * pageSize >= users.length} onClick={() => setPage(page + 1)}>Next page</button></div>
     </SectionCard>
   </section>;
 }
