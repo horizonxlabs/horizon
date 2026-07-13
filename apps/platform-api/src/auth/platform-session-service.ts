@@ -3,7 +3,12 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-export type PlatformSessionSubject = { id: string; email: string };
+export type PlatformSessionSubject = {
+  id: string;
+  email: string;
+  providerConfigId: string;
+  claims: Record<string, unknown>;
+};
 
 export type PlatformTokenPair = {
   token: string;
@@ -19,6 +24,9 @@ export type PersistedPlatformSession = {
   accessTokenId: string;
   userId: string;
   email: string;
+  providerConfigId: string;
+  claims: Record<string, unknown>;
+  sessionTokenHash: string;
   refreshTokenHash?: string | null;
   expiresAt: Date;
   refreshExpiresAt?: Date | null;
@@ -79,7 +87,12 @@ export class PlatformSessionService {
     }
     if (existing.revokedAt) throw new PlatformSessionError("invalid_refresh_token");
     if (this.now().getTime() >= existing.refreshExpiresAt.getTime()) throw new PlatformSessionError("invalid_refresh_token");
-    const next = this.newSession({ id: existing.userId, email: existing.email }, this.now(), existing.sessionFamilyId);
+    const next = this.newSession({
+      id: existing.userId,
+      email: existing.email,
+      providerConfigId: existing.providerConfigId,
+      claims: existing.claims
+    }, this.now(), existing.sessionFamilyId);
     await this.repository.replaceSession({ previousId: existing.id, next: next.record });
     return next.pair;
   }
@@ -99,9 +112,14 @@ export class PlatformSessionService {
     const refreshExpiresAt = new Date(issuedAt.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000);
     const refreshToken = this.token();
     const payload: AccessPayload = { typ: "evcp.platform.session", sid: id, jti: accessTokenId, sub: subject.id, email: subject.email, iat: Math.floor(issuedAt.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000) };
+    const token = this.encodeAccessToken(payload);
     return {
-      record: { id, sessionFamilyId, accessTokenId, userId: subject.id, email: subject.email, refreshTokenHash: this.hash(refreshToken), expiresAt, refreshExpiresAt },
-      pair: { token: this.encodeAccessToken(payload), expiresAt: expiresAt.toISOString(), refreshToken, refreshExpiresAt: refreshExpiresAt.toISOString(), sessionId: id }
+      record: {
+        id, sessionFamilyId, accessTokenId, userId: subject.id, email: subject.email,
+        providerConfigId: subject.providerConfigId, claims: subject.claims,
+        sessionTokenHash: this.hash(token), refreshTokenHash: this.hash(refreshToken), expiresAt, refreshExpiresAt
+      },
+      pair: { token, expiresAt: expiresAt.toISOString(), refreshToken, refreshExpiresAt: refreshExpiresAt.toISOString(), sessionId: id }
     };
   }
 
