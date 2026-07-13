@@ -6,3 +6,4 @@ export {
   restoreValidationRows
 } from "./evidence";
 export type { InstallWizardStepId } from "./evidence";
+export { SetupWizard } from "@/setup-wizard";

@@ -9,7 +9,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { apiBaseUrl, saveAdminSession } from "./admin-client";
+import { apiBaseUrl, saveAdminSession } from "@/shared/platform-client";
 
 interface LoginResult {
   token: string;
