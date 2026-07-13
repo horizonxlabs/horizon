@@ -12,6 +12,7 @@ const requiredRootScripts = [
   "check:ci",
   "check:changed",
   "check:staged",
+  "check:frontend-architecture",
   "lint",
   "lint:code",
   "lint:repo",

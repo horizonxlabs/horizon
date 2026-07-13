@@ -1,14 +1,34 @@
 # Frontend architecture & code-health guardrails
 
+## Required feature-first application layout
+
+New React business code follows this target layout. Existing layer-first source is deliberately
+migrated incrementally; do not add new files to it.
+
+```
+apps/<app>/src/
+  app/        composition, providers, layouts, configuration
+  routes/     URL mapping, guards, loaders; no feature business logic
+  features/   business capabilities; only index.ts is cross-feature API
+  shared/     generic app-local code; never imports feature/route/app
+```
+
+A capability lives in `features/<feature-name>` and owns its API adapters, components, hooks,
+schemas, types, and utilities. Do not scaffold empty folders: add a folder only when it has code.
+Other features and routes import it only through its **Feature public API** (`@/features/<name>`),
+never a deep internal path. New target-layout imports use the `@/` alias. UI permission helpers are
+for experience only; backend authorization remains authoritative. See ADR-012 for the full decision.
+
 This document exists because a few files grew to thousands of lines
 (`apps/creator-web/src/main.tsx` hit 3499, `apps/admin-web/src/main.tsx` is still ~4976) and
 became painful and risky to refactor. It records the conventions that keep new code maintainable
 and the automated guardrails that enforce them.
 
-## The convention: page = thin component + hook, logic in modules
+## Legacy migration guidance: page = thin component + hook, logic in modules
 
-A React app is decomposed so that **every unit is small, single-purpose, and independently
-understandable** — the same principle applied to `creator-web`, which is now the reference layout:
+While baseline layer-first files are migrated into the required layout above, keep every unit small,
+single-purpose, and independently understandable. The existing `creator-web` layout below is a
+legacy migration reference, not a structure for new files:
 
 ```
 apps/<app>/src/
