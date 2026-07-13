@@ -222,3 +222,17 @@ test("Admin governance does not load while logged out and gates provider test ca
     2
   );
 });
+
+test("Admin logout disables governance and clears quota fixture evidence", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(
+    source,
+    /function handleLogoutBridge\(\) \{\s*setBootstrap\(clearAdminSessionBridge\(\)\);\s*setSessionActive\(false\);/s
+  );
+  assert.doesNotMatch(source, /latestAiQuota\?\.usedToday \?\? 0/);
+  assert.doesNotMatch(source, /latestAiQuota\?\.dailyLimit \?\? aiGovernanceForm\.quotaDailyLimit/);
+  assert.doesNotMatch(source, /Organization 1,000 daily/);
+  assert.doesNotMatch(source, /Creator 500 daily/);
+  assert.doesNotMatch(source, /Project 300 daily/);
+  assert.doesNotMatch(source, /App 100 daily/);
+});

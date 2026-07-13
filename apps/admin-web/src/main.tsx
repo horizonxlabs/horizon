@@ -1701,6 +1701,12 @@ function AdminApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearAdminSessionBridge());
+    setSessionActive(false);
+    setLatestAiRoute(undefined);
+    setLatestAiQuota(undefined);
+    setLatestGuardrailRule(undefined);
+    setProviderTestCallResult(undefined);
+    setAiKeySecret("");
   }
 
   const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
@@ -3323,25 +3329,30 @@ function AdminApp() {
               </SectionCard>
 
               <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
-                <div className="ds-quota-meter">
-                  <div>
-                    <span>Used today</span>
-                    <strong>
-                      {latestAiQuota?.usedToday ?? 0} /{" "}
-                      {latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit}
-                    </strong>
+                {latestAiQuota ? (
+                  <div className="ds-quota-meter">
+                    <div>
+                      <span>Used today</span>
+                      <strong>
+                        {latestAiQuota.usedToday} / {latestAiQuota.dailyLimit}
+                      </strong>
+                    </div>
+                    <progress
+                      className="ds-meter-progress"
+                      value={latestAiQuota.usedToday}
+                      max={Math.max(latestAiQuota.dailyLimit, 1)}
+                      aria-label="Daily token quota used"
+                    />
+                    <small>Hard stop blocks before provider call.</small>
                   </div>
-                  <progress
-                    className="ds-meter-progress"
-                    value={latestAiQuota?.usedToday ?? 0}
-                    max={Math.max(
-                      Number(latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit),
-                      1
-                    )}
-                    aria-label="Daily token quota used"
+                ) : (
+                  <DecisionPanel
+                    tone="warning"
+                    badge="unavailable"
+                    title="Quota data unavailable"
+                    lines={["Configure a quota through the Platform API to view its usage."]}
                   />
-                  <small>Hard stop blocks before provider call.</small>
-                </div>
+                )}
                 <div className="ai-governance-action-panel compact">
                   <label>
                     Scope
@@ -3365,18 +3376,6 @@ function AdminApp() {
                   >
                     <Gauge size={15} /> Configure Quota
                   </button>
-                </div>
-                <div className="ds-stack-list">
-                  {[
-                    "Organization 1,000 daily",
-                    "Creator 500 daily",
-                    "Project 300 daily",
-                    "App 100 daily"
-                  ].map((item) => (
-                    <p key={item}>
-                      <Activity size={14} /> {item}
-                    </p>
-                  ))}
                 </div>
               </SectionCard>
             </section>
