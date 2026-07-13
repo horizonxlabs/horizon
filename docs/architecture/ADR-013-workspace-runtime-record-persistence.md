@@ -1,7 +1,7 @@
 # ADR-013: Persist workspace runtime records
 
-**Status:** Accepted  
-**Date:** 2026-07-13  
+**Status:** Accepted
+**Date:** 2026-07-13
 **Deciders:** Platform Engineering
 
 ## Context
@@ -33,7 +33,7 @@ authority for intended lifecycle state and audit/recovery metadata.
 | Failure/audit evidence | Lost |
 | API compatibility | Unchanged |
 
-**Pros:** no migration.  
+**Pros:** no migration.
 **Cons:** cannot distinguish intentional idle/archive from an interrupted process; every restart
 needs a side-effecting recovery request.
 
@@ -46,7 +46,7 @@ needs a side-effecting recovery request.
 | Failure/audit evidence | Durable |
 | API compatibility | Preserved after hydration |
 
-**Pros:** explicit lifecycle transitions survive restart and remain queryable.  
+**Pros:** explicit lifecycle transitions survive restart and remain queryable.
 **Cons:** requires one migration and compensating behavior when Docker has drifted.
 
 ### Option C: External workflow engine
@@ -57,7 +57,7 @@ needs a side-effecting recovery request.
 | Restart fidelity | High |
 | Operational cost | High |
 
-**Pros:** durable retries and leases.  
+**Pros:** durable retries and leases.
 **Cons:** exceeds the private-server MVP boundary.
 
 ## Trade-off analysis
