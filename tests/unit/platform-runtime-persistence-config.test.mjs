@@ -28,6 +28,7 @@ test("runtime core persistence memory mode enables repository-backed core routes
 
   assert.equal(resolveCorePersistenceMode({ EVCP_CORE_PERSISTENCE: "memory" }), "memory");
   assert.ok(services.corePersistence);
+  assert.ok(services.governedAiExecutor);
   assert.equal(created.status, 201);
   assert.match(created.body.data.id, /^prj_[0-9a-f]{32}$/);
   assert.equal(audit.body.data.length, 1);

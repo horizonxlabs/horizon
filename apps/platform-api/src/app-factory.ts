@@ -54,6 +54,8 @@ import {
   MemoryAiGovernancePersistenceClient,
   type AiGovernanceRepositoryBackedService
 } from "./persistence/ai-governance-repositories";
+import { createPersistedGovernedAiExecutor } from "./ai-governance/execution-runtime";
+import { PrismaAiExecutionStore } from "./persistence/ai-execution-repository";
 import {
   createBusinessSettingsRepositoryBackedService,
   createPrismaBusinessSettingsPersistence,
@@ -119,6 +121,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistenceClient?: CorePersistenceClient;
   credentialService?: PlatformCredentialService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
+  governedAiExecutor?: import("./ai-governance/execution-service").GovernedAiExecutor;
   businessSettingsPersistence?: BusinessSettingsRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
   workspacePersistence?: WorkspaceRepositoryBackedService;
@@ -261,6 +264,7 @@ export async function createRuntimePlatformApiServices(
   if (mode === "legacy") return services;
   if (mode === "memory") {
     const client = new MemoryCorePersistenceClient();
+    const aiClient = new MemoryAiGovernancePersistenceClient();
     return {
       ...services,
       corePersistence: createCoreRepositoryBackedService(client),
@@ -269,8 +273,9 @@ export async function createRuntimePlatformApiServices(
         createCorePersistenceCredentialStore(client)
       ),
       aiGovernancePersistence: createAiGovernanceRepositoryBackedService(
-        new MemoryAiGovernancePersistenceClient()
+        aiClient
       ),
+      governedAiExecutor: createPersistedGovernedAiExecutor(aiClient),
       businessSettingsPersistence: createBusinessSettingsRepositoryBackedService(
         new MemoryBusinessSettingsPersistenceClient()
       ),
@@ -291,7 +296,7 @@ export async function createRuntimePlatformApiServices(
   await services.workspaceOrchestrator.hydrateRuntimeRecords(
     await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL)
   );
-  const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
+  const { client: aiClient, service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
     env.DATABASE_URL
   );
   const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(
@@ -315,6 +320,7 @@ export async function createRuntimePlatformApiServices(
       createCorePersistenceCredentialStore(client)
     ),
     aiGovernancePersistence,
+    governedAiExecutor: createPersistedGovernedAiExecutor(aiClient, { executionStore: new PrismaAiExecutionStore(aiClient as never) }),
     businessSettingsPersistence,
     prdPersistence,
     workspacePersistence,
