@@ -108,6 +108,25 @@ test("AppShell provides a professional persistent navigation layout", () => {
   assert.match(css, /\.sidebar-nav a\.active/);
 });
 
+test("sidebar session controls use a contained two-row grid", () => {
+  const css = readFileSync("packages/ui/styles.css", "utf8");
+
+  assert.match(
+    css,
+    /\.sidebar-session\s*\{[^}]*display: grid;[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/s
+  );
+  assert.match(
+    css,
+    /\.sidebar-session > \.tone-badge\s*\{[^}]*box-sizing: border-box;[^}]*grid-column: 1 \/ -1;[^}]*max-width: 100%;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/s
+  );
+  assert.match(css, /\.sidebar-session :is\(button, a\)\s*\{[^}]*min-width: 0;[^}]*width: 100%;/s);
+  assert.match(css, /\.app-shell-collapsed \.sidebar-session\s*\{[^}]*display: none;/s);
+  assert.match(
+    css,
+    /@media \(max-width: 760px\)\s*\{[\s\S]*?\.app-shell-collapsed \.sidebar-session\s*\{[^}]*display: grid;/
+  );
+});
+
 test("admin governance screen consumes shared design system components", () => {
   const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 
