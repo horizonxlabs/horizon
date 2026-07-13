@@ -19,3 +19,5 @@ Review follow-up: Creator now consumes the handoff before auth gating; Store beg
 P1 follow-up: mock-header authentication is now opt-in (`EVCP_ALLOW_SIMULATE_LOGIN=1`); unset and disabled environments reject it. Native-auth test harness enables it only as explicit test setup.
 
 CI follow-up: replaced stale simulated-login and mock-store assertions with Keycloak redirect/session assertions.
+
+Final CI follow-up: refreshed the operational bootstrap documentation assertion for the Keycloak session handoff.
