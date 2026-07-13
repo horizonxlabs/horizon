@@ -4,18 +4,15 @@ import {
   type StoreTicketResponse
 } from "@evcp/api-client";
 import { DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
-import {
-  Bug,
-  Download,
-  MessageSquare,
-  Send,
-  Trash2
-} from "lucide-react";
+import { Bug, Download, MessageSquare, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fallbackAccessRequest } from "@/features/access-requests";
-import { appInstallJourneySteps, fallbackInstallation, installJourneyStatus } from "@/features/installations";
+import {
+  appInstallJourneySteps,
+  fallbackInstallation,
+  installJourneyStatus
+} from "@/features/installations";
 import { fallbackTicket } from "@/features/support-tickets";
-import { createStorePlatformClient } from "@/shared/platform-client";
 import { StorefrontSummary } from "./StorefrontSummary";
 import {
   clearStoreSessionBridge,
@@ -24,6 +21,7 @@ import {
   loadStoreBootstrap,
   signInStoreSessionBridge
 } from "./bootstrap";
+import { createStorePlatformClient } from "./platform-client";
 
 export function StorefrontApp() {
   const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);

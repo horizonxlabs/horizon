@@ -1,6 +1,12 @@
-import { createPlatformApiClient, createPlatformSessionStore, type CurrentUserResponse, type SimulatedSsoLoginInput, type StorefrontAppCardDto, type StorefrontHomeResponse } from "@evcp/api-client";
+import {
+  createPlatformSessionStore,
+  type CurrentUserResponse,
+  type SimulatedSsoLoginInput,
+  type StorefrontAppCardDto,
+  type StorefrontHomeResponse
+} from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createStorePlatformClient, resolvePlatformApiBaseUrl } from "@/shared/platform-client";
+import { createStorePlatformClient, createStoreSessionBridgeClient } from "./platform-client";
 
 export type StoreBootstrapState = {
   userName: string;
@@ -81,12 +87,7 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
 }
 
 export async function signInStoreSessionBridge(): Promise<StoreBootstrapState> {
-  const baseUrl = resolvePlatformApiBaseUrl();
-  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const bridgeClient = createPlatformApiClient({
-    baseUrl,
-    legacyUserEmail: "admin@company.com"
-  });
+  const bridgeClient = createStoreSessionBridgeClient();
   const session = await bridgeClient.simulateSsoLogin(storeSessionBridgeProfile);
   createPlatformSessionStore(window.localStorage).saveSession(session);
   return loadStoreBootstrap();

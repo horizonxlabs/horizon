@@ -15,3 +15,15 @@ test("app-store bootstrap delegates root composition and URL mapping", async () 
   assert.match(routes, /@\/features\/generated-leave-management/);
   assert.doesNotMatch(main, /function GeneratedLeaveManagementApp/);
 });
+
+test("shared platform client remains generic while storefront owns Store configuration", async () => {
+  const [sharedClient, storefrontClient] = await Promise.all([
+    source("apps/app-store-pwa/src/shared/platform-client.ts"),
+    source("apps/app-store-pwa/src/features/storefront/platform-client.ts")
+  ]);
+
+  assert.match(sharedClient, /createConfiguredPlatformApiClient/);
+  assert.doesNotMatch(sharedClient, /createStorePlatformClient|@company\.com/);
+  assert.match(storefrontClient, /createStorePlatformClient/);
+  assert.match(storefrontClient, /user@company\.com/);
+});
