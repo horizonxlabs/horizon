@@ -5,7 +5,7 @@
 
 ## 1. สถานะและสมมติฐาน
 
-เอกสารนี้เรียงงานตามลำดับการลงมือทำตั้งแต่ setup ถึง release ไม่ได้ถือว่า Sprint 0–14 ยังไม่ได้ทำ สถานะอ้างอิงจาก `main` commit `bc177ad` (`v0.2.1`), เอกสาร operations/specs และ implementation ที่ตรวจเมื่อ 2026-07-13
+เอกสารนี้เรียงงานตามลำดับการลงมือทำตั้งแต่ setup ถึง release ไม่ได้ถือว่า Sprint 0–14 ยังไม่ได้ทำ สถานะอ้างอิงจาก `main` commit `bc177ad` (`v0.2.1`), เอกสาร operations/specs, implementation และการทดสอบ local Compose/Keycloak ที่ตรวจเมื่อ 2026-07-13
 
 - `[x]` ทำแล้วระดับ prototype/foundation
 - `[~]` ทำบางส่วน แต่ยังไม่ผ่าน real/pilot gate
@@ -19,7 +19,14 @@
 - [x] Prototype flow Admin governance → Creator/PRD/workspace → publish → App Store/ticket → ticket-to-PRD พร้อม Sprint 0–14 regression evidence
 - [x] Repository-shaped persistence, signed bearer-session, AI adapter, API bootstrap และ deterministic memory mode
 - [x] Real workspace adapters สำหรับ Docker/PostgreSQL/MinIO/LiteLLM, generation loop, Git checkpoint และ container publish foundation
-- [~] หลายหน้า/service ยังพึ่ง static demo data, simulated login, legacy/in-memory state หรือยังไม่มี browser E2E บน private-server stack จริง
+- [~] Real Keycloak/OIDC ใช้งานได้แล้วสำหรับ Admin และ Creator; แต่หลายหน้า/service ยังพึ่ง static demo data, legacy/in-memory state หรือยังไม่มี browser E2E บน private-server stack จริง
+
+### หลักฐานที่ตรวจเพิ่มเมื่อ 2026-07-13
+
+- [x] Local Compose stack เปิดได้: PostgreSQL, Redis, MinIO, Keycloak, LiteLLM, Platform API, Admin, Creator, Store และ Caddy
+- [x] Health และ Caddy routes ที่ทดสอบตอบปกติ: `/api/health`, Keycloak discovery ใต้ `/auth`, และ 3 web surfaces
+- [x] Real Keycloak login สำหรับ Admin และ Creator: สร้าง Creator จาก Admin ได้ และหลัง login ถูกส่งไป `http://localhost:8088/creator/`
+- [~] การทดสอบนี้เป็น local development evidence: มี restart/migration/seed และ unauthenticated OIDC-start smoke evidence แล้ว แต่ยังไม่ได้พิสูจน์ clean private-server install, credentialed Store browser login หรือ critical flow หลัง restart แบบครบวงจร
 
 ## 2. Execution Plan — ทำตามลำดับ
 
@@ -54,10 +61,10 @@
 **Dependencies:** Phase 1  
 **Checklist:**
 
-- [ ] Start PostgreSQL, Redis, MinIO, Keycloak, LiteLLM, Platform API, 3 web surfaces และ Caddy
-- [ ] รัน `prisma migrate deploy` และ idempotent seed โดยปิด demo project เว้นแต่ opt-in
-- [ ] ตรวจ health/readiness, private network, volumes, Caddy routes และไม่ expose internal ports เกินสัญญา
-- [ ] รัน install verification และ restart stack หนึ่งรอบเพื่อยืนยัน volume persistence
+- [~] Start PostgreSQL, Redis, MinIO, Keycloak, LiteLLM, Platform API, 3 web surfaces และ Caddy (ผ่านบน local Compose; ยังต้องยืนยันบน clean private server)
+- [~] รัน `prisma migrate deploy` และ idempotent seed โดยปิด demo project เว้นแต่ opt-in (ยืนยันบน local Compose แล้ว รวม Keycloak provider seed; ยังต้อง rerun บน clean private server)
+- [~] ตรวจ health/readiness และ Caddy routes (ผ่าน local); ยังต้องตรวจ private-network exposure และ volume behavior ตามสภาพแวดล้อม pilot
+- [~] รัน install verification และ restart stack หนึ่งรอบเพื่อยืนยัน volume persistence (ผ่าน local Compose; clean-host evidence ยังเหลือ)
 
 **Exit gate:** ทุก service healthy; migration/seed rerun ได้; restart แล้วข้อมูลและ volumes ยังอยู่  
 **ทำขนานได้:** smoke test MinIO, database connectivity และ observability collection
@@ -67,11 +74,11 @@
 **Dependencies:** Phase 2  
 **Checklist:**
 
-- [ ] ทำ browser redirect/callback/token exchange สำหรับ Admin, Creator และ App Store
-- [ ] persist/revoke/expire/refresh Platform Auth sessions ด้วย PostgreSQL
-- [ ] enforce platform role, app role และ resource scope ใน protected APIs
-- [ ] ปิด simulated-login route และลบ mock-header/session-bridge fallback จาก pilot configuration
-- [ ] เพิ่ม PostgreSQL auth integration tests และ browser login/logout/expiry E2E
+- [~] ทำ browser redirect/callback/token exchange สำหรับ Admin, Creator และ App Store (Admin/Creator browser-tested; Store code path ยังต้องทดสอบจริง)
+- [x] persist/revoke/expire/refresh Platform Auth sessions ด้วย PostgreSQL พร้อม refresh rotation, reuse-family revocation, logout และ Admin session revoke UI
+- [~] enforce platform role, app role และ resource scope ใน protected APIs (role mapping ใช้งานได้; ยังต้องพิสูจน์ทุก protected resource และ negative cases)
+- [x] ปิด simulated-login route และลบ mock-header/session-bridge fallback จาก pilot configuration (default ปิด; test mode ต้อง opt-in ชัดเจน)
+- [~] เพิ่ม PostgreSQL auth integration tests และ browser login/logout/expiry E2E (route/rotation/revoke contracts และ unauthenticated OIDC-start browser smoke ผ่านแล้ว; credentialed logout, expiry และ full browser E2E ยังเหลือ)
 
 **Exit gate:** ทั้ง 3 surfaces ใช้ real login เท่านั้น; invalid/expired/revoked token ถูกปฏิเสธ; restart ไม่ทำ policy เพี้ยน  
 **ทำขนานได้:** frontend callback UX และ security/redaction tests
@@ -81,11 +88,11 @@
 **Dependencies:** Phase 2; session records พึ่ง Phase 3  
 **Checklist:**
 
-- [ ] ทำ route/service inventory: `prisma`, `memory-test-only`, `legacy-to-remove`
-- [ ] ย้าย AI providers/keys/routes/quota/usage และ business state ที่เหลือไป Prisma repositories
-- [ ] เพิ่ม migration/rollback notes และ real-PostgreSQL route-level integration suite
+- [x] ทำ route/service inventory: `prisma`, `memory-test-only`, `legacy-to-remove` (`docs/operations/phase-4-state-inventory.md`)
+- [~] ย้าย AI providers/keys/routes/quota/usage และ business state ที่เหลือไป Prisma repositories (session, migration evidence และ workspace lifecycle ย้ายแล้ว; generation run/approval ledger และ legacy adapters ยังเหลือ)
+- [~] เพิ่ม migration/rollback notes และ real-PostgreSQL route-level integration suite (migration/ADR/evidence มีแล้ว; clean PostgreSQL route-level suite ยังเหลือ)
 - [ ] เปลี่ยน local secret envelope เป็น production KMS/secret-store ก่อนรับ customer provider key
-- [ ] ทดสอบ restart persistence, idempotency, tenant/project/app scoping และ cross-scope denial
+- [~] ทดสอบ restart persistence, idempotency, tenant/project/app scoping และ cross-scope denial (session rotation/reuse, migration/runtime hydration และ API denial contracts ผ่าน; full real-stack scope/restart E2E ยังเหลือ)
 
 **Exit gate:** pilot ใช้ `EVCP_CORE_PERSISTENCE=prisma`; ไม่มี authoritative state ใน process memory; secrets ไม่ออกจาก server boundary  
 **ทำขนานได้:** repository migration แยกตาม domain และ backup/restore test fixtures

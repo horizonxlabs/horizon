@@ -94,3 +94,9 @@ pnpm --filter @evcp/creator-web build                             # pass
 
 The build retains the existing runtime font-resolution warnings for `/creator/fonts/*` and
 completes successfully.
+
+## Documentation follow-up
+
+- Added the Unreleased Changed entry for issue #143 / PR #141's behavior-preserving Creator feature-first layout migration.
+- `git diff --check` passed.
+- Committed as `1a38add` (`docs(creator): record layout migration`).
