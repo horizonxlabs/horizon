@@ -22,7 +22,8 @@ test("api client exposes platform bootstrap client contract", () => {
   assert.match(source, /legacyUserEmail/);
   assert.match(source, /PlatformApiError/);
   assert.match(source, /createPlatformSessionStore/);
-  assert.match(source, /simulateSsoLogin/);
+  assert.match(source, /startKeycloakLogin/);
+  assert.doesNotMatch(source, /simulateSsoLogin/);
   assert.match(source, /EVCP_SESSION_STORAGE_KEY/);
 });
 

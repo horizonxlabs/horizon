@@ -17,3 +17,5 @@ Verification run:
 Review follow-up: Creator now consumes the handoff before auth gating; Store begins OIDC without a mock header when no platform session exists; simulation defaults disabled and Keycloak issuance no longer calls the simulation path. Focused Keycloak/frontend-bootstrap contracts: 17 passing. All three frontend builds passed.
 
 P1 follow-up: mock-header authentication is now opt-in (`EVCP_ALLOW_SIMULATE_LOGIN=1`); unset and disabled environments reject it. Native-auth test harness enables it only as explicit test setup.
+
+CI follow-up: replaced stale simulated-login and mock-store assertions with Keycloak redirect/session assertions.

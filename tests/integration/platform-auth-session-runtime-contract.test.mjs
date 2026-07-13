@@ -26,11 +26,8 @@ test("core API routes expose auth evidence and support runtime persistence beare
 });
 
 test("auth session operations doc explains current modes risks and next migration step", () => {
-  assert.match(authSessionDoc, /Platform Auth Session Runtime Integration/);
-  assert.match(authSessionDoc, /platform_session/);
-  assert.match(authSessionDoc, /mock_header/);
-  assert.match(authSessionDoc, /Authorization: Bearer evcp_session/);
-  assert.match(authSessionDoc, /Keycloak\/OIDC callback/);
-  assert.match(authSessionDoc, /Remove the mock header fallback/);
+  assert.match(authSessionDoc, /Production Keycloak Authentication/);
+  assert.match(authSessionDoc, /Authorization: Bearer <evcp_session>/);
+  assert.match(authSessionDoc, /auth\/keycloak\/callback/);
+  assert.match(authSessionDoc, /mock identity headers/);
 });
-

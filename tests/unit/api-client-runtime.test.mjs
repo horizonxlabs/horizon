@@ -212,55 +212,9 @@ test("platform session store saves loads and clears browser tokens", () => {
   assert.equal(store.getExpiresAt(), undefined);
 });
 
-test("platform API client posts simulated SSO login payloads through the bridge endpoint", async () => {
-  let observedUrl = "";
-  let observedBody = {};
-  let observedAdminHeader = "";
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "admin@company.com",
-    fetcher: async (url, init) => {
-      observedUrl = String(url);
-      observedAdminHeader = init.headers.get("x-mock-user-email");
-      observedBody = JSON.parse(String(init.body));
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "psess_0001",
-            providerId: "authprov_keycloak_default_001",
-            providerType: "keycloak",
-            token: "evcp_session.payload.signature",
-            claims: {
-              subject: "keycloak-creator-ui-bridge",
-              email: "creator@company.com",
-              name: "Creator User",
-              groups: ["evcp-creators"],
-              platformRoles: ["creator"],
-              appRoles: { "leave-management": ["HR Admin"] }
-            },
-            issuedAt: "2026-07-04T01:00:00.000Z",
-            expiresAt: "2026-07-04T02:00:00.000Z"
-          })
-        ),
-        { status: 201 }
-      );
-    }
-  });
-
-  const session = await client.simulateSsoLogin({
-    subject: "keycloak-creator-ui-bridge",
-    email: "creator@company.com",
-    name: "Creator User",
-    groups: ["evcp-creators"],
-    appRoles: { "leave-management": ["HR Admin"] }
-  });
-
-  assert.equal(observedUrl, "https://platform.example/api/admin/auth/simulate-login");
-  assert.equal(observedAdminHeader, "admin@company.com");
-  assert.equal(observedBody.providerId, "authprov_keycloak_default_001");
-  assert.equal(observedBody.email, "creator@company.com");
-  assert.deepEqual(observedBody.groups, ["evcp-creators"]);
-  assert.equal(session.token, "evcp_session.payload.signature");
+test("platform API client builds a Keycloak start redirect without a browser token", async () => {
+  const { startKeycloakLogin } = await import("../../packages/api-client/src/index.ts");
+  assert.equal(startKeycloakLogin("https://platform.example/api", "creator", "https://creator.example/workspace"), "https://platform.example/api/auth/keycloak/start?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace");
 });
 
 test("platform API client posts AI provider test-call requests", async () => {
