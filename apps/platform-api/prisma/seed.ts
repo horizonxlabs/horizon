@@ -29,6 +29,22 @@ const users = [
   { id: "usr_end_user", email: "user@company.com", name: "End User", roleId: "role_end_user" }
 ];
 
+async function seedKeycloakProvider() {
+  await prisma.authProviderConfig.upsert({
+    where: { id: "authprov_keycloak_default_001" },
+    update: {
+      providerType: "keycloak", name: "Bundled Keycloak Default", status: "active",
+      issuerUrl: "http://keycloak:8080/realms/evcp",
+      groupRoleMapping: { "evcp-admins": ["admin"], "evcp-creators": ["creator"], "evcp-users": ["end_user"] }
+    },
+    create: {
+      id: "authprov_keycloak_default_001", providerType: "keycloak", name: "Bundled Keycloak Default", status: "active",
+      issuerUrl: "http://keycloak:8080/realms/evcp", scopes: ["openid", "profile", "email"],
+      groupRoleMapping: { "evcp-admins": ["admin"], "evcp-creators": ["creator"], "evcp-users": ["end_user"] }, createdByUserId: "usr_admin"
+    }
+  });
+}
+
 async function main() {
   for (const role of roles) {
     await prisma.platformRole.upsert({
@@ -63,7 +79,9 @@ async function main() {
     update: {},
     create: { userId: "usr_creator", groupId: "grp_hr_department" }
   });
-  if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return; // demo retired; seed only when opted in
+  // Keycloak is required for every private-server installation; only sample project data is opt-in.
+  await seedKeycloakProvider();
+  if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;
   await prisma.project.upsert({
     where: { slug: "leave-management" },
     update: {
@@ -1398,34 +1416,7 @@ async function main() {
     }
   });
 
-  await prisma.authProviderConfig.upsert({
-    where: { id: "authprov_keycloak_default_001" },
-    update: {
-      providerType: "keycloak",
-      name: "Bundled Keycloak Default",
-      status: "active",
-      issuerUrl: "http://keycloak:8080/realms/evcp",
-      groupRoleMapping: {
-        "evcp-admins": ["admin"],
-        "evcp-creators": ["creator"],
-        "evcp-users": ["end_user"]
-      }
-    },
-    create: {
-      id: "authprov_keycloak_default_001",
-      providerType: "keycloak",
-      name: "Bundled Keycloak Default",
-      status: "active",
-      issuerUrl: "http://keycloak:8080/realms/evcp",
-      scopes: ["openid", "profile", "email"],
-      groupRoleMapping: {
-        "evcp-admins": ["admin"],
-        "evcp-creators": ["creator"],
-        "evcp-users": ["end_user"]
-      },
-      createdByUserId: "usr_admin"
-    }
-  });
+  await seedKeycloakProvider();
 
   await prisma.authProviderConfig.upsert({
     where: { id: "authprov_oidc_azure_ad_001" },
