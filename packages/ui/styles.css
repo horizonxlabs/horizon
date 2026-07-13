@@ -6333,9 +6333,11 @@ button:disabled {
     radial-gradient(900px 500px at 12% -10%, rgba(37, 99, 235, 0.14), transparent 60%),
     radial-gradient(760px 460px at 105% 112%, rgba(14, 165, 233, 0.1), transparent 55%),
     var(--evcp-color-page, #f1f5f9);
+  box-sizing: border-box;
   display: flex;
   justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
 }
 
@@ -6443,9 +6445,11 @@ button:disabled {
 }
 
 .creator-auth-form {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
   padding: 40px;
 }
 
@@ -6522,6 +6526,11 @@ button:disabled {
   opacity: 1;
 }
 
+.creator-auth-field input:-webkit-autofill {
+  -webkit-text-fill-color: var(--evcp-color-text, #0f172a);
+  box-shadow: 0 0 0 1000px var(--evcp-color-surface, #fff) inset;
+}
+
 .creator-auth-eye {
   align-items: center;
   background: transparent;
@@ -6530,11 +6539,20 @@ button:disabled {
   color: var(--evcp-color-muted, #94a3b8);
   cursor: pointer;
   display: flex;
-  padding: 4px;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
 }
 
 .creator-auth-eye:hover {
   color: var(--evcp-color-text, #0f172a);
+}
+
+.creator-auth-eye:focus-visible,
+.creator-auth-submit:focus-visible {
+  outline: 3px solid var(--evcp-color-primary, #2563eb);
+  outline-offset: 2px;
 }
 
 .creator-auth-submit {
@@ -6597,6 +6615,25 @@ button:disabled {
   margin: 6px 0 0;
   padding-top: 16px;
   text-align: center;
+}
+
+@media (max-width: 480px) {
+  .creator-auth-form {
+    padding: var(--evcp-space-6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creator-auth-submit {
+    transition:
+      filter 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .creator-auth-submit:hover:not(:disabled),
+  .creator-auth-submit:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 /* --- Workspace Code tab: file browser + source viewer --- */
