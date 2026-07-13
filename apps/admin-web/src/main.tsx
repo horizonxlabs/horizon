@@ -57,6 +57,7 @@ import { createRoot } from "react-dom/client";
 import { apiBaseUrl, createAdminPlatformClient, hasValidAdminSession } from "./admin-client";
 import { canMutateAiGovernance, useAiGovernance } from "./features/ai-governance";
 import { AuditEvidenceSection } from "./features/audit-monitoring";
+import { serviceHealthRows } from "./features/platform-operations";
 import {
   authMappingRows,
   authProviderRows,
@@ -146,14 +147,6 @@ const monitoringKpis = [
   icon: ComponentType<{ size?: number }>;
   tone: BadgeTone;
 }>;
-
-const serviceHealthRows = [
-  { service: "Platform API", status: "healthy", signal: "p95 42ms", owner: "IT Admin" },
-  { service: "PostgreSQL", status: "healthy", signal: "migration current", owner: "System" },
-  { service: "Redis + BullMQ", status: "healthy", signal: "0 delayed jobs", owner: "System" },
-  { service: "MinIO", status: "healthy", signal: "screenshots retained", owner: "System" },
-  { service: "Caddy Proxy", status: "healthy", signal: "domain route active", owner: "IT Admin" }
-];
 
 const ticketCountRows = [
   { metric: "Submitted", value: "1", trend: "from Horizon Store feedback" },
