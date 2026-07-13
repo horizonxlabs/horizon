@@ -210,7 +210,7 @@ test("Admin governance never substitutes local route, rule, or evidence fixtures
 
 test("Admin governance does not load while logged out and gates provider test calls", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
-  assert.match(source, /sessionActive \? createAdminPlatformClient\(\) : undefined/);
+  assert.match(source, /sessionActive \? createAdminPlatformClient\(\(\) => \{ clearAdminSession\(\); setSessionActive\(false\); \}\) : undefined/);
   assert.match(source, /if \(!client\) throw new Error\("AI governance API is unavailable"\)/);
   assert.match(source, /canMutateAiGovernance\(visibleAvailability\)/);
 });

@@ -1,19 +1,19 @@
 import {
   createPlatformApiClient,
+  createSessionAwareFetch,
   createPlatformSessionStore,
   type CurrentUserResponse,
   type PlatformProjectDto
 } from "@evcp/api-client";
 import type { CreatorProjectView } from "@/shared/types";
 import { apiBaseUrl } from "@/shared/runtime-config";
-import { platformSessionToken } from "@/shared/session";
 
-export function createCreatorPlatformClient() {
+export function createCreatorPlatformClient(onSessionEnded?: () => void) {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
   return createPlatformApiClient({
     baseUrl,
-    sessionToken: platformSessionToken(),
+    fetcher: createSessionAwareFetch({ baseUrl, storage: window.localStorage, onSessionEnded }),
     legacyUserEmail: "creator@company.com"
   });
 }

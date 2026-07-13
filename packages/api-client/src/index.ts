@@ -1,3 +1,5 @@
+import { PlatformSessionStore, type PlatformSessionStorage } from "./platform-session-store";
+
 export type ApiSuccess<T> = {
   ok: true;
   data: T;
@@ -64,7 +66,7 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage } from "./keycloak-user-types";
+export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage, PlatformSessionSummary } from "./keycloak-user-types";
 export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
@@ -717,32 +719,8 @@ export type PlatformApiClientOptions = {
   fetcher?: typeof fetch;
 };
 
-export type PlatformSessionStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-
-export const EVCP_SESSION_STORAGE_KEY = "evcp_session";
-export const EVCP_SESSION_EXPIRES_AT_STORAGE_KEY = "evcp_session_expires_at";
-
-export class PlatformSessionStore {
-  constructor(private readonly storage: PlatformSessionStorage) {}
-
-  getToken(): string | undefined {
-    return this.storage.getItem(EVCP_SESSION_STORAGE_KEY) ?? undefined;
-  }
-
-  getExpiresAt(): string | undefined {
-    return this.storage.getItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY) ?? undefined;
-  }
-
-  saveSession(session: Pick<PlatformAuthSessionResponse, "token" | "expiresAt">): void {
-    this.storage.setItem(EVCP_SESSION_STORAGE_KEY, session.token);
-    this.storage.setItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY, session.expiresAt);
-  }
-
-  clearSession(): void {
-    this.storage.removeItem(EVCP_SESSION_STORAGE_KEY);
-    this.storage.removeItem(EVCP_SESSION_EXPIRES_AT_STORAGE_KEY);
-  }
-}
+export * from "./platform-session-store";
+export * from "./platform-session-client";
 
 export class PlatformApiError extends Error {
   readonly code: string;

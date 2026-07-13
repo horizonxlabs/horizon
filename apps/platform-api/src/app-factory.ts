@@ -12,10 +12,12 @@ import { registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
+import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
+import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
-import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
+import { startIdleSweep } from "./workspace-orchestrator/idle-sweep";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
 import {
@@ -43,6 +45,8 @@ import {
   createCorePersistenceCredentialStore,
   createUserWithRole
 } from "./auth/prisma-credential-store";
+import { resolvePersistedAuth } from "./auth/persistence-auth-resolver";
+import type { PlatformSessionService } from "./auth/platform-session-service";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import {
   createAiGovernanceRepositoryBackedService,
@@ -120,6 +124,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   workspacePersistence?: WorkspaceRepositoryBackedService;
   publishStorePersistence?: PublishStoreRepositoryBackedService;
   generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
+  platformSessions?: PlatformSessionService;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
@@ -283,6 +288,9 @@ export async function createRuntimePlatformApiServices(
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  await services.workspaceOrchestrator.hydrateRuntimeRecords(
+    await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL)
+  );
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
     env.DATABASE_URL
   );
@@ -464,23 +472,7 @@ export function renderPreviewUnavailableHtml(input: {
 </html>`;
 }
 
-async function resolvePersistenceAuth(
-  services: PersistenceAwarePlatformApiServices,
-  headers: HeaderBag
-): Promise<AuthResolution> {
-  if (!services.corePersistence) throw new Error("Core persistence service is not configured");
-  // Resolve claims from the signed session token (or mock header) WITHOUT the in-memory identity,
-  // then load the user from core-persistence (Postgres). This is what lets a Postgres-only user
-  // (e.g. one created via /admin/users, after a process restart clears the mock identity seed)
-  // authenticate on session-backed routes and /auth/change-password.
-  const claims = services.auth.resolveSessionClaims(headers);
-  return {
-    user: await services.corePersistence.getUserByEmail(claims.email),
-    mode: claims.mode,
-    sessionId: claims.sessionId,
-    expiresAt: claims.expiresAt
-  };
-}
+const resolvePersistenceAuth = resolvePersistedAuth;
 
 async function resolvePersistenceUser(
   services: PersistenceAwarePlatformApiServices,
@@ -3036,7 +3028,7 @@ async function registerPlatformRoutes(
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
 
   if (services.keycloakUserManagement) {
-    registerKeycloakUserManagementRoutes(routes, services.keycloakUserManagement, (headers) => resolvePersistenceUser(services, headers ?? {}));
+    registerKeycloakUserManagementRoutes(routes, services.keycloakUserManagement, (headers) => resolvePersistenceUser(services, headers ?? {}), services.platformSessions);
   }
 
   routes.get("/health", (request, response) =>
@@ -3312,7 +3304,9 @@ async function registerPlatformRoutes(
   // generated shell/file/migration actions still use the generation placeholder.
   // Shared across the generation loop AND the publish pre-checks so publish sees the migrations the
   // generation loop actually applied (rather than a fresh, empty store).
-  const sharedMigrationStore = createMemoryMigrationStore();
+  const sharedMigrationStore = resolveCorePersistenceMode() === "prisma"
+    ? await createPrismaWorkspaceMigrationStore(process.env.DATABASE_URL)
+    : createMemoryMigrationStore();
   const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,

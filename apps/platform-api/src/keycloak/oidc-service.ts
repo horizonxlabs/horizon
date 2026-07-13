@@ -15,11 +15,16 @@ type OidcTransaction = {
 
 type VerifiedIdentity = Pick<PlatformAuthClaims, "subject" | "email" | "name" | "groups">;
 
-export type OidcLoginResult = { session: PlatformAuthSession; returnTo: string };
+export type OidcLoginResult = {
+  session: PlatformAuthSession & { refreshToken?: string; refreshExpiresAt?: string };
+  returnTo: string;
+};
 
 export type KeycloakOidcServiceDependencies = {
   config: KeycloakConfig;
-  issueKeycloakSession: (claims: PlatformAuthClaims) => PlatformAuthSession | Promise<PlatformAuthSession>;
+  issueKeycloakSession: (claims: PlatformAuthClaims) =>
+    | (PlatformAuthSession & { refreshToken?: string; refreshExpiresAt?: string })
+    | Promise<PlatformAuthSession & { refreshToken?: string; refreshExpiresAt?: string }>;
   fetch?: typeof fetch;
   allowedReturnOrigins?: Partial<Record<PlatformApp, string>>;
   now?: () => Date;

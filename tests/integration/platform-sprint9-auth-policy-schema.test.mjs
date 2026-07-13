@@ -53,3 +53,9 @@ test("Sprint 9 seed includes auth providers sessions break-glass and policy temp
   }
 });
 
+test("Keycloak provider seed runs even when demo project seeding is disabled", () => {
+  const providerSeed = seed.indexOf("await seedKeycloakProvider();");
+  const demoGate = seed.indexOf('if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;');
+  assert.ok(providerSeed >= 0);
+  assert.ok(demoGate > providerSeed, "provider configuration must be seeded before the demo-only return");
+});

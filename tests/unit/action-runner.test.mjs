@@ -189,7 +189,7 @@ test("runs a migration action, records it, and treats it as a hard checkpoint bo
   });
 
   assert.equal(result.ok, true);
-  const recorded = migrations.listMigrations("p1");
+  const recorded = await migrations.listMigrations("p1");
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0].name, "add_users");
   assert.equal(recorded[0].commitSha, "deadbeef");

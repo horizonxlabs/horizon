@@ -6,7 +6,7 @@ const { KeycloakUserService } = await import("../../apps/platform-api/src/keyclo
 const { registerKeycloakUserManagementRoutes } = await import("../../apps/platform-api/src/keycloak/routes.ts");
 const { AuditService, createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
 
-function createKeycloakAdminHarness() {
+function createKeycloakAdminHarness({ platformSessions } = {}) {
   const services = createPlatformApiServices();
   const adminSession = services.authSso.issueKeycloakSession({
     subject: "keycloak-admin-001", email: "admin@company.com", name: "Admin",
@@ -62,11 +62,11 @@ function createKeycloakAdminHarness() {
   const userService = new KeycloakUserService({ client, audit, requireAdmin: (actor) => services.auth.requireRole(actor, ["admin"]) });
   const handlers = new Map();
   const routes = { get: (path, handler) => handlers.set(`GET ${path}`, handler), post: (path, handler) => handlers.set(`POST ${path}`, handler), put: (path, handler) => handlers.set(`PUT ${path}`, handler) };
-  registerKeycloakUserManagementRoutes(routes, userService, (headers) => services.auth.resolveCurrentUser(headers ?? {}));
+  registerKeycloakUserManagementRoutes(routes, userService, (headers) => services.auth.resolveCurrentUser(headers ?? {}), platformSessions);
   const request = async (session, method, path, body) => {
     const requestUrl = new URL(path, "https://platform.example.test");
     const pathname = requestUrl.pathname;
-    const key = `${method} ${pathname.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/users\/[^/]+$/, "/users/:id")}`;
+    const key = `${method} ${pathname.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/[^/]+\/sessions(?:\/revoke)?$/, (value) => value.includes("revoke") ? "/:id/sessions/revoke" : "/:id/sessions").replace(/\/users\/[^/]+$/, "/users/:id")}`;
     const handler = handlers.get(key);
     let status = 200; let responseBody;
     await handler({ headers: session ? { authorization: `Bearer ${session.token}` } : {}, query: Object.fromEntries(requestUrl.searchParams), body, params: pathname.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: pathname.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
@@ -97,6 +97,25 @@ test("admin can create, role-map, disable and reset a Keycloak user without rece
 test("creator cannot call Keycloak user-management API", async () => {
   const response = await createKeycloakAdminHarness().asCreator("GET", "/admin/keycloak/users");
   assert.equal(response.status, 403);
+});
+
+test("admin can revoke a Keycloak user's mapped Platform sessions", async () => {
+  const calls = [];
+  const exec = createKeycloakAdminHarness({ platformSessions: { revokeUserSessions: async (...input) => calls.push(input) } });
+  const response = await exec.asAdmin("POST", "/admin/keycloak/users/keycloak-subject-42/sessions/revoke");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.id, "keycloak-subject-42");
+  assert.match(calls[0][0], /^usr_sso_/);
+  assert.equal(calls[0][1], "admin_revoked");
+});
+
+test("admin can view session metadata without exposing refresh credentials", async () => {
+  const exec = createKeycloakAdminHarness({ platformSessions: { listUserSessions: async () => [{ id: "sess_1", sessionFamilyId: "family_1", expiresAt: new Date("2026-07-14T00:00:00.000Z"), refreshExpiresAt: new Date("2026-07-20T00:00:00.000Z"), refreshTokenHash: "must-not-leak", sessionTokenHash: "must-not-leak", claims: { email: "user@example.test" } }] } });
+  const response = await exec.asAdmin("GET", "/admin/keycloak/users/keycloak-subject-42/sessions");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data[0].id, "sess_1");
+  assert.equal("refreshTokenHash" in response.body.data[0], false);
+  assert.equal("sessionTokenHash" in response.body.data[0], false);
 });
 
 test("admin lists, updates, enables, and replaces only EVCP role groups", async () => {

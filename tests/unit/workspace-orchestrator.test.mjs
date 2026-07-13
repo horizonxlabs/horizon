@@ -28,6 +28,16 @@ function createDeps(overrides = {}) {
   return { deps, executedSql, audits };
 }
 
+function createRuntimeRecordStore() {
+  const snapshots = new Map();
+  return {
+    snapshots,
+    async list() { return [...snapshots.values()]; },
+    async save(snapshot) { snapshots.set(snapshot.record.projectId, structuredClone(snapshot)); },
+    async remove(projectId) { snapshots.delete(projectId); }
+  };
+}
+
 test("provisionWorkspace creates schema, bucket, llm key, secrets and running container", async () => {
   const { deps, executedSql, audits } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
@@ -196,6 +206,21 @@ test("provision self-heals to the existing container after a restart (empty reco
     createWorkspaceOrchestrator(restartedDeps).getProjectDatabaseUrl("prj-leave-tracker"),
     /^postgresql:\/\/app_prj_leave_tracker_role:/
   );
+});
+
+test("runtime records hydrate lifecycle state and persist transitions across an API restart", async () => {
+  const { deps } = createDeps();
+  const runtimeRecords = createRuntimeRecordStore();
+  const first = createWorkspaceOrchestrator({ ...deps, runtimeRecords });
+  await first.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
+  await first.stopWorkspace("prj-leave-tracker");
+  assert.equal(runtimeRecords.snapshots.get("prj-leave-tracker").record.state, "idle");
+
+  const restarted = createWorkspaceOrchestrator({ ...deps, runtimeRecords });
+  await restarted.hydrateRuntimeRecords(runtimeRecords);
+  assert.equal(restarted.getWorkspace("prj-leave-tracker").state, "idle");
+  await restarted.wakeWorkspace("prj-leave-tracker");
+  assert.equal(runtimeRecords.snapshots.get("prj-leave-tracker").record.state, "running");
 });
 
 test("stop/wake cycle follows state machine and audits", async () => {

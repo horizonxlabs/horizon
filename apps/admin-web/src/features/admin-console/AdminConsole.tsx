@@ -35,7 +35,7 @@ function pageFromPath(pathname: string) {
 export function AdminConsole() {
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
   const [sessionActive, setSessionActive] = useState(() => consumeAdminSessionHandoff() || hasValidAdminSession());
-  const client = useMemo(() => (sessionActive ? createAdminPlatformClient() : undefined), [sessionActive]);
+  const client = useMemo(() => (sessionActive ? createAdminPlatformClient(() => { clearAdminSession(); setSessionActive(false); }) : undefined), [sessionActive]);
   const ai = useAiGovernance(client);
   const page = pageFromPath(window.location.pathname);
 
@@ -53,7 +53,7 @@ export function AdminConsole() {
   }
 
   const content = page === "audit-logs" ? <AuditEvidenceSection /> : page === "users" && client ? <KeycloakUserManagement client={client} /> : page === "ai-providers" || page === "guardrails" ? <AiGovernancePanel ai={ai} /> : <OperationsDashboard page={page} />;
-  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { clearAdminSession(); setSessionActive(false); }}><LockKeyhole size={16} />Logout</button>}><PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />{content}</AppShell></AdminRoutes>;
+  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined); clearAdminSession(); setSessionActive(false); }}><LockKeyhole size={16} />Logout</button>}><PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />{content}</AppShell></AdminRoutes>;
 }
 
 function OperationsDashboard({ page }: { page: string }) {

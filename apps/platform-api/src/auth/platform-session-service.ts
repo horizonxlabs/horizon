@@ -3,7 +3,12 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-export type PlatformSessionSubject = { id: string; email: string };
+export type PlatformSessionSubject = {
+  id: string;
+  email: string;
+  providerConfigId: string;
+  claims: Record<string, unknown>;
+};
 
 export type PlatformTokenPair = {
   token: string;
@@ -19,10 +24,16 @@ export type PersistedPlatformSession = {
   accessTokenId: string;
   userId: string;
   email: string;
+  providerConfigId: string;
+  claims: Record<string, unknown>;
+  sessionTokenHash: string;
   refreshTokenHash?: string | null;
   expiresAt: Date;
   refreshExpiresAt?: Date | null;
+  issuedAt?: Date;
+  lastUsedAt?: Date | null;
   revokedAt?: Date | null;
+  revokeReason?: string | null;
   replacedBySessionId?: string | null;
 };
 
@@ -30,10 +41,11 @@ export interface PlatformSessionRepository {
   createSession(input: PersistedPlatformSession): Promise<void>;
   findById(id: string): Promise<PersistedPlatformSession | undefined>;
   findByRefreshTokenHash(hash: string): Promise<PersistedPlatformSession | undefined>;
-  replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<void>;
+  replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<boolean>;
   revokeSession(id: string, reason: string): Promise<void>;
   revokeSessionFamily(familyId: string, reason: string): Promise<void>;
   revokeUserSessions(userId: string, reason: string): Promise<void>;
+  listUserSessions(userId: string): Promise<PersistedPlatformSession[]>;
 }
 
 type AccessPayload = { typ: "evcp.platform.session"; sid: string; jti: string; sub: string; email: string; iat: number; exp: number };
@@ -79,8 +91,16 @@ export class PlatformSessionService {
     }
     if (existing.revokedAt) throw new PlatformSessionError("invalid_refresh_token");
     if (this.now().getTime() >= existing.refreshExpiresAt.getTime()) throw new PlatformSessionError("invalid_refresh_token");
-    const next = this.newSession({ id: existing.userId, email: existing.email }, this.now(), existing.sessionFamilyId);
-    await this.repository.replaceSession({ previousId: existing.id, next: next.record });
+    const next = this.newSession({
+      id: existing.userId,
+      email: existing.email,
+      providerConfigId: existing.providerConfigId,
+      claims: existing.claims
+    }, this.now(), existing.sessionFamilyId);
+    if (!await this.repository.replaceSession({ previousId: existing.id, next: next.record })) {
+      await this.repository.revokeSessionFamily(existing.sessionFamilyId, "refresh_token_reused");
+      throw new PlatformSessionError("refresh_token_reused");
+    }
     return next.pair;
   }
 
@@ -92,6 +112,10 @@ export class PlatformSessionService {
     return this.repository.revokeUserSessions(userId, reason);
   }
 
+  listUserSessions(userId: string): Promise<PersistedPlatformSession[]> {
+    return this.repository.listUserSessions(userId);
+  }
+
   private newSession(subject: PlatformSessionSubject, issuedAt: Date, sessionFamilyId: string): { record: PersistedPlatformSession; pair: PlatformTokenPair } {
     const id = this.id();
     const accessTokenId = this.id();
@@ -99,9 +123,14 @@ export class PlatformSessionService {
     const refreshExpiresAt = new Date(issuedAt.getTime() + REFRESH_TOKEN_TTL_SECONDS * 1000);
     const refreshToken = this.token();
     const payload: AccessPayload = { typ: "evcp.platform.session", sid: id, jti: accessTokenId, sub: subject.id, email: subject.email, iat: Math.floor(issuedAt.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000) };
+    const token = this.encodeAccessToken(payload);
     return {
-      record: { id, sessionFamilyId, accessTokenId, userId: subject.id, email: subject.email, refreshTokenHash: this.hash(refreshToken), expiresAt, refreshExpiresAt },
-      pair: { token: this.encodeAccessToken(payload), expiresAt: expiresAt.toISOString(), refreshToken, refreshExpiresAt: refreshExpiresAt.toISOString(), sessionId: id }
+      record: {
+        id, sessionFamilyId, accessTokenId, userId: subject.id, email: subject.email,
+        providerConfigId: subject.providerConfigId, claims: subject.claims,
+        sessionTokenHash: this.hash(token), refreshTokenHash: this.hash(refreshToken), expiresAt, refreshExpiresAt
+      },
+      pair: { token, expiresAt: expiresAt.toISOString(), refreshToken, refreshExpiresAt: refreshExpiresAt.toISOString(), sessionId: id }
     };
   }
 

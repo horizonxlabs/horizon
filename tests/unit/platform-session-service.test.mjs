@@ -22,6 +22,7 @@ test("rotates once and revokes the complete family when a previous refresh token
     replaceSession: async ({ previousId, next }) => {
       sessions.get(previousId).replacedBySessionId = next.id;
       sessions.set(next.id, next);
+      return true;
     },
     revokeSession: async (id) => { sessions.get(id).revokedAt = new Date(); },
     revokeSessionFamily: async (familyId) => {
@@ -30,7 +31,10 @@ test("rotates once and revokes the complete family when a previous refresh token
     revokeUserSessions: async () => {}
   };
   const service = new PlatformSessionService(repository, "test-secret");
-  const first = await service.issue({ id: "usr_1", email: "user@example.test" });
+  const first = await service.issue({
+    id: "usr_1", email: "user@example.test", providerConfigId: "authprov_keycloak_default_001",
+    claims: { platformRoles: ["creator"] }
+  });
   const second = await service.refresh(first.refreshToken);
 
   await assert.rejects(() => service.refresh(first.refreshToken), (error) => error instanceof PlatformSessionError && error.code === "refresh_token_reused");

@@ -5,7 +5,7 @@ import { createMemoryGitPort } from "../../apps/platform-api/src/publish/git-por
 import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
 test("passes when migrations are applied and tree is clean without executing in the dev container", async () => {
   const migrations = createMemoryMigrationStore();
-  migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
+  await migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
   const git = createMemoryGitPort({
     p1: { clean: true, head: "s", migrationNames: { s: ["001_init"] } }
   });
@@ -18,7 +18,7 @@ test("passes when migrations are applied and tree is clean without executing in 
 
 test("fails and lists migration and clean-tree failures", async () => {
   const migrations = createMemoryMigrationStore();
-  migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
+  await migrations.recordMigration({ projectId: "p1", name: "001_init", sql: "-- init", commitSha: "s" });
   const git = createMemoryGitPort({
     p1: { clean: false, head: "s", migrationNames: { s: ["001_init", "002_users"] } }
   });
