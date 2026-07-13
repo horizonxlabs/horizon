@@ -3,10 +3,11 @@ import {
   createPlatformSessionStore,
   type PrdVersionDto
 } from "@evcp/api-client";
-import { creatorSessionBridgeProfile, fallbackSelectedProject } from "@/shared/creator-defaults";
+import { creatorSessionBridgeProfile } from "@/features/authentication";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
 import { apiBaseUrl } from "@/shared/runtime-config";
 import type { CreatorBootstrapState } from "@/shared/types";
+import { fallbackSelectedProject } from "@/app/creator-defaults";
 
 export async function loadCreatorBootstrap(
   selectedProjectKey?: string

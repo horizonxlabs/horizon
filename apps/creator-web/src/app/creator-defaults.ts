@@ -1,4 +1,3 @@
-import type { SimulatedSsoLoginInput } from "@evcp/api-client";
 import type {
   CreateProjectFormState,
   CreatorBootstrapState,
@@ -30,12 +29,4 @@ export const initialCreateProjectForm: CreateProjectFormState = {
   targetDepartment: "",
   intendedUsers: "",
   dataSensitivity: "internal"
-};
-
-export const creatorSessionBridgeProfile: SimulatedSsoLoginInput = {
-  subject: "keycloak-creator-ui-bridge",
-  email: "creator@company.com",
-  name: "Creator User",
-  groups: ["evcp-creators"],
-  appRoles: { "leave-management": ["HR Admin"] }
 };

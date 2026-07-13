@@ -1,8 +1,13 @@
 import { type PrdVersionDto } from "@evcp/api-client";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useReducer, useState, type FormEvent } from "react";
-import { initialCreateProjectForm, initialCreatorBootstrap } from "@/shared/creator-defaults";
-import { prdSections, versionRows } from "@/features/prd/fixtures";
+import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
+import {
+  loadCreatorBootstrap,
+  loadPrdState,
+  signInCreatorSessionBridge
+} from "@/app/creator-app-helpers";
+import { prdSections, versionRows } from "@/features/prd";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
 import {
   createCreatorNavigation,
@@ -13,11 +18,6 @@ import {
 } from "@/app/routes";
 import { clearLoginSession } from "@/shared/session";
 import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types";
-import {
-  loadCreatorBootstrap,
-  loadPrdState,
-  signInCreatorSessionBridge
-} from "@/shared/creator-app-helpers";
 import { usePublishAccess } from "@/features/publish";
 import { ensureVibeWorkspace, loadWorkspaceState, useVibeWorkspace } from "@/features/workspace";
 
@@ -181,7 +181,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   function handleLogoutBridge() {
-    setBootstrap(clearCreatorSessionBridge());
+    clearCreatorSessionBridge();
+    setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
     vibeWorkspace.setWorkspaceMessage(
       "Using deterministic local workspace evidence until the Platform API is configured."

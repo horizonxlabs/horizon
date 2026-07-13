@@ -77,3 +77,20 @@ completes successfully.
 - No router, global store, data-fetching dependency, or API/session contract was introduced.
 - Public feature barrels are used for route and cross-feature screen/component consumption.
 - Existing smoke renders the real `useCreatorApp` hook and all seven Creator screens.
+
+## Final review follow-up — dependency boundaries
+
+- `use-creator-app.tsx` now consumes PRD fixture values through the `@/features/prd` public API.
+- Creator bootstrap and project-form defaults now live in `app`; the SSO bridge profile lives with
+  authentication and is exported through that feature's public API. The bootstrap helpers moved to
+  `app`, so `shared` no longer imports Creator app or feature state.
+
+```text
+pnpm check:frontend-architecture                                  # pass
+node --import tsx --test tests/unit/creator-web-render-smoke.test.mjs  # 18/18 pass
+pnpm --filter @evcp/creator-web typecheck                         # pass
+pnpm --filter @evcp/creator-web build                             # pass
+```
+
+The build retains the existing runtime font-resolution warnings for `/creator/fonts/*` and
+completes successfully.
