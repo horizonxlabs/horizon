@@ -81,3 +81,16 @@ test("frontend session bridge can issue a bearer token accepted by bootstrap aut
   assert.equal(me.body.data.auth.mode, "platform_session");
   assert.equal(me.body.data.auth.legacyMockFallback, false);
 });
+
+test("operational bootstrap guidance records fail-closed Admin AI governance", () => {
+  const operationsGuide = readFileSync(
+    "docs/operations/real-mvp-frontend-api-bootstrap.md",
+    "utf8"
+  );
+
+  assert.match(operationsGuide, /Admin AI governance is fail-closed/);
+  assert.match(
+    operationsGuide,
+    /does not render fallback provider, key, route, quota, or guardrail data/
+  );
+});

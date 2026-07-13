@@ -84,6 +84,10 @@ Until the real browser login flow fully replaces the bridge, the frontend client
 
 ## Remaining Work
 
+### Admin AI governance pilot behavior
+
+Admin AI governance is fail-closed in pilot mode. When its Platform API reads fail, the console clears the current provider, API-key, route, quota, and guardrail-event view, displays an unavailable state, and disables configuration writes until a successful refresh. It does not render fallback provider, key, route, quota, or guardrail data, and it never generates a replacement provider secret.
+
 - Replace simulated login with the real Keycloak/OIDC browser callback and token storage.
 - Continue moving remaining page tables/forms/actions from static demo arrays to API calls; Admin AI governance core actions are now API-backed.
 - Remove legacy mock header fallback after all surfaces use Platform Auth bearer sessions.
