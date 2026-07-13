@@ -1081,16 +1081,25 @@ model AuthProviderConfig {
 
 model PlatformAuthSession {
   id               String   @id
+  sessionFamilyId  String   @map("session_family_id")
+  accessTokenId    String   @map("access_token_id")
   providerConfigId String   @map("provider_config_id")
   userId           String   @map("user_id")
   sessionTokenHash String   @map("session_token_hash")
+  refreshTokenHash String?  @unique @map("refresh_token_hash")
   claims           Json
   provider         AuthProviderConfig @relation(fields: [providerConfigId], references: [id])
   user             PlatformUser @relation("PlatformAuthSessionUser", fields: [userId], references: [id])
   issuedAt         DateTime @default(now()) @map("issued_at")
   expiresAt        DateTime @map("expires_at")
+  refreshExpiresAt DateTime? @map("refresh_expires_at")
+  lastUsedAt       DateTime? @map("last_used_at")
+  revokedAt        DateTime? @map("revoked_at")
+  revokeReason     String?  @map("revoke_reason")
+  replacedBySessionId String? @map("replaced_by_session_id")
 
   @@index([userId, expiresAt])
+  @@index([sessionFamilyId])
   @@map("platform_auth_sessions")
 }
 
