@@ -2,15 +2,12 @@ import {
   createPlatformApiClient,
   createPlatformSessionStore,
   PlatformApiError,
-  type AiApiKeyDto,
-  type AiProviderDto,
   type AiProviderTestCallInput,
   type AiProviderTestCallResponse,
   type AiQuotaDto,
   type AiScenarioRouteDto,
   type CreatePlatformUserInput,
   type CurrentUserResponse,
-  type GuardrailEventDto,
   type GuardrailRuleDto,
   type InstallerPreflightInput,
   type InstallerReportDto,
@@ -49,9 +46,18 @@ import {
   SlidersHorizontal,
   TicketCheck
 } from "lucide-react";
-import { useEffect, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type ComponentType,
+  type ReactNode
+} from "react";
 import { createRoot } from "react-dom/client";
 import { apiBaseUrl, createAdminPlatformClient, hasValidAdminSession } from "./admin-client";
+import { useAiGovernance } from "./hooks/use-ai-governance";
+import { canMutateAiGovernance } from "./lib/ai-governance-status";
 import { AdminLoginScreen } from "./login-screen";
 import { SetupWizard } from "./setup-wizard";
 
@@ -97,67 +103,6 @@ const kpis = [
   icon: ComponentType<{ size?: number }>;
   tone: BadgeTone;
 }>;
-
-const providerRows = [
-  {
-    provider: "OpenAI Production",
-    adapter: "openai",
-    endpoint: "api.openai.com/v1",
-    models: "gpt-4.1, gpt-4.1-mini",
-    status: "active",
-    checked: "ล่าสุด"
-  },
-  {
-    provider: "Anthropic Fallback",
-    adapter: "anthropic",
-    endpoint: "api.anthropic.com",
-    models: "claude-3-5-sonnet",
-    status: "active",
-    checked: "ล่าสุด"
-  }
-];
-
-const routeRows = [
-  {
-    scenario: "Requirement Analysis",
-    primary: "OpenAI Production / gpt-4.1",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet",
-    guard: "quota + guardrail"
-  },
-  {
-    scenario: "Frontend Coding",
-    primary: "OpenAI Production / gpt-4.1-mini",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet",
-    guard: "quota + guardrail"
-  }
-];
-
-const guardrailRows = [
-  {
-    rule: "Block payroll export",
-    severity: "high",
-    action: "block",
-    scope: "organization",
-    status: "active"
-  },
-  {
-    rule: "Warn confidential data",
-    severity: "warning",
-    action: "warn",
-    scope: "organization",
-    status: "active"
-  }
-];
-
-const eventRows = [
-  {
-    event: "gre_0001",
-    decision: "Blocked",
-    rule: "Block payroll export",
-    actor: "Admin User",
-    time: "ล่าสุด"
-  }
-];
 
 const monitoringKpis = [
   {
@@ -613,12 +558,6 @@ type AiGovernanceForm = {
   guardrailPattern: string;
 };
 
-type AiGovernanceBootstrapState = {
-  providers: AiProviderDto[];
-  apiKeys: AiApiKeyDto[];
-  guardrailEvents: GuardrailEventDto[];
-};
-
 const initialAdminBootstrap: AdminBootstrapState = {
   userName: "Platform Admin",
   source: "local fallback"
@@ -995,76 +934,6 @@ async function saveInstallerSetup(form: InstallWizardSetupForm): Promise<Install
 
 async function listInstallerReports(): Promise<InstallerReportDto[]> {
   return createAdminPlatformClient().listInstallerReports();
-}
-
-async function loadAiGovernanceState(): Promise<AiGovernanceBootstrapState> {
-  const client = createAdminPlatformClient();
-  const [providers, apiKeys, guardrailEvents] = await Promise.all([
-    client.listAiProviders(),
-    client.listAiApiKeys(),
-    client.listGuardrailEvents()
-  ]);
-  return { providers, apiKeys, guardrailEvents };
-}
-
-async function createAdminAiProvider(form: AiGovernanceForm): Promise<AiProviderDto> {
-  return createAdminPlatformClient().createAiProvider({
-    name: form.providerName,
-    adapter: form.providerAdapter,
-    baseUrl: form.providerBaseUrl,
-    models: form.providerModels
-      .split(",")
-      .map((model) => model.trim())
-      .filter(Boolean)
-  });
-}
-
-async function createAdminAiApiKey(
-  providerId: string,
-  form: AiGovernanceForm,
-  secret: string
-): Promise<AiApiKeyDto> {
-  return createAdminPlatformClient().createAiApiKey({
-    providerId,
-    name: form.apiKeyName,
-    secret,
-    usageMode: "production",
-    quotaTokens: Number.parseInt(form.apiKeyQuotaTokens, 10) || 100000,
-    fallbackPriority: Number.parseInt(form.apiKeyFallbackPriority, 10) || 1
-  });
-}
-
-async function configureAdminAiRoute(
-  providerId: string,
-  form: AiGovernanceForm
-): Promise<AiScenarioRouteDto> {
-  return createAdminPlatformClient().configureAiRoute({
-    scenario: form.routeScenario,
-    primaryProviderId: providerId,
-    primaryModel: form.routeModel
-  });
-}
-
-async function configureAdminAiQuota(form: AiGovernanceForm): Promise<AiQuotaDto> {
-  return createAdminPlatformClient().configureAiQuota({
-    scope: form.quotaScope,
-    dailyLimit: Number.parseInt(form.quotaDailyLimit, 10) || 1000,
-    monthlyLimit: Number.parseInt(form.quotaMonthlyLimit, 10) || 30000,
-    warningThreshold: Number.parseInt(form.quotaWarningThreshold, 10) || 900,
-    hardStop: true,
-    usedToday: 0
-  });
-}
-
-async function createAdminGuardrailRule(form: AiGovernanceForm): Promise<GuardrailRuleDto> {
-  return createAdminPlatformClient().createGuardrailRule({
-    name: form.guardrailName,
-    type: "keyword",
-    pattern: form.guardrailPattern,
-    severity: "high",
-    action: "block",
-    scope: "organization"
-  });
 }
 
 async function runProviderTestCall(
@@ -1474,19 +1343,10 @@ function AdminApp() {
     InstallerSetupResponse | undefined
   >(undefined);
   const [installerReports, setInstallerReports] = useState<InstallerReportDto[]>([]);
-  const [aiProviders, setAiProviders] = useState<AiProviderDto[]>([]);
-  const [aiApiKeys, setAiApiKeys] = useState<AiApiKeyDto[]>([]);
-  const [aiGuardrailEvents, setAiGuardrailEvents] = useState<GuardrailEventDto[]>([]);
   const [latestAiRoute, setLatestAiRoute] = useState<AiScenarioRouteDto | undefined>(undefined);
   const [latestAiQuota, setLatestAiQuota] = useState<AiQuotaDto | undefined>(undefined);
   const [latestGuardrailRule, setLatestGuardrailRule] = useState<GuardrailRuleDto | undefined>(
     undefined
-  );
-  const [aiGovernanceSource, setAiGovernanceSource] = useState<"Platform API" | "local fallback">(
-    "local fallback"
-  );
-  const [aiGovernanceMessage, setAiGovernanceMessage] = useState(
-    "AI governance actions are ready for local fallback review."
   );
   const [aiKeySecret, setAiKeySecret] = useState("");
   const [providerTestCallResult, setProviderTestCallResult] = useState<
@@ -1497,10 +1357,17 @@ function AdminApp() {
   );
   const [isRunningInstallCheck, setIsRunningInstallCheck] = useState(false);
   const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
-  const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
   const [sessionActive, setSessionActive] = useState<boolean>(hasValidAdminSession());
+  const adminClient = useMemo(
+    () => (sessionActive ? createAdminPlatformClient() : undefined),
+    [sessionActive]
+  );
+  const aiGovernance = useAiGovernance(adminClient);
+  const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
+  const governanceWritesDisabled =
+    !canMutateAiGovernance(aiGovernance.availability) || isSavingAiGovernance;
   const [createUserForm, setCreateUserForm] = useState({
     email: "",
     name: "",
@@ -1531,40 +1398,16 @@ function AdminApp() {
       .then(setInstallerReports)
       .catch(() => setInstallerReports([]));
 
-    loadAiGovernanceState()
-      .then((state) => {
-        setAiProviders(state.providers);
-        setAiApiKeys(state.apiKeys);
-        setAiGuardrailEvents(state.guardrailEvents);
-        setAiGovernanceSource("Platform API");
-        setAiGovernanceMessage("Loaded AI governance state from Platform API.");
-      })
-      .catch(() => {
-        setAiProviders([]);
-        setAiApiKeys([]);
-        setAiGuardrailEvents([]);
-        setAiGovernanceSource("local fallback");
-      });
   }, [sessionActive]);
 
   useEffect(() => {
-    if (bootstrap.source !== "Platform API") return;
-    loadAiGovernanceState()
-      .then((state) => {
-        setAiProviders(state.providers);
-        setAiApiKeys(state.apiKeys);
-        setAiGuardrailEvents(state.guardrailEvents);
-        setAiGovernanceSource("Platform API");
-        setAiGovernanceMessage("Loaded AI governance state from Platform API.");
-      })
-      .catch((error) => {
-        setAiGovernanceMessage(
-          error instanceof Error
-            ? error.message
-            : "Unable to load AI governance state from Platform API."
-        );
-      });
-  }, [bootstrap.source]);
+    if (aiGovernance.availability === "ready") return;
+    setLatestAiRoute(undefined);
+    setLatestAiQuota(undefined);
+    setLatestGuardrailRule(undefined);
+    setProviderTestCallResult(undefined);
+    setProviderTestCallMessage("AI governance data is unavailable. Refresh the page or sign in again.");
+  }, [aiGovernance.availability, adminClient]);
 
   useEffect(() => {
     const sectionId = window.location.hash
@@ -1652,6 +1495,7 @@ function AdminApp() {
   }
 
   async function handleRunProviderTestCall() {
+    if (governanceWritesDisabled) return;
     setIsRunningProviderTestCall(true);
     setProviderTestCallMessage("Provider test is running through the governed AI Gateway route.");
     try {
@@ -1664,13 +1508,9 @@ function AdminApp() {
       setProviderTestCallMessage(
         "Provider route validated. Output excerpt and usage evidence are safe to show."
       );
-    } catch (error) {
+    } catch {
       setProviderTestCallResult(undefined);
-      setProviderTestCallMessage(
-        error instanceof Error
-          ? error.message
-          : "Provider test failed. Review route, active key and adapter setup."
-      );
+      setProviderTestCallMessage("Provider test failed. Review route, active key and adapter setup.");
     } finally {
       setIsRunningProviderTestCall(false);
     }
@@ -1722,59 +1562,59 @@ function AdminApp() {
   async function handleCreateAiProvider() {
     setIsSavingAiGovernance(true);
     try {
-      const provider = await createAdminAiProvider(aiGovernanceForm);
-      setAiProviders((current) => [
-        provider,
-        ...current.filter((candidate) => candidate.id !== provider.id)
-      ]);
-      setAiGovernanceSource("Platform API");
-      setAiGovernanceMessage(`Provider saved: ${provider.name}`);
+      await aiGovernance.createProvider({
+        name: aiGovernanceForm.providerName,
+        adapter: aiGovernanceForm.providerAdapter,
+        baseUrl: aiGovernanceForm.providerBaseUrl,
+        models: aiGovernanceForm.providerModels
+          .split(",")
+          .map((model) => model.trim())
+          .filter(Boolean)
+      });
     } catch {
-      setAiGovernanceSource("local fallback");
-      setAiGovernanceMessage("Provider save failed; local fallback rows remain visible.");
+      // A failed write does not add a locally invented provider row.
     } finally {
       setIsSavingAiGovernance(false);
     }
   }
 
   async function handleSaveAiApiKey() {
+    if (!aiKeySecret.trim()) return;
+    const providerId = aiGovernance.providers[0]?.id;
+    if (!providerId) return;
     setIsSavingAiGovernance(true);
     try {
-      const providerId = aiProviders[0]?.id ?? "aip_openai";
-      const key = await createAdminAiApiKey(
-        providerId,
-        aiGovernanceForm,
-        aiKeySecret || "replace-before-production"
+      await aiGovernance.saveApiKey(
+        {
+          providerId,
+          name: aiGovernanceForm.apiKeyName,
+          usageMode: "production",
+          quotaTokens: Number.parseInt(aiGovernanceForm.apiKeyQuotaTokens, 10) || 100000,
+          fallbackPriority: Number.parseInt(aiGovernanceForm.apiKeyFallbackPriority, 10) || 1
+        },
+        aiKeySecret
       );
-      setAiApiKeys((current) => [key, ...current.filter((candidate) => candidate.id !== key.id)]);
       setAiKeySecret("");
-      setAiGovernanceSource("Platform API");
-      setAiGovernanceMessage(
-        `Masked key saved for ${key.providerId}; fingerprint evidence is visible.`
-      );
     } catch {
-      setAiGovernanceSource("local fallback");
-      setAiGovernanceMessage(
-        "API key save failed; verify provider exists and secret input is set."
-      );
+      // Preserve entered secret only when the API rejects the request.
     } finally {
       setIsSavingAiGovernance(false);
     }
   }
 
   async function handleConfigureAiRoute() {
+    const providerId = aiGovernance.providers[0]?.id;
+    if (!providerId) return;
     setIsSavingAiGovernance(true);
     try {
-      const providerId = aiProviders[0]?.id ?? "aip_openai";
-      const route = await configureAdminAiRoute(providerId, aiGovernanceForm);
+      const route = await aiGovernance.configureRoute({
+        scenario: aiGovernanceForm.routeScenario,
+        primaryProviderId: providerId,
+        primaryModel: aiGovernanceForm.routeModel
+      });
       setLatestAiRoute(route);
-      setAiGovernanceSource("Platform API");
-      setAiGovernanceMessage(`Route configured for ${route.scenario}.`);
     } catch {
-      setAiGovernanceSource("local fallback");
-      setAiGovernanceMessage(
-        "Route configuration failed; create or load an active provider first."
-      );
+      // API errors leave the table empty rather than substituting a local route.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1783,13 +1623,17 @@ function AdminApp() {
   async function handleConfigureAiQuota() {
     setIsSavingAiGovernance(true);
     try {
-      const quota = await configureAdminAiQuota(aiGovernanceForm);
+      const quota = await aiGovernance.configureQuota({
+        scope: aiGovernanceForm.quotaScope,
+        dailyLimit: Number.parseInt(aiGovernanceForm.quotaDailyLimit, 10) || 1000,
+        monthlyLimit: Number.parseInt(aiGovernanceForm.quotaMonthlyLimit, 10) || 30000,
+        warningThreshold: Number.parseInt(aiGovernanceForm.quotaWarningThreshold, 10) || 900,
+        hardStop: true,
+        usedToday: 0
+      });
       setLatestAiQuota(quota);
-      setAiGovernanceSource("Platform API");
-      setAiGovernanceMessage(`Quota configured for ${quota.scope}.`);
     } catch {
-      setAiGovernanceSource("local fallback");
-      setAiGovernanceMessage("Quota configuration failed; local fallback remains visible.");
+      // API errors leave the last API-backed quota state unchanged.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1798,17 +1642,17 @@ function AdminApp() {
   async function handleCreateGuardrailRule() {
     setIsSavingAiGovernance(true);
     try {
-      const rule = await createAdminGuardrailRule(aiGovernanceForm);
-      const events = await createAdminPlatformClient()
-        .listGuardrailEvents()
-        .catch(() => aiGuardrailEvents);
+      const rule = await aiGovernance.createGuardrailRule({
+        name: aiGovernanceForm.guardrailName,
+        type: "keyword",
+        pattern: aiGovernanceForm.guardrailPattern,
+        severity: "high",
+        action: "block",
+        scope: "organization"
+      });
       setLatestGuardrailRule(rule);
-      setAiGuardrailEvents(events);
-      setAiGovernanceSource("Platform API");
-      setAiGovernanceMessage(`Guardrail active: ${rule.name}`);
     } catch {
-      setAiGovernanceSource("local fallback");
-      setAiGovernanceMessage("Guardrail save failed; local fallback rules remain visible.");
+      // API errors leave the table empty rather than substituting a local guardrail rule.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1849,6 +1693,12 @@ function AdminApp() {
 
   function handleLogoutBridge() {
     setBootstrap(clearAdminSessionBridge());
+    setSessionActive(false);
+    setLatestAiRoute(undefined);
+    setLatestAiQuota(undefined);
+    setLatestGuardrailRule(undefined);
+    setProviderTestCallResult(undefined);
+    setAiKeySecret("");
   }
 
   const installWizardSetupItems = setupItemsFromConfig(installerSetupForm, savedInstallerSetup);
@@ -1877,18 +1727,16 @@ function AdminApp() {
     return <AdminLoginScreen onLoggedIn={() => setSessionActive(true)} />;
   }
 
-  const aiProviderTableRows = aiProviders.length
-    ? aiProviders.map((provider) => ({
-        provider: provider.name,
-        adapter: provider.adapter,
-        endpoint: provider.baseUrl?.replace(/^https?:\/\//, "") ?? "configured endpoint",
-        models: provider.models.join(", "),
-        status: provider.status,
-        checked: aiGovernanceSource
-      }))
-    : providerRows;
-  const latestAiKey = aiApiKeys[0];
-  const aiRouteTableRows = latestAiRoute
+  const aiProviderTableRows = aiGovernance.providers.map((provider) => ({
+    provider: provider.name,
+    adapter: provider.adapter,
+    endpoint: provider.baseUrl?.replace(/^https?:\/\//, "") ?? "configured endpoint",
+    models: provider.models.join(", "),
+    status: provider.status,
+    checked: aiGovernance.availability
+  }));
+  const latestAiKey = aiGovernance.apiKeys[0];
+  const aiRouteTableRows = aiGovernance.availability === "ready" && latestAiRoute
     ? [
         {
           scenario: latestAiRoute.scenario,
@@ -1897,11 +1745,10 @@ function AdminApp() {
             ? `${latestAiRoute.fallback.providerId} / ${latestAiRoute.fallback.model}`
             : "not configured",
           guard: "quota + guardrail"
-        },
-        ...routeRows.filter((row) => row.scenario !== latestAiRoute.scenario)
+        }
       ]
-    : routeRows;
-  const aiGuardrailRows = latestGuardrailRule
+    : [];
+  const aiGuardrailRows = aiGovernance.availability === "ready" && latestGuardrailRule
     ? [
         {
           rule: latestGuardrailRule.name,
@@ -1909,19 +1756,36 @@ function AdminApp() {
           action: latestGuardrailRule.action,
           scope: latestGuardrailRule.scope,
           status: latestGuardrailRule.status
-        },
-        ...guardrailRows.filter((row) => row.rule !== latestGuardrailRule.name)
+        }
       ]
-    : guardrailRows;
-  const aiEventRows = aiGuardrailEvents.length
-    ? aiGuardrailEvents.map((event) => ({
-        event: event.id,
-        decision: event.decision,
-        rule: event.matchedRuleName ?? event.matchedRuleId ?? "No matched rule",
-        actor: event.actorId ?? "Platform API",
-        time: event.occurredAt ?? "latest"
-      }))
-    : eventRows;
+    : [];
+  const aiEventRows = aiGovernance.guardrailEvents.map((event) => ({
+    event: event.id,
+    decision: event.decision,
+    rule: event.matchedRuleName ?? event.matchedRuleId ?? "No matched rule",
+    actor: event.actorId ?? "Platform API",
+    time: event.occurredAt ?? "latest"
+  }));
+  const latestGuardrailEvent = aiGovernance.guardrailEvents[0];
+  const aiGovernanceAvailabilityPanel = (
+    <div aria-live="polite">
+      <DecisionPanel
+        tone={aiGovernance.availability === "ready" ? "success" : "warning"}
+        badge={aiGovernance.availability}
+        title={aiGovernance.message}
+        lines={["Configuration changes are disabled until Platform API data is available."]}
+      />
+      {aiGovernance.availability !== "ready" ? (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => void aiGovernance.reload()}
+        >
+          Refresh AI governance data
+        </button>
+      ) : null}
+    </div>
+  );
   const adminPage = adminPageFromPath(window.location.pathname);
   const pageCopy = adminPageCopy[adminPage];
   const adminSessionControls = (
@@ -2134,6 +1998,7 @@ function AdminApp() {
   if (adminPage === "ai-providers") {
     return renderAdminShell(
       <section className="admin-page-stack" aria-label="AI provider management">
+        {aiGovernanceAvailabilityPanel}
         <section className="ds-metric-grid">
           {kpis.map((item) => {
             const Icon = item.icon;
@@ -2158,7 +2023,7 @@ function AdminApp() {
                 type="button"
                 className="secondary-button"
                 onClick={handleRunProviderTestCall}
-                disabled={isRunningProviderTestCall}
+                disabled={governanceWritesDisabled || isRunningProviderTestCall}
               >
                 <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
               </button>
@@ -2215,7 +2080,7 @@ function AdminApp() {
                 type="button"
                 className="secondary-button"
                 onClick={handleSaveAiApiKey}
-                disabled={isSavingAiGovernance}
+                disabled={governanceWritesDisabled}
               >
                 <KeyRound size={15} /> Save Masked Key
               </button>
@@ -2230,7 +2095,7 @@ function AdminApp() {
               type="button"
               className="ghost-button"
               onClick={handleCreateAiProvider}
-              disabled={isSavingAiGovernance}
+              disabled={governanceWritesDisabled}
             >
               <BrainCircuit size={15} /> Create Provider
             </button>
@@ -2280,7 +2145,7 @@ function AdminApp() {
                 type="button"
                 className="ghost-button"
                 onClick={handleConfigureAiRoute}
-                disabled={isSavingAiGovernance}
+                disabled={governanceWritesDisabled}
               >
                 <Route size={15} /> Configure Route
               </button>
@@ -2316,7 +2181,7 @@ function AdminApp() {
                 type="button"
                 className="secondary-button"
                 onClick={handleConfigureAiQuota}
-                disabled={isSavingAiGovernance}
+                disabled={governanceWritesDisabled}
               >
                 <Gauge size={15} /> Configure Quota
               </button>
@@ -2330,6 +2195,7 @@ function AdminApp() {
   if (adminPage === "guardrails") {
     return renderAdminShell(
       <section className="admin-page-stack" aria-label="Guardrail management">
+        {aiGovernanceAvailabilityPanel}
         <SectionCard
           eyebrow="Security Rules"
           title="Guardrail Rules"
@@ -2338,7 +2204,7 @@ function AdminApp() {
               type="button"
               className="ghost-button"
               onClick={handleCreateGuardrailRule}
-              disabled={isSavingAiGovernance}
+              disabled={governanceWritesDisabled}
             >
               <ShieldCheck size={15} /> Add Guardrail Rule
             </button>
@@ -3143,6 +3009,10 @@ function AdminApp() {
           />
 
           <div className="ds-main-stack">
+            {aiGovernance.availability !== "ready" ? (
+              aiGovernanceAvailabilityPanel
+            ) : (
+              <>
             <SectionCard
               eyebrow="Provider Test Call"
               title="Validate AI provider route"
@@ -3151,7 +3021,7 @@ function AdminApp() {
                   type="button"
                   className="secondary-button"
                   onClick={handleRunProviderTestCall}
-                  disabled={isRunningProviderTestCall}
+                  disabled={governanceWritesDisabled || isRunningProviderTestCall}
                 >
                   <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
                 </button>
@@ -3242,6 +3112,8 @@ function AdminApp() {
                 />
               </div>
             </SectionCard>
+              </>
+            )}
 
             <div id="ai-provider-registry">
               <SectionCard
@@ -3252,7 +3124,7 @@ function AdminApp() {
                     type="button"
                     className="ghost-button"
                     onClick={handleCreateAiProvider}
-                    disabled={isSavingAiGovernance}
+                    disabled={governanceWritesDisabled}
                   >
                     <BrainCircuit size={15} /> Create Provider
                   </button>
@@ -3282,8 +3154,8 @@ function AdminApp() {
                   </label>
                   <DefinitionGrid
                     items={[
-                      { label: "Source", value: aiGovernanceSource },
-                      { label: "Last action", value: aiGovernanceMessage }
+                      { label: "Source", value: aiGovernance.availability },
+                      { label: "Last action", value: aiGovernance.message }
                     ]}
                   />
                 </div>
@@ -3308,7 +3180,7 @@ function AdminApp() {
                     <LockKeyhole size={22} />
                   </div>
                   <div>
-                    <strong>{latestAiKey?.name ?? "Primary Production Key"}</strong>
+                    <strong>{latestAiKey?.name ?? "No API key data available"}</strong>
                     <span>
                       {latestAiKey
                         ? "API key saved through Platform API. Only masked evidence is visible."
@@ -3340,7 +3212,7 @@ function AdminApp() {
                     type="button"
                     className="secondary-button"
                     onClick={handleSaveAiApiKey}
-                    disabled={isSavingAiGovernance}
+                    disabled={governanceWritesDisabled}
                   >
                     <KeyRound size={15} /> Save Masked Key
                   </button>
@@ -3349,7 +3221,7 @@ function AdminApp() {
                   items={[
                     {
                       label: "Provider",
-                      value: latestAiKey?.providerId ?? aiProviders[0]?.name ?? "OpenAI Production"
+                      value: latestAiKey?.providerId ?? aiGovernance.providers[0]?.name ?? "Unavailable"
                     },
                     { label: "Usage", value: latestAiKey?.usageMode ?? "production" },
                     {
@@ -3377,10 +3249,21 @@ function AdminApp() {
                   <input defaultValue="Generate payroll export report" />
                 </label>
                 <DecisionPanel
-                  tone="danger"
-                  badge="Blocked"
-                  title="Decision: block"
-                  lines={["Matched rule: Block payroll export", "Event id: gre_0001"]}
+                  tone={latestGuardrailEvent?.decision === "block" ? "danger" : "warning"}
+                  badge={latestGuardrailEvent?.decision ?? "unavailable"}
+                  title={
+                    latestGuardrailEvent
+                      ? `Decision: ${latestGuardrailEvent.decision}`
+                      : "Guardrail decision data unavailable"
+                  }
+                  lines={
+                    latestGuardrailEvent
+                      ? [
+                          `Matched rule: ${latestGuardrailEvent.matchedRuleName ?? latestGuardrailEvent.matchedRuleId ?? "No matched rule"}`,
+                          `Event id: ${latestGuardrailEvent.id}`
+                        ]
+                      : ["No API-backed guardrail event is available."]
+                  }
                 />
               </SectionCard>
             </section>
@@ -3394,7 +3277,7 @@ function AdminApp() {
                     type="button"
                     className="ghost-button"
                     onClick={handleConfigureAiRoute}
-                    disabled={isSavingAiGovernance}
+                    disabled={governanceWritesDisabled}
                   >
                     <Route size={15} /> Configure Route
                   </button>
@@ -3428,25 +3311,30 @@ function AdminApp() {
               </SectionCard>
 
               <SectionCard eyebrow="Quota" title="Token Quota / Token Budget">
-                <div className="ds-quota-meter">
-                  <div>
-                    <span>Used today</span>
-                    <strong>
-                      {latestAiQuota?.usedToday ?? 0} /{" "}
-                      {latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit}
-                    </strong>
+                {latestAiQuota ? (
+                  <div className="ds-quota-meter">
+                    <div>
+                      <span>Used today</span>
+                      <strong>
+                        {latestAiQuota.usedToday} / {latestAiQuota.dailyLimit}
+                      </strong>
+                    </div>
+                    <progress
+                      className="ds-meter-progress"
+                      value={latestAiQuota.usedToday}
+                      max={Math.max(latestAiQuota.dailyLimit, 1)}
+                      aria-label="Daily token quota used"
+                    />
+                    <small>Hard stop blocks before provider call.</small>
                   </div>
-                  <progress
-                    className="ds-meter-progress"
-                    value={latestAiQuota?.usedToday ?? 0}
-                    max={Math.max(
-                      Number(latestAiQuota?.dailyLimit ?? aiGovernanceForm.quotaDailyLimit),
-                      1
-                    )}
-                    aria-label="Daily token quota used"
+                ) : (
+                  <DecisionPanel
+                    tone="warning"
+                    badge="unavailable"
+                    title="Quota data unavailable"
+                    lines={["Configure a quota through the Platform API to view its usage."]}
                   />
-                  <small>Hard stop blocks before provider call.</small>
-                </div>
+                )}
                 <div className="ai-governance-action-panel compact">
                   <label>
                     Scope
@@ -3466,22 +3354,10 @@ function AdminApp() {
                     type="button"
                     className="secondary-button"
                     onClick={handleConfigureAiQuota}
-                    disabled={isSavingAiGovernance}
+                    disabled={governanceWritesDisabled}
                   >
                     <Gauge size={15} /> Configure Quota
                   </button>
-                </div>
-                <div className="ds-stack-list">
-                  {[
-                    "Organization 1,000 daily",
-                    "Creator 500 daily",
-                    "Project 300 daily",
-                    "App 100 daily"
-                  ].map((item) => (
-                    <p key={item}>
-                      <Activity size={14} /> {item}
-                    </p>
-                  ))}
                 </div>
               </SectionCard>
             </section>
@@ -3495,7 +3371,7 @@ function AdminApp() {
                     type="button"
                     className="ghost-button"
                     onClick={handleCreateGuardrailRule}
-                    disabled={isSavingAiGovernance}
+                    disabled={governanceWritesDisabled}
                   >
                     <ShieldCheck size={15} /> Add Guardrail Rule
                   </button>

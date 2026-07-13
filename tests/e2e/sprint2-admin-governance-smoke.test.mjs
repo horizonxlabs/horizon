@@ -184,7 +184,7 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
     "Configure Route",
     "Configure Quota",
     "Add Guardrail Rule",
-    "aiGovernanceSource",
+    "aiGovernance.availability",
     "Scenario Routing",
     "Token Quota",
     "Guardrail Rules",
@@ -196,4 +196,83 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
   }
 
   assert.doesNotMatch(adminSource, /sk-[A-Za-z0-9]/);
+});
+
+test("Admin governance renders unavailable guidance instead of fallback data", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /aria-live="polite"/);
+  assert.match(source, /Refresh AI governance data/);
+  assert.doesNotMatch(source, /local fallback rows remain visible/);
+});
+
+test("Admin governance never substitutes local route, rule, or evidence fixtures", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.doesNotMatch(source, /const routeRows/);
+  assert.doesNotMatch(source, /const guardrailRows/);
+  assert.doesNotMatch(source, /\?\? "OpenAI Production"/);
+  assert.doesNotMatch(source, /Matched rule: Block payroll export/);
+});
+
+test("Admin governance does not load while logged out and gates provider test calls", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /sessionActive \? createAdminPlatformClient\(\) : undefined/);
+  assert.match(source, /if \(governanceWritesDisabled\) return;/);
+  assert.equal(
+    [...source.matchAll(/disabled=\{governanceWritesDisabled \|\| isRunningProviderTestCall\}/g)].length,
+    2
+  );
+});
+
+test("Admin logout disables governance and clears quota fixture evidence", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(
+    source,
+    /function handleLogoutBridge\(\) \{\s*setBootstrap\(clearAdminSessionBridge\(\)\);\s*setSessionActive\(false\);/s
+  );
+  assert.doesNotMatch(source, /latestAiQuota\?\.usedToday \?\? 0/);
+  assert.doesNotMatch(source, /latestAiQuota\?\.dailyLimit \?\? aiGovernanceForm\.quotaDailyLimit/);
+  assert.doesNotMatch(source, /Organization 1,000 daily/);
+  assert.doesNotMatch(source, /Creator 500 daily/);
+  assert.doesNotMatch(source, /Project 300 daily/);
+  assert.doesNotMatch(source, /App 100 daily/);
+});
+
+test("Admin clears derived governance state after a failed read or session transition", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /if \(aiGovernance\.availability === "ready"\) return;/);
+  for (const reset of [
+    "setLatestAiRoute(undefined)",
+    "setLatestAiQuota(undefined)",
+    "setLatestGuardrailRule(undefined)",
+    "setProviderTestCallResult(undefined)",
+    "setProviderTestCallMessage("
+  ]) {
+    assert.match(source, new RegExp(reset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(
+    source,
+    /setProviderTestCallMessage\("AI governance data is unavailable\. Refresh the page or sign in again\."\);\s*setAiKeySecret\(""\);/s
+  );
+  assert.match(
+    source,
+    /setProviderTestCallMessage\("Provider test failed\. Review route, active key and adapter setup\."\)/
+  );
+});
+
+test("Dashboard governance shows unavailable guidance instead of provider-test placeholders", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /aiGovernance\.availability !== "ready" \? \(\s*aiGovernanceAvailabilityPanel/s);
+  assert.ok([...source.matchAll(/aiGovernanceAvailabilityPanel/g)].length >= 4);
+});
+
+test("Admin hides local route and rule rows until governance is ready", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(
+    source,
+    /const aiRouteTableRows = aiGovernance\.availability === "ready" && latestAiRoute/s
+  );
+  assert.match(
+    source,
+    /const aiGuardrailRows = aiGovernance\.availability === "ready" && latestGuardrailRule/s
+  );
 });
