@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Admin Login now shares the responsive Horizon split-shell, accessible password toggle, and safe loading/error states used by Creator Login, while preserving the existing authentication and session contract (#131).
+- Admin Login now shares the responsive Horizon split-shell, accessible password toggle, and safe loading/error states used by Creator Login, while preserving the existing authentication and session contract; the Admin sidebar account panel now presents Logout only, with the session-source badge and Refresh Session control removed (#131).
 
 ### Added
 
