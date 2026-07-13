@@ -59,6 +59,18 @@ test("architecture checker permits public feature and shared alias imports", () 
   }
 });
 
+test("architecture checker permits relative imports within the same feature", () => {
+  const file = "apps/demo/src/features/users/components/UserTable.tsx";
+  const diskPath = join(process.cwd(), file);
+  mkdirSync(join(diskPath, ".."), { recursive: true });
+  writeFileSync(diskPath, "import { formatUser } from '../format-user';");
+  try {
+    assert.deepEqual(checkFrontendArchitecture([file]), []);
+  } finally {
+    rmSync(diskPath);
+  }
+});
+
 test("quality commands and Vite configs expose the architecture gate and aliases", () => {
   const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(rootPackage.scripts["check:frontend-architecture"], "node scripts/quality/check-frontend-architecture.mjs");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { aiGovernanceUnavailableMessage, canMutateAiGovernance } = await import(
-  "../../apps/admin-web/src/lib/ai-governance-status.ts"
+  "../../apps/admin-web/src/features/ai-governance/status.ts"
 );
 
 test("only ready governance state permits writes", () => {

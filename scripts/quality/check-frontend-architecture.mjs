@@ -70,7 +70,9 @@ export function checkFrontendArchitecture(files) {
       if ((context.root === "routes" && deepFeatureImport) || (featureName && featureName !== targetFeature && deepFeatureImport)) {
         violations.push(`${file}: feature imports must use the public @/features/${targetFeature} index.ts API`);
       }
-      if (isTarget && specifier.startsWith(".")) {
+      const isSameFeatureImport =
+        featureName && target[0] === "features" && target[1] === featureName;
+      if (isTarget && specifier.startsWith(".") && !isSameFeatureImport) {
         violations.push(`${file}: new target-layout code must use @/ aliases`);
       }
     }
