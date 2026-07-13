@@ -20,7 +20,10 @@ function readAllSourceFiles(dir) {
 
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
-const aiGovernanceHookSource = readFileSync("apps/admin-web/src/hooks/use-ai-governance.ts", "utf8");
+const aiGovernanceHookSource = readFileSync(
+  "apps/admin-web/src/features/ai-governance/use-ai-governance.ts",
+  "utf8"
+);
 const adminClientSource = readFileSync("apps/admin-web/src/admin-client.ts", "utf8");
 // The creator-web CreatorApp component was split across hooks/, pages/, and
 // components/ files as a pure restructure; concatenate the whole src tree so

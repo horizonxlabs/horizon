@@ -15,7 +15,7 @@ import {
   aiGovernanceUnavailableMessage,
   canMutateAiGovernance,
   type AiGovernanceAvailability
-} from "../lib/ai-governance-status";
+} from "./status";
 
 type AiGovernanceSnapshot = {
   providers: AiProviderDto[];

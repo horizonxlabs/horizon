@@ -1,7 +1,5 @@
 [
   "apps/admin-web/src/admin-client.ts",
-  "apps/admin-web/src/hooks/use-ai-governance.ts",
-  "apps/admin-web/src/lib/ai-governance-status.ts",
   "apps/admin-web/src/login-screen.tsx",
   "apps/admin-web/src/setup-wizard.tsx",
   "apps/admin-web/src/vite-env.d.ts",

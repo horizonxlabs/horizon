@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 
 const requiredFiles = [
   "package.json",
   "pnpm-workspace.yaml",
   "CHANGELOG.md",
   "apps/admin-web/src/main.tsx",
+  "apps/admin-web/src/features/ai-governance/index.ts",
+  "apps/admin-web/src/features/ai-governance/use-ai-governance.ts",
   "apps/admin-web/public/favicon.svg",
   "apps/creator-web/src/main.tsx",
   "apps/app-store-pwa/src/main.tsx",
@@ -60,6 +62,7 @@ function trackedTextFiles() {
   return output
     .split("\0")
     .filter(Boolean)
+    .filter((path) => existsSync(path))
     .filter((path) => !/\.(png|jpg|jpeg|webp|ico|woff2?)$/i.test(path));
 }
 

@@ -56,8 +56,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { apiBaseUrl, createAdminPlatformClient, hasValidAdminSession } from "./admin-client";
-import { useAiGovernance } from "./hooks/use-ai-governance";
-import { canMutateAiGovernance } from "./lib/ai-governance-status";
+import { canMutateAiGovernance, useAiGovernance } from "./features/ai-governance";
 import { AdminLoginScreen } from "./login-screen";
 import { SetupWizard } from "./setup-wizard";
 
