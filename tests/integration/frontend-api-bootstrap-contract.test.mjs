@@ -125,15 +125,15 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   assert.match(storeSource, /loadStoreBootstrap/);
 });
 
-test("frontend shells expose Platform Auth sign-in and logout bridge controls", () => {
+test("frontend shells retain platform session bridges while Admin exposes logout only", () => {
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.match(source, /createPlatformSessionStore/);
     assert.match(source, /simulateSsoLogin/);
     assert.match(source, /Logout/);
   }
-  // Admin and store keep a visible session sign-in/refresh control. The creator shell dropped its
-  // "Demo Sign in" button (it uses native login + the automatic session bridge), keeping only logout.
-  assert.match(adminSource, /Sign in|Refresh Session/);
+  // Admin and Creator use automatic session bridges and expose only Logout. Store retains its
+  // visible sign-in/refresh control because it has a distinct session-recovery workflow.
+  assert.doesNotMatch(adminSource, /Sign in|Refresh Session/);
   assert.match(storeSource, /Sign in|Refresh Session/);
 
   assert.match(adminSource, /adminSessionBridgeProfile/);
