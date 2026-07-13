@@ -316,9 +316,8 @@ table {
 
 .sidebar-account {
   --sidebar-account-bg: #131a2b;
-  --sidebar-account-border: rgba(148, 163, 184, 0.14);
   background: var(--sidebar-account-bg);
-  border: 1px solid var(--sidebar-account-border);
+  border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -384,27 +383,17 @@ table {
 }
 
 .sidebar-session {
-  display: grid;
+  align-items: center;
+  display: flex;
   gap: 6px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 0;
 }
 
-.sidebar-session > .tone-badge {
-  box-sizing: border-box;
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .sidebar-session :is(button, a) {
+  flex: 1;
   font-size: 12px;
   font-weight: 600;
   justify-content: center;
-  min-width: 0;
-  width: 100%;
 }
 
 .app-shell-collapsed .sidebar-session {
@@ -546,7 +535,7 @@ table {
 
 .app-shell-light .sidebar-account {
   --sidebar-account-bg: var(--evcp-color-surface-muted, #f8fafc);
-  --sidebar-account-border: var(--evcp-color-border, #e2e8f0);
+  border-color: var(--evcp-color-border, #e2e8f0);
 }
 
 .app-shell-light .sidebar-footer strong {
@@ -5101,16 +5090,16 @@ button:disabled {
     display: inline-flex;
   }
 
-  /* The mobile navigation is always a full drawer, regardless of desktop collapse state. */
+  /* Mobile navigation is always a full drawer, regardless of desktop collapse preference. */
   .app-shell-collapsed .sidebar-account {
     background: var(--sidebar-account-bg);
-    border-color: var(--sidebar-account-border);
+    border-color: rgba(148, 163, 184, 0.14);
     gap: 10px;
     padding: 10px;
   }
 
   .app-shell-collapsed .sidebar-session {
-    display: grid;
+    display: flex;
   }
 
   .app-shell-collapsed .sidebar-nav a,

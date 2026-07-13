@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 globalThis.React = React;
 
 const loginSource = readFileSync("apps/admin-web/src/login-screen.tsx", "utf8");
+const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
 const { AdminLoginScreen, authenticateAdmin, nativeLogin } =
   await import("../../apps/admin-web/src/login-screen.tsx");
@@ -74,6 +75,15 @@ test("Admin login preserves request/session flow and provides safe loading and e
   assert.match(loginSource, /<AlertCircle[^>]*aria-hidden="true"/);
   assert.match(loginSource, /setErrorMessage\("Invalid email or password"\)/);
   assert.doesNotMatch(loginSource, /aria-live=/);
+});
+
+test("Admin sidebar retains only the accessible logout action", () => {
+  assert.match(
+    adminSource,
+    /const adminSessionControls = \(\s*<button type="button" className="secondary-button" onClick=\{handleLogoutBridge\}>[\s\S]*?<LockKeyhole[^>]*\/>[\s\S]*?Logout[\s\S]*?<\/button>\s*\);/
+  );
+  assert.doesNotMatch(adminSource, /Refresh Session/);
+  assert.doesNotMatch(adminSource, /handleSignInBridge/);
 });
 
 test("nativeLogin keeps the POST contract and rejects non-OK or malformed responses", async () => {
