@@ -1403,6 +1403,16 @@ function AdminApp() {
   }, [sessionActive]);
 
   useEffect(() => {
+    if (aiGovernance.availability === "ready") return;
+    setLatestAiRoute(undefined);
+    setLatestAiQuota(undefined);
+    setLatestGuardrailRule(undefined);
+    setProviderTestCallResult(undefined);
+    setProviderTestCallMessage("AI governance data is unavailable. Refresh the page or sign in again.");
+    setAiKeySecret("");
+  }, [aiGovernance.availability, adminClient]);
+
+  useEffect(() => {
     const sectionId = window.location.hash
       ? window.location.hash.slice(1)
       : sectionIdFromAdminPath(window.location.pathname);
@@ -1501,13 +1511,9 @@ function AdminApp() {
       setProviderTestCallMessage(
         "Provider route validated. Output excerpt and usage evidence are safe to show."
       );
-    } catch (error) {
+    } catch {
       setProviderTestCallResult(undefined);
-      setProviderTestCallMessage(
-        error instanceof Error
-          ? error.message
-          : "Provider test failed. Review route, active key and adapter setup."
-      );
+      setProviderTestCallMessage("Provider test failed. Review route, active key and adapter setup.");
     } finally {
       setIsRunningProviderTestCall(false);
     }
@@ -1775,14 +1781,12 @@ function AdminApp() {
     time: event.occurredAt ?? "latest"
   }));
   const latestGuardrailEvent = aiGovernance.guardrailEvents[0];
-  const aiGovernanceUnavailableMessage =
-    "AI governance data is unavailable. Refresh the page or sign in again.";
   const aiGovernanceAvailabilityPanel = (
     <div aria-live="polite">
       <DecisionPanel
         tone={aiGovernance.availability === "ready" ? "success" : "warning"}
         badge={aiGovernance.availability}
-        title={aiGovernance.message || aiGovernanceUnavailableMessage}
+        title={aiGovernance.message}
         lines={["Configuration changes are disabled until Platform API data is available."]}
       />
       {aiGovernance.availability !== "ready" ? (
@@ -3033,6 +3037,10 @@ function AdminApp() {
           />
 
           <div className="ds-main-stack">
+            {aiGovernance.availability !== "ready" ? (
+              aiGovernanceAvailabilityPanel
+            ) : (
+              <>
             <SectionCard
               eyebrow="Provider Test Call"
               title="Validate AI provider route"
@@ -3132,6 +3140,8 @@ function AdminApp() {
                 />
               </div>
             </SectionCard>
+              </>
+            )}
 
             <div id="ai-provider-registry">
               <SectionCard

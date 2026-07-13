@@ -236,3 +236,27 @@ test("Admin logout disables governance and clears quota fixture evidence", () =>
   assert.doesNotMatch(source, /Project 300 daily/);
   assert.doesNotMatch(source, /App 100 daily/);
 });
+
+test("Admin clears derived governance state after a failed read or session transition", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /if \(aiGovernance\.availability === "ready"\) return;/);
+  for (const reset of [
+    "setLatestAiRoute(undefined)",
+    "setLatestAiQuota(undefined)",
+    "setLatestGuardrailRule(undefined)",
+    "setProviderTestCallResult(undefined)",
+    "setProviderTestCallMessage("
+  ]) {
+    assert.match(source, new RegExp(reset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(
+    source,
+    /setProviderTestCallMessage\("Provider test failed\. Review route, active key and adapter setup\."\)/
+  );
+});
+
+test("Dashboard governance shows unavailable guidance instead of provider-test placeholders", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /aiGovernance\.availability !== "ready" \? \(\s*aiGovernanceAvailabilityPanel/s);
+  assert.ok([...source.matchAll(/aiGovernanceAvailabilityPanel/g)].length >= 4);
+});

@@ -10,7 +10,7 @@ import type {
   GuardrailRuleDto,
   PlatformApiClient
 } from "@evcp/api-client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   aiGovernanceUnavailableMessage,
   canMutateAiGovernance,
@@ -28,14 +28,40 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
   const [availability, setAvailability] = useState<AiGovernanceAvailability>("loading");
   const [message, setMessage] = useState("Loading AI governance data.");
   const [snapshot, setSnapshot] = useState<AiGovernanceSnapshot>(emptySnapshot);
+  const [snapshotClient, setSnapshotClient] = useState(client);
+  const activeClientRef = useRef(client);
+  const generationRef = useRef(0);
+
+  if (activeClientRef.current !== client) {
+    activeClientRef.current = client;
+    generationRef.current += 1;
+  }
+
+  const isSnapshotCurrent = snapshotClient === client;
+  const visibleSnapshot = isSnapshotCurrent ? snapshot : emptySnapshot;
+  const visibleAvailability: AiGovernanceAvailability = isSnapshotCurrent
+    ? availability
+    : client
+      ? "loading"
+      : "unavailable";
+  const visibleMessage = isSnapshotCurrent
+    ? message
+    : client
+      ? "Loading AI governance data."
+      : aiGovernanceUnavailableMessage(undefined);
 
   const reload = useCallback(async () => {
+    const requestGeneration = ++generationRef.current;
     if (!client) {
+      if (generationRef.current !== requestGeneration) return;
       setSnapshot(emptySnapshot);
+      setSnapshotClient(client);
       setAvailability("unavailable");
       setMessage(aiGovernanceUnavailableMessage(undefined));
       return;
     }
+    setSnapshot(emptySnapshot);
+    setSnapshotClient(client);
     setAvailability("loading");
     setMessage("Loading AI governance data.");
     try {
@@ -44,11 +70,14 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
         client.listAiApiKeys(),
         client.listGuardrailEvents()
       ]);
+      if (generationRef.current !== requestGeneration || activeClientRef.current !== client) return;
       setSnapshot({ providers, apiKeys, guardrailEvents });
       setAvailability("ready");
       setMessage("Loaded AI governance data from Platform API.");
     } catch (error) {
+      if (generationRef.current !== requestGeneration || activeClientRef.current !== client) return;
       setSnapshot(emptySnapshot);
+      setSnapshotClient(client);
       setAvailability("unavailable");
       setMessage(aiGovernanceUnavailableMessage(error));
     }
@@ -59,7 +88,7 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
   }, [reload]);
   const requireReadyClient = (): PlatformApiClient => {
     if (!client) throw new Error("AI governance API is unavailable");
-    if (!canMutateAiGovernance(availability)) {
+    if (!canMutateAiGovernance(visibleAvailability)) {
       throw new Error("AI governance API is unavailable");
     }
     return client;
@@ -113,9 +142,9 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     return rule;
   };
   return {
-    availability,
-    message,
-    ...snapshot,
+    availability: visibleAvailability,
+    message: visibleMessage,
+    ...visibleSnapshot,
     reload,
     createProvider,
     saveApiKey,
