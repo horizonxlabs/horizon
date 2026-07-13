@@ -58,6 +58,7 @@ import { apiBaseUrl, createAdminPlatformClient, hasValidAdminSession } from "./a
 import { canMutateAiGovernance, useAiGovernance } from "./features/ai-governance";
 import { AuditEvidenceSection } from "./features/audit-monitoring";
 import { serviceHealthRows } from "./features/platform-operations";
+import { domainRequestRows, ticketCountRows } from "./features/publish-governance";
 import {
   authMappingRows,
   authProviderRows,
@@ -147,22 +148,6 @@ const monitoringKpis = [
   icon: ComponentType<{ size?: number }>;
   tone: BadgeTone;
 }>;
-
-const ticketCountRows = [
-  { metric: "Submitted", value: "1", trend: "from Horizon Store feedback" },
-  { metric: "Planned", value: "1", trend: "converted to PRD change" },
-  { metric: "Resolved", value: "0", trend: "awaiting pilot validation" }
-];
-
-const domainRequestRows = [
-  {
-    request: "DOM-0001",
-    domain: "leave.company.example",
-    project: "Leave Management",
-    status: "approved",
-    policy: "internal data + approved users"
-  }
-];
 
 const runtimeKpis = [
   {
