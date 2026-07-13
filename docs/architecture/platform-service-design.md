@@ -175,7 +175,7 @@ sequenceDiagram
   participant Store as MinIO
 
   Creator->>API: Submit PRD or workspace prompt
-  API->>Policy: Confirm PRD baseline; evaluate guardrail and quota
+  API->>Policy: Confirm PRD baseline, evaluate guardrail and quota
   alt Blocked
     Policy-->>API: Block decision
     API->>DB: Persist blocked-task or audit evidence
