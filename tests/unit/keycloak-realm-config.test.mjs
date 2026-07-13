@@ -15,7 +15,11 @@ const requiredEnvironment = {
 
 test("Keycloak realm permits authorization-code login only through the confidential Platform API client", async () => {
   const { readKeycloakConfig } = await import("../../apps/platform-api/src/keycloak/config.ts");
-  const realm = JSON.parse(await readFile("apps/platform-api/keycloak/evcp-realm.json", "utf8"));
+  const [realmSource, bootstrap] = await Promise.all([
+    readFile("apps/platform-api/keycloak/evcp-realm.json", "utf8"),
+    readFile("apps/platform-api/keycloak/bootstrap-clients.sh", "utf8")
+  ]);
+  const realm = JSON.parse(realmSource);
   const config = readKeycloakConfig(requiredEnvironment);
 
   assert.deepEqual(
@@ -35,11 +39,10 @@ test("Keycloak realm permits authorization-code login only through the confident
   assert.equal(adminClient.publicClient, false);
   assert.equal(adminClient.standardFlowEnabled, false);
   assert.equal(adminClient.serviceAccountsEnabled, true);
-  assert.deepEqual(adminClient.serviceAccountClientRoles["realm-management"].sort(), [
-    "manage-users",
-    "query-users",
-    "view-users"
-  ]);
+  assert.equal("serviceAccountClientRoles" in adminClient, false);
+  assert.match(bootstrap, /add-roles/);
+  assert.match(bootstrap, /--cclientid realm-management/);
+  assert.match(bootstrap, /for role in query-users view-users manage-users; do/);
   for (const client of realm.clients) {
     assert.equal(client.directAccessGrantsEnabled, false);
     assert.equal("secret" in client, false, `${client.clientId} secret must be bootstrapped at runtime`);
