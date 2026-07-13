@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { getMockPermissions } from "@evcp/auth-sdk";
 import type { PlatformRole } from "@evcp/types";
@@ -111,18 +111,6 @@ interface CredentialUserRecord {
   mustChangePassword: boolean;
 }
 
-interface UpdateUserArgs {
-  where: { id: string };
-  data: {
-    passwordHash?: string;
-    mustChangePassword?: boolean;
-    passwordUpdatedAt?: Date;
-    name?: string;
-    status?: string;
-    roles?: { deleteMany: Record<string, never>; create: Array<{ role: { connect: { key: string } } }> };
-  };
-}
-
 /**
  * Canonical Prisma nested-relation write for a user's role join, e.g.
  * `roles: { create: [{ role: { connect: { key: "creator" } } }] }`. This is the shape the REAL
@@ -147,7 +135,7 @@ export interface CorePersistenceClient {
     findUnique(
       args: FindUniqueUserArgs
     ): Promise<(PlatformUserRecord & Partial<CredentialUserRecord>) | null>;
-    update(args: UpdateUserArgs): Promise<{ id: string }>;
+    update(args: { where: { id: string }; data: Partial<CredentialUserRecord & Omit<PlatformUserRecord, "roles">> & { passwordUpdatedAt?: Date; roles?: { deleteMany: Record<string, never>; create: Array<{ role: { connect: { key: string } } }> } } }): Promise<{ id: string }>;
     create(
       args: CreateUserArgs
     ): Promise<{ id: string; email: string; name: string; status: string }>;
@@ -560,30 +548,6 @@ export function buildPlatformUserRoleRecords(role: string | undefined): Platform
       }
     }
   ];
-}
-
-/** Maintains the local projection used by persistence-backed routes from Keycloak's current claims. */
-export async function upsertKeycloakUserProjection(
-  client: CorePersistenceClient,
-  input: { subject: string; email: string; name: string; role: PlatformRole }
-): Promise<void> {
-  const email = input.email.trim().toLowerCase();
-  const name = input.name.trim() || email;
-  const roles = { deleteMany: {} as Record<string, never>, create: [{ role: { connect: { key: input.role } } }] };
-  const existing = await client.platformUser.findUnique({ where: { email } });
-  if (existing) {
-    await client.platformUser.update({ where: { id: existing.id }, data: { name, status: "active", roles } });
-    return;
-  }
-  await client.platformUser.create({
-    data: {
-      id: `usr_sso_${createHash("sha256").update(input.subject).digest("hex").slice(0, 12)}`,
-      email,
-      name,
-      status: "active",
-      roles: { create: roles.create }
-    }
-  });
 }
 
 function normalizeSensitivity(value: string | null): PlatformProject["dataSensitivity"] {

@@ -2,7 +2,8 @@ import { getMockPermissions } from "@evcp/auth-sdk";
 import { mockUsers } from "@evcp/mock-data";
 import type { PlatformRole } from "@evcp/types";
 import { PlatformAuthSsoService, type PlatformAuthClaims, type PlatformAuthSession, type PlatformUser } from "../platform-services";
-import { upsertKeycloakUserProjection, type CorePersistenceClient } from "../persistence/core-repositories";
+import type { CorePersistenceClient } from "../persistence/core-repositories";
+import { upsertKeycloakUserProjection } from "../persistence/keycloak-user-projection";
 
 declare module "../platform-services" {
   interface PlatformAuthSsoService {
