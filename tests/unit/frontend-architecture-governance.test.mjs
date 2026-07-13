@@ -73,6 +73,13 @@ test("architecture checker permits relative imports within the same feature", ()
   }
 });
 
+test("architecture checker ignores the non-React Platform API source tree", () => {
+  assert.deepEqual(
+    checkFrontendArchitecture(["apps/platform-api/src/keycloak/oidc-service.ts"]),
+    []
+  );
+});
+
 test("quality commands and Vite configs expose the architecture gate and aliases", () => {
   const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(rootPackage.scripts["check:frontend-architecture"], "node scripts/quality/check-frontend-architecture.mjs");

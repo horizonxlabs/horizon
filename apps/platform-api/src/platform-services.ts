@@ -1761,7 +1761,7 @@ export class IdentityService {
   }): PlatformUser {
     const email = input.email.trim().toLowerCase();
     const existing = this.users.find((candidate) => candidate.email === email);
-    if (existing) return existing;
+    if (existing) return Object.assign(existing, { name: input.name.trim() || email, role: this.primaryPlatformRole(input.platformRoles), permissions: getMockPermissions(this.primaryPlatformRole(input.platformRoles)) });
 
     const role = this.primaryPlatformRole(input.platformRoles);
     const user: PlatformUser = {
@@ -1946,7 +1946,7 @@ export class MockAuthService {
   }
 
   private resolveMockHeaderEmail(headers: HeaderBag): string {
-    const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "1") === "0";
+    const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "0") !== "1";
     const email = disabled ? undefined : normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
     if (!email) throw new MockAuthError(disabled ? "Mock header auth is disabled" : "Missing Authorization Bearer token or x-mock-user-email header"); return email;
   }
@@ -2678,7 +2678,7 @@ export class PlatformAuthSsoService {
     this.sessions.push(session);
     this.audit.record({
       actorId: actor.id,
-      action: "auth.sso_login.succeeded",
+      action: provider.type === "keycloak" ? "auth.keycloak_login.succeeded" : "auth.sso_login.succeeded",
       resourceType: "platform_auth_session",
       resourceId: session.id,
       metadata: {

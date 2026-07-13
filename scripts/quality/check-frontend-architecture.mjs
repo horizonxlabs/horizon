@@ -29,6 +29,7 @@ function sourceContext(file) {
   const normalized = file.replaceAll("\\", "/");
   const match = normalized.match(/^(apps\/[^/]+\/src)\/(.*)$/);
   if (!match) return null;
+  if (match[1].startsWith("apps/platform-api/")) return null;
   const segments = match[2].split("/");
   return { srcRoot: resolve(ROOT, match[1]), relativePath: match[2], root: segments[0], segments };
 }

@@ -111,11 +111,6 @@ interface CredentialUserRecord {
   mustChangePassword: boolean;
 }
 
-interface UpdateUserCredentialArgs {
-  where: { id: string };
-  data: { passwordHash?: string; mustChangePassword?: boolean; passwordUpdatedAt?: Date };
-}
-
 /**
  * Canonical Prisma nested-relation write for a user's role join, e.g.
  * `roles: { create: [{ role: { connect: { key: "creator" } } }] }`. This is the shape the REAL
@@ -140,7 +135,7 @@ export interface CorePersistenceClient {
     findUnique(
       args: FindUniqueUserArgs
     ): Promise<(PlatformUserRecord & Partial<CredentialUserRecord>) | null>;
-    update(args: UpdateUserCredentialArgs): Promise<{ id: string }>;
+    update(args: { where: { id: string }; data: Partial<CredentialUserRecord & Omit<PlatformUserRecord, "roles">> & { passwordUpdatedAt?: Date; roles?: { deleteMany: Record<string, never>; create: Array<{ role: { connect: { key: string } } }> } } }): Promise<{ id: string }>;
     create(
       args: CreateUserArgs
     ): Promise<{ id: string; email: string; name: string; status: string }>;
@@ -333,6 +328,9 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
         if (data.passwordHash !== undefined) user.passwordHash = data.passwordHash;
         if (data.mustChangePassword !== undefined)
           user.mustChangePassword = data.mustChangePassword;
+        if (data.name !== undefined) user.name = data.name;
+        if (data.status !== undefined) user.status = data.status as UserStatus;
+        if (data.roles) user.roles = normalizeCreateRoles({ create: data.roles.create });
         return { id: user.id };
       },
       create: async ({ data }) => {

@@ -3,9 +3,6 @@ name: evcp-private-server
 x-evcp-node-service: &evcp-node-service
   image: node:22-alpine
   working_dir: /workspace
-  env_file:
-    - path: ../.env
-      required: false
   volumes:
     - ..:/workspace
     - evcp_pnpm_store:/workspace/.pnpm-store
@@ -69,13 +66,17 @@ services:
     image: quay.io/keycloak/keycloak:26.2
     container_name: evcp-keycloak
     restart: unless-stopped
-    command: start-dev --http-port=8080
+    command: start-dev --import-realm --http-port=8080
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
       KC_HEALTH_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080/auth}
     ports:
       - "8081:8080"
+    volumes:
+      - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
     healthcheck:
       test:
         [
@@ -86,10 +87,36 @@ services:
       timeout: 5s
       retries: 30
 
+  keycloak-bootstrap:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-keycloak-bootstrap
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM is required}
+      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID is required}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET:?KEYCLOAK_PLATFORM_CLIENT_SECRET is required}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID is required}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
+      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
+      EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
+    entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
+    volumes:
+      - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
+    networks:
+      - evcp-internal
+
   platform-api:
     <<: *evcp-node-service
     container_name: evcp-platform-api
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
     command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api exec prisma generate --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
     ports:
       - "${EVCP_API_PORT:-3100}:3100"
@@ -116,6 +143,14 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL}
+      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+      EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL}
     networks:
       - evcp-internal
     depends_on:
@@ -127,6 +162,10 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
+      keycloak:
+        condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
 
   admin-web:
     <<: *evcp-node-service

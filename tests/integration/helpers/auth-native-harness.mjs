@@ -19,13 +19,14 @@ export function createNativeAuthServices() {
 
 export function buildTestExecutor(options = {}) {
   const services = createNativeAuthServices();
-  const envOverrides = options.env ?? {};
+  const envOverrides = options.env ?? { EVCP_ALLOW_SIMULATE_LOGIN: "1" };
 
   async function request({ method, path, headers = {}, body }) {
     const previous = {};
     for (const key of Object.keys(envOverrides)) {
       previous[key] = process.env[key];
-      process.env[key] = envOverrides[key];
+      if (envOverrides[key] === undefined) delete process.env[key];
+      else process.env[key] = envOverrides[key];
     }
     try {
       return await executePlatformApiRequestAsync(services, { method, path, headers, body });

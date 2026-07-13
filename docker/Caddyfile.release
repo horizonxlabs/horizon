@@ -5,6 +5,10 @@
 	@compressible not path /api/*
 	encode @compressible zstd gzip
 
+	handle /auth/* {
+		reverse_proxy keycloak:8080
+	}
+
 	handle_path /api/* {
 		# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
 		reverse_proxy platform-api:3100 {

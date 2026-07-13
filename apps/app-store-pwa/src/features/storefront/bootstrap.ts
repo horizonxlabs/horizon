@@ -1,12 +1,11 @@
 import {
   createPlatformSessionStore,
   type CurrentUserResponse,
-  type SimulatedSsoLoginInput,
   type StorefrontAppCardDto,
   type StorefrontHomeResponse
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createStorePlatformClient, createStoreSessionBridgeClient } from "./platform-client";
+import { createStorePlatformClient, startStoreKeycloakLogin } from "./platform-client";
 
 export type StoreBootstrapState = {
   userName: string;
@@ -49,14 +48,6 @@ export const initialStoreBootstrap: StoreBootstrapState = {
   source: "local fallback"
 };
 
-const storeSessionBridgeProfile: SimulatedSsoLoginInput = {
-  subject: "keycloak-store-ui-bridge",
-  email: "user@company.com",
-  name: "End User",
-  groups: ["evcp-users"],
-  appRoles: { "leave-management": ["Employee"] }
-};
-
 function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
   return {
     id: app.id,
@@ -73,6 +64,11 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
   };
 }
 export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
+  consumeStoreSessionHandoff();
+  if (!createPlatformSessionStore(window.localStorage).getToken()) {
+    signInStoreSessionBridge();
+    return initialStoreBootstrap;
+  }
   const client = createStorePlatformClient();
   const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all(
     [client.getCurrentUser(), client.listStoreApps()]
@@ -86,11 +82,17 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
   };
 }
 
-export async function signInStoreSessionBridge(): Promise<StoreBootstrapState> {
-  const bridgeClient = createStoreSessionBridgeClient();
-  const session = await bridgeClient.simulateSsoLogin(storeSessionBridgeProfile);
-  createPlatformSessionStore(window.localStorage).saveSession(session);
-  return loadStoreBootstrap();
+export function signInStoreSessionBridge(): void {
+  window.location.assign(startStoreKeycloakLogin(window.location.href));
+}
+
+function consumeStoreSessionHandoff(): void {
+  const handoff = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = handoff.get("evcp_session");
+  const expiresAt = handoff.get("evcp_session_expires_at");
+  if (!token || !expiresAt) return;
+  createPlatformSessionStore(window.localStorage).saveSession({ token, expiresAt });
+  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
 }
 
 export function clearStoreSessionBridge(): StoreBootstrapState {

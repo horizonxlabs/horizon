@@ -50,7 +50,7 @@ test("admin first-run screen behaves like an initial product setup gate", () => 
   assert.match(adminRoutesSource, /<AdminLoginScreen onLoggedIn=/);
   assert.match(setupWizard, /initializeSetup/);
   assert.match(setupWizard, /businessName/);
-  assert.match(loginScreen, /auth\/login/);
+  assert.match(loginScreen, /startAdminKeycloakLogin/);
   assert.match(setupWizard, /Create admin & finish/);
 });
 

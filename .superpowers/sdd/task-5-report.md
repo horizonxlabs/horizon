@@ -1,48 +1,41 @@
-# Task 5: Security and release readiness evidence extraction
+# Task 5 report — production Keycloak auth operations
 
-## Scope
+## Delivered
 
-- Created `apps/admin-web/src/features/security-release-readiness/evidence.ts`.
-- Created `apps/admin-web/src/features/security-release-readiness/index.ts`.
-- Moved the security/release readiness evidence imports in `apps/admin-web/src/main.tsx` to the feature barrel and removed the in-file declarations.
-- Added `tests/unit/admin-security-release-readiness-feature.test.mjs`.
+- Replaced simulated-auth operations guidance with the deployed server-owned Keycloak
+  OpenID Connect Authorization Code with PKCE contract.
+- Documented the realm import, confidential-client secret bootstrap, required runtime
+  variables, exact callback and frontend-origin constraints, first EVCP administrator
+  bootstrap, readiness checks, and fail-closed troubleshooting.
+- Updated native-auth coverage so production mode rejects native login and password
+  changes, mock headers, and simulated login. The legacy native credential harness
+  is exercised only with an explicit `EVCP_ALLOW_SIMULATE_LOGIN=1` test setting.
+- Added the production documentation contract at
+  `tests/e2e/keycloak-production-contract.test.mjs`.
 
-The following existing evidence was extracted without content changes:
+## TDD record
 
-- `securityReleaseKpis`
-- `tlsSessionRows`
-- `secretRedactionRows`
-- `uploadValidationRows`
-- `releaseChecklistRows`
-- `rtmRegressionRows`
-
-UI rendering, Admin root handlers, and Admin root state remain in `main.tsx`.
-
-## TDD evidence
-
-1. Added the required API-ownership test before feature implementation.
-2. Ran `node --import tsx --test tests/unit/admin-security-release-readiness-feature.test.mjs`.
-   - Expected RED result: failed because `apps/admin-web/src/features/security-release-readiness/index.ts` did not exist.
-3. Added the evidence module, public barrel exports, and `main.tsx` feature import.
-4. Re-ran the same test.
-   - GREEN result: 1 passing, 0 failing.
+1. Added the production documentation contract before changing operations docs.
+2. RED: `node --import tsx --test tests/e2e/keycloak-production-contract.test.mjs`
+   failed because frontend bootstrap guidance still described the simulated SSO bridge.
+3. Replaced the obsolete guidance and reran the contract successfully.
+4. Replaced the native-auth test with a production rejection contract.
+5. RED: `node --import tsx --test tests/integration/platform-auth-native-contract.test.mjs`
+   returned 401 from native login instead of the required disabled endpoint response.
+6. GREEN: production-mode requests are rejected, and the legacy native credential
+   harness remains available only under the explicit test flag; the focused native-auth
+   contract passes.
 
 ## Verification
 
-- `node --import tsx --test tests/unit/admin-security-release-readiness-feature.test.mjs`
-  - Passed: 1 test, 0 failures.
-- `pnpm --filter @evcp/admin-web typecheck`
-  - Passed with exit code 0.
-- `node --import tsx --test tests/unit/admin-security-release-readiness-feature.test.mjs tests/unit/admin-*-feature.test.mjs`
-  - Passed: 9 tests, 0 failures.
-- `pnpm check:staged`
-  - Passed: conflict-marker scan, design-system governance, frontend architecture, and changed-file checks.
-- `git diff --cached --check`
-  - Passed with no whitespace errors.
-- A Node assertion compared each extracted array against `HEAD:apps/admin-web/src/main.tsx` after normalizing only `export const` to `const`.
-  - Passed: all six arrays matched byte-for-byte.
+- `node --import tsx --test tests/e2e/keycloak-production-contract.test.mjs tests/integration/platform-auth-native-contract.test.mjs` — 3 passing tests.
+- `git diff --check` — passed.
+- `pnpm check:ci` — blocked by pre-existing oxlint warnings in
+  `tests/integration/keycloak-user-management-contract.test.mjs` at lines 30 and 40
+  (`ignored` unused). All preceding quality stages passed.
 
-## Deliberately unchanged
+## Scope note
 
-- Fixtures, UI behavior, Admin root handlers, and Admin root state.
-- Unrelated documentation files already present in the worktree.
+An additional pre-existing focused Keycloak callback test currently fails because a
+new Keycloak session does not replace an older in-memory local role. It is outside
+this documentation/native-auth task and was not changed here.

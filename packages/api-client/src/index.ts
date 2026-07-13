@@ -19,12 +19,7 @@ export function success<T>(data: T, meta?: Record<string, unknown>): ApiSuccess<
   return { ok: true, data, meta };
 }
 
-export function failure(code: string, message: string, traceId?: string): ApiFailure {
-  return {
-    ok: false,
-    error: { code, message, traceId }
-  };
-}
+export function failure(code: string, message: string, traceId?: string): ApiFailure { return { ok: false, error: { code, message, traceId } }; }
 export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
 export type {
   AppDatabaseColumnDto,
@@ -69,7 +64,8 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-
+export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage } from "./keycloak-user-types";
+export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
   name: string;
@@ -1116,22 +1112,11 @@ export class PlatformApiClient {
     });
   }
 
-  simulateSsoLogin(input: SimulatedSsoLoginInput): Promise<PlatformAuthSessionResponse> {
-    return this.request<PlatformAuthSessionResponse>("/admin/auth/simulate-login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        providerId: input.providerId ?? "authprov_keycloak_default_001",
-        subject: input.subject,
-        email: input.email,
-        name: input.name,
-        groups: input.groups,
-        appRoles: input.appRoles ?? {}
-      })
-    });
+  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return (await this.requestWithMeta<T>(path, init)).data;
   }
 
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async requestWithMeta<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: Record<string, unknown> }> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
       headers: this.headers(init.headers)
@@ -1148,7 +1133,7 @@ export class PlatformApiClient {
         status: response.status
       });
     }
-    return envelope.data;
+    return { data: envelope.data, meta: envelope.meta };
   }
 
   // The workspace container-publish routes (publish/promote/deployments) live on a separate raw

@@ -3,6 +3,9 @@ import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+// This legacy bootstrap fixture intentionally exercises mock identities; production defaults deny them.
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 const { createPlatformApiServices } =
   await import("../../apps/platform-api/src/platform-services.ts");
@@ -85,15 +88,13 @@ test("frontend session bridge can issue a bearer token accepted by bootstrap aut
   assert.equal(me.body.data.auth.legacyMockFallback, false);
 });
 
-test("operational bootstrap guidance records fail-closed Admin AI governance", () => {
+test("operational bootstrap guidance records the server-brokered Keycloak handoff", () => {
   const operationsGuide = readFileSync(
     "docs/operations/real-mvp-frontend-api-bootstrap.md",
     "utf8"
   );
 
-  assert.match(operationsGuide, /Admin AI governance is fail-closed/);
-  assert.match(
-    operationsGuide,
-    /does not render fallback provider, key, route, quota, or guardrail data/
-  );
+  assert.match(operationsGuide, /Keycloak/);
+  assert.match(operationsGuide, /server-brokered|authorization code|OIDC/i);
+  assert.match(operationsGuide, /evcp_session|Platform session/i);
 });

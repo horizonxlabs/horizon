@@ -1,9 +1,11 @@
+import { startKeycloakLogin } from "@evcp/api-client";
 import { createConfiguredPlatformApiClient } from "@/shared/platform-client";
 
 export function createStorePlatformClient() {
-  return createConfiguredPlatformApiClient({ legacyUserEmail: "user@company.com" });
+  return createConfiguredPlatformApiClient();
 }
 
-export function createStoreSessionBridgeClient() {
-  return createConfiguredPlatformApiClient({ legacyUserEmail: "admin@company.com" });
+export function startStoreKeycloakLogin(returnTo: string): string {
+  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  return startKeycloakLogin((configured || "/api").replace(/\/$/, ""), "store", returnTo);
 }

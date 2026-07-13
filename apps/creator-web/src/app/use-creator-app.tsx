@@ -150,28 +150,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
-      const nextBootstrap = await signInCreatorSessionBridge(
-        projectRouteSegmentFromPath(window.location.pathname)
-      );
-      setBootstrap(nextBootstrap);
-      try {
-        await refreshPrdState(nextBootstrap.selectedProject.id);
-      } catch {
-        setCurrentPrdVersion(undefined);
-        setPrdVersionList([]);
-      }
-      try {
-        vibeWorkspace.setWorkspaceSnapshot(
-          await loadWorkspaceState(nextBootstrap.selectedProject.id)
-        );
-        await publishAccess.refreshCreatorPublishState(nextBootstrap.selectedProject.id);
-        vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
-      } catch {
-        vibeWorkspace.setWorkspaceSnapshot(undefined);
-        vibeWorkspace.setWorkspaceMessage(
-          "Signed in. Confirm PRD baseline before workspace generation."
-        );
-      }
+      signInCreatorSessionBridge();
+      return;
     } catch {
       setBootstrap(initialCreatorBootstrap);
       vibeWorkspace.setWorkspaceSnapshot(undefined);

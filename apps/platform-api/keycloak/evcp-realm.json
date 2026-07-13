@@ -1,0 +1,56 @@
+{
+  "realm": "evcp",
+  "enabled": true,
+  "displayName": "Enterprise Vibe Coding Platform",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "groups": [
+    { "name": "evcp-admins" },
+    { "name": "evcp-creators" },
+    { "name": "evcp-users" }
+  ],
+  "clients": [
+    {
+      "clientId": "evcp-platform-api",
+      "name": "EVCP Platform API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3100/auth/keycloak/callback"],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "evcp-admin-service",
+      "name": "EVCP Admin Service",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "serviceAccountClientRoles": {
+        "realm-management": ["query-users", "view-users", "manage-users"]
+      }
+    }
+  ]
+}

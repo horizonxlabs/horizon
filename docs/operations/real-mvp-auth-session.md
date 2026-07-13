@@ -1,84 +1,95 @@
-# Real MVP Platform Auth Session Runtime Integration
+# Production Keycloak Authentication
 
-Status: Phase 2 implementation in progress  
-Issue: #40  
-Stacked after: #39 Runtime core persistence configuration
+## Production contract
 
-## Purpose
+EVCP uses Keycloak as the authoritative identity, credential and group store.
+Browser sign-in is a server-brokered OpenID Connect **Authorization Code with PKCE**
+flow. The browser never receives a Keycloak client secret, administrative token, or
+refresh token.
 
-This phase moves the core Platform API away from mock-header-only authentication by issuing signed Platform Auth bearer sessions from the existing SSO simulation path and accepting those sessions on repository-backed core routes.
+1. An Admin, Creator, or Store shell sends the browser to
+   `GET /api/auth/keycloak/start?app=<admin|creator|store>&returnTo=<approved URL>`.
+2. Platform API creates a one-time, five-minute transaction with state, nonce, and
+   PKCE verifier, then redirects to Keycloak.
+3. Keycloak redirects only to
+   `${EVCP_PUBLIC_API_URL}/auth/keycloak/callback`.
+4. Platform API validates state, PKCE, nonce, issuer, audience, signature, expiry,
+   and group claims; it creates or updates its local user projection and returns an
+   `evcp_session` handoff in the approved frontend URL fragment.
+5. The shell stores the short-lived Platform session and uses it as
+   `Authorization: Bearer <evcp_session>` for Platform API calls.
 
-It does not claim that the real Keycloak/OIDC browser callback is complete. The current implementation creates the session contract that the real callback will use in the next auth slice.
+The realm groups map exactly to platform roles:
 
-## Auth Modes
+| Keycloak group | Platform role |
+| --- | --- |
+| `evcp-admins` | `admin` |
+| `evcp-creators` | `creator` |
+| `evcp-users` | `end_user` |
 
-| Mode | Current use | Behavior |
-| --- | --- | --- |
-| `platform_session` | Real MVP runtime path | Requests send `Authorization: Bearer evcp_session.<payload>.<signature>`. The API verifies the HMAC signature, expiry and session claims before resolving the platform user. |
-| `mock_header` | Legacy sprint regression and migration fallback | Requests send `x-mock-user-email` or `x-evcp-user`. Core persistence routes map the resolved identity back to the repository user where required. |
+## Required configuration
 
-`GET /auth/me` returns auth evidence so clients and tests can prove which mode was used:
+Set these values in the private-server `.env`; replace all example values before
+deployment.
 
-```json
-{
-  "auth": {
-    "mode": "platform_session",
-    "sessionId": "psess_0001",
-    "expiresAt": "2026-07-04T01:00:00.000Z",
-    "legacyMockFallback": false
-  }
-}
+| Variable | Purpose |
+| --- | --- |
+| `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD` | Bootstrap administrator for the Keycloak master realm. |
+| `KEYCLOAK_REALM` | Imported EVCP realm; normally `evcp`. |
+| `KEYCLOAK_ISSUER_URL` | Platform API's issuer URL, such as `http://keycloak:8080/realms/evcp` inside Compose. |
+| `KEYCLOAK_PLATFORM_CLIENT_ID`, `KEYCLOAK_PLATFORM_CLIENT_SECRET` | Confidential authorization-code client used only by Platform API. |
+| `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET` | Confidential service-account client used for Keycloak user management. |
+| `EVCP_PUBLIC_API_URL` | Public Platform API origin; defines the callback URL. |
+| `EVCP_ADMIN_WEB_URL`, `EVCP_CREATOR_WEB_URL`, `EVCP_STORE_WEB_URL` | Allowed browser return origins for Admin, Creator, and Store. |
+
+`keycloak` imports `apps/platform-api/keycloak/evcp-realm.json`, and the
+`keycloak-bootstrap` service writes the two confidential client secrets after the
+realm is healthy. Do not add client secrets to the realm JSON or browser bundles.
+
+The Platform API callback URL and Keycloak platform client redirect URI must match
+exactly. For a public API URL of `https://platform.example.com/api`, configure:
+
+```text
+EVCP_PUBLIC_API_URL=https://platform.example.com/api
+Keycloak redirect URI=https://platform.example.com/api/auth/keycloak/callback
 ```
 
-## Runtime Flow
+## First administrator bootstrap
 
-```mermaid
-sequenceDiagram
-  participant Admin as Admin
-  participant API as Platform API
-  participant SSO as SSO Simulation
-  participant Auth as MockAuthService
-  participant Repo as Core Persistence
+`KEYCLOAK_ADMIN` controls Keycloak itself; it is not an EVCP application user.
+After the stack is healthy, sign in to the Keycloak Admin Console with that bootstrap
+account, select the `evcp` realm, and create the person named by
+`FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_NAME`. Assign that user to `evcp-admins` and set
+a temporary password with **Update Password** required. That person then signs in
+through the Admin Web and becomes the first Platform Admin.
 
-  Admin->>API: POST /admin/auth/simulate-login
-  API->>SSO: normalize claims and roles
-  SSO->>Auth: issuePlatformSession(user, sessionId)
-  Auth-->>API: evcp_session bearer token
-  Admin-->>API: Authorization: Bearer evcp_session...
-  API->>Auth: verify signature, expiry and claims
-  API->>Repo: create/list project or record audit
-  Repo-->>API: repository-backed response
-```
+Use the Admin Web Keycloak user-management surface for later user creation, role
+changes, disable/enable actions, and password resets. Its server-side service account
+has only `query-users`, `view-users`, and `manage-users`; browsers must not call the
+Keycloak Admin API directly.
 
-## Current Guarantees
+## Production restrictions and troubleshooting
 
-- Platform sessions are signed with HMAC SHA-256 using `SESSION_SECRET`.
-- Tokens carry a stable `typ`, `sid`, `sub`, `email`, `iat` and `exp` claim set.
-- Tampered, malformed and expired bearer tokens return the existing unauthorized API envelope.
-- Simulated SSO provisions an active platform user with permissions from mapped platform roles before issuing a session.
-- Repository-backed `/auth/me`, `/projects`, `/audit-logs` and `/audit-logs/filter` accept bearer sessions when `EVCP_CORE_PERSISTENCE=memory` or `prisma`.
-- Mock headers remain available as an explicit legacy fallback while sprint services are migrated.
+`EVCP_ALLOW_SIMULATE_LOGIN` is `0` in both Compose deployments. Production browser
+authentication is Keycloak-only: mock identity headers and
+`POST /admin/auth/simulate-login` are disabled, and legacy native credential calls
+are rejected instead of establishing a production user journey. The isolated native
+credential harness explicitly sets `EVCP_ALLOW_SIMULATE_LOGIN=1`.
 
-## Verification
+If login fails:
 
-```bash
-node --import tsx --test \
-  tests/unit/platform-api-services.test.mjs \
-  tests/integration/platform-auth-session-runtime-contract.test.mjs \
-  tests/e2e/platform-api-http-smoke.test.mjs \
-  tests/e2e/platform-auth-session-runtime-smoke.test.mjs
-```
+- Confirm `keycloak` is healthy and `keycloak-bootstrap` completed successfully:
+  `docker compose --env-file .env -f docker/docker-compose.yml ps`.
+- Verify `KEYCLOAK_ISSUER_URL` is reachable from `platform-api` and points to the
+  imported realm, not the master realm.
+- Verify the confidential client IDs/secrets agree with `.env`, and the platform
+  client retains Authorization Code flow while direct grants remain disabled.
+- Check that `EVCP_PUBLIC_API_URL` and each allowed frontend origin use the exact
+  scheme, host, and port seen by the browser. A callback mismatch or unapproved
+  `returnTo` is rejected.
+- Ensure the user is enabled and belongs to one of the three EVCP groups. An
+  identity without a mapped group is rejected rather than receiving a default role.
 
-The full Phase 2 install regression remains:
-
-```bash
-pnpm verify:real-mvp-install
-```
-
-## Remaining Mock-to-Real Work
-
-- Replace `/admin/auth/simulate-login` with the real Keycloak/OIDC callback and token exchange.
-- Persist platform sessions in the database instead of the in-memory session registry.
-- Replace the temporary frontend session bridge with the real Keycloak/OIDC callback; current Admin, Creator and App Store shells can store, send and clear `localStorage["evcp_session"]`.
-- Remove the mock header fallback after Admin, Creator and App Store clients have migrated.
-- Add PostgreSQL-backed auth session E2E coverage against a migrated private-server database.
+Sessions previously issued by Platform API remain valid only until their expiry;
+new login and all Keycloak user mutations fail closed when Keycloak, discovery,
+JWKS, or token exchange is unavailable.
