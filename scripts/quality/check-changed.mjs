@@ -117,6 +117,18 @@ function getChangedFiles({ base, staged }) {
     .filter((file) => existsSync(file));
 }
 
+export function getComparisonBaseRef({ base, staged }) {
+  if (staged || !base) return "HEAD";
+  return runGit(["merge-base", base, "HEAD"]).toString("utf8").trim();
+}
+
+export function existsAtGitRef(ref, file) {
+  const result = spawnSync("git", ["cat-file", "-e", `${ref}:${file}`], {
+    stdio: "ignore"
+  });
+  return result.status === 0;
+}
+
 function runCommand(label, command, args) {
   if (args.length === 0) {
     return;
@@ -175,7 +187,10 @@ function countLines(file) {
   return lines.length;
 }
 
-function checkLargeFiles(files) {
+export function getLargeFileViolations(
+  files,
+  { baseline = LARGE_FILE_BASELINE, comparisonBaseRef }
+) {
   const violations = [];
   const notes = [];
 
@@ -183,11 +198,18 @@ function checkLargeFiles(files) {
     const lineCount = countLines(file);
     if (lineCount <= LARGE_FILE_LINE_LIMIT) continue;
 
-    const ceiling = LARGE_FILE_BASELINE[file];
+    const ceiling = baseline[file];
+    const existedInComparisonBase =
+      ceiling !== undefined && existsAtGitRef(comparisonBaseRef, file);
     if (ceiling === undefined) {
       // Brand-new (or newly-grown) file over the limit — always blocked.
       violations.push(
         `${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) — split it into focused modules`
+      );
+    } else if (!existedInComparisonBase) {
+      // A baseline entry cannot grandfather a path that did not exist in the comparison base.
+      violations.push(
+        `${file} is ${lineCount} lines (limit ${LARGE_FILE_LINE_LIMIT}) and was not present in comparison base ${comparisonBaseRef} — baseline entries only grandfather pre-existing paths; split it into focused modules`
       );
     } else if (lineCount > ceiling) {
       // Grandfathered, but it grew past its recorded ceiling — the ratchet only allows shrinking.
@@ -205,9 +227,13 @@ function checkLargeFiles(files) {
     }
   }
 
-  for (const note of notes) {
-    console.error(note);
-  }
+  return { notes, violations };
+}
+
+function checkLargeFiles(files, comparisonBaseRef) {
+  const { notes, violations } = getLargeFileViolations(files, { comparisonBaseRef });
+
+  for (const note of notes) console.error(note);
 
   if (violations.length > 0) {
     console.error("[quality:changed] large-file check failed");
@@ -218,52 +244,58 @@ function checkLargeFiles(files) {
   }
 }
 
-const args = parseArgs(process.argv.slice(2));
-const changedFiles = getChangedFiles(args);
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const changedFiles = getChangedFiles(args);
 
-if (changedFiles.length === 0) {
-  console.error("[quality:changed] no changed files to check");
-  process.exit(0);
-}
+  if (changedFiles.length === 0) {
+    console.error("[quality:changed] no changed files to check");
+    return;
+  }
 
-const formatFiles = changedFiles.filter(isFormatTarget);
-const lintFiles = changedFiles.filter(isLintTarget);
-const largeFileTargets = changedFiles.filter(isLargeFileTarget);
-const designSystemTargets = changedFiles.filter(isDesignSystemTarget);
+  const formatFiles = changedFiles.filter(isFormatTarget);
+  const lintFiles = changedFiles.filter(isLintTarget);
+  const largeFileTargets = changedFiles.filter(isLargeFileTarget);
+  const designSystemTargets = changedFiles.filter(isDesignSystemTarget);
 
-runCommand("conflict marker scan", "node", [
-  "scripts/quality/check-no-conflict-markers.mjs",
-  ...changedFiles
-]);
-
-if (!args.formatOnly && largeFileTargets.length > 0) {
-  checkLargeFiles(largeFileTargets);
-}
-
-if (!args.formatOnly && designSystemTargets.length > 0) {
-  runCommand("design system governance", "node", [
-    "scripts/quality/check-design-system.mjs",
-    ...designSystemTargets
+  runCommand("conflict marker scan", "node", [
+    "scripts/quality/check-no-conflict-markers.mjs",
+    ...changedFiles
   ]);
+
+  if (!args.formatOnly && largeFileTargets.length > 0) {
+    checkLargeFiles(largeFileTargets, getComparisonBaseRef(args));
+  }
+
+  if (!args.formatOnly && designSystemTargets.length > 0) {
+    runCommand("design system governance", "node", [
+      "scripts/quality/check-design-system.mjs",
+      ...designSystemTargets
+    ]);
+  }
+
+  if (!args.formatOnly) {
+    runArchitectureCheck(changedFiles);
+  }
+
+  if (args.format && formatFiles.length > 0) {
+    runCommand("format check", "pnpm", ["exec", "prettier", "--check", ...formatFiles]);
+  }
+
+  if (!args.formatOnly && lintFiles.length > 0) {
+    runCommand("oxlint", "pnpm", ["exec", "oxlint", "--deny-warnings", ...lintFiles]);
+  }
+
+  if (
+    !args.formatOnly &&
+    changedFiles.some((file) => file.endsWith("package.json") || file === "pnpm-workspace.yaml")
+  ) {
+    runCommand("workspace package script check", "pnpm", ["check:workspace-scripts"]);
+  }
+
+  console.error("[quality:changed] changed-file checks passed");
 }
 
-if (!args.formatOnly) {
-  runArchitectureCheck(changedFiles);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
 }
-
-if (args.format && formatFiles.length > 0) {
-  runCommand("format check", "pnpm", ["exec", "prettier", "--check", ...formatFiles]);
-}
-
-if (!args.formatOnly && lintFiles.length > 0) {
-  runCommand("oxlint", "pnpm", ["exec", "oxlint", "--deny-warnings", ...lintFiles]);
-}
-
-if (
-  !args.formatOnly &&
-  changedFiles.some((file) => file.endsWith("package.json") || file === "pnpm-workspace.yaml")
-) {
-  runCommand("workspace package script check", "pnpm", ["check:workspace-scripts"]);
-}
-
-console.error("[quality:changed] changed-file checks passed");
