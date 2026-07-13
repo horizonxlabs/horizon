@@ -19,3 +19,9 @@ test("Creator workspace composes focused hook modules without changing its publi
   assert.match(hook, /useVibeChat/);
   assert.match(hook, /workspaceViewState/);
 });
+
+test("Creator workspace initial state does not render fixture preview, task, or usage success data", () => {
+  const viewState = readFileSync("apps/creator-web/src/features/workspace/workspace-view-state.ts", "utf8");
+  assert.doesNotMatch(viewState, /fallbackPreview|fallbackTaskSteps|usageRows|local_workspace_task|local_usage/);
+  assert.match(viewState, /version: "No preview yet"/);
+});
