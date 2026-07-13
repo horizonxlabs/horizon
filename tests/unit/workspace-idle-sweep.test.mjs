@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { startIdleSweep } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts"
+  "../../apps/platform-api/src/workspace-orchestrator/idle-sweep.ts"
 );
 
 test("idle sweep invokes stopIdleWorkspaces on interval and can be stopped", async () => {

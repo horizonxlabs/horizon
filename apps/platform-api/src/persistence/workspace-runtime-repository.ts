@@ -1,0 +1,68 @@
+import type { WorkspaceContainerRecord } from "@evcp/types";
+
+export type WorkspaceRuntimeSnapshot = { record: WorkspaceContainerRecord; llmGatewayKeyId?: string };
+
+export interface WorkspaceRuntimeRecordStore {
+  list(): Promise<WorkspaceRuntimeSnapshot[]>;
+  save(snapshot: WorkspaceRuntimeSnapshot): Promise<void>;
+  remove(projectId: string): Promise<void>;
+}
+
+type RuntimeRecord = WorkspaceContainerRecord & { llmGatewayKeyId?: string | null };
+
+export interface WorkspaceRuntimePersistenceClient {
+  workspaceRuntimeRecord: {
+    findMany(args: { orderBy: { updatedAt: "asc" } }): Promise<RuntimeRecord[]>;
+    upsert(args: {
+      where: { projectId: string };
+      update: Omit<RuntimeRecord, "id" | "projectId" | "createdAt">;
+      create: RuntimeRecord;
+    }): Promise<RuntimeRecord>;
+    delete(args: { where: { projectId: string } }): Promise<RuntimeRecord>;
+  };
+}
+
+export class WorkspaceRuntimeRepositoryBackedStore implements WorkspaceRuntimeRecordStore {
+  constructor(private readonly client: WorkspaceRuntimePersistenceClient) {}
+
+  async list(): Promise<WorkspaceRuntimeSnapshot[]> {
+    return (await this.client.workspaceRuntimeRecord.findMany({ orderBy: { updatedAt: "asc" } })).map((item) => ({
+      record: toRecord(item),
+      ...(item.llmGatewayKeyId ? { llmGatewayKeyId: item.llmGatewayKeyId } : {})
+    }));
+  }
+
+  async save(snapshot: WorkspaceRuntimeSnapshot): Promise<void> {
+    const data = { ...snapshot.record, llmGatewayKeyId: snapshot.llmGatewayKeyId ?? null };
+    const { id: _id, projectId: _projectId, createdAt: _createdAt, ...update } = data;
+    await this.client.workspaceRuntimeRecord.upsert({
+      where: { projectId: snapshot.record.projectId },
+      update,
+      create: data
+    });
+  }
+
+  async remove(projectId: string): Promise<void> {
+    try { await this.client.workspaceRuntimeRecord.delete({ where: { projectId } }); }
+    catch { /* deletion is idempotent for recovery cleanup */ }
+  }
+}
+
+export async function createPrismaWorkspaceRuntimeRecordStore(databaseUrl = process.env.DATABASE_URL): Promise<WorkspaceRuntimeRecordStore> {
+  const { PrismaClient } = await import("@prisma/client");
+  const client = new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined) as unknown as WorkspaceRuntimePersistenceClient;
+  return new WorkspaceRuntimeRepositoryBackedStore(client);
+}
+
+function toRecord(record: RuntimeRecord): WorkspaceContainerRecord {
+  const { llmGatewayKeyId: _llmGatewayKeyId, ...workspace } = record;
+  return {
+    ...workspace,
+    state: workspace.state as WorkspaceContainerRecord["state"],
+    lastActivityAt: toIso(workspace.lastActivityAt),
+    createdAt: toIso(workspace.createdAt),
+    updatedAt: toIso(workspace.updatedAt)
+  };
+}
+
+function toIso(value: string | Date): string { return value instanceof Date ? value.toISOString() : value; }

@@ -5,6 +5,7 @@ import { resourceKeyForProject } from "./resource-ports";
 import type { ObjectStorageProvisioner, LlmGatewayAdmin } from "./resource-ports";
 import type { ProjectSecretStore } from "./secret-store";
 import { buildDevContainerSpec, type DockerEngine } from "./docker-engine";
+import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 
 export interface WorkspaceAuditEvent {
   action: string;
@@ -26,6 +27,7 @@ export interface WorkspaceOrchestratorDeps {
   postgresHost?: string;
   s3Endpoint?: string;
   onAudit?: (event: WorkspaceAuditEvent) => void;
+  runtimeRecords?: WorkspaceRuntimeRecordStore;
 }
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
@@ -41,16 +43,17 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
 
   const records = new Map<string, WorkspaceContainerRecord>();
-  // Retained per-project so a future deleteWorkspace() can revoke the LiteLLM key on hard-delete (see follow-up).
   const llmKeyIds = new Map<string, string>();
+  let runtimeRecords = deps.runtimeRecords;
 
   const now = () => new Date().toISOString();
-
   const save = (record: WorkspaceContainerRecord): WorkspaceContainerRecord => {
     const next = { ...record, updatedAt: now() };
     records.set(record.projectId, next);
     return next;
   };
+
+  const persist = async (record: WorkspaceContainerRecord): Promise<void> => { await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) }); };
 
   const buildWorkspaceSpec = (projectId: string, resourceKey: string) =>
     buildDevContainerSpec({
@@ -82,6 +85,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         lastActivityAt: now(),
         lastError: undefined
       });
+      await persist(recovered);
       audit({
         action: "workspace.recovered",
         projectId: input.projectId,
@@ -103,14 +107,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       buildWorkspaceSpec(input.projectId, resourceKey)
     );
     await deps.docker.startContainer(containerId);
-    const recovered = save({
+      const recovered = save({
       ...existing,
       slug: input.slug,
       state: "running",
       containerId,
       lastActivityAt: now(),
-      lastError: undefined
-    });
+        lastError: undefined
+      });
+      await persist(recovered);
     audit({
       action: "workspace.recovered",
       projectId: input.projectId,
@@ -128,6 +133,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   return {
+    async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
+      runtimeRecords = store;
+      for (const snapshot of await store.list()) {
+        records.set(snapshot.record.projectId, snapshot.record);
+        if (snapshot.llmGatewayKeyId) llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
+      }
+    },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
     },
@@ -157,7 +169,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     markActivity(projectId: string): void {
       const record = records.get(projectId);
       if (record) {
-        save({ ...record, lastActivityAt: now() });
+        const updated = save({ ...record, lastActivityAt: now() });
+        void persist(updated).catch(() => undefined);
       }
     },
 
@@ -214,6 +227,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           createdAt: now(),
           updatedAt: now()
         });
+        await persist(healed);
         audit({
           action: "workspace.reattached",
           projectId: input.projectId,
@@ -235,6 +249,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         createdAt: now(),
         updatedAt: now()
       });
+      await persist(record);
 
       const rollbacks: Array<() => Promise<void>> = [];
       try {
@@ -277,6 +292,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           lastActivityAt: now(),
           lastError: undefined
         });
+        await persist(record);
         audit({
           action: "workspace.provisioned",
           projectId: input.projectId,
@@ -298,6 +314,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           containerId: null,
           lastError: (error as Error).message
         });
+        await persist(record);
         audit({
           action: "workspace.provision_failed",
           projectId: input.projectId,
@@ -312,6 +329,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       assertTransition(record.state, "idle");
       await deps.docker.stopContainer(record.containerId!);
       const next = save({ ...record, state: "idle" });
+      await persist(next);
       audit({ action: "workspace.stopped", projectId });
       return next;
     },
@@ -321,6 +339,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       assertTransition(record.state, "running");
       await deps.docker.startContainer(record.containerId!);
       const next = save({ ...record, state: "running", lastActivityAt: now() });
+      await persist(next);
       audit({ action: "workspace.started", projectId });
       return next;
     },
@@ -333,6 +352,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.removeContainer(record.containerId);
       }
       const next = save({ ...record, state: "archived", containerId: null });
+      await persist(next);
       audit({ action: "workspace.archived", projectId });
       return next;
     },
@@ -356,6 +376,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       deps.secrets.removeAll(projectId);
       records.delete(projectId);
       llmKeyIds.delete(projectId);
+      await runtimeRecords?.remove(projectId);
       audit({ action: "workspace.deleted", projectId });
     },
 
@@ -376,21 +397,4 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 }
 
-export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>;
-export { schemaNameFor, roleNameFor };
-
-export function startIdleSweep(
-  orchestrator: Pick<WorkspaceOrchestrator, "stopIdleWorkspaces">,
-  opts: { intervalMs?: number } = {}
-): { stop(): void } {
-  const intervalMs = opts.intervalMs ?? 60_000;
-  const timer = setInterval(() => {
-    void orchestrator.stopIdleWorkspaces().catch(() => undefined);
-  }, intervalMs);
-  timer.unref?.();
-  return {
-    stop() {
-      clearInterval(timer);
-    }
-  };
-}
+export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>; export { schemaNameFor, roleNameFor };

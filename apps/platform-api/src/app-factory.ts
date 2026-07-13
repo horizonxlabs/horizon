@@ -13,10 +13,11 @@ import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
+import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
-import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
+import { startIdleSweep } from "./workspace-orchestrator/idle-sweep";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
 import {
@@ -287,6 +288,9 @@ export async function createRuntimePlatformApiServices(
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  await services.workspaceOrchestrator.hydrateRuntimeRecords(
+    await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL)
+  );
   const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
     env.DATABASE_URL
   );
