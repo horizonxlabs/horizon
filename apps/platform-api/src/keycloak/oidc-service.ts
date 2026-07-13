@@ -21,7 +21,7 @@ export type KeycloakOidcServiceDependencies = {
   config: KeycloakConfig;
   issueKeycloakSession: (claims: PlatformAuthClaims) => PlatformAuthSession;
   fetch?: typeof fetch;
-  allowedReturnOrigins?: string[];
+  allowedReturnOrigins?: Partial<Record<PlatformApp, string>>;
   now?: () => Date;
   randomBytes?: (size: number) => Buffer;
   verifyIdToken?: (input: { idToken: string; nonce: string }) => Promise<VerifiedIdentity>;
@@ -39,19 +39,19 @@ export class KeycloakOidcService {
   private readonly fetcher: typeof fetch;
   private readonly now: () => Date;
   private readonly random: (size: number) => Buffer;
-  private readonly allowedReturnOrigins: Set<string>;
+  private readonly allowedReturnOrigins: Partial<Record<PlatformApp, string>>;
 
   constructor(private readonly deps: KeycloakOidcServiceDependencies) {
     this.fetcher = deps.fetch ?? fetch;
     this.now = deps.now ?? (() => new Date());
     this.random = deps.randomBytes ?? randomBytes;
-    this.allowedReturnOrigins = new Set(
-      deps.allowedReturnOrigins ?? ["http://localhost:4100", "http://localhost:4101", "http://localhost:4102"]
-    );
+    this.allowedReturnOrigins = deps.allowedReturnOrigins ?? {
+      admin: "http://localhost:4100", creator: "http://localhost:4101", store: "http://localhost:4102"
+    };
   }
 
   start(app: PlatformApp, returnTo: string): { state: string; authorizationUrl: string } {
-    const safeReturnTo = this.requireAllowedReturnTo(returnTo);
+    const safeReturnTo = this.requireAllowedReturnTo(app, returnTo);
     const state = this.token(32);
     const nonce = this.token(32);
     const verifier = this.token(48);
@@ -133,10 +133,10 @@ export class KeycloakOidcService {
     };
   }
 
-  private requireAllowedReturnTo(returnTo: string): string {
+  private requireAllowedReturnTo(app: PlatformApp, returnTo: string): string {
     let parsed: URL;
     try { parsed = new URL(returnTo); } catch { throw new Error("invalid_return_to"); }
-    if (!this.allowedReturnOrigins.has(parsed.origin)) throw new Error("invalid_return_to");
+    if (parsed.origin !== this.allowedReturnOrigins[app]) throw new Error("invalid_return_to");
     return parsed.toString();
   }
 

@@ -1761,7 +1761,7 @@ export class IdentityService {
   }): PlatformUser {
     const email = input.email.trim().toLowerCase();
     const existing = this.users.find((candidate) => candidate.email === email);
-    if (existing) return existing;
+    if (existing) return Object.assign(existing, { name: input.name.trim() || email, role: this.primaryPlatformRole(input.platformRoles), permissions: getMockPermissions(this.primaryPlatformRole(input.platformRoles)) });
 
     const role = this.primaryPlatformRole(input.platformRoles);
     const user: PlatformUser = {

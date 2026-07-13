@@ -10,12 +10,10 @@ const corePersistenceMode = resolveCorePersistenceMode();
 const services = await createRuntimePlatformApiServices();
 const app = await createPlatformApiApp(services);
 if (process.env.KEYCLOAK_ISSUER_URL) {
-  const origins = [process.env.EVCP_ADMIN_WEB_URL, process.env.EVCP_CREATOR_WEB_URL, process.env.EVCP_STORE_WEB_URL]
-    .filter((origin): origin is string => Boolean(origin));
   registerKeycloakOidcRoutes(app.getHttpAdapter().getInstance(), new KeycloakOidcService({
     config: readKeycloakConfig(process.env),
     issueKeycloakSession: (claims) => services.authSso.issueKeycloakSession(claims),
-    allowedReturnOrigins: origins.length ? origins : undefined
+    allowedReturnOrigins: { admin: process.env.EVCP_ADMIN_WEB_URL ?? "http://localhost:4100", creator: process.env.EVCP_CREATOR_WEB_URL ?? "http://localhost:4101", store: process.env.EVCP_STORE_WEB_URL ?? "http://localhost:4102" }
   }));
 }
 await app.listen(port, host);
