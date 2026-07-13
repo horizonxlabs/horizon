@@ -30,7 +30,10 @@ export type PersistedPlatformSession = {
   refreshTokenHash?: string | null;
   expiresAt: Date;
   refreshExpiresAt?: Date | null;
+  issuedAt?: Date;
+  lastUsedAt?: Date | null;
   revokedAt?: Date | null;
+  revokeReason?: string | null;
   replacedBySessionId?: string | null;
 };
 
@@ -42,6 +45,7 @@ export interface PlatformSessionRepository {
   revokeSession(id: string, reason: string): Promise<void>;
   revokeSessionFamily(familyId: string, reason: string): Promise<void>;
   revokeUserSessions(userId: string, reason: string): Promise<void>;
+  listUserSessions(userId: string): Promise<PersistedPlatformSession[]>;
 }
 
 type AccessPayload = { typ: "evcp.platform.session"; sid: string; jti: string; sub: string; email: string; iat: number; exp: number };
@@ -106,6 +110,10 @@ export class PlatformSessionService {
 
   revokeUserSessions(userId: string, reason: string): Promise<void> {
     return this.repository.revokeUserSessions(userId, reason);
+  }
+
+  listUserSessions(userId: string): Promise<PersistedPlatformSession[]> {
+    return this.repository.listUserSessions(userId);
   }
 
   private newSession(subject: PlatformSessionSubject, issuedAt: Date, sessionFamilyId: string): { record: PersistedPlatformSession; pair: PlatformTokenPair } {

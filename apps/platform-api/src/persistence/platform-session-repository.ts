@@ -15,6 +15,7 @@ type SessionDelegate = {
   findUnique(input: { where: { id?: string; refreshTokenHash?: string } }): Promise<SessionRecord | null>;
   update(input: { where: { id: string }; data: Record<string, unknown> }): Promise<SessionRecord>;
   updateMany(input: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
+  findMany(input: { where: Record<string, unknown>; orderBy: { issuedAt: "desc" } }): Promise<SessionRecord[]>;
 };
 
 type SessionDatabase = {
@@ -67,6 +68,13 @@ export class PrismaPlatformSessionRepository implements PlatformSessionRepositor
     await this.database.platformAuthSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date(), revokeReason: reason } });
   }
 
+  async listUserSessions(userId: string): Promise<PersistedPlatformSession[]> {
+    return (await this.database.platformAuthSession.findMany({ where: { userId }, orderBy: { issuedAt: "desc" } })).flatMap((record) => {
+      const session = this.fromRecord(record);
+      return session ? [session] : [];
+    });
+  }
+
   private toRecord(input: PersistedPlatformSession): Omit<SessionRecord, "email"> {
     const { email: _email, ...record } = input;
     return record;
@@ -98,6 +106,7 @@ export class MemoryPlatformSessionRepository implements PlatformSessionRepositor
   async revokeSession(id: string, _reason: string): Promise<void> { const session = this.sessions.get(id); if (session) { session.revokedAt = new Date(); } }
   async revokeSessionFamily(familyId: string, _reason: string): Promise<void> { this.revoke((session) => session.sessionFamilyId === familyId); }
   async revokeUserSessions(userId: string, _reason: string): Promise<void> { this.revoke((session) => session.userId === userId); }
+  async listUserSessions(userId: string): Promise<PersistedPlatformSession[]> { return [...this.sessions.values()].filter((session) => session.userId === userId).map((session) => this.copy(session) as PersistedPlatformSession); }
   private revoke(matches: (session: PersistedPlatformSession) => boolean): void { for (const session of this.sessions.values()) if (matches(session) && !session.revokedAt) session.revokedAt = new Date(); }
   private copy(session: PersistedPlatformSession | undefined): PersistedPlatformSession | undefined { return session ? structuredClone(session) : undefined; }
 }

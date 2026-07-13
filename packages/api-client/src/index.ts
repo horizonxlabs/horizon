@@ -66,7 +66,7 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage } from "./keycloak-user-types";
+export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage, PlatformSessionSummary } from "./keycloak-user-types";
 export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;

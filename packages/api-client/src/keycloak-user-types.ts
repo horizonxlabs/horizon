@@ -16,3 +16,4 @@ export type CreateKeycloakUserInput = {
 
 export type KeycloakUserListMeta = { first: number; max: number; total: number };
 export type KeycloakUserListPage = { users: KeycloakUserDto[]; meta: KeycloakUserListMeta };
+export type PlatformSessionSummary = { id: string; sessionFamilyId: string; issuedAt?: string; lastUsedAt?: string; expiresAt: string; refreshExpiresAt?: string; revokedAt?: string; revokeReason?: string };

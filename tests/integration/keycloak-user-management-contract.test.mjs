@@ -66,7 +66,7 @@ function createKeycloakAdminHarness({ platformSessions } = {}) {
   const request = async (session, method, path, body) => {
     const requestUrl = new URL(path, "https://platform.example.test");
     const pathname = requestUrl.pathname;
-    const key = `${method} ${pathname.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/[^/]+\/sessions\/revoke$/, "/:id/sessions/revoke").replace(/\/users\/[^/]+$/, "/users/:id")}`;
+    const key = `${method} ${pathname.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/[^/]+\/sessions(?:\/revoke)?$/, (value) => value.includes("revoke") ? "/:id/sessions/revoke" : "/:id/sessions").replace(/\/users\/[^/]+$/, "/users/:id")}`;
     const handler = handlers.get(key);
     let status = 200; let responseBody;
     await handler({ headers: session ? { authorization: `Bearer ${session.token}` } : {}, query: Object.fromEntries(requestUrl.searchParams), body, params: pathname.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: pathname.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
@@ -107,6 +107,15 @@ test("admin can revoke a Keycloak user's mapped Platform sessions", async () => 
   assert.equal(response.body.data.id, "keycloak-subject-42");
   assert.match(calls[0][0], /^usr_sso_/);
   assert.equal(calls[0][1], "admin_revoked");
+});
+
+test("admin can view session metadata without exposing refresh credentials", async () => {
+  const exec = createKeycloakAdminHarness({ platformSessions: { listUserSessions: async () => [{ id: "sess_1", sessionFamilyId: "family_1", expiresAt: new Date("2026-07-14T00:00:00.000Z"), refreshExpiresAt: new Date("2026-07-20T00:00:00.000Z"), refreshTokenHash: "must-not-leak", sessionTokenHash: "must-not-leak", claims: { email: "user@example.test" } }] } });
+  const response = await exec.asAdmin("GET", "/admin/keycloak/users/keycloak-subject-42/sessions");
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data[0].id, "sess_1");
+  assert.equal("refreshTokenHash" in response.body.data[0], false);
+  assert.equal("sessionTokenHash" in response.body.data[0], false);
 });
 
 test("admin lists, updates, enables, and replaces only EVCP role groups", async () => {
