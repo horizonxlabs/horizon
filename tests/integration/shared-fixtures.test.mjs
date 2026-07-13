@@ -19,9 +19,16 @@ function readAllSourceFiles(dir) {
 }
 
 const fixtures = readFileSync("packages/mock-data/src/index.ts", "utf8");
-const adminApp = `${readFileSync("apps/admin-web/src/app/AdminApp.tsx", "utf8")}\n${readAllSourceFiles(
-  "apps/admin-web/src/shared"
-)}`;
+const adminApp = [
+  "apps/admin-web/src/app/AdminApp.tsx",
+  "apps/admin-web/src/routes/AdminRoutes.tsx"
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .concat(
+    readAllSourceFiles("apps/admin-web/src/shared"),
+    readAllSourceFiles("apps/admin-web/src/features/admin-console")
+  )
+  .join("\n");
 // creator-web's main.tsx was split into hooks/pages modules; scan the whole src tree.
 const creatorApp = readAllSourceFiles("apps/creator-web/src");
 // Store's entrypoint is intentionally only a mount point. Its public behavior
