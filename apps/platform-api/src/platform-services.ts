@@ -1946,7 +1946,7 @@ export class MockAuthService {
   }
 
   private resolveMockHeaderEmail(headers: HeaderBag): string {
-    const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "1") === "0";
+    const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "0") !== "1";
     const email = disabled ? undefined : normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
     if (!email) throw new MockAuthError(disabled ? "Mock header auth is disabled" : "Missing Authorization Bearer token or x-mock-user-email header"); return email;
   }

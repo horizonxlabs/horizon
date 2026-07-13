@@ -19,7 +19,7 @@ export function createNativeAuthServices() {
 
 export function buildTestExecutor(options = {}) {
   const services = createNativeAuthServices();
-  const envOverrides = options.env ?? {};
+  const envOverrides = options.env ?? { EVCP_ALLOW_SIMULATE_LOGIN: "1" };
 
   async function request({ method, path, headers = {}, body }) {
     const previous = {};
