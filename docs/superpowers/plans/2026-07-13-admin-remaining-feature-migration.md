@@ -181,7 +181,7 @@ Run: `node --import tsx --test tests/unit/admin-*-feature.test.mjs`
 
 Run: `pnpm check && pnpm --filter @evcp/admin-web build && git diff --check`
 
-- [ ] **Step 3: Commit and push the completed migration to PR #141**
+- [x] **Step 3: Commit and push the completed migration to PR #141**
 
 ```bash
 git add apps/admin-web/src/features apps/admin-web/src/main.tsx tests/unit docs/superpowers/plans/2026-07-13-admin-remaining-feature-migration.md
