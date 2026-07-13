@@ -4,14 +4,14 @@ import type { AiScenario, PlatformUser } from "../platform-services";
 
 export function createPersistedGovernedAiExecutor(
   client: AiGovernancePersistenceClient,
-  options: { executionStore?: AiExecutionStore; fetcher?: typeof fetch } = {}
+  options: { executionStore?: AiExecutionStore; fetcher?: typeof fetch; timeoutMs?: number } = {}
 ): GovernedAiExecutor {
   return new GovernedAiExecutor({
     store: options.executionStore ?? new MemoryAiExecutionStore(),
     resolvePlan: async (actor, scenario) => resolvePlan(client, actor, scenario),
     evaluateGuardrail: async ({ scenario, prompt }) => evaluateGuardrail(client, scenario, prompt),
     reserveQuota: async ({ requestedTokens }) => reserveCreatorQuota(client, requestedTokens),
-    invoke: async ({ provider, prompt }) => invokeOpenAiCompatible(provider, prompt, options.fetcher ?? globalThis.fetch)
+    invoke: async ({ provider, prompt }) => invokeOpenAiCompatible(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000)
   });
 }
 
@@ -53,14 +53,15 @@ async function reserveCreatorQuota(client: AiGovernancePersistenceClient, reques
   return { allowed: true, remainingToday: remainingToday - requestedTokens };
 }
 
-async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch) {
+async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST", headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
-        body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.2 })
+        body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
+        signal: AbortSignal.timeout(timeoutMs)
       });
       if (!response.ok) {
         if (response.status >= 500 && attempt === 0) continue;
