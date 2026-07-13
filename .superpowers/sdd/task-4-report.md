@@ -13,3 +13,5 @@ Verification run:
 - `pnpm --filter @evcp/creator-web build` — passed (existing unresolved-at-build font notices only).
 - `pnpm --filter @evcp/app-store-pwa build` — passed (existing unresolved-at-build font notices only).
 - `git diff --check` — passed.
+
+Review follow-up: Creator now consumes the handoff before auth gating; Store begins OIDC without a mock header when no platform session exists; simulation defaults disabled and Keycloak issuance no longer calls the simulation path. Focused Keycloak/frontend-bootstrap contracts: 17 passing. All three frontend builds passed.

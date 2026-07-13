@@ -2768,7 +2768,7 @@ export function executePlatformApiRequest(
     }
 
     if (request.method === "POST" && request.path === "/admin/auth/simulate-login") {
-      if (String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "1") === "0") {
+      if (String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "0") !== "1") {
         return {
           status: HttpStatus.FORBIDDEN,
           body: failure("simulate_login_disabled", "Simulate-login is disabled")

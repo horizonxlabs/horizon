@@ -2,7 +2,7 @@ import { startKeycloakLogin } from "@evcp/api-client";
 import { createConfiguredPlatformApiClient } from "@/shared/platform-client";
 
 export function createStorePlatformClient() {
-  return createConfiguredPlatformApiClient({ legacyUserEmail: "user@company.com" });
+  return createConfiguredPlatformApiClient();
 }
 
 export function startStoreKeycloakLogin(returnTo: string): string {

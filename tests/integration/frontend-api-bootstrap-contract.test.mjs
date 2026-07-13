@@ -139,7 +139,7 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
 test("frontend shells retain platform session handling while Admin exposes logout only", () => {
   for (const source of [creatorSource, storeSource]) {
     assert.match(source, /createPlatformSessionStore/);
-    assert.match(source, /simulateSsoLogin/);
+    assert.doesNotMatch(source, /simulateSsoLogin/);
     assert.match(source, /Logout/);
   }
   assert.match(adminClientSource, /createPlatformSessionStore/);
@@ -150,8 +150,8 @@ test("frontend shells retain platform session handling while Admin exposes logou
   assert.doesNotMatch(adminSource, /Sign in|Refresh Session/);
   assert.match(storeSource, /Sign in|Refresh Session/);
 
-  assert.match(creatorSource, /creatorSessionBridgeProfile/);
-  assert.match(storeSource, /storeSessionBridgeProfile/);
+  assert.match(creatorSource, /startKeycloakLogin/);
+  assert.match(storeSource, /startKeycloakLogin/);
 });
 
 test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {

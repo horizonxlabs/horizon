@@ -17,12 +17,12 @@ const systemAdmin: PlatformUser = {
 
 PlatformAuthSsoService.prototype.issueKeycloakSession = function issueKeycloakSession(claims) {
   if (!claims.platformRoles.length) throw new Error("unmapped_keycloak_group");
-  return this.simulateLogin(systemAdmin, {
-    providerId: "authprov_keycloak_default_001",
-    subject: claims.subject,
+  const session = this.issueNativeSession({
+    ...systemAdmin,
+    id: claims.subject,
     email: claims.email,
     name: claims.name,
-    groups: claims.groups,
-    appRoles: claims.appRoles
+    role: claims.platformRoles[0] as PlatformRole
   });
+  return { id: claims.subject, providerId: "authprov_keycloak_default_001", providerType: "keycloak", token: session.token, expiresAt: session.expiresAt, issuedAt: new Date().toISOString(), claims };
 };

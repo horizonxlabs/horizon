@@ -4,6 +4,7 @@ import { CreatorRoutes } from "@/routes/CreatorRoutes";
 import { clearLoginSession, hasValidSession } from "@/shared/session";
 import type { NativeLoginResult } from "@/shared/types";
 import { useCreatorApp } from "@/app/use-creator-app";
+import { consumeCreatorSessionHandoff } from "@/app/creator-app-helpers";
 
 function CreatorWorkspaceApp({ onLogout }: { onLogout: () => void }) {
   const app = useCreatorApp({ onLogout });
@@ -11,6 +12,7 @@ function CreatorWorkspaceApp({ onLogout }: { onLogout: () => void }) {
 }
 
 export function CreatorApp() {
+  consumeCreatorSessionHandoff();
   const [authStage, setAuthStage] = useState<"login" | "change-password" | "workspace">(
     hasValidSession() ? "workspace" : "login"
   );

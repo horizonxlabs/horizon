@@ -65,6 +65,10 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
 }
 export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
   consumeStoreSessionHandoff();
+  if (!createPlatformSessionStore(window.localStorage).getToken()) {
+    signInStoreSessionBridge();
+    return initialStoreBootstrap;
+  }
   const client = createStorePlatformClient();
   const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all(
     [client.getCurrentUser(), client.listStoreApps()]

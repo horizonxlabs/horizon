@@ -1112,21 +1112,6 @@ export class PlatformApiClient {
     });
   }
 
-  simulateSsoLogin(input: SimulatedSsoLoginInput): Promise<PlatformAuthSessionResponse> {
-    return this.request<PlatformAuthSessionResponse>("/admin/auth/simulate-login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        providerId: input.providerId ?? "authprov_keycloak_default_001",
-        subject: input.subject,
-        email: input.email,
-        name: input.name,
-        groups: input.groups,
-        appRoles: input.appRoles ?? {}
-      })
-    });
-  }
-
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,

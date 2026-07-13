@@ -47,7 +47,7 @@ export function beginCreatorKeycloakLogin(): void {
   window.location.assign(startKeycloakLogin(baseUrl, "creator", window.location.href));
 }
 
-function consumeCreatorSessionHandoff(): void {
+export function consumeCreatorSessionHandoff(): void {
   const handoff = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const token = handoff.get("evcp_session");
   const expiresAt = handoff.get("evcp_session_expires_at");

@@ -22,3 +22,18 @@ test("admin user page exposes Keycloak lifecycle actions", async () => {
   for (const label of ["Create user", "Disable", "Enable", "Reset password", "Role"])
     assert.match(source, new RegExp(label));
 });
+
+test("Creator consumes a Platform session handoff before its auth gate and Store has no mock identity", async () => {
+  const [creator, store] = await Promise.all([
+    readFile("apps/creator-web/src/app/CreatorApp.tsx", "utf8"),
+    readFile("apps/app-store-pwa/src/features/storefront/platform-client.ts", "utf8")
+  ]);
+  assert.match(creator, /consumeCreatorSessionHandoff\(\)[\s\S]*hasValidSession/);
+  assert.doesNotMatch(store, /legacyUserEmail/);
+});
+
+test("simulate login is disabled unless explicitly enabled", async () => {
+  const source = await readFile("apps/platform-api/src/app-factory.ts", "utf8");
+  assert.match(source, /EVCP_ALLOW_SIMULATE_LOGIN \?\? "0"/);
+  assert.match(source, /!== "1"/);
+});
