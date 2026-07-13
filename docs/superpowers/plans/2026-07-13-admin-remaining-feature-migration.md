@@ -177,7 +177,7 @@ Run: `node --import tsx --test tests/unit/admin-security-release-readiness-featu
 
 Run: `node --import tsx --test tests/unit/admin-*-feature.test.mjs`
 
-- [ ] **Step 2: Run repository and production checks**
+- [x] **Step 2: Run repository and production checks**
 
 Run: `pnpm check && pnpm --filter @evcp/admin-web build && git diff --check`
 

@@ -3,17 +3,21 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const installerEvidence = readFileSync(
+  "apps/admin-web/src/features/installer-operations/evidence.ts",
+  "utf8"
+);
 
-function sourceBlock(startToken, endToken) {
-  const start = adminSource.indexOf(startToken);
-  const end = adminSource.indexOf(endToken, start);
+function sourceBlock(source, startToken, endToken) {
+  const start = source.indexOf(startToken);
+  const end = source.indexOf(endToken, start);
   assert.notEqual(start, -1, `${startToken} not found`);
   assert.notEqual(end, -1, `${endToken} not found`);
-  return adminSource.slice(start, end);
+  return source.slice(start, end);
 }
 
 test("admin first-run install wizard defines complete ordered install steps", () => {
-  const steps = sourceBlock("const installWizardSteps", "const installWizardPassingProfile");
+  const steps = installerEvidence;
 
   for (const token of ["prepare_server", "configure_environment", "preflight", "setup", "deploy_stack", "migrate_seed", "verify_health", "first_admin_login"]) {
     assert.match(steps, new RegExp(token));
@@ -30,8 +34,12 @@ test("admin first-run install wizard defines complete ordered install steps", ()
 });
 
 test("admin first-run installation journey exposes owner evidence and next action", () => {
-  const journey = sourceBlock("function buildInstallJourneySteps", "const observabilityLicenseKpis");
-  const ui = sourceBlock("aria-label=\"First-run installation journey\"", "eyebrow=\"Setup Wizard\"");
+  const journey = sourceBlock(adminSource, "function buildInstallJourneySteps", "function AdminApp");
+  const ui = sourceBlock(
+    adminSource,
+    "aria-label=\"First-run installation journey\"",
+    "eyebrow=\"Setup Wizard\""
+  );
 
   for (const token of ["owner", "evidence", "nextAction", "install-journey-board", "install-journey-card"]) {
     assert.match(`${journey}\n${ui}`, new RegExp(token));
@@ -45,8 +53,16 @@ test("admin first-run installation journey exposes owner evidence and next actio
 });
 
 test("admin install wizard setup evidence is secret-safe", () => {
-  const setup = sourceBlock("function setupItemsFromConfig", "function preflightRowsFromReport");
-  const saveHandler = sourceBlock("async function handleSaveInstallerSetup", "function handleWizardNext");
+  const setup = sourceBlock(
+    adminSource,
+    "function setupItemsFromConfig",
+    "function preflightRowsFromReport"
+  );
+  const saveHandler = sourceBlock(
+    adminSource,
+    "async function handleSaveInstallerSetup",
+    "function handleWizardNext"
+  );
 
   assert.match(setup, /databaseUrlMasked/);
   assert.match(setup, /:\*\*\*@/);
