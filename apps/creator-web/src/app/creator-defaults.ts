@@ -4,22 +4,23 @@ import type {
   CreatorProjectView
 } from "@/shared/types";
 
-export const fallbackSelectedProject: CreatorProjectView = {
-  id: "proj_placeholder",
-  name: "New project",
-  appType: "Workflow App",
-  status: "draft",
-  owner: "Creator User",
-  prdVersion: "1.0",
-  frontendVersion: "preview-0001",
+export const unselectedProject: CreatorProjectView = {
+  id: "",
+  name: "",
+  appType: "",
+  status: "",
+  owner: "",
+  prdVersion: "",
+  frontendVersion: "",
   tokenUsedThisMonth: 0
 };
 
 export const initialCreatorBootstrap: CreatorBootstrapState = {
-  userName: "Creator User",
-  selectedProject: fallbackSelectedProject,
+  status: "loading",
+  userName: "",
+  selectedProject: unselectedProject,
   projects: [],
-  source: "local fallback"
+  source: "Platform API"
 };
 
 export const initialCreateProjectForm: CreateProjectFormState = {

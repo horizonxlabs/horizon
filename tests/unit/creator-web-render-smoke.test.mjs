@@ -106,7 +106,7 @@ test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
   localStorageValues.set("evcp_session_expires_at", new Date(Date.now() + 60_000).toISOString());
   window.location.pathname = "/creator/projects/project-1";
   const html = renderToStaticMarkup(React.createElement(CreatorApp));
-  assert.match(html, /Workspace view/);
+  assert.match(html, /Loading Creator projects from Platform API/);
   localStorageValues.clear();
 });
 
@@ -122,14 +122,18 @@ const ROUTE_CASES = [
 for (const [page, pathname, expected] of ROUTE_CASES) {
   test(`CreatorRoutes maps ${page} to its capability screen`, () => {
     window.location.pathname = pathname;
-    const html = renderWithHook((app) => React.createElement(CreatorRoutes, { app }));
+    const html = renderWithHook((app) =>
+      React.createElement(CreatorRoutes, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+    );
     assert.match(html, expected);
   });
 }
 
 test("CreatorRoutes retains the default dashboard fallback", () => {
   const html = renderWithHook((app) =>
-    React.createElement(CreatorRoutes, { app: { ...app, creatorPage: "unexpected" } })
+    React.createElement(CreatorRoutes, {
+      app: { ...app, creatorPage: "unexpected", bootstrap: { ...app.bootstrap, status: "ready" } }
+    })
   );
   assert.match(html, /Database and frontend versions/);
 });

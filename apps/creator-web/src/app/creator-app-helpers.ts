@@ -6,7 +6,16 @@ import {
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
 import { apiBaseUrl } from "@/shared/runtime-config";
 import type { CreatorBootstrapState } from "@/shared/types";
-import { fallbackSelectedProject } from "@/app/creator-defaults";
+import { initialCreatorBootstrap, unselectedProject } from "@/app/creator-defaults";
+
+export function creatorApiFailureState(message: string): CreatorBootstrapState {
+  return {
+    ...initialCreatorBootstrap,
+    status: "error",
+    message,
+    selectedProject: unselectedProject
+  };
+}
 
 export async function loadCreatorBootstrap(
   selectedProjectKey?: string
@@ -19,12 +28,13 @@ export async function loadCreatorBootstrap(
   const selectedProject =
     projectViews.find((project) => project.id === selectedProjectKey) ??
     projectViews[0] ??
-    fallbackSelectedProject;
+    unselectedProject;
   return {
+    status: projectViews.length ? "ready" : "empty",
     userName: currentUser.user.name,
     selectedProject,
-    projects: projectViews.length ? projectViews : [fallbackSelectedProject],
-    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+    projects: projectViews,
+    source: "Platform API"
   };
 }
 

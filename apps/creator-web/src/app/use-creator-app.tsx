@@ -3,6 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { useEffect, useReducer, useState, type FormEvent } from "react";
 import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
 import {
+  creatorApiFailureState,
   loadCreatorBootstrap,
   loadPrdState,
   signInCreatorSessionBridge
@@ -111,8 +112,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           );
         }
       })
-      .catch(() => {
-        setBootstrap(initialCreatorBootstrap);
+      .catch((error) => {
+        setBootstrap(
+          creatorApiFailureState(
+            error instanceof Error ? error.message : "Unable to load Creator projects from Platform API."
+          )
+        );
         vibeWorkspace.setWorkspaceSnapshot(undefined);
       })
       .finally(() => {
@@ -161,12 +166,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     clearCreatorSessionBridge();
     setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
-    vibeWorkspace.setWorkspaceMessage(
-      "Using deterministic local workspace evidence until the Platform API is configured."
-    );
-    publishAccess.setPublishMessage(
-      "Using deterministic local publish evidence until the Platform API is configured."
-    );
+    vibeWorkspace.setWorkspaceMessage("Signed out. Sign in again to load workspace state.");
+    publishAccess.setPublishMessage("Signed out. Sign in again to load publish state.");
     clearLoginSession();
     onLogout?.();
   }
