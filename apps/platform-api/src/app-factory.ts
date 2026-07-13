@@ -56,6 +56,7 @@ import {
 } from "./persistence/ai-governance-repositories";
 import { createPersistedGovernedAiExecutor } from "./ai-governance/execution-runtime";
 import { PrismaAiExecutionStore } from "./persistence/ai-execution-repository";
+import { handleAiProviderTestCall, handleLegacyAiProviderTestCall } from "./ai-governance/provider-test-route";
 import {
   createBusinessSettingsRepositoryBackedService,
   createPrismaBusinessSettingsPersistence,
@@ -607,6 +608,7 @@ function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
     request.path === "/ai/api-keys" ||
     request.path === "/ai/routes" ||
     request.path === "/ai/quotas" ||
+    request.path === "/ai/provider-test-call" ||
     request.path === "/guardrails/rules" ||
     request.path === "/guardrails/test" ||
     request.path === "/guardrails/events"
@@ -725,6 +727,7 @@ export async function executePlatformApiRequestAsync(
 
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
+  const governedAiExecutor = services.governedAiExecutor;
   const prdPersistence = services.prdPersistence;
   const workspacePersistence = services.workspacePersistence;
   const publishStorePersistence = services.publishStorePersistence;
@@ -1102,6 +1105,12 @@ export async function executePlatformApiRequestAsync(
         status: HttpStatus.OK,
         body: success(await aiGovernancePersistence.listGuardrailEvents(user))
       };
+    }
+
+    if (aiGovernancePersistence && governedAiExecutor && request.method === "POST" && request.path === "/ai/provider-test-call") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const result = await handleAiProviderTestCall({ request, resolveUser: async () => user, executor: governedAiExecutor, providerNameFor: async (id) => (await aiGovernancePersistence.listProviders(user)).find((provider) => provider.id === id)?.name, legacyTest: () => { throw new Error("legacy AI test is unavailable in persistence mode"); } });
+      return { status: result?.status ?? HttpStatus.NOT_FOUND, body: result?.body ?? failure("NOT_FOUND", "route not found") };
     }
 
     const setup = await resolveSetupRequest(request, services, () =>
@@ -2977,17 +2986,8 @@ export function executePlatformApiRequest(
     }
 
     if (request.method === "POST" && request.path === "/ai/provider-test-call") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.aiGovernance.testProviderCall(user, {
-        scenario: String(request.body?.scenario ?? "prd_generation") as never,
-        prompt: request.body?.prompt ? String(request.body.prompt) : undefined,
-        requestedTokens:
-          request.body?.requestedTokens === undefined
-            ? undefined
-            : Number(request.body.requestedTokens),
-        dryRun: request.body?.dryRun === undefined ? undefined : Boolean(request.body.dryRun)
-      });
-      return { status: HttpStatus.CREATED, body: success(result) };
+      const result = handleLegacyAiProviderTestCall({ request, resolveUser: () => services.auth.resolveCurrentUser(request.headers ?? {}), legacyTest: (user, input) => services.aiGovernance.testProviderCall(user, input) });
+      return { status: result?.status ?? HttpStatus.NOT_FOUND, body: result?.body ?? failure("NOT_FOUND", "route not found") };
     }
 
     if (request.method === "POST" && request.path === "/guardrails/rules") {
