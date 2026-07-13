@@ -1,0 +1,1 @@
+export { PrdPage } from "./PrdPage";

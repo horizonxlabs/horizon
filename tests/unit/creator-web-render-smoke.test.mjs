@@ -47,14 +47,20 @@ globalThis.React = React;
 const { renderToStaticMarkup } = await import("react-dom/server");
 
 const base = "../../apps/creator-web/src";
-const { useCreatorApp } = await import(`${base}/hooks/use-creator-app.tsx`);
-const { ProjectsPage } = await import(`${base}/pages/ProjectsPage.tsx`);
-const { WorkspacePage } = await import(`${base}/pages/WorkspacePage.tsx`);
-const { PrdPage } = await import(`${base}/pages/PrdPage.tsx`);
-const { UsersPage } = await import(`${base}/pages/UsersPage.tsx`);
-const { PublishPage } = await import(`${base}/pages/PublishPage.tsx`);
-const { TicketsPage } = await import(`${base}/pages/TicketsPage.tsx`);
-const { DefaultPage } = await import(`${base}/pages/DefaultPage.tsx`);
+const main = await import("node:fs/promises").then((fs) => fs.readFile("apps/creator-web/src/main.tsx", "utf8"));
+const routes = await import("node:fs/promises").then((fs) => fs.readFile("apps/creator-web/src/routes/CreatorRoutes.tsx", "utf8"));
+assert.match(main, /@\/app\/CreatorApp/);
+assert.match(routes, /@\/features\/projects/);
+assert.doesNotMatch(main, /function CreatorAuthGate/);
+
+const { useCreatorApp } = await import(`${base}/app/use-creator-app.tsx`);
+const { ProjectsPage } = await import(`${base}/features/projects`);
+const { WorkspacePage } = await import(`${base}/features/workspace`);
+const { PrdPage } = await import(`${base}/features/prd`);
+const { UsersPage } = await import(`${base}/features/users`);
+const { PublishPage } = await import(`${base}/features/publish`);
+const { TicketsPage } = await import(`${base}/features/tickets`);
+const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
   ProjectsPage,
