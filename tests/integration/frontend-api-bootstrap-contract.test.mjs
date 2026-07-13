@@ -19,17 +19,27 @@ function readAllSourceFiles(dir) {
 }
 
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
-const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminSource = readFileSync("apps/admin-web/src/app/AdminApp.tsx", "utf8");
 const aiGovernanceHookSource = readFileSync(
   "apps/admin-web/src/features/ai-governance/use-ai-governance.ts",
   "utf8"
 );
-const adminClientSource = readFileSync("apps/admin-web/src/admin-client.ts", "utf8");
+const adminClientSource = readFileSync("apps/admin-web/src/shared/platform-client.ts", "utf8");
 // The creator-web CreatorApp component was split across hooks/, pages/, and
 // components/ files as a pure restructure; concatenate the whole src tree so
 // source-content assertions below still see every identifier/behavior.
 const creatorSource = readAllSourceFiles("apps/creator-web/src");
-const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+// Store's entrypoint is intentionally only a mount point. Its public behavior
+// lives in the app/router composition and feature modules.
+const storeAppComposition = [
+  "apps/app-store-pwa/src/app/StoreApp.tsx",
+  "apps/app-store-pwa/src/routes/StoreRoutes.tsx"
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .join("\n");
+const storePublicFeatureSource = readAllSourceFiles("apps/app-store-pwa/src/features");
+const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
+const storeSource = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
 const appConfig = readFileSync("packages/config/src/index.ts", "utf8");
 const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
@@ -126,7 +136,7 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   // Admin delegates platform session-token handling to its extracted admin-client module.
   assert.match(adminClientSource, /platformSessionToken/);
   assert.match(creatorSource, /platformSessionToken/);
-  assert.match(storeSource, /platformSessionToken/);
+  assert.match(storeSource, /createPlatformSessionStore/);
 
   assert.match(adminSource, /loadAdminBootstrap/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
@@ -238,7 +248,7 @@ test("published app route opens a usable generated Leave Management runtime", ()
   assert.match(storeIndex, /href="manifest\.webmanifest"/);
   assert.match(caddyfile, /reverse_proxy app-store-pwa:4102/);
   assert.match(storeSource, /GeneratedLeaveManagementApp/);
-  assert.match(storeSource, /currentPath\.startsWith\("\/apps\/leave-management"\)/);
+  assert.match(storeSource, /window\.location\.pathname\.startsWith\("\/apps\/leave-management"\)/);
   assert.match(storeSource, /handleOpenSelectedApp/);
   assert.match(
     storeSource,

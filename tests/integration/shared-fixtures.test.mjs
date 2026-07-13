@@ -19,10 +19,22 @@ function readAllSourceFiles(dir) {
 }
 
 const fixtures = readFileSync("packages/mock-data/src/index.ts", "utf8");
-const adminApp = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminApp = `${readFileSync("apps/admin-web/src/app/AdminApp.tsx", "utf8")}\n${readAllSourceFiles(
+  "apps/admin-web/src/shared"
+)}`;
 // creator-web's main.tsx was split into hooks/pages modules; scan the whole src tree.
 const creatorApp = readAllSourceFiles("apps/creator-web/src");
-const storeApp = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+// Store's entrypoint is intentionally only a mount point. Its public behavior
+// is composed through the app/router and feature source.
+const storeAppComposition = [
+  "apps/app-store-pwa/src/app/StoreApp.tsx",
+  "apps/app-store-pwa/src/routes/StoreRoutes.tsx"
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .join("\n");
+const storePublicFeatureSource = readAllSourceFiles("apps/app-store-pwa/src/features");
+const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
+const storeApp = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
 
 test("frontend shells no longer import mock data directly for bootstrap state", () => {
   assert.doesNotMatch(adminApp, /@evcp\/mock-data/);

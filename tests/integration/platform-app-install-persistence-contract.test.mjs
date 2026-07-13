@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import {
   MemoryPublishStorePersistenceClient,
@@ -8,7 +9,30 @@ import {
 
 const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
-const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+function readAllSourceFiles(dir) {
+  return readdirSync(dir)
+    .flatMap((entry) => {
+      const fullPath = path.join(dir, entry);
+      return statSync(fullPath).isDirectory()
+        ? readAllSourceFiles(fullPath)
+        : /\.(tsx?|jsx?)$/.test(entry)
+          ? [readFileSync(fullPath, "utf8")]
+          : [];
+    })
+    .join("\n");
+}
+
+// Store's entrypoint is intentionally only a mount point. Verify its composed
+// public surface and feature behavior instead.
+const storeAppComposition = [
+  "apps/app-store-pwa/src/app/StoreApp.tsx",
+  "apps/app-store-pwa/src/routes/StoreRoutes.tsx"
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .join("\n");
+const storePublicFeatureSource = readAllSourceFiles("apps/app-store-pwa/src/features");
+const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
+const storeSource = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
 const schema = readFileSync("apps/platform-api/prisma/schema.prisma", "utf8");
 const persistenceDoc = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 const migrationPath =
