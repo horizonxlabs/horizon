@@ -1,5 +1,6 @@
 import {
-  createSessionAwarePlatformApiClient,
+  createPlatformApiClient,
+  createSessionAwareFetch,
   createPlatformSessionStore,
   type CurrentUserResponse,
   type PlatformProjectDto
@@ -10,10 +11,9 @@ import { apiBaseUrl } from "@/shared/runtime-config";
 export function createCreatorPlatformClient(onSessionEnded?: () => void) {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  return createSessionAwarePlatformApiClient({
+  return createPlatformApiClient({
     baseUrl,
-    storage: window.localStorage,
-    onSessionEnded,
+    fetcher: createSessionAwareFetch({ baseUrl, storage: window.localStorage, onSessionEnded }),
     legacyUserEmail: "creator@company.com"
   });
 }

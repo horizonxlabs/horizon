@@ -1,9 +1,9 @@
-import { createPlatformApiClient, type PlatformApiClient, type PlatformApiClientOptions } from "./index";
 import { PlatformSessionStore, type PlatformSessionStorage, type PlatformSessionTokenPair } from "./platform-session-store";
 
 type RefreshResponse = { ok: true; data: PlatformSessionTokenPair } | { ok: false };
 
-export type SessionAwarePlatformApiClientOptions = Omit<PlatformApiClientOptions, "sessionToken" | "fetcher"> & {
+export type SessionAwareFetchOptions = {
+  baseUrl: string;
   storage: PlatformSessionStorage;
   /** Called after a rejected/reused refresh token has been removed from local storage. */
   onSessionEnded?: () => void;
@@ -12,13 +12,12 @@ export type SessionAwarePlatformApiClientOptions = Omit<PlatformApiClientOptions
 };
 
 /**
- * Creates a normal PlatformApiClient whose Authorization header follows the rotating browser
- * session. It refreshes once before an imminent expiry or after one 401, then fails closed.
+ * Creates the browser fetcher for a rotating Platform session. It refreshes once before an
+ * imminent expiry or after one 401, then fails closed. Keeping this module independent from the
+ * API-client facade avoids an ESM circular import in Vite.
  */
-export function createSessionAwarePlatformApiClient(
-  options: SessionAwarePlatformApiClientOptions
-): PlatformApiClient {
-  const { storage, onSessionEnded, refreshLeewayMs = 60_000, fetcher = globalThis.fetch.bind(globalThis), ...clientOptions } = options;
+export function createSessionAwareFetch(options: SessionAwareFetchOptions): typeof fetch {
+  const { storage, onSessionEnded, refreshLeewayMs = 60_000, fetcher = globalThis.fetch.bind(globalThis), baseUrl } = options;
   const sessions = new PlatformSessionStore(storage);
   let refreshInFlight: Promise<boolean> | undefined;
   let sessionEnded = false;
@@ -40,7 +39,7 @@ export function createSessionAwarePlatformApiClient(
         return false;
       }
       try {
-        const response = await fetcher(`${clientOptions.baseUrl.replace(/\/$/, "")}/auth/refresh`, {
+        const response = await fetcher(`${baseUrl.replace(/\/$/, "")}/auth/refresh`, {
           method: "POST",
           headers: { accept: "application/json", "content-type": "application/json" },
           body: JSON.stringify({ refreshToken })
@@ -76,5 +75,5 @@ export function createSessionAwarePlatformApiClient(
     return response;
   };
 
-  return createPlatformApiClient({ ...clientOptions, fetcher: authenticatedFetch });
+  return authenticatedFetch;
 }
