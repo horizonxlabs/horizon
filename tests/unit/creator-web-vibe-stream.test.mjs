@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { applyVibeEvent } = await import("../../apps/creator-web/src/lib/vibe-stream.ts");
+const { applyVibeEvent } =
+  await import("../../apps/creator-web/src/features/workspace/vibe-stream.ts");
 
 function baseMessage(overrides = {}) {
   return {

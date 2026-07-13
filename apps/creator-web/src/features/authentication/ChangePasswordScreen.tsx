@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { AlertCircle, LockKeyhole, ShieldCheck } from "lucide-react";
 import { HorizonLogo } from "@/shared/HorizonLogo";
-import { apiBaseUrl } from "@/shared/routing";
+import { apiBaseUrl } from "@/shared/runtime-config";
 import { vibeAuthHeaders } from "@/shared/session";
 
 async function nativeChangePassword(currentPassword: string, newPassword: string): Promise<void> {

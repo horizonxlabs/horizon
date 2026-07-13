@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/shared/routing";
+import { apiBaseUrl } from "@/shared/runtime-config";
 import { vibeAuthHeaders } from "@/shared/session";
 
 // Client for the per-project database browser (backed by the project's scoped Postgres role).

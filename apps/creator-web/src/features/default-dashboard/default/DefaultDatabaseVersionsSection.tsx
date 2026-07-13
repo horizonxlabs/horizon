@@ -8,7 +8,7 @@ import {
   ShieldCheck,
   Table2
 } from "lucide-react";
-import { checkpointRows, databaseTables, migrationRows, sampleRecords } from "@/shared/mock-data";
+import { checkpointRows, databaseTables, migrationRows, sampleRecords } from "../fixtures";
 
 export function DefaultDatabaseVersionsSection() {
   return (

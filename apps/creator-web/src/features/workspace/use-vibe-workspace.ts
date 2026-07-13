@@ -6,19 +6,15 @@ import {
   type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
 import { useEffect, useState } from "react";
-import { fallbackPreview, fallbackTaskSteps, usageRows } from "@/shared/mock-data";
+import { fallbackPreview, fallbackTaskSteps, usageRows } from "./fixtures";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { fetchChatHistory } from "./chat-history";
 import { vibeActionVerb } from "./vibe-actions";
 import { applyVibeEvent, type VibeMessage } from "./vibe-stream";
-import {
-  normalizeWorkspaceMode,
-  persistWorkspaceMode,
-  readWorkspaceMode
-} from "./workspace-mode";
+import { normalizeWorkspaceMode, persistWorkspaceMode, readWorkspaceMode } from "./workspace-mode";
 import type { CreatorProjectView } from "@/shared/types";
 import { extractedTextFor, sha256Hex } from "./project-file-upload";
-import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "@/shared/creator-app-helpers";
+import { ensureVibeWorkspace, loadWorkspaceState, streamVibeChat } from "./api";
 
 function browserStorage() {
   return typeof window === "undefined" ? undefined : window.localStorage;

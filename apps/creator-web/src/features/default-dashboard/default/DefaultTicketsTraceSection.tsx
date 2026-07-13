@@ -1,6 +1,6 @@
 import { DataTable, DecisionPanel, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
 import { CheckCircle2, MessageSquare } from "lucide-react";
-import { creatorTickets, mvpDemoSteps, prdChangeRows, traceRows } from "@/shared/mock-data";
+import { creatorTickets, mvpDemoSteps, prdChangeRows, traceRows } from "@/features/tickets";
 
 export function DefaultTicketsTraceSection() {
   return (

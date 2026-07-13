@@ -1,18 +1,7 @@
 import { navigation } from "@evcp/config";
-import type { CreatorPage, CreatorProjectView } from "@/shared/types";
+import type { CreatorProjectView } from "@/shared/types";
 
-export function apiBaseUrl(): string | undefined {
-  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
-  if (
-    (!configured || configured === "/api") &&
-    typeof window !== "undefined" &&
-    window.location.port === "4101"
-  ) {
-    return "http://127.0.0.1:3100";
-  }
-  if (!configured && import.meta.env.DEV) return undefined;
-  return (configured || "/api").replace(/\/$/, "");
-}
+export type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
 
 export function creatorPageFromPath(pathname: string): CreatorPage {
   if (pathname.endsWith("/prd")) return "prd";
@@ -38,7 +27,6 @@ export function slugifyProjectName(name: string): string {
   );
 }
 
-// Workspace is entered by opening a project card, so a dedicated sidebar entry is redundant.
 const EXCLUDED_CREATOR_NAV_LABELS = new Set(["Creator Workspace"]);
 
 export function createCreatorNavigation(project: CreatorProjectView) {
@@ -46,8 +34,6 @@ export function createCreatorNavigation(project: CreatorProjectView) {
   return navigation.creator
     .filter((item) => !EXCLUDED_CREATOR_NAV_LABELS.has(item.label))
     .map((item) => {
-      // Only Projects ships today; the rest are surfaced as upcoming ("Soon") but non-interactive.
-      // The routes/pages still exist and stay reachable by direct URL.
       const isProjectScoped = item.route.includes("/creator/projects/leave-management");
       if (!isProjectScoped) return item;
       return {

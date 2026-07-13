@@ -27,7 +27,5 @@ export type CreateProjectFormState = {
   dataSensitivity: CreateProjectInput["dataSensitivity"];
 };
 
-export type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
-
 // --- Native login + change-password gate ---
 export type NativeLoginResult = { token: string; expiresAt: string; mustChangePassword: boolean };

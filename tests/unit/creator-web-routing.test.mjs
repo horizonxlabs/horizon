@@ -6,7 +6,7 @@ const {
   projectRouteSegmentFromPath,
   slugifyProjectName,
   createCreatorNavigation
-} = await import("../../apps/creator-web/src/lib/routing.ts");
+} = await import("../../apps/creator-web/src/app/routes.ts");
 
 test("creatorPageFromPath: recognizes each known suffix", () => {
   assert.equal(creatorPageFromPath("/creator/projects/leave-management/prd"), "prd");

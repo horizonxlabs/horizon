@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
 import { useEffect, useMemo, useState } from "react";
-import { ensureVibeWorkspace } from "@/shared/creator-app-helpers";
+import { ensureVibeWorkspace } from "./api";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
 interface TreeNode {

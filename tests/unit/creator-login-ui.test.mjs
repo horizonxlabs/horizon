@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { persistLoginSession, needsPasswordChange } = await import(
-  "../../apps/creator-web/src/lib/session.ts"
-);
+const { persistLoginSession, needsPasswordChange } =
+  await import("../../apps/creator-web/src/shared/session.ts");
 
 test("persistLoginSession stores token + expiry", () => {
   const store = new Map();

@@ -1,30 +1,25 @@
 import { type PrdVersionDto } from "@evcp/api-client";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useReducer, useState, type FormEvent } from "react";
-import {
-  initialCreateProjectForm,
-  initialCreatorBootstrap,
-  prdSections,
-  versionRows
-} from "@/shared/mock-data";
+import { initialCreateProjectForm, initialCreatorBootstrap } from "@/shared/creator-defaults";
+import { prdSections, versionRows } from "@/features/prd/fixtures";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
 import {
   createCreatorNavigation,
   creatorPageCopy,
   creatorPageFromPath,
-  projectRouteSegmentFromPath
-} from "@/shared/routing";
+  projectRouteSegmentFromPath,
+  type CreatorPage
+} from "@/app/routes";
 import { clearLoginSession } from "@/shared/session";
-import type { CreateProjectFormState, CreatorPage, CreatorProjectView } from "@/shared/types";
+import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types";
 import {
-  ensureVibeWorkspace,
   loadCreatorBootstrap,
   loadPrdState,
-  loadWorkspaceState,
   signInCreatorSessionBridge
 } from "@/shared/creator-app-helpers";
-import { usePublishAccess } from "@/features/publish/use-publish-access";
-import { useVibeWorkspace } from "@/features/workspace/use-vibe-workspace";
+import { usePublishAccess } from "@/features/publish";
+import { ensureVibeWorkspace, loadWorkspaceState, useVibeWorkspace } from "@/features/workspace";
 
 export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
@@ -94,7 +89,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     // (the card-click path does this via handleSelectProject; a fresh page load does not).
     const onWorkspace = creatorPage === "workspace";
     if (onWorkspace) setIsEnteringWorkspace(true);
-    loadCreatorBootstrap()
+    loadCreatorBootstrap(projectRouteSegmentFromPath(window.location.pathname))
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
         try {
@@ -155,7 +150,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
-      const nextBootstrap = await signInCreatorSessionBridge();
+      const nextBootstrap = await signInCreatorSessionBridge(
+        projectRouteSegmentFromPath(window.location.pathname)
+      );
       setBootstrap(nextBootstrap);
       try {
         await refreshPrdState(nextBootstrap.selectedProject.id);

@@ -45,6 +45,33 @@ completes successfully.
 The staged large-file gate permits the unchanged 405-line workspace hook at its relocated,
 ratcheted baseline path; it did not grow.
 
+## Review follow-up — Task 2
+
+### RED
+
+The affected Creator test set initially failed because `WorkspaceCodePanel` still imported the
+relocated workspace provisioner from the removed shared integration location. Updating it to the
+workspace feature API restored the public-boundary contract.
+
+### GREEN
+
+```text
+node --import tsx --test tests/unit/creator-web-render-smoke.test.mjs \
+  tests/unit/creator-web-routing.test.mjs tests/unit/creator-web-session.test.mjs \
+  tests/unit/creator-login-ui.test.mjs tests/unit/creator-web-project-files-ui.test.mjs \
+  tests/unit/creator-chat-history.test.mjs tests/unit/staging-preview-access.test.mjs \
+  tests/unit/workspace-mode.test.mjs tests/unit/creator-web-vibe-actions.test.mjs \
+  tests/unit/creator-web-vibe-stream.test.mjs                         # 71/71 pass
+pnpm check:frontend-architecture                                      # pass
+pnpm --filter @evcp/creator-web typecheck                             # pass
+pnpm --filter @evcp/creator-web build                                 # pass
+```
+
+The render smoke now composes the real `CreatorApp` auth gate (logged out and valid-session
+states) and verifies every `CreatorRoutes` capability mapping plus its default-dashboard fallback.
+The build retains the pre-existing runtime font-resolution warnings for `/creator/fonts/*` and
+completes successfully.
+
 ## Guardrails observed
 
 - No router, global store, data-fetching dependency, or API/session contract was introduced.

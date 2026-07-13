@@ -4,9 +4,9 @@ import {
   type CurrentUserResponse,
   type PlatformProjectDto
 } from "@evcp/api-client";
-import { initialCreatorBootstrap } from "@/shared/mock-data";
+import { initialCreatorBootstrap } from "@/shared/creator-defaults";
 import type { CreatorBootstrapState, CreatorProjectView } from "@/shared/types";
-import { apiBaseUrl } from "@/shared/routing";
+import { apiBaseUrl } from "@/shared/runtime-config";
 import { platformSessionToken } from "@/shared/session";
 
 export function createCreatorPlatformClient() {

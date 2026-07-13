@@ -6,16 +6,11 @@ import {
   type PublishReviewResponse
 } from "@evcp/api-client";
 import { useState } from "react";
-import {
-  accessRequests,
-  appMembers,
-  appRoles,
-  pendingInvites,
-  publishChecklist
-} from "@/shared/mock-data";
+import { accessRequests, appMembers, appRoles, pendingInvites } from "@/features/users";
+import { publishChecklist } from "./fixtures";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
-import { loadCreatorPublishState } from "@/shared/creator-app-helpers";
+import { loadCreatorPublishState } from "./api";
 
 export function usePublishAccess({
   selectedProject,
@@ -78,9 +73,7 @@ export function usePublishAccess({
   const visibleDeployment = publishResult?.deployment;
   const visibleRegistryEntry =
     publishResult?.registryEntry ??
-    registryEntries.find(
-      (entry) => entry.projectId === selectedProject.id
-    );
+    registryEntries.find((entry) => entry.projectId === selectedProject.id);
 
   function resetPublishAccess() {
     setAppAccessSnapshot(undefined);

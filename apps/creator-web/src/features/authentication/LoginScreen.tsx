@@ -10,7 +10,7 @@ import {
   Wand2
 } from "lucide-react";
 import { HorizonLogo } from "@/shared/HorizonLogo";
-import { apiBaseUrl } from "@/shared/routing";
+import { apiBaseUrl } from "@/shared/runtime-config";
 import { persistLoginSession } from "@/shared/session";
 import type { NativeLoginResult } from "@/shared/types";
 

@@ -2,7 +2,8 @@ import { ArrowRight, Search, Sparkles, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { CreatorShell } from "./CreatorShell";
 import type { useCreatorApp } from "@/app/use-creator-app";
-import type { CreatorPage, CreatorProjectView } from "@/shared/types";
+import type { CreatorProjectView } from "@/shared/types";
+import type { CreatorPage } from "@/app/routes";
 
 // Deterministic tone per project until stored preview thumbnails are available.
 function projectToneClass(seed: string): string {

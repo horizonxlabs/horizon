@@ -1,6 +1,6 @@
 import { DataTable, SectionCard, ToneBadge } from "@evcp/ui";
 import { MessageSquare } from "lucide-react";
-import { creatorTickets, prdChangeRows } from "@/shared/mock-data";
+import { creatorTickets, prdChangeRows } from "./fixtures";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 

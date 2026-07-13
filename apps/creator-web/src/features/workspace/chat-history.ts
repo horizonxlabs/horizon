@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/shared/routing";
+import { apiBaseUrl } from "@/shared/runtime-config";
 import { vibeAuthHeaders } from "@/shared/session";
 import type { VibeAction } from "./vibe-actions";
 import type { VibeMessage } from "./vibe-stream";

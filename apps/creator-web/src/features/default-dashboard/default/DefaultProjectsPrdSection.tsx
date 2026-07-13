@@ -7,7 +7,7 @@ import {
   WorkflowRail
 } from "@evcp/ui";
 import { CheckCircle2, FileText, LayoutDashboard, LockKeyhole, Sparkles } from "lucide-react";
-import { wizardSteps } from "@/shared/mock-data";
+import { wizardSteps } from "../fixtures";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function DefaultProjectsPrdSection({ app }: { app: ReturnType<typeof useCreatorApp> }) {

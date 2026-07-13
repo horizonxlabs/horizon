@@ -8,7 +8,7 @@ const {
   platformSessionToken,
   hasValidSession,
   vibeAuthHeaders
-} = await import("../../apps/creator-web/src/lib/session.ts");
+} = await import("../../apps/creator-web/src/shared/session.ts");
 
 function createFakeStorage(initial = {}) {
   const store = { ...initial };
