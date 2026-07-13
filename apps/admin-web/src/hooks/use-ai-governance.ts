@@ -24,12 +24,18 @@ type AiGovernanceSnapshot = {
 };
 const emptySnapshot: AiGovernanceSnapshot = { providers: [], apiKeys: [], guardrailEvents: [] };
 
-export function useAiGovernance(client: PlatformApiClient) {
+export function useAiGovernance(client: PlatformApiClient | undefined) {
   const [availability, setAvailability] = useState<AiGovernanceAvailability>("loading");
   const [message, setMessage] = useState("Loading AI governance data.");
   const [snapshot, setSnapshot] = useState<AiGovernanceSnapshot>(emptySnapshot);
 
   const reload = useCallback(async () => {
+    if (!client) {
+      setSnapshot(emptySnapshot);
+      setAvailability("unavailable");
+      setMessage(aiGovernanceUnavailableMessage(undefined));
+      return;
+    }
     setAvailability("loading");
     setMessage("Loading AI governance data.");
     try {
@@ -51,12 +57,16 @@ export function useAiGovernance(client: PlatformApiClient) {
   useEffect(() => {
     void reload();
   }, [reload]);
-  const requireReady = () => {
-    if (!canMutateAiGovernance(availability)) throw new Error("AI governance API is unavailable");
+  const requireReadyClient = (): PlatformApiClient => {
+    if (!client) throw new Error("AI governance API is unavailable");
+    if (!canMutateAiGovernance(availability)) {
+      throw new Error("AI governance API is unavailable");
+    }
+    return client;
   };
   const createProvider = async (input: CreateAiProviderInput): Promise<AiProviderDto> => {
-    requireReady();
-    const provider = await client.createAiProvider(input);
+    const readyClient = requireReadyClient();
+    const provider = await readyClient.createAiProvider(input);
     setSnapshot((current) => ({
       ...current,
       providers: [provider, ...current.providers.filter((item) => item.id !== provider.id)]
@@ -68,9 +78,9 @@ export function useAiGovernance(client: PlatformApiClient) {
     input: Omit<CreateAiApiKeyInput, "secret">,
     secret: string
   ): Promise<AiApiKeyDto> => {
-    requireReady();
+    const readyClient = requireReadyClient();
     if (!secret.trim()) throw new Error("Enter a provider secret before saving.");
-    const key = await client.createAiApiKey({ ...input, secret });
+    const key = await readyClient.createAiApiKey({ ...input, secret });
     setSnapshot((current) => ({
       ...current,
       apiKeys: [key, ...current.apiKeys.filter((item) => item.id !== key.id)]
@@ -81,23 +91,23 @@ export function useAiGovernance(client: PlatformApiClient) {
   const configureRoute = async (
     input: Parameters<PlatformApiClient["configureAiRoute"]>[0]
   ): Promise<AiScenarioRouteDto> => {
-    requireReady();
-    const route = await client.configureAiRoute(input);
+    const readyClient = requireReadyClient();
+    const route = await readyClient.configureAiRoute(input);
     setMessage(`Route configured for ${route.scenario}.`);
     return route;
   };
   const configureQuota = async (input: AiQuotaDto): Promise<AiQuotaDto> => {
-    requireReady();
-    const quota = await client.configureAiQuota(input);
+    const readyClient = requireReadyClient();
+    const quota = await readyClient.configureAiQuota(input);
     setMessage(`Quota configured for ${quota.scope}.`);
     return quota;
   };
   const createGuardrailRule = async (
     input: CreateGuardrailRuleInput
   ): Promise<GuardrailRuleDto> => {
-    requireReady();
-    const rule = await client.createGuardrailRule(input);
-    const guardrailEvents = await client.listGuardrailEvents();
+    const readyClient = requireReadyClient();
+    const rule = await readyClient.createGuardrailRule(input);
+    const guardrailEvents = await readyClient.listGuardrailEvents();
     setSnapshot((current) => ({ ...current, guardrailEvents }));
     setMessage(`Guardrail active: ${rule.name}`);
     return rule;

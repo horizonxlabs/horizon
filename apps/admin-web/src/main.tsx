@@ -104,38 +104,6 @@ const kpis = [
   tone: BadgeTone;
 }>;
 
-const routeRows = [
-  {
-    scenario: "Requirement Analysis",
-    primary: "OpenAI Production / gpt-4.1",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet",
-    guard: "quota + guardrail"
-  },
-  {
-    scenario: "Frontend Coding",
-    primary: "OpenAI Production / gpt-4.1-mini",
-    fallback: "Anthropic Fallback / claude-3-5-sonnet",
-    guard: "quota + guardrail"
-  }
-];
-
-const guardrailRows = [
-  {
-    rule: "Block payroll export",
-    severity: "high",
-    action: "block",
-    scope: "organization",
-    status: "active"
-  },
-  {
-    rule: "Warn confidential data",
-    severity: "warning",
-    action: "warn",
-    scope: "organization",
-    status: "active"
-  }
-];
-
 const monitoringKpis = [
   {
     label: "Service Health",
@@ -1394,7 +1362,10 @@ function AdminApp() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
   const [sessionActive, setSessionActive] = useState<boolean>(hasValidAdminSession());
-  const adminClient = useMemo(() => createAdminPlatformClient(), [sessionActive]);
+  const adminClient = useMemo(
+    () => (sessionActive ? createAdminPlatformClient() : undefined),
+    [sessionActive]
+  );
   const aiGovernance = useAiGovernance(adminClient);
   const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const governanceWritesDisabled =
@@ -1517,6 +1488,7 @@ function AdminApp() {
   }
 
   async function handleRunProviderTestCall() {
+    if (governanceWritesDisabled) return;
     setIsRunningProviderTestCall(true);
     setProviderTestCallMessage("Provider test is running through the governed AI Gateway route.");
     try {
@@ -1597,7 +1569,7 @@ function AdminApp() {
           .filter(Boolean)
       });
     } catch {
-      // The unavailable panel continues to fail closed when the Platform API cannot persist changes.
+      // A failed write does not add a locally invented provider row.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1621,7 +1593,7 @@ function AdminApp() {
       );
       setAiKeySecret("");
     } catch {
-      // Preserve entered secret only when the governed API rejects the request.
+      // Preserve entered secret only when the API rejects the request.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1639,7 +1611,7 @@ function AdminApp() {
       });
       setLatestAiRoute(route);
     } catch {
-      // The hook keeps the API-backed snapshot; no local route fallback is rendered.
+      // API errors leave the table empty rather than substituting a local route.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1658,7 +1630,7 @@ function AdminApp() {
       });
       setLatestAiQuota(quota);
     } catch {
-      // The hook keeps the API-backed snapshot; no local quota fallback is rendered.
+      // API errors leave the last API-backed quota state unchanged.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1677,7 +1649,7 @@ function AdminApp() {
       });
       setLatestGuardrailRule(rule);
     } catch {
-      // The hook keeps the API-backed snapshot; no local guardrail fallback is rendered.
+      // API errors leave the table empty rather than substituting a local guardrail rule.
     } finally {
       setIsSavingAiGovernance(false);
     }
@@ -1775,10 +1747,9 @@ function AdminApp() {
             ? `${latestAiRoute.fallback.providerId} / ${latestAiRoute.fallback.model}`
             : "not configured",
           guard: "quota + guardrail"
-        },
-        ...routeRows.filter((row) => row.scenario !== latestAiRoute.scenario)
+        }
       ]
-    : routeRows;
+    : [];
   const aiGuardrailRows = latestGuardrailRule
     ? [
         {
@@ -1787,10 +1758,9 @@ function AdminApp() {
           action: latestGuardrailRule.action,
           scope: latestGuardrailRule.scope,
           status: latestGuardrailRule.status
-        },
-        ...guardrailRows.filter((row) => row.rule !== latestGuardrailRule.name)
+        }
       ]
-    : guardrailRows;
+    : [];
   const aiEventRows = aiGovernance.guardrailEvents.map((event) => ({
     event: event.id,
     decision: event.decision,
@@ -1798,6 +1768,7 @@ function AdminApp() {
     actor: event.actorId ?? "Platform API",
     time: event.occurredAt ?? "latest"
   }));
+  const latestGuardrailEvent = aiGovernance.guardrailEvents[0];
   const aiGovernanceUnavailableMessage =
     "AI governance data is unavailable. Refresh the page or sign in again.";
   const aiGovernanceAvailabilityPanel = (
@@ -2070,7 +2041,7 @@ function AdminApp() {
                 type="button"
                 className="secondary-button"
                 onClick={handleRunProviderTestCall}
-                disabled={isRunningProviderTestCall}
+                disabled={governanceWritesDisabled || isRunningProviderTestCall}
               >
                 <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
               </button>
@@ -3064,7 +3035,7 @@ function AdminApp() {
                   type="button"
                   className="secondary-button"
                   onClick={handleRunProviderTestCall}
-                  disabled={isRunningProviderTestCall}
+                  disabled={governanceWritesDisabled || isRunningProviderTestCall}
                 >
                   <Route size={15} /> {isRunningProviderTestCall ? "Running" : "Run Provider Test"}
                 </button>
@@ -3221,7 +3192,7 @@ function AdminApp() {
                     <LockKeyhole size={22} />
                   </div>
                   <div>
-                    <strong>{latestAiKey?.name ?? "Primary Production Key"}</strong>
+                    <strong>{latestAiKey?.name ?? "No API key data available"}</strong>
                     <span>
                       {latestAiKey
                         ? "API key saved through Platform API. Only masked evidence is visible."
@@ -3262,7 +3233,7 @@ function AdminApp() {
                   items={[
                     {
                       label: "Provider",
-                      value: latestAiKey?.providerId ?? aiGovernance.providers[0]?.name ?? "OpenAI Production"
+                      value: latestAiKey?.providerId ?? aiGovernance.providers[0]?.name ?? "Unavailable"
                     },
                     { label: "Usage", value: latestAiKey?.usageMode ?? "production" },
                     {
@@ -3290,10 +3261,21 @@ function AdminApp() {
                   <input defaultValue="Generate payroll export report" />
                 </label>
                 <DecisionPanel
-                  tone="danger"
-                  badge="Blocked"
-                  title="Decision: block"
-                  lines={["Matched rule: Block payroll export", "Event id: gre_0001"]}
+                  tone={latestGuardrailEvent?.decision === "block" ? "danger" : "warning"}
+                  badge={latestGuardrailEvent?.decision ?? "unavailable"}
+                  title={
+                    latestGuardrailEvent
+                      ? `Decision: ${latestGuardrailEvent.decision}`
+                      : "Guardrail decision data unavailable"
+                  }
+                  lines={
+                    latestGuardrailEvent
+                      ? [
+                          `Matched rule: ${latestGuardrailEvent.matchedRuleName ?? latestGuardrailEvent.matchedRuleId ?? "No matched rule"}`,
+                          `Event id: ${latestGuardrailEvent.id}`
+                        ]
+                      : ["No API-backed guardrail event is available."]
+                  }
                 />
               </SectionCard>
             </section>

@@ -6,6 +6,8 @@ const source = readFileSync("apps/admin-web/src/hooks/use-ai-governance.ts", "ut
 
 test("governance hook is API-authoritative and never invents a key", () => {
   assert.match(source, /export function useAiGovernance/);
+  assert.match(source, /client: PlatformApiClient \| undefined/);
+  assert.match(source, /if \(!client\)/);
   assert.match(source, /client\.listAiProviders\(\)/);
   assert.match(source, /client\.listAiApiKeys\(\)/);
   assert.match(source, /client\.listGuardrailEvents\(\)/);

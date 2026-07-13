@@ -204,3 +204,21 @@ test("Admin governance renders unavailable guidance instead of fallback data", (
   assert.match(source, /Refresh AI governance data/);
   assert.doesNotMatch(source, /local fallback rows remain visible/);
 });
+
+test("Admin governance never substitutes local route, rule, or evidence fixtures", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.doesNotMatch(source, /const routeRows/);
+  assert.doesNotMatch(source, /const guardrailRows/);
+  assert.doesNotMatch(source, /\?\? "OpenAI Production"/);
+  assert.doesNotMatch(source, /Matched rule: Block payroll export/);
+});
+
+test("Admin governance does not load while logged out and gates provider test calls", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /sessionActive \? createAdminPlatformClient\(\) : undefined/);
+  assert.match(source, /if \(governanceWritesDisabled\) return;/);
+  assert.equal(
+    [...source.matchAll(/disabled=\{governanceWritesDisabled \|\| isRunningProviderTestCall\}/g)].length,
+    2
+  );
+});
