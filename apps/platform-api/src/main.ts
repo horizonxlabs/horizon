@@ -6,18 +6,18 @@ import { KeycloakAdminClient } from "./keycloak/admin-client";
 import { KeycloakUserService } from "./keycloak/user-service";
 import { createKeycloakSessionIssuer } from "./keycloak/platform-session-issuer";
 import { PlatformSessionService } from "./auth/platform-session-service";
-import { PrismaPlatformSessionRepository } from "./persistence/platform-session-repository";
+import { isPlatformSessionDatabase, MemoryPlatformSessionRepository, PrismaPlatformSessionRepository } from "./persistence/platform-session-repository";
 
 const port = Number(process.env.PORT ?? 3100);
 const host = process.env.HOST ?? "127.0.0.1";
 const corePersistenceMode = resolveCorePersistenceMode();
 
 const runtimeServices = await createRuntimePlatformApiServices();
-const platformSessions = runtimeServices.corePersistenceClient
-  ? new PlatformSessionService(
-      new PrismaPlatformSessionRepository(runtimeServices.corePersistenceClient as never),
-      process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production"
-    )
+const sessionRepository = corePersistenceMode === "prisma" && isPlatformSessionDatabase(runtimeServices.corePersistenceClient)
+  ? new PrismaPlatformSessionRepository(runtimeServices.corePersistenceClient)
+  : corePersistenceMode === "memory" ? new MemoryPlatformSessionRepository() : undefined;
+const platformSessions = sessionRepository
+  ? new PlatformSessionService(sessionRepository, process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production")
   : undefined;
 const services = { ...runtimeServices, platformSessions };
 if (process.env.KEYCLOAK_ISSUER_URL) {

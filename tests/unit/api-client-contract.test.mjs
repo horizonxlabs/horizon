@@ -24,7 +24,8 @@ test("api client exposes platform bootstrap client contract", () => {
   assert.match(source, /createPlatformSessionStore/);
   assert.match(source, /startKeycloakLogin/);
   assert.doesNotMatch(source, /simulateSsoLogin/);
-  assert.match(source, /EVCP_SESSION_STORAGE_KEY/);
+  assert.match(source, /export \* from "\.\/platform-session-store"/);
+  assert.match(source, /export \* from "\.\/platform-session-client"/);
 });
 
 test("api client exposes workspace file browser contract", () => {

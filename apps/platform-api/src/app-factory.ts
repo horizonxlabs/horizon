@@ -44,6 +44,7 @@ import {
   createUserWithRole
 } from "./auth/prisma-credential-store";
 import { resolvePersistedAuth } from "./auth/persistence-auth-resolver";
+import type { PlatformSessionService } from "./auth/platform-session-service";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import {
   createAiGovernanceRepositoryBackedService,
@@ -121,6 +122,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   workspacePersistence?: WorkspaceRepositoryBackedService;
   publishStorePersistence?: PublishStoreRepositoryBackedService;
   generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
+  platformSessions?: PlatformSessionService;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
@@ -3021,7 +3023,7 @@ async function registerPlatformRoutes(
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
 
   if (services.keycloakUserManagement) {
-    registerKeycloakUserManagementRoutes(routes, services.keycloakUserManagement, (headers) => resolvePersistenceUser(services, headers ?? {}));
+    registerKeycloakUserManagementRoutes(routes, services.keycloakUserManagement, (headers) => resolvePersistenceUser(services, headers ?? {}), services.platformSessions);
   }
 
   routes.get("/health", (request, response) =>

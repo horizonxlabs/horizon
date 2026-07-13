@@ -17,7 +17,14 @@ type SessionDelegate = {
   updateMany(input: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
 };
 
-type SessionDatabase = { platformAuthSession: SessionDelegate };
+type SessionDatabase = {
+  platformAuthSession: SessionDelegate;
+  $transaction?: <T>(work: (database: SessionDatabase) => Promise<T>) => Promise<T>;
+};
+
+export function isPlatformSessionDatabase(value: unknown): value is SessionDatabase {
+  return Boolean(value && typeof value === "object" && "platformAuthSession" in value);
+}
 
 /** Prisma-backed, process-independent Platform Auth session state. */
 export class PrismaPlatformSessionRepository implements PlatformSessionRepository {
@@ -35,12 +42,17 @@ export class PrismaPlatformSessionRepository implements PlatformSessionRepositor
     return this.fromRecord(await this.database.platformAuthSession.findUnique({ where: { refreshTokenHash: hash } }));
   }
 
-  async replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<void> {
-    await this.database.platformAuthSession.update({
-      where: { id: input.previousId },
-      data: { replacedBySessionId: input.next.id, revokeReason: "refresh_rotated" }
-    });
-    await this.createSession(input.next);
+  async replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<boolean> {
+    const replace = async (database: SessionDatabase) => {
+      const updated = await database.platformAuthSession.updateMany({
+        where: { id: input.previousId, revokedAt: null, replacedBySessionId: null },
+        data: { replacedBySessionId: input.next.id, revokeReason: "refresh_rotated", lastUsedAt: new Date() }
+      });
+      if (!updated.count) return false;
+      await database.platformAuthSession.create({ data: this.toRecord(input.next) });
+      return true;
+    };
+    return this.database.$transaction ? this.database.$transaction(replace) : replace(this.database);
   }
 
   async revokeSession(id: string, reason: string): Promise<void> {
@@ -65,4 +77,27 @@ export class PrismaPlatformSessionRepository implements PlatformSessionRepositor
     const email = typeof record.claims.email === "string" ? record.claims.email : "";
     return { ...record, email };
   }
+}
+
+/** Explicit test/dev repository; production uses PrismaPlatformSessionRepository. */
+export class MemoryPlatformSessionRepository implements PlatformSessionRepository {
+  private readonly sessions = new Map<string, PersistedPlatformSession>();
+
+  async createSession(input: PersistedPlatformSession): Promise<void> { this.sessions.set(input.id, structuredClone(input)); }
+  async findById(id: string): Promise<PersistedPlatformSession | undefined> { return this.copy(this.sessions.get(id)); }
+  async findByRefreshTokenHash(hash: string): Promise<PersistedPlatformSession | undefined> {
+    return this.copy([...this.sessions.values()].find((session) => session.refreshTokenHash === hash));
+  }
+  async replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<boolean> {
+    const previous = this.sessions.get(input.previousId);
+    if (!previous || previous.revokedAt || previous.replacedBySessionId) return false;
+    previous.replacedBySessionId = input.next.id;
+    this.sessions.set(input.next.id, structuredClone(input.next));
+    return true;
+  }
+  async revokeSession(id: string, _reason: string): Promise<void> { const session = this.sessions.get(id); if (session) { session.revokedAt = new Date(); } }
+  async revokeSessionFamily(familyId: string, _reason: string): Promise<void> { this.revoke((session) => session.sessionFamilyId === familyId); }
+  async revokeUserSessions(userId: string, _reason: string): Promise<void> { this.revoke((session) => session.userId === userId); }
+  private revoke(matches: (session: PersistedPlatformSession) => boolean): void { for (const session of this.sessions.values()) if (matches(session) && !session.revokedAt) session.revokedAt = new Date(); }
+  private copy(session: PersistedPlatformSession | undefined): PersistedPlatformSession | undefined { return session ? structuredClone(session) : undefined; }
 }

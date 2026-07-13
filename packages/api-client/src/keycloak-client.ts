@@ -14,6 +14,7 @@ export function createKeycloakUserClient(client: PlatformApiClient) {
     update: (id: string, input: { email: string; name: string }) => client.request<KeycloakUserDto>(`/admin/keycloak/users/${encodeURIComponent(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }),
     setEnabled: (id: string, enabled: boolean) => client.request<KeycloakUserDto>(`/admin/keycloak/users/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`, { method: "POST" }),
     setRole: (id: string, role: CreateKeycloakUserInput["role"]) => client.request<KeycloakUserDto>(`/admin/keycloak/users/${encodeURIComponent(id)}/groups`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ role }) }),
-    resetPassword: (id: string, temporaryPassword: string) => client.request<void>(`/admin/keycloak/users/${encodeURIComponent(id)}/reset-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ temporaryPassword }) })
+    resetPassword: (id: string, temporaryPassword: string) => client.request<void>(`/admin/keycloak/users/${encodeURIComponent(id)}/reset-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ temporaryPassword }) }),
+    revokeSessions: (id: string) => client.request<{ id: string; revoked: boolean }>(`/admin/keycloak/users/${encodeURIComponent(id)}/sessions/revoke`, { method: "POST" })
   };
 }

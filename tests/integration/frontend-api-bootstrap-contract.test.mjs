@@ -77,7 +77,7 @@ test("Admin AI provider API contract is exposed by the shared client", () => {
   assert.match(apiClient, /AiProviderTestCallInput/);
   assert.match(apiClient, /AiProviderTestCallResponse/);
   assert.match(apiClient, /\/ai\/provider-test-call/);
-  assert.match(adminClientSource, /createPlatformApiClient/);
+  assert.match(adminClientSource, /createSessionAwarePlatformApiClient/);
   assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
 });
 
@@ -120,7 +120,7 @@ test("Admin AI governance actions are API-client backed", () => {
 test("frontend shells use API-backed bootstrap instead of direct mock fixtures", () => {
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.doesNotMatch(source, /@evcp\/mock-data/);
-    assert.match(source, /createPlatformApiClient/);
+    assert.match(source, /createSessionAwarePlatformApiClient/);
   }
   assert.match(adminConsoleSource, /catch\(\(\) => setSetupStatus\("incomplete"\)\)/);
   assert.match(creatorSource, /local fallback/);

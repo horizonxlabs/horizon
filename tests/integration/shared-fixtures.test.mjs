@@ -47,9 +47,9 @@ test("frontend shells no longer import mock data directly for bootstrap state", 
   assert.doesNotMatch(adminApp, /@evcp\/mock-data/);
   assert.doesNotMatch(creatorApp, /@evcp\/mock-data/);
   assert.doesNotMatch(storeApp, /@evcp\/mock-data/);
-  assert.match(adminApp, /createPlatformApiClient/);
-  assert.match(creatorApp, /createPlatformApiClient/);
-  assert.match(storeApp, /createPlatformApiClient/);
+  assert.match(adminApp, /createSessionAwarePlatformApiClient/);
+  assert.match(creatorApp, /createSessionAwarePlatformApiClient/);
+  assert.match(storeApp, /createSessionAwarePlatformApiClient/);
 });
 
 test("leave management demo data is shared across project and app store contexts", () => {

@@ -5,6 +5,7 @@ import type { KeycloakUserService } from "./user-service";
 export type { KeycloakUserService } from "./user-service";
 import { failure, success } from "@evcp/api-client";
 import { PlatformSessionError, type PlatformSessionService } from "../auth/platform-session-service";
+import { keycloakPlatformUserId } from "../persistence/keycloak-user-projection";
 
 type Request = { query?: Record<string, unknown>; headers?: Record<string, string | string[] | undefined>; body?: Record<string, unknown>; params?: Record<string, string> };
 type Response = { redirect?: (url: string) => void; status: (code: number) => Response; json: (body: unknown) => void };
@@ -80,7 +81,8 @@ export function registerKeycloakOidcRoutes(
 export function registerKeycloakUserManagementRoutes(
   routes: Routes,
   service: KeycloakUserService,
-  resolveUser: (headers: Request["headers"]) => PlatformUser | Promise<PlatformUser>
+  resolveUser: (headers: Request["headers"]) => PlatformUser | Promise<PlatformUser>,
+  sessions?: PlatformSessionService
 ): void {
   const handle = (status: number, action: (user: PlatformUser, request: Request) => Promise<unknown>) => async (request: Request, response: Response) => {
     try { response.status(status).json(success(await action(await resolveUser(request.headers), request))); }
@@ -112,6 +114,25 @@ export function registerKeycloakUserManagementRoutes(
   routes.post("/admin/keycloak/users/:id/enable", handle(200, (user, request) => service.setEnabled(user, String(request.params?.id ?? ""), true)));
   routes.put("/admin/keycloak/users/:id/groups", handle(200, (user, request) => service.setRole(user, String(request.params?.id ?? ""), String(request.body?.role ?? "") as never)));
   routes.post("/admin/keycloak/users/:id/reset-password", handle(200, async (user, request) => { await service.resetPassword(user, String(request.params?.id ?? ""), String(request.body?.temporaryPassword ?? "")); return { id: String(request.params?.id ?? "") }; }));
+  routes.post("/admin/keycloak/users/:id/sessions/revoke", async (request, response) => {
+    try {
+      const actor = await resolveUser(request.headers);
+      if (actor.role !== "admin") {
+        response.status(403).json(failure("FORBIDDEN", "Admin role is required"));
+        return;
+      }
+      if (!sessions) {
+        response.status(503).json(failure("SESSION_SERVICE_UNAVAILABLE", "Persistent sessions are not configured"));
+        return;
+      }
+      const keycloakSubject = String(request.params?.id ?? "");
+      if (!keycloakSubject) throw new Error("missing_user_id");
+      await sessions.revokeUserSessions(keycloakPlatformUserId(keycloakSubject), "admin_revoked");
+      response.status(200).json(success({ id: keycloakSubject, revoked: true }));
+    } catch (error) {
+      response.status(400).json(failure("SESSION_REVOKE_FAILED", error instanceof Error ? error.message : "Session revoke failed"));
+    }
+  });
 }
 
 function pagination(query: Request["query"]): { first: number; max: number } {

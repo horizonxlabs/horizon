@@ -22,6 +22,7 @@ test("rotates once and revokes the complete family when a previous refresh token
     replaceSession: async ({ previousId, next }) => {
       sessions.get(previousId).replacedBySessionId = next.id;
       sessions.set(next.id, next);
+      return true;
     },
     revokeSession: async (id) => { sessions.get(id).revokedAt = new Date(); },
     revokeSessionFamily: async (familyId) => {

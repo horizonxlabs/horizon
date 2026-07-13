@@ -6,13 +6,10 @@ import {
 import { DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
 import { Bug, Download, MessageSquare, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { fallbackAccessRequest } from "@/features/access-requests";
 import {
   appInstallJourneySteps,
-  fallbackInstallation,
   installJourneyStatus
 } from "@/features/installations";
-import { fallbackTicket } from "@/features/support-tickets";
 import { StorefrontSummary } from "./StorefrontSummary";
 import {
   clearStoreSessionBridge,
@@ -45,6 +42,8 @@ export function StorefrontApp() {
   const [isInstallingApp, setIsInstallingApp] = useState(false);
   const [isUninstallingApp, setIsUninstallingApp] = useState(false);
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+  const [sessionError, setSessionError] = useState<string>();
+  const [actionError, setActionError] = useState<string>();
   const myApps = bootstrap.myApps;
   const availableApps = bootstrap.availableApps;
   const selectedApp = myApps[0] ?? availableApps[0] ?? fallbackStoreApps[0];
@@ -57,8 +56,8 @@ export function StorefrontApp() {
 
   useEffect(() => {
     loadStoreBootstrap()
-      .then(setBootstrap)
-      .catch(() => setBootstrap(initialStoreBootstrap));
+      .then((next) => { setBootstrap(next); setSessionError(undefined); })
+      .catch((error) => setSessionError(error instanceof Error ? error.message : "Unable to verify your session."));
   }, []);
 
   async function handleSignInBridge() {
@@ -67,7 +66,7 @@ export function StorefrontApp() {
       signInStoreSessionBridge();
       return;
     } catch {
-      setBootstrap(initialStoreBootstrap);
+      setSessionError("Unable to start secure sign-in. Please try again.");
     } finally {
       setIsSigningIn(false);
     }
@@ -93,8 +92,8 @@ export function StorefrontApp() {
       });
       setAccessRequestResult(result);
       setBootstrap(await loadStoreBootstrap());
-    } catch {
-      setAccessRequestResult(fallbackAccessRequest(selectedApp.slug, requestedRole, requestReason));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Access request could not be submitted.");
     } finally {
       setIsRequestingAccess(false);
     }
@@ -107,8 +106,8 @@ export function StorefrontApp() {
       const result = await client.installStoreApp(selectedApp.slug);
       setInstallResult(result);
       setBootstrap(await loadStoreBootstrap());
-    } catch {
-      setInstallResult(fallbackInstallation(selectedApp.slug, "active"));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "App installation could not be completed.");
     } finally {
       setIsInstallingApp(false);
     }
@@ -121,8 +120,8 @@ export function StorefrontApp() {
       const result = await client.uninstallStoreApp(selectedApp.slug);
       setInstallResult(result);
       setBootstrap(await loadStoreBootstrap());
-    } catch {
-      setInstallResult(fallbackInstallation(selectedApp.slug, "disabled"));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "App removal could not be completed.");
     } finally {
       setIsUninstallingApp(false);
     }
@@ -142,10 +141,8 @@ export function StorefrontApp() {
       });
       setTicketResult(submitted);
       setTicketStatus(await client.getStoreTicket(submitted.id));
-    } catch {
-      const localTicket = fallbackTicket(selectedApp.slug, title, ticketDescription, ticketDevice);
-      setTicketResult(localTicket);
-      setTicketStatus(localTicket);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Support ticket could not be submitted.");
     } finally {
       setIsSubmittingTicket(false);
     }
@@ -155,6 +152,8 @@ export function StorefrontApp() {
     if (selectedApp.accessStatus !== "active") return;
     window.location.assign(selectedApp.route ?? `/apps/${selectedApp.slug}`);
   }
+
+  if (sessionError) return <main className="store-shell"><SectionCard eyebrow="Secure session" title="Sign-in required"><p>{sessionError}</p><button type="button" onClick={() => void handleSignInBridge()} disabled={isSigningIn}>{isSigningIn ? "Opening sign-in…" : "Sign in with Keycloak"}</button></SectionCard></main>;
 
   return (
     <main className="store-shell">
@@ -168,6 +167,7 @@ export function StorefrontApp() {
         onSignIn={handleSignInBridge}
         onLogout={handleLogoutBridge}
       />
+      {actionError ? <section role="alert" className="store-action-error"><strong>Action not completed.</strong> {actionError}</section> : null}
 
       <section className="store-detail-grid" aria-label="App Detail and support">
         <SectionCard eyebrow="App Detail" title={selectedApp.name}>

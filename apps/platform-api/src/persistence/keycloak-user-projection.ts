@@ -21,11 +21,16 @@ export async function upsertKeycloakUserProjection(
   }
   await client.platformUser.create({
     data: {
-      id: `usr_sso_${createHash("sha256").update(input.subject).digest("hex").slice(0, 12)}`,
+      id: keycloakPlatformUserId(input.subject),
       email,
       name,
       status: "active",
       roles: { create: roles.create }
     }
   });
+}
+
+/** Stable local user id for the Keycloak `sub`; shared by admin session-management actions. */
+export function keycloakPlatformUserId(subject: string): string {
+  return `usr_sso_${createHash("sha256").update(subject).digest("hex").slice(0, 12)}`;
 }

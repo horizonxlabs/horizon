@@ -67,7 +67,7 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
   consumeStoreSessionHandoff();
   if (!createPlatformSessionStore(window.localStorage).getToken()) {
     signInStoreSessionBridge();
-    return initialStoreBootstrap;
+    throw new Error("Your session has ended. Sign in again to access the app store.");
   }
   const client = createStorePlatformClient();
   const [currentUser, storeHome]: [CurrentUserResponse, StorefrontHomeResponse] = await Promise.all(

@@ -720,6 +720,7 @@ export type PlatformApiClientOptions = {
 };
 
 export * from "./platform-session-store";
+export * from "./platform-session-client";
 
 export class PlatformApiError extends Error {
   readonly code: string;

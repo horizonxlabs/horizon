@@ -38,7 +38,7 @@ export interface PlatformSessionRepository {
   createSession(input: PersistedPlatformSession): Promise<void>;
   findById(id: string): Promise<PersistedPlatformSession | undefined>;
   findByRefreshTokenHash(hash: string): Promise<PersistedPlatformSession | undefined>;
-  replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<void>;
+  replaceSession(input: { previousId: string; next: PersistedPlatformSession }): Promise<boolean>;
   revokeSession(id: string, reason: string): Promise<void>;
   revokeSessionFamily(familyId: string, reason: string): Promise<void>;
   revokeUserSessions(userId: string, reason: string): Promise<void>;
@@ -93,7 +93,10 @@ export class PlatformSessionService {
       providerConfigId: existing.providerConfigId,
       claims: existing.claims
     }, this.now(), existing.sessionFamilyId);
-    await this.repository.replaceSession({ previousId: existing.id, next: next.record });
+    if (!await this.repository.replaceSession({ previousId: existing.id, next: next.record })) {
+      await this.repository.revokeSessionFamily(existing.sessionFamilyId, "refresh_token_reused");
+      throw new PlatformSessionError("refresh_token_reused");
+    }
     return next.pair;
   }
 
