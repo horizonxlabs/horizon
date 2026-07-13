@@ -48,7 +48,7 @@ export class KeycloakAdminClient {
 
   private async serviceToken(): Promise<string> {
     if (this.token && this.token.expiresAt > Date.now() + 10_000) return this.token.value;
-    const response = await this.fetcher(`${this.deps.config.issuerUrl}/protocol/openid-connect/token`, {
+    const response = await this.fetcher(`${this.deps.config.internalIssuerUrl}/protocol/openid-connect/token`, {
       method: "POST",
       headers: {
         authorization: `Basic ${Buffer.from(`${this.deps.config.adminClientId}:${this.deps.config.adminClientSecret}`).toString("base64")}`,
@@ -64,7 +64,7 @@ export class KeycloakAdminClient {
   }
 
   private adminBaseUrl(): string {
-    const issuer = new URL(this.deps.config.issuerUrl);
+    const issuer = new URL(this.deps.config.internalIssuerUrl);
     return `${issuer.origin}/admin/realms/${encodeURIComponent(this.deps.config.realm)}`;
   }
 }

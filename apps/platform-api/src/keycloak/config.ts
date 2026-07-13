@@ -1,5 +1,8 @@
 export type KeycloakConfig = {
+  /** Browser-visible issuer and JWT issuer. */
   issuerUrl: string;
+  /** Internal server-to-server endpoint; never sent to a browser. */
+  internalIssuerUrl: string;
   realm: string;
   platformClientId: string;
   platformClientSecret: string;
@@ -18,6 +21,7 @@ export function readKeycloakConfig(env: Record<string, string | undefined>): Key
 
   return {
     issuerUrl: required("KEYCLOAK_ISSUER_URL"),
+    internalIssuerUrl: required("KEYCLOAK_INTERNAL_ISSUER_URL"),
     realm: required("KEYCLOAK_REALM"),
     platformClientId: required("KEYCLOAK_PLATFORM_CLIENT_ID"),
     platformClientSecret: required("KEYCLOAK_PLATFORM_CLIENT_SECRET"),

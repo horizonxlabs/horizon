@@ -19,7 +19,7 @@ export type OidcLoginResult = { session: PlatformAuthSession; returnTo: string }
 
 export type KeycloakOidcServiceDependencies = {
   config: KeycloakConfig;
-  issueKeycloakSession: (claims: PlatformAuthClaims) => PlatformAuthSession;
+  issueKeycloakSession: (claims: PlatformAuthClaims) => PlatformAuthSession | Promise<PlatformAuthSession>;
   fetch?: typeof fetch;
   allowedReturnOrigins?: Partial<Record<PlatformApp, string>>;
   now?: () => Date;
@@ -86,7 +86,7 @@ export class KeycloakOidcService {
     const platformRoles = [...new Set(identity.groups.flatMap((group) => GROUP_ROLES[group as keyof typeof GROUP_ROLES] ?? []))];
     if (!platformRoles.length) throw new Error("unmapped_keycloak_group");
     const claims: PlatformAuthClaims = { ...identity, platformRoles, appRoles: {} };
-    return { session: this.deps.issueKeycloakSession(claims), returnTo: transaction.returnTo };
+    return { session: await this.deps.issueKeycloakSession(claims), returnTo: transaction.returnTo };
   }
 
   private consumeTransaction(state: string): OidcTransaction {
@@ -97,7 +97,7 @@ export class KeycloakOidcService {
   }
 
   private async exchangeCode(code: string, verifier: string): Promise<{ id_token: string }> {
-    const response = await this.fetcher(`${this.deps.config.issuerUrl}/protocol/openid-connect/token`, {
+    const response = await this.fetcher(`${this.deps.config.internalIssuerUrl}/protocol/openid-connect/token`, {
       method: "POST",
       headers: {
         authorization: `Basic ${Buffer.from(`${this.deps.config.platformClientId}:${this.deps.config.platformClientSecret}`).toString("base64")}`,
@@ -118,7 +118,7 @@ export class KeycloakOidcService {
 
   private async verifyIdToken(idToken: string, nonce: string): Promise<VerifiedIdentity> {
     if (this.deps.verifyIdToken) return this.deps.verifyIdToken({ idToken, nonce });
-    const jwks = createRemoteJWKSet(new URL(`${this.deps.config.issuerUrl}/protocol/openid-connect/certs`));
+    const jwks = createRemoteJWKSet(new URL(`${this.deps.config.internalIssuerUrl}/protocol/openid-connect/certs`));
     const { payload } = await jwtVerify(idToken, jwks, {
       issuer: this.deps.config.issuerUrl,
       audience: this.deps.config.platformClientId

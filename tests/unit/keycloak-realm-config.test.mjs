@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const requiredEnvironment = {
-  KEYCLOAK_ISSUER_URL: "http://keycloak:8080/realms/evcp",
+  KEYCLOAK_ISSUER_URL: "http://localhost:8080/auth/realms/evcp",
+  KEYCLOAK_INTERNAL_ISSUER_URL: "http://keycloak:8080/auth/realms/evcp",
   KEYCLOAK_REALM: "evcp",
   KEYCLOAK_PLATFORM_CLIENT_ID: "evcp-platform-api",
   KEYCLOAK_PLATFORM_CLIENT_SECRET: "secret",
@@ -44,7 +45,7 @@ test("Keycloak realm permits authorization-code login only through the confident
     assert.equal("secret" in client, false, `${client.clientId} secret must be bootstrapped at runtime`);
   }
 
-  assert.equal(config.issuerUrl, "http://keycloak:8080/realms/evcp");
+  assert.equal(config.issuerUrl, "http://localhost:8080/auth/realms/evcp");
   assert.equal(config.callbackUrl, "http://localhost:3100/auth/keycloak/callback");
 });
 
@@ -53,6 +54,10 @@ test("Keycloak configuration rejects missing required values and normalizes the 
   assert.throws(
     () => readKeycloakConfig({ ...requiredEnvironment, KEYCLOAK_ADMIN_CLIENT_SECRET: "  " }),
     /KEYCLOAK_ADMIN_CLIENT_SECRET is required/
+  );
+  assert.throws(
+    () => readKeycloakConfig({ ...requiredEnvironment, KEYCLOAK_INTERNAL_ISSUER_URL: "  " }),
+    /KEYCLOAK_INTERNAL_ISSUER_URL is required/
   );
   assert.equal(
     readKeycloakConfig({ ...requiredEnvironment, EVCP_PUBLIC_API_URL: "http://localhost:3100/" }).callbackUrl,
@@ -84,4 +89,27 @@ test("Compose imports the realm and bootstraps confidential client secrets befor
   );
   assert.doesNotMatch(developmentSharedNodeService, /env_file:/);
   assert.match(developmentPlatformApi, /env_file:/);
+});
+
+test("bootstrap reconciles the public callback and compose exposes a public Keycloak issuer", async () => {
+  const [bootstrap, developmentCompose, releaseCompose, caddy, releaseCaddy] = await Promise.all([
+    readFile("apps/platform-api/keycloak/bootstrap-clients.sh", "utf8"),
+    readFile("docker/docker-compose.yml", "utf8"),
+    readFile("docker/docker-compose.release.yml", "utf8"),
+    readFile("docker/Caddyfile", "utf8"),
+    readFile("docker/Caddyfile.release", "utf8")
+  ]);
+
+  assert.match(bootstrap, /EVCP_PUBLIC_API_URL/);
+  assert.match(bootstrap, /redirectUris/);
+  assert.match(bootstrap, /auth\/keycloak\/callback/);
+  for (const compose of [developmentCompose, releaseCompose]) {
+    assert.match(compose, /KEYCLOAK_INTERNAL_ISSUER_URL/);
+    assert.match(compose, /KC_HTTP_RELATIVE_PATH: \/auth/);
+    assert.match(compose, /KC_HOSTNAME/);
+  }
+  for (const config of [caddy, releaseCaddy]) {
+    assert.match(config, /handle \/auth\/\*/);
+    assert.match(config, /reverse_proxy keycloak:8080/);
+  }
 });

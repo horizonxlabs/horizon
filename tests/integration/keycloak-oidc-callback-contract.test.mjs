@@ -6,6 +6,8 @@ const { KeycloakOidcService } = await import(
 );
 const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
+const { MemoryCorePersistenceClient, createCoreRepositoryBackedService } = await import("../../apps/platform-api/src/persistence/core-repositories.ts");
+const { createKeycloakSessionIssuer } = await import("../../apps/platform-api/src/keycloak/platform-session-issuer.ts");
 await import("../../apps/platform-api/src/keycloak/platform-session-issuer.ts");
 
 function base64Url(value) {
@@ -21,6 +23,7 @@ function createKeycloakOidcHarness({ groups = ["evcp-users"] } = {}) {
   const issued = [];
   const config = {
     issuerUrl: "https://keycloak.example.test/realms/evcp",
+    internalIssuerUrl: "http://keycloak.internal.test/realms/evcp",
     realm: "evcp",
     platformClientId: "evcp-platform-api",
     platformClientSecret: "server-only-client-secret",
@@ -108,6 +111,28 @@ test("Keycloak login replaces a stale local admin role with current end-user cla
   });
   assert.equal(response.body.data.user.role, "end_user");
   assert.equal(response.body.data.permissions.includes("admin:users:manage"), false);
+});
+
+test("Keycloak login updates the core persistence projection before persistent auth/me", async () => {
+  const services = createPlatformApiServices();
+  const client = new MemoryCorePersistenceClient();
+  const persistentServices = { ...services, corePersistence: createCoreRepositoryBackedService(client), corePersistenceClient: client };
+  const issue = createKeycloakSessionIssuer(persistentServices);
+  await issue({
+    subject: "keycloak-persisted-001", email: "persisted@example.test", name: "Persisted User",
+    groups: ["evcp-creators"], platformRoles: ["creator"], appRoles: {}
+  });
+  const session = await issue({
+    subject: "keycloak-persisted-001", email: "persisted@example.test", name: "Renamed User",
+    groups: ["evcp-users"], platformRoles: ["end_user"], appRoles: {}
+  });
+  const response = await (await import("../../apps/platform-api/src/app-factory.ts")).executePlatformApiRequestAsync(persistentServices, {
+    method: "GET", path: "/auth/me", headers: { authorization: `Bearer ${session.token}` }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.user.email, "persisted@example.test");
+  assert.equal(response.body.data.user.name, "Renamed User");
+  assert.equal(response.body.data.user.role, "end_user");
 });
 
 test("OIDC start binds each app to its permitted return origin", () => {

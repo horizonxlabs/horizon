@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { getMockPermissions } from "@evcp/auth-sdk";
 import type { PlatformRole } from "@evcp/types";
@@ -111,9 +111,16 @@ interface CredentialUserRecord {
   mustChangePassword: boolean;
 }
 
-interface UpdateUserCredentialArgs {
+interface UpdateUserArgs {
   where: { id: string };
-  data: { passwordHash?: string; mustChangePassword?: boolean; passwordUpdatedAt?: Date };
+  data: {
+    passwordHash?: string;
+    mustChangePassword?: boolean;
+    passwordUpdatedAt?: Date;
+    name?: string;
+    status?: string;
+    roles?: { deleteMany: Record<string, never>; create: Array<{ role: { connect: { key: string } } }> };
+  };
 }
 
 /**
@@ -140,7 +147,7 @@ export interface CorePersistenceClient {
     findUnique(
       args: FindUniqueUserArgs
     ): Promise<(PlatformUserRecord & Partial<CredentialUserRecord>) | null>;
-    update(args: UpdateUserCredentialArgs): Promise<{ id: string }>;
+    update(args: UpdateUserArgs): Promise<{ id: string }>;
     create(
       args: CreateUserArgs
     ): Promise<{ id: string; email: string; name: string; status: string }>;
@@ -333,6 +340,9 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
         if (data.passwordHash !== undefined) user.passwordHash = data.passwordHash;
         if (data.mustChangePassword !== undefined)
           user.mustChangePassword = data.mustChangePassword;
+        if (data.name !== undefined) user.name = data.name;
+        if (data.status !== undefined) user.status = data.status as UserStatus;
+        if (data.roles) user.roles = normalizeCreateRoles({ create: data.roles.create });
         return { id: user.id };
       },
       create: async ({ data }) => {
@@ -550,6 +560,30 @@ export function buildPlatformUserRoleRecords(role: string | undefined): Platform
       }
     }
   ];
+}
+
+/** Maintains the local projection used by persistence-backed routes from Keycloak's current claims. */
+export async function upsertKeycloakUserProjection(
+  client: CorePersistenceClient,
+  input: { subject: string; email: string; name: string; role: PlatformRole }
+): Promise<void> {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim() || email;
+  const roles = { deleteMany: {} as Record<string, never>, create: [{ role: { connect: { key: input.role } } }] };
+  const existing = await client.platformUser.findUnique({ where: { email } });
+  if (existing) {
+    await client.platformUser.update({ where: { id: existing.id }, data: { name, status: "active", roles } });
+    return;
+  }
+  await client.platformUser.create({
+    data: {
+      id: `usr_sso_${createHash("sha256").update(input.subject).digest("hex").slice(0, 12)}`,
+      email,
+      name,
+      status: "active",
+      roles: { create: roles.create }
+    }
+  });
 }
 
 function normalizeSensitivity(value: string | null): PlatformProject["dataSensitivity"] {

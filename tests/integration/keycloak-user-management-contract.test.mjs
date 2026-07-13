@@ -26,7 +26,7 @@ function createKeycloakAdminHarness() {
   ]);
   let nextId = 1;
   const config = {
-    issuerUrl: "https://keycloak.example.test/realms/evcp", realm: "evcp",
+    issuerUrl: "https://keycloak.example.test/realms/evcp", internalIssuerUrl: "http://keycloak.internal.test/realms/evcp", realm: "evcp",
     platformClientId: "platform", platformClientSecret: "not-for-browser",
     adminClientId: "admin-service", adminClientSecret: "server-only", callbackUrl: "https://api.example.test/callback"
   };

@@ -2,6 +2,7 @@ import { getMockPermissions } from "@evcp/auth-sdk";
 import { mockUsers } from "@evcp/mock-data";
 import type { PlatformRole } from "@evcp/types";
 import { PlatformAuthSsoService, type PlatformAuthClaims, type PlatformAuthSession, type PlatformUser } from "../platform-services";
+import { upsertKeycloakUserProjection, type CorePersistenceClient } from "../persistence/core-repositories";
 
 declare module "../platform-services" {
   interface PlatformAuthSsoService {
@@ -26,3 +27,19 @@ PlatformAuthSsoService.prototype.issueKeycloakSession = function issueKeycloakSe
     appRoles: claims.appRoles
   });
 };
+
+export function createKeycloakSessionIssuer(input: {
+  authSso: PlatformAuthSsoService;
+  corePersistenceClient?: CorePersistenceClient;
+}): (claims: PlatformAuthClaims) => Promise<PlatformAuthSession> {
+  return async (claims) => {
+    const role = claims.platformRoles[0] as PlatformRole | undefined;
+    if (!role) throw new Error("unmapped_keycloak_group");
+    if (input.corePersistenceClient) {
+      await upsertKeycloakUserProjection(input.corePersistenceClient, {
+        subject: claims.subject, email: claims.email, name: claims.name, role
+      });
+    }
+    return input.authSso.issueKeycloakSession(claims);
+  };
+}

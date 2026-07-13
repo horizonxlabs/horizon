@@ -4,6 +4,7 @@ import { KeycloakOidcService } from "./keycloak/oidc-service";
 import { registerKeycloakOidcRoutes } from "./keycloak/routes";
 import { KeycloakAdminClient } from "./keycloak/admin-client";
 import { KeycloakUserService } from "./keycloak/user-service";
+import { createKeycloakSessionIssuer } from "./keycloak/platform-session-issuer";
 
 const port = Number(process.env.PORT ?? 3100);
 const host = process.env.HOST ?? "127.0.0.1";
@@ -21,7 +22,7 @@ const app = await createPlatformApiApp(services);
 if (process.env.KEYCLOAK_ISSUER_URL) {
   registerKeycloakOidcRoutes(app.getHttpAdapter().getInstance(), new KeycloakOidcService({
     config: readKeycloakConfig(process.env),
-    issueKeycloakSession: (claims) => services.authSso.issueKeycloakSession(claims),
+    issueKeycloakSession: createKeycloakSessionIssuer(services),
     allowedReturnOrigins: { admin: process.env.EVCP_ADMIN_WEB_URL ?? "http://localhost:4100", creator: process.env.EVCP_CREATOR_WEB_URL ?? "http://localhost:4101", store: process.env.EVCP_STORE_WEB_URL ?? "http://localhost:4102" }
   }));
 }

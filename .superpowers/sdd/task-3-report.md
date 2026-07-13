@@ -40,3 +40,9 @@
 - Test-only `test:unit`, `test:integration`, and `test:e2e` commands explicitly set `EVCP_ALLOW_SIMULATE_LOGIN=1`, restoring legacy mock-header fixtures without changing application defaults.
 - The native auth harness can temporarily delete an environment value, and its security regression now verifies that an unset flag rejects mock headers and simulated login.
 - `pnpm check:ci` passed hygiene, install, architecture, lint, and typecheck, then reached unrelated pre-existing unit assertions for removed mock-client APIs; it no longer fails on disabled mock headers.
+
+## Production deployment follow-up
+
+1. RED: added deploy-boundary contracts for Keycloak callback reconciliation, public `/auth/*` proxying with an internal back-channel issuer, and a persistence-backed Keycloak login projection. The new contracts failed because bootstrap only set secrets and OIDC sessions did not project to core persistence.
+2. GREEN: bootstrap now reconciles the Platform API callback from `EVCP_PUBLIC_API_URL`; Keycloak runs under public `/auth` through Caddy while Platform API uses `KEYCLOAK_INTERNAL_ISSUER_URL` for token/JWKS/Admin calls; and session issuance upserts the current Keycloak name/role before it signs a Platform session.
+3. Verification: focused Keycloak unit, integration, user-management, and production contracts passed (15 tests), alongside Platform API and API client typechecks and `git diff --check`.
