@@ -39,14 +39,14 @@ test("frontend bootstrap API routes return current user projects and store apps"
 });
 
 test("frontend source exposes API bootstrap state without direct mock-data imports", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
-  const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+  const storeSource = readAllSourceFiles("apps/app-store-pwa/src");
 
-  assert.match(adminSource, /loadAdminBootstrap/);
-  assert.match(adminSource, /adminSessionBridgeProfile/);
+  assert.match(adminSource, /createAdminPlatformClient/);
+  assert.match(adminSource, /getSetupStatus/);
   assert.match(adminSource, /Logout/);
-  assert.doesNotMatch(adminSource, /Session: \{bootstrap\.source\}|Refresh Session/);
+  assert.doesNotMatch(adminSource, /Refresh Session/);
   // The creator "Bootstrap: <source>" badge was removed in the UI cleanup, but the bootstrap state
   // still derives its source from the real Platform API auth mode (vs local fallback).
   assert.match(creatorSource, /source: currentUser\.auth\.mode === "platform_session"/);

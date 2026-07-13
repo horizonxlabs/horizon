@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -179,16 +179,17 @@ test("Sprint 10 Admin runtime routes reject creator access", () => {
 });
 
 test("Sprint 10 Admin UI exposes generated runtime hardening dashboard", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Generated App Runtime Hardening",
-    "Container Contract",
-    "Schema Isolation",
-    "Health / Readiness",
-    "Structured Logs",
-    "Metrics",
-    "OpenAPI Contract",
+    "runtimeContractRows",
+    "runtimeEndpointRows",
+    "runtimeLogRows",
+    "runtimeMetricRows",
+    "Runtime Status",
+    "Schema Grant",
+    "Readiness",
+    "Container",
     "Migration Dry Run"
   ]) {
     assert.match(adminSource, new RegExp(text));

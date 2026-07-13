@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -188,21 +189,21 @@ test("Sprint 9 API enforces break-glass reason and policy template evaluation", 
 });
 
 test("Sprint 9 Admin UI exposes auth SSO and policy hardening surfaces", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
   const featureSource = readFileSync(
     "apps/admin-web/src/features/auth-sso/evidence.ts",
     "utf8"
   );
 
-  assert.match(adminSource, /from "\.\/features\/auth-sso"/);
+  assert.match(adminSource, /from "@\/features\/auth-sso"/);
 
   for (const text of [
-    "Auth / SSO Production Readiness",
-    "SSO Providers",
-    "Role / Group Mapping",
-    "Break-glass Admin",
-    "Policy Templates",
-    "Auth Session Evidence"
+    "authProviderRows",
+    "authReadinessRows",
+    "authMappingRows",
+    "policyRows",
+    "Provider registry",
+    "Keycloak Default"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }

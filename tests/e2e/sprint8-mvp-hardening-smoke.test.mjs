@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -269,7 +268,7 @@ test("Sprint 8 API exposes monitoring dashboard and filtered audit log", () => {
 
 test("Sprint 8 UI exposes ticket-to-PRD domain traceability monitoring and demo surfaces", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
     "Ticket-to-PRD Change",
@@ -285,11 +284,11 @@ test("Sprint 8 UI exposes ticket-to-PRD domain traceability monitoring and demo 
   }
 
   for (const text of [
-    "MVP Monitoring",
+    "AuditEvidenceSection",
     "Service Health",
     "Audit Filters",
-    "Domain Requests",
-    "Ticket Counts"
+    "domainRequestRows",
+    "Platform API"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }

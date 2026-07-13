@@ -3,13 +3,13 @@ import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const adminApp = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminApp = readAllSourceFiles("apps/admin-web/src");
 const creatorApp = readAllSourceFiles("apps/creator-web/src");
-const storeApp = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+const storeApp = readAllSourceFiles("apps/app-store-pwa/src");
 const navigation = readFileSync("packages/config/src/index.ts", "utf8");
 
 test("admin creator and store shells expose the expected sprint 0 user journeys", () => {
-  assert.match(adminApp, /AI Providers & API Keys/);
+  assert.match(adminApp, /External AI Providers/);
   assert.match(adminApp, /AppShell/);
   assert.match(adminApp, /PageHeader/);
   assert.match(adminApp, /ServiceStrip/);

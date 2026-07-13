@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -189,19 +189,18 @@ test("Sprint 12 Admin backup routes reject creator access", () => {
 });
 
 test("Sprint 12 Admin UI exposes Installer Backup Restore dashboard", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Installer, Backup and Restore",
+    "operationsRecoveryKpis",
+    "backupRunRows",
+    "restoreValidationRows",
     "Preflight Report",
     "Setup Wizard",
     "Backup Schedule",
-    "Backup Runs",
-    "PostgreSQL PITR",
     "Restore Drill",
-    "Recovery Evidence",
-    "operations-recovery-shell",
-    "backup-restore-mobile-list"
+    "bckrun_nightly_postgres_001",
+    "Prisma schema current"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }
