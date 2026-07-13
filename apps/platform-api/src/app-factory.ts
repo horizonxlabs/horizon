@@ -23,7 +23,6 @@ import * as nodeHttp from "node:http";
 import {
   createPlatformApiServices,
   PermissionError,
-  QuotaExceededError,
   ValidationError,
   type AuthResolution,
   type PlatformApiServices,
@@ -57,6 +56,7 @@ import {
 import { createPersistedGovernedAiExecutor } from "./ai-governance/execution-runtime";
 import { PrismaAiExecutionStore } from "./persistence/ai-execution-repository";
 import { handleAiProviderTestCall, handleLegacyAiProviderTestCall } from "./ai-governance/provider-test-route";
+import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
 import {
   createBusinessSettingsRepositoryBackedService,
   createPrismaBusinessSettingsPersistence,
@@ -1239,6 +1239,7 @@ export async function executePlatformApiRequestAsync(
       corePersistence &&
       prdPersistence &&
       workspacePersistence &&
+      governedAiExecutor &&
       request.method === "POST" &&
       workspacePromptMatch
     ) {
@@ -1248,30 +1249,8 @@ export async function executePlatformApiRequestAsync(
       const baseline = await prdPersistence.getCurrent(user, project);
       const prompt = String(request.body?.prompt ?? "");
       const agentMode = resolveWorkspaceAgentMode(request.body);
-      const guardrail = services.guardrails.evaluatePrompt(user, {
-        prompt,
-        scenario: "frontend_coding"
-      });
-
-      if (guardrail.decision === "block") {
-        const blocked = await workspacePersistence.blockPrompt(user, {
-          project,
-          baseline,
-          prompt,
-          guardrail
-        });
-        await corePersistence.recordAudit({
-          actorId: user.id,
-          action: "workspace.prompt.blocked",
-          resourceType: "workspace_task",
-          resourceId: blocked.task.id,
-          severity: "warning",
-          metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
-        });
-        return { status: HttpStatus.OK, body: success(blocked) };
-      }
-
       if (agentMode === "plan") {
+        const guardrail = services.guardrails.evaluatePrompt(user, { prompt, scenario: "frontend_coding" });
         const planned = await workspacePersistence.planPrompt(user, {
           project,
           baseline,
@@ -1288,36 +1267,16 @@ export async function executePlatformApiRequestAsync(
         });
         return { status: HttpStatus.OK, body: success(planned) };
       }
-
-      const route = services.aiGovernance.resolveRoute("frontend_coding");
-      const requestEstimate = 120;
-      const quota = services.aiGovernance.checkQuota("creator", requestEstimate);
-      if (!quota.allowed) {
-        throw new QuotaExceededError(
-          `Creator quota exceeded. Remaining today: ${quota.remainingToday}`
-        );
-      }
-      services.aiGovernance.recordProviderCall();
-      const result = await workspacePersistence.submitPrompt(user, {
-        project,
-        baseline,
-        prompt,
-        guardrail,
-        route: route.primary,
-        tokensUsed: requestEstimate
+      const result = await handlePersistedWorkspacePrompt({
+        actor: user, project, baseline, prompt,
+        requestId: String(request.body?.requestId ?? crypto.randomUUID()),
+        executor: governedAiExecutor,
+        workspace: workspacePersistence,
+        audit: ({ actorId, action, resourceId, severity, metadata }) => corePersistence.recordAudit({
+          actorId, action, resourceType: "workspace_task", resourceId, severity, metadata
+        })
       });
-      await corePersistence.recordAudit({
-        actorId: user.id,
-        action: "workspace.prompt.accepted",
-        resourceType: "workspace_task",
-        resourceId: result.task.id,
-        metadata: {
-          projectId: project.id,
-          previewVersion: result.preview.version,
-          tokensUsed: result.usage?.tokensUsed ?? 0
-        }
-      });
-      return { status: HttpStatus.CREATED, body: success(result) };
+      return { status: result.status, body: success(result.body) };
     }
 
     const workspaceRefreshMatch = request.path.match(
@@ -3955,9 +3914,9 @@ async function registerPlatformRoutes(
     )
   );
   routes.get("/projects/:projectId/workspace", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace`,
         headers: request.headers
@@ -3965,9 +3924,9 @@ async function registerPlatformRoutes(
     )
   );
   routes.post("/projects/:projectId/workspace/prompts", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace/prompts`,
         headers: request.headers,
@@ -3976,9 +3935,9 @@ async function registerPlatformRoutes(
     )
   );
   routes.post("/projects/:projectId/workspace/preview/refresh", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace/preview/refresh`,
         headers: request.headers,
