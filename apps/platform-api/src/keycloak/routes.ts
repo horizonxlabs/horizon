@@ -4,6 +4,7 @@ import type { PlatformUser } from "../platform-services";
 import type { KeycloakUserService } from "./user-service";
 export type { KeycloakUserService } from "./user-service";
 import { failure, success } from "@evcp/api-client";
+import { PlatformSessionError, type PlatformSessionService } from "../auth/platform-session-service";
 
 type Request = { query?: Record<string, unknown>; headers?: Record<string, string | string[] | undefined>; body?: Record<string, unknown>; params?: Record<string, string> };
 type Response = { redirect?: (url: string) => void; status: (code: number) => Response; json: (body: unknown) => void };
@@ -13,7 +14,11 @@ type Routes = {
   put: (path: string, handler: (request: Request, response: Response) => void | Promise<void>) => void;
 };
 
-export function registerKeycloakOidcRoutes(routes: Routes, service: KeycloakOidcService): void {
+export function registerKeycloakOidcRoutes(
+  routes: Routes,
+  service: KeycloakOidcService,
+  sessions?: PlatformSessionService
+): void {
   routes.get("/auth/keycloak/start", (request, response) => {
     const app = request.query?.app;
     const returnTo = request.query?.returnTo;
@@ -40,6 +45,34 @@ export function registerKeycloakOidcRoutes(routes: Routes, service: KeycloakOidc
       response.redirect?.(handoff.toString());
     } catch (error) {
       response.status(400).json({ error: error instanceof Error ? error.message : "keycloak_login_failed" });
+    }
+  });
+  routes.post("/auth/refresh", async (request, response) => {
+    if (!sessions || typeof request.body?.refreshToken !== "string") {
+      response.status(401).json(failure("UNAUTHORIZED", "Invalid refresh token"));
+      return;
+    }
+    try {
+      response.status(200).json(success(await sessions.refresh(request.body.refreshToken)));
+    } catch (error) {
+      const message = error instanceof PlatformSessionError ? "Session refresh rejected" : "Session refresh failed";
+      response.status(401).json(failure("UNAUTHORIZED", message));
+    }
+  });
+  routes.post("/auth/logout", async (request, response) => {
+    const authorization = request.headers?.authorization;
+    const value = Array.isArray(authorization) ? authorization[0] : authorization;
+    const token = value?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!sessions || !token) {
+      response.status(401).json(failure("UNAUTHORIZED", "Missing session token"));
+      return;
+    }
+    try {
+      const session = await sessions.verify(token);
+      await sessions.logout(session.id);
+      response.status(200).json(success({ ok: true }));
+    } catch {
+      response.status(401).json(failure("UNAUTHORIZED", "Invalid session token"));
     }
   });
 }

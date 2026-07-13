@@ -43,6 +43,7 @@ import {
   createCorePersistenceCredentialStore,
   createUserWithRole
 } from "./auth/prisma-credential-store";
+import { resolvePersistedAuth } from "./auth/persistence-auth-resolver";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import {
   createAiGovernanceRepositoryBackedService,
@@ -464,23 +465,7 @@ export function renderPreviewUnavailableHtml(input: {
 </html>`;
 }
 
-async function resolvePersistenceAuth(
-  services: PersistenceAwarePlatformApiServices,
-  headers: HeaderBag
-): Promise<AuthResolution> {
-  if (!services.corePersistence) throw new Error("Core persistence service is not configured");
-  // Resolve claims from the signed session token (or mock header) WITHOUT the in-memory identity,
-  // then load the user from core-persistence (Postgres). This is what lets a Postgres-only user
-  // (e.g. one created via /admin/users, after a process restart clears the mock identity seed)
-  // authenticate on session-backed routes and /auth/change-password.
-  const claims = services.auth.resolveSessionClaims(headers);
-  return {
-    user: await services.corePersistence.getUserByEmail(claims.email),
-    mode: claims.mode,
-    sessionId: claims.sessionId,
-    expiresAt: claims.expiresAt
-  };
-}
+const resolvePersistenceAuth = resolvePersistedAuth;
 
 async function resolvePersistenceUser(
   services: PersistenceAwarePlatformApiServices,
