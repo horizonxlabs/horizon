@@ -1,4 +1,3 @@
-import { type PlatformApiError, type PlatformUserSummary } from "@evcp/api-client";
 import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard, ServiceStrip } from "@evcp/ui";
 import { BrainCircuit, CheckCircle2, KeyRound, LockKeyhole, Route, ShieldCheck } from "lucide-react";
@@ -14,8 +13,8 @@ import { serviceHealthRows } from "@/features/platform-operations";
 import { domainRequestRows } from "@/features/publish-governance";
 import { runtimeContractRows } from "@/features/runtime-hardening";
 import { securityReleaseKpis } from "@/features/security-release-readiness";
-import { buildCreateUserPayload, generateTempPassword } from "@/features/user-management";
-import { clearAdminSession, createAdminPlatformClient, hasValidAdminSession } from "@/shared/platform-client";
+import { KeycloakUserManagement } from "@/features/user-management";
+import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession } from "@/shared/platform-client";
 
 const dashboardKpis = [
   { label: "Provider พร้อมใช้งาน", value: "2", detail: "OpenAI + Anthropic fallback", icon: BrainCircuit },
@@ -35,10 +34,7 @@ function pageFromPath(pathname: string) {
 
 export function AdminConsole() {
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
-  const [sessionActive, setSessionActive] = useState(hasValidAdminSession());
-  const [user, setUser] = useState({ email: "admin@company.com", name: "Platform Admin", role: "admin", tempPassword: "" });
-  const [createdUser, setCreatedUser] = useState<{ summary: PlatformUserSummary; tempPassword: string }>();
-  const [userError, setUserError] = useState("");
+  const [sessionActive, setSessionActive] = useState(() => consumeAdminSessionHandoff() || hasValidAdminSession());
   const client = useMemo(() => (sessionActive ? createAdminPlatformClient() : undefined), [sessionActive]);
   const ai = useAiGovernance(client);
   const page = pageFromPath(window.location.pathname);
@@ -56,19 +52,7 @@ export function AdminConsole() {
     return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)} />;
   }
 
-  const createUser = async () => {
-    setUserError("");
-    try {
-      const payload = buildCreateUserPayload(user);
-      const summary = await createAdminPlatformClient().createUser(payload);
-      setCreatedUser({ summary, tempPassword: payload.tempPassword });
-      setUser({ email: "", name: "", role: "creator", tempPassword: "" });
-    } catch (error) {
-      const apiError = error as PlatformApiError;
-      setUserError(apiError.message || "User creation failed");
-    }
-  };
-  const content = page === "audit-logs" ? <AuditEvidenceSection /> : page === "users" ? <UserCreation user={user} setUser={setUser} error={userError} created={createdUser} onCreate={createUser} /> : page === "ai-providers" || page === "guardrails" ? <AiGovernancePanel ai={ai} /> : <OperationsDashboard page={page} />;
+  const content = page === "audit-logs" ? <AuditEvidenceSection /> : page === "users" && client ? <KeycloakUserManagement client={client} /> : page === "ai-providers" || page === "guardrails" ? <AiGovernancePanel ai={ai} /> : <OperationsDashboard page={page} />;
   return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { clearAdminSession(); setSessionActive(false); }}><LockKeyhole size={16} />Logout</button>}><PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />{content}</AppShell></AdminRoutes>;
 }
 
@@ -84,9 +68,4 @@ function EvidenceOverview() {
 function AiGovernancePanel({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
   return <section className="admin-page-stack"><DecisionPanel tone={disabled ? "warning" : "success"} badge={ai.availability} title={ai.message} lines={["Configuration changes are disabled until Platform API data is available."]} /><section className="ds-grid-2"><SectionCard eyebrow="Provider Registry" title="External AI Providers"><DataTable columns={[{ key: "name", label: "Provider" }, { key: "adapter", label: "Adapter" }, { key: "status", label: "Status" }]} rows={ai.providers} /></SectionCard><SectionCard eyebrow="Guardrails" title="Latest events"><DataTable columns={[{ key: "id", label: "Event" }, { key: "decision", label: "Decision" }, { key: "occurredAt", label: "Time" }]} rows={ai.guardrailEvents} /></SectionCard></section></section>;
-}
-
-function UserCreation({ user, setUser, error, created, onCreate }: { user: { email: string; name: string; role: string; tempPassword: string }; setUser: (value: typeof user) => void; error: string; created?: { summary: PlatformUserSummary; tempPassword: string }; onCreate: () => Promise<void> }) {
-  const update = (field: keyof typeof user, value: string) => setUser({ ...user, [field]: value });
-  return <SectionCard eyebrow="Create Account" title="Create Creator account"><div className="ai-governance-action-panel compact"><label>Email<input type="email" value={user.email} onChange={(event) => update("email", event.target.value)} /></label><label>Name<input value={user.name} onChange={(event) => update("name", event.target.value)} /></label><label>Temp Password<input value={user.tempPassword} onChange={(event) => update("tempPassword", event.target.value)} /></label><button type="button" className="secondary-button" onClick={() => update("tempPassword", generateTempPassword())}><KeyRound size={15} />Generate</button><button type="button" onClick={() => void onCreate()} disabled={!user.email || !user.name || !user.tempPassword}><ShieldCheck size={15} />Create User</button></div>{error ? <DecisionPanel tone="danger" badge="error" title={error} lines={["Fix the field above and try again."]} /> : null}{created ? <DecisionPanel tone="success" badge="temp password" title="Give this to the Creator — they'll change it on first login" lines={[`Email: ${created.summary.email}`, `Temporary password: ${created.tempPassword}`]} /> : null}</SectionCard>;
 }

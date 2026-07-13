@@ -64,7 +64,8 @@ export function StorefrontApp() {
   async function handleSignInBridge() {
     setIsSigningIn(true);
     try {
-      setBootstrap(await signInStoreSessionBridge());
+      signInStoreSessionBridge();
+      return;
     } catch {
       setBootstrap(initialStoreBootstrap);
     } finally {

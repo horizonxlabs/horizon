@@ -19,12 +19,7 @@ export function success<T>(data: T, meta?: Record<string, unknown>): ApiSuccess<
   return { ok: true, data, meta };
 }
 
-export function failure(code: string, message: string, traceId?: string): ApiFailure {
-  return {
-    ok: false,
-    error: { code, message, traceId }
-  };
-}
+export function failure(code: string, message: string, traceId?: string): ApiFailure { return { ok: false, error: { code, message, traceId } }; }
 export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
 export type {
   AppDatabaseColumnDto,
@@ -70,6 +65,7 @@ export type PlatformUserDto = {
   permissions?: string[];
 };
 export type { KeycloakUserDto, CreateKeycloakUserInput } from "./keycloak-user-types";
+export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
   name: string;

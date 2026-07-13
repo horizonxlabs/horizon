@@ -1,9 +1,8 @@
 import {
-  createPlatformApiClient,
   createPlatformSessionStore,
+  startKeycloakLogin,
   type PrdVersionDto
 } from "@evcp/api-client";
-import { creatorSessionBridgeProfile } from "@/features/authentication";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
 import { apiBaseUrl } from "@/shared/runtime-config";
 import type { CreatorBootstrapState } from "@/shared/types";
@@ -12,6 +11,7 @@ import { fallbackSelectedProject } from "@/app/creator-defaults";
 export async function loadCreatorBootstrap(
   selectedProjectKey?: string
 ): Promise<CreatorBootstrapState> {
+  consumeCreatorSessionHandoff();
   const client = createCreatorPlatformClient();
   const currentUser = await client.getCurrentUser();
   const projects = await client.listProjects();
@@ -37,16 +37,21 @@ export async function loadPrdState(
   return { current, versions };
 }
 
-export async function signInCreatorSessionBridge(
-  selectedProjectKey?: string
-): Promise<CreatorBootstrapState> {
+export function signInCreatorSessionBridge(): void {
+  beginCreatorKeycloakLogin();
+}
+
+export function beginCreatorKeycloakLogin(): void {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
-  const bridgeClient = createPlatformApiClient({
-    baseUrl,
-    legacyUserEmail: "admin@company.com"
-  });
-  const session = await bridgeClient.simulateSsoLogin(creatorSessionBridgeProfile);
-  createPlatformSessionStore(window.localStorage).saveSession(session);
-  return loadCreatorBootstrap(selectedProjectKey);
+  window.location.assign(startKeycloakLogin(baseUrl, "creator", window.location.href));
+}
+
+function consumeCreatorSessionHandoff(): void {
+  const handoff = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = handoff.get("evcp_session");
+  const expiresAt = handoff.get("evcp_session_expires_at");
+  if (!token || !expiresAt) return;
+  createPlatformSessionStore(window.localStorage).saveSession({ token, expiresAt });
+  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
 }
