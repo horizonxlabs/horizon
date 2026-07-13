@@ -376,6 +376,28 @@ model AiQuota {
   @@map("ai_quotas")
 }
 
+model AiExecutionEvidence {
+  id                  String   @id
+  requestId           String   @unique @map("request_id")
+  actorUserId         String   @map("actor_user_id")
+  projectId           String?  @map("project_id")
+  scenario            String
+  providerId          String   @map("provider_id")
+  model               String
+  status              String
+  tokensUsed          Int      @map("tokens_used")
+  latencyMs           Int      @map("latency_ms")
+  fallbackUsed        Boolean  @default(false) @map("fallback_used")
+  failureReason       String?  @map("failure_reason")
+  quotaScope          String   @map("quota_scope")
+  quotaTokensReserved Int      @default(0) @map("quota_tokens_reserved")
+  occurredAt          DateTime @default(now()) @map("occurred_at")
+
+  @@index([projectId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@map("ai_execution_evidence")
+}
+
 model GuardrailRule {
   id        String            @id
   name      String
