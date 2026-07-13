@@ -1507,8 +1507,6 @@ async function main() {
     },
     create: {
       id: "psess_sprint9_oidc_001",
-      sessionFamilyId: "psess_sprint9_oidc_001",
-      accessTokenId: "access_sprint9_oidc_001",
       providerConfigId: "authprov_oidc_azure_ad_001",
       userId: "usr_creator",
       sessionTokenHash: "hash_psess_sprint9_oidc_001",

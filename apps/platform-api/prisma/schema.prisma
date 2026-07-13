@@ -1081,8 +1081,8 @@ model AuthProviderConfig {
 
 model PlatformAuthSession {
   id               String   @id
-  sessionFamilyId  String   @map("session_family_id")
-  accessTokenId    String   @map("access_token_id")
+  sessionFamilyId  String   @default(cuid()) @map("session_family_id")
+  accessTokenId    String   @default(cuid()) @map("access_token_id")
   providerConfigId String   @map("provider_config_id")
   userId           String   @map("user_id")
   sessionTokenHash String   @map("session_token_hash")
