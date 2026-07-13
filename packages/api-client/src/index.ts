@@ -69,7 +69,7 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-
+export type { KeycloakUserDto, CreateKeycloakUserInput } from "./keycloak-user-types";
 export type CreatePlatformUserInput = {
   email: string;
   name: string;

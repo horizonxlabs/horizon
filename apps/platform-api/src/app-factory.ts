@@ -14,6 +14,7 @@ import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
+import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
 import { startIdleSweep } from "./workspace-orchestrator/orchestrator";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
@@ -84,20 +85,16 @@ import {
   MemoryGeneratedRuntimePersistenceClient,
   type GeneratedRuntimeRepositoryBackedService
 } from "./persistence/generated-runtime-repositories";
-
 type HeaderBag = Record<string, string | string[] | undefined>;
-
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
   params?: Record<string, string>;
 };
-
 type HttpResponse = {
   status: (code: number) => HttpResponse;
   json: (body: unknown) => void;
 };
-
 type RouteRegistry = {
   get: (
     path: string,
@@ -112,8 +109,8 @@ type RouteRegistry = {
     handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
   ) => void;
 };
-
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
+  keycloakUserManagement?: KeycloakUserService;
   corePersistence?: CoreRepositoryBackedService;
   corePersistenceClient?: CorePersistenceClient;
   credentialService?: PlatformCredentialService;
@@ -124,7 +121,6 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   publishStorePersistence?: PublishStoreRepositoryBackedService;
   generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
 };
-
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
 
@@ -3038,6 +3034,10 @@ async function registerPlatformRoutes(
   services: PersistenceAwarePlatformApiServices
 ): Promise<void> {
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
+
+  if (services.keycloakUserManagement) {
+    registerKeycloakUserManagementRoutes(routes, services.keycloakUserManagement, (headers) => resolvePersistenceUser(services, headers ?? {}));
+  }
 
   routes.get("/health", (request, response) =>
     sendPlatformResponse(
