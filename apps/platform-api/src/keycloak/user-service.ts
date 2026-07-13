@@ -3,6 +3,7 @@ import type { AuditService, PlatformUser } from "../platform-services";
 import type { KeycloakAdminClient } from "./admin-client";
 
 export type KeycloakUserDto = { id: string; email: string; name: string; enabled: boolean; groups: string[]; createdAt?: string };
+export type KeycloakUserPage = { users: KeycloakUserDto[]; first: number; max: number; total: number };
 type KeycloakRecord = { id: string; email?: string; firstName?: string; enabled?: boolean; createdTimestamp?: number };
 type KeycloakGroup = { id: string; name: string };
 const ROLE_GROUP: Record<PlatformRole, string> = { admin: "evcp-admins", creator: "evcp-creators", end_user: "evcp-users" };
@@ -11,10 +12,14 @@ const EVCP_GROUPS = new Set(Object.values(ROLE_GROUP));
 export class KeycloakUserService {
   constructor(private readonly deps: { client: KeycloakAdminClient; audit: AuditService; requireAdmin: (actor: PlatformUser) => void }) {}
 
-  async list(actor: PlatformUser): Promise<KeycloakUserDto[]> {
+  async list(actor: PlatformUser, page: { first: number; max: number }): Promise<KeycloakUserPage> {
     this.deps.requireAdmin(actor);
-    const users = (await this.deps.client.get<KeycloakRecord[]>("/users")).data;
-    return Promise.all(users.map((user) => this.toDto(user)));
+    const query = new URLSearchParams({ first: String(page.first), max: String(page.max) });
+    const [records, total] = await Promise.all([
+      this.deps.client.get<KeycloakRecord[]>(`/users?${query}`),
+      this.deps.client.get<number>("/users/count")
+    ]);
+    return { users: await Promise.all(records.data.map((user) => this.toDto(user))), first: page.first, max: page.max, total: total.data };
   }
 
   async create(actor: PlatformUser, input: { email: string; name: string; role: PlatformRole; temporaryPassword: string }): Promise<KeycloakUserDto> {

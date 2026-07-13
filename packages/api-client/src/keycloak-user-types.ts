@@ -13,3 +13,6 @@ export type CreateKeycloakUserInput = {
   role: "admin" | "creator" | "end_user";
   temporaryPassword: string;
 };
+
+export type KeycloakUserListMeta = { first: number; max: number; total: number };
+export type KeycloakUserListPage = { users: KeycloakUserDto[]; meta: KeycloakUserListMeta };

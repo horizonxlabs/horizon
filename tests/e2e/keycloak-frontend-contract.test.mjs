@@ -21,6 +21,8 @@ test("admin user page exposes Keycloak lifecycle actions", async () => {
   );
   for (const label of ["Create user", "Edit", "Disable", "Enable", "Reset password", "Role", "Next page"])
     assert.match(source, new RegExp(label));
+  assert.match(source, /keycloak\.list\(\{ first: page \* pageSize, max: pageSize \}\)/);
+  assert.match(source, /result\.meta\.total/);
 });
 
 test("Creator consumes a Platform session handoff before its auth gate and Store has no mock identity", async () => {

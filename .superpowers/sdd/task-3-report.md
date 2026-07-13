@@ -46,3 +46,9 @@
 1. RED: added deploy-boundary contracts for Keycloak callback reconciliation, public `/auth/*` proxying with an internal back-channel issuer, and a persistence-backed Keycloak login projection. The new contracts failed because bootstrap only set secrets and OIDC sessions did not project to core persistence.
 2. GREEN: bootstrap now reconciles the Platform API callback from `EVCP_PUBLIC_API_URL`; Keycloak runs under public `/auth` through Caddy while Platform API uses `KEYCLOAK_INTERNAL_ISSUER_URL` for token/JWKS/Admin calls; and session issuance upserts the current Keycloak name/role before it signs a Platform session.
 3. Verification: focused Keycloak unit, integration, user-management, and production contracts passed (15 tests), alongside Platform API and API client typechecks and `git diff --check`.
+
+## Admin path and pagination follow-up
+
+1. RED: URL-contract and pagination tests showed that Keycloak Admin REST and `kcadm` lost the `/auth` relative path, while the user list ignored offsets and could not report a total.
+2. GREEN: Admin/kcadm bases now derive from `KEYCLOAK_INTERNAL_ISSUER_URL`, retaining its relative path. The user endpoint sends Keycloak `first/max`, reads `/users/count`, returns `{ first, max, total }` metadata, and the Admin client/UI request a single server page at a time.
+3. Verification: 15 focused Keycloak unit, integration, and frontend contracts passed; Platform API, API client, and Admin Web typechecks passed; `git diff --check` passed.

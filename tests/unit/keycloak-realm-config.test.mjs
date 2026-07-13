@@ -103,6 +103,8 @@ test("bootstrap reconciles the public callback and compose exposes a public Keyc
   assert.match(bootstrap, /EVCP_PUBLIC_API_URL/);
   assert.match(bootstrap, /redirectUris/);
   assert.match(bootstrap, /auth\/keycloak\/callback/);
+  assert.match(bootstrap, /KEYCLOAK_INTERNAL_ISSUER_URL/);
+  assert.doesNotMatch(bootstrap, /--server http:\/\/keycloak:8080/);
   for (const compose of [developmentCompose, releaseCompose]) {
     assert.match(compose, /KEYCLOAK_INTERNAL_ISSUER_URL/);
     assert.match(compose, /KC_HTTP_RELATIVE_PATH: \/auth/);
@@ -112,4 +114,22 @@ test("bootstrap reconciles the public callback and compose exposes a public Keyc
     assert.match(config, /handle \/auth\/\*/);
     assert.match(config, /reverse_proxy keycloak:8080/);
   }
+});
+
+test("Keycloak Admin client preserves the internal /auth path for its token and REST endpoints", async () => {
+  const { KeycloakAdminClient } = await import("../../apps/platform-api/src/keycloak/admin-client.ts");
+  const { readKeycloakConfig } = await import("../../apps/platform-api/src/keycloak/config.ts");
+  const urls = [];
+  const client = new KeycloakAdminClient({
+    config: { ...readKeycloakConfig(requiredEnvironment) },
+    fetch: async (url) => {
+      urls.push(String(url));
+      return urls.length === 1 ? new Response(JSON.stringify({ access_token: "service-token" })) : new Response(JSON.stringify([]));
+    }
+  });
+  await client.get("/users?first=0&max=1");
+  assert.deepEqual(urls, [
+    "http://keycloak:8080/auth/realms/evcp/protocol/openid-connect/token",
+    "http://keycloak:8080/auth/admin/realms/evcp/users?first=0&max=1"
+  ]);
 });

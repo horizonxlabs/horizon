@@ -56,7 +56,19 @@ export function registerKeycloakUserManagementRoutes(
       response.status(responseStatus).json(failure(unauthenticated ? "UNAUTHORIZED" : forbidden ? "FORBIDDEN" : "KEYCLOAK_USER_MANAGEMENT_FAILED", error instanceof Error ? error.message : "Keycloak user management failed"));
     }
   };
-  routes.get("/admin/keycloak/users", handle(200, (user) => service.list(user)));
+  routes.get("/admin/keycloak/users", async (request, response) => {
+    try {
+      const user = await resolveUser(request.headers);
+      const page = pagination(request.query);
+      const result = await service.list(user, page);
+      response.status(200).json(success(result.users, { first: result.first, max: result.max, total: result.total }));
+    } catch (error) {
+      const unauthenticated = error instanceof Error && error.name === "MockAuthError";
+      const forbidden = error instanceof Error && error.name === "PermissionError";
+      const responseStatus = unauthenticated ? 401 : forbidden ? 403 : 400;
+      response.status(responseStatus).json(failure(unauthenticated ? "UNAUTHORIZED" : forbidden ? "FORBIDDEN" : "KEYCLOAK_USER_MANAGEMENT_FAILED", error instanceof Error ? error.message : "Keycloak user management failed"));
+    }
+  });
   routes.post("/admin/keycloak/users", handle(201, (user, request) => service.create(user, {
     email: String(request.body?.email ?? ""), name: String(request.body?.name ?? ""), role: String(request.body?.role ?? "") as never, temporaryPassword: String(request.body?.temporaryPassword ?? "")
   })));
@@ -65,4 +77,11 @@ export function registerKeycloakUserManagementRoutes(
   routes.post("/admin/keycloak/users/:id/enable", handle(200, (user, request) => service.setEnabled(user, String(request.params?.id ?? ""), true)));
   routes.put("/admin/keycloak/users/:id/groups", handle(200, (user, request) => service.setRole(user, String(request.params?.id ?? ""), String(request.body?.role ?? "") as never)));
   routes.post("/admin/keycloak/users/:id/reset-password", handle(200, async (user, request) => { await service.resetPassword(user, String(request.params?.id ?? ""), String(request.body?.temporaryPassword ?? "")); return { id: String(request.params?.id ?? "") }; }));
+}
+
+function pagination(query: Request["query"]): { first: number; max: number } {
+  const first = query?.first === undefined ? 0 : Number(query.first);
+  const max = query?.max === undefined ? 50 : Number(query.max);
+  if (!Number.isInteger(first) || first < 0 || !Number.isInteger(max) || max < 1 || max > 100) throw new Error("invalid_pagination");
+  return { first, max };
 }

@@ -65,6 +65,10 @@ export class KeycloakAdminClient {
 
   private adminBaseUrl(): string {
     const issuer = new URL(this.deps.config.internalIssuerUrl);
-    return `${issuer.origin}/admin/realms/${encodeURIComponent(this.deps.config.realm)}`;
+    const realmPath = `/realms/${encodeURIComponent(this.deps.config.realm)}`;
+    const prefix = issuer.pathname.endsWith(realmPath)
+      ? issuer.pathname.slice(0, -realmPath.length).replace(/\/$/, "")
+      : "";
+    return `${issuer.origin}${prefix}/admin/realms/${encodeURIComponent(this.deps.config.realm)}`;
   }
 }

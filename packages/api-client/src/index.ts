@@ -64,7 +64,7 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-export type { KeycloakUserDto, CreateKeycloakUserInput } from "./keycloak-user-types";
+export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage } from "./keycloak-user-types";
 export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
@@ -1113,6 +1113,10 @@ export class PlatformApiClient {
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return (await this.requestWithMeta<T>(path, init)).data;
+  }
+
+  async requestWithMeta<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: Record<string, unknown> }> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
       headers: this.headers(init.headers)
@@ -1129,7 +1133,7 @@ export class PlatformApiClient {
         status: response.status
       });
     }
-    return envelope.data;
+    return { data: envelope.data, meta: envelope.meta };
   }
 
   // The workspace container-publish routes (publish/promote/deployments) live on a separate raw

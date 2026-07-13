@@ -2,9 +2,10 @@
 set -eu
 
 kcadm=/opt/keycloak/bin/kcadm.sh
+keycloak_server=${KEYCLOAK_INTERNAL_ISSUER_URL%/realms/$KEYCLOAK_REALM}
 
 "$kcadm" config credentials \
-  --server http://keycloak:8080 \
+  --server "$keycloak_server" \
   --realm master \
   --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
   --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
