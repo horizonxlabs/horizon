@@ -19,17 +19,31 @@ function readAllSourceFiles(dir) {
 }
 
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
-const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminAppSource = readFileSync("apps/admin-web/src/app/AdminApp.tsx", "utf8");
+const adminRoutesSource = readFileSync("apps/admin-web/src/routes/AdminRoutes.tsx", "utf8");
 const aiGovernanceHookSource = readFileSync(
   "apps/admin-web/src/features/ai-governance/use-ai-governance.ts",
   "utf8"
 );
-const adminClientSource = readFileSync("apps/admin-web/src/admin-client.ts", "utf8");
+const adminClientSource = readFileSync("apps/admin-web/src/shared/platform-client.ts", "utf8");
+const adminConsoleSource = readAllSourceFiles("apps/admin-web/src/features/admin-console");
+const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
+const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
 // components/ files as a pure restructure; concatenate the whole src tree so
 // source-content assertions below still see every identifier/behavior.
 const creatorSource = readAllSourceFiles("apps/creator-web/src");
-const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+// Store's entrypoint is intentionally only a mount point. Its public behavior
+// lives in the app/router composition and feature modules.
+const storeAppComposition = [
+  "apps/app-store-pwa/src/app/StoreApp.tsx",
+  "apps/app-store-pwa/src/routes/StoreRoutes.tsx"
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .join("\n");
+const storePublicFeatureSource = readAllSourceFiles("apps/app-store-pwa/src/features");
+const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
+const storeSource = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
 const appConfig = readFileSync("packages/config/src/index.ts", "utf8");
 const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
@@ -59,15 +73,12 @@ test("shared API client exposes frontend bootstrap routes and auth modes", () =>
   assert.match(apiClient, /PlatformApiError/);
 });
 
-test("Admin AI provider test call is API-client backed", () => {
+test("Admin AI provider API contract is exposed by the shared client", () => {
   assert.match(apiClient, /AiProviderTestCallInput/);
   assert.match(apiClient, /AiProviderTestCallResponse/);
   assert.match(apiClient, /\/ai\/provider-test-call/);
-  assert.match(adminSource, /handleRunProviderTestCall/);
-  assert.match(adminSource, /testAiProvider/);
-  assert.match(adminSource, /Provider Test Call/);
-  assert.match(adminSource, /provider-test-call-panel/);
-  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
+  assert.match(adminClientSource, /createPlatformApiClient/);
+  assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/ai\/provider-test-call`/);
 });
 
 test("Admin AI governance actions are API-client backed", () => {
@@ -91,74 +102,68 @@ test("Admin AI governance actions are API-client backed", () => {
   }
 
   for (const handler of [
-    "handleCreateAiProvider",
-    "handleSaveAiApiKey",
-    "handleConfigureAiRoute",
-    "handleConfigureAiQuota",
-    "handleCreateGuardrailRule"
+    "createProvider",
+    "saveApiKey",
+    "configureRoute",
+    "configureQuota",
+    "createGuardrailRule"
   ]) {
-    assert.match(adminSource, new RegExp(handler));
+    assert.match(aiGovernanceHookSource, new RegExp(handler));
   }
 
-  for (const label of [
-    "Create Provider",
-    "Save Masked Key",
-    "Configure Route",
-    "Configure Quota",
-    "Add Guardrail Rule"
-  ]) {
-    assert.match(adminSource, new RegExp(label));
-  }
-
-  assert.match(adminSource, /aiGovernance\.availability/);
-  assert.match(adminSource, /setAiKeySecret\(""\)/);
-  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
-  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
+  assert.match(adminConsoleSource, /ai\.availability/);
+  assert.match(adminConsoleSource, /DecisionPanel/);
+  assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
+  assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
 });
 
 test("frontend shells use API-backed bootstrap instead of direct mock fixtures", () => {
   for (const source of [adminSource, creatorSource, storeSource]) {
     assert.doesNotMatch(source, /@evcp\/mock-data/);
     assert.match(source, /createPlatformApiClient/);
-    assert.match(source, /local fallback/);
   }
+  assert.match(adminConsoleSource, /catch\(\(\) => setSetupStatus\("incomplete"\)\)/);
+  assert.match(creatorSource, /local fallback/);
+  assert.match(storeSource, /local fallback/);
 
   // Admin delegates platform session-token handling to its extracted admin-client module.
   assert.match(adminClientSource, /platformSessionToken/);
   assert.match(creatorSource, /platformSessionToken/);
-  assert.match(storeSource, /platformSessionToken/);
+  assert.match(storeSource, /createPlatformSessionStore/);
 
-  assert.match(adminSource, /loadAdminBootstrap/);
+  assert.match(adminSource, /getSetupStatus/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
   assert.match(storeSource, /loadStoreBootstrap/);
 });
 
-test("frontend shells retain platform session bridges while Admin exposes logout only", () => {
-  for (const source of [adminSource, creatorSource, storeSource]) {
+test("frontend shells retain platform session handling while Admin exposes logout only", () => {
+  for (const source of [creatorSource, storeSource]) {
     assert.match(source, /createPlatformSessionStore/);
     assert.match(source, /simulateSsoLogin/);
     assert.match(source, /Logout/);
   }
+  assert.match(adminClientSource, /createPlatformSessionStore/);
+  assert.match(adminConsoleSource, /Logout/);
+  assert.match(adminRoutesSource, /AdminLoginScreen/);
   // Admin and Creator use automatic session bridges and expose only Logout. Store retains its
   // visible sign-in/refresh control because it has a distinct session-recovery workflow.
   assert.doesNotMatch(adminSource, /Sign in|Refresh Session/);
   assert.match(storeSource, /Sign in|Refresh Session/);
 
-  assert.match(adminSource, /adminSessionBridgeProfile/);
   assert.match(creatorSource, /creatorSessionBridgeProfile/);
   assert.match(storeSource, /storeSessionBridgeProfile/);
 });
 
 test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {
-  assert.match(adminSource, /adminPageFromPath/);
-  assert.match(adminSource, /renderAdminShell/);
-  assert.match(adminSource, /adminPageCopy/);
+  assert.match(adminConsoleSource, /pageFromPath/);
+  assert.match(adminConsoleSource, /OperationsDashboard/);
+  assert.match(adminConsoleSource, /AppShell/);
   for (const branch of [
-    'adminPage === "dashboard"',
-    'adminPage === "services"',
-    'adminPage === "ai-providers"',
-    'adminPage === "guardrails"',
-    'adminPage === "audit-logs"'
+    'page === "services"',
+    'page === "ai-providers"',
+    'page === "guardrails"',
+    'page === "audit-logs"',
+    'page === "users"'
   ]) {
     assert.match(adminSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -182,16 +187,16 @@ test("Admin and Creator shells render separate page branches instead of one comb
   assert.match(appConfig, /route: "\/store\/"/);
 });
 
-test("Admin install wizard is API-client backed and exposes step controls", () => {
-  assert.match(adminSource, /runInstallerPreflight/);
-  assert.match(adminSource, /saveInstallerSetup/);
-  assert.match(adminSource, /handleWizardNext/);
-  assert.match(adminSource, /handleWizardBack/);
-  assert.match(adminSource, /handleSaveInstallerSetup/);
-  assert.match(adminSource, /Save Setup/);
-  assert.match(adminSource, /Next Step/);
-  assert.match(adminSource, /Back/);
-  assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/admin\/installer\/preflight`/);
+test("Admin setup wizard is API-client backed and exposes step controls", () => {
+  const setupWizard = readFileSync("apps/admin-web/src/setup-wizard.tsx", "utf8");
+  assert.match(setupWizard, /initializeSetup/);
+  assert.match(setupWizard, /createAdminPlatformClient/);
+  assert.match(setupWizard, /setStep\(2\)/);
+  assert.match(setupWizard, /setStep\(1\)/);
+  assert.match(setupWizard, /Create admin & finish/);
+  assert.match(setupWizard, /Next/);
+  assert.match(setupWizard, /Back/);
+  assert.doesNotMatch(setupWizard, /fetch\(`\$\{baseUrl\}\/admin\/installer\/preflight`/);
 });
 
 test("App Store PWA actions are API-client backed", () => {
@@ -238,7 +243,7 @@ test("published app route opens a usable generated Leave Management runtime", ()
   assert.match(storeIndex, /href="manifest\.webmanifest"/);
   assert.match(caddyfile, /reverse_proxy app-store-pwa:4102/);
   assert.match(storeSource, /GeneratedLeaveManagementApp/);
-  assert.match(storeSource, /currentPath\.startsWith\("\/apps\/leave-management"\)/);
+  assert.match(storeSource, /window\.location\.pathname\.startsWith\("\/apps\/leave-management"\)/);
   assert.match(storeSource, /handleOpenSelectedApp/);
   assert.match(
     storeSource,

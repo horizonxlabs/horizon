@@ -9,7 +9,9 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { apiBaseUrl, saveAdminSession } from "./admin-client";
+// This legacy root-level screen remains on the migration baseline. Use a relative shared-module
+// import so isolated Node tests can load it, while keeping its platform client in the shared layer.
+import { apiBaseUrl, saveAdminSession } from "./shared/platform-client";
 
 interface LoginResult {
   token: string;

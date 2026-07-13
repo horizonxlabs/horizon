@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -143,20 +143,20 @@ test("Sprint 13 API validates license offline cache and enforces restricted acti
 });
 
 test("Sprint 13 Admin UI exposes Observability and License dashboard", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Observability and License",
+    "observabilityLicenseKpis",
+    "generatedAppHealthRows",
+    "queueBackpressureRows",
+    "telemetryExportRows",
+    "upgradeCompatibilityRows",
+    "licenseEnforcementRows",
     "Service Health",
-    "Generated App Health",
-    "Queue Backpressure",
+    "Leave Management",
     "Telemetry Export",
-    "Upgrade Compatibility",
-    "Rollback Report",
     "License Validation",
-    "License Enforcement",
-    "observability-license-shell",
-    "license-enforcement-mobile-list"
+    "License Enforcement"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }

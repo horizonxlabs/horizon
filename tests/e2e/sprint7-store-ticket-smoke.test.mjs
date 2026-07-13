@@ -192,7 +192,7 @@ test("Sprint 7 API routes tickets to Creator inbox and denies invisible ticket s
 });
 
 test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow", () => {
-  const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
+  const storeSource = readAllSourceFiles("apps/app-store-pwa/src");
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   assert.equal(existsSync("apps/app-store-pwa/public/manifest.webmanifest"), true);

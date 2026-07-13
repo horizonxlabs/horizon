@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { normalizeWorkspaceMode, persistWorkspaceMode, readWorkspaceMode, workspaceModeStorageKey } =
-  await import("../../apps/creator-web/src/lib/workspace-mode.ts");
+  await import("../../apps/creator-web/src/features/workspace/workspace-mode.ts");
 
 function createMemoryStorage(seed = {}) {
   const data = new Map(Object.entries(seed));

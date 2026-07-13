@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { vibeActionVerb, vibeActionIcon, VIBE_ACTION_VERBS } = await import(
-  "../../apps/creator-web/src/lib/vibe-actions.ts"
-);
+const { vibeActionVerb, vibeActionIcon, VIBE_ACTION_VERBS } =
+  await import("../../apps/creator-web/src/features/workspace/vibe-actions.ts");
 
 test("vibeActionVerb: returns the active verb while running, for every known type", () => {
   assert.equal(vibeActionVerb("file", "running"), "Creating");

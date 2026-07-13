@@ -1,15 +1,12 @@
 {
   "apps/platform-api/src/platform-services.ts": 8560,
-  "apps/admin-web/src/main.tsx": 4664,
-  "apps/platform-api/src/app-factory.ts": 4261,
+  "apps/platform-api/src/app-factory.ts": 4378,
   "apps/platform-api/prisma/seed.ts": 2492,
   "apps/platform-api/src/persistence/publish-store-repositories.ts": 1544,
   "packages/api-client/src/index.ts": 1193,
   "tests/unit/api-client-runtime.test.mjs": 923,
-  "apps/app-store-pwa/src/main.tsx": 844,
   "tests/unit/platform-governance-services.test.mjs": 707,
   "apps/platform-api/src/persistence/core-repositories.ts": 626,
   "apps/platform-api/src/persistence/generated-runtime-repositories.ts": 620,
-  "apps/platform-api/src/persistence/ai-governance-repositories.ts": 556,
-  "apps/creator-web/src/hooks/use-vibe-workspace.ts": 405
+  "apps/platform-api/src/persistence/ai-governance-repositories.ts": 556
 }

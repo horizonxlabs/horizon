@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -84,19 +84,21 @@ test("Sprint 14 API validates uploads release checklist and sensitive redaction"
 });
 
 test("Sprint 14 Admin UI exposes Security Release Readiness dashboard", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Security Release Readiness",
+    "securityReleaseKpis",
+    "tlsSessionRows",
+    "secretRedactionRows",
+    "uploadValidationRows",
+    "releaseChecklistRows",
+    "rtmRegressionRows",
     "TLS Enforcement",
     "Session Policy",
     "Secret Redaction",
-    "Upload Validation",
-    "Public / External Checklist",
-    "Sensitive Log Redaction",
+    "payload.exe",
     "RTM Regression",
-    "security-release-shell",
-    "security-release-mobile-list"
+    "TLS required before public exposure"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }

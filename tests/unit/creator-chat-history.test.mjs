@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapChatHistoryToVibeMessages } from "../../apps/creator-web/src/lib/chat-history.ts";
+import { mapChatHistoryToVibeMessages } from "../../apps/creator-web/src/features/workspace/chat-history.ts";
 
 test("mapChatHistoryToVibeMessages: keeps only user/assistant turns", () => {
   const out = mapChatHistoryToVibeMessages([

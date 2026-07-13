@@ -13,10 +13,11 @@ import assert from "node:assert/strict";
 // We stub the browser globals the render path reads (window/localStorage/document/fetch) BEFORE
 // importing the app modules. Effects do not run under static rendering, so no network happens.
 
+const localStorageValues = new Map();
 const localStorageStub = {
-  getItem: () => null,
-  setItem() {},
-  removeItem() {}
+  getItem: (key) => localStorageValues.get(key) ?? null,
+  setItem: (key, value) => localStorageValues.set(key, value),
+  removeItem: (key) => localStorageValues.delete(key)
 };
 globalThis.localStorage ??= localStorageStub;
 globalThis.window ??= {
@@ -47,14 +48,26 @@ globalThis.React = React;
 const { renderToStaticMarkup } = await import("react-dom/server");
 
 const base = "../../apps/creator-web/src";
-const { useCreatorApp } = await import(`${base}/hooks/use-creator-app.tsx`);
-const { ProjectsPage } = await import(`${base}/pages/ProjectsPage.tsx`);
-const { WorkspacePage } = await import(`${base}/pages/WorkspacePage.tsx`);
-const { PrdPage } = await import(`${base}/pages/PrdPage.tsx`);
-const { UsersPage } = await import(`${base}/pages/UsersPage.tsx`);
-const { PublishPage } = await import(`${base}/pages/PublishPage.tsx`);
-const { TicketsPage } = await import(`${base}/pages/TicketsPage.tsx`);
-const { DefaultPage } = await import(`${base}/pages/DefaultPage.tsx`);
+const main = await import("node:fs/promises").then((fs) =>
+  fs.readFile("apps/creator-web/src/main.tsx", "utf8")
+);
+const routes = await import("node:fs/promises").then((fs) =>
+  fs.readFile("apps/creator-web/src/routes/CreatorRoutes.tsx", "utf8")
+);
+assert.match(main, /@\/app\/CreatorApp/);
+assert.match(routes, /@\/features\/projects/);
+assert.doesNotMatch(main, /function CreatorAuthGate/);
+
+const { useCreatorApp } = await import(`${base}/app/use-creator-app.tsx`);
+const { CreatorApp } = await import(`${base}/app/CreatorApp.tsx`);
+const { CreatorRoutes } = await import(`${base}/routes/CreatorRoutes.tsx`);
+const { ProjectsPage } = await import(`${base}/features/projects`);
+const { WorkspacePage } = await import(`${base}/features/workspace`);
+const { PrdPage } = await import(`${base}/features/prd`);
+const { UsersPage } = await import(`${base}/features/users`);
+const { PublishPage } = await import(`${base}/features/publish`);
+const { TicketsPage } = await import(`${base}/features/tickets`);
+const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
   ProjectsPage,
@@ -79,6 +92,46 @@ test("useCreatorApp renders without a ReferenceError (catches dropped imports/re
   assert.doesNotThrow(() =>
     renderWithHook((app) => React.createElement("div", null, String(app.creatorPage ?? "?")))
   );
+});
+
+test("CreatorApp composes the login auth gate when no Creator session exists", () => {
+  localStorageValues.clear();
+  const html = renderToStaticMarkup(React.createElement(CreatorApp));
+  assert.match(html, /creator-auth-screen/);
+  assert.doesNotMatch(html, /Workspace view/);
+});
+
+test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
+  localStorageValues.set("evcp_session", "creator-session");
+  localStorageValues.set("evcp_session_expires_at", new Date(Date.now() + 60_000).toISOString());
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderToStaticMarkup(React.createElement(CreatorApp));
+  assert.match(html, /Workspace view/);
+  localStorageValues.clear();
+});
+
+const ROUTE_CASES = [
+  ["projects", "/creator", /รายการโปรเจกต์/],
+  ["workspace", "/creator/projects/project-1", /Workspace view/],
+  ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
+  ["users", "/creator/projects/project-1/users", /App users roles/],
+  ["publish", "/creator/projects/project-1/publish", /Publish app/],
+  ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/]
+];
+
+for (const [page, pathname, expected] of ROUTE_CASES) {
+  test(`CreatorRoutes maps ${page} to its capability screen`, () => {
+    window.location.pathname = pathname;
+    const html = renderWithHook((app) => React.createElement(CreatorRoutes, { app }));
+    assert.match(html, expected);
+  });
+}
+
+test("CreatorRoutes retains the default dashboard fallback", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(CreatorRoutes, { app: { ...app, creatorPage: "unexpected" } })
+  );
+  assert.match(html, /Database and frontend versions/);
 });
 
 for (const [name, Page] of Object.entries(PAGES)) {

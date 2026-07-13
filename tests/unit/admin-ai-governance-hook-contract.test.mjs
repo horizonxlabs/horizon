@@ -4,12 +4,12 @@ import test from "node:test";
 
 const source = readFileSync("apps/admin-web/src/features/ai-governance/use-ai-governance.ts", "utf8");
 const featureApi = readFileSync("apps/admin-web/src/features/ai-governance/index.ts", "utf8");
-const adminApp = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const adminApp = readFileSync("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
 
 test("AI governance is imported through its feature public API", () => {
   assert.match(featureApi, /export \{ useAiGovernance \} from "\.\/use-ai-governance"/);
   assert.match(featureApi, /export \{ canMutateAiGovernance \} from "\.\/status"/);
-  assert.match(adminApp, /from "\.\/features\/ai-governance"/);
+  assert.match(adminApp, /from "@\/features\/ai-governance"/);
   assert.doesNotMatch(adminApp, /\.\/hooks\/use-ai-governance/);
   assert.doesNotMatch(adminApp, /\.\/lib\/ai-governance-status/);
 });

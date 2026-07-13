@@ -4,7 +4,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const TARGET_ROOTS = new Set(["app", "features", "shared", "routes", "assets", "mocks", "test"]);
+const TARGET_ROOTS = new Set(["app", "routes", "features", "shared"]);
 const LEGACY_ROOTS = new Set(["components", "hooks", "lib", "pages", "data"]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa"];

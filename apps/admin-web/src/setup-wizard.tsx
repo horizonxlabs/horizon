@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
-import { createAdminPlatformClient } from "./admin-client";
+import { createAdminPlatformClient } from "@/shared/platform-client";
 
 interface BusinessForm {
   businessName: string;

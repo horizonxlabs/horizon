@@ -11,6 +11,7 @@ test("frontend ADR defines the dependency direction", () => {
   assert.match(adr, /app → routes → features → shared/);
   assert.match(adr, /Shared modules must never import feature, route, or app modules/);
   assert.match(adr, /index\.ts is the only cross-feature public API/);
+  assert.match(adr, /Component state.*URL state.*Server state.*Global client state/s);
 });
 
 test("legacy baseline is sorted and is app source only", () => {
@@ -25,6 +26,7 @@ test("architecture checker rejects forbidden source boundaries", () => {
     ["apps/demo/src/shared/table.ts", "import { User } from '@/features/users';", "shared modules"],
     ["apps/demo/src/features/a/api/client.ts", "import { UserTable } from '@/features/users/components/UserTable';", "public @/features/users index.ts API"],
     ["apps/demo/src/components/NewCard.tsx", "export const NewCard = () => null;", "legacy root components"],
+    ["apps/demo/src/assets/new-icon.ts", "export const icon = 'new';", "legacy root assets"],
     ["apps/demo/src/features/users/pages/UsersPage.tsx", "import { Button } from '../../../shared/Button';", "must use @/ aliases"]
   ];
   try {
@@ -86,6 +88,7 @@ test("developer docs describe the required feature-first workflow", () => {
   const quality = readFileSync("docs/testing/code-quality.md", "utf8");
   assert.match(architecture, /features\/<feature-name>/);
   assert.match(architecture, /Feature public API/);
+  assert.match(architecture, /Component state.*URL state.*Server state.*Global client state/s);
   assert.match(quality, /pnpm check:frontend-architecture/);
   assert.match(quality, /legacy baseline/);
 });

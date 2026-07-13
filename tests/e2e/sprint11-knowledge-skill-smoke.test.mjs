@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -360,19 +360,18 @@ test("Sprint 11 workspace prompt returns governed knowledge and skill metadata",
 });
 
 test("Sprint 11 Admin UI exposes Knowledge and Skill Governance dashboard", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Knowledge and Skill Governance",
-    "Knowledge Library",
-    "Version Approval",
-    "Scoped Retrieval",
-    "Skill Library",
-    "Skill Versioning",
-    "Skill Assignment",
-    "Workspace Context",
-    "knowledge-skill-governance-shell",
-    "governance-mobile-list"
+    "knowledgeSourceRows",
+    "skillLibraryRows",
+    "skillAssignmentRows",
+    "Knowledge active",
+    "Pending approvals",
+    "Retrieval pass",
+    "Active skills",
+    "HR Leave Policy Handbook",
+    "Frontend Developer Leave Skill"
   ]) {
     assert.match(adminSource, new RegExp(text));
   }

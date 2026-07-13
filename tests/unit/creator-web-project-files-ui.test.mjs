@@ -2,9 +2,19 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const workspacePage = readFileSync("apps/creator-web/src/pages/WorkspacePage.tsx", "utf8");
-const vibeHook = readFileSync("apps/creator-web/src/hooks/use-vibe-workspace.ts", "utf8");
-const helpers = readFileSync("apps/creator-web/src/hooks/creator-app-helpers.ts", "utf8");
+const workspacePage = readFileSync(
+  "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
+  "utf8"
+);
+const vibeHook = readFileSync(
+  "apps/creator-web/src/features/workspace/use-vibe-workspace.ts",
+  "utf8"
+);
+const projectFilesHook = readFileSync(
+  "apps/creator-web/src/features/workspace/use-project-files.ts",
+  "utf8"
+);
+const helpers = readFileSync("apps/creator-web/src/features/workspace/api.ts", "utf8");
 
 test("Creator workspace exposes project file upload controls and status chips", () => {
   assert.match(workspacePage, /type="file"/);
@@ -16,9 +26,10 @@ test("Creator workspace exposes project file upload controls and status chips", 
 });
 
 test("Creator workspace hook uploads files and sends selected attachment ids to chat", () => {
-  assert.match(vibeHook, /initializeProjectFileUpload/);
-  assert.match(vibeHook, /completeProjectFileUpload/);
+  assert.match(projectFilesHook, /initializeProjectFileUpload/);
+  assert.match(projectFilesHook, /completeProjectFileUpload/);
   assert.match(vibeHook, /selectedAttachmentIds/);
+  assert.match(projectFilesHook, /selectedAttachmentIds/);
   assert.match(vibeHook, /attachmentIds/);
   assert.match(helpers, /attachmentIds/);
   assert.doesNotMatch(helpers, /if \(after\) return/);
