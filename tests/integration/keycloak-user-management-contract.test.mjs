@@ -8,6 +8,14 @@ const { AuditService, createPlatformApiServices } = await import("../../apps/pla
 
 function createKeycloakAdminHarness() {
   const services = createPlatformApiServices();
+  const adminSession = services.authSso.issueKeycloakSession({
+    subject: "keycloak-admin-001", email: "admin@company.com", name: "Admin",
+    groups: ["evcp-admins"], platformRoles: ["admin"], appRoles: {}
+  });
+  const creatorSession = services.authSso.issueKeycloakSession({
+    subject: "keycloak-creator-001", email: "creator@company.com", name: "Creator",
+    groups: ["evcp-creators"], platformRoles: ["creator"], appRoles: {}
+  });
   const audit = new AuditService();
   const users = new Map();
   const groups = new Map([
@@ -27,7 +35,7 @@ function createKeycloakAdminHarness() {
     const method = options.method ?? "GET";
     if (path.endsWith("/protocol/openid-connect/token")) return json({ access_token: "service-token" });
     if (path === "/groups" && method === "GET") return json([...groups.values()]);
-    if (path === "/users" && method === "GET") return json([...users.values()].map(({ groups: ignored, ...user }) => user));
+    if (path === "/users" && method === "GET") return json([...users.values()].map(({ groups: _groups, ...user }) => user));
     if (path === "/users" && method === "POST") {
       const body = JSON.parse(String(options.body)); const id = `user_${nextId++}`;
       users.set(id, { id, email: body.email, firstName: body.firstName, enabled: body.enabled, createdTimestamp: 0, groups: [] });
@@ -37,7 +45,7 @@ function createKeycloakAdminHarness() {
     if (!match) return new Response("not found", { status: 404 });
     const [, id, action, groupId] = match; const user = users.get(id);
     if (!user) return new Response("not found", { status: 404 });
-    if (!action && method === "GET") { const { groups: ignored, ...record } = user; return json(record); }
+    if (!action && method === "GET") { const { groups: _groups, ...record } = user; return json(record); }
     if (!action && method === "PUT") { Object.assign(user, JSON.parse(String(options.body))); return new Response(null, { status: 204 }); }
     if (action === "groups" && method === "GET") return json(user.groups.map((name) => groups.get(name)));
     if (action === "groups" && method === "PUT") { user.groups = [...user.groups, [...groups.values()].find((group) => group.id === groupId).name]; return new Response(null, { status: 204 }); }
@@ -49,16 +57,16 @@ function createKeycloakAdminHarness() {
   const handlers = new Map();
   const routes = { get: (path, handler) => handlers.set(`GET ${path}`, handler), post: (path, handler) => handlers.set(`POST ${path}`, handler), put: (path, handler) => handlers.set(`PUT ${path}`, handler) };
   registerKeycloakUserManagementRoutes(routes, userService, (headers) => services.auth.resolveCurrentUser(headers ?? {}));
-  const request = async (email, method, path, body) => {
+  const request = async (session, method, path, body) => {
     const key = `${method} ${path.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/users\/[^/]+$/, "/users/:id")}`;
     const handler = handlers.get(key);
     let status = 200; let responseBody;
-    await handler({ headers: email ? { "x-mock-user-email": email } : {}, body, params: path.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: path.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
+    await handler({ headers: session ? { authorization: `Bearer ${session.token}` } : {}, body, params: path.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: path.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
     return { status, body: responseBody };
   };
   return {
-    asAdmin: (method, path, body) => request("admin@company.com", method, path, body),
-    asCreator: (method, path, body) => request("creator@company.com", method, path, body),
+    asAdmin: (method, path, body) => request(adminSession, method, path, body),
+    asCreator: (method, path, body) => request(creatorSession, method, path, body),
     asAnonymous: (method, path, body) => request(undefined, method, path, body),
     addGroup: (id, name) => users.get(id).groups.push(name), audit
   };

@@ -28,3 +28,9 @@
 2. RED: the focused suite failed because create suppressed `auth.keycloak_user.role_changed` and `MockAuthError` was translated to 400 rather than 401.
 3. GREEN: create now audits the assigned role change, and the route adapter maps authentication resolution failures to the normal 401/`UNAUTHORIZED` envelope.
 4. Verification: `node --import tsx --test tests/integration/keycloak-user-management-contract.test.mjs` passed 5 tests; both package typechecks and `git diff --check` passed.
+
+## CI regression follow-up
+
+- Root cause for the stale-role contract: the Keycloak session issuer bypassed `simulateLogin`, so it did not refresh the in-memory identity that bearer-session resolution reads. It now re-enters the Keycloak provider mapping/provisioning path, making the newest Keycloak groups authoritative.
+- Root cause for the management-contract failures after the auth hardening task: its harness relied on mock headers, which are intentionally disabled by default. The harness now issues Keycloak-backed Platform Auth bearer sessions.
+- Verification: `pnpm exec oxlint --deny-warnings tests/integration/keycloak-user-management-contract.test.mjs`, both Keycloak integration contracts (9 passing tests), Platform API typecheck, and `git diff --check` passed.
