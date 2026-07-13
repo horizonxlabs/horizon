@@ -184,7 +184,7 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
     "Configure Route",
     "Configure Quota",
     "Add Guardrail Rule",
-    "aiGovernanceSource",
+    "aiGovernance.availability",
     "Scenario Routing",
     "Token Quota",
     "Guardrail Rules",
@@ -196,4 +196,11 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
   }
 
   assert.doesNotMatch(adminSource, /sk-[A-Za-z0-9]/);
+});
+
+test("Admin governance renders unavailable guidance instead of fallback data", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(source, /aria-live="polite"/);
+  assert.match(source, /Refresh AI governance data/);
+  assert.doesNotMatch(source, /local fallback rows remain visible/);
 });

@@ -20,6 +20,7 @@ function readAllSourceFiles(dir) {
 
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+const aiGovernanceHookSource = readFileSync("apps/admin-web/src/hooks/use-ai-governance.ts", "utf8");
 const adminClientSource = readFileSync("apps/admin-web/src/admin-client.ts", "utf8");
 // The creator-web CreatorApp component was split across hooks/, pages/, and
 // components/ files as a pure restructure; concatenate the whole src tree so
@@ -67,6 +68,11 @@ test("Admin AI provider test call is API-client backed", () => {
 });
 
 test("Admin AI governance actions are API-client backed", () => {
+  assert.match(adminSource, /useAiGovernance/);
+  assert.match(adminSource, /AI governance data is unavailable/);
+  assert.doesNotMatch(adminSource, /Provider save failed; local fallback rows remain visible/);
+  assert.doesNotMatch(adminSource, /replace-before-production/);
+
   for (const method of [
     "listAiProviders",
     "listAiApiKeys",
@@ -78,11 +84,10 @@ test("Admin AI governance actions are API-client backed", () => {
     "listGuardrailEvents"
   ]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
-    assert.match(adminSource, new RegExp(method));
+    assert.match(aiGovernanceHookSource, new RegExp(method));
   }
 
   for (const handler of [
-    "loadAiGovernanceState",
     "handleCreateAiProvider",
     "handleSaveAiApiKey",
     "handleConfigureAiRoute",
@@ -102,7 +107,7 @@ test("Admin AI governance actions are API-client backed", () => {
     assert.match(adminSource, new RegExp(label));
   }
 
-  assert.match(adminSource, /aiGovernanceSource/);
+  assert.match(adminSource, /aiGovernance\.availability/);
   assert.match(adminSource, /setAiKeySecret\(""\)/);
   assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
   assert.doesNotMatch(adminSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
