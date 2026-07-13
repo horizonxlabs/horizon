@@ -55,14 +55,26 @@ async function reserveCreatorQuota(client: AiGovernancePersistenceClient, reques
 
 async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
-  const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST", headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.2 })
-  });
-  const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { total_tokens?: unknown } };
-  if (!response.ok) throw new Error(`AI provider returned HTTP ${response.status}`);
-  const text = String(body.choices?.[0]?.message?.content ?? "").trim();
-  if (!text) throw new Error("AI provider returned an empty completion");
-  const tokensUsed = Number(body.usage?.total_tokens ?? Math.max(1, Math.ceil((prompt.length + text.length) / 4)));
-  return { text, tokensUsed: Number.isFinite(tokensUsed) && tokensUsed > 0 ? tokensUsed : 1, latencyMs: 1, providerId: provider.id, model: provider.model };
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST", headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.2 })
+      });
+      if (!response.ok) {
+        if (response.status >= 500 && attempt === 0) continue;
+        throw new Error(`AI provider returned HTTP ${response.status}`);
+      }
+      const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { total_tokens?: unknown } };
+      const text = String(body.choices?.[0]?.message?.content ?? "").trim();
+      if (!text) throw new Error("AI provider returned an empty completion");
+      const tokensUsed = Number(body.usage?.total_tokens ?? Math.max(1, Math.ceil((prompt.length + text.length) / 4)));
+      return { text, tokensUsed: Number.isFinite(tokensUsed) && tokensUsed > 0 ? tokensUsed : 1, latencyMs: 1, providerId: provider.id, model: provider.model };
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) continue;
+    }
+  }
+  throw lastError;
 }
