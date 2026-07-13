@@ -9,7 +9,7 @@ import {
 } from "../../scripts/quality/check-changed.mjs";
 
 const fixture = "tests/unit/.large-file-ratchet-fixture.mjs";
-const preExistingFile = "apps/admin-web/src/app/AdminApp.tsx";
+const preExistingFile = "packages/api-client/src/index.ts";
 
 test("large-file baseline cannot grandfather paths absent from --staged or --base comparison", () => {
   writeFileSync(fixture, "// fixture\n".repeat(401));

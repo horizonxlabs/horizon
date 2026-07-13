@@ -112,21 +112,25 @@ test("AppShell provides a professional persistent navigation layout", () => {
   );
 });
 
-test("admin governance screen consumes shared design system components", () => {
-  const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+test("AdminApp composes a governance screen that consumes shared design system components", () => {
+  const adminAppSource = readFileSync("apps/admin-web/src/app/AdminApp.tsx", "utf8");
+  const adminConsoleSource = readFileSync(
+    "apps/admin-web/src/features/admin-console/AdminConsole.tsx",
+    "utf8"
+  );
 
-  assert.match(adminSource, /from "@evcp\/ui"/);
+  assert.match(adminAppSource, /import \{ AdminConsole \} from "@\/features\/admin-console"/);
+  assert.match(adminConsoleSource, /from "@evcp\/ui"/);
   for (const component of [
     "PageHeader",
     "MetricCard",
     "SectionCard",
     "DataTable",
     "DecisionPanel",
-    "WorkflowRail",
     "ServiceStrip"
   ]) {
-    assert.match(adminSource, new RegExp(`\\b${component}\\b`));
-    assert.doesNotMatch(adminSource, new RegExp(`function ${component}\\b`));
+    assert.match(adminConsoleSource, new RegExp(`\\b${component}\\b`));
+    assert.doesNotMatch(adminConsoleSource, new RegExp(`function ${component}\\b`));
   }
 });
 
