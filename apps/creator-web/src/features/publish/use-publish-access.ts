@@ -5,8 +5,6 @@ import {
   type PublishReviewResponse
 } from "@evcp/api-client";
 import { useState } from "react";
-import { accessRequests, appMembers, appRoles, pendingInvites } from "@/features/users";
-import { publishChecklist } from "./fixtures";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
 import { loadCreatorPublishState } from "./api";
@@ -34,7 +32,7 @@ export function usePublishAccess({
       role: member.roleName,
       status: member.status,
       lastAccess: member.lastAccessAt ? member.lastAccessAt.slice(0, 10) : "pending"
-    })) ?? appMembers;
+    })) ?? [];
   const visiblePendingInvites =
     appAccessSnapshot?.invitations.map((invite) => ({
       email: invite.email,
@@ -42,7 +40,7 @@ export function usePublishAccess({
       invitedBy: "Creator User",
       expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
       status: invite.status
-    })) ?? pendingInvites;
+    })) ?? [];
   const visibleAccessRequests =
     appAccessSnapshot?.accessRequests.map((request) => ({
       id: request.id,
@@ -51,20 +49,20 @@ export function usePublishAccess({
       reason: request.reason,
       submitted: request.createdAt.slice(0, 10),
       status: request.status
-    })) ?? accessRequests;
+    })) ?? [];
   const visibleAppRoles =
     appAccessSnapshot?.roles.map((role) => ({
       role: role.name,
       permissions: role.permissions.join(", "),
       members: String(role.memberCount),
       status: role.memberCount > 0 ? "active" : "ready"
-    })) ?? appRoles;
+    })) ?? [];
   const visiblePublishChecklist =
     publishReview?.checklist.map((item) => ({
       check: item.label,
       state: item.status,
       detail: item.detail
-    })) ?? publishChecklist;
+    })) ?? [];
   const visibleDeployment = publishResult?.deployment;
   const visibleRegistryEntry =
     publishResult?.registryEntry ??
@@ -112,12 +110,15 @@ export function usePublishAccess({
     const pendingRequest = appAccessSnapshot?.accessRequests.find(
       (request) => request.status === "pending"
     );
+    if (!pendingRequest) {
+      setPublishMessage("No pending access request is available from Platform API.");
+      return;
+    }
     setIsApprovingAccess(true);
     try {
       const client = createCreatorPlatformClient();
-      const targetRequestId = pendingRequest?.id ?? "appreq_local_pending";
       await client.decideAppAccessRequest(selectedProject.id, {
-        requestId: targetRequestId,
+        requestId: pendingRequest.id,
         decision: "approved"
       });
       await refreshCreatorPublishState(selectedProject.id);
