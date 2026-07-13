@@ -2678,7 +2678,7 @@ export class PlatformAuthSsoService {
     this.sessions.push(session);
     this.audit.record({
       actorId: actor.id,
-      action: "auth.sso_login.succeeded",
+      action: provider.type === "keycloak" ? "auth.keycloak_login.succeeded" : "auth.sso_login.succeeded",
       resourceType: "platform_auth_session",
       resourceId: session.id,
       metadata: {
