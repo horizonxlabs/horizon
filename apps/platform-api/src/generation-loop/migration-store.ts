@@ -1,15 +1,15 @@
 import type { MigrationRecord } from "@evcp/types";
 
 export interface MigrationStore {
-  recordMigration(input: { projectId: string; name: string; sql: string; commitSha: string }): MigrationRecord;
-  listMigrations(projectId: string): MigrationRecord[];
+  recordMigration(input: { projectId: string; name: string; sql: string; commitSha: string }): Promise<MigrationRecord>;
+  listMigrations(projectId: string): Promise<MigrationRecord[]>;
 }
 
 export function createMemoryMigrationStore(): MigrationStore {
   const byProject = new Map<string, MigrationRecord[]>();
   let counter = 0;
   return {
-    recordMigration(input) {
+    async recordMigration(input) {
       counter += 1;
       const record: MigrationRecord = {
         id: `mig-${counter}`,
@@ -24,7 +24,7 @@ export function createMemoryMigrationStore(): MigrationStore {
       byProject.set(input.projectId, list);
       return record;
     },
-    listMigrations(projectId) {
+    async listMigrations(projectId) {
       return [...(byProject.get(projectId) ?? [])];
     }
   };

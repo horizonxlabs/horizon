@@ -244,7 +244,7 @@ export function createActionRunner(deps: {
           };
         }
       }
-      deps.migrations.recordMigration({
+      await deps.migrations.recordMigration({
         projectId: input.projectId,
         name: action.name,
         sql: action.sql,

@@ -16,6 +16,7 @@ route is not marked persistent merely because it has a repository-shaped service
 | Workspace metadata | workspace Prisma repository | `persistence/workspace-repositories.ts` | Prisma |
 | Publishing and Store records | publish/store Prisma repository | `persistence/publish-store-repositories.ts` | Prisma |
 | Generated runtime records | generated-runtime Prisma repository | `persistence/generated-runtime-repositories.ts` | Prisma |
+| Generation-loop applied SQL migrations | `WorkspaceMigrationRecord` Prisma repository | migration `20260713000001_workspace_migration_records` | Prisma |
 
 ## Deliberately non-authoritative state
 
@@ -24,7 +25,7 @@ route is not marked persistent merely because it has a repository-shaped service
 | `Memory*PersistenceClient` implementations | deterministic unit tests and explicit `EVCP_CORE_PERSISTENCE=memory` dev mode | prohibited for pilot; retain as test doubles |
 | `MemoryPlatformSessionRepository` | dev/test session lifecycle | selected only in explicit memory mode; never selected for `prisma` |
 | `platform-services.ts` simulated SSO/session arrays | legacy contracts and regression tests | Keycloak production path issues persistent Platform sessions; remove after remaining legacy contract consumers are migrated |
-| `generation-loop/*` in-memory stores | transient build/chat orchestration and local development | migrate durable chat/checkpoint/run state before live generation becomes pilot authority |
+| generation checkpoints/run coordination | transient build orchestration and local development | migrate durable checkpoint/run ledger before live generation becomes pilot authority; chat and applied SQL migration evidence are now persistent |
 | `publish/*` in-memory adapters | deterministic publish tests | production factory must use registry/runtime adapters and persisted deployment records |
 | frontend `fallback*`, fixtures, initial bootstrap objects | offline UI fixtures | pilot configuration must show loading/empty/error instead of treating fixture mutation as success; Store is fail-closed as of this change |
 
@@ -45,7 +46,7 @@ route is not marked persistent merely because it has a repository-shaped service
 ## Remaining Phase 4 blockers
 
 - Real PostgreSQL route-level integration suite (not only repository/unit contracts).
-- Durable generation chat/checkpoint/run ledger and production secret-store/KMS integration.
+- Durable generation checkpoint/run ledger and production secret-store/KMS integration.
 - Remove or gate Creator's remaining fixture fallbacks and validate every Admin operational panel
   against API data.
 - Backup/restore drill for PostgreSQL, MinIO and Keycloak export.

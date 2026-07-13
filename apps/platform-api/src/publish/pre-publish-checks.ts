@@ -10,7 +10,7 @@ export async function runPrePublishChecks(
   const failures: string[] = [];
 
   const filesAtCommit = await deps.git.listMigrationNames(input.projectId, input.commitSha);
-  const applied = new Set(deps.migrations.listMigrations(input.projectId).map((m) => m.name));
+  const applied = new Set((await deps.migrations.listMigrations(input.projectId)).map((m) => m.name));
   const pending = filesAtCommit.filter((name) => !applied.has(name));
   if (pending.length > 0) {
     failures.push(`pending migrations: ${pending.join(", ")}`);

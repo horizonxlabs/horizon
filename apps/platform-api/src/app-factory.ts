@@ -12,6 +12,7 @@ import { registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
+import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
@@ -3299,7 +3300,9 @@ async function registerPlatformRoutes(
   // generated shell/file/migration actions still use the generation placeholder.
   // Shared across the generation loop AND the publish pre-checks so publish sees the migrations the
   // generation loop actually applied (rather than a fresh, empty store).
-  const sharedMigrationStore = createMemoryMigrationStore();
+  const sharedMigrationStore = resolveCorePersistenceMode() === "prisma"
+    ? await createPrismaWorkspaceMigrationStore(process.env.DATABASE_URL)
+    : createMemoryMigrationStore();
   const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
