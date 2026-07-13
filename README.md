@@ -133,10 +133,9 @@ pnpm check:changed --base origin/main
 
 ## Documentation
 
+- [Platform service design](./docs/architecture/platform-service-design.md)
 - [Private-server installation](./docs/operations/real-mvp-install.md)
 - [Production candidate readiness](./docs/delivery/production-candidate-readiness.md)
-- [MVP pending tasks](./docs/MVP_PENDING_TASKS.md)
-- [Original product requirements](./docs/original_prd.md)
 
 ## Current Status
 
