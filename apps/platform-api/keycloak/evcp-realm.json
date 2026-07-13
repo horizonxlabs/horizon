@@ -47,10 +47,7 @@
       "clientAuthenticatorType": "client-secret",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "serviceAccountClientRoles": {
-        "realm-management": ["query-users", "view-users", "manage-users"]
-      }
+      "serviceAccountsEnabled": true
     }
   ]
 }

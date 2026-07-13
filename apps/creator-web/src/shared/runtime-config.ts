@@ -7,6 +7,5 @@ export function apiBaseUrl(): string | undefined {
   ) {
     return "http://127.0.0.1:3100";
   }
-  if (!configured && import.meta.env.DEV) return undefined;
   return (configured || "/api").replace(/\/$/, "");
 }

@@ -26,6 +26,12 @@ set_client_secret() {
 set_client_secret "$KEYCLOAK_PLATFORM_CLIENT_ID" "$KEYCLOAK_PLATFORM_CLIENT_SECRET"
 set_client_secret "$KEYCLOAK_ADMIN_CLIENT_ID" "$KEYCLOAK_ADMIN_CLIENT_SECRET"
 
+admin_client_id=$("$kcadm" get clients -r "$KEYCLOAK_REALM" -q "clientId=$KEYCLOAK_ADMIN_CLIENT_ID" --fields id --format csv --noquotes)
+service_account_id=$("$kcadm" get "clients/$admin_client_id/service-account-user" -r "$KEYCLOAK_REALM" --fields id --format csv --noquotes)
+for role in query-users view-users manage-users; do
+  "$kcadm" add-roles -r "$KEYCLOAK_REALM" --uid "$service_account_id" --cclientid realm-management --rolename "$role"
+done
+
 platform_client_id=$("$kcadm" get clients -r "$KEYCLOAK_REALM" -q "clientId=$KEYCLOAK_PLATFORM_CLIENT_ID" --fields id --format csv --noquotes)
 callback_url="${EVCP_PUBLIC_API_URL%/}/auth/keycloak/callback"
 "$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s "redirectUris=[\"$callback_url\"]"

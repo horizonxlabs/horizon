@@ -71,18 +71,17 @@ services:
       - "${EVCP_KEYCLOAK_PORT:-8081}:8080"
     volumes:
       - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
+    networks:
+      - evcp-internal
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
+          "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
         ]
       interval: 10s
       timeout: 5s
       retries: 30
-    networks:
-      - evcp-internal
-
   keycloak-bootstrap:
     image: quay.io/keycloak/keycloak:26.2
     container_name: evcp-keycloak-bootstrap
