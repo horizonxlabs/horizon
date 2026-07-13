@@ -7,7 +7,11 @@ Issue: #26
 
 The Sprint 0-14 stack is an integrated mock-first MVP prototype. This document defines the first concrete step toward a real usable MVP: a reproducible private-server install foundation.
 
-This phase does not claim that auth, AI generation, generated app runtime and all frontend data flows are production-real yet. It creates the install contract required before those mock-to-real conversions can be verified end to end.
+This install contract deploys server-owned Keycloak authentication alongside the
+Platform API. Browser sign-in uses OpenID Connect **Authorization Code with PKCE**;
+Keycloak owns credentials and EVCP receives only the validated, short-lived Platform
+session. AI generation, generated-app runtime, and some frontend data flows remain
+separate operational concerns.
 
 ## Install Steps
 
@@ -25,6 +29,8 @@ Required secrets include:
 - `SESSION_SECRET`
 - `ENCRYPTION_KEY`
 - `KEYCLOAK_ADMIN_PASSWORD`
+- `KEYCLOAK_PLATFORM_CLIENT_SECRET`
+- `KEYCLOAK_ADMIN_CLIENT_SECRET`
 - `MINIO_ROOT_PASSWORD`
 - `STORAGE_SECRET_KEY`
 - `AI_API_KEY`
@@ -32,6 +38,13 @@ Required secrets include:
 Required runtime mode:
 
 - `EVCP_CORE_PERSISTENCE=prisma` for private-server core API persistence
+- `KEYCLOAK_REALM=evcp` unless deploying an intentionally different imported realm
+- `KEYCLOAK_ISSUER_URL` reachable by `platform-api`, for example
+  `http://keycloak:8080/realms/evcp` in the bundled network
+- `EVCP_PUBLIC_API_URL` set to the externally reachable Platform API origin; its
+  `/auth/keycloak/callback` URL must match the Keycloak client redirect URI exactly
+- `EVCP_ADMIN_WEB_URL`, `EVCP_CREATOR_WEB_URL`, and `EVCP_STORE_WEB_URL` set to the
+  exact browser origins allowed to receive the post-login handoff
 
 3. Run preflight.
 
@@ -76,7 +89,24 @@ pnpm install:real
 docker compose --env-file .env -f docker/docker-compose.yml up -d
 ```
 
-7. Verify the stack and installer contract.
+7. Confirm Keycloak is ready and its confidential clients were bootstrapped.
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml ps
+```
+
+`keycloak` must be healthy and `keycloak-bootstrap` must have completed
+successfully before `platform-api` starts. Compose imports the versioned
+`apps/platform-api/keycloak/evcp-realm.json`; `keycloak-bootstrap` then applies the
+server-only Platform API and admin-service client secrets. Do not put either secret
+in the realm JSON, frontend configuration, or a browser redirect URL.
+
+8. Create the first EVCP administrator in Keycloak. Sign in to the Keycloak Admin
+Console with `KEYCLOAK_ADMIN`, select the `evcp` realm, create the user named by
+`FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_NAME`, assign `evcp-admins`, and require a
+password update. The Keycloak master administrator is not itself an EVCP user.
+
+9. Verify the stack and installer contract.
 
 ```bash
 pnpm verify:installer
@@ -111,7 +141,8 @@ The Admin Console now presents the install as an explicit operations journey rat
 | Deploy Stack | System Admin | `docker compose --env-file .env -f docker/docker-compose.yml up -d` | Deploy Stack |
 | Migrate + Seed | Platform API | `pnpm --filter @evcp/platform-api exec prisma migrate deploy` plus seed | Run Prisma migrate deploy and seed |
 | Verify Health | IT Admin | health endpoints, Caddy `/api/*` route and service readiness | Verify Health |
-| First Admin Login | Platform Admin | `GET /api/auth/me` through a Platform Auth session | First Admin Login |
+| First Admin Bootstrap | Keycloak Admin | `evcp` user in `evcp-admins` with required password update | Create first application admin in Keycloak Admin Console |
+| First Admin Login | Platform Admin | `GET /api/auth/me` through a Keycloak-issued Platform Auth session | Continue with Keycloak in Admin Web |
 
 The journey does not mark deployment, migration or health as complete from UI text alone. It follows the same state source as the wizard: preflight report status, saved setup evidence, active step and installer report history.
 
@@ -138,11 +169,27 @@ The installer report includes:
 | `app-store-pwa` | End User App Store |
 | `caddy` | Private-server reverse proxy |
 
-## Remaining Mock-to-Real Work
+## Keycloak authentication operations
 
-- Replace simulated SSO login with the real Keycloak/OIDC callback and remove mock auth header fallback after all clients send Platform Auth bearer sessions.
-- Continue replacing static frontend demo sections with API calls; primary user/project/store bootstrap now uses `@evcp/api-client`.
-- Move service state from in-memory/demo records to Prisma-backed repositories.
-- Add the production worker/runtime fetcher around the live AI Provider Adapter path, including retry and circuit-breaker policy.
-- Replace mock generated app preview with real build/deploy/runtime flow.
-- Add E2E tests that use real login, database state and deployed generated app routes.
+The imported `evcp` realm provides two confidential clients:
+
+- `evcp-platform-api` permits Authorization Code login and is the only client that
+  may use the callback URL `${EVCP_PUBLIC_API_URL}/auth/keycloak/callback`.
+- `evcp-admin-service` is a service-account client limited to Keycloak user
+  management permissions.
+
+The realm groups are `evcp-admins`, `evcp-creators`, and `evcp-users`; they map to
+the EVCP `admin`, `creator`, and `end_user` roles. Keep direct grants disabled and
+do not create public browser clients for EVCP.
+
+Production Compose pins `EVCP_ALLOW_SIMULATE_LOGIN=0`. Mock identity headers and
+`/admin/auth/simulate-login` are disabled, while legacy native credential requests
+are rejected and must not be used as a production identity journey. Test-only
+harnesses may enable that flag explicitly, but it must never be enabled in a deployed
+`.env` or Compose override.
+
+For Keycloak readiness failures, inspect the `keycloak` and `keycloak-bootstrap`
+container logs, confirm the issuer resolves from `platform-api`, and verify that the
+public API URL, callback URL, and frontend origins match exactly. Missing or unmapped
+group claims, a failed discovery/JWKS request, or an invalid callback transaction
+are fail-closed errors; begin a fresh login after correcting configuration.
