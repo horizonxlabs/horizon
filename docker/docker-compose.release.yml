@@ -60,7 +60,7 @@ services:
     image: quay.io/keycloak/keycloak:26.2
     container_name: evcp-keycloak
     restart: unless-stopped
-    command: start-dev --import-realm --http-port=8080
+    command: start --import-realm --http-enabled=true --http-port=8080
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
@@ -78,6 +78,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+    networks:
+      - evcp-internal
+
+  keycloak-bootstrap:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-keycloak-bootstrap
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM is required}
+      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID is required}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET:?KEYCLOAK_PLATFORM_CLIENT_SECRET is required}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID is required}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
+    entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
+    volumes:
+      - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
     networks:
       - evcp-internal
 
@@ -187,6 +208,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
     networks:
       - evcp-internal
 
