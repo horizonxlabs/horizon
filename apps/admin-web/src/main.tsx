@@ -6,7 +6,6 @@ import {
   type AiProviderTestCallResponse,
   type AiQuotaDto,
   type AiScenarioRouteDto,
-  type CreatePlatformUserInput,
   type CurrentUserResponse,
   type GuardrailRuleDto,
   type InstallerPreflightInput,
@@ -63,6 +62,7 @@ import {
   authReadinessRows,
   policyRows
 } from "./features/auth-sso";
+import { buildCreateUserPayload, generateTempPassword } from "./features/user-management";
 import { AdminLoginScreen } from "./login-screen";
 import { SetupWizard } from "./setup-wizard";
 
@@ -903,28 +903,9 @@ async function runProviderTestCall(
   return createAdminPlatformClient().testAiProvider(input);
 }
 
-export function buildCreateUserPayload(input: {
-  email: string;
-  name: string;
-  role: string;
-  tempPassword: string;
-}): CreatePlatformUserInput {
-  return {
-    email: input.email.trim().toLowerCase(),
-    name: input.name.trim(),
-    role: input.role.trim() || "creator",
-    tempPassword: input.tempPassword
-  };
-}
-
-export function generateTempPassword(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
-  let out = "";
-  for (let i = 0; i < 12; i += 1) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
-}
-
-async function createAdminUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
+async function createAdminUser(
+  input: ReturnType<typeof buildCreateUserPayload>
+): Promise<PlatformUserSummary> {
   return createAdminPlatformClient().createUser(input);
 }
 

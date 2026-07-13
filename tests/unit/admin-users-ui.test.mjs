@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { buildCreateUserPayload, generateTempPassword } = await import(
-  "../../apps/admin-web/src/main.tsx"
+  "../../apps/admin-web/src/features/user-management/index.ts"
 );
 
 test("buildCreateUserPayload trims + defaults role to creator", () => {
