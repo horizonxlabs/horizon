@@ -39,10 +39,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const creatorNavItems = createCreatorNavigation(selectedProject);
 
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
-  const publishAccess = usePublishAccess({
-    selectedProject,
-    visiblePreviewVersion: vibeWorkspace.visiblePreview.version
-  });
+  const publishAccess = usePublishAccess({ selectedProject });
 
   const visiblePrdSections = currentPrdVersion?.sections?.length
     ? currentPrdVersion.sections.map((section) => ({

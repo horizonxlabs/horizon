@@ -51,6 +51,18 @@ const caddyfile = readFileSync("docker/Caddyfile", "utf8");
 const creatorViteConfig = readFileSync("apps/creator-web/vite.config.ts", "utf8");
 const storeViteConfig = readFileSync("apps/app-store-pwa/vite.config.ts", "utf8");
 const storeIndex = readFileSync("apps/app-store-pwa/index.html", "utf8");
+const storeBootstrapSource = readFileSync(
+  "apps/app-store-pwa/src/features/storefront/bootstrap.ts",
+  "utf8"
+);
+const creatorWorkspaceHookSource = readFileSync(
+  "apps/creator-web/src/features/workspace/use-vibe-workspace.ts",
+  "utf8"
+);
+const creatorPublishHookSource = readFileSync(
+  "apps/creator-web/src/features/publish/use-publish-access.ts",
+  "utf8"
+);
 
 test("shared API client exposes frontend bootstrap routes and auth modes", () => {
   assert.match(apiClient, /class PlatformApiClient/);
@@ -123,8 +135,9 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
     assert.match(source, /createSessionAwareFetch/);
   }
   assert.match(adminConsoleSource, /catch\(\(\) => setSetupStatus\("incomplete"\)\)/);
-  assert.match(creatorSource, /local fallback/);
-  assert.match(storeSource, /local fallback/);
+  assert.doesNotMatch(creatorWorkspaceHookSource, /Local fallback/);
+  assert.doesNotMatch(creatorPublishHookSource, /Local fallback/);
+  assert.doesNotMatch(storeBootstrapSource, /local fallback/);
 
   // Admin delegates platform session-token handling to its extracted admin-client module.
   assert.match(adminClientSource, /platformSessionToken/);
@@ -134,6 +147,14 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   assert.match(adminSource, /getSetupStatus/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
   assert.match(storeSource, /loadStoreBootstrap/);
+});
+
+test("Store and Creator fail closed instead of creating local success evidence", () => {
+  assert.match(storeBootstrapSource, /status: "loading" \| "ready" \| "error"/);
+  for (const source of [storeBootstrapSource, creatorWorkspaceHookSource, creatorPublishHookSource]) {
+    assert.doesNotMatch(source, /Local fallback (generated|produced|recorded|kept)/);
+    assert.doesNotMatch(source, /fallbackWorkspacePromptResult/);
+  }
 });
 
 test("frontend shells retain platform session handling while Admin exposes logout only", () => {

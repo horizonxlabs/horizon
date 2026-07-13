@@ -8,44 +8,20 @@ import type { AppStoreItem } from "@evcp/types";
 import { createStorePlatformClient, startStoreKeycloakLogin } from "./platform-client";
 
 export type StoreBootstrapState = {
-  userName: string;
-  email: string;
+  status: "loading" | "ready" | "error";
+  userName?: string;
+  email?: string;
   myApps: AppStoreItem[];
   availableApps: AppStoreItem[];
-  source: "Platform API" | "local fallback";
+  source: "Platform API";
+  error?: string;
 };
 
-export const fallbackStoreApps: AppStoreItem[] = [
-  {
-    id: "app_leave_management",
-    slug: "leave-management",
-    name: "Leave Management",
-    description:
-      "Submit, approve and track leave requests inside the private enterprise app store.",
-    owner: "Creator User",
-    route: "/apps/leave-management",
-    myRole: "Employee",
-    accessStatus: "active",
-    health: "healthy"
-  },
-  {
-    id: "app_procurement",
-    slug: "procurement-request",
-    name: "Procurement Request",
-    description: "Request purchasing approval with governed access.",
-    owner: "Finance Ops",
-    route: "/apps/procurement-request",
-    accessStatus: "available",
-    health: "healthy"
-  }
-];
-
 export const initialStoreBootstrap: StoreBootstrapState = {
-  userName: "End User",
-  email: "user@company.com",
-  myApps: fallbackStoreApps.filter((app) => app.accessStatus === "active"),
-  availableApps: fallbackStoreApps.filter((app) => app.accessStatus !== "active"),
-  source: "local fallback"
+  status: "loading",
+  myApps: [],
+  availableApps: [],
+  source: "Platform API"
 };
 
 function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
@@ -74,11 +50,12 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
     [client.getCurrentUser(), client.listStoreApps()]
   );
   return {
+    status: "ready",
     userName: storeHome.profile.userName || currentUser.user.name,
     email: storeHome.profile.email || currentUser.user.email,
     myApps: storeHome.myApps.map(appCardToStoreItem),
     availableApps: storeHome.availableApps.map(appCardToStoreItem),
-    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+    source: "Platform API"
   };
 }
 
@@ -101,5 +78,9 @@ function consumeStoreSessionHandoff(): void {
 
 export function clearStoreSessionBridge(): StoreBootstrapState {
   createPlatformSessionStore(window.localStorage).clearSession();
-  return initialStoreBootstrap;
+  return {
+    ...initialStoreBootstrap,
+    status: "error",
+    error: "Your session has ended. Sign in again to access the app store."
+  };
 }

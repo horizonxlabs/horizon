@@ -13,7 +13,6 @@ import {
 import { StorefrontSummary } from "./StorefrontSummary";
 import {
   clearStoreSessionBridge,
-  fallbackStoreApps,
   initialStoreBootstrap,
   loadStoreBootstrap,
   signInStoreSessionBridge
@@ -46,7 +45,7 @@ export function StorefrontApp() {
   const [actionError, setActionError] = useState<string>();
   const myApps = bootstrap.myApps;
   const availableApps = bootstrap.availableApps;
-  const selectedApp = myApps[0] ?? availableApps[0] ?? fallbackStoreApps[0];
+  const selectedApp = myApps[0] ?? availableApps[0];
   const visibleTicket = ticketStatus ?? ticketResult;
   const visibleTimeline = visibleTicket?.timeline ?? [];
   const installJourneyRows = appInstallJourneySteps.map((step) => ({
@@ -81,6 +80,7 @@ export function StorefrontApp() {
   }
 
   async function handleRequestAccess() {
+    if (!selectedApp) return;
     setIsRequestingAccess(true);
     try {
       const client = createStorePlatformClient();
@@ -100,6 +100,7 @@ export function StorefrontApp() {
   }
 
   async function handleInstallApp() {
+    if (!selectedApp) return;
     setIsInstallingApp(true);
     try {
       const client = createStorePlatformClient();
@@ -114,6 +115,7 @@ export function StorefrontApp() {
   }
 
   async function handleUninstallApp() {
+    if (!selectedApp) return;
     setIsUninstallingApp(true);
     try {
       const client = createStorePlatformClient();
@@ -128,6 +130,7 @@ export function StorefrontApp() {
   }
 
   async function handleSubmitTicket() {
+    if (!selectedApp) return;
     setIsSubmittingTicket(true);
     const title = ticketDescription.split(".")[0] || "Horizon Store feedback";
     try {
@@ -149,11 +152,14 @@ export function StorefrontApp() {
   }
 
   function handleOpenSelectedApp() {
+    if (!selectedApp) return;
     if (selectedApp.accessStatus !== "active") return;
     window.location.assign(selectedApp.route ?? `/apps/${selectedApp.slug}`);
   }
 
-  if (sessionError) return <main className="store-shell"><SectionCard eyebrow="Secure session" title="Sign-in required"><p>{sessionError}</p><button type="button" onClick={() => void handleSignInBridge()} disabled={isSigningIn}>{isSigningIn ? "Opening sign-in…" : "Sign in with Keycloak"}</button></SectionCard></main>;
+  if (sessionError || bootstrap.status === "error") return <main className="store-shell"><SectionCard eyebrow="Secure session" title="Sign-in required"><p>{sessionError ?? bootstrap.error}</p><button type="button" onClick={() => void handleSignInBridge()} disabled={isSigningIn}>{isSigningIn ? "Opening sign-in…" : "Sign in with Keycloak"}</button></SectionCard></main>;
+  if (bootstrap.status === "loading") return <main className="store-shell"><SectionCard eyebrow="App Store" title="Loading your apps"><p>Loading current access and installed applications from Platform API.</p></SectionCard></main>;
+  if (!selectedApp) return <main className="store-shell"><StorefrontSummary userName={bootstrap.userName} email={bootstrap.email} source={bootstrap.source} myApps={myApps} availableApps={availableApps} isSigningIn={isSigningIn} onSignIn={handleSignInBridge} onLogout={handleLogoutBridge} /><SectionCard eyebrow="App Store" title="No apps available"><p>No applications are currently assigned to your account. Request access from a workspace owner.</p></SectionCard></main>;
 
   return (
     <main className="store-shell">
