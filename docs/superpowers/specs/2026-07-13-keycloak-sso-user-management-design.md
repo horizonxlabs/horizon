@@ -9,8 +9,8 @@ safe user-management surface mediated by Platform API.
 
 ## Scope
 
-- Provision the `evcp` realm, public OIDC clients, platform API confidential
-  client, service-account permissions, and the three EVCP role groups in Docker.
+- Provision the `evcp` realm, a Platform API confidential OIDC client,
+  service-account permissions, and the three EVCP role groups in Docker.
 - Redirect Admin, Creator, and Store users to Keycloak for login.
 - Have Platform API complete the OIDC callback, validate tokens and claims, then
   issue the existing short-lived `platform_session` for product API calls.
@@ -67,10 +67,12 @@ authoritative store; Platform API does not create native credential records.
 ## Configuration and Provisioning
 
 Production configuration uses environment variables for the public issuer URL,
-realm, per-app client IDs, API client secret, callback URLs, and the Keycloak admin
-service-account credentials. Docker imports a versioned realm definition so a new
-installation has the required clients, groups and service-account permissions
-without manual console work.
+realm, Platform API client ID and secret, callback URLs, and the Keycloak admin
+service-account credentials. Browser applications are not Keycloak clients: Docker
+imports a versioned realm definition, then a server-only bootstrap assigns the
+runtime secrets to its confidential clients so a new installation has the required
+clients, groups and service-account permissions without exposing refresh tokens to
+browsers or requiring manual console work.
 
 ## Failure Handling
 
