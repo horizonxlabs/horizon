@@ -7,6 +7,7 @@ export type ResolvedAiProvider = {
   model: string;
   secret: string;
   adapter: string;
+  baseUrl?: string;
 };
 
 export type ResolvedAiExecutionPlan = {
@@ -144,4 +145,3 @@ function sanitizeFailure(error: unknown, secret: string): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.split(secret).join("[redacted-secret]").replace(/sk-[A-Za-z0-9._-]+/g, "sk-[redacted]");
 }
-
