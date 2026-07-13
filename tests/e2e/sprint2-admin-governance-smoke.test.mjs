@@ -249,6 +249,10 @@ test("Admin clears derived governance state after a failed read or session trans
   ]) {
     assert.match(source, new RegExp(reset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.doesNotMatch(
+    source,
+    /setProviderTestCallMessage\("AI governance data is unavailable\. Refresh the page or sign in again\."\);\s*setAiKeySecret\(""\);/s
+  );
   assert.match(
     source,
     /setProviderTestCallMessage\("Provider test failed\. Review route, active key and adapter setup\."\)/
@@ -259,4 +263,16 @@ test("Dashboard governance shows unavailable guidance instead of provider-test p
   const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
   assert.match(source, /aiGovernance\.availability !== "ready" \? \(\s*aiGovernanceAvailabilityPanel/s);
   assert.ok([...source.matchAll(/aiGovernanceAvailabilityPanel/g)].length >= 4);
+});
+
+test("Admin hides local route and rule rows until governance is ready", () => {
+  const source = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  assert.match(
+    source,
+    /const aiRouteTableRows = aiGovernance\.availability === "ready" && latestAiRoute/s
+  );
+  assert.match(
+    source,
+    /const aiGuardrailRows = aiGovernance\.availability === "ready" && latestGuardrailRule/s
+  );
 });

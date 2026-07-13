@@ -1409,7 +1409,6 @@ function AdminApp() {
     setLatestGuardrailRule(undefined);
     setProviderTestCallResult(undefined);
     setProviderTestCallMessage("AI governance data is unavailable. Refresh the page or sign in again.");
-    setAiKeySecret("");
   }, [aiGovernance.availability, adminClient]);
 
   useEffect(() => {
@@ -1750,7 +1749,7 @@ function AdminApp() {
     checked: aiGovernance.availability
   }));
   const latestAiKey = aiGovernance.apiKeys[0];
-  const aiRouteTableRows = latestAiRoute
+  const aiRouteTableRows = aiGovernance.availability === "ready" && latestAiRoute
     ? [
         {
           scenario: latestAiRoute.scenario,
@@ -1762,7 +1761,7 @@ function AdminApp() {
         }
       ]
     : [];
-  const aiGuardrailRows = latestGuardrailRule
+  const aiGuardrailRows = aiGovernance.availability === "ready" && latestGuardrailRule
     ? [
         {
           rule: latestGuardrailRule.name,
