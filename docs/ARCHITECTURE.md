@@ -19,6 +19,12 @@ Other features and routes import it only through its **Feature public API** (`@/
 never a deep internal path. New target-layout imports use the `@/` alias. UI permission helpers are
 for experience only; backend authorization remains authoritative. See ADR-012 for the full decision.
 
+## State placement
+
+Use Component state for local interaction, URL state for bookmarkable navigation,
+Server state close to its API consumer, and Global client state only when it is
+truly application-wide.
+
 This document exists because a few files grew to thousands of lines
 (`apps/creator-web/src/main.tsx` hit 3499, `apps/admin-web/src/main.tsx` is still ~4976) and
 became painful and risky to refactor. It records the conventions that keep new code maintainable

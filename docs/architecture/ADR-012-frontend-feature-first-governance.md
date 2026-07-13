@@ -21,6 +21,12 @@ The workspace packages `@evcp/ui`, `@evcp/api-client`, `@evcp/auth-sdk`, `@evcp/
 - UI permission checks improve UX but never replace backend authorization.
 - Root test placement remains `tests/unit`, `tests/integration`, and `tests/e2e` until the runner convention changes.
 
+## State placement
+
+Use Component state for local interaction, URL state for bookmarkable navigation,
+Server state close to its API consumer, and Global client state only when it is
+truly application-wide.
+
 ## Migration
 
 The existing layer-first files are recorded in `scripts/quality/frontend-legacy-path-baseline.json`. They may be migrated incrementally, but no new files may extend those legacy roots. The executable architecture check enforces this rule locally, for changed files, in pre-commit, and in CI.
