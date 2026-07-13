@@ -36,6 +36,61 @@ test("rejects writes to locked files without touching the container", async () =
   assert.deepEqual(docker.state.execCalls, []);
 });
 
+async function makeRunner() {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await docker.createContainer({
+    name: "evcp-ws-demo",
+    image: "img",
+    env: [],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
+    labels: {},
+    exposedPort: 3000,
+    publishPorts: false
+  });
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+  return { docker, containerId, runner };
+}
+
+test("rejects a file write whose content carries a git conflict marker", async () => {
+  const { docker, containerId, runner } = await makeRunner();
+  const result = await runner.runAction({
+    containerId,
+    projectId: "p1",
+    template,
+    action: {
+      id: "act-1",
+      type: "file",
+      filePath: "app/page.tsx",
+      content: "function a() {}\n=======\nfunction a() {}\n"
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /conflict marker/);
+  assert.deepEqual(docker.state.execCalls, [], "must not write the broken file to the container");
+});
+
+test("rejects an edit whose REPLACE text carries a git conflict marker", async () => {
+  const { runner, containerId } = await makeRunner();
+  const result = await runner.runAction({
+    containerId,
+    projectId: "p1",
+    template,
+    action: {
+      id: "act-2",
+      type: "edit",
+      filePath: "app/page.tsx",
+      find: "const x = 1;",
+      replace: "const x = 2;\n>>>>>>> REPLACE\nconst y = 3;"
+    }
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /conflict marker/);
+});
+
 test("writes a non-locked file via a base64-encoded shell write", async () => {
   const docker = createMemoryDockerEngine();
   const { containerId } = await docker.createContainer({
