@@ -13,7 +13,8 @@ function createKeycloakAdminHarness() {
   const groups = new Map([
     ["evcp-admins", { id: "grp_admin", name: "evcp-admins" }],
     ["evcp-creators", { id: "grp_creator", name: "evcp-creators" }],
-    ["evcp-users", { id: "grp_user", name: "evcp-users" }]
+    ["evcp-users", { id: "grp_user", name: "evcp-users" }],
+    ["external-contractors", { id: "grp_external", name: "external-contractors" }]
   ]);
   let nextId = 1;
   const config = {
@@ -52,10 +53,15 @@ function createKeycloakAdminHarness() {
     const key = `${method} ${path.replace(/\/[^/]+\/(disable|enable|groups|reset-password)$/, "/:id/$1").replace(/\/users\/[^/]+$/, "/users/:id")}`;
     const handler = handlers.get(key);
     let status = 200; let responseBody;
-    await handler({ headers: { "x-mock-user-email": email }, body, params: path.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: path.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
+    await handler({ headers: email ? { "x-mock-user-email": email } : {}, body, params: path.match(/^\/admin\/keycloak\/users\/([^/]+)/) ? { id: path.split("/")[4] } : {} }, { status: (code) => { status = code; return { json: (value) => { responseBody = value; } }; }, json: (value) => { responseBody = value; } });
     return { status, body: responseBody };
   };
-  return { asAdmin: (method, path, body) => request("admin@company.com", method, path, body), asCreator: (method, path, body) => request("creator@company.com", method, path, body), audit };
+  return {
+    asAdmin: (method, path, body) => request("admin@company.com", method, path, body),
+    asCreator: (method, path, body) => request("creator@company.com", method, path, body),
+    asAnonymous: (method, path, body) => request(undefined, method, path, body),
+    addGroup: (id, name) => users.get(id).groups.push(name), audit
+  };
 }
 
 const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -68,10 +74,42 @@ test("admin can create, role-map, disable and reset a Keycloak user without rece
   assert.equal("temporaryPassword" in created.body.data, false);
   assert.equal((await exec.asAdmin("POST", `/admin/keycloak/users/${created.body.data.id}/disable`)).status, 200);
   assert.equal((await exec.asAdmin("POST", `/admin/keycloak/users/${created.body.data.id}/reset-password`, { temporaryPassword: "Next1234!" })).status, 200);
+  assert.deepEqual(exec.audit.list().map((event) => event.action), ["auth.keycloak_user.role_changed", "auth.keycloak_user.created", "auth.keycloak_user.enabled_changed", "auth.keycloak_user.password_reset"]);
   assert.equal(exec.audit.list().some((event) => /Temp1234!|Next1234!/.test(JSON.stringify(event))), false);
 });
 
 test("creator cannot call Keycloak user-management API", async () => {
   const response = await createKeycloakAdminHarness().asCreator("GET", "/admin/keycloak/users");
   assert.equal(response.status, 403);
+});
+
+test("admin lists, updates, enables, and replaces only EVCP role groups", async () => {
+  const exec = createKeycloakAdminHarness();
+  const created = await exec.asAdmin("POST", "/admin/keycloak/users", { email: "before@company.com", name: "Before", role: "creator", temporaryPassword: "Temp1234!" });
+  const id = created.body.data.id;
+  exec.addGroup(id, "external-contractors");
+  const listed = await exec.asAdmin("GET", "/admin/keycloak/users");
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.data[0].email, "before@company.com");
+  const updated = await exec.asAdmin("PUT", `/admin/keycloak/users/${id}`, { email: "after@company.com", name: "After" });
+  assert.equal(updated.body.data.name, "After");
+  assert.equal((await exec.asAdmin("POST", `/admin/keycloak/users/${id}/enable`)).body.data.enabled, true);
+  const roleChanged = await exec.asAdmin("PUT", `/admin/keycloak/users/${id}/groups`, { role: "end_user" });
+  assert.deepEqual(roleChanged.body.data.groups.sort(), ["evcp-users", "external-contractors"]);
+  assert.deepEqual(exec.audit.list().map((event) => event.action), ["auth.keycloak_user.role_changed", "auth.keycloak_user.created", "auth.keycloak_user.updated", "auth.keycloak_user.enabled_changed", "auth.keycloak_user.role_changed"]);
+});
+
+test("admin supports every valid platform role and rejects invalid roles", async () => {
+  const exec = createKeycloakAdminHarness();
+  for (const [role, group] of [["admin", "evcp-admins"], ["creator", "evcp-creators"], ["end_user", "evcp-users"]]) {
+    const response = await exec.asAdmin("POST", "/admin/keycloak/users", { email: `${role}@company.com`, name: role, role, temporaryPassword: "Temp1234!" });
+    assert.equal(response.status, 201);
+    assert.deepEqual(response.body.data.groups, [group]);
+  }
+  const invalid = await exec.asAdmin("POST", "/admin/keycloak/users", { email: "bad@company.com", name: "Bad", role: "owner", temporaryPassword: "Temp1234!" });
+  assert.equal(invalid.status, 400);
+});
+
+test("unauthenticated callers receive 401 from Keycloak user-management routes", async () => {
+  assert.equal((await createKeycloakAdminHarness().asAnonymous("GET", "/admin/keycloak/users")).status, 401);
 });

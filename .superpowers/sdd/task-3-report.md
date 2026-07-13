@@ -21,3 +21,10 @@
 - Every service operation first requires the platform actor to be an admin; the route contract verifies a creator receives 403.
 - Role changes replace EVCP role groups only and retain unrelated Keycloak groups.
 - Audit records include actor, action, and user ID only; temporary passwords are never placed in audit metadata or response DTOs. The lifecycle test checks both submitted passwords do not appear in audit events.
+
+## Review follow-up TDD record
+
+1. Expanded the integration contract before changing production code to cover list, update, enable, EVCP-role replacement with an unrelated group retained, every supported role, invalid roles, full audit action coverage, and anonymous access.
+2. RED: the focused suite failed because create suppressed `auth.keycloak_user.role_changed` and `MockAuthError` was translated to 400 rather than 401.
+3. GREEN: create now audits the assigned role change, and the route adapter maps authentication resolution failures to the normal 401/`UNAUTHORIZED` envelope.
+4. Verification: `node --import tsx --test tests/integration/keycloak-user-management-contract.test.mjs` passed 5 tests; both package typechecks and `git diff --check` passed.

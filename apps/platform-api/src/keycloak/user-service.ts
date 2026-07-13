@@ -24,7 +24,7 @@ export class KeycloakUserService {
     const id = response.headers.get("location")?.split("/").at(-1);
     if (!id) throw new Error("invalid_keycloak_user_location");
     await this.deps.client.put(`/users/${encodeURIComponent(id)}/reset-password`, { type: "password", value: input.temporaryPassword, temporary: true });
-    const user = await this.applyRole(actor, id, input.role, false);
+    const user = await this.applyRole(actor, id, input.role);
     this.audit(actor, "auth.keycloak_user.created", id);
     return user;
   }

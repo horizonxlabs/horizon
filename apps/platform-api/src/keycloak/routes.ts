@@ -50,8 +50,10 @@ export function registerKeycloakUserManagementRoutes(
   const handle = (status: number, action: (user: PlatformUser, request: Request) => Promise<unknown>) => async (request: Request, response: Response) => {
     try { response.status(status).json(success(await action(await resolveUser(request.headers), request))); }
     catch (error) {
+      const unauthenticated = error instanceof Error && error.name === "MockAuthError";
       const forbidden = error instanceof Error && error.name === "PermissionError";
-      response.status(forbidden ? 403 : 400).json(failure(forbidden ? "FORBIDDEN" : "KEYCLOAK_USER_MANAGEMENT_FAILED", error instanceof Error ? error.message : "Keycloak user management failed"));
+      const responseStatus = unauthenticated ? 401 : forbidden ? 403 : 400;
+      response.status(responseStatus).json(failure(unauthenticated ? "UNAUTHORIZED" : forbidden ? "FORBIDDEN" : "KEYCLOAK_USER_MANAGEMENT_FAILED", error instanceof Error ? error.message : "Keycloak user management failed"));
     }
   };
   routes.get("/admin/keycloak/users", handle(200, (user) => service.list(user)));
