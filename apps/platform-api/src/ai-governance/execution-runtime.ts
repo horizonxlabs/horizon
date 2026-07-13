@@ -6,13 +6,28 @@ export function createPersistedGovernedAiExecutor(
   client: AiGovernancePersistenceClient,
   options: { executionStore?: AiExecutionStore; fetcher?: typeof fetch; timeoutMs?: number } = {}
 ): GovernedAiExecutor {
+  const circuit = new Map<string, { failures: number; blockedUntil?: number }>();
   return new GovernedAiExecutor({
     store: options.executionStore ?? new MemoryAiExecutionStore(),
     resolvePlan: async (actor, scenario) => resolvePlan(client, actor, scenario),
     evaluateGuardrail: async ({ scenario, prompt }) => evaluateGuardrail(client, scenario, prompt),
     reserveQuota: async ({ requestedTokens }) => reserveCreatorQuota(client, requestedTokens),
-    invoke: async ({ provider, prompt }) => invokeOpenAiCompatible(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000)
+    invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000, circuit)
   });
+}
+
+async function invokeWithCircuitBreaker(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, circuit: Map<string, { failures: number; blockedUntil?: number }>) {
+  const state = circuit.get(provider.id);
+  if (state?.blockedUntil && state.blockedUntil > Date.now()) throw new Error(`AI provider ${provider.id} circuit is open`);
+  try {
+    const result = await invokeOpenAiCompatible(provider, prompt, fetcher, timeoutMs);
+    circuit.delete(provider.id);
+    return result;
+  } catch (error) {
+    const failures = (state?.failures ?? 0) + 1;
+    circuit.set(provider.id, { failures, ...(failures >= 3 ? { blockedUntil: Date.now() + 30_000 } : {}) });
+    throw error;
+  }
 }
 
 async function resolvePlan(client: AiGovernancePersistenceClient, actor: PlatformUser, scenario: AiScenario): Promise<ResolvedAiExecutionPlan> {
