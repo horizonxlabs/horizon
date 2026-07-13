@@ -70,6 +70,7 @@ export type GovernedAiExecutorDependencies = {
   resolvePlan: (actor: PlatformUser, scenario: AiScenario) => Promise<ResolvedAiExecutionPlan>;
   evaluateGuardrail: (input: { actor: PlatformUser; scenario: AiScenario; prompt: string }) => Promise<{ decision: "allow" | "warn" | "block"; reason?: string }>;
   reserveQuota: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number }) => Promise<{ allowed: boolean; remainingToday: number }>;
+  reconcileQuota?: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number; actualTokens: number }) => Promise<void>;
   invoke: (input: { provider: ResolvedAiProvider; prompt: string; scenario: AiScenario }) => Promise<{ text: string; tokensUsed: number; latencyMs: number; providerId: string; model: string }>;
   now?: () => Date;
 };
@@ -89,8 +90,9 @@ export class GovernedAiExecutor {
         status: "blocked", tokensUsed: 0, latencyMs: 0, fallbackUsed: false, failureReason: guardrail.reason ?? "guardrail_blocked"
       });
     }
+    const requestedTokens = input.requestedTokens ?? estimateTokens(prompt);
     const quota = await this.dependencies.reserveQuota({
-      actor, projectId: input.projectId, requestId: input.requestId, requestedTokens: input.requestedTokens ?? estimateTokens(prompt)
+      actor, projectId: input.projectId, requestId: input.requestId, requestedTokens
     });
     if (!quota.allowed) {
       return this.persist(input, actor, plan.provider, {
@@ -99,6 +101,7 @@ export class GovernedAiExecutor {
     }
     try {
       const completed = await this.dependencies.invoke({ provider: plan.provider, prompt, scenario: input.scenario });
+      await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: completed.tokensUsed });
       return this.persist(input, actor, plan.provider, {
         status: "succeeded", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: false
       });
@@ -110,6 +113,7 @@ export class GovernedAiExecutor {
       }
       try {
         const completed = await this.dependencies.invoke({ provider: plan.fallback, prompt, scenario: input.scenario });
+        await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: completed.tokensUsed });
         return this.persist(input, actor, plan.fallback, {
           status: "fallback", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: true, failureReason: sanitizeFailure(error, plan.provider.secret)
         });

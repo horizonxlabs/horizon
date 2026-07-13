@@ -29,7 +29,7 @@ test("persisted executor resolves the configured route, key, guardrail and quota
       return new Response(JSON.stringify({ choices: [{ message: { content: "Generated safely" } }], usage: { total_tokens: 37 } }), { status: 200 });
     }
   });
-  const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a leave view", requestId: "req_live_1", requestedTokens: 37 });
+  const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a leave view", requestId: "req_live_1", requestedTokens: 100 });
   assert.equal(result.status, "succeeded");
   assert.equal(result.evidence.providerId, "aip_primary");
   assert.equal(result.evidence.tokensUsed, 37);

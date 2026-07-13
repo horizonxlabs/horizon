@@ -12,6 +12,7 @@ export function createPersistedGovernedAiExecutor(
     resolvePlan: async (actor, scenario) => resolvePlan(client, actor, scenario),
     evaluateGuardrail: async ({ scenario, prompt }) => evaluateGuardrail(client, scenario, prompt),
     reserveQuota: async ({ requestedTokens }) => reserveCreatorQuota(client, requestedTokens),
+    reconcileQuota: async ({ requestedTokens, actualTokens }) => reconcileCreatorQuota(client, requestedTokens, actualTokens),
     invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000, circuit)
   });
 }
@@ -66,6 +67,12 @@ async function reserveCreatorQuota(client: AiGovernancePersistenceClient, reques
   if (quota.hardStop && requestedTokens > remainingToday) return { allowed: false, remainingToday };
   await client.aiQuota.upsert({ where: { scope: quota.scope }, update: { usedToday: quota.usedToday + requestedTokens }, create: quota });
   return { allowed: true, remainingToday: remainingToday - requestedTokens };
+}
+
+async function reconcileCreatorQuota(client: AiGovernancePersistenceClient, requestedTokens: number, actualTokens: number): Promise<void> {
+  const quota = (await client.aiQuota.findMany()).find((candidate) => candidate.scope === "creator");
+  if (!quota) return;
+  await client.aiQuota.upsert({ where: { scope: quota.scope }, update: { usedToday: Math.max(0, quota.usedToday - requestedTokens + actualTokens) }, create: quota });
 }
 
 async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number) {
