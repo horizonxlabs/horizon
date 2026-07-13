@@ -33,7 +33,9 @@ export function registerKeycloakOidcRoutes(routes: Routes, service: KeycloakOidc
       const handoff = new URL(result.returnTo);
       handoff.hash = new URLSearchParams({
         evcp_session: result.session.token,
-        evcp_session_expires_at: result.session.expiresAt
+        evcp_session_expires_at: result.session.expiresAt,
+        ...(result.session.refreshToken ? { evcp_refresh_token: result.session.refreshToken } : {}),
+        ...(result.session.refreshExpiresAt ? { evcp_refresh_expires_at: result.session.refreshExpiresAt } : {})
       }).toString();
       response.redirect?.(handoff.toString());
     } catch (error) {

@@ -4,6 +4,12 @@ import type { PlatformRole } from "@evcp/types";
 import { PlatformAuthSsoService, type PlatformAuthClaims, type PlatformAuthSession, type PlatformUser } from "../platform-services";
 import type { CorePersistenceClient } from "../persistence/core-repositories";
 import { upsertKeycloakUserProjection } from "../persistence/keycloak-user-projection";
+import type { PlatformSessionService } from "../auth/platform-session-service";
+
+type KeycloakPlatformSession = PlatformAuthSession & {
+  refreshToken?: string;
+  refreshExpiresAt?: string;
+};
 
 declare module "../platform-services" {
   interface PlatformAuthSsoService {
@@ -32,7 +38,8 @@ PlatformAuthSsoService.prototype.issueKeycloakSession = function issueKeycloakSe
 export function createKeycloakSessionIssuer(input: {
   authSso: PlatformAuthSsoService;
   corePersistenceClient?: CorePersistenceClient;
-}): (claims: PlatformAuthClaims) => Promise<PlatformAuthSession> {
+  platformSessions?: PlatformSessionService;
+}): (claims: PlatformAuthClaims) => Promise<KeycloakPlatformSession> {
   return async (claims) => {
     const role = claims.platformRoles[0] as PlatformRole | undefined;
     if (!role) throw new Error("unmapped_keycloak_group");
@@ -40,6 +47,27 @@ export function createKeycloakSessionIssuer(input: {
       await upsertKeycloakUserProjection(input.corePersistenceClient, {
         subject: claims.subject, email: claims.email, name: claims.name, role
       });
+    }
+    if (input.platformSessions && input.corePersistenceClient) {
+      const user = await input.corePersistenceClient.platformUser.findUnique({ where: { email: claims.email } });
+      if (!user) throw new Error("keycloak_user_projection_missing");
+      const pair = await input.platformSessions.issue({
+        id: user.id,
+        email: claims.email,
+        providerConfigId: "authprov_keycloak_default_001",
+        claims: claims as unknown as Record<string, unknown>
+      });
+      return {
+        id: pair.sessionId,
+        providerId: "authprov_keycloak_default_001",
+        providerType: "keycloak",
+        token: pair.token,
+        claims,
+        issuedAt: new Date().toISOString(),
+        expiresAt: pair.expiresAt,
+        refreshToken: pair.refreshToken,
+        refreshExpiresAt: pair.refreshExpiresAt
+      };
     }
     return input.authSso.issueKeycloakSession(claims);
   };

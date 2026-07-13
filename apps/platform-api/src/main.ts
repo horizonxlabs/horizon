@@ -5,12 +5,20 @@ import { registerKeycloakOidcRoutes } from "./keycloak/routes";
 import { KeycloakAdminClient } from "./keycloak/admin-client";
 import { KeycloakUserService } from "./keycloak/user-service";
 import { createKeycloakSessionIssuer } from "./keycloak/platform-session-issuer";
+import { PlatformSessionService } from "./auth/platform-session-service";
+import { PrismaPlatformSessionRepository } from "./persistence/platform-session-repository";
 
 const port = Number(process.env.PORT ?? 3100);
 const host = process.env.HOST ?? "127.0.0.1";
 const corePersistenceMode = resolveCorePersistenceMode();
 
 const services = await createRuntimePlatformApiServices();
+const platformSessions = services.corePersistenceClient
+  ? new PlatformSessionService(
+      new PrismaPlatformSessionRepository(services.corePersistenceClient as never),
+      process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production"
+    )
+  : undefined;
 if (process.env.KEYCLOAK_ISSUER_URL) {
   const config = readKeycloakConfig(process.env);
   services.keycloakUserManagement = new KeycloakUserService({
@@ -22,7 +30,7 @@ const app = await createPlatformApiApp(services);
 if (process.env.KEYCLOAK_ISSUER_URL) {
   registerKeycloakOidcRoutes(app.getHttpAdapter().getInstance(), new KeycloakOidcService({
     config: readKeycloakConfig(process.env),
-    issueKeycloakSession: createKeycloakSessionIssuer(services),
+    issueKeycloakSession: createKeycloakSessionIssuer({ ...services, platformSessions }),
     allowedReturnOrigins: { admin: process.env.EVCP_ADMIN_WEB_URL ?? "http://localhost:4100", creator: process.env.EVCP_CREATOR_WEB_URL ?? "http://localhost:4101", store: process.env.EVCP_STORE_WEB_URL ?? "http://localhost:4102" }
   }));
 }
