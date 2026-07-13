@@ -189,6 +189,12 @@ test("Sprint 9 API enforces break-glass reason and policy template evaluation", 
 
 test("Sprint 9 Admin UI exposes auth SSO and policy hardening surfaces", () => {
   const adminSource = readFileSync("apps/admin-web/src/main.tsx", "utf8");
+  const featureSource = readFileSync(
+    "apps/admin-web/src/features/auth-sso/evidence.ts",
+    "utf8"
+  );
+
+  assert.match(adminSource, /from "\.\/features\/auth-sso"/);
 
   for (const text of [
     "Auth / SSO Production Readiness",
@@ -196,10 +202,15 @@ test("Sprint 9 Admin UI exposes auth SSO and policy hardening surfaces", () => {
     "Role / Group Mapping",
     "Break-glass Admin",
     "Policy Templates",
-    "Auth Session Evidence",
+    "Auth Session Evidence"
+  ]) {
+    assert.match(adminSource, new RegExp(text));
+  }
+
+  for (const text of [
     "Keycloak Default",
     "Direct IdP Constraints"
   ]) {
-    assert.match(adminSource, new RegExp(text));
+    assert.match(featureSource, new RegExp(text));
   }
 });
