@@ -132,6 +132,18 @@ function runCommand(label, command, args) {
   }
 }
 
+function runArchitectureCheck(files) {
+  if (files.length === 0) return;
+  console.error("[quality:changed] frontend architecture");
+  const result = spawnSync("node", ["scripts/quality/check-frontend-architecture.mjs", "--files"], {
+    cwd: process.cwd(),
+    input: Buffer.from(files.join("\0") + "\0"),
+    shell: false,
+    stdio: ["pipe", "inherit", "inherit"]
+  });
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
 function isFormatTarget(file) {
   return FORMAT_EXTENSIONS.has(extname(file)) && !FORMAT_EXCLUDES.has(file);
 }
@@ -233,6 +245,10 @@ if (!args.formatOnly && designSystemTargets.length > 0) {
     "scripts/quality/check-design-system.mjs",
     ...designSystemTargets
   ]);
+}
+
+if (!args.formatOnly) {
+  runArchitectureCheck(changedFiles);
 }
 
 if (args.format && formatFiles.length > 0) {

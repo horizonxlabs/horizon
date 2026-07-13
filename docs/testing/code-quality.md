@@ -15,6 +15,8 @@ protects the full product surface.
 - `pnpm check:design-system` scans app source for design-system governance:
   no app-local stylesheets, no inline visual styles, no hardcoded colors, and no
   local CSS imports outside `@evcp/ui/styles.css`.
+- `pnpm check:frontend-architecture` enforces the React feature-first dependency boundaries.
+  `pnpm check`, `pnpm check:changed`, `pnpm check:staged`, and CI run it too.
 - `pnpm format` formats the full repository with Prettier.
 - `pnpm format:check:all` audits the full formatting baseline. Formatting is
   intentionally opt-in while the existing repository formatting baseline is being
@@ -25,6 +27,17 @@ protects the full product surface.
 Every non-trivial PR should include the commands or CI run used as evidence.
 User-facing or operational changes should update the relevant docs in the same
 PR. Security-sensitive areas are routed through CODEOWNERS.
+
+## Frontend structure migration
+
+New app business code belongs in `features/<feature-name>` and exposes intentional exports from
+`index.ts`. Use `@/features/<name>` for cross-feature imports, never a deep feature path; `shared`
+must not import `app`, `routes`, or `features`. The checked-in legacy baseline allows existing
+`components`, `hooks`, `lib`, `pages`, and `data` files while blocking new legacy siblings.
+
+When the architecture gate fails, move new business files under `features/<feature-name>`, expose a
+public API through `index.ts`, replace deep cross-feature imports, or migrate a baseline file before
+creating a legacy sibling. Do not edit the baseline merely to bypass the migration rule.
 
 ## Quality Layers
 
