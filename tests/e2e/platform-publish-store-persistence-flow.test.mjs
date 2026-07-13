@@ -6,10 +6,7 @@ import {
   MemoryCorePersistenceClient,
   createCoreRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/core-repositories.ts";
-import {
-  MemoryAiGovernancePersistenceClient,
-  createAiGovernanceRepositoryBackedService
-} from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
+import { MemoryAiGovernancePersistenceClient } from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
 import {
   MemoryPrdPersistenceClient,
   createPrdRepositoryBackedService
@@ -22,22 +19,26 @@ import {
   MemoryPublishStorePersistenceClient,
   createPublishStoreRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/publish-store-repositories.ts";
+import { createPersistedGovernedAiFixture } from "../helpers/persisted-governed-ai-fixture.ts";
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 const endUserHeaders = { "x-mock-user-email": "user@company.com" };
 
-function createPersistentServices(
+async function createPersistentServices(
   coreClient,
   aiClient,
   prdClient,
   workspaceClient,
   publishStoreClient
 ) {
+  const legacyServices = createPlatformApiServices();
+  const governedAi = await createPersistedGovernedAiFixture(aiClient, legacyServices.auth.resolveCurrentUser(adminHeaders));
   const services = {
-    ...createPlatformApiServices(),
+    ...legacyServices,
     corePersistence: createCoreRepositoryBackedService(coreClient),
-    aiGovernancePersistence: createAiGovernanceRepositoryBackedService(aiClient),
+    aiGovernancePersistence: governedAi.service,
+    governedAiExecutor: governedAi.executor,
     prdPersistence: createPrdRepositoryBackedService(prdClient),
     workspacePersistence: createWorkspaceRepositoryBackedService(workspaceClient),
     publishStorePersistence: createPublishStoreRepositoryBackedService(publishStoreClient)
@@ -126,7 +127,7 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   const prdClient = new MemoryPrdPersistenceClient();
   const workspaceClient = new MemoryWorkspacePersistenceClient();
   const publishStoreClient = new MemoryPublishStorePersistenceClient();
-  const firstServices = createPersistentServices(
+  const firstServices = await createPersistentServices(
     coreClient,
     aiClient,
     prdClient,
@@ -182,7 +183,7 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   assert.equal(ticket.status, 201);
   assert.equal(JSON.stringify(ticket.body).includes("secret-that-must-not-return"), false);
 
-  const recreatedServices = createPersistentServices(
+  const recreatedServices = await createPersistentServices(
     coreClient,
     aiClient,
     prdClient,

@@ -6,10 +6,7 @@ import {
   MemoryCorePersistenceClient,
   createCoreRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/core-repositories.ts";
-import {
-  MemoryAiGovernancePersistenceClient,
-  createAiGovernanceRepositoryBackedService
-} from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
+import { MemoryAiGovernancePersistenceClient } from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
 import {
   MemoryPrdPersistenceClient,
   createPrdRepositoryBackedService
@@ -26,11 +23,12 @@ import {
   MemoryGeneratedRuntimePersistenceClient,
   createGeneratedRuntimeRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/generated-runtime-repositories.ts";
+import { createPersistedGovernedAiFixture } from "../helpers/persisted-governed-ai-fixture.ts";
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 
-function createPersistentServices(
+async function createPersistentServices(
   coreClient,
   aiClient,
   prdClient,
@@ -38,10 +36,13 @@ function createPersistentServices(
   publishStoreClient,
   runtimeClient
 ) {
+  const legacyServices = createPlatformApiServices();
+  const governedAi = await createPersistedGovernedAiFixture(aiClient, legacyServices.auth.resolveCurrentUser(adminHeaders));
   const services = {
-    ...createPlatformApiServices(),
+    ...legacyServices,
     corePersistence: createCoreRepositoryBackedService(coreClient),
-    aiGovernancePersistence: createAiGovernanceRepositoryBackedService(aiClient),
+    aiGovernancePersistence: governedAi.service,
+    governedAiExecutor: governedAi.executor,
     prdPersistence: createPrdRepositoryBackedService(prdClient),
     workspacePersistence: createWorkspaceRepositoryBackedService(workspaceClient),
     publishStorePersistence: createPublishStoreRepositoryBackedService(publishStoreClient),
@@ -139,7 +140,7 @@ test("runtime memory persistence keeps generated runtime evidence across service
   const workspaceClient = new MemoryWorkspacePersistenceClient();
   const publishStoreClient = new MemoryPublishStorePersistenceClient();
   const runtimeClient = new MemoryGeneratedRuntimePersistenceClient();
-  const firstServices = createPersistentServices(
+  const firstServices = await createPersistentServices(
     coreClient,
     aiClient,
     prdClient,
@@ -181,7 +182,7 @@ test("runtime memory persistence keeps generated runtime evidence across service
   assert.equal(dryRun.status, 200);
   assert.equal(dryRun.body.data.status, "blocked");
 
-  const recreatedServices = createPersistentServices(
+  const recreatedServices = await createPersistentServices(
     coreClient,
     aiClient,
     prdClient,
