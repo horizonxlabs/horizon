@@ -34,3 +34,9 @@
 - Root cause for the stale-role contract: the Keycloak session issuer bypassed `simulateLogin`, so it did not refresh the in-memory identity that bearer-session resolution reads. It now re-enters the Keycloak provider mapping/provisioning path, making the newest Keycloak groups authoritative.
 - Root cause for the management-contract failures after the auth hardening task: its harness relied on mock headers, which are intentionally disabled by default. The harness now issues Keycloak-backed Platform Auth bearer sessions.
 - Verification: `pnpm exec oxlint --deny-warnings tests/integration/keycloak-user-management-contract.test.mjs`, both Keycloak integration contracts (9 passing tests), Platform API typecheck, and `git diff --check` passed.
+
+## Test bootstrap follow-up
+
+- Test-only `test:unit`, `test:integration`, and `test:e2e` commands explicitly set `EVCP_ALLOW_SIMULATE_LOGIN=1`, restoring legacy mock-header fixtures without changing application defaults.
+- The native auth harness can temporarily delete an environment value, and its security regression now verifies that an unset flag rejects mock headers and simulated login.
+- `pnpm check:ci` passed hygiene, install, architecture, lint, and typecheck, then reached unrelated pre-existing unit assertions for removed mock-client APIs; it no longer fails on disabled mock headers.

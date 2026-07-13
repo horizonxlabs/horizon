@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTestExecutor } from "./helpers/auth-native-harness.mjs";
 
-test("production configuration rejects native credentials, mock headers, and simulated login", async () => {
-  const exec = buildTestExecutor({ env: { EVCP_ALLOW_SIMULATE_LOGIN: "0" } });
+test("unset production configuration rejects native credentials, mock headers, and simulated login", async () => {
+  const exec = buildTestExecutor({ env: { EVCP_ALLOW_SIMULATE_LOGIN: undefined } });
 
   const [login, changePassword, mockHeader, simulatedLogin] = await Promise.all([
     exec.anon({
