@@ -90,8 +90,12 @@ function consumeStoreSessionHandoff(): void {
   const handoff = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const token = handoff.get("evcp_session");
   const expiresAt = handoff.get("evcp_session_expires_at");
+  const refreshToken = handoff.get("evcp_refresh_token");
+  const refreshExpiresAt = handoff.get("evcp_refresh_expires_at");
   if (!token || !expiresAt) return;
-  createPlatformSessionStore(window.localStorage).saveSession({ token, expiresAt });
+  createPlatformSessionStore(window.localStorage).saveSession({
+    token, expiresAt, ...(refreshToken && refreshExpiresAt ? { refreshToken, refreshExpiresAt } : {})
+  });
   window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
 }
 
