@@ -106,6 +106,10 @@ test("AppShell provides a professional persistent navigation layout", () => {
   assert.match(css, /\.app-shell-collapsed\s*\{[^}]*grid-template-columns: 84px minmax\(0, 1fr\)/s);
   assert.match(css, /position: sticky/);
   assert.match(css, /\.sidebar-nav a\.active/);
+  assert.match(
+    css,
+    /@media \(max-width: 760px\)\s*\{[\s\S]*?\.app-shell-collapsed \.sidebar-session\s*\{[^}]*display: flex;/
+  );
 });
 
 test("admin governance screen consumes shared design system components", () => {

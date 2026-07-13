@@ -61,6 +61,18 @@ Admin surfaces should favor tables, status cards, audit trails, filters, and con
 
 Generated app runtime screens must stay visually compatible with Horizon, but should use constrained runtime patterns rather than full admin/creator chrome.
 
+### Responsive Authentication Shell
+
+Admin and Creator sign-in screens share the Horizon authentication split shell defined by the `creator-auth-*` selectors in `packages/ui/styles.css`. The historical prefix is shared implementation, not a Creator-only visual contract; role-specific screens supply their own copy, form name, control IDs, and authentication behavior.
+
+- At `860px` and wider, use the centered two-column shell with an `884px` maximum width and `1.05fr 1fr` brand/form proportions. Keep the decorative brand panel `aria-hidden="true"` and free of focusable content.
+- Below `860px`, hide the brand panel and constrain the form shell to `424px`. At `480px` and below, use `--evcp-space-6` form padding. The page must reflow without horizontal overflow at `320px`/200% zoom and scroll naturally on short viewports.
+- Give the form a role-specific accessible name and one exposed page `h1`. Associate visible labels with required native email/password controls; placeholders are hints, and field icons are decorative.
+- Password visibility controls are non-submit buttons with a `44px` minimum target, a visible `:focus-visible` treatment, and an accessible name that changes between “Show password” and “Hide password” while retaining focus and the entered value.
+- During submission, expose `aria-busy="true"`, disable the submit control, retain entered values, and replace the action label with a progress label. Clear any prior error when a new attempt starts.
+- Authentication failures use one stable `role="alert"` with safe, non-identifying copy. Do not duplicate the assertive announcement with another live region or expose raw server details.
+- Preserve legible browser autofill styles and remove spatial button transforms under `prefers-reduced-motion: reduce` while retaining non-motion interaction feedback.
+
 ## Code Rules
 
 Allowed in app code:

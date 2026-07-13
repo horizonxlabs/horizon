@@ -43,7 +43,10 @@ test("frontend source exposes API bootstrap state without direct mock-data impor
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
   const storeSource = readFileSync("apps/app-store-pwa/src/main.tsx", "utf8");
 
-  assert.match(adminSource, /Session: \{bootstrap\.source\}/);
+  assert.match(adminSource, /loadAdminBootstrap/);
+  assert.match(adminSource, /adminSessionBridgeProfile/);
+  assert.match(adminSource, /Logout/);
+  assert.doesNotMatch(adminSource, /Session: \{bootstrap\.source\}|Refresh Session/);
   // The creator "Bootstrap: <source>" badge was removed in the UI cleanup, but the bootstrap state
   // still derives its source from the real Platform API auth mode (vs local fallback).
   assert.match(creatorSource, /source: currentUser\.auth\.mode === "platform_session"/);

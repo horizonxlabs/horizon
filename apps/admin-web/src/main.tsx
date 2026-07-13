@@ -652,7 +652,6 @@ const initialInstallerSetupForm: InstallWizardSetupForm = {
   firstAdminTemporaryPassword: "change-me-on-first-login"
 };
 
-
 const initialAiGovernanceForm: AiGovernanceForm = {
   providerName: "OpenAI Production",
   providerAdapter: "openai",
@@ -1500,7 +1499,6 @@ function AdminApp() {
   const [isSavingInstallerSetup, setIsSavingInstallerSetup] = useState(false);
   const [isSavingAiGovernance, setIsSavingAiGovernance] = useState(false);
   const [isRunningProviderTestCall, setIsRunningProviderTestCall] = useState(false);
-  const [isSigningIn, setIsSigningIn] = useState(false);
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
   const [sessionActive, setSessionActive] = useState<boolean>(hasValidAdminSession());
   const [createUserForm, setCreateUserForm] = useState({
@@ -1849,17 +1847,6 @@ function AdminApp() {
     }
   }
 
-  async function handleSignInBridge() {
-    setIsSigningIn(true);
-    try {
-      setBootstrap(await signInAdminSessionBridge());
-    } catch {
-      setBootstrap(initialAdminBootstrap);
-    } finally {
-      setIsSigningIn(false);
-    }
-  }
-
   function handleLogoutBridge() {
     setBootstrap(clearAdminSessionBridge());
   }
@@ -1938,24 +1925,10 @@ function AdminApp() {
   const adminPage = adminPageFromPath(window.location.pathname);
   const pageCopy = adminPageCopy[adminPage];
   const adminSessionControls = (
-    <>
-      <ToneBadge tone={bootstrap.source === "Platform API" ? "success" : "neutral"}>
-        Session: {bootstrap.source}
-      </ToneBadge>
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={handleSignInBridge}
-        disabled={isSigningIn}
-      >
-        <Fingerprint size={16} />
-        {isSigningIn ? "Refreshing" : "Refresh Session"}
-      </button>
-      <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
-        <LockKeyhole size={16} />
-        Logout
-      </button>
-    </>
+    <button type="button" className="secondary-button" onClick={handleLogoutBridge}>
+      <LockKeyhole size={16} />
+      Logout
+    </button>
   );
   const adminPageActions =
     adminPage === "ai-providers" || adminPage === "guardrails" ? (
