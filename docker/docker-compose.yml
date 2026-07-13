@@ -77,11 +77,13 @@ services:
       - "8081:8080"
     volumes:
       - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
+    networks:
+      - evcp-internal
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
+          "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
         ]
       interval: 10s
       timeout: 5s
@@ -193,7 +195,7 @@ services:
     <<: *evcp-node-service
     container_name: evcp-app-store-pwa
     restart: unless-stopped
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/app-store-pwa dev -- --host 0.0.0.0 --port 4102"
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/app-store-pwa exec vite --host 0.0.0.0 --port 4102"
     ports:
       - "${EVCP_STORE_PORT:-4102}:4102"
     depends_on:
