@@ -17,8 +17,12 @@ interface LoginResult {
   mustChangePassword: boolean;
 }
 
-async function nativeLogin(email: string, password: string): Promise<LoginResult> {
-  const response = await fetch(`${apiBaseUrl()}/auth/login`, {
+export async function nativeLogin(
+  email: string,
+  password: string,
+  baseUrl = apiBaseUrl()
+): Promise<LoginResult> {
+  const response = await fetch(`${baseUrl}/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password })
@@ -27,10 +31,38 @@ async function nativeLogin(email: string, password: string): Promise<LoginResult
     | { ok: true; data: LoginResult }
     | { ok: false; error: { code: string; message: string } }
     | null;
-  if (!body || body.ok !== true) {
-    throw new Error(body && "error" in body ? body.error.message : "Invalid email or password");
+  if (
+    !response.ok ||
+    !body ||
+    body.ok !== true ||
+    typeof body.data?.token !== "string" ||
+    body.data.token.trim().length === 0 ||
+    typeof body.data.expiresAt !== "string" ||
+    body.data.expiresAt.trim().length === 0 ||
+    typeof body.data.mustChangePassword !== "boolean"
+  ) {
+    throw new Error("Invalid email or password");
   }
   return body.data;
+}
+
+interface AdminLoginDependencies {
+  login: (email: string, password: string) => Promise<LoginResult>;
+  saveSession: (session: { token: string; expiresAt: string }) => void;
+}
+
+export async function authenticateAdmin(
+  email: string,
+  password: string,
+  onLoggedIn: () => void,
+  dependencies: AdminLoginDependencies = {
+    login: nativeLogin,
+    saveSession: saveAdminSession
+  }
+): Promise<void> {
+  const result = await dependencies.login(email.trim(), password);
+  dependencies.saveSession({ token: result.token, expiresAt: result.expiresAt });
+  onLoggedIn();
 }
 
 const BRAND_POINTS = [
@@ -52,9 +84,7 @@ export function AdminLoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
     setIsSubmitting(true);
     setErrorMessage(undefined);
     try {
-      const result = await nativeLogin(email.trim(), password);
-      saveAdminSession({ token: result.token, expiresAt: result.expiresAt });
-      onLoggedIn();
+      await authenticateAdmin(email, password, onLoggedIn);
     } catch {
       setErrorMessage("Invalid email or password");
     } finally {

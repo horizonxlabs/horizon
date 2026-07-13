@@ -6492,7 +6492,7 @@ button:disabled {
 .creator-auth-field {
   align-items: center;
   background: var(--evcp-color-surface, #fff);
-  border: 1px solid var(--evcp-color-border, #e2e8f0);
+  border: 1px solid var(--evcp-color-muted, #64748b);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
   color: #7c8799;
@@ -6521,7 +6521,7 @@ button:disabled {
 }
 
 .creator-auth-field input::placeholder {
-  color: #9aa5b5;
+  color: var(--evcp-color-muted, #64748b);
   font-weight: 500;
   opacity: 1;
 }

@@ -8,7 +8,8 @@ globalThis.React = React;
 
 const loginSource = readFileSync("apps/admin-web/src/login-screen.tsx", "utf8");
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
-const { AdminLoginScreen } = await import("../../apps/admin-web/src/login-screen.tsx");
+const { AdminLoginScreen, authenticateAdmin, nativeLogin } =
+  await import("../../apps/admin-web/src/login-screen.tsx");
 
 function renderLogin() {
   return renderToStaticMarkup(React.createElement(AdminLoginScreen, { onLoggedIn() {} }));
@@ -60,24 +61,132 @@ test("Admin login exposes labeled native controls and an accessible password tog
 });
 
 test("Admin login preserves request/session flow and provides safe loading and error states", () => {
-  assert.match(loginSource, /fetch\(`\$\{apiBaseUrl\(\)\}\/auth\/login`/);
+  assert.match(loginSource, /fetch\(`\$\{baseUrl\}\/auth\/login`/);
   assert.match(loginSource, /JSON\.stringify\(\{ email, password \}\)/);
-  assert.match(loginSource, /nativeLogin\(email\.trim\(\), password\)/);
-  assert.match(
-    loginSource,
-    /saveAdminSession\(\{ token: result\.token, expiresAt: result\.expiresAt \}\)/
-  );
-  assert.match(loginSource, /saveAdminSession[\s\S]*onLoggedIn\(\)/);
+  assert.match(loginSource, /authenticateAdmin\(email, password, onLoggedIn\)/);
   assert.match(loginSource, /if \(isSubmitting\) return/);
   assert.match(loginSource, /aria-busy=\{isSubmitting\}/);
   assert.match(loginSource, /disabled=\{isSubmitting\}/);
   assert.match(loginSource, /Signing in…/);
-  assert.match(loginSource, /setErrorMessage\(undefined\)[\s\S]*nativeLogin/);
+  assert.match(loginSource, /setErrorMessage\(undefined\)[\s\S]*authenticateAdmin/);
   assert.match(loginSource, /id="admin-login-error"/);
   assert.match(loginSource, /role="alert"/);
   assert.match(loginSource, /<AlertCircle[^>]*aria-hidden="true"/);
   assert.match(loginSource, /setErrorMessage\("Invalid email or password"\)/);
   assert.doesNotMatch(loginSource, /aria-live=/);
+});
+
+test("nativeLogin keeps the POST contract and rejects non-OK or malformed responses", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+
+  try {
+    globalThis.fetch = async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return {
+            ok: true,
+            data: {
+              token: "admin-token",
+              expiresAt: "2026-07-14T00:00:00.000Z",
+              mustChangePassword: false
+            }
+          };
+        }
+      };
+    };
+
+    const result = await nativeLogin(
+      "admin@company.com",
+      "unchanged-password",
+      "https://platform.example/api"
+    );
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, "https://platform.example/api/auth/login");
+    assert.deepEqual(requests[0].options, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "admin@company.com",
+        password: "unchanged-password"
+      })
+    });
+    assert.deepEqual(result, {
+      token: "admin-token",
+      expiresAt: "2026-07-14T00:00:00.000Z",
+      mustChangePassword: false
+    });
+
+    for (const response of [
+      { ok: true, json: async () => ({ ok: true, data: {} }) },
+      {
+        ok: false,
+        json: async () => ({
+          ok: true,
+          data: {
+            token: "must-not-be-accepted",
+            expiresAt: "2026-07-14T00:00:00.000Z"
+          }
+        })
+      },
+      { ok: true, json: async () => null }
+    ]) {
+      globalThis.fetch = async () => response;
+      await assert.rejects(
+        () => nativeLogin("admin@company.com", "password", "https://platform.example/api"),
+        /Invalid email or password/
+      );
+    }
+
+    globalThis.fetch = async () => {
+      throw new Error("network details stay internal to the submit handler");
+    };
+    await assert.rejects(() =>
+      nativeLogin("admin@company.com", "password", "https://platform.example/api")
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("authenticateAdmin trims email and persists before notifying success", async () => {
+  const events = [];
+
+  await authenticateAdmin(
+    " admin@company.com ",
+    " unchanged-password ",
+    () => events.push("logged-in"),
+    {
+      login: async (email, password) => {
+        events.push(`login:${email}:${password}`);
+        return {
+          token: "admin-token",
+          expiresAt: "2026-07-14T00:00:00.000Z",
+          mustChangePassword: false
+        };
+      },
+      saveSession: (session) => events.push(`save:${session.token}:${session.expiresAt}`)
+    }
+  );
+
+  assert.deepEqual(events, [
+    "login:admin@company.com: unchanged-password ",
+    "save:admin-token:2026-07-14T00:00:00.000Z",
+    "logged-in"
+  ]);
+
+  await assert.rejects(() =>
+    authenticateAdmin("admin@company.com", "password", () => events.push("unexpected"), {
+      login: async () => {
+        throw new Error("invalid credentials");
+      },
+      saveSession: () => events.push("unexpected-save")
+    })
+  );
+  assert.doesNotMatch(events.join("\n"), /unexpected/);
 });
 
 test("Shared auth CSS covers responsive reflow, focus, hit targets, and reduced motion", () => {
@@ -95,6 +204,14 @@ test("Shared auth CSS covers responsive reflow, focus, hit targets, and reduced 
     /@media \(max-width: 480px\)[\s\S]*?\.creator-auth-form\s*\{[^}]*padding: var\(--evcp-space-6\);/s
   );
   assert.match(uiStyles, /\.creator-auth-eye\s*\{[^}]*min-height: 44px;[^}]*min-width: 44px;/s);
+  assert.match(
+    uiStyles,
+    /\.creator-auth-field\s*\{[^}]*border: 1px solid var\(--evcp-color-muted, #64748b\);/s
+  );
+  assert.match(
+    uiStyles,
+    /\.creator-auth-field input::placeholder\s*\{[^}]*color: var\(--evcp-color-muted, #64748b\);/s
+  );
   assert.match(uiStyles, /\.creator-auth-eye:focus-visible/);
   assert.match(uiStyles, /\.creator-auth-submit:focus-visible/);
   assert.match(
