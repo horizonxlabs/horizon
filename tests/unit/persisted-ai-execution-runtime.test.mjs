@@ -56,3 +56,12 @@ test("persisted executor retries one transient provider failure before recording
   assert.equal(result.status, "succeeded");
   assert.equal(attempts, 2);
 });
+
+test("persisted executor does not retry a non-retryable provider response", async () => {
+  const client = new MemoryAiGovernancePersistenceClient({ providers: [{ id: "aip_primary", name: "Primary", adapter: "openai", baseUrl: "https://gateway.example.test/v1", models: ["gpt-test"], status: "active", createdAt: now }], apiKeys: [{ id: "aik_primary", providerId: "aip_primary", name: "primary", usageMode: "production", quotaTokens: 1000, fallbackPriority: 0, fingerprint: "sha256:abc", maskedValue: "***test", secretCiphertext: "local-envelope:c2VjcmV0", keyVersion: 1, encryptionProvider: "local-envelope", status: "active", createdAt: now }], routes: [{ id: "air_frontend", scenario: "frontend_coding", primaryProviderId: "aip_primary", primaryModel: "gpt-test", createdAt: now }] });
+  let attempts = 0;
+  const executor = createPersistedGovernedAiExecutor(client, { fetcher: async () => { attempts += 1; return new Response("bad request", { status: 400 }); } });
+  const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a leave view", requestId: "req_bad_1" });
+  assert.equal(result.status, "failed");
+  assert.equal(attempts, 1);
+});

@@ -64,7 +64,9 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
       });
       if (!response.ok) {
         if (response.status >= 500 && attempt === 0) continue;
-        throw new Error(`AI provider returned HTTP ${response.status}`);
+        const error = new Error(`AI provider returned HTTP ${response.status}`) as Error & { retryable?: boolean };
+        error.retryable = response.status >= 500;
+        throw error;
       }
       const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { total_tokens?: unknown } };
       const text = String(body.choices?.[0]?.message?.content ?? "").trim();
@@ -73,8 +75,16 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
       return { text, tokensUsed: Number.isFinite(tokensUsed) && tokensUsed > 0 ? tokensUsed : 1, latencyMs: 1, providerId: provider.id, model: provider.model };
     } catch (error) {
       lastError = error;
-      if (attempt === 0) continue;
+      if (attempt === 0 && (isRetryable(error) || !(error instanceof Error))) continue;
+      throw error;
     }
   }
   throw lastError;
+}
+
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  const tagged = error as Error & { retryable?: boolean };
+  if (tagged.retryable !== undefined) return tagged.retryable;
+  return !/^AI provider returned HTTP 4\d\d$/.test(error.message);
 }
