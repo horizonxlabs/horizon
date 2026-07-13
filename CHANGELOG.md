@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Admin Login now shares the responsive Horizon split-shell, accessible password toggle, and safe loading/error states used by Creator Login, while preserving the existing authentication and session contract (#131).
+
 ### Added
 
 - Creator workspace Plan/Build mode switch with OpenCode-style read-only Plan agent analysis, Build-only mutation paths, per-project mode persistence, server-side mode plumbing, and unit/integration/E2E coverage.
