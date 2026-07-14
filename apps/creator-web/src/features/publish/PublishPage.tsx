@@ -1,11 +1,10 @@
-import { DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
+import { DecisionPanel, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
 import { CheckCircle2, ClipboardCheck, Store } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
-    selectedProject,
     handlePublishProject,
     isPublishingProject,
     publishReview,
@@ -13,7 +12,8 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     visibleRegistryEntry,
     visiblePublishChecklist,
     visibleDeployment,
-    visiblePreview
+    visiblePreview,
+    publishMessage
   } = app;
   return (
     <CreatorShell
@@ -27,31 +27,45 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
               <button
                 type="button"
                 onClick={handlePublishProject}
-                disabled={isPublishingProject || publishReview?.ready === false}
+                disabled={isPublishingProject || !publishReview || !publishReview.ready}
               >
                 <Store size={15} /> {isPublishingProject ? "Publishing" : "Publish to App Store"}
               </button>
             }
           >
+            <p>{publishMessage}</p>
             <DefinitionGrid
               items={[
                 {
                   label: "Manifest",
-                  value: `manifest v${publishReview?.manifest.manifestVersion ?? publishResult?.manifest.manifestVersion ?? "1"}`
+                  value:
+                    (publishReview?.manifest.manifestVersion ??
+                    publishResult?.manifest.manifestVersion)
+                      ? `manifest v${publishReview?.manifest.manifestVersion ?? publishResult?.manifest.manifestVersion}`
+                      : "No manifest returned"
                 },
                 {
                   label: "Route",
                   value:
                     publishReview?.manifest.app?.route ??
                     publishResult?.manifest.app?.route ??
-                    `/apps/${selectedProject.id}`
+                    "No route returned"
                 },
-                { label: "Auth", value: publishReview?.manifest.auth?.mode ?? "platform_auth_sdk" },
+                {
+                  label: "Auth",
+                  value: publishReview?.manifest.auth?.mode ?? "No auth mode returned"
+                },
                 {
                   label: "Frontend",
-                  value: publishReview?.manifest.frontend?.checkpointId ?? visiblePreview.version
+                  value:
+                    publishReview?.manifest.frontend?.checkpointId ??
+                    visiblePreview.version ??
+                    "No preview returned"
                 },
-                { label: "Visibility", value: visibleRegistryEntry?.visibility ?? "restricted" }
+                {
+                  label: "Visibility",
+                  value: visibleRegistryEntry?.visibility ?? "No registry entry returned"
+                }
               ]}
             />
             <div className="publish-checklist">
@@ -68,18 +82,26 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
             </div>
           </SectionCard>
           <SectionCard eyebrow="Deployment Record" title="Published Output">
-            <div className="deployment-record">
-              <CheckCircle2 size={20} />
-              <div>
-                <strong>{visibleDeployment?.id ?? "dep_leave_management_001"}</strong>
-                <span>
-                  {visibleDeployment?.status ?? "published"} · manifest v
-                  {visibleDeployment?.manifestVersion ??
-                    publishResult?.manifest.manifestVersion ??
-                    "1"}
-                </span>
+            {visibleDeployment ? (
+              <div className="deployment-record">
+                <CheckCircle2 size={20} />
+                <div>
+                  <strong>{visibleDeployment.id}</strong>
+                  <span>
+                    {visibleDeployment.status} · manifest v{visibleDeployment.manifestVersion}
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <DecisionPanel
+                tone="warning"
+                badge="API required"
+                title="No deployment record"
+                lines={[
+                  "A deployment appears here only after Platform API publishes a healthy revision."
+                ]}
+              />
+            )}
           </SectionCard>
         </section>
       }
