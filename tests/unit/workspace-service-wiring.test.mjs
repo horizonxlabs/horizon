@@ -22,5 +22,5 @@ test("createDefaultWorkspaceOrchestrator provisions a workspace", async () => {
     slug: "demo-app"
   });
   assert.equal(record.state, "running");
-  assert.ok(orchestrator.listSecretNames("prj-demo-app").includes("DATABASE_URL"));
+  assert.ok((await orchestrator.listSecretNames("prj-demo-app")).includes("DATABASE_URL"));
 });

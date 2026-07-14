@@ -13,8 +13,7 @@ export function createCreatorPlatformClient(onSessionEnded?: () => void) {
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
   return createPlatformApiClient({
     baseUrl,
-    fetcher: createSessionAwareFetch({ baseUrl, storage: window.localStorage, onSessionEnded }),
-    legacyUserEmail: "creator@company.com"
+    fetcher: createSessionAwareFetch({ baseUrl, storage: window.localStorage, onSessionEnded })
   });
 }
 

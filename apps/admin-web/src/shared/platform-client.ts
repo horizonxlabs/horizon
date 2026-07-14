@@ -1,4 +1,4 @@
-import { createPlatformApiClient, createPlatformSessionStore, createSessionAwareFetch, startKeycloakLogin } from "@evcp/api-client";
+import { createPlatformApiClient, createPlatformSessionStore, createSessionAwareFetch, startKeycloakLogin, startKeycloakLogout } from "@evcp/api-client";
 
 // Shared client + session helpers for the admin app (extracted from main.tsx so the setup wizard
 // and login screen can reuse them without duplicating config).
@@ -44,11 +44,14 @@ export function consumeAdminSessionHandoff(location = window.location): boolean 
 export function createAdminPlatformClient(onSessionEnded?: () => void) {
   return createPlatformApiClient({
     baseUrl: apiBaseUrl(),
-    fetcher: createSessionAwareFetch({ baseUrl: apiBaseUrl(), storage: window.localStorage, onSessionEnded }),
-    legacyUserEmail: "admin@company.com"
+    fetcher: createSessionAwareFetch({ baseUrl: apiBaseUrl(), storage: window.localStorage, onSessionEnded })
   });
 }
 
 export function startAdminKeycloakLogin(returnTo = window.location.href): string {
   return startKeycloakLogin(apiBaseUrl(), "admin", returnTo);
+}
+
+export function startAdminKeycloakLogout(returnTo = window.location.href): string {
+  return startKeycloakLogout(apiBaseUrl(), "admin", returnTo);
 }

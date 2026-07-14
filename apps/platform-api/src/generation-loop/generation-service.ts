@@ -9,31 +9,10 @@ import type { createErrorFeedbackTracker } from "./error-feedback";
 import { selectContextFiles } from "./context-selector";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { AiScenario, PlatformUser } from "../platform-services";
+import type { CheckpointStore } from "./checkpoint-store";
+import type { ChatStreamEvent } from "./generation-types";
 
-export type ActionActionType = "file" | "edit" | "shell" | "migration";
-
-export type ChatStreamEvent =
-  | { type: "token"; content: string }
-  // Emitted when an action begins so the UI can show a live "in progress" row (shimmer).
-  | { type: "action_start"; actionId: string; actionType: ActionActionType; label: string }
-  // Emitted as an action's content streams in, so the UI can show it growing live.
-  | { type: "action_chunk"; actionId: string; content: string }
-  // Emitted when the action finishes. Carries a preview the UI can expand: find/replace for an
-  // edit (rendered as a diff), body for file/shell/migration, or error text on failure.
-  | {
-      type: "action_result";
-      actionId: string;
-      actionType: ActionActionType;
-      label: string;
-      ok: boolean;
-      find?: string;
-      replace?: string;
-      body?: string;
-      error?: string;
-    }
-  | { type: "commit"; sha: string }
-  | { type: "error"; message: string }
-  | { type: "done" };
+export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 
 // Preview payloads can be large (whole files); cap them so the SSE stream stays lean.
 const PREVIEW_MAX = 4000;
@@ -64,6 +43,7 @@ export interface GenerationServiceDeps {
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   commitAllChanges: (projectId: string, message: string) => Promise<string>;
+  checkpoints?: CheckpointStore;
   onAudit?: (event: {
     action: string;
     projectId: string;
@@ -351,6 +331,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         try {
           const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
           assistantMessage.commitSha = sha;
+          await deps.checkpoints?.createCheckpoint({
+            projectId: input.projectId,
+            tag: `checkpoint/${sha.slice(0, 12)}`,
+            commitSha: sha,
+            label: input.prompt.slice(0, 120)
+          });
           deps.onAudit?.({
             action: "generation.commit_created",
             projectId: input.projectId,

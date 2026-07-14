@@ -129,13 +129,26 @@ for (const [page, pathname, expected] of ROUTE_CASES) {
   });
 }
 
-test("CreatorRoutes retains the default dashboard fallback", () => {
+test("CreatorRoutes fail-closes the default dashboard route without demo records", () => {
   const html = renderWithHook((app) =>
     React.createElement(CreatorRoutes, {
       app: { ...app, creatorPage: "unexpected", bootstrap: { ...app.bootstrap, status: "ready" } }
     })
   );
-  assert.match(html, /Database and frontend versions/);
+  assert.match(html, /This route has no dashboard fallback/);
+  assert.doesNotMatch(html, /Database and frontend versions/);
+  assert.doesNotMatch(html, /TKT-0001/);
+});
+
+test("CreatorRoutes keeps the first-project state inside the shared Creator shell", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(CreatorRoutes, {
+      app: { ...app, bootstrap: { ...app.bootstrap, status: "empty" } }
+    })
+  );
+  assert.match(html, /class="[^"]*app-shell-light/);
+  assert.match(html, /วันนี้อยากสร้างอะไร/);
+  assert.match(html, /สร้างด้วย AI/);
 });
 
 for (const [name, Page] of Object.entries(PAGES)) {

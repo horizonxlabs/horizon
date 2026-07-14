@@ -8,11 +8,11 @@ import {
   Send
 } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
-import { platformSessionToken } from "@/shared/session";
+import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -63,10 +63,38 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     setWorkspaceMode
   } = app;
   const [showPublish, setShowPublish] = useState(false);
+  const [previewAuthorizationState, setPreviewAuthorizationState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [previewAuthorizationAttempt, setPreviewAuthorizationAttempt] = useState(0);
+  const [authorizedPreviewRequestKey, setAuthorizedPreviewRequestKey] = useState("");
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
   const previewKey = selectedProject.id.replaceAll("_", "-");
-  const previewSrc = `/preview/${previewKey}?token=${encodeURIComponent(platformSessionToken() ?? "")}`;
+  const previewSrc = `/preview/${previewKey}`;
+  const previewRequestKey = `${selectedProject.id}:${vibePreviewKey}:${previewAuthorizationAttempt}`;
+  const isPreviewAuthorized =
+    previewAuthorizationState === "ready" &&
+    authorizedPreviewRequestKey === previewRequestKey;
+  useEffect(() => {
+    let active = true;
+    setPreviewAuthorizationState("loading");
+    setAuthorizedPreviewRequestKey("");
+    void createCreatorPlatformClient()
+      .authorizeWorkspacePreview(selectedProject.id)
+      .then(() => {
+        if (active) {
+          setAuthorizedPreviewRequestKey(previewRequestKey);
+          setPreviewAuthorizationState("ready");
+        }
+      })
+      .catch(() => {
+        if (active) setPreviewAuthorizationState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedProject.id, vibePreviewKey, previewAuthorizationAttempt]);
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
@@ -107,7 +135,16 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           >
             <RotateCw size={15} />
           </button>
-          <a href={previewSrc} target="_blank" rel="noreferrer" className="vibe-live-control">
+          <a
+            href={previewSrc}
+            target="_blank"
+            rel="noreferrer"
+            aria-disabled={!isPreviewAuthorized}
+            onClick={(event) => {
+              if (!isPreviewAuthorized) event.preventDefault();
+            }}
+            className="vibe-live-control"
+          >
             <span>Preview</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
@@ -145,8 +182,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   <div className="vibe-message-text">{message.text || (isVibing ? "▋" : "")}</div>
                   {message.actions.length > 0 && (
                     <div className="vibe-message-actions">
-                      {message.actions.map((action) => (
-                        <VibeActionRow key={action.id} action={action} />
+                      {message.actions.map((action, actionIndex) => (
+                        <VibeActionRow
+                          key={`${message.id}:${action.id}:${actionIndex}`}
+                          action={action}
+                        />
                       ))}
                     </div>
                   )}
@@ -263,13 +303,27 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </div>
         </div>
         <div className="vibe-live-preview-panel">
-          {vibeTab === "preview" ? (
+          {vibeTab === "preview" && isPreviewAuthorized ? (
             <iframe
               key={vibePreviewKey}
               title="Live preview"
               src={previewSrc}
               className="vibe-live-iframe"
             />
+          ) : vibeTab === "preview" ? (
+            <div className="hz-db-empty" role="status">
+              {previewAuthorizationState === "loading"
+                ? "Authorizing preview…"
+                : "Preview authorization failed."}
+              {previewAuthorizationState === "error" ? (
+                <button
+                  type="button"
+                  onClick={() => setPreviewAuthorizationAttempt((attempt) => attempt + 1)}
+                >
+                  Retry preview
+                </button>
+              ) : null}
+            </div>
           ) : vibeTab === "database" ? (
             <Suspense fallback={<div className="hz-db-empty">กำลังโหลด Database…</div>}>
               <WorkspaceDatabasePanel projectId={selectedProject.id} />

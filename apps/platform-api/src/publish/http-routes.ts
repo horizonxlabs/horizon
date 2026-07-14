@@ -7,6 +7,23 @@ import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports"
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
 
+interface PublishedProjectAccess {
+  canAccessPublishedProject: (
+    actor: NonNullable<WorkspaceAuthContext["actor"]>,
+    projectId: string
+  ) => Promise<boolean>;
+}
+
+export async function canAccessPublishedDeployment(
+  auth: WorkspaceAuthContext,
+  projectId: string,
+  persistence?: PublishedProjectAccess
+): Promise<boolean> {
+  if (auth.projectIds.includes(projectId)) return true;
+  if (!auth.actor || !persistence) return false;
+  return persistence.canAccessPublishedProject(auth.actor, projectId);
+}
+
 type HeaderBag = Record<string, string | string[] | undefined>;
 
 // Minimal raw-Express surface used by the publish + /apps serve handlers (mirrors the shape the
@@ -80,6 +97,8 @@ export function registerPublishHttpRoutes(opts: {
   nodeHttp: typeof NodeHttp;
   env?: Record<string, string | undefined>;
   resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
+  canAccessDeployment: (auth: WorkspaceAuthContext, projectId: string) => Promise<boolean>;
+  publishStack?: ReturnType<typeof createDefaultPublishStack>;
   recordAudit: (event: {
     action: string;
     projectId: string;
@@ -92,7 +111,8 @@ export function registerPublishHttpRoutes(opts: {
     publishService,
     deployments: workspaceDeployments,
     rehydrateDeployment
-  } = createDefaultPublishStack({
+  } = opts.publishStack ??
+  createDefaultPublishStack({
     orchestrator,
     migrations: opts.migrations,
     env: opts.env,
@@ -175,14 +195,22 @@ export function registerPublishHttpRoutes(opts: {
   // above remain authenticated. Deployed apps receive their full base-path URL so Next can match
   // the EVCP_PREVIEW_BASE that was compiled into the image.
   const makeAppsHandler =
-    (environment: EnvironmentName) =>
-    async (req: PublishReq, res: PublishRes) => {
+    (environment: EnvironmentName) => async (req: PublishReq, res: PublishRes) => {
+      const auth = await opts.resolvePublishAuth(req.headers ?? {});
+      if (!auth) {
+        res.status(401).json({ error: "unauthorized" });
+        return;
+      }
       const slug = String(req.params?.slug ?? "");
       const decision = await resolveAppsTarget(workspaceDeployments, slug, environment, () =>
         rehydrateDeployment(slug, environment)
       );
       if (!decision.ok) {
         res.status(decision.status).json({ error: "app_unavailable" });
+        return;
+      }
+      if (!(await opts.canAccessDeployment(auth, decision.projectId))) {
+        res.status(403).json({ error: "forbidden" });
         return;
       }
       const target = new URL(decision.upstream);

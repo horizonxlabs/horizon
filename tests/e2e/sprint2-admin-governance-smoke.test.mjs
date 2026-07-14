@@ -176,8 +176,10 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
 
   for (const text of [
     "useAiGovernance",
-    "External AI Providers",
-    "Latest events",
+    "Register approved endpoint",
+    "Persisted records",
+    "Providers, masked credentials, and guardrail evidence",
+    "Provider secrets are sent only to Platform API",
     "createProvider",
     "saveApiKey",
     "configureRoute",
@@ -196,7 +198,8 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
 test("Admin governance renders unavailable guidance instead of fallback data", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
   assert.match(source, /aiGovernanceUnavailableMessage/);
-  assert.match(source, /Configuration changes are disabled until Platform API data is available/);
+  assert.match(source, /AI governance data is unavailable\. Refresh the page or sign in again\./);
+  assert.match(source, /disabled = !canMutateAiGovernance\(ai\.availability\)/);
   assert.doesNotMatch(source, /local fallback rows remain visible/);
 });
 
@@ -246,7 +249,7 @@ test("Admin clears derived governance state after a failed read or session trans
 test("Dashboard governance shows unavailable guidance instead of provider-test placeholders", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
   assert.match(source, /DecisionPanel tone=\{disabled \? "warning" : "success"\}/);
-  assert.match(source, /badge=\{ai\.availability\} title=\{ai\.message\}/);
+  assert.match(source, /badge=\{ai\.availability\} title=\{message \?\? ai\.message\}/);
 });
 
 test("Admin hides local route and rule rows until governance is ready", () => {

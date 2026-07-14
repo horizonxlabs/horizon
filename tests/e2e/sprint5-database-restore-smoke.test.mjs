@@ -169,32 +169,27 @@ test("Sprint 5 API restores frontend checkpoint only and audits result", () => {
   assert.ok(services.audit.list().some((event) => event.action === "frontend.restore.completed"));
 });
 
-test("Sprint 5 Creator UI exposes database view frontend versions compare and restore boundary", () => {
+test("Sprint 5 Creator UI exposes the API-backed project database and checkpoint boundary", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "Database View",
-    "Schema",
-    "Sample Records",
-    "Migration History",
-    "Frontend Versions",
-    "Compare",
-    "Restore Frontend Only",
-    "Will not change",
-    "backend",
-    "database",
-    "auth",
-    "PRD baseline"
+    "fetchProjectDbSchema",
+    "fetchProjectDbTable",
+    "mutateProjectDbRow",
+    "No tables in schema",
+    "read-only",
+    "New row",
+    "Delete",
+    "Refresh",
+    "checkpointId"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   for (const component of [
-    "PageHeader",
-    "SectionCard",
-    "DataTable",
-    "DecisionPanel",
-    "ToneBadge"
+    "DataGrid",
+    "WorkspaceDatabasePanel",
+    "DecisionPanel"
   ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }

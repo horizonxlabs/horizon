@@ -142,24 +142,24 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "โปรเจกต์ของฉัน",
+    "Horizon AI Builder",
+    "ค้นหาโปรเจกต์",
+    "สร้างด้วย AI",
     "Create Project Wizard",
-    "Generate PRD",
     "PRD Viewer",
+    "Structured PRD Sections",
     "Version History",
     "Confirm Baseline",
-    "Baseline v1.0"
+    "No local PRD fallback"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   for (const component of [
-    "PageHeader",
+    "WorkflowRail",
     "SectionCard",
     "DataTable",
-    "DefinitionGrid",
-    "DecisionPanel",
-    "ToneBadge"
+    "DecisionPanel"
   ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }

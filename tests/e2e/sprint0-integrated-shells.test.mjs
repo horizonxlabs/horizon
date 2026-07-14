@@ -9,7 +9,7 @@ const storeApp = readAllSourceFiles("apps/app-store-pwa/src");
 const navigation = readFileSync("packages/config/src/index.ts", "utf8");
 
 test("admin creator and store shells expose the expected sprint 0 user journeys", () => {
-  assert.match(adminApp, /External AI Providers/);
+  assert.match(adminApp, /Register approved endpoint/);
   assert.match(adminApp, /AppShell/);
   assert.match(adminApp, /PageHeader/);
   assert.match(adminApp, /ServiceStrip/);
@@ -18,7 +18,7 @@ test("admin creator and store shells expose the expected sprint 0 user journeys"
   assert.match(creatorApp, /PRD Viewer/);
   assert.match(storeApp, /My Apps/);
   assert.match(storeApp, /Available Apps/);
-  assert.match(storeApp, /AppCard/);
+  assert.match(storeApp, /StorefrontSummary/);
 });
 
 test("route map connects the three MVP surfaces", () => {

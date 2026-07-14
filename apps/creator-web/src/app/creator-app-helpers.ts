@@ -1,6 +1,7 @@
 import {
   createPlatformSessionStore,
   startKeycloakLogin,
+  startKeycloakLogout,
   type PrdVersionDto
 } from "@evcp/api-client";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
@@ -55,6 +56,12 @@ export function beginCreatorKeycloakLogin(): void {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
   window.location.assign(startKeycloakLogin(baseUrl, "creator", window.location.href));
+}
+
+export function beginCreatorKeycloakLogout(): void {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  window.location.assign(startKeycloakLogout(baseUrl, "creator", window.location.href));
 }
 
 export function consumeCreatorSessionHandoff(): void {

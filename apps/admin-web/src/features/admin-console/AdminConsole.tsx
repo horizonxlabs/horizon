@@ -3,11 +3,11 @@ import { AppShell, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard
 import { BrainCircuit, KeyRound, LockKeyhole, Route, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdminRoutes } from "@/routes/AdminRoutes";
-import { canMutateAiGovernance, useAiGovernance } from "@/features/ai-governance";
+import { AiGovernancePanel, useAiGovernance } from "@/features/ai-governance";
 import { AuditEvidenceSection } from "@/features/audit-monitoring";
 import { useProductionObservability } from "@/features/platform-operations";
 import { KeycloakUserManagement } from "@/features/user-management";
-import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession } from "@/shared/platform-client";
+import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession, startAdminKeycloakLogout } from "@/shared/platform-client";
 
 function pageFromPath(pathname: string) {
   if (pathname.includes("/services")) return "services";
@@ -39,7 +39,7 @@ export function AdminConsole() {
   }
 
   const content = page === "audit-logs" && client ? <AuditEvidenceSection client={client} /> : page === "users" && client ? <KeycloakUserManagement client={client} /> : page === "ai-providers" || page === "guardrails" ? <AiGovernancePanel ai={ai} /> : <OperationsDashboard client={client} ai={ai} page={page} />;
-  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined); clearAdminSession(); setSessionActive(false); }}><LockKeyhole size={16} />Logout</button>}><PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />{content}</AppShell></AdminRoutes>;
+  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}><PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />{content}</AppShell></AdminRoutes>;
 }
 
 function OperationsDashboard({ client, ai, page }: { client: ReturnType<typeof createAdminPlatformClient> | undefined; ai: ReturnType<typeof useAiGovernance>; page: string }) {
@@ -50,10 +50,5 @@ function OperationsDashboard({ client, ai, page }: { client: ReturnType<typeof c
     { label: "Service healthy", value: String(operations.serviceHealth.filter((item) => item.status === "healthy").length), detail: operations.message, icon: Route },
     { label: "Queues degraded", value: String(operations.queueHealth.filter((item) => item.status !== "healthy").length), detail: "from Platform API", icon: ShieldCheck }
   ];
-  return <section className="admin-page-stack"><section className="ds-metric-grid">{kpis.map(({ icon: Icon, ...item }) => <MetricCard key={item.label} {...item} icon={<Icon size={18} />} tone={operations.status === "ready" ? "success" : "warning"} />)}</section><ServiceStrip services={operations.serviceHealth.map(({ name, detail, status }) => ({ name, detail, status: status === "failed" ? "down" : status }))} /><SectionCard eyebrow="Operations" title={page === "services" ? "Service health" : "Production evidence"}><DataTable columns={[{ key: "name", label: "Service" }, { key: "status", label: "Status" }, { key: "detail", label: "Signal" }]} rows={operations.serviceHealth} /></SectionCard><SectionCard eyebrow="Queues" title="Current backpressure"><DataTable columns={[{ key: "name", label: "Queue" }, { key: "depth", label: "Depth" }, { key: "failedCount", label: "Failed" }, { key: "status", label: "Status" }]} rows={operations.queueHealth} /></SectionCard></section>;
-}
-
-function AiGovernancePanel({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
-  const disabled = !canMutateAiGovernance(ai.availability);
-  return <section className="admin-page-stack"><DecisionPanel tone={disabled ? "warning" : "success"} badge={ai.availability} title={ai.message} lines={["Configuration changes are disabled until Platform API data is available."]} /><section className="ds-grid-2"><SectionCard eyebrow="Provider Registry" title="External AI Providers"><DataTable columns={[{ key: "name", label: "Provider" }, { key: "adapter", label: "Adapter" }, { key: "status", label: "Status" }]} rows={ai.providers} /></SectionCard><SectionCard eyebrow="Guardrails" title="Latest events"><DataTable columns={[{ key: "id", label: "Event" }, { key: "decision", label: "Decision" }, { key: "occurredAt", label: "Time" }]} rows={ai.guardrailEvents} /></SectionCard></section></section>;
+  return <section className="admin-page-stack"><DecisionPanel tone={operations.status === "ready" ? "success" : "warning"} badge={operations.status} title={operations.message} lines={["Health and queue evidence is loaded from Platform API; unavailable data never falls back to demo success."]} /><section className="ds-metric-grid">{kpis.map(({ icon: Icon, ...item }) => <MetricCard key={item.label} {...item} icon={<Icon size={18} />} tone={operations.status === "ready" ? "success" : "warning"} />)}</section><ServiceStrip services={operations.serviceHealth.map(({ name, detail, status }) => ({ name, detail, status: status === "failed" ? "down" : status }))} /><SectionCard eyebrow="Operations" title={page === "services" ? "Service health" : "Production evidence"}><DataTable columns={[{ key: "name", label: "Service" }, { key: "status", label: "Status" }, { key: "detail", label: "Signal" }]} rows={operations.serviceHealth} /></SectionCard><SectionCard eyebrow="Queues" title="Current backpressure"><DataTable columns={[{ key: "name", label: "Queue" }, { key: "depth", label: "Depth" }, { key: "failedCount", label: "Failed" }, { key: "status", label: "Status" }]} rows={operations.queueHealth} /></SectionCard></section>;
 }

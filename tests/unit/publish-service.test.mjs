@@ -4,37 +4,8 @@ import {
   createPublishService,
   PRODUCTION_DOCKERFILE
 } from "../../apps/platform-api/src/publish/publish-service.ts";
-import { createMemoryGitPort } from "../../apps/platform-api/src/publish/git-port.ts";
-import { createMemoryDeploymentStore } from "../../apps/platform-api/src/publish/deployment-store.ts";
-import { createMemoryHealthChecker } from "../../apps/platform-api/src/publish/health-checker.ts";
-import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
-import { createMemoryDockerEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
 import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts";
-
-function buildDeps({ healthy = true } = {}) {
-  const docker = createMemoryDockerEngine();
-  // Seed the already-running dev container (created earlier by the workspace
-  // orchestrator, not as part of the publish flow) so buildImage/commit can find it.
-  docker.state.containers.push({
-    containerId: "dev-c1",
-    spec: { name: "evcp-ws-app" },
-    status: "running"
-  });
-  const git = createMemoryGitPort({ p1: { clean: true, head: "sha1", migrationNames: {} } });
-  const audits = [];
-  return {
-    docker,
-    git,
-    migrations: createMemoryMigrationStore(),
-    deployments: createMemoryDeploymentStore(),
-    health: createMemoryHealthChecker(healthy),
-    resolveEnv: () => ({ DATABASE_URL: "postgres://x" }),
-    getDevContainerId: () => "dev-c1",
-    network: "evcp-internal",
-    onAudit: (e) => audits.push(e),
-    _audits: audits
-  };
-}
+import { buildPublishServiceDeps as buildDeps } from "./publish-service-test-helpers.mjs";
 
 test("production Dockerfile preserves the npm dependency cache across source-only edits", () => {
   const manifestCopy = PRODUCTION_DOCKERFILE.indexOf("COPY package*.json ./");

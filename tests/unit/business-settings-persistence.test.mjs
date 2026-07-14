@@ -120,6 +120,13 @@ test("route: GET /setup/status is unauthenticated and reports not-completed init
 
 test("route: POST /setup/initialize creates a real admin, flips flag, and is one-shot", async () => {
   const services = createSetupServices();
+  let keycloakProvision;
+  services.keycloakUserManagement = {
+    create: async (actor, input) => {
+      keycloakProvision = { actor, input };
+      return { id: "kc-owner", email: input.email, name: input.name, enabled: true, groups: ["evcp-admins"] };
+    }
+  };
 
   const payload = {
     business: {
@@ -146,6 +153,10 @@ test("route: POST /setup/initialize creates a real admin, flips flag, and is one
   assert.equal(created.status, 201);
   assert.equal(created.body.ok, true);
   assert.deepEqual(created.body.data, { setupCompleted: true });
+  assert.equal(keycloakProvision.input.email, "owner@widgets.co");
+  assert.equal(keycloakProvision.input.role, "admin");
+  assert.equal(keycloakProvision.input.temporaryPassword, "supersecret1");
+  assert.equal(keycloakProvision.actor.role, "admin");
 
   // Admin user genuinely persisted with admin role + password hash.
   const user = await services.corePersistenceClient.platformUser.findUnique({

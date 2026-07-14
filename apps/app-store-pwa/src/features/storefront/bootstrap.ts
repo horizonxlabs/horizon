@@ -5,7 +5,7 @@ import {
   type StorefrontHomeResponse
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createStorePlatformClient, startStoreKeycloakLogin } from "./platform-client";
+import { createStorePlatformClient, startStoreKeycloakLogin, startStoreKeycloakLogout } from "./platform-client";
 
 export type StoreBootstrapState = {
   status: "loading" | "ready" | "error";
@@ -61,6 +61,10 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
 
 export function signInStoreSessionBridge(): void {
   window.location.assign(startStoreKeycloakLogin(window.location.href));
+}
+
+export function beginStoreKeycloakLogout(): void {
+  window.location.assign(startStoreKeycloakLogout(window.location.href));
 }
 
 function consumeStoreSessionHandoff(): void {

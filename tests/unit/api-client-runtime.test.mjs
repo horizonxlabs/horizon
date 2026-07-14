@@ -212,9 +212,10 @@ test("platform session store saves loads and clears browser tokens", () => {
   assert.equal(store.getExpiresAt(), undefined);
 });
 
-test("platform API client builds a Keycloak start redirect without a browser token", async () => {
-  const { startKeycloakLogin } = await import("../../packages/api-client/src/index.ts");
+test("platform API client builds Keycloak login and logout redirects without a browser token", async () => {
+  const { startKeycloakLogin, startKeycloakLogout } = await import("../../packages/api-client/src/index.ts");
   assert.equal(startKeycloakLogin("https://platform.example/api", "creator", "https://creator.example/workspace"), "https://platform.example/api/auth/keycloak/start?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace");
+  assert.equal(startKeycloakLogout("https://platform.example/api", "creator", "https://creator.example/workspace"), "https://platform.example/api/auth/keycloak/logout?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace");
 });
 
 test("platform API client posts AI provider test-call requests", async () => {
@@ -256,6 +257,23 @@ test("platform API client posts AI provider test-call requests", async () => {
   assert.deepEqual(observedBody, { scenario: "prd_generation", prompt: "Validate provider route", dryRun: true });
   assert.equal(result.providerName, "OpenAI Production");
   assert.equal(result.usageLogId, "aigw_0001");
+});
+
+test("platform API client queues and reads durable AI jobs", async () => {
+  const calls = [];
+  const client = createPlatformApiClient({
+    baseUrl: "http://platform.test/api",
+    fetcher: async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? "GET", body: init.body });
+      return new Response(JSON.stringify(success({ id: "aijob_1", requestId: "req_1", scenario: "frontend_coding", status: "queued", attempts: 0, createdAt: "2026-07-14T00:00:00.000Z", updatedAt: "2026-07-14T00:00:00.000Z" })), { status: 200 });
+    }
+  });
+  await client.enqueueDurableAiJob("project one", { prompt: "Build a review", scenario: "frontend_coding", requestId: "req_1" });
+  await client.getDurableAiJob("project one", "aijob_1");
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.url}`), [
+    "POST http://platform.test/api/projects/project%20one/ai-jobs",
+    "GET http://platform.test/api/projects/project%20one/ai-jobs/aijob_1"
+  ]);
 });
 
 test("platform API client manages AI governance resources", async () => {

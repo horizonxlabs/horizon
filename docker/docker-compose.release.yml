@@ -9,8 +9,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-    ports:
-      - "${EVCP_POSTGRES_PORT:-5432}:5432"
     volumes:
       - evcp_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,8 +23,6 @@ services:
     image: redis:7-alpine
     container_name: evcp-redis
     restart: unless-stopped
-    ports:
-      - "${EVCP_REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -43,9 +39,6 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
-    ports:
-      - "${EVCP_MINIO_API_PORT:-9000}:9000"
-      - "${EVCP_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - evcp_minio_data:/data
     healthcheck:
@@ -67,8 +60,6 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required}
-    ports:
-      - "${EVCP_KEYCLOAK_PORT:-8081}:8080"
     volumes:
       - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
     networks:
@@ -99,6 +90,9 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
       KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
+      EVCP_ADMIN_WEB_URL: ${EVCP_ADMIN_WEB_URL:?EVCP_ADMIN_WEB_URL is required}
+      EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:?EVCP_CREATOR_WEB_URL is required}
+      EVCP_STORE_WEB_URL: ${EVCP_STORE_WEB_URL:?EVCP_STORE_WEB_URL is required}
     entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
     volumes:
       - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
@@ -136,8 +130,6 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
       DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
       LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
@@ -168,8 +160,6 @@ services:
     env_file:
       - path: ../.env
         required: false
-    ports:
-      - "${EVCP_API_PORT:-3100}:3100"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -188,6 +178,7 @@ services:
       EVCP_S3_HOST: minio
       EVCP_S3_PORT: "9000"
       EVCP_S3_SSL: "false"
+      EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:?EVCP_S3_PUBLIC_URL is required}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"

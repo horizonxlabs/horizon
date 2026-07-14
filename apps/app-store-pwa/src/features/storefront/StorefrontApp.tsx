@@ -13,6 +13,7 @@ import {
 import { StorefrontSummary } from "./StorefrontSummary";
 import {
   clearStoreSessionBridge,
+  beginStoreKeycloakLogout,
   initialStoreBootstrap,
   loadStoreBootstrap,
   signInStoreSessionBridge
@@ -48,10 +49,6 @@ export function StorefrontApp() {
   const selectedApp = myApps[0] ?? availableApps[0];
   const visibleTicket = ticketStatus ?? ticketResult;
   const visibleTimeline = visibleTicket?.timeline ?? [];
-  const installJourneyRows = appInstallJourneySteps.map((step) => ({
-    ...step,
-    status: installJourneyStatus(step.id, selectedApp, installResult, isInstallingApp)
-  }));
 
   useEffect(() => {
     loadStoreBootstrap()
@@ -71,12 +68,14 @@ export function StorefrontApp() {
     }
   }
 
-  function handleLogoutBridge() {
+  async function handleLogoutBridge() {
+    await createStorePlatformClient().request("/auth/logout", { method: "POST" }).catch(() => undefined);
     setBootstrap(clearStoreSessionBridge());
     setAccessRequestResult(undefined);
     setInstallResult(undefined);
     setTicketResult(undefined);
     setTicketStatus(undefined);
+    beginStoreKeycloakLogout();
   }
 
   async function handleRequestAccess() {
@@ -160,6 +159,11 @@ export function StorefrontApp() {
   if (sessionError || bootstrap.status === "error") return <main className="store-shell"><SectionCard eyebrow="Secure session" title="Sign-in required"><p>{sessionError ?? bootstrap.error}</p><button type="button" onClick={() => void handleSignInBridge()} disabled={isSigningIn}>{isSigningIn ? "Opening sign-in…" : "Sign in with Keycloak"}</button></SectionCard></main>;
   if (bootstrap.status === "loading") return <main className="store-shell"><SectionCard eyebrow="App Store" title="Loading your apps"><p>Loading current access and installed applications from Platform API.</p></SectionCard></main>;
   if (!selectedApp) return <main className="store-shell"><StorefrontSummary userName={bootstrap.userName} email={bootstrap.email} source={bootstrap.source} myApps={myApps} availableApps={availableApps} isSigningIn={isSigningIn} onSignIn={handleSignInBridge} onLogout={handleLogoutBridge} /><SectionCard eyebrow="App Store" title="No apps available"><p>No applications are currently assigned to your account. Request access from a workspace owner.</p></SectionCard></main>;
+
+  const installJourneyRows = appInstallJourneySteps.map((step) => ({
+    ...step,
+    status: installJourneyStatus(step.id, selectedApp, installResult, isInstallingApp)
+  }));
 
   return (
     <main className="store-shell">

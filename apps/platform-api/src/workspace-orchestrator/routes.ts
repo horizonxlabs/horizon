@@ -54,7 +54,7 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
       }
       return {
         status: 200,
-        body: { workspace, secretNames: orchestrator.listSecretNames(input.projectId) }
+        body: { workspace, secretNames: await orchestrator.listSecretNames(input.projectId) }
       };
     },
 

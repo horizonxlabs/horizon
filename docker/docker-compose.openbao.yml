@@ -1,0 +1,27 @@
+services:
+  openbao:
+    image: openbao/openbao:2.3.1
+    command: server -config=/openbao/config/config.hcl
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - openbao-data:/openbao/file
+      - ./openbao/config.hcl:/openbao/config/config.hcl:ro
+    networks:
+      - evcp-internal
+    restart: unless-stopped
+
+  platform-api:
+    environment:
+      # OpenBao implements the Vault KV v2 HTTP API consumed by Platform API.
+      VAULT_ADDR: ${VAULT_ADDR:-http://openbao:8200}
+      VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-platform}
+      VAULT_TOKEN_FILE: /run/secrets/evcp-openbao-token
+    volumes:
+      - type: bind
+        source: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST is required}
+        target: /run/secrets/evcp-openbao-token
+        read_only: true
+
+volumes:
+  openbao-data:

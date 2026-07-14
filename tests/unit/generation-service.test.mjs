@@ -36,6 +36,7 @@ test("successful file-action turn streams tokens, action_result, commit, then do
     '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
     "</artifact>";
 
+  const checkpoints = createMemoryCheckpointStore();
   const service = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([scriptedReply]),
     chatHistory: createMemoryChatHistoryStore(),
@@ -48,7 +49,8 @@ test("successful file-action turn streams tokens, action_result, commit, then do
     template,
     getApiKey: () => "sk-fake",
     getContainerId: () => containerId,
-    commitAllChanges: async () => "commit-sha-1"
+    commitAllChanges: async () => "commit-sha-1",
+    checkpoints
   });
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "add home page" }));
@@ -58,6 +60,10 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   assert.equal(actionResult.ok, true);
   const commit = events.find((event) => event.type === "commit");
   assert.equal(commit.sha, "commit-sha-1");
+  assert.deepEqual(
+    (await checkpoints.listCheckpoints("p1")).map(({ commitSha, tag, label }) => ({ commitSha, tag, label })),
+    [{ commitSha: "commit-sha-1", tag: "checkpoint/commit-sha-1", label: "add home page" }]
+  );
   assert.equal(events.at(-1).type, "done");
 });
 

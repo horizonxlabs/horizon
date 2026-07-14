@@ -265,7 +265,7 @@ export interface ProjectDbRouteDeps {
   post: (path: string, handler: DbRouteHandler) => void;
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
-  getDatabaseUrl: (projectId: string) => string | undefined;
+  getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
   /** Record a mutation for compliance (who/what/when). Called only after a write succeeds. */
   audit: (
     headers: DbRouteRequest["headers"],
@@ -288,7 +288,7 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const projectId = String(request.params?.projectId ?? "");
       const projectIds = await deps.resolveAccessibleProjectIds(request.headers);
       if (!projectIds.includes(projectId)) throw new ProjectDbError("Unknown project", 404);
-      const url = deps.getDatabaseUrl(projectId);
+      const url = await deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
       deps.ok(

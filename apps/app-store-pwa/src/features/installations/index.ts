@@ -1,8 +1,4 @@
 import type { StoreAppInstallationResponse } from "@evcp/api-client";
-
-export function fallbackInstallation(appSlug: string, status: "active" | "disabled"): StoreAppInstallationResponse {
-  return { id: "local_install_001", appSlug, status, installedAt: new Date().toISOString(), disabledAt: status === "disabled" ? new Date().toISOString() : undefined };
-}
 import type { AppStoreItem } from "@evcp/types";
 
 type InstallJourneyStepStatus = "complete" | "current" | "pending" | "blocked";

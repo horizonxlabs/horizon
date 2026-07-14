@@ -6,6 +6,7 @@ const { buildDevContainerSpec, createMemoryDockerEngine } = await import(
 );
 
 const baseInput = {
+  projectId: "prj_leave_tracker",
   slug: "leave-tracker",
   image: "evcp/workspace-next:1",
   env: { DATABASE_URL: "postgresql://x", S3_BUCKET: "proj-leave-tracker" },
@@ -26,6 +27,7 @@ test("builds a locked-down dev container spec", () => {
   assert.deepEqual(spec.hostConfig.Binds, ["evcp-ws-leave-tracker-data:/workspace"]);
   assert.ok(spec.env.includes("DATABASE_URL=postgresql://x"));
   assert.equal(spec.labels["evcp.project-slug"], "leave-tracker");
+  assert.equal(spec.labels["evcp.project-id"], "prj_leave_tracker");
 });
 
 test("memory docker engine tracks lifecycle", async () => {
@@ -34,6 +36,7 @@ test("memory docker engine tracks lifecycle", async () => {
   const { containerId } = await engine.createContainer(spec);
   await engine.startContainer(containerId);
   assert.equal(engine.state.containers[0].status, "running");
+  assert.equal((await engine.listManagedContainers())[0].name, "evcp-ws-leave-tracker");
   await engine.stopContainer(containerId);
   assert.equal(engine.state.containers[0].status, "stopped");
   await engine.removeContainer(containerId);

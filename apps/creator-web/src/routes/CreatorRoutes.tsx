@@ -15,7 +15,7 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
     return <main className="creator-page"><h1>Creator data unavailable</h1><p role="alert">{app.bootstrap.message}</p><button type="button" onClick={() => window.location.reload()}>Retry</button></main>;
   }
   if (app.bootstrap.status === "empty") {
-    return <main className="creator-page"><h1>Create your first project</h1><p>No projects are assigned to this account yet. Start with a business problem to create one through Platform API.</p><button type="button" onClick={() => app.setIsCreateProjectDialogOpen(true)}>Create project</button></main>;
+    return <ProjectsPage app={app} />;
   }
   if (app.creatorPage === "projects") return <ProjectsPage app={app} />;
   if (app.creatorPage === "workspace") return <WorkspacePage app={app} />;

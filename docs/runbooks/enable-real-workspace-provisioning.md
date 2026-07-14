@@ -63,23 +63,23 @@ Set `EVCP_WORKSPACE_REAL_ADAPTERS: "0"` in `docker/docker-compose.yml` and recre
 
 - Secrets (DB/S3 creds) are stored only in the encrypted `ProjectSecretStore` and never surfaced to the Creator — only env var NAMES appear in the UI.
 - Workspace containers run non-root, on the internal network, and never publish host ports.
-- LiteLLM per-project virtual keys are memory-backed until Plan 7.
+- LiteLLM keys are provisioned per workspace and their credentials are stored only through the encrypted project secret store.
 
-## Enable AI generation (LiteLLM) — makes vibe coding work
+## Enable governed AI generation
 
-The AI chat needs a real LLM provider key. LiteLLM (config `docker/litellm-config.yaml`) targets
-`anthropic/claude-sonnet-5` by default, `openai/gpt-4.1` as fallback. Add these to `docker/.env`
-(values are YOURS — never commit them; this repo never stores them):
+LiteLLM remains the internal workspace gateway and needs only its own master key. Upstream
+provider credentials must be entered in Admin and stored in OpenBao; never add Anthropic or
+OpenAI keys to `.env` or the LiteLLM container.
 
 ```
 LITELLM_MASTER_KEY=sk-<choose-a-strong-random-master-key>
 LITELLM_DATABASE_URL=postgresql://evcp:<POSTGRES_PASSWORD>@postgres:5432/evcp
-ANTHROPIC_API_KEY=sk-ant-<your-real-anthropic-key>
-# optional fallback:
-# OPENAI_API_KEY=sk-<your-openai-key>
+VAULT_ADDR=http://openbao:8200
+VAULT_TOKEN_FILE=/run/secrets/evcp-vault-token
 ```
 
-Then start LiteLLM and recreate platform-api so it picks up the master key:
+Start LiteLLM/OpenBao, recreate Platform API, then register provider, key and scenario routes from
+Admin before testing Creator:
 
 ```
 docker compose -f docker/docker-compose.yml up -d litellm
@@ -95,9 +95,10 @@ docker exec -e EVCP_VIBE_LIVE=1 -e EVCP_WORKSPACE_REAL_ADAPTERS=1 -e EVCP_TEST_S
 # expect: a prompt produces a real file + git commit inside the project container
 ```
 
-**MVP note:** chat authenticates to LiteLLM with the master key (server-side; never shown to the Creator).
-Per-project virtual-key budgets are a follow-up. Chat history/checkpoints are in-memory (lost on
-platform-api restart) until Postgres-backed persistence lands.
+**MVP note:** chat authenticates server-side and never exposes a LiteLLM credential to Creator.
+Chat messages, durable governed jobs, applied migrations, runtime records, and immutable Git code
+checkpoints are persisted in PostgreSQL. The active SSE connection itself is transient and clients
+must reconnect/reload state after a Platform API restart.
 
 ## Recover a workspace preview with corrupted Next.js artifacts
 

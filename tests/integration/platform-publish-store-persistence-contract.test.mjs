@@ -101,6 +101,8 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.equal(review.manifest.frontend.checkpointId, preview.id);
 
   const publish = await service.publishApp(creatorActor, { project, baseline, preview });
+  assert.equal(await service.canAccessPublishedProject(endUserActor, project.id), true);
+  assert.equal(await service.canAccessPublishedProject({ ...endUserActor, id: "outsider", email: "outsider@company.com" }, project.id), false);
   const registry = await service.listRegistry(creatorActor);
   assert.equal(publish.publishRequest.status, "published");
   assert.equal(publish.deployment.status, "published");

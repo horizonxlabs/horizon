@@ -29,6 +29,12 @@ const users = [
   { id: "usr_end_user", email: "user@company.com", name: "End User", roleId: "role_end_user" }
 ];
 
+const systemBootstrapUser = {
+  id: "usr_system_bootstrap",
+  email: "system-bootstrap@invalid.local",
+  name: "System Bootstrap"
+};
+
 async function seedKeycloakProvider() {
   await prisma.authProviderConfig.upsert({
     where: { id: "authprov_keycloak_default_001" },
@@ -40,7 +46,7 @@ async function seedKeycloakProvider() {
     create: {
       id: "authprov_keycloak_default_001", providerType: "keycloak", name: "Bundled Keycloak Default", status: "active",
       issuerUrl: "http://keycloak:8080/realms/evcp", scopes: ["openid", "profile", "email"],
-      groupRoleMapping: { "evcp-admins": ["admin"], "evcp-creators": ["creator"], "evcp-users": ["end_user"] }, createdByUserId: "usr_admin"
+      groupRoleMapping: { "evcp-admins": ["admin"], "evcp-creators": ["creator"], "evcp-users": ["end_user"] }, createdByUserId: systemBootstrapUser.id
     }
   });
 }
@@ -53,6 +59,17 @@ async function main() {
       create: role
     });
   }
+
+  await prisma.platformUser.upsert({
+    where: { email: systemBootstrapUser.email },
+    update: { name: systemBootstrapUser.name, status: "active" },
+    create: { ...systemBootstrapUser, status: "active" }
+  });
+
+  // Keycloak is required for every private-server installation; all human identities
+  // and sample business data are explicit local-demo opt-ins.
+  await seedKeycloakProvider();
+  if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;
 
   await prisma.platformGroup.upsert({
     where: { key: "hr_department" },
@@ -79,9 +96,6 @@ async function main() {
     update: {},
     create: { userId: "usr_creator", groupId: "grp_hr_department" }
   });
-  // Keycloak is required for every private-server installation; only sample project data is opt-in.
-  await seedKeycloakProvider();
-  if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;
   await prisma.project.upsert({
     where: { slug: "leave-management" },
     update: {

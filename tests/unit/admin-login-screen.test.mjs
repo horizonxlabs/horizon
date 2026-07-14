@@ -49,10 +49,8 @@ test("Admin login keeps credentials and Keycloak tokens out of browser code", ()
 });
 
 test("Admin sidebar retains only the accessible logout action", () => {
-  assert.match(
-    adminSource,
-    /session=\{<button type="button" className="secondary-button" onClick=\{\(\) => \{ void client\?\.request\("\/auth\/logout", \{ method: "POST" \}\)\.catch\(\(\) => undefined\); clearAdminSession\(\); setSessionActive\(false\); \}\}><LockKeyhole[^>]*\/>Logout<\/button>\}/
-  );
+  assert.match(adminSource, /client\?\.request\("\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(adminSource, /window\.location\.assign\(startAdminKeycloakLogout\(\)\)/);
   assert.doesNotMatch(adminSource, /Refresh Session/);
   assert.doesNotMatch(adminSource, /handleSignInBridge/);
 });

@@ -8,6 +8,7 @@ import { createMemoryChatHistoryStore, type ChatHistoryStore } from "./chat-hist
 import { createPrismaChatHistoryStore } from "../persistence/chat-history-repository";
 import { createActionRunner } from "./action-runner";
 import { createMemoryCheckpointStore } from "./checkpoint-store";
+import { createPrismaWorkspaceCheckpointStore } from "../persistence/workspace-checkpoint-repository";
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
 import { createErrorFeedbackTracker } from "./error-feedback";
 import { createGenerationService } from "./generation-service";
@@ -54,6 +55,9 @@ export async function createDefaultGenerationService(opts: {
     (corePersistenceMode === "prisma"
       ? await createPrismaChatHistoryStore(env.DATABASE_URL)
       : createMemoryChatHistoryStore());
+  const checkpoints = corePersistenceMode === "prisma"
+    ? await createPrismaWorkspaceCheckpointStore(env.DATABASE_URL)
+    : createMemoryCheckpointStore();
 
   const llmClient: LlmCompletionClient =
     mode === "real" && hasLiteLlmConfig
@@ -99,9 +103,10 @@ export async function createDefaultGenerationService(opts: {
         }
       : {}),
     chatHistory,
+    checkpoints,
     actionRunner: createActionRunner({
       docker,
-      checkpoints: createMemoryCheckpointStore(),
+      checkpoints,
       migrations: opts.migrations ?? createMemoryMigrationStore(),
       ...(mode === "real" ? { runMigrationSql: createPgMigrationRunner().run } : {})
     }),

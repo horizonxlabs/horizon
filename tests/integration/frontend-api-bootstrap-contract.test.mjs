@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -129,8 +129,8 @@ test("Admin AI governance actions are API-client backed", () => {
     assert.match(aiGovernanceHookSource, new RegExp(handler));
   }
 
-  assert.match(adminConsoleSource, /ai\.availability/);
-  assert.match(adminConsoleSource, /DecisionPanel/);
+  assert.match(adminFeatureSource, /ai\.availability/);
+  assert.match(adminFeatureSource, /DecisionPanel/);
   assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
   assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
 });
@@ -193,6 +193,33 @@ test("frontend shells retain platform session handling while Admin exposes logou
 
   assert.match(creatorSource, /startKeycloakLogin/);
   assert.match(storeSource, /startKeycloakLogin/);
+});
+
+test("Creator preview establishes an HttpOnly session without putting bearer tokens in URLs", () => {
+  const workspacePage = readFileSync(
+    "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
+    "utf8"
+  );
+  const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
+  const previewSessionRoutePath =
+    "apps/platform-api/src/workspace-orchestrator/preview-session-route.ts";
+
+  assert.doesNotMatch(workspacePage, /platformSessionToken/);
+  assert.doesNotMatch(workspacePage, /[?&]token=/);
+  assert.match(workspacePage, /authorizeWorkspacePreview/);
+  assert.match(workspacePage, /previewAuthorizationState/);
+  assert.match(
+    workspacePage,
+    /\[selectedProject\.id, vibePreviewKey, previewAuthorizationAttempt\]/
+  );
+  assert.match(apiClient, /authorizeWorkspacePreview\(projectId: string\)/);
+  assert.match(apiClient, /workspace\/preview-session/);
+  assert.match(appFactory, /registerPreviewSessionRoute/);
+  assert.doesNotMatch(appFactory, /queryToken/);
+  assert.equal(existsSync(previewSessionRoutePath), true);
+  const previewSessionRoute = readFileSync(previewSessionRoutePath, "utf8");
+  assert.match(previewSessionRoute, /HttpOnly/);
+  assert.match(previewSessionRoute, /SameSite=Strict/);
 });
 
 test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {
@@ -273,6 +300,20 @@ test("App Store PWA exposes an install journey instead of a single opaque instal
   assert.match(storeSource, /store-install-step status-/);
   assert.match(storeSource, /installResult\?\.status === "active"/);
   assert.match(persistenceDocs, /App Install Journey/);
+});
+
+test("App Store renders its unauthenticated and empty states before deriving install details", () => {
+  const selectedAppDeclaration = storeSource.indexOf("const selectedApp = myApps[0] ?? availableApps[0];");
+  const emptyGuard = storeSource.indexOf("if (!selectedApp) return");
+  const journeyDerivation = storeSource.indexOf("const installJourneyRows = appInstallJourneySteps.map");
+  assert.ok(selectedAppDeclaration >= 0);
+  assert.ok(emptyGuard > selectedAppDeclaration);
+  assert.ok(journeyDerivation > emptyGuard);
+});
+
+test("App Store logout revokes the Platform session before ending Keycloak SSO", () => {
+  assert.match(storeSource, /request\("\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(storeSource, /beginStoreKeycloakLogout\(\)/);
 });
 
 test("published app route opens a usable generated Leave Management runtime", () => {

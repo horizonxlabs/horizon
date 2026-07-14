@@ -4,6 +4,7 @@ import { useEffect, useReducer, useState, type FormEvent } from "react";
 import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
 import {
   creatorApiFailureState,
+  beginCreatorKeycloakLogout,
   loadCreatorBootstrap,
   loadPrdState,
   signInCreatorSessionBridge
@@ -169,7 +170,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
   }
 
-  function handleLogoutBridge() {
+  async function handleLogoutBridge() {
+    await createCreatorPlatformClient().request("/auth/logout", { method: "POST" }).catch(() => undefined);
     clearCreatorSessionBridge();
     setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
@@ -177,6 +179,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     publishAccess.setPublishMessage("Signed out. Sign in again to load publish state.");
     clearLoginSession();
     onLogout?.();
+    beginCreatorKeycloakLogout();
   }
 
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {

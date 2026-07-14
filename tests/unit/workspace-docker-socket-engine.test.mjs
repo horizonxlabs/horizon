@@ -9,6 +9,7 @@ const { buildDevContainerSpec } = await import(
 );
 
 const spec = buildDevContainerSpec({
+  projectId: "prj_leave_tracker",
   slug: "leave-tracker",
   image: "evcp/workspace-next:1",
   env: { DATABASE_URL: "postgresql://x", S3_BUCKET: "proj-leave-tracker" },
@@ -99,6 +100,32 @@ test("inspectContainer returns image and management labels needed to restore dep
     },
     env: ["NODE_ENV=production"]
   });
+});
+
+test("listManagedContainers uses the managed label filter and normalizes Docker names", async () => {
+  const calls = [];
+  const engine = createDockerSocketEngine({
+    request: async ({ path }) => {
+      calls.push(path);
+      return {
+        status: 200,
+        json: async () => [{
+          Id: "container-123",
+          Names: ["/evcp-ws-prj-123"],
+          State: "exited",
+          Labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
+        }]
+      };
+    }
+  });
+
+  assert.deepEqual(await engine.listManagedContainers(), [{
+    containerId: "container-123",
+    name: "evcp-ws-prj-123",
+    running: false,
+    labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
+  }]);
+  assert.match(calls[0], /^\/containers\/json\?all=true&filters=/);
 });
 
 test("non-2xx throws a descriptive error", async () => {

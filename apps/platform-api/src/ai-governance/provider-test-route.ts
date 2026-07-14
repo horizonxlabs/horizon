@@ -30,6 +30,7 @@ export async function handleAiProviderTestCall(input: {
   resolveUser: () => Promise<PlatformUser>;
   executor?: Pick<GovernedAiExecutor, "execute">;
   providerNameFor?: (providerId: string) => Promise<string | undefined>;
+  providerAdapterFor?: (providerId: string) => Promise<AiProviderTestCallResult["adapter"] | undefined>;
   legacyTest: (actor: PlatformUser, request: ProviderTestRequest) => AiProviderTestCallResult;
 }): Promise<Response | undefined> {
   if (input.request.method !== "POST" || input.request.path !== "/ai/provider-test-call") return undefined;
@@ -43,11 +44,17 @@ export async function handleAiProviderTestCall(input: {
     scenario: request.scenario, projectId: "", prompt: request.prompt?.trim() || `Validate ${request.scenario} provider route before Creator use`,
     requestId: `admin_provider_test_${crypto.randomUUID()}`, ...(request.requestedTokens ? { requestedTokens: request.requestedTokens } : {})
   });
+  if (execution.status === "failed" || execution.status === "blocked") {
+    throw new Error(
+      `Provider test ${execution.status}: ${execution.evidence.failureReason ?? execution.status}`
+    );
+  }
   const providerName = await input.providerNameFor?.(execution.evidence.providerId) ?? execution.evidence.providerId;
+  const adapter = await input.providerAdapterFor?.(execution.evidence.providerId) ?? "openai";
   return {
     status: 201,
     body: success({
-      providerId: execution.evidence.providerId, providerName, adapter: "openai", model: execution.evidence.model,
+      providerId: execution.evidence.providerId, providerName, adapter, model: execution.evidence.model,
       status: execution.status === "fallback" ? "fallback" : "succeeded", fallbackUsed: execution.evidence.fallbackUsed,
       tokensUsed: execution.evidence.tokensUsed, latencyMs: execution.evidence.latencyMs, usageLogId: execution.evidence.id,
       outputExcerpt: execution.text?.slice(0, 280) ?? "Execution did not produce provider output."

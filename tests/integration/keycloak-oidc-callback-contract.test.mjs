@@ -139,3 +139,15 @@ test("OIDC start binds each app to its permitted return origin", () => {
   const { service } = createKeycloakOidcHarness();
   assert.throws(() => service.start("admin", "https://creator.example.test/"), /invalid_return_to/);
 });
+
+test("OIDC logout ends the Keycloak SSO session and returns to the requested app", () => {
+  const { service } = createKeycloakOidcHarness();
+  const logoutUrl = new URL(service.logout("creator", "https://creator.example.test/"));
+  assert.equal(
+    logoutUrl.origin + logoutUrl.pathname,
+    "https://keycloak.example.test/realms/evcp/protocol/openid-connect/logout"
+  );
+  assert.equal(logoutUrl.searchParams.get("client_id"), "evcp-platform-api");
+  assert.equal(logoutUrl.searchParams.get("post_logout_redirect_uri"), "https://creator.example.test/");
+  assert.throws(() => service.logout("creator", "https://admin.example.test/"), /invalid_return_to/);
+});

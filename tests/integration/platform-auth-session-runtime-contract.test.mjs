@@ -21,7 +21,8 @@ test("core API routes expose auth evidence and support runtime persistence beare
   assert.match(appFactory, /buildAuthEvidence/);
   assert.match(appFactory, /legacyMockFallback: resolution\.mode === "mock_header"/);
   assert.match(appFactory, /auth: buildAuthEvidence\(authResolution\)/);
-  assert.match(appFactory, /authMode: "platform_session_with_mock_fallback"/);
+  assert.match(appFactory, /platform_session_with_mock_header_for_tests/);
+  assert.match(appFactory, /: "platform_session"/);
   assert.match(appFactory, /executePlatformApiRequestAsync/);
 });
 

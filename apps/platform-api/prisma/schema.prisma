@@ -180,6 +180,7 @@ model Project {
   apps        App[]
   prdDocument PrdDocument?
   workspaceTasks WorkspaceTask[]
+  workspaceCodeCheckpoints WorkspaceCodeCheckpoint[]
   previewVersions PreviewVersion[]
   aiUsageLogs AiUsageLog[]
   appDatabaseTables AppDatabaseTable[]
@@ -409,6 +410,56 @@ model AiExecutionEvidence {
   @@index([projectId, occurredAt])
   @@index([actorUserId, occurredAt])
   @@map("ai_execution_evidence")
+}
+
+model AiExecutionJob {
+  id                String   @id
+  requestId         String   @unique @map("request_id")
+  actorUserId       String   @map("actor_user_id")
+  projectId         String   @map("project_id")
+  scenario          String
+  payloadCiphertext String   @map("payload_ciphertext")
+  status            String
+  attempts          Int      @default(0)
+  availableAt       DateTime @map("available_at")
+  leaseOwner        String?  @map("lease_owner")
+  leaseExpiresAt    DateTime? @map("lease_expires_at")
+  result            Json?
+  failureReason     String?  @map("failure_reason")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([status, availableAt])
+  @@index([leaseExpiresAt])
+  @@map("ai_execution_jobs")
+}
+
+model ProjectFileUpload {
+  id                String   @id
+  projectId         String   @map("project_id")
+  sourceId          String   @map("source_id")
+  versionId         String   @map("version_id")
+  ownerUserId       String   @map("owner_user_id")
+  fileName          String   @map("file_name")
+  mimeType          String   @map("mime_type")
+  sizeBytes         Int      @map("size_bytes")
+  sha256            String
+  bucket            String
+  objectKey         String   @map("object_key")
+  purpose           String
+  uploadStatus      String   @map("upload_status")
+  scanStatus        String   @map("scan_status")
+  indexStatus       String   @map("index_status")
+  extractionStatus  String   @map("extraction_status")
+  includeByDefault  Boolean  @default(true) @map("include_by_default")
+  excerpts          String[] @default([])
+  archivedAt        DateTime? @map("archived_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, archivedAt])
+  @@unique([bucket, objectKey])
+  @@map("project_file_uploads")
 }
 
 model GuardrailRule {
@@ -672,6 +723,22 @@ model WorkspaceMigrationRecord {
   @@unique([projectId, name])
   @@index([projectId, appliedAt])
   @@map("workspace_migration_records")
+}
+
+/** Immutable Git checkpoint emitted after a successful Creator generation turn. */
+model WorkspaceCodeCheckpoint {
+  id        String   @id
+  projectId String   @map("project_id")
+  tag       String
+  commitSha String   @map("commit_sha")
+  label     String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([projectId, commitSha])
+  @@unique([projectId, tag])
+  @@index([projectId, createdAt])
+  @@map("workspace_code_checkpoints")
 }
 
 /** Intended lifecycle state for a managed development workspace; never stores secret values. */

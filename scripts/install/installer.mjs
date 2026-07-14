@@ -24,7 +24,10 @@ const SECRET_KEYS = [
   "apikey",
   "token",
   "client_secret",
-  "access_key"
+  "access_key",
+  "master_key",
+  "encryption_key",
+  "private_key"
 ];
 
 export function parseInstallerArgs(argv = process.argv.slice(2)) {
@@ -66,7 +69,12 @@ export function redactDeep(value) {
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => {
       const lowerKey = key.toLowerCase();
-      if (SECRET_KEYS.some((secretKey) => lowerKey.includes(secretKey))) {
+      const compactKey = lowerKey.replaceAll(/[^a-z0-9]/g, "");
+      if (
+        SECRET_KEYS.some((secretKey) =>
+          compactKey.includes(secretKey.replaceAll(/[^a-z0-9]/g, ""))
+        )
+      ) {
         return [`${key}Fingerprint`, fingerprint(entry)];
       }
       return [key, redactDeep(entry)];
@@ -107,11 +115,12 @@ export function buildSetupEvidence(env) {
       admin: env.KEYCLOAK_ADMIN,
       adminPassword: env.KEYCLOAK_ADMIN_PASSWORD
     }),
-    ai: redactDeep({
-      provider: env.AI_PROVIDER,
-      model: env.AI_MODEL,
-      apiKey: env.AI_API_KEY
-    }),
+    ai: {
+      management: "admin_openbao",
+      vaultAddress: env.VAULT_ADDR,
+      vaultTokenFile: env.VAULT_TOKEN_FILE,
+      providerCredentialsInEnvironment: false
+    },
     guardrail: {
       defaultPolicy: "enterprise-default",
       blockHighRisk: true

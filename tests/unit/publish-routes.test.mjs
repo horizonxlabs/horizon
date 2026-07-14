@@ -140,9 +140,9 @@ test("promote route: 403 non-member, 409 when no staging, 201 with deployment on
   assert.equal(res.body.deployment.id, "dep-9");
 });
 
-test("resolveAppsTarget: production is public — 404 until a healthy deploy, then 200 with no auth", async () => {
+test("resolveAppsTarget: production is unavailable until a healthy deploy exists", async () => {
   const deployments = createMemoryDeploymentStore();
-  // No deployment yet → 404 regardless of auth (production is public, so no 401).
+  // Authentication is enforced by the HTTP route; this resolver owns deployment readiness only.
   assert.deepEqual(await resolveAppsTarget(deployments, "app"), { ok: false, status: 404 });
 
   const dep = deployments.create({
@@ -158,10 +158,11 @@ test("resolveAppsTarget: production is public — 404 until a healthy deploy, th
   assert.deepEqual(await resolveAppsTarget(deployments, "app"), { ok: false, status: 404 });
 
   deployments.updateHealth(dep.id, "healthy");
-  // Healthy production → served publicly, even with NO auth (end users open the live app).
+  // Healthy production returns the project id needed by the HTTP membership check.
   assert.deepEqual(await resolveAppsTarget(deployments, "app"), {
     ok: true,
-    upstream: "http://evcp-production-app:3000"
+    upstream: "http://evcp-production-app:3000",
+    projectId: "p1"
   });
 });
 
@@ -183,7 +184,11 @@ test("resolveAppsTarget rechecks the deployment store after restart rehydration"
       });
       deployments.updateHealth(deployment.id, "healthy");
     }),
-    { ok: true, upstream: "http://evcp-staging-prj-e8204c2a1b7e4901a1db54c2317b4852:3000" }
+    {
+      ok: true,
+      upstream: "http://evcp-staging-prj-e8204c2a1b7e4901a1db54c2317b4852:3000",
+      projectId: "prj_e8204c2a1b7e4901a1db54c2317b4852"
+    }
   );
   assert.equal(rehydrated, 1);
 });
@@ -204,7 +209,8 @@ test("resolveAppsTarget: staging environment resolves to the staging upstream, i
   // staging tier resolves to the staging container...
   assert.deepEqual(await resolveAppsTarget(deployments, "app", "staging"), {
     ok: true,
-    upstream: "http://evcp-staging-app:3000"
+    upstream: "http://evcp-staging-app:3000",
+    projectId: "p1"
   });
   // ...while production is still unavailable (a staging deploy must not satisfy the prod route)
   assert.deepEqual(await resolveAppsTarget(deployments, "app", "production"), {
@@ -213,7 +219,7 @@ test("resolveAppsTarget: staging environment resolves to the staging upstream, i
   });
 });
 
-test("resolveAppsTarget: staging and production are public once healthy", async () => {
+test("resolveAppsTarget: staging and production resolve independently once healthy", async () => {
   const deployments = createMemoryDeploymentStore();
   const stg = deployments.create({
     projectId: "p1",
@@ -227,10 +233,11 @@ test("resolveAppsTarget: staging and production are public once healthy", async 
   deployments.updateHealth(stg.id, "healthy");
   assert.deepEqual(await resolveAppsTarget(deployments, "app", "staging"), {
     ok: true,
-    upstream: "http://evcp-staging-app:3000"
+    upstream: "http://evcp-staging-app:3000",
+    projectId: "p1"
   });
 
-  // Production is public too.
+  // Production is independently healthy too.
   const prod = deployments.create({
     projectId: "p1",
     slug: "app",
@@ -243,6 +250,7 @@ test("resolveAppsTarget: staging and production are public once healthy", async 
   deployments.updateHealth(prod.id, "healthy");
   assert.deepEqual(await resolveAppsTarget(deployments, "app", "production"), {
     ok: true,
-    upstream: "http://evcp-production-app:3000"
+    upstream: "http://evcp-production-app:3000",
+    projectId: "p1"
   });
 });

@@ -23,11 +23,35 @@ test("persisted provider-test route uses governed execution evidence instead of 
     resolveUser: async () => ({ id: "u1", email: "admin@example.test", name: "Admin", role: "admin" }),
     executor: { execute: async () => ({ status: "succeeded", text: "safe output", evidence: { id: "e1", requestId: "r1", actorId: "u1", projectId: "", scenario: "frontend_coding", providerId: "aip_primary", model: "gpt-test", status: "succeeded", tokensUsed: 37, latencyMs: 4, fallbackUsed: false, occurredAt: "2026-07-13T00:00:00.000Z" } }) },
     providerNameFor: async () => "Primary provider",
+    providerAdapterFor: async () => "anthropic",
     legacyTest: () => { legacyCalls += 1; throw new Error("legacy must not run"); }
   });
   assert.equal(legacyCalls, 0);
   assert.equal(result?.status, 201);
   assert.equal(result?.body.data.providerName, "Primary provider");
+  assert.equal(result?.body.data.adapter, "anthropic");
   assert.equal(result?.body.data.usageLogId, "e1");
   assert.equal(result?.body.data.outputExcerpt, "safe output");
+});
+
+test("persisted provider-test route rejects failed governed execution", async () => {
+  await assert.rejects(
+    () =>
+      handleAiProviderTestCall({
+        request: { method: "POST", path: "/ai/provider-test-call", body: { scenario: "frontend_coding" } },
+        resolveUser: async () => ({ id: "u1", email: "admin@example.test", name: "Admin", role: "admin" }),
+        executor: {
+          execute: async () => ({
+            status: "failed",
+            evidence: {
+              id: "e1", requestId: "r1", actorId: "u1", projectId: "", scenario: "frontend_coding",
+              providerId: "aip_primary", model: "gpt-test", status: "failed", tokensUsed: 0,
+              latencyMs: 4, fallbackUsed: false, failureReason: "provider timeout", occurredAt: "2026-07-14T00:00:00.000Z"
+            }
+          })
+        },
+        legacyTest: () => { throw new Error("legacy must not run"); }
+      }),
+    /provider timeout/
+  );
 });

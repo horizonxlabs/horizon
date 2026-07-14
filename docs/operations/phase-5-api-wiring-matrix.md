@@ -1,28 +1,39 @@
-# Phase 5 API wiring matrix
+# Phase 5 API Wiring Matrix
 
-Status date: 2026-07-13. The browser is a Platform API client, not an authority for project,
-publish, installation, or support state. When an endpoint fails, UI preserves the last server
-snapshot and shows loading, empty, denied, or retryable error state; it does not construct a local
-success response.
+This matrix is the acceptance inventory for a pilot build. “API-backed” means the
+screen reads its authoritative state through a Platform API request and reports a
+server error without manufacturing a local result. Static explanatory copy is not
+authoritative application data.
 
-| Surface | View/state | API client methods | Loading / empty / denied / error behavior |
-| --- | --- | --- | --- |
-| Admin | Setup, AI governance, Keycloak user/session controls | `getSetupStatus`, AI governance methods, Keycloak user/session methods | Existing governance data clears on session change; unavailable state disables mutations |
-| Creator | Projects, PRD, workspace, app access, publish | project/PRD/workspace/access/publish methods | No API project means no workspace/publish operation; failed mutation keeps prior snapshot |
-| App Store | Store home, access, install, uninstall, ticket | `getCurrentUser`, `listStoreApps`, store detail/action methods | Starts loading with no app card; missing/revoked session redirects to Keycloak; no assigned app is explicit empty state |
+| Surface | Capability | Platform API contract | Empty / denied / retry behaviour | Status |
+| --- | --- | --- | --- | --- |
+| Creator | Project selection | `GET /projects` | Empty routes to `ProjectsPage`; API failure shows retry without a fixture | API-backed |
+| Creator | PRD and versions | `GET /projects/:id/prd`, `GET /projects/:id/prd/versions`, baseline mutation | Explicit “No local PRD fallback”; mutation failure preserves rendered API state | API-backed |
+| Creator | Workspace chat, preview, usage and files | Workspace, SSE chat, preview and persistent-file endpoints | Existing preview is retained on failure; no generated client result | API-backed |
+| Creator | Database | `GET /projects/:id/database` in `WorkspaceDatabasePanel` | Loading and unavailable state belong to the panel; root dashboard does not render sample records | API-backed |
+| Creator | Tickets | `GET /creator/projects/:id/tickets` | Empty inbox and unavailable message; no demo approval queue | API-backed |
+| Creator | Access and publish | App access and publish client contracts | Queries refresh after mutations; API error stays visible | API-backed |
+| Creator | Unknown/default route | none | Informational fail-closed screen; does not mount the old demo dashboard | fail-closed |
+| Admin | User/session administration | Keycloak management and Platform session routes | Loading, empty sessions, mutation error and revoke state are explicit | API-backed |
+| Admin | AI governance | Persisted provider/key/primary+fallback route/quota/guardrail/execution APIs | Availability gate blocks mutations without a valid API response; never exposes secret material | API-backed |
+| Admin | Audit and operations | Production audit and operations APIs | Loading/unavailable states are explicit | API-backed |
+| App Store | App list/detail/access/install | `/store/apps`, detail, access and install routes | Current session required; mutations refetch the storefront | API-backed |
+| App Store | Ticket/status | Store ticket create/read routes | Server failure leaves no local ticket result | API-backed |
 
-## State ownership
+## Explicitly excluded from pilot authority
 
-- Access/refresh credentials: browser Platform session store only; refresh/revoke behavior is owned by
-  the session-aware fetcher.
-- User/project/PRD/workspace/publish/store entities: Platform API and its configured persistence
-  runtime.
-- Form field values, in-flight flags, selected tab, and visible error copy: local React view state.
-- A browser action may only show success when it receives a successful Platform API response.
+- `apps/app-store-pwa/src/features/generated-leave-management/` is a generated-app
+  showcase, not the App Store authority. It must not be seeded or published as a
+  pilot application without an explicit local-development opt-in.
+- The former Creator default dashboard was removed from the fallback route because
+  it rendered fixture database, ticket, trace, and deployment data beside the
+  API-backed pages.
+- The App Store has no local ticket or installation fallback helpers.
 
-## Deliberate local-only behaviors
+## Verification
 
-The test runtime may enable deterministic memory services with
-`EVCP_ALLOW_SIMULATE_LOGIN=1`. This flag is not a production UI fallback: production builds do
-not invent Store apps, workspace previews, invitations, access decisions, or publish records.
-
+Run the browser flow with a new account and an empty database. Confirm that every
+empty page remains empty, a forced API 5xx exposes an error/retry state, and no
+`TKT-LOCAL`, `local_install`, or demo project is inserted into PostgreSQL.
+`EVCP_SEED_DEMO_PROJECT` defaults to `0`; setting it to `1` is required before
+the seed script creates sample users, projects, tickets, or artifacts.

@@ -34,6 +34,16 @@ test("real mode builds an orchestrator without throwing at construction", () => 
   assert.equal(typeof orchestrator.provisionWorkspace, "function");
 });
 
+test("real mode refuses to start without an injected workspace encryption key", () => {
+  assert.throws(
+    () =>
+      createDefaultWorkspaceOrchestrator({
+        env: { EVCP_WORKSPACE_REAL_ADAPTERS: "1" }
+      }),
+    /EVCP_WORKSPACE_SECRET_KEY.*required/i
+  );
+});
+
 test("real mode runtime options honor release compose workspace env", () => {
   const options = resolveWorkspaceRuntimeOptions({
     EVCP_WORKSPACE_IMAGE: "ghcr.io/0xlabsteam/evcp-workspace-next:v9.9.9",

@@ -42,6 +42,16 @@ export function registerKeycloakOidcRoutes(
     try { response.redirect?.(service.start(app, returnTo).authorizationUrl); }
     catch (error) { response.status(400).json({ error: error instanceof Error ? error.message : "invalid_oidc_start" }); }
   });
+  routes.get("/auth/keycloak/logout", (request, response) => {
+    const app = request.query?.app;
+    const returnTo = request.query?.returnTo;
+    if ((app !== "admin" && app !== "creator" && app !== "store") || typeof returnTo !== "string") {
+      response.status(400).json({ error: "invalid_oidc_logout" });
+      return;
+    }
+    try { response.redirect?.(service.logout(app, returnTo)); }
+    catch (error) { response.status(400).json({ error: error instanceof Error ? error.message : "invalid_oidc_logout" }); }
+  });
   routes.get("/auth/keycloak/callback", async (request, response) => {
     try {
       const code = request.query?.code;
