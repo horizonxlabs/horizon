@@ -581,10 +581,6 @@ function buildPersistencePrdPrompt(project: PlatformProject): string {
   ].join("\n");
 }
 
-function buildDeterministicPrdSummary(project: PlatformProject): string {
-  return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
-}
-
 function isPersistenceCoreRoute(request: PlatformRequest): boolean {
   return (
     request.path === "/auth/me" ||
@@ -1119,7 +1115,7 @@ export async function executePlatformApiRequestAsync(
     if (setup) return setup;
 
     const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
-    if (corePersistence && prdPersistence && request.method === "POST" && prdGenerateMatch) {
+    if (corePersistence && prdPersistence && governedAiExecutor && request.method === "POST" && prdGenerateMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, prdGenerateMatch[1]);
       const sourcePrompt = buildPersistencePrdPrompt(project);
@@ -1132,48 +1128,25 @@ export async function executePlatformApiRequestAsync(
           `PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`
         );
       }
-      const deterministicFallbackText = buildDeterministicPrdSummary(project);
-      let completion: {
-        text: string;
-        providerId: string;
-        model: string;
-        usageLogId?: string;
-        status?: string;
-        fallbackUsed?: boolean;
-        tokensUsed?: number;
-      };
-      try {
-        completion = services.aiGovernance.invokeCompletion(user, {
-          projectId: project.id,
-          scenario: "prd_generation",
-          prompt: sourcePrompt,
-          requestedTokens: 300,
-          guardrailDecision: guardrail.decision,
-          dryRun: true,
-          allowDeterministicFallback: true,
-          deterministicFallbackText
-        });
-      } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes("No route configured"))
-          throw error;
-        completion = {
-          text: deterministicFallbackText,
-          providerId: "deterministic_prd_fallback",
-          model: "local-deterministic-prd",
-          status: "fallback",
-          fallbackUsed: true,
-          tokensUsed: 0
-        };
+      const execution = await governedAiExecutor.execute(user, {
+        scenario: "prd_generation",
+        projectId: project.id,
+        prompt: sourcePrompt,
+        requestId: String(request.body?.requestId ?? crypto.randomUUID()),
+        requestedTokens: 300
+      });
+      if (execution.status === "blocked" || execution.status === "failed" || !execution.text) {
+        throw new ValidationError(`PRD generation unavailable: ${execution.evidence.failureReason ?? execution.status}`);
       }
       const draft = await prdPersistence.generateDraft(user, {
         project,
         sourcePrompt,
         generatedBy: {
           scenario: "prd_generation",
-          providerId: completion.providerId,
-          model: completion.model
+          providerId: execution.evidence.providerId,
+          model: execution.evidence.model
         },
-        aiSummary: completion.text
+        aiSummary: execution.text
       });
       await corePersistence.recordAudit({
         actorId: user.id,
@@ -1183,10 +1156,10 @@ export async function executePlatformApiRequestAsync(
         metadata: {
           projectId: project.id,
           guardrailDecision: guardrail.decision,
-          aiUsageLogId: completion.usageLogId,
-          aiStatus: completion.status,
-          fallbackUsed: completion.fallbackUsed,
-          tokensUsed: completion.tokensUsed
+          executionId: execution.evidence.id,
+          aiStatus: execution.status,
+          fallbackUsed: execution.evidence.fallbackUsed,
+          tokensUsed: execution.evidence.tokensUsed
         }
       });
       return { status: HttpStatus.CREATED, body: success(draft) };
