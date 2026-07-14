@@ -31,6 +31,7 @@ const adminOperationsSource = readFileSync("apps/admin-web/src/features/platform
 const adminAuditSource = readFileSync("apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx", "utf8");
 const creatorTicketsSource = readFileSync("apps/creator-web/src/features/tickets/TicketsPage.tsx", "utf8");
 const creatorTicketInboxSource = readFileSync("apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts", "utf8");
+const creatorAppHookSource = readFileSync("apps/creator-web/src/app/use-creator-app.tsx", "utf8");
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
 const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
@@ -162,6 +163,7 @@ test("Store and Creator fail closed instead of creating local success evidence",
   assert.match(creatorTicketInboxSource, /\/creator\/projects\//);
   assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
   assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
+  assert.doesNotMatch(creatorAppHookSource, /prdSections|versionRows/);
 });
 
 test("Admin operations and audit views use Platform API data and fail closed", () => {

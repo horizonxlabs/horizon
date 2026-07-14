@@ -8,7 +8,6 @@ import {
   loadPrdState,
   signInCreatorSessionBridge
 } from "@/app/creator-app-helpers";
-import { prdSections, versionRows } from "@/features/prd";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
 import {
   createCreatorNavigation,
@@ -42,17 +41,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
   const publishAccess = usePublishAccess({ selectedProject });
 
-  const visiblePrdSections = currentPrdVersion?.sections?.length
-    ? currentPrdVersion.sections.map((section) => ({
-        key: section.key,
-        title: section.title,
-        body: section.body,
-        order: String(section.order)
-      }))
-    : prdSections.map((section) => ({
-        ...section,
-        body: section.body.replaceAll("Leave Management", selectedProject.name)
-      }));
+  const visiblePrdSections = currentPrdVersion?.sections?.map((section) => ({
+    key: section.key,
+    title: section.title,
+    body: section.body,
+    order: String(section.order)
+  })) ?? [];
   const visibleVersionRows = prdVersionList.length
     ? prdVersionList.map((version) => ({
         version: version.version,
@@ -60,11 +54,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         summary: version.changeSummary,
         author: selectedProject.owner
       }))
-    : versionRows.map((row) => ({
-        ...row,
-        summary: row.summary.replaceAll("Leave Management", selectedProject.name),
-        author: selectedProject.owner
-      }));
+    : [];
+  const prdMessage = currentPrdVersion
+    ? "PRD loaded from Platform API."
+    : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline.";
   const creatorPage = creatorPageFromPath(window.location.pathname);
   const pageCopy = creatorPageCopy[creatorPage];
   const [, forceRerender] = useReducer((tick: number) => tick + 1, 0);
@@ -329,6 +322,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     creatorNavItems,
     visiblePrdSections,
     visibleVersionRows,
+    prdMessage,
     creatorPage,
     pageCopy,
     refreshPrdState,
