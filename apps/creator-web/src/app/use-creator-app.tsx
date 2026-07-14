@@ -3,11 +3,12 @@ import { RotateCcw } from "lucide-react";
 import { useEffect, useReducer, useState, type FormEvent } from "react";
 import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
 import {
+  creatorApiFailureState,
+  beginCreatorKeycloakLogout,
   loadCreatorBootstrap,
   loadPrdState,
   signInCreatorSessionBridge
 } from "@/app/creator-app-helpers";
-import { prdSections, versionRows } from "@/features/prd";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
 import {
   createCreatorNavigation,
@@ -34,27 +35,20 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
+  const [prdMessage, setPrdMessage] = useState("Loading PRD state from Platform API.");
 
   const selectedProject = bootstrap.selectedProject;
   const creatorNavItems = createCreatorNavigation(selectedProject);
 
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
-  const publishAccess = usePublishAccess({
-    selectedProject,
-    visiblePreviewVersion: vibeWorkspace.visiblePreview.version
-  });
+  const publishAccess = usePublishAccess({ selectedProject });
 
-  const visiblePrdSections = currentPrdVersion?.sections?.length
-    ? currentPrdVersion.sections.map((section) => ({
-        key: section.key,
-        title: section.title,
-        body: section.body,
-        order: String(section.order)
-      }))
-    : prdSections.map((section) => ({
-        ...section,
-        body: section.body.replaceAll("Leave Management", selectedProject.name)
-      }));
+  const visiblePrdSections = currentPrdVersion?.sections?.map((section) => ({
+    key: section.key,
+    title: section.title,
+    body: section.body,
+    order: String(section.order)
+  })) ?? [];
   const visibleVersionRows = prdVersionList.length
     ? prdVersionList.map((version) => ({
         version: version.version,
@@ -62,11 +56,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         summary: version.changeSummary,
         author: selectedProject.owner
       }))
-    : versionRows.map((row) => ({
-        ...row,
-        summary: row.summary.replaceAll("Leave Management", selectedProject.name),
-        author: selectedProject.owner
-      }));
+    : [];
   const creatorPage = creatorPageFromPath(window.location.pathname);
   const pageCopy = creatorPageCopy[creatorPage];
   const [, forceRerender] = useReducer((tick: number) => tick + 1, 0);
@@ -75,6 +65,22 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     const prdState = await loadPrdState(projectId);
     setCurrentPrdVersion(prdState.current);
     setPrdVersionList(prdState.versions);
+    setPrdMessage(prdState.current ? "PRD loaded from Platform API." : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline.");
+  }
+
+  async function handleConfirmPrdBaseline() {
+    if (!selectedProject.id || !currentPrdVersion) {
+      setPrdMessage("No API-backed PRD draft is available to confirm.");
+      return;
+    }
+    try {
+      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, { versionId: currentPrdVersion.id });
+      setCurrentPrdVersion(baseline);
+      setPrdVersionList((current) => [baseline, ...current.filter((version) => version.id !== baseline.id)]);
+      setPrdMessage(`Baseline v${baseline.version} confirmed through Platform API.`);
+    } catch (error) {
+      setPrdMessage(error instanceof Error ? `Baseline confirmation failed: ${error.message}` : "Baseline confirmation failed. No local state was changed.");
+    }
   }
 
   function resetProjectRuntimeState() {
@@ -114,8 +120,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           );
         }
       })
-      .catch(() => {
-        setBootstrap(initialCreatorBootstrap);
+      .catch((error) => {
+        setBootstrap(
+          creatorApiFailureState(
+            error instanceof Error ? error.message : "Unable to load Creator projects from Platform API."
+          )
+        );
         vibeWorkspace.setWorkspaceSnapshot(undefined);
       })
       .finally(() => {
@@ -160,18 +170,16 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
   }
 
-  function handleLogoutBridge() {
+  async function handleLogoutBridge() {
+    await createCreatorPlatformClient().request("/auth/logout", { method: "POST" }).catch(() => undefined);
     clearCreatorSessionBridge();
     setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
-    vibeWorkspace.setWorkspaceMessage(
-      "Using deterministic local workspace evidence until the Platform API is configured."
-    );
-    publishAccess.setPublishMessage(
-      "Using deterministic local publish evidence until the Platform API is configured."
-    );
+    vibeWorkspace.setWorkspaceMessage("Signed out. Sign in again to load workspace state.");
+    publishAccess.setPublishMessage("Signed out. Sign in again to load publish state.");
     clearLoginSession();
     onLogout?.();
+    beginCreatorKeycloakLogout();
   }
 
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
@@ -331,6 +339,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     creatorNavItems,
     visiblePrdSections,
     visibleVersionRows,
+    prdMessage,
+    handleConfirmPrdBaseline,
     creatorPage,
     pageCopy,
     refreshPrdState,

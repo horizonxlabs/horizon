@@ -43,3 +43,12 @@ test("seed data can hydrate repository-backed core flow", () => {
   assert.match(seed, /auditLog\.upsert/);
   assert.match(seed, /creator@company\.com/);
 });
+
+test("demo identities and project fixtures are opt-in for a clean pilot install", () => {
+  const demoGate = seed.indexOf('if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;');
+  const demoUserSeed = seed.indexOf("for (const user of users)");
+  const demoProjectSeed = seed.indexOf("await prisma.project.upsert");
+  assert.ok(demoGate >= 0);
+  assert.ok(demoUserSeed > demoGate);
+  assert.ok(demoProjectSeed > demoGate);
+});

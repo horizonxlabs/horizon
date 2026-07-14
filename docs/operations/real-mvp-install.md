@@ -33,7 +33,12 @@ Required secrets include:
 - `KEYCLOAK_ADMIN_CLIENT_SECRET`
 - `MINIO_ROOT_PASSWORD`
 - `STORAGE_SECRET_KEY`
-- `AI_API_KEY`
+- `EVCP_WORKSPACE_SECRET_KEY`
+- `EVCP_AI_JOB_ENCRYPTION_KEY`
+- `LITELLM_MASTER_KEY`
+
+Provider credentials are not install-time environment variables. Configure `VAULT_ADDR` and the
+mounted `VAULT_TOKEN_FILE`, then create provider keys from Admin so only OpenBao stores them.
 
 Required runtime mode:
 

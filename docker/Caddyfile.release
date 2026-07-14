@@ -1,4 +1,4 @@
-:80 {
+{$EVCP_CADDY_ADDRESS:localhost} {
 	# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
 	# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
 	# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
@@ -44,4 +44,10 @@
 	handle {
 		reverse_proxy admin-web:80
 	}
+}
+
+# Browser uploads are signed for this exact public origin. Keep the original Host header when
+# proxying to MinIO so AWS SigV4 verification sees the same authority that was signed.
+{$EVCP_STORAGE_CADDY_ADDRESS:storage.localhost} {
+	reverse_proxy minio:9000
 }

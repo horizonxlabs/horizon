@@ -1,6 +1,6 @@
 # Phase 4 state inventory
 
-Status date: 2026-07-13. This inventory distinguishes production authority from fixtures and
+Status date: 2026-07-14. This inventory distinguishes production authority from fixtures and
 explicitly documents what prevents a Prisma-only pilot. It is intentionally conservative: a
 route is not marked persistent merely because it has a repository-shaped service.
 
@@ -18,6 +18,9 @@ route is not marked persistent merely because it has a repository-shaped service
 | Generated runtime records | generated-runtime Prisma repository | `persistence/generated-runtime-repositories.ts` | Prisma |
 | Generation-loop applied SQL migrations | `WorkspaceMigrationRecord` Prisma repository | migration `20260713000001_workspace_migration_records` | Prisma |
 | Workspace container lifecycle | `WorkspaceRuntimeRecord` write-through repository | migration `20260713000002_workspace_runtime_records` | Prisma |
+| Long-running governed AI jobs | `AiExecutionJob` through `PrismaDurableAiJobStore`; AES-GCM payload and PostgreSQL lease | migration `20260714020000_durable_ai_execution_jobs` | Prisma |
+| Project file/attachment metadata | `ProjectFileUpload` through `PrismaProjectFileRepository`; object body in MinIO | migration `20260714030000_persistent_project_file_uploads` | Prisma + MinIO |
+| Generation code checkpoints | `WorkspaceCodeCheckpoint` through `PrismaWorkspaceCheckpointStore`; immutable per project/commit | migration `20260714040000_workspace_code_checkpoints` | Prisma |
 
 ## Deliberately non-authoritative state
 
@@ -26,8 +29,8 @@ route is not marked persistent merely because it has a repository-shaped service
 | `Memory*PersistenceClient` implementations | deterministic unit tests and explicit `EVCP_CORE_PERSISTENCE=memory` dev mode | prohibited for pilot; retain as test doubles |
 | `MemoryPlatformSessionRepository` | dev/test session lifecycle | selected only in explicit memory mode; never selected for `prisma` |
 | `platform-services.ts` simulated SSO/session arrays | legacy contracts and regression tests | Keycloak production path issues persistent Platform sessions; remove after remaining legacy contract consumers are migrated |
-| generation checkpoints/run coordination | transient build orchestration and local development | migrate durable checkpoint/run ledger before live generation becomes pilot authority; chat, applied SQL migration evidence, and workspace lifecycle are now persistent |
-| `publish/*` in-memory adapters | deterministic publish tests | production factory must use registry/runtime adapters and persisted deployment records |
+| transient generation action coordination | one in-flight request inside a worker process | durable AI job, chat, Git commit, code checkpoint, applied SQL migration, workspace lifecycle, and project uploads are persistent; never treat an in-flight event stream as authority |
+| `publish/*` in-memory deployment cache | fast healthy-container routing and deterministic publish tests | production rehydrates a healthy labelled container after restart; product manifest/registry/deployment evidence remains persisted in Prisma |
 | frontend `fallback*`, fixtures, initial bootstrap objects | offline UI fixtures | pilot configuration must show loading/empty/error instead of treating fixture mutation as success; Store is fail-closed as of this change |
 
 ## Migration controls
@@ -46,8 +49,7 @@ route is not marked persistent merely because it has a repository-shaped service
 
 ## Remaining Phase 4 blockers
 
-- Real PostgreSQL route-level integration suite (not only repository/unit contracts).
-- Durable generation checkpoint/run ledger and production secret-store/KMS integration.
-- Remove or gate Creator's remaining fixture fallbacks and validate every Admin operational panel
-  against API data.
-- Backup/restore drill for PostgreSQL, MinIO and Keycloak export.
+- Repeat the PostgreSQL route-level and browser contracts on the clean pilot host.
+- Operator-owned OpenBao/KMS initialization and external encrypted backup retention.
+- Clean-pilot PostgreSQL/MinIO/Keycloak restore and versioned-registry rollback evidence. Local
+  encrypted PostgreSQL and MinIO restore drills passed on 2026-07-14.

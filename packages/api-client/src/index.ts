@@ -67,7 +67,7 @@ export type PlatformUserDto = {
   permissions?: string[];
 };
 export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage, PlatformSessionSummary } from "./keycloak-user-types";
-export { createKeycloakUserClient, startKeycloakLogin } from "./keycloak-client";
+export { createKeycloakUserClient, startKeycloakLogin, startKeycloakLogout } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
   name: string;
@@ -579,6 +579,24 @@ export type AiProviderTestCallResponse = {
   outputExcerpt: string;
 };
 
+export type DurableAiJobDto = {
+  id: string;
+  requestId: string;
+  scenario: AiScenarioDto;
+  status: "queued" | "running" | "succeeded" | "failed";
+  attempts: number;
+  result?: { evidenceRequestId: string };
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateDurableAiJobInput = {
+  prompt: string;
+  scenario: AiScenarioDto;
+  requestId?: string;
+  requestedTokens?: number;
+};
 export type AiProviderAdapterDto = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiScenarioDto =
   | "prd_generation"
@@ -843,6 +861,25 @@ export class PlatformApiClient {
     return this.request<WorkspaceSnapshotResponse>(
       `/projects/${encodeURIComponent(projectId)}/workspace`
     );
+  }
+
+  authorizeWorkspacePreview(projectId: string): Promise<{ authorized: true }> {
+    return this.request<{ authorized: true }>(
+      `/projects/${encodeURIComponent(projectId)}/workspace/preview-session`,
+      { method: "POST" }
+    );
+  }
+
+  getDurableAiJob(projectId: string, jobId: string): Promise<DurableAiJobDto> {
+    return this.request<DurableAiJobDto>(`/projects/${encodeURIComponent(projectId)}/ai-jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  enqueueDurableAiJob(projectId: string, input: CreateDurableAiJobInput): Promise<Pick<DurableAiJobDto, "id" | "requestId" | "status">> {
+    return this.request<Pick<DurableAiJobDto, "id" | "requestId" | "status">>(`/projects/${encodeURIComponent(projectId)}/ai-jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    });
   }
 
   listProjectFiles(projectId: string): Promise<ProjectFileUploadDto[]> {

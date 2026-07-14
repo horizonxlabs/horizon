@@ -1,15 +1,15 @@
 import type { CodeCheckpoint } from "@evcp/types";
 
 export interface CheckpointStore {
-  createCheckpoint(input: { projectId: string; tag: string; commitSha: string; label: string }): CodeCheckpoint;
-  listCheckpoints(projectId: string): CodeCheckpoint[];
+  createCheckpoint(input: { projectId: string; tag: string; commitSha: string; label: string }): Promise<CodeCheckpoint>;
+  listCheckpoints(projectId: string): Promise<CodeCheckpoint[]>;
 }
 
 export function createMemoryCheckpointStore(): CheckpointStore {
   const byProject = new Map<string, CodeCheckpoint[]>();
   let counter = 0;
   return {
-    createCheckpoint(input) {
+    async createCheckpoint(input) {
       counter += 1;
       const checkpoint: CodeCheckpoint = {
         id: `chk-${counter}`,
@@ -24,7 +24,7 @@ export function createMemoryCheckpointStore(): CheckpointStore {
       byProject.set(input.projectId, list);
       return checkpoint;
     },
-    listCheckpoints(projectId) {
+    async listCheckpoints(projectId) {
       return [...(byProject.get(projectId) ?? [])];
     }
   };

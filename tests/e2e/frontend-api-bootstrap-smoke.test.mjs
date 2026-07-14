@@ -50,9 +50,7 @@ test("frontend source exposes API bootstrap state without direct mock-data impor
   assert.match(adminSource, /getSetupStatus/);
   assert.match(adminSource, /Logout/);
   assert.doesNotMatch(adminSource, /Refresh Session/);
-  // The creator "Bootstrap: <source>" badge was removed in the UI cleanup, but the bootstrap state
-  // still derives its source from the real Platform API auth mode (vs local fallback).
-  assert.match(creatorSource, /source: currentUser\.auth\.mode === "platform_session"/);
+  assert.match(creatorSource, /source: "Platform API"/);
   assert.match(storeSource, /loadStoreBootstrap/);
   assert.doesNotMatch(`${adminSource}\n${creatorSource}\n${storeSource}`, /@evcp\/mock-data/);
 });

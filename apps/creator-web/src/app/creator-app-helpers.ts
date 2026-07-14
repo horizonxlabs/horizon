@@ -1,12 +1,22 @@
 import {
   createPlatformSessionStore,
   startKeycloakLogin,
+  startKeycloakLogout,
   type PrdVersionDto
 } from "@evcp/api-client";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
 import { apiBaseUrl } from "@/shared/runtime-config";
 import type { CreatorBootstrapState } from "@/shared/types";
-import { fallbackSelectedProject } from "@/app/creator-defaults";
+import { initialCreatorBootstrap, unselectedProject } from "@/app/creator-defaults";
+
+export function creatorApiFailureState(message: string): CreatorBootstrapState {
+  return {
+    ...initialCreatorBootstrap,
+    status: "error",
+    message,
+    selectedProject: unselectedProject
+  };
+}
 
 export async function loadCreatorBootstrap(
   selectedProjectKey?: string
@@ -19,12 +29,13 @@ export async function loadCreatorBootstrap(
   const selectedProject =
     projectViews.find((project) => project.id === selectedProjectKey) ??
     projectViews[0] ??
-    fallbackSelectedProject;
+    unselectedProject;
   return {
+    status: projectViews.length ? "ready" : "empty",
     userName: currentUser.user.name,
     selectedProject,
-    projects: projectViews.length ? projectViews : [fallbackSelectedProject],
-    source: currentUser.auth.mode === "platform_session" ? "Platform API" : "local fallback"
+    projects: projectViews,
+    source: "Platform API"
   };
 }
 
@@ -45,6 +56,12 @@ export function beginCreatorKeycloakLogin(): void {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
   window.location.assign(startKeycloakLogin(baseUrl, "creator", window.location.href));
+}
+
+export function beginCreatorKeycloakLogout(): void {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) throw new Error("Platform API base URL is not configured for local dev");
+  window.location.assign(startKeycloakLogout(baseUrl, "creator", window.location.href));
 }
 
 export function consumeCreatorSessionHandoff(): void {

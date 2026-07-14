@@ -1,10 +1,10 @@
-import { DataTable, SectionCard, WorkflowRail } from "@evcp/ui";
+import { DataTable, DecisionPanel, SectionCard, WorkflowRail } from "@evcp/ui";
 import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
-  const { visiblePrdSections, visibleVersionRows } = app;
+  const { visiblePrdSections, visibleVersionRows, prdMessage, currentPrdVersion, handleConfirmPrdBaseline } = app;
   return (
     <CreatorShell
       app={app}
@@ -24,8 +24,9 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
             <SectionCard
               eyebrow="PRD Viewer"
               title="Structured PRD Sections"
-              action={<button type="button">Confirm Baseline</button>}
+              action={<button type="button" disabled={!currentPrdVersion || currentPrdVersion.status === "baseline"} onClick={() => { void handleConfirmPrdBaseline(); }}>Confirm Baseline</button>}
             >
+              <p>{prdMessage}</p>
               <div className="creator-prd-sections">
                 {visiblePrdSections.map((section) => (
                   <article id={section.key} key={section.key}>
@@ -37,6 +38,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   </article>
                 ))}
               </div>
+              {!visiblePrdSections.length && <DecisionPanel tone="warning" badge="API required" title="No local PRD fallback" lines={["The platform did not return a PRD record for this project."]} />}
             </SectionCard>
             <SectionCard eyebrow="Version History" title="PRD Version History">
               <DataTable

@@ -60,7 +60,7 @@ test("real installer CLI fails dry-run when example secrets are not explicitly a
     assert.equal(result.status, 1);
     assert.match(result.stdout, /EVCP installer: FAILED/);
     assert.match(result.stdout, /FAILED preflight/);
-    assert.match(result.stdout, /action: secret:AI_API_KEY/);
+    assert.match(result.stdout, /action: secret:EVCP_AI_JOB_ENCRYPTION_KEY/);
   } finally {
     rmSync(reportDir, { recursive: true, force: true });
   }

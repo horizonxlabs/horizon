@@ -1,11 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+// These smoke cases explicitly exercise the legacy development-only auth adapter.
+// Keep the opt-in local to this test process so a production-like `.env` cannot
+// silently change their meaning.
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { createPlatformApiApp, executePlatformApiRequest } = await import(
   "../../apps/platform-api/src/app-factory.ts"
 );
 const { createPlatformApiServices } = await import(
   "../../apps/platform-api/src/platform-services.ts"
+);
+const {
+  MemoryCorePersistenceClient,
+  createCoreRepositoryBackedService
+} = await import("../../apps/platform-api/src/persistence/core-repositories.ts");
+const {
+  MemoryAiGovernancePersistenceClient,
+  createAiGovernanceRepositoryBackedService
+} = await import("../../apps/platform-api/src/persistence/ai-governance-repositories.ts");
+const { PlatformSessionService } = await import(
+  "../../apps/platform-api/src/auth/platform-session-service.ts"
+);
+const { MemoryPlatformSessionRepository } = await import(
+  "../../apps/platform-api/src/persistence/platform-session-repository.ts"
 );
 
 test("platform API health and auth/me return shared success envelopes", async () => {
@@ -143,6 +162,71 @@ test("platform HTTP runtime parses JSON bodies for admin configuration routes", 
     assert.equal(envelope.ok, true);
     assert.equal(envelope.data.providerId, "authprov_keycloak_default_001");
     assert.equal(envelope.data.token.startsWith("evcp_session."), true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("platform HTTP AI governance routes verify persisted Platform sessions", async () => {
+  const email = "persisted.admin@company.test";
+  const coreClient = new MemoryCorePersistenceClient({
+    users: [
+      {
+        id: "usr_persisted_admin",
+        email,
+        name: "Persisted Admin",
+        status: "active",
+        roles: [
+          {
+            role: {
+              id: "role_admin",
+              key: "admin",
+              name: "Platform Admin",
+              permissions: ["platform:admin"]
+            }
+          }
+        ]
+      }
+    ]
+  });
+  const platformSessions = new PlatformSessionService(
+    new MemoryPlatformSessionRepository(),
+    "http-ai-governance-session-secret"
+  );
+  const session = await platformSessions.issue({
+    id: "usr_persisted_admin",
+    email,
+    providerConfigId: "authprov_keycloak_default_001",
+    claims: { email }
+  });
+  const services = {
+    ...createPlatformApiServices(),
+    corePersistence: createCoreRepositoryBackedService(coreClient),
+    aiGovernancePersistence: createAiGovernanceRepositoryBackedService(
+      new MemoryAiGovernancePersistenceClient()
+    ),
+    platformSessions
+  };
+  const app = await createPlatformApiApp(services);
+  await app.listen(0, "127.0.0.1");
+  try {
+    const address = app.getHttpServer().address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const response = await fetch(`http://127.0.0.1:${port}/ai/providers`, {
+      headers: { authorization: `Bearer ${session.token}` }
+    });
+    const envelope = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(envelope.ok, true);
+    assert.deepEqual(envelope.data, []);
+
+    const invalidSessionResponse = await fetch(`http://127.0.0.1:${port}/auth/me`, {
+      headers: { authorization: "Bearer invalid-platform-session" }
+    });
+    const invalidSessionEnvelope = await invalidSessionResponse.json();
+    assert.equal(invalidSessionResponse.status, 401);
+    assert.equal(invalidSessionEnvelope.error.code, "UNAUTHORIZED");
   } finally {
     await app.close();
   }

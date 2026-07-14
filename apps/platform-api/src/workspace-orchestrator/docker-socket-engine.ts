@@ -167,6 +167,20 @@ export function createDockerSocketEngine(
         env: Array.isArray(payload?.Config?.Env) ? payload.Config.Env.map(String) : []
       };
     },
+    async listManagedContainers() {
+      const filters = encodeURIComponent(JSON.stringify({ label: ["evcp.managed=true"] }));
+      const result = await request({ method: "GET", path: `/containers/json?all=true&filters=${filters}` });
+      await expect("list-managed", result, [200]);
+      const payload = await result.json();
+      return (Array.isArray(payload) ? payload : []).map((container: any) => ({
+        containerId: String(container.Id),
+        name: String(Array.isArray(container.Names) ? container.Names[0] ?? "" : "").replace(/^\//, ""),
+        running: String(container.State) === "running",
+        labels: container.Labels && typeof container.Labels === "object"
+          ? Object.fromEntries(Object.entries(container.Labels).map(([key, value]) => [key, String(value)]))
+          : {}
+      }));
+    },
     async execInContainer(containerId, cmd) {
       return runExec(containerId, cmd);
     },

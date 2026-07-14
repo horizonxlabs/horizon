@@ -1,34 +1,12 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import { assertTransition } from "./state";
-import { schemaNameFor, roleNameFor, type PostgresProvisioner } from "./postgres-provisioner";
+import { schemaNameFor, roleNameFor } from "./postgres-provisioner";
 import { resourceKeyForProject } from "./resource-ports";
-import type { ObjectStorageProvisioner, LlmGatewayAdmin } from "./resource-ports";
-import type { ProjectSecretStore } from "./secret-store";
-import { buildDevContainerSpec, type DockerEngine } from "./docker-engine";
+import { buildDevContainerSpec } from "./docker-engine";
+import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 
-export interface WorkspaceAuditEvent {
-  action: string;
-  projectId: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface WorkspaceOrchestratorDeps {
-  postgres: PostgresProvisioner;
-  objectStorage: ObjectStorageProvisioner;
-  llmGateway: LlmGatewayAdmin;
-  secrets: ProjectSecretStore;
-  docker: DockerEngine;
-  image?: string;
-  network?: string;
-  cpuCores?: number;
-  memoryMb?: number;
-  databaseName?: string;
-  postgresHost?: string;
-  s3Endpoint?: string;
-  onAudit?: (event: WorkspaceAuditEvent) => void;
-  runtimeRecords?: WorkspaceRuntimeRecordStore;
-}
+export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -55,12 +33,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
   const persist = async (record: WorkspaceContainerRecord): Promise<void> => { await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) }); };
 
-  const buildWorkspaceSpec = (projectId: string, resourceKey: string) =>
+  const buildWorkspaceSpec = async (projectId: string, resourceKey: string) =>
     buildDevContainerSpec({
+      projectId,
       slug: resourceKey,
       image,
       env: {
-        ...deps.secrets.resolveEnv(projectId),
+        ...(await deps.secrets.resolveEnv(projectId)),
         EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
       },
       cpuCores,
@@ -98,13 +77,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     // Load encrypted at-rest secrets first so a post-restart recovery can recreate the container
     // without attempting to create its schema, bucket, or LLM key again.
     await deps.secrets.hydrate();
-    if (Object.keys(deps.secrets.resolveEnv(input.projectId)).length === 0) {
+    if (Object.keys(await deps.secrets.resolveEnv(input.projectId)).length === 0) {
       throw new Error(
         `cannot recover workspace '${input.projectId}': managed secrets are unavailable`
       );
     }
     const { containerId } = await deps.docker.createContainer(
-      buildWorkspaceSpec(input.projectId, resourceKey)
+      await buildWorkspaceSpec(input.projectId, resourceKey)
     );
     await deps.docker.startContainer(containerId);
       const recovered = save({
@@ -140,11 +119,26 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
       }
     },
+    async cleanupOrphanContainers(): Promise<string[]> {
+      const removed: string[] = [];
+      for (const container of await deps.docker.listManagedContainers()) {
+        const projectId = container.labels["evcp.project-id"];
+        const isDevelopmentWorkspace = container.name.startsWith("evcp-ws-") && !container.labels["evcp.env"];
+        // Older containers without a stable project-id label are left untouched: deletion must be
+        // provably safe. They are adopted by provisionWorkspace and relabelled on recreation.
+        if (!isDevelopmentWorkspace || !projectId || records.has(projectId)) continue;
+        if (container.running) await deps.docker.stopContainer(container.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(container.containerId);
+        removed.push(container.name);
+        audit({ action: "workspace.orphan_removed", projectId, metadata: { containerName: container.name } });
+      }
+      return removed;
+    },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
     },
 
-    listSecretNames(projectId: string): string[] {
+    async listSecretNames(projectId: string): Promise<string[]> {
       return deps.secrets.listNames(projectId);
     },
 
@@ -153,8 +147,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
      * for internal server-side use only — never surfaced to the Creator. Postgres enforces schema
      * isolation via this role. Undefined until the workspace has been provisioned.
      */
-    getProjectDatabaseUrl(projectId: string): string | undefined {
-      return deps.secrets.resolveEnv(projectId).DATABASE_URL;
+    async getProjectDatabaseUrl(projectId: string): Promise<string | undefined> {
+      return (await deps.secrets.resolveEnv(projectId)).DATABASE_URL;
     },
 
     /**
@@ -162,7 +156,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
      * for internal server-side use only — never surfaced to the Creator. Used by the container
      * publish stack to start production/staging containers with the same secrets as dev.
      */
-    resolveEnv(projectId: string): Record<string, string> {
+    async resolveEnv(projectId: string): Promise<Record<string, string>> {
       return deps.secrets.resolveEnv(projectId);
     },
 
@@ -212,7 +206,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           ) {
             continue;
           }
-          deps.secrets.put(input.projectId, name, entry.slice(separator + 1));
+          await deps.secrets.put(input.projectId, name, entry.slice(separator + 1));
         }
         const healed = save({
           id: `ws-${resourceKey}`,
@@ -266,20 +260,20 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         llmKeyIds.set(input.projectId, llmKey.keyId);
         rollbacks.push(() => deps.llmGateway.revokeVirtualKey(llmKey.keyId));
 
-        deps.secrets.put(
+        await deps.secrets.put(
           input.projectId,
           "DATABASE_URL",
           `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`
         );
-        deps.secrets.put(input.projectId, "S3_ENDPOINT", s3Endpoint);
-        deps.secrets.put(input.projectId, "S3_BUCKET", bucket.bucket);
-        deps.secrets.put(input.projectId, "S3_ACCESS_KEY", bucket.accessKey);
-        deps.secrets.put(input.projectId, "S3_SECRET_KEY", bucket.secretKey);
-        deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
-        rollbacks.push(async () => deps.secrets.removeAll(input.projectId));
+        await deps.secrets.put(input.projectId, "S3_ENDPOINT", s3Endpoint);
+        await deps.secrets.put(input.projectId, "S3_BUCKET", bucket.bucket);
+        await deps.secrets.put(input.projectId, "S3_ACCESS_KEY", bucket.accessKey);
+        await deps.secrets.put(input.projectId, "S3_SECRET_KEY", bucket.secretKey);
+        await deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
+        rollbacks.push(() => deps.secrets.removeAll(input.projectId));
 
         const { containerId } = await deps.docker.createContainer(
-          buildWorkspaceSpec(input.projectId, resourceKey)
+          await buildWorkspaceSpec(input.projectId, resourceKey)
         );
         rollbacks.push(() => deps.docker.removeContainer(containerId));
         await deps.docker.startContainer(containerId);
@@ -373,7 +367,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       if (keyId) {
         await deps.llmGateway.revokeVirtualKey(keyId).catch(() => undefined);
       }
-      deps.secrets.removeAll(projectId);
+      await deps.secrets.removeAll(projectId);
       records.delete(projectId);
       llmKeyIds.delete(projectId);
       await runtimeRecords?.remove(projectId);

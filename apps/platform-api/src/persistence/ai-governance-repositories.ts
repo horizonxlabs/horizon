@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createMemoryAiQuotaUsagePersistence, type AiQuotaUsagePersistence } from "./ai-quota-usage-store";
 import type {
   AiApiKey,
   AiProvider,
@@ -15,13 +16,12 @@ import type {
   PlatformUser
 } from "../platform-services";
 import { PermissionError, ValidationError } from "../platform-services";
-
+import { MemoryAiSecretStore, type AiSecretStore } from "../ai-governance/secret-store";
 type DateValue = Date | string;
 type ProviderStatus = AiProvider["status"];
 type GuardrailSeverity = GuardrailRule["severity"];
 type GuardrailScope = GuardrailRule["scope"];
 type QuotaScope = AiQuota["scope"];
-
 interface AiProviderRecord {
   id: string;
   name: string;
@@ -31,7 +31,6 @@ interface AiProviderRecord {
   status: ProviderStatus;
   createdAt: DateValue;
 }
-
 interface AiApiKeyRecord {
   id: string;
   providerId: string;
@@ -43,12 +42,11 @@ interface AiApiKeyRecord {
   maskedValue: string;
   secretCiphertext: string;
   keyVersion: number;
-  encryptionProvider: "local-envelope";
+  encryptionProvider: string;
   status: "active" | "disabled";
   lastUsedAt?: DateValue | null;
   createdAt: DateValue;
 }
-
 interface AiScenarioRouteRecord {
   id: string;
   scenario: string;
@@ -145,6 +143,7 @@ export interface AiGovernancePersistenceClient {
     findMany(args?: { orderBy?: { scope?: "asc" | "desc" } }): Promise<AiQuotaRecord[]>;
     upsert(args: UpsertQuotaArgs): Promise<AiQuotaRecord>;
   };
+  aiQuotaUsage: AiQuotaUsagePersistence;
   guardrailRule: {
     findMany(args?: { orderBy?: { updatedAt?: "asc" | "desc" } }): Promise<GuardrailRuleRecord[]>;
     upsert(args: UpsertGuardrailRuleArgs): Promise<GuardrailRuleRecord>;
@@ -156,7 +155,7 @@ export interface AiGovernancePersistenceClient {
 }
 
 export class AiGovernanceRepositoryBackedService {
-  constructor(private readonly client: AiGovernancePersistenceClient) {}
+  constructor(private readonly client: AiGovernancePersistenceClient, private readonly secretStore: AiSecretStore = new MemoryAiSecretStore()) {}
 
   async listProviders(actor: PlatformUser): Promise<AiProvider[]> {
     requireAdmin(actor);
@@ -224,9 +223,9 @@ export class AiGovernanceRepositoryBackedService {
         fallbackPriority: input.fallbackPriority,
         fingerprint: fingerprintSecret(input.secret),
         maskedValue: maskSecret(input.secret),
-        secretCiphertext: encryptSecretEnvelope(input.secret),
+        secretCiphertext: await this.secretStore.write(slugId("aik", `${input.providerId}_${input.name}`), input.secret),
         keyVersion: 1,
-        encryptionProvider: "local-envelope",
+        encryptionProvider: this.secretStore.provider,
         status: "active",
         createdAt: new Date()
       }
@@ -345,6 +344,7 @@ export class MemoryAiGovernancePersistenceClient implements AiGovernancePersiste
   readonly aiApiKey: AiGovernancePersistenceClient["aiApiKey"];
   readonly aiScenarioRoute: AiGovernancePersistenceClient["aiScenarioRoute"];
   readonly aiQuota: AiGovernancePersistenceClient["aiQuota"];
+  readonly aiQuotaUsage: AiQuotaUsagePersistence;
   readonly guardrailRule: AiGovernancePersistenceClient["guardrailRule"];
   readonly guardrailEvent: AiGovernancePersistenceClient["guardrailEvent"];
 
@@ -385,6 +385,7 @@ export class MemoryAiGovernancePersistenceClient implements AiGovernancePersiste
       findMany: async ({ orderBy } = {}) => sortByString(this.quotas, "scope", orderBy?.scope),
       upsert: async ({ where, update, create }) => upsertByKey(this.quotas, "scope", where.scope, update, create)
     };
+    this.aiQuotaUsage = createMemoryAiQuotaUsagePersistence();
     this.guardrailRule = {
       findMany: async ({ orderBy } = {}) => sortByDate(this.rules, "updatedAt", orderBy?.updatedAt),
       upsert: async ({ where, update, create }) => upsertById(this.rules, where.id, update, create)
@@ -399,16 +400,16 @@ export class MemoryAiGovernancePersistenceClient implements AiGovernancePersiste
   }
 }
 
-export function createAiGovernanceRepositoryBackedService(client: AiGovernancePersistenceClient = new MemoryAiGovernancePersistenceClient()): AiGovernanceRepositoryBackedService {
-  return new AiGovernanceRepositoryBackedService(client);
+export function createAiGovernanceRepositoryBackedService(client: AiGovernancePersistenceClient = new MemoryAiGovernancePersistenceClient(), secretStore?: AiSecretStore): AiGovernanceRepositoryBackedService {
+  return new AiGovernanceRepositoryBackedService(client, secretStore);
 }
 
-export async function createPrismaAiGovernancePersistence(databaseUrl = process.env.DATABASE_URL): Promise<{ client: AiGovernancePersistenceClient; service: AiGovernanceRepositoryBackedService }> {
+export async function createPrismaAiGovernancePersistence(databaseUrl = process.env.DATABASE_URL, secretStore?: AiSecretStore): Promise<{ client: AiGovernancePersistenceClient; service: AiGovernanceRepositoryBackedService }> {
   const { PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined) as unknown as AiGovernancePersistenceClient;
   return {
     client,
-    service: new AiGovernanceRepositoryBackedService(client)
+    service: new AiGovernanceRepositoryBackedService(client, secretStore)
   };
 }
 
@@ -516,10 +517,6 @@ function fingerprintSecret(secret: string): string {
 function maskSecret(secret: string): string {
   const suffix = secret.slice(-4);
   return `***${suffix}`;
-}
-
-function encryptSecretEnvelope(secret: string): string {
-  return `local-envelope:${Buffer.from(secret, "utf8").toString("base64")}`;
 }
 
 function toIsoString(value: DateValue): string {

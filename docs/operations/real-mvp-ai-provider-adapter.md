@@ -57,6 +57,8 @@ sequenceDiagram
 - Provider test-call responses include provider id/name, adapter, model, status, fallback flag, tokens, latency, usage log id and a sanitized output excerpt.
 - Guardrail `block` decisions stop before adapter invocation.
 - Quota exhaustion stops before adapter invocation.
+- Quota policies remain configured by `organization`, `creator`, `project`, or `app`; a persisted usage ledger reserves and reconciles tokens independently for each target scope.
+- Execution evidence records the quota scopes and reserved tokens without retaining prompt, response, or provider secret material.
 - API keys are stored as local envelopes and responses expose only masked/fingerprint values.
 - PRD generation records AI usage with provider id, model, scenario, token estimate, latency, status, cost estimate and prompt fingerprint.
 - Deterministic fallback is allowed only when a route fallback and explicit fallback text are provided.
@@ -67,4 +69,4 @@ sequenceDiagram
 - Add provider-specific timeout defaults and async worker execution around the runtime fetcher when background job orchestration is introduced.
 - Persist AI providers, encrypted keys, routes, quotas and usage logs through Prisma repositories.
 - Route workspace/frontend/backend/review/documentation scenarios through the same gateway.
-- Add per-provider cost tables and organization/project/app scoped quota consumption.
+- Add per-provider cost tables and monthly/reset accounting for the persisted quota ledger.

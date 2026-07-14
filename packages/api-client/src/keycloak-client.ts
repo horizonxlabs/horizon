@@ -4,6 +4,10 @@ export function startKeycloakLogin(baseUrl: string, app: "admin" | "creator" | "
   return `${baseUrl.replace(/\/$/, "")}/auth/keycloak/start?${new URLSearchParams({ app, returnTo })}`;
 }
 
+export function startKeycloakLogout(baseUrl: string, app: "admin" | "creator" | "store", returnTo: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/auth/keycloak/logout?${new URLSearchParams({ app, returnTo })}`;
+}
+
 export function createKeycloakUserClient(client: PlatformApiClient) {
   return {
     list: async ({ first = 0, max = 50 }: Partial<KeycloakUserListMeta> = {}): Promise<KeycloakUserListPage> => {

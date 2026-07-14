@@ -1,6 +1,6 @@
 # Horizon — MVP Pending Tasks
 
-อัปเดตสถานะ: 2026-07-13  
+อัปเดตสถานะ: 2026-07-14
 เป้าหมาย: เปลี่ยน integrated mock-first prototype ให้เป็น MVP สำหรับ pilot บน private server ที่พิสูจน์ flow จริงได้
 
 ## 1. สถานะและสมมติฐาน
@@ -19,7 +19,7 @@
 - [x] Prototype flow Admin governance → Creator/PRD/workspace → publish → App Store/ticket → ticket-to-PRD พร้อม Sprint 0–14 regression evidence
 - [x] Repository-shaped persistence, signed bearer-session, AI adapter, API bootstrap และ deterministic memory mode
 - [x] Real workspace adapters สำหรับ Docker/PostgreSQL/MinIO/LiteLLM, generation loop, Git checkpoint และ container publish foundation
-- [~] หลายหน้า/service ยังพึ่ง static demo data, simulated login, legacy/in-memory state หรือยังไม่มี browser E2E บน private-server stack จริง
+- [~] Phase 3–9 software path และ local real-stack evidence ผ่านแล้ว; ยังเหลือ clean-pilot infrastructure ownership และ release certification ใน Phase 0–2/10
 
 ## 2. Execution Plan — ทำตามลำดับ
 
@@ -67,11 +67,11 @@
 **Dependencies:** Phase 2  
 **Checklist:**
 
-- [ ] ทำ browser redirect/callback/token exchange สำหรับ Admin, Creator และ App Store
-- [ ] persist/revoke/expire/refresh Platform Auth sessions ด้วย PostgreSQL
-- [ ] enforce platform role, app role และ resource scope ใน protected APIs
-- [ ] ปิด simulated-login route และลบ mock-header/session-bridge fallback จาก pilot configuration
-- [ ] เพิ่ม PostgreSQL auth integration tests และ browser login/logout/expiry E2E
+- [x] ทำ browser redirect/callback/token exchange สำหรับ Admin, Creator และ App Store; local Keycloak browser proof ผ่านครบ 3 surface
+- [x] persist/revoke/expire/refresh Platform Auth sessions ด้วย PostgreSQL และ restart แล้วยังใช้ session เดิมได้
+- [x] enforce platform role, app role และ resource scope ใน protected APIs รวม generated-app proxy แบบ 401/403/member-only
+- [x] ปิด simulated-login/mock-header ใน pilot configuration; เปิดได้เฉพาะ explicit test mode
+- [x] เพิ่ม PostgreSQL auth integration tests และ local browser login/logout/revoke E2E; clean-pilot hostname proof อยู่ Phase 10
 
 **Exit gate:** ทั้ง 3 surfaces ใช้ real login เท่านั้น; invalid/expired/revoked token ถูกปฏิเสธ; restart ไม่ทำ policy เพี้ยน  
 **ทำขนานได้:** frontend callback UX และ security/redaction tests
@@ -81,11 +81,11 @@
 **Dependencies:** Phase 2; session records พึ่ง Phase 3  
 **Checklist:**
 
-- [ ] ทำ route/service inventory: `prisma`, `memory-test-only`, `legacy-to-remove`
-- [ ] ย้าย AI providers/keys/routes/quota/usage และ business state ที่เหลือไป Prisma repositories
-- [ ] เพิ่ม migration/rollback notes และ real-PostgreSQL route-level integration suite
-- [ ] เปลี่ยน local secret envelope เป็น production KMS/secret-store ก่อนรับ customer provider key
-- [ ] ทดสอบ restart persistence, idempotency, tenant/project/app scoping และ cross-scope denial
+- [x] ทำ route/service inventory: `prisma`, `memory-test-only`, `legacy-to-remove` ใน `docs/operations/phase-4-state-inventory.md`
+- [x] ย้าย AI providers/keys/routes/quota/usage, durable AI jobs, project uploads และ generation checkpoints ไป persistent repositories
+- [x] เพิ่ม migrations, rollback boundary และ PostgreSQL route/repository integration contracts; clean-pilot restore certification อยู่ Phase 10
+- [x] ใช้ OpenBao KV v2 สำหรับ provider credentials; database เก็บเพียง secret reference และ local restart recovery ผ่าน
+- [x] ทดสอบ local restart persistence, idempotency, project/app scoping และ cross-scope denial
 
 **Exit gate:** pilot ใช้ `EVCP_CORE_PERSISTENCE=prisma`; ไม่มี authoritative state ใน process memory; secrets ไม่ออกจาก server boundary  
 **ทำขนานได้:** repository migration แยกตาม domain และ backup/restore test fixtures
@@ -95,11 +95,11 @@
 **Dependencies:** Phase 3–4 และ stable API contracts  
 **Checklist:**
 
-- [ ] ทำ API wiring matrix ครบ Admin, Creator และ App Store
-- [ ] Creator: database/version, ticket/trace, workspace usage/preview และ publish/access ใช้ API-backed state
-- [ ] Admin: monitoring, audit, auth/domain/operations และ AI governance อ่าน/เขียนข้อมูลจริง
-- [ ] App Store: list/detail/install/access/ticket/status ใช้ current session และ database-backed APIs
-- [ ] จำกัด fallback เฉพาะ explicit local-dev; เพิ่ม loading/empty/denied/retry/stale-session states
+- [x] ทำ API wiring matrix ครบ Admin, Creator และ App Store — ดู `docs/operations/phase-5-api-wiring-matrix.md`; local real-Keycloak browser proof ผ่าน
+- [x] Creator: database/version, ticket/trace, workspace usage/preview และ publish/access ใช้ API-backed state; default demo ถูกปิด และ preview ใช้ HttpOnly path-scoped session โดยไม่มี bearer token ใน URL
+- [x] Admin: monitoring, audit, auth/domain/operations และ AI governance อ่าน/เขียนข้อมูลจริง; provider/key/route/quota/guardrail/test-call ผ่าน browser กับ OpenBao/Anthropic
+- [x] App Store: list/detail/install/access/ticket/status ใช้ current session และ database-backed APIs; local login/logout/revoke และ fail-closed empty state ผ่าน
+- [x] จำกัด fallback เฉพาะ explicit local-dev; loading/empty/denied/retry/stale-session เป็น fail-closed และ frontend contract/render suites ผ่าน
 
 **Exit gate:** fresh pilot install ไม่มี demo record โดยไม่ opt-in; reload/restart แล้วยังตรง DB; API failure ไม่คืน fake success  
 **ทำขนานได้:** แบ่งตาม 3 surfaces หลัง API contracts freeze
@@ -109,11 +109,11 @@
 **Dependencies:** Phase 4; UI test-call พึ่ง Phase 5  
 **Checklist:**
 
-- [ ] route workspace/frontend/backend/review/documentation scenarios ผ่าน gateway เดียว
-- [ ] persist routing, fallback, tokens, latency, cost, status และ sanitized failure evidence
-- [ ] เพิ่ม provider timeout, bounded retry/circuit breaker และ async worker สำหรับงานยาว
-- [ ] ทำ quota consumption ระดับ organization/project/app และ block ก่อน external call เมื่อหมด
-- [ ] ทดสอบ prompt/response guardrail, provider failure/fallback และ no-secret leakage
+- [x] ทั้ง 6 scenarios (`prd_generation`, `requirement_analysis`, `frontend_coding`, `backend_coding`, `review`, `documentation`) ผ่าน governed executor กับ Anthropic จริงและ route/model เดียวกัน
+- [x] persist routing, fallback, tokens, latency, cost, status และ sanitized failure evidence ใน PostgreSQL; actor/project/provider trace ถูกตรวจแล้ว
+- [x] provider timeout, bounded retry/circuit breaker และ durable async worker: encrypted payload, heartbeat, expired-lease reclaim, restart recovery และ exactly-one evidence ผ่าน
+- [x] quota consumption ระดับ organization/project/app และ block ก่อน external call เมื่อหมด; live hard-stop proof ไม่เพิ่ม succeeded evidence
+- [x] prompt guardrail, provider failure/fallback และ no-secret leakage ผ่าน live proof; credential อยู่ใน OpenBao และ DB เก็บเพียง `vault://` reference/masked value
 
 **Exit gate:** Admin test call และ Creator ใช้ config เดียวกัน; retry ไม่สร้าง artifact/usage ซ้ำ; usage trace กลับหา actor/project/provider ได้  
 **ทำขนานได้:** provider adapter tests, cost/quota model และ worker orchestration
@@ -123,11 +123,12 @@
 **Dependencies:** Phase 3–6  
 **Checklist:**
 
-- [ ] Create project แล้ว provision schema, DB user, bucket, LiteLLM key และ isolated container จริง
-- [ ] ส่ง prompt ให้ AI แก้ไฟล์, validate/build, Git commit และ refresh preview จริง
-- [ ] ตรวจ locked files, membership, names-only secret list และ schema/bucket isolation
-- [ ] ทดสอบ partial-provision rollback, restart recovery, idle stop/wake และ orphan cleanup
-- [ ] ทดสอบ restore boundary; block การย้อน code ข้าม incompatible DB migration พร้อม recovery guidance
+- [x] Workspace credentials เข้ารหัส AES-GCM และ persist ก่อน recreate; real adapter fail-closed เมื่อไม่มี operator-injected encryption key
+- [x] Local Creator สร้าง project และ provision schema, DB user, bucket, LiteLLM key และ isolated container จริง
+- [x] Local live AI แก้ไฟล์, validate/build, Git commit, สร้าง immutable Prisma checkpoint และ refresh token-free preview จริง
+- [x] locked files, project membership, names-only secret list และ schema/bucket isolation มี negative contracts
+- [x] partial-provision rollback, restart recovery, idle stop/wake และ labelled orphan cleanup มี regression proof
+- [x] rollback block เมื่อ code เก่ากว่า applied migration โดยไม่ checkout source และคืน recovery guidance
 
 **Exit gate:** Creator สร้าง/แก้ app โดย fixture ไม่ใช่ authoritative output; restart ไม่ทำ source/chat/checkpoint หาย; failure รักษา last-known-good preview  
 **ทำขนานได้:** isolation negative tests, recovery tests และ restore UX
@@ -137,11 +138,11 @@
 **Dependencies:** Phase 7; auth/access policy จาก Phase 3  
 **Checklist:**
 
-- [ ] build versioned image/artifact และผูก source commit, manifest, deployment revision
-- [ ] publish ผ่าน internal route โดยไม่ expose container port ตรง
-- [ ] enforce Platform Auth/app membership และตรวจ health/readiness ก่อนเปิด route
-- [ ] ทดสอบ failed publish, app restart และ rollback ไป previous healthy revision
-- [ ] ยืนยัน App Store แสดง/เปิด app ตามสิทธิ์จาก persistent registry
+- [x] build versioned image/tag ผูก source commit และ deployment revision; persisted product manifest/registry ผูก project/app revision
+- [x] publish/preview ผ่าน Caddy → Platform API → internal container โดย release Compose publish เฉพาะ ingress ports
+- [x] generated-app proxy บังคับ Platform Auth/app membership และ route เฉพาะ healthy deployment
+- [x] failed publish, restart rehydration, promote และ migration-safe rollback มี regression contracts
+- [x] App Store list/detail/install/access ใช้ persistent registry และ open action ถูก authorize ซ้ำที่ generated-app proxy
 
 **Exit gate:** end user ที่มีสิทธิ์เปิด published app ได้; ผู้ไม่มีสิทธิ์ถูก deny; rollback กู้ healthy route โดยไม่กระทบ app อื่น  
 **ทำขนานได้:** runtime probes, access negative tests และ deployment/audit trace
@@ -151,10 +152,10 @@
 **Dependencies:** Phase 5 และ Phase 8  
 **Checklist:**
 
-- [ ] End user ส่ง/ติดตาม ticket จาก published app
-- [ ] Creator เห็นเฉพาะ ticket ของ app ที่ดูแล และ convert เป็น PRD change/AI prompt
-- [ ] ป้องกัน duplicate conversion และ trace ticket → PRD change → source commit → deployment
-- [ ] ทดสอบ request-access/invite/role lifecycle หาก sponsor กำหนดเป็น release blocker
+- [x] Persistent App Store path รองรับ end user ส่ง/ติดตาม ticket ของ published app
+- [x] Creator inbox scope ตาม project/app และมี ticket-to-PRD/AI regression path
+- [~] duplicate ticket conversion มี regression proof; full persistent trace ticket → PRD → source commit → deployment ยังต้องยืนยันใน clean browser E2E
+- [x] request-access/invite/role/install lifecycle ใช้ persistent repository และมี access-denial contracts
 
 **Exit gate:** feedback round-trip ผ่านด้วย persistent data และ audit trail  
 **ทำขนานได้:** ถ้า Phase 0 ตัดออกจาก first pilot ให้รันเป็น prototype regression และไม่ block Phase 10
@@ -166,10 +167,10 @@
 
 - [ ] รัน `pnpm check:ci`, relevant verify suites และ `pnpm verify:real-mvp-install` จาก clean checkout
 - [ ] Browser E2E: real login → create → live AI change → preview → publish → end-user open app
-- [ ] รัน flow ซ้ำหลัง service restart; ทดสอบ provider/registry outage และ generated-app rollback
-- [ ] ทำ backup/restore drill ครบ PostgreSQL, MinIO artifacts, Keycloak config และ release evidence
-- [ ] security review: auth/RBAC, TLS, secrets/log redaction, uploads, cross-schema denial และ app isolation
-- [ ] สรุป versions/digests, known limitations, operator runbook และ reproducible pass/fail evidence
+- [~] Local restart, provider outage/fallback, durable reclaim และ generated-app rollback contracts ผ่าน; registry outage บน pilot ยังเหลือ
+- [~] Local encrypted PostgreSQL/MinIO restore ผ่าน; external destination/retention และ Keycloak export/restore ยังเหลือ
+- [~] auth/RBAC, secret redaction, uploads และ app isolation มี contracts; public TLS/cross-host review ต้องทำบน pilot
+- [~] operator runbooks และ local evidence อัปเดตแล้ว; final image digests/versions และ pilot sign-off ยังเหลือ
 
 **Exit gate:** ไม่มี open Critical/High หรือ P0 data-loss defect; critical flow ผ่าน 2 รอบ; backup/rollback proof ตรวจซ้ำได้  
 **ทำขนานได้:** security review, ops drill และ documentation evidence หลัง release candidate freeze
@@ -213,7 +214,7 @@ Knowledge/Skill, Remix, PRD export, push notification, Durable LangGraph, advanc
 ## 6. Definition of Done
 
 - [ ] Phase 0–10 exit gates ผ่านตาม cutline พร้อม evidence
-- [ ] test/demo flags ปิดโดย default ใน pilot release
+- [x] test/demo flags ปิดโดย default ใน pilot release
 - [ ] audit trace เชื่อม actor → project/app → AI usage → source commit → deployment
 - [ ] คนอื่นทำ clean install, happy path, restart, backup/restore และ rollback ตาม runbook ได้
 - [ ] Product Owner, Security และ Ops ยอมรับ known limitations

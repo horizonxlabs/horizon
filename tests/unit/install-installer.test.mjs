@@ -24,7 +24,8 @@ test("installer state machine runs all dry-run stages and writes redacted report
     assert.equal(report.stages.every((stage) => stage.status === "passed"), true);
     assert.equal(report.composeReadiness.every((service) => service.status === "ready"), true);
     assert.match(report.setupEvidence.database.urlMasked, /\*\*\*/);
-    assert.match(report.setupEvidence.ai.apiKeyFingerprint, /^sha256:/);
+    assert.equal(report.setupEvidence.ai.management, "admin_openbao");
+    assert.equal(report.setupEvidence.ai.providerCredentialsInEnvironment, false);
     assert.equal(reportText.includes("example-openai-key-change-before-use"), false);
   } finally {
     rmSync(reportDir, { recursive: true, force: true });
@@ -50,7 +51,7 @@ test("installer blocks example secrets in real mode contract", () => {
   assert.equal(report.status, "failed");
   assert.equal(report.stages[0].name, "preflight");
   assert.equal(report.stages[0].status, "failed");
-  assert.ok(report.actionableFailures.some((failure) => failure.includes("secret:AI_API_KEY")));
+  assert.ok(report.actionableFailures.some((failure) => failure.includes("secret:EVCP_AI_JOB_ENCRYPTION_KEY")));
   assert.equal(JSON.stringify(report).includes("example-openai-key-change-before-use"), false);
 });
 
@@ -74,9 +75,8 @@ test("installer setup evidence captures install inputs without raw secrets", () 
     KEYCLOAK_REALM: "evcp",
     KEYCLOAK_ADMIN: "admin",
     KEYCLOAK_ADMIN_PASSWORD: "keycloak-secret",
-    AI_PROVIDER: "openai",
-    AI_MODEL: "gpt-4.1-mini",
-    AI_API_KEY: "ai-secret",
+    VAULT_ADDR: "https://openbao.acme.test",
+    VAULT_TOKEN_FILE: "/run/secrets/evcp-vault-token",
     BACKUP_BUCKET: "backups",
     BACKUP_RETENTION_DAYS: "30",
     BACKUP_ENCRYPTION_KEY_REF: "kms://backup",
@@ -92,5 +92,20 @@ test("installer setup evidence captures install inputs without raw secrets", () 
   assert.equal(serialized.includes("super-secret-db"), false);
   assert.equal(serialized.includes("storage-secret"), false);
   assert.equal(serialized.includes("keycloak-secret"), false);
-  assert.equal(serialized.includes("ai-secret"), false);
+  assert.equal(evidence.ai.management, "admin_openbao");
+  assert.equal(evidence.ai.providerCredentialsInEnvironment, false);
+});
+
+test("installer evidence fingerprints master and encryption credentials", () => {
+  const redacted = installer.redactDeep({
+    litellmMasterKey: "litellm-master-key-value",
+    workspaceEncryptionKey: "workspace-encryption-key-value",
+    publicDomain: "pilot.example.test"
+  });
+
+  assert.match(redacted.litellmMasterKeyFingerprint, /^sha256:/);
+  assert.match(redacted.workspaceEncryptionKeyFingerprint, /^sha256:/);
+  assert.equal(redacted.publicDomain, "pilot.example.test");
+  assert.equal(JSON.stringify(redacted).includes("master-key-value"), false);
+  assert.equal(JSON.stringify(redacted).includes("encryption-key-value"), false);
 });

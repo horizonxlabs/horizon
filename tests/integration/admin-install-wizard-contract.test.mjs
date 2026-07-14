@@ -19,7 +19,8 @@ test("admin install wizard is wired to the installer preflight API contract", ()
   assert.match(adminSource, /VITE_PLATFORM_API_BASE_URL/);
   assert.match(adminSource, /\/api/);
   assert.match(adminSource, /createAdminPlatformClient/);
-  assert.match(adminSource, /legacyUserEmail: "admin@company.com"/);
+  assert.match(adminSource, /createSessionAwareFetch/);
+  assert.doesNotMatch(adminSource, /legacyUserEmail/);
   assert.match(apiClient, /runInstallerPreflight\(/);
   assert.match(apiClient, /saveInstallerSetup\(/);
   assert.match(apiClient, /\/admin\/installer\/preflight/);

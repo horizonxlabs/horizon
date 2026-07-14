@@ -10,6 +10,7 @@ import type {
   PlatformUser
 } from "../platform-services";
 import { PermissionError, ValidationError } from "../platform-services";
+import { getPlatformUserById } from "./platform-user-lookup";
 
 type JsonRecord = Record<string, unknown>;
 type UserStatus = PlatformUser["status"];
@@ -27,7 +28,7 @@ interface PlatformUserRoleRecord {
   role: PlatformRoleRecord;
 }
 
-interface PlatformUserRecord {
+export interface PlatformUserRecord {
   id: string;
   email: string;
   name: string;
@@ -155,7 +156,6 @@ export interface CoreRepositories {
   projects: ProjectRepository;
   audits: AuditLogRepository;
 }
-
 export class PlatformUserRepository {
   constructor(private readonly client: CorePersistenceClient) {}
 
@@ -168,8 +168,8 @@ export class PlatformUserRepository {
     if (!record) throw new ValidationError(`Unknown platform user: ${email}`);
     return mapPlatformUser(record);
   }
+  async getById(id: string): Promise<PlatformUser> { return getPlatformUserById(this.client, id, mapPlatformUser); }
 }
-
 export class ProjectRepository {
   constructor(private readonly client: CorePersistenceClient) {}
 
@@ -271,6 +271,8 @@ export class CoreRepositoryBackedService {
   getUserByEmail(email: string): Promise<PlatformUser> {
     return this.repositories.users.getByEmail(email);
   }
+
+  getUserById(id: string): Promise<PlatformUser> { return this.repositories.users.getById(id); }
 
   createProject(input: CreateProjectInput): Promise<PlatformProject> {
     return this.repositories.projects.createOrReplace(input);
@@ -408,7 +410,7 @@ export async function createPrismaCorePersistence(databaseUrl = process.env.DATA
   };
 }
 
-function mapPlatformUser(record: PlatformUserRecord): PlatformUser {
+export function mapPlatformUser(record: PlatformUserRecord): PlatformUser {
   const roleRecord = record.roles?.[0]?.role;
   const role = normalizeRole(roleRecord?.key);
   return {

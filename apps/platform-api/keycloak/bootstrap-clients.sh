@@ -34,4 +34,7 @@ done
 
 platform_client_id=$("$kcadm" get clients -r "$KEYCLOAK_REALM" -q "clientId=$KEYCLOAK_PLATFORM_CLIENT_ID" --fields id --format csv --noquotes)
 callback_url="${EVCP_PUBLIC_API_URL%/}/auth/keycloak/callback"
-"$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s "redirectUris=[\"$callback_url\"]"
+redirect_uris=$(printf '["%s","%s/*","%s/*","%s/*"]' "$callback_url" "${EVCP_ADMIN_WEB_URL%/}" "${EVCP_CREATOR_WEB_URL%/}" "${EVCP_STORE_WEB_URL%/}")
+"$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s "redirectUris=$redirect_uris"
+# `+` means Keycloak permits the already-validated client redirect URIs for RP-initiated logout.
+"$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s 'attributes."post.logout.redirect.uris"="+"'

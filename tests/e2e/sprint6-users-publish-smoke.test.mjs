@@ -196,22 +196,19 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
   for (const text of [
     "App Users",
     "เชิญผู้ใช้",
-    "Pending Invites",
     "Access Requests",
     "App Roles",
-    "External invite requires approval",
     "Publish Review",
-    "Manifest",
     "Readiness checklist",
     "Publish to App Store",
     "Deployment Record",
-    "App Store registry"
+    "No deployment record",
+    "No registry entry returned"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   for (const component of [
-    "PageHeader",
     "SectionCard",
     "DataTable",
     "DefinitionGrid",

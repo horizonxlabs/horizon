@@ -68,7 +68,7 @@ export interface PublishServiceDeps {
   migrations: MigrationStore;
   deployments: DeploymentStore;
   health: HealthChecker;
-  resolveEnv: (projectId: string) => Record<string, string>;
+  resolveEnv: (projectId: string) => Promise<Record<string, string>>;
   getDevContainerId: (projectId: string) => string | Promise<string>;
   network?: string;
   onAudit?: (event: {
@@ -156,7 +156,7 @@ export function createPublishService(deps: PublishServiceDeps) {
         projectId: input.projectId,
         slug: input.slug,
         image: imageTag,
-        env: deps.resolveEnv(input.projectId),
+        env: await deps.resolveEnv(input.projectId),
         network,
         workspaceVolume: `evcp-ws-${input.slug}-${environment}-data`
       },
@@ -217,10 +217,6 @@ export function createPublishService(deps: PublishServiceDeps) {
 
         // Resolve target commit (explicit = rollback/older; else current HEAD).
         const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
-        if (isRollback) {
-          await deps.git.checkoutCommit(input.projectId, commitSha);
-        }
-
         audit(isRollback ? "workspace.rollback" : "workspace.publish", input.projectId, {
           slug: input.slug,
           environment: input.environment,
@@ -241,6 +237,10 @@ export function createPublishService(deps: PublishServiceDeps) {
           });
           return { ok: false, reason: "pre_checks_failed", failures: checks.failures };
         }
+
+        // Do not mutate the live development checkout until every rollback boundary has passed.
+        // A rejected rollback must leave the current healthy source and preview untouched.
+        if (isRollback) await deps.git.checkoutCommit(input.projectId, commitSha);
 
         return withDeployQueue(() =>
           deployFromContainer({

@@ -58,7 +58,7 @@ export function createDefaultPublishStack(opts: {
 
   let docker: DockerEngine;
   let git: GitPort;
-  let resolveEnv: (projectId: string) => Record<string, string>;
+  let resolveEnv: (projectId: string) => Promise<Record<string, string>>;
 
   if (mode === "real") {
     // Real container publish: a socket engine over the same /var/run/docker.sock the orchestrator
@@ -89,7 +89,7 @@ export function createDefaultPublishStack(opts: {
       removeContainer: async () => {}
     } as never;
     git = createMemoryGitPort({});
-    resolveEnv = () => ({});
+    resolveEnv = async () => ({});
   }
 
   const publishService = createPublishService({

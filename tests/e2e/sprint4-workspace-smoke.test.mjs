@@ -142,29 +142,29 @@ test("Sprint 4 API smoke blocks guardrail prompt before preview update", () => {
   assert.equal(response.body.data.preview.version, "preview-0000");
 });
 
-test("Sprint 4 Creator workspace UI exposes prompt progress token preview and logs", () => {
+test("Sprint 4 Creator workspace UI exposes live AI planning build preview code and database tools", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "Creator Workspace",
-    "Prompt Composer",
-    "Guardrail pre-check",
-    "Task Progress",
-    "Token Remaining",
-    "Live Preview",
-    "Add WFH leave type",
-    "Usage Log"
+    "Plan with AI",
+    "Build with AI",
+    "Preview",
+    "Code",
+    "Database",
+    "Publish",
+    "Project files",
+    "Authorizing preview",
+    "Retry preview",
+    "Workspace mode",
+    "committed"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   for (const component of [
-    "PageHeader",
-    "SectionCard",
-    "WorkflowRail",
-    "DataTable",
-    "DecisionPanel",
-    "ToneBadge"
+    "WorkspaceCodePanel",
+    "WorkspaceDatabasePanel",
+    "PublishDialog"
   ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }

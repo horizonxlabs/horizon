@@ -3,9 +3,9 @@ import { AppCard, ToneBadge } from "@evcp/ui";
 import { Bell, Search, ShieldCheck, Store, WifiOff } from "lucide-react";
 
 type StorefrontSummaryProps = {
-  userName: string;
-  email: string;
-  source: "Platform API" | "local fallback";
+  userName?: string;
+  email?: string;
+  source: "Platform API";
   myApps: AppStoreItem[];
   availableApps: AppStoreItem[];
   isSigningIn: boolean;
@@ -21,11 +21,11 @@ export function StorefrontSummary({ userName, email, source, myApps, availableAp
           <span className="eyebrow">Private PWA</span>
           <h1>Horizon Store</h1>
           <p>
-            {userName} · {email}
+            {userName ?? "Loading account…"}{email ? ` · ${email}` : ""}
           </p>
         </div>
         <div className="store-header-actions">
-          <ToneBadge tone={source === "Platform API" ? "success" : "neutral"}>
+          <ToneBadge tone="success">
             {source}
           </ToneBadge>
           <button
@@ -35,7 +35,7 @@ export function StorefrontSummary({ userName, email, source, myApps, availableAp
             disabled={isSigningIn}
           >
             <ShieldCheck size={15} />
-            {isSigningIn ? "Signing in" : "Demo Sign in"}
+            {isSigningIn ? "Signing in" : "Sign in with Keycloak"}
           </button>
           <button type="button" className="secondary-button" onClick={onLogout}>
             Logout

@@ -8,31 +8,11 @@ import type { ActionRunner, RunnableAction } from "./action-runner";
 import type { createErrorFeedbackTracker } from "./error-feedback";
 import { selectContextFiles } from "./context-selector";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
+import type { AiScenario, PlatformUser } from "../platform-services";
+import type { CheckpointStore } from "./checkpoint-store";
+import type { ChatStreamEvent } from "./generation-types";
 
-export type ActionActionType = "file" | "edit" | "shell" | "migration";
-
-export type ChatStreamEvent =
-  | { type: "token"; content: string }
-  // Emitted when an action begins so the UI can show a live "in progress" row (shimmer).
-  | { type: "action_start"; actionId: string; actionType: ActionActionType; label: string }
-  // Emitted as an action's content streams in, so the UI can show it growing live.
-  | { type: "action_chunk"; actionId: string; content: string }
-  // Emitted when the action finishes. Carries a preview the UI can expand: find/replace for an
-  // edit (rendered as a diff), body for file/shell/migration, or error text on failure.
-  | {
-      type: "action_result";
-      actionId: string;
-      actionType: ActionActionType;
-      label: string;
-      ok: boolean;
-      find?: string;
-      replace?: string;
-      body?: string;
-      error?: string;
-    }
-  | { type: "commit"; sha: string }
-  | { type: "error"; message: string }
-  | { type: "done" };
+export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 
 // Preview payloads can be large (whole files); cap them so the SSE stream stays lean.
 const PREVIEW_MAX = 4000;
@@ -42,6 +22,18 @@ function clip(text: string): string {
 
 export interface GenerationServiceDeps {
   llmClient: LlmCompletionClient;
+  /**
+   * The private-server path supplies this adapter so workspace chat uses the same
+   * governed route, guardrails, quota, retry and evidence store as every other AI action.
+   * Keeping the LLM client as the explicit fallback preserves isolated memory tests only.
+   */
+  governedCompletion?: (input: {
+    actor: PlatformUser;
+    projectId: string;
+    scenario: AiScenario;
+    prompt: string;
+    requestId: string;
+  }) => Promise<string>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
   errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
@@ -51,6 +43,7 @@ export interface GenerationServiceDeps {
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   commitAllChanges: (projectId: string, message: string) => Promise<string>;
+  checkpoints?: CheckpointStore;
   onAudit?: (event: {
     action: string;
     projectId: string;
@@ -112,6 +105,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       projectId: string;
       prompt: string;
       agentMode?: WorkspaceAgentMode;
+      actor?: PlatformUser;
     }): AsyncIterable<ChatStreamEvent> {
       const agentMode: WorkspaceAgentMode = input.agentMode === "plan" ? "plan" : "build";
       const userMessage: WorkspaceChatMessage = {
@@ -168,16 +162,27 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           systemPrompt,
           messages: [...priorMessages, { role: "user" as const, content: prompt }]
         };
+        const governedPrompt = [
+          systemPrompt,
+          "\nConversation:",
+          ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)
+        ].join("\n");
+        const completion = deps.governedCompletion
+          ? await resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
+          : undefined;
+        const tokens = completion === undefined
+          ? deps.llmClient.streamChat(chatInput)
+          : streamText(completion);
 
         if (agentMode === "plan") {
-          for await (const token of deps.llmClient.streamChat(chatInput)) {
+          for await (const token of tokens) {
             assistantText += token;
             yield { type: "token", content: token };
           }
           break roundLoop;
         }
 
-        for await (const token of deps.llmClient.streamChat(chatInput)) {
+        for await (const token of tokens) {
           for (const event of parser.push(token)) {
             if (event.type === "text") {
               assistantText += event.content;
@@ -326,6 +331,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         try {
           const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
           assistantMessage.commitSha = sha;
+          await deps.checkpoints?.createCheckpoint({
+            projectId: input.projectId,
+            tag: `checkpoint/${sha.slice(0, 12)}`,
+            commitSha: sha,
+            label: input.prompt.slice(0, 120)
+          });
           deps.onAudit?.({
             action: "generation.commit_created",
             projectId: input.projectId,
@@ -347,4 +358,29 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       yield { type: "done" };
     }
   };
+}
+
+async function resolveGovernedCompletion(
+  completion: NonNullable<GenerationServiceDeps["governedCompletion"]>,
+  input: { actor?: PlatformUser; projectId: string },
+  prompt: string,
+  agentMode: WorkspaceAgentMode
+): Promise<string> {
+  if (!input.actor) throw new Error("Governed AI execution requires the authenticated workspace actor");
+  return completion({
+    actor: input.actor,
+    projectId: input.projectId,
+    scenario: agentMode === "plan" ? "requirement_analysis" : "frontend_coding",
+    prompt,
+    requestId: `workspace_chat_${randomUUID()}`
+  });
+}
+
+async function* streamText(text: string): AsyncIterable<string> {
+  // The governed provider returns one audited completion. Chunking it here keeps the existing
+  // SSE parser/progress contract without opening a second, bypassing provider stream.
+  const chunkSize = 256;
+  for (let offset = 0; offset < text.length; offset += chunkSize) {
+    yield text.slice(offset, offset + chunkSize);
+  }
 }

@@ -25,9 +25,12 @@ const REQUIRED_ENV = [
   "STORAGE_ACCESS_KEY",
   "STORAGE_SECRET_KEY",
   "REDIS_URL",
-  "AI_PROVIDER",
-  "AI_MODEL",
-  "AI_API_KEY",
+  "EVCP_S3_PUBLIC_URL",
+  "VAULT_ADDR",
+  "VAULT_TOKEN_FILE",
+  "EVCP_WORKSPACE_SECRET_KEY",
+  "EVCP_AI_JOB_ENCRYPTION_KEY",
+  "LITELLM_MASTER_KEY",
   "BACKUP_BUCKET",
   "BACKUP_RETENTION_DAYS"
 ];
@@ -40,7 +43,20 @@ const SECRET_ENV = [
   "KEYCLOAK_ADMIN_PASSWORD",
   "MINIO_ROOT_PASSWORD",
   "STORAGE_SECRET_KEY",
-  "AI_API_KEY"
+  "EVCP_WORKSPACE_SECRET_KEY",
+  "EVCP_AI_JOB_ENCRYPTION_KEY",
+  "LITELLM_MASTER_KEY"
+];
+const SECRET_ENV_KEY_PARTS = [
+  "password",
+  "secret",
+  "api_key",
+  "apikey",
+  "token",
+  "access_key",
+  "master_key",
+  "encryption_key",
+  "private_key"
 ];
 
 const REQUIRED_SERVICES = [
@@ -131,10 +147,18 @@ export function maskSecret(value) {
   return `${value.slice(0, 3)}...${value.slice(-3)}`;
 }
 
+export function isSensitiveEnvKey(key) {
+  const normalizedKey = String(key ?? "").toLowerCase();
+  return (
+    normalizedKey === "database_url" ||
+    SECRET_ENV_KEY_PARTS.some((part) => normalizedKey.includes(part))
+  );
+}
+
 export function redactEnv(env) {
   const redacted = {};
   for (const [key, value] of Object.entries(env)) {
-    redacted[key] = SECRET_ENV.includes(key) ? maskSecret(value) : value;
+    redacted[key] = isSensitiveEnvKey(key) ? maskSecret(value) : value;
   }
   return redacted;
 }

@@ -54,7 +54,7 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.ok(executedSql.some((sql) => sql.includes("app_prj_leave_tracker")));
   assert.deepEqual(deps.objectStorage.state.buckets, ["proj-prj-leave-tracker"]);
   assert.equal(deps.llmGateway.state.keys.length, 1);
-  assert.deepEqual(orchestrator.listSecretNames("prj-leave-tracker").sort(), [
+  assert.deepEqual((await orchestrator.listSecretNames("prj-leave-tracker")).sort(), [
     "DATABASE_URL",
     "LLM_GATEWAY_KEY",
     "S3_ACCESS_KEY",
@@ -107,13 +107,35 @@ test("provisioning rolls back everything when container start fails", async () =
   assert.deepEqual(deps.objectStorage.state.buckets, [], "bucket must be rolled back");
   assert.equal(deps.llmGateway.state.keys[0].revoked, true, "llm key must be revoked");
   assert.deepEqual(
-    orchestrator.listSecretNames("prj-leave-tracker"),
+    await orchestrator.listSecretNames("prj-leave-tracker"),
     [],
     "secrets must be cleared"
   );
   const record = orchestrator.getWorkspace("prj-leave-tracker");
   assert.equal(record.state, "failed");
   assert.equal(record.lastError, "docker daemon exploded");
+});
+
+test("provisioning fails before Docker when encrypted secret persistence is unavailable", async () => {
+  const { deps } = createDeps({
+    secrets: createProjectSecretStore({
+      encryptionKeyHex: randomBytes(32).toString("hex"),
+      persistence: {
+        loadAll: async () => [],
+        upsert: async () => {
+          throw new Error("secret persistence unavailable");
+        },
+        deleteAll: async () => {}
+      }
+    })
+  });
+  const orchestrator = createWorkspaceOrchestrator(deps);
+
+  await assert.rejects(
+    () => orchestrator.provisionWorkspace({ projectId: "prj-secrets", slug: "secrets" }),
+    /secret persistence unavailable/
+  );
+  assert.deepEqual(deps.docker.state.containers, []);
 });
 
 test("duplicate provisioning for same project is idempotent (returns the existing workspace)", async () => {
@@ -203,7 +225,7 @@ test("provision self-heals to the existing container after a restart (empty reco
   assert.equal(healed.containerId, first.containerId);
   assert.equal(healed.state, "running");
   assert.match(
-    createWorkspaceOrchestrator(restartedDeps).getProjectDatabaseUrl("prj-leave-tracker"),
+    await createWorkspaceOrchestrator(restartedDeps).getProjectDatabaseUrl("prj-leave-tracker"),
     /^postgresql:\/\/app_prj_leave_tracker_role:/
   );
 });
@@ -243,6 +265,39 @@ test("stopIdleWorkspaces stops containers idle for 30+ minutes", async () => {
   const stopped = await orchestrator.stopIdleWorkspaces(future);
   assert.deepEqual(stopped, ["prj-leave-tracker"]);
   assert.equal(orchestrator.getWorkspace("prj-leave-tracker").state, "idle");
+});
+
+test("startup orphan cleanup removes only labelled development workspaces without runtime records", async () => {
+  const { deps, audits } = createDeps();
+  const orphan = await deps.docker.createContainer({
+    name: "evcp-ws-prj-orphan",
+    image: "evcp/workspace-next:1",
+    env: [],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "evcp-internal", Binds: [] },
+    labels: {
+      "evcp.managed": "true",
+      "evcp.project-id": "prj_orphan",
+      "evcp.project-slug": "prj-orphan"
+    },
+    exposedPort: 3000,
+    publishPorts: false
+  });
+  await deps.docker.startContainer(orphan.containerId);
+  const deployed = await deps.docker.createContainer({
+    name: "evcp-production-prj-live",
+    image: "evcp-production-prj-live:sha",
+    env: [],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "evcp-internal", Binds: [] },
+    labels: { "evcp.managed": "true", "evcp.project-id": "prj_live", "evcp.env": "production" },
+    exposedPort: 3000,
+    publishPorts: false
+  });
+  await deps.docker.startContainer(deployed.containerId);
+  const orchestrator = createWorkspaceOrchestrator(deps);
+
+  assert.deepEqual(await orchestrator.cleanupOrphanContainers(), ["evcp-ws-prj-orphan"]);
+  assert.deepEqual(deps.docker.state.containers.map((item) => item.spec.name), ["evcp-production-prj-live"]);
+  assert.ok(audits.some((event) => event.action === "workspace.orphan_removed"));
 });
 
 test("archiveWorkspace stops container but keeps volume resources", async () => {

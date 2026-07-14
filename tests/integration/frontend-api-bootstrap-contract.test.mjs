@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,6 +27,12 @@ const aiGovernanceHookSource = readFileSync(
 );
 const adminClientSource = readFileSync("apps/admin-web/src/shared/platform-client.ts", "utf8");
 const adminConsoleSource = readAllSourceFiles("apps/admin-web/src/features/admin-console");
+const adminOperationsSource = readFileSync("apps/admin-web/src/features/platform-operations/use-production-observability.ts", "utf8");
+const adminAuditSource = readFileSync("apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx", "utf8");
+const creatorTicketsSource = readFileSync("apps/creator-web/src/features/tickets/TicketsPage.tsx", "utf8");
+const creatorTicketInboxSource = readFileSync("apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts", "utf8");
+const creatorAppHookSource = readFileSync("apps/creator-web/src/app/use-creator-app.tsx", "utf8");
+const creatorPublishPageSource = readFileSync("apps/creator-web/src/features/publish/PublishPage.tsx", "utf8");
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
 const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
@@ -51,6 +57,18 @@ const caddyfile = readFileSync("docker/Caddyfile", "utf8");
 const creatorViteConfig = readFileSync("apps/creator-web/vite.config.ts", "utf8");
 const storeViteConfig = readFileSync("apps/app-store-pwa/vite.config.ts", "utf8");
 const storeIndex = readFileSync("apps/app-store-pwa/index.html", "utf8");
+const storeBootstrapSource = readFileSync(
+  "apps/app-store-pwa/src/features/storefront/bootstrap.ts",
+  "utf8"
+);
+const creatorWorkspaceHookSource = readFileSync(
+  "apps/creator-web/src/features/workspace/use-vibe-workspace.ts",
+  "utf8"
+);
+const creatorPublishHookSource = readFileSync(
+  "apps/creator-web/src/features/publish/use-publish-access.ts",
+  "utf8"
+);
 
 test("shared API client exposes frontend bootstrap routes and auth modes", () => {
   assert.match(apiClient, /class PlatformApiClient/);
@@ -111,8 +129,8 @@ test("Admin AI governance actions are API-client backed", () => {
     assert.match(aiGovernanceHookSource, new RegExp(handler));
   }
 
-  assert.match(adminConsoleSource, /ai\.availability/);
-  assert.match(adminConsoleSource, /DecisionPanel/);
+  assert.match(adminFeatureSource, /ai\.availability/);
+  assert.match(adminFeatureSource, /DecisionPanel/);
   assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/ai\/providers`/);
   assert.doesNotMatch(adminFeatureSource, /fetch\(`\$\{baseUrl\}\/guardrails\/rules`/);
 });
@@ -123,8 +141,9 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
     assert.match(source, /createSessionAwareFetch/);
   }
   assert.match(adminConsoleSource, /catch\(\(\) => setSetupStatus\("incomplete"\)\)/);
-  assert.match(creatorSource, /local fallback/);
-  assert.match(storeSource, /local fallback/);
+  assert.doesNotMatch(creatorWorkspaceHookSource, /Local fallback/);
+  assert.doesNotMatch(creatorPublishHookSource, /Local fallback/);
+  assert.doesNotMatch(storeBootstrapSource, /local fallback/);
 
   // Admin delegates platform session-token handling to its extracted admin-client module.
   assert.match(adminClientSource, /platformSessionToken/);
@@ -134,6 +153,28 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
   assert.match(adminSource, /getSetupStatus/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
   assert.match(storeSource, /loadStoreBootstrap/);
+});
+
+test("Store and Creator fail closed instead of creating local success evidence", () => {
+  assert.match(storeBootstrapSource, /status: "loading" \| "ready" \| "error"/);
+  for (const source of [storeBootstrapSource, creatorWorkspaceHookSource, creatorPublishHookSource]) {
+    assert.doesNotMatch(source, /Local fallback (generated|produced|recorded|kept)/);
+    assert.doesNotMatch(source, /fallbackWorkspacePromptResult/);
+  }
+  assert.match(creatorTicketInboxSource, /\/creator\/projects\//);
+  assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
+  assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
+  assert.doesNotMatch(creatorAppHookSource, /prdSections|versionRows/);
+  assert.doesNotMatch(creatorPublishPageSource, /dep_leave_management_001|\/apps\/\$\{selectedProject\.id\}/);
+  assert.match(creatorPublishPageSource, /No deployment record/);
+});
+
+test("Admin operations and audit views use Platform API data and fail closed", () => {
+  assert.match(adminOperationsSource, /\/admin\/production\/observability/);
+  assert.match(adminOperationsSource, /No local health evidence is shown/);
+  assert.match(adminAuditSource, /\/audit-logs/);
+  assert.match(adminAuditSource, /No local records are shown/);
+  assert.doesNotMatch(adminConsoleSource, /serviceHealthRows|productionServiceRows|authProviderRows/);
 });
 
 test("frontend shells retain platform session handling while Admin exposes logout only", () => {
@@ -152,6 +193,33 @@ test("frontend shells retain platform session handling while Admin exposes logou
 
   assert.match(creatorSource, /startKeycloakLogin/);
   assert.match(storeSource, /startKeycloakLogin/);
+});
+
+test("Creator preview establishes an HttpOnly session without putting bearer tokens in URLs", () => {
+  const workspacePage = readFileSync(
+    "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
+    "utf8"
+  );
+  const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
+  const previewSessionRoutePath =
+    "apps/platform-api/src/workspace-orchestrator/preview-session-route.ts";
+
+  assert.doesNotMatch(workspacePage, /platformSessionToken/);
+  assert.doesNotMatch(workspacePage, /[?&]token=/);
+  assert.match(workspacePage, /authorizeWorkspacePreview/);
+  assert.match(workspacePage, /previewAuthorizationState/);
+  assert.match(
+    workspacePage,
+    /\[selectedProject\.id, vibePreviewKey, previewAuthorizationAttempt\]/
+  );
+  assert.match(apiClient, /authorizeWorkspacePreview\(projectId: string\)/);
+  assert.match(apiClient, /workspace\/preview-session/);
+  assert.match(appFactory, /registerPreviewSessionRoute/);
+  assert.doesNotMatch(appFactory, /queryToken/);
+  assert.equal(existsSync(previewSessionRoutePath), true);
+  const previewSessionRoute = readFileSync(previewSessionRoutePath, "utf8");
+  assert.match(previewSessionRoute, /HttpOnly/);
+  assert.match(previewSessionRoute, /SameSite=Strict/);
 });
 
 test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {
@@ -232,6 +300,20 @@ test("App Store PWA exposes an install journey instead of a single opaque instal
   assert.match(storeSource, /store-install-step status-/);
   assert.match(storeSource, /installResult\?\.status === "active"/);
   assert.match(persistenceDocs, /App Install Journey/);
+});
+
+test("App Store renders its unauthenticated and empty states before deriving install details", () => {
+  const selectedAppDeclaration = storeSource.indexOf("const selectedApp = myApps[0] ?? availableApps[0];");
+  const emptyGuard = storeSource.indexOf("if (!selectedApp) return");
+  const journeyDerivation = storeSource.indexOf("const installJourneyRows = appInstallJourneySteps.map");
+  assert.ok(selectedAppDeclaration >= 0);
+  assert.ok(emptyGuard > selectedAppDeclaration);
+  assert.ok(journeyDerivation > emptyGuard);
+});
+
+test("App Store logout revokes the Platform session before ending Keycloak SSO", () => {
+  assert.match(storeSource, /request\("\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(storeSource, /beginStoreKeycloakLogout\(\)/);
 });
 
 test("published app route opens a usable generated Leave Management runtime", () => {

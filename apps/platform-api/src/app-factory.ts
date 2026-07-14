@@ -6,9 +6,10 @@ import { failure, success } from "@evcp/api-client";
 import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-session-route";
 import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
-import { registerPublishHttpRoutes } from "./publish/http-routes";
+import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
@@ -20,75 +21,31 @@ import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "
 import { startIdleSweep } from "./workspace-orchestrator/idle-sweep";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
-import {
-  createPlatformApiServices,
-  PermissionError,
-  QuotaExceededError,
-  ValidationError,
-  type AuthResolution,
-  type PlatformApiServices,
-  type PlatformProject,
-  type PlatformUser
-} from "./platform-services";
-import {
-  createCoreRepositoryBackedService,
-  createPrismaCorePersistence,
-  MemoryCorePersistenceClient,
-  type CoreRepositoryBackedService,
-  type CorePersistenceClient
-} from "./persistence/core-repositories";
-import {
-  createPlatformCredentialService,
-  type PlatformCredentialService
-} from "./auth/platform-credential-service";
-import {
-  createCorePersistenceCredentialStore,
-  createUserWithRole
-} from "./auth/prisma-credential-store";
+import { createPlatformApiServices, PermissionError, ValidationError, type AuthResolution, type PlatformApiServices, type PlatformProject, type PlatformUser } from "./platform-services";
+import { createCoreRepositoryBackedService, createPrismaCorePersistence, MemoryCorePersistenceClient, type CoreRepositoryBackedService, type CorePersistenceClient } from "./persistence/core-repositories";
+import { createPlatformCredentialService, type PlatformCredentialService } from "./auth/platform-credential-service";
+import { createCorePersistenceCredentialStore, createUserWithRole } from "./auth/prisma-credential-store";
 import { resolvePersistedAuth } from "./auth/persistence-auth-resolver";
-import type { PlatformSessionService } from "./auth/platform-session-service";
+import { PlatformSessionError, type PlatformSessionService } from "./auth/platform-session-service";
 import { getMockPermissions } from "@evcp/auth-sdk";
-import {
-  createAiGovernanceRepositoryBackedService,
-  createPrismaAiGovernancePersistence,
-  MemoryAiGovernancePersistenceClient,
-  type AiGovernanceRepositoryBackedService
-} from "./persistence/ai-governance-repositories";
-import {
-  createBusinessSettingsRepositoryBackedService,
-  createPrismaBusinessSettingsPersistence,
-  MemoryBusinessSettingsPersistenceClient,
-  type BusinessSettingsRepositoryBackedService
-} from "./persistence/business-settings-repositories";
-import {
-  isPersistenceBusinessSettingsRoute,
-  registerSetupRoutes,
-  resolveSetupRequest
-} from "./setup-routes";
-import {
-  createPrdRepositoryBackedService,
-  createPrismaPrdPersistence,
-  MemoryPrdPersistenceClient,
-  type PrdRepositoryBackedService
-} from "./persistence/prd-repositories";
-import {
-  createPrismaWorkspacePersistence,
-  createWorkspaceRepositoryBackedService,
-  MemoryWorkspacePersistenceClient,
-  type WorkspaceRepositoryBackedService
-} from "./persistence/workspace-repositories";
-import {
-  createPrismaPublishStorePersistence,
-  createPublishStoreRepositoryBackedService,
-  MemoryPublishStorePersistenceClient,
-  type PublishStoreRepositoryBackedService
-} from "./persistence/publish-store-repositories";
-import {
-  createGeneratedRuntimeRepositoryBackedService,
-  createPrismaGeneratedRuntimePersistence,
-  MemoryGeneratedRuntimePersistenceClient,
-  type GeneratedRuntimeRepositoryBackedService
-} from "./persistence/generated-runtime-repositories";
+import { createAiGovernanceRepositoryBackedService, createPrismaAiGovernancePersistence, MemoryAiGovernancePersistenceClient, type AiGovernanceRepositoryBackedService } from "./persistence/ai-governance-repositories";
+import { createPersistedGovernedAiExecutor } from "./ai-governance/execution-runtime";
+import { PrismaAiExecutionStore } from "./persistence/ai-execution-repository";
+import { createAiJobPayloadCipher, MemoryDurableAiJobStore, type AiJobPayloadCipher, type DurableAiJobStore } from "./ai-governance/durable-job-worker";
+import { PrismaDurableAiJobStore } from "./persistence/ai-job-repository";
+import { handleDurableAiJob, registerDurableAiJobHttpRoutes } from "./ai-governance/durable-job-route";
+import { UnavailableAiSecretStore, VaultKvV2AiSecretStore, type AiSecretStore } from "./ai-governance/secret-store";
+import { PrismaProjectFileRepository } from "./persistence/project-file-repository";
+import { createMinioProjectFileUploadUrlIssuer, type ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
+import { handlePersistentProjectFilesRoute, isPersistenceProjectFileRoute } from "./persistence/persistent-project-files-route";
+import { handleAiProviderTestCall, handleLegacyAiProviderTestCall } from "./ai-governance/provider-test-route";
+import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
+import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSettingsPersistence, MemoryBusinessSettingsPersistenceClient, type BusinessSettingsRepositoryBackedService } from "./persistence/business-settings-repositories";
+import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
+import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrdPersistenceClient, type PrdRepositoryBackedService } from "./persistence/prd-repositories";
+import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
+import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
+import { createGeneratedRuntimeRepositoryBackedService, createPrismaGeneratedRuntimePersistence, MemoryGeneratedRuntimePersistenceClient, type GeneratedRuntimeRepositoryBackedService } from "./persistence/generated-runtime-repositories";
 type HeaderBag = Record<string, string | string[] | undefined>;
 type HttpRequest = {
   headers: HeaderBag;
@@ -100,18 +57,9 @@ type HttpResponse = {
   json: (body: unknown) => void;
 };
 type RouteRegistry = {
-  get: (
-    path: string,
-    handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
-  ) => void;
-  post: (
-    path: string,
-    handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
-  ) => void;
-  put: (
-    path: string,
-    handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>
-  ) => void;
+  get: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
+  post: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
+  put: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
 };
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   keycloakUserManagement?: KeycloakUserService;
@@ -119,11 +67,16 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   corePersistenceClient?: CorePersistenceClient;
   credentialService?: PlatformCredentialService;
   aiGovernancePersistence?: AiGovernanceRepositoryBackedService;
+  governedAiExecutor?: import("./ai-governance/execution-service").GovernedAiExecutor;
   businessSettingsPersistence?: BusinessSettingsRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
   workspacePersistence?: WorkspaceRepositoryBackedService;
   publishStorePersistence?: PublishStoreRepositoryBackedService;
   generatedRuntimePersistence?: GeneratedRuntimeRepositoryBackedService;
+  durableAiJobs?: DurableAiJobStore;
+  durableAiJobPayloadCipher?: AiJobPayloadCipher;
+  projectFilePersistence?: PrismaProjectFileRepository;
+  projectFileUploadUrlIssuer?: ProjectFileUploadUrlIssuer;
   platformSessions?: PlatformSessionService;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -199,6 +152,8 @@ export interface PlatformRequest {
     | "/guardrails/events"
     | `/projects/${string}/prd`
     | `/projects/${string}/prd/generate`
+    | `/projects/${string}/ai-jobs`
+    | `/projects/${string}/ai-jobs/${string}`
     | `/projects/${string}/prd/baseline`
     | `/projects/${string}/prd/versions`
     | `/creator/projects/${string}/prd/changes`
@@ -253,77 +208,88 @@ export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CoreP
   throw new Error(`Unsupported EVCP_CORE_PERSISTENCE mode: ${env.EVCP_CORE_PERSISTENCE}`);
 }
 
-export async function createRuntimePlatformApiServices(
-  env: RuntimeEnv = process.env
-): Promise<PersistenceAwarePlatformApiServices> {
+export async function createRuntimePlatformApiServices(env: RuntimeEnv = process.env): Promise<PersistenceAwarePlatformApiServices> {
   const services = createPlatformApiServices();
   const mode = resolveCorePersistenceMode(env);
+  const productionAiSecretStore: AiSecretStore =
+    env.VAULT_ADDR && env.VAULT_TOKEN_FILE
+      ? new VaultKvV2AiSecretStore({
+          address: env.VAULT_ADDR,
+          mount: env.VAULT_KV_MOUNT ?? "platform",
+          tokenFile: env.VAULT_TOKEN_FILE
+        })
+      : new UnavailableAiSecretStore();
+  const durableAiJobPayloadCipher = env.EVCP_AI_JOB_ENCRYPTION_KEY ? createAiJobPayloadCipher(env.EVCP_AI_JOB_ENCRYPTION_KEY) : undefined;
   if (mode === "legacy") return services;
   if (mode === "memory") {
     const client = new MemoryCorePersistenceClient();
+    const aiClient = new MemoryAiGovernancePersistenceClient();
     return {
       ...services,
       corePersistence: createCoreRepositoryBackedService(client),
       corePersistenceClient: client,
-      credentialService: createPlatformCredentialService(
-        createCorePersistenceCredentialStore(client)
-      ),
-      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(
-        new MemoryAiGovernancePersistenceClient()
-      ),
-      businessSettingsPersistence: createBusinessSettingsRepositoryBackedService(
-        new MemoryBusinessSettingsPersistenceClient()
-      ),
+      credentialService: createPlatformCredentialService(createCorePersistenceCredentialStore(client)),
+      aiGovernancePersistence: createAiGovernanceRepositoryBackedService(aiClient),
+      governedAiExecutor: createPersistedGovernedAiExecutor(aiClient),
+      businessSettingsPersistence: createBusinessSettingsRepositoryBackedService(new MemoryBusinessSettingsPersistenceClient()),
       prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
-      workspacePersistence: createWorkspaceRepositoryBackedService(
-        new MemoryWorkspacePersistenceClient()
-      ),
-      publishStorePersistence: createPublishStoreRepositoryBackedService(
-        new MemoryPublishStorePersistenceClient()
-      ),
-      generatedRuntimePersistence: createGeneratedRuntimeRepositoryBackedService(
-        new MemoryGeneratedRuntimePersistenceClient()
-      )
+      workspacePersistence: createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient()),
+      publishStorePersistence: createPublishStoreRepositoryBackedService(new MemoryPublishStorePersistenceClient()),
+      generatedRuntimePersistence: createGeneratedRuntimeRepositoryBackedService(new MemoryGeneratedRuntimePersistenceClient()),
+      durableAiJobs: new MemoryDurableAiJobStore(),
+      durableAiJobPayloadCipher
     };
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
-  await services.workspaceOrchestrator.hydrateRuntimeRecords(
-    await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL)
-  );
-  const { service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(
-    env.DATABASE_URL
-  );
-  const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(
-    env.DATABASE_URL
-  );
+  await services.workspaceOrchestrator.hydrateRuntimeRecords(await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL));
+  await services.workspaceOrchestrator.cleanupOrphanContainers();
+  const { client: aiClient, service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL, productionAiSecretStore);
+  const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(env.DATABASE_URL);
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
-  const { service: workspacePersistence } = await createPrismaWorkspacePersistence(
-    env.DATABASE_URL
-  );
-  const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(
-    env.DATABASE_URL
-  );
-  const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(
-    env.DATABASE_URL
-  );
+  const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
+  const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL);
+  const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
+  const projectFileUploadUrlIssuer =
+    env.EVCP_S3_PUBLIC_URL && env.MINIO_ROOT_USER && env.MINIO_ROOT_PASSWORD
+      ? createMinioProjectFileUploadUrlIssuer({
+          endPoint: env.EVCP_S3_HOST ?? "minio",
+          port: Number(env.EVCP_S3_PORT ?? 9000),
+          useSSL: env.EVCP_S3_SSL === "true",
+          accessKey: env.MINIO_ROOT_USER,
+          secretKey: env.MINIO_ROOT_PASSWORD,
+          publicBaseUrl: env.EVCP_S3_PUBLIC_URL
+        })
+      : undefined;
   return {
     ...services,
     corePersistence: service,
     corePersistenceClient: client,
-    credentialService: createPlatformCredentialService(
-      createCorePersistenceCredentialStore(client)
-    ),
+    credentialService: createPlatformCredentialService(createCorePersistenceCredentialStore(client)),
     aiGovernancePersistence,
+    governedAiExecutor: createPersistedGovernedAiExecutor(aiClient, {
+      executionStore: new PrismaAiExecutionStore(aiClient as never),
+      secretStore: productionAiSecretStore
+    }),
     businessSettingsPersistence,
     prdPersistence,
     workspacePersistence,
     publishStorePersistence,
-    generatedRuntimePersistence
+    generatedRuntimePersistence,
+    durableAiJobs: new PrismaDurableAiJobStore(aiClient as never),
+    durableAiJobPayloadCipher,
+    projectFilePersistence: new PrismaProjectFileRepository(client as never),
+    projectFileUploadUrlIssuer
   };
 }
 
 function errorResponse(error: unknown): PlatformResponse {
+  if (error instanceof PlatformSessionError)
+    return {
+      status: HttpStatus.UNAUTHORIZED,
+      body: failure("UNAUTHORIZED", "Invalid, expired, or revoked platform session")
+    };
+
   if (error instanceof Error && error.name === "MockAuthError") {
     return { status: HttpStatus.UNAUTHORIZED, body: failure("UNAUTHORIZED", error.message) };
   }
@@ -357,18 +323,11 @@ function sendPlatformResponse(response: HttpResponse, platformResponse: Platform
   response.status(platformResponse.status).json(platformResponse.body);
 }
 
-async function sendPlatformResponseAsync(
-  response: HttpResponse,
-  platformResponse: Promise<PlatformResponse>
-): Promise<void> {
+async function sendPlatformResponseAsync(response: HttpResponse, platformResponse: Promise<PlatformResponse>): Promise<void> {
   sendPlatformResponse(response, await platformResponse);
 }
 
-export async function resolvePreviewProxyDecision(
-  services: PersistenceAwarePlatformApiServices,
-  headers: HeaderBag,
-  slug: string
-): Promise<{ status: number } | { upstream: string }> {
+export async function resolvePreviewProxyDecision(services: PersistenceAwarePlatformApiServices, headers: HeaderBag, slug: string): Promise<{ status: number } | { upstream: string }> {
   let auth: WorkspaceAuthContext | null = null;
   try {
     auth = await resolveWorkspaceAuth(services, headers ?? {});
@@ -388,15 +347,9 @@ export function wantsPreviewJson(headers: HeaderBag): boolean {
   return accept.includes("application/json") && !accept.includes("text/html");
 }
 
-export function renderPreviewUnavailableHtml(input: {
-  status: number;
-  title?: string;
-  message?: string;
-}): string {
+export function renderPreviewUnavailableHtml(input: { status: number; title?: string; message?: string }): string {
   const title = input.title ?? "Starting workspace preview";
-  const message =
-    input.message ??
-    "The workspace container is still starting. This preview will refresh automatically.";
+  const message = input.message ?? "The workspace container is still starting. This preview will refresh automatically.";
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -474,38 +427,20 @@ export function renderPreviewUnavailableHtml(input: {
 
 const resolvePersistenceAuth = resolvePersistedAuth;
 
-async function resolvePersistenceUser(
-  services: PersistenceAwarePlatformApiServices,
-  headers: HeaderBag
-) {
+async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
   if (services.corePersistence) return (await resolvePersistenceAuth(services, headers)).user;
   return services.auth.resolveCurrentUser(headers);
 }
 
-// Resolve the workspace auth context (user + project membership) for workspace/chat/preview
-// routes. When core persistence is on (the pilot), the user and their projects live in Postgres,
-// so we MUST derive membership from corePersistence — the legacy in-memory `services.projects`
-// does not contain Postgres-created projects, which is why natively-created Creators hit 403.
-async function resolveWorkspaceAuth(
-  services: PersistenceAwarePlatformApiServices,
-  headers: HeaderBag
-): Promise<WorkspaceAuthContext> {
+async function resolveWorkspaceAuth(services: PersistenceAwarePlatformApiServices, headers: HeaderBag): Promise<WorkspaceAuthContext> {
   const user = await resolvePersistenceUser(services, headers);
-  const projectIds = services.corePersistence
-    ? (await services.corePersistence.listProjects(user)).map((project) => project.id)
-    : services.projects.listProjects(user).map((project) => project.id);
-  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+  const projectIds = services.corePersistence ? (await services.corePersistence.listProjects(user)).map((project) => project.id) : services.projects.listProjects(user).map((project) => project.id);
+  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds, actor: user };
 }
 
-async function resolvePersistenceProject(
-  services: PersistenceAwarePlatformApiServices,
-  actor: Awaited<ReturnType<typeof resolvePersistenceUser>>,
-  projectId: string
-): Promise<PlatformProject> {
+async function resolvePersistenceProject(services: PersistenceAwarePlatformApiServices, actor: Awaited<ReturnType<typeof resolvePersistenceUser>>, projectId: string): Promise<PlatformProject> {
   if (!services.corePersistence) throw new Error("Core persistence service is not configured");
-  const project = (await services.corePersistence.listProjects(actor)).find(
-    (candidate) => candidate.id === projectId
-  );
+  const project = (await services.corePersistence.listProjects(actor)).find((candidate) => candidate.id === projectId);
   if (!project) throw new PermissionError(`Role ${actor.role} cannot access project ${projectId}`);
   return project;
 }
@@ -545,10 +480,7 @@ function roleFromPlatformRoles(roles: string[] | undefined): PlatformUser["role"
   return "end_user";
 }
 
-async function ensureCoreUserForSimulatedSession(
-  corePersistenceClient: CorePersistenceClient,
-  session: SimulatedPlatformSession
-): Promise<void> {
+async function ensureCoreUserForSimulatedSession(corePersistenceClient: CorePersistenceClient, session: SimulatedPlatformSession): Promise<void> {
   const email = session.claims?.email?.trim().toLowerCase();
   if (!email) return;
 
@@ -564,120 +496,47 @@ async function ensureCoreUserForSimulatedSession(
 }
 
 function buildPersistencePrdPrompt(project: PlatformProject): string {
-  return [
-    `Create a PRD for ${project.name}.`,
-    `Problem: ${project.businessProblem}`,
-    `App type: ${project.appType}`,
-    `Department: ${project.targetDepartment}`,
-    `Users: ${project.intendedUsers.join(", ")}`,
-    `Sensitivity: ${project.dataSensitivity}`
-  ].join("\n");
-}
-
-function buildDeterministicPrdSummary(project: PlatformProject): string {
-  return `Deterministic PRD fallback for ${project.name}: ${project.businessProblem}`;
+  return [`Create a PRD for ${project.name}.`, `Problem: ${project.businessProblem}`, `App type: ${project.appType}`, `Department: ${project.targetDepartment}`, `Users: ${project.intendedUsers.join(", ")}`, `Sensitivity: ${project.dataSensitivity}`].join("\n");
 }
 
 function isPersistenceCoreRoute(request: PlatformRequest): boolean {
-  return (
-    request.path === "/auth/me" ||
-    request.path === "/projects" ||
-    request.path === "/audit-logs" ||
-    request.path === "/audit-logs/filter"
-  );
+  return request.path === "/auth/me" || request.path === "/projects" || request.path === "/audit-logs" || request.path === "/audit-logs/filter";
 }
 
 function isNativeAuthRoute(request: PlatformRequest): boolean {
-  return (
-    request.path === "/admin/users" ||
-    request.path === "/auth/login" ||
-    request.path === "/auth/change-password"
-  );
+  return request.path === "/admin/users" || request.path === "/auth/login" || request.path === "/auth/change-password";
 }
 
 function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
-  return (
-    request.path === "/ai/providers" ||
-    request.path === "/ai/api-keys" ||
-    request.path === "/ai/routes" ||
-    request.path === "/ai/quotas" ||
-    request.path === "/guardrails/rules" ||
-    request.path === "/guardrails/test" ||
-    request.path === "/guardrails/events"
-  );
+  return request.path === "/ai/providers" || request.path === "/ai/api-keys" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
 }
 
 function isPersistencePrdRoute(request: PlatformRequest): boolean {
-  return (
-    /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) ||
-    /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) ||
-    /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) ||
-    /^\/projects\/[^/]+\/prd$/.test(request.path)
-  );
+  return /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) || /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) || /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) || /^\/projects\/[^/]+\/prd$/.test(request.path);
 }
 
 function isPersistenceWorkspaceRoute(request: PlatformRequest): boolean {
-  return (
-    /^\/projects\/[^/]+\/workspace$/.test(request.path) ||
-    /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) ||
-    /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path)
-  );
+  return /^\/projects\/[^/]+\/workspace$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path);
 }
 
 function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
-  return (
-    /^\/projects\/[^/]+\/app\/users$/.test(request.path) ||
-    /^\/projects\/[^/]+\/app\/roles$/.test(request.path) ||
-    /^\/projects\/[^/]+\/app\/invitations$/.test(request.path) ||
-    /^\/projects\/[^/]+\/app\/access-requests$/.test(request.path) ||
-    /^\/projects\/[^/]+\/app\/access-requests\/decision$/.test(request.path) ||
-    /^\/projects\/[^/]+\/publish\/review$/.test(request.path) ||
-    /^\/projects\/[^/]+\/publish$/.test(request.path) ||
-    request.path === "/app-store/registry" ||
-    request.path === "/store/apps" ||
-    /^\/store\/apps\/[^/]+$/.test(request.path) ||
-    /^\/store\/apps\/[^/]+\/install$/.test(request.path) ||
-    /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) ||
-    /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) ||
-    /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) ||
-    /^\/store\/tickets\/[^/]+$/.test(request.path) ||
-    /^\/creator\/projects\/[^/]+\/tickets$/.test(request.path)
-  );
+  return /^\/projects\/[^/]+\/app\/users$/.test(request.path) || /^\/projects\/[^/]+\/app\/roles$/.test(request.path) || /^\/projects\/[^/]+\/app\/invitations$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests\/decision$/.test(request.path) || /^\/projects\/[^/]+\/publish\/review$/.test(request.path) || /^\/projects\/[^/]+\/publish$/.test(request.path) || request.path === "/app-store/registry" || request.path === "/store/apps" || /^\/store\/apps\/[^/]+$/.test(request.path) || /^\/store\/apps\/[^/]+\/install$/.test(request.path) || /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) || /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) || /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) || /^\/store\/tickets\/[^/]+$/.test(request.path) || /^\/creator\/projects\/[^/]+\/tickets$/.test(request.path);
 }
 
 function isPersistenceGeneratedRuntimeRoute(request: PlatformRequest): boolean {
-  return (
-    /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) ||
-    /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) ||
-    /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) ||
-    /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) ||
-    /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path)
-  );
+  return /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path);
 }
 
-async function resolvePersistedRuntimeInput(
-  services: PersistenceAwarePlatformApiServices,
-  actor: PlatformUser,
-  projectId: string
-) {
-  if (!services.publishStorePersistence)
-    throw new Error("Publish Store persistence service is not configured");
+async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformApiServices, actor: PlatformUser, projectId: string) {
+  if (!services.publishStorePersistence) throw new Error("Publish Store persistence service is not configured");
   const project = await resolvePersistenceProject(services, actor, projectId);
   const manifest = await services.publishStorePersistence.getManifestForProject(actor, project);
-  const deployment = await services.publishStorePersistence.getLatestDeploymentForProject(
-    actor,
-    project
-  );
+  const deployment = await services.publishStorePersistence.getLatestDeploymentForProject(actor, project);
   return { project, manifest, deployment };
 }
 
-export async function executePlatformApiRequestAsync(
-  services: PersistenceAwarePlatformApiServices,
-  request: PlatformRequest
-): Promise<PlatformResponse> {
-  const containerMatch = request.path.match(
-    /^\/projects\/([^/]+)\/workspace\/container(?:\/(stop|wake))?$/
-  );
+export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
+  const containerMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/container(?:\/(stop|wake))?$/);
   if (containerMatch) {
     try {
       const projectId = containerMatch[1];
@@ -704,13 +563,7 @@ export async function executePlatformApiRequestAsync(
       }
       return {
         status: result.status,
-        body:
-          result.status < 400
-            ? success(result.body)
-            : failure(
-                String(result.body.code ?? "WORKSPACE_ERROR"),
-                String(result.body.error ?? "error")
-              )
+        body: result.status < 400 ? success(result.body) : failure(String(result.body.code ?? "WORKSPACE_ERROR"), String(result.body.error ?? "error"))
       };
     } catch (error) {
       return errorResponse(error);
@@ -719,6 +572,7 @@ export async function executePlatformApiRequestAsync(
 
   const corePersistence = services.corePersistence;
   const aiGovernancePersistence = services.aiGovernancePersistence;
+  const governedAiExecutor = services.governedAiExecutor;
   const prdPersistence = services.prdPersistence;
   const workspacePersistence = services.workspacePersistence;
   const publishStorePersistence = services.publishStorePersistence;
@@ -726,77 +580,42 @@ export async function executePlatformApiRequestAsync(
   const corePersistenceClient = services.corePersistenceClient;
   const credentialService = services.credentialService;
   const useCorePersistence = Boolean(corePersistence && isPersistenceCoreRoute(request));
-  const useAiGovernancePersistence = Boolean(
-    aiGovernancePersistence && isPersistenceAiGovernanceRoute(request)
-  );
-  const useBusinessSettingsPersistence = Boolean(
-    services.businessSettingsPersistence && isPersistenceBusinessSettingsRoute(request)
-  );
-  const usePrdPersistence = Boolean(
-    corePersistence && prdPersistence && isPersistencePrdRoute(request)
-  );
-  const useWorkspacePersistence = Boolean(
-    corePersistence &&
-    prdPersistence &&
-    workspacePersistence &&
-    isPersistenceWorkspaceRoute(request)
-  );
-  const usePublishStorePersistence = Boolean(
-    corePersistence &&
-    prdPersistence &&
-    workspacePersistence &&
-    publishStorePersistence &&
-    isPersistencePublishStoreRoute(request)
-  );
-  const useGeneratedRuntimePersistence = Boolean(
-    corePersistence &&
-    publishStorePersistence &&
-    generatedRuntimePersistence &&
-    isPersistenceGeneratedRuntimeRoute(request)
-  );
-  const useNativeAuth = Boolean(
-    corePersistenceClient && credentialService && isNativeAuthRoute(request)
-  );
-  const useSimulatedAuth = Boolean(
-    corePersistenceClient &&
-    request.method === "POST" &&
-    request.path === "/admin/auth/simulate-login"
-  );
-  if (
-    !useCorePersistence &&
-    !useAiGovernancePersistence &&
-    !useBusinessSettingsPersistence &&
-    !usePrdPersistence &&
-    !useWorkspacePersistence &&
-    !usePublishStorePersistence &&
-    !useGeneratedRuntimePersistence &&
-    !useNativeAuth &&
-    !useSimulatedAuth
-  )
-    return executePlatformApiRequest(services, request);
+  const useAiGovernancePersistence = Boolean(aiGovernancePersistence && isPersistenceAiGovernanceRoute(request));
+  const useBusinessSettingsPersistence = Boolean(services.businessSettingsPersistence && isPersistenceBusinessSettingsRoute(request));
+  const usePrdPersistence = Boolean(corePersistence && prdPersistence && isPersistencePrdRoute(request));
+  const useWorkspacePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && isPersistenceWorkspaceRoute(request));
+  const usePublishStorePersistence = Boolean(corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && isPersistencePublishStoreRoute(request));
+  const useGeneratedRuntimePersistence = Boolean(corePersistence && publishStorePersistence && generatedRuntimePersistence && isPersistenceGeneratedRuntimeRoute(request));
+  const useNativeAuth = Boolean(corePersistenceClient && credentialService && isNativeAuthRoute(request));
+  const usePersistentProjectFiles = Boolean(corePersistence && isPersistenceProjectFileRoute(request.path));
+  const useDurableAiJobs = Boolean(services.durableAiJobs && request.path.match(/^\/projects\/[^/]+\/ai-jobs(?:\/[^/]+)?$/));
+  const useSimulatedAuth = Boolean(corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login");
+  if (!useCorePersistence && !useAiGovernancePersistence && !useBusinessSettingsPersistence && !usePrdPersistence && !useWorkspacePersistence && !usePublishStorePersistence && !useGeneratedRuntimePersistence && !useNativeAuth && !usePersistentProjectFiles && !useDurableAiJobs && !useSimulatedAuth) return executePlatformApiRequest(services, request);
 
   try {
-    if (
-      corePersistenceClient &&
-      request.method === "POST" &&
-      request.path === "/admin/auth/simulate-login"
-    ) {
+    const persistentProjectFileResponse = await handlePersistentProjectFilesRoute({
+      method: request.method,
+      path: request.path,
+      body: request.body,
+      repository: services.projectFilePersistence,
+      issuer: services.projectFileUploadUrlIssuer,
+      resolveActor: () => resolvePersistenceUser(services, request.headers ?? {}),
+      resolveProject: (actor, projectId) => resolvePersistenceProject(services, actor as PlatformUser, projectId)
+    });
+    if (persistentProjectFileResponse)
+      return {
+        status: persistentProjectFileResponse.status,
+        body: success(persistentProjectFileResponse.data)
+      };
+    if (corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login") {
       const response = executePlatformApiRequest(services, request);
       if (response.status === HttpStatus.CREATED && response.body.ok === true) {
-        await ensureCoreUserForSimulatedSession(
-          corePersistenceClient,
-          response.body.data as SimulatedPlatformSession
-        );
+        await ensureCoreUserForSimulatedSession(corePersistenceClient, response.body.data as SimulatedPlatformSession);
       }
       return response;
     }
 
-    if (
-      corePersistenceClient &&
-      credentialService &&
-      request.method === "POST" &&
-      request.path === "/admin/users"
-    ) {
+    if (corePersistenceClient && credentialService && request.method === "POST" && request.path === "/admin/users") {
       const actor = await resolvePersistenceUser(services, request.headers ?? {});
       services.auth.requireRole(actor, ["admin"]);
 
@@ -869,12 +688,7 @@ export async function executePlatformApiRequestAsync(
         };
       }
 
-      // Source the session subject from core-persistence (Postgres) — NOT the in-memory identity —
-      // so login works for a Postgres-only user after a process restart. `getUserByEmail` returns
-      // the role resolved from the platform_user_roles join; issueNativeSession signs email+role.
-      const user = corePersistence
-        ? await corePersistence.getUserByEmail(email.trim().toLowerCase())
-        : services.identity.getUserByEmail(email.trim().toLowerCase());
+      const user = corePersistence ? await corePersistence.getUserByEmail(email.trim().toLowerCase()) : services.identity.getUserByEmail(email.trim().toLowerCase());
       const session = services.authSso.issueNativeSession(user);
       return {
         status: HttpStatus.OK,
@@ -886,18 +700,8 @@ export async function executePlatformApiRequestAsync(
       };
     }
 
-    if (
-      credentialService &&
-      request.method === "POST" &&
-      request.path === "/auth/change-password"
-    ) {
-      // Resolve the caller from the signed session token via core-persistence (Postgres), NOT the
-      // mock identity — the native token issued by issueNativeSession must authenticate a
-      // Postgres-only user even after a restart. Falls back to the mock resolver only when
-      // core-persistence is not configured.
-      const actor = corePersistence
-        ? (await resolvePersistenceAuth(services, request.headers ?? {})).user
-        : services.auth.resolve(request.headers ?? {}).user;
+    if (credentialService && request.method === "POST" && request.path === "/auth/change-password") {
+      const actor = corePersistence ? (await resolvePersistenceAuth(services, request.headers ?? {})).user : services.auth.resolve(request.headers ?? {}).user;
       const body = (request.body ?? {}) as Record<string, unknown>;
       const currentPassword = String(body.currentPassword ?? "");
       const newPassword = String(body.newPassword ?? "");
@@ -951,18 +755,10 @@ export async function executePlatformApiRequestAsync(
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
         appType: request.body?.appType ? String(request.body.appType) : undefined,
-        businessProblem: request.body?.businessProblem
-          ? String(request.body.businessProblem)
-          : undefined,
-        targetDepartment: request.body?.targetDepartment
-          ? String(request.body.targetDepartment)
-          : undefined,
-        intendedUsers: Array.isArray(request.body?.intendedUsers)
-          ? request.body.intendedUsers.map(String)
-          : undefined,
-        dataSensitivity: request.body?.dataSensitivity
-          ? (String(request.body.dataSensitivity) as never)
-          : undefined
+        businessProblem: request.body?.businessProblem ? String(request.body.businessProblem) : undefined,
+        targetDepartment: request.body?.targetDepartment ? String(request.body.targetDepartment) : undefined,
+        intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
+        dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
       });
       await corePersistence.recordAudit({
         actorId: user.id,
@@ -1035,9 +831,7 @@ export async function executePlatformApiRequestAsync(
         scenario: String(request.body?.scenario ?? "prd_generation") as never,
         primaryProviderId: String(request.body?.primaryProviderId ?? ""),
         primaryModel: String(request.body?.primaryModel ?? ""),
-        fallbackProviderId: request.body?.fallbackProviderId
-          ? String(request.body.fallbackProviderId)
-          : undefined,
+        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
         fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
       });
       return { status: HttpStatus.OK, body: success(route) };
@@ -1056,11 +850,7 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.OK, body: success(quota) };
     }
 
-    if (
-      aiGovernancePersistence &&
-      request.method === "POST" &&
-      request.path === "/guardrails/rules"
-    ) {
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/rules") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const rule = await aiGovernancePersistence.createGuardrailRule(user, {
         name: String(request.body?.name ?? ""),
@@ -1073,11 +863,7 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.CREATED, body: success(rule) };
     }
 
-    if (
-      aiGovernancePersistence &&
-      request.method === "POST" &&
-      request.path === "/guardrails/test"
-    ) {
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/test") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const result = await aiGovernancePersistence.testPrompt(user, {
         prompt: String(request.body?.prompt ?? ""),
@@ -1086,11 +872,7 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.OK, body: success(result) };
     }
 
-    if (
-      aiGovernancePersistence &&
-      request.method === "GET" &&
-      request.path === "/guardrails/events"
-    ) {
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return {
         status: HttpStatus.OK,
@@ -1098,13 +880,45 @@ export async function executePlatformApiRequestAsync(
       };
     }
 
-    const setup = await resolveSetupRequest(request, services, () =>
-      resolvePersistenceUser(services, request.headers ?? {})
-    );
+    if (aiGovernancePersistence && governedAiExecutor && request.method === "POST" && request.path === "/ai/provider-test-call") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const result = await handleAiProviderTestCall({
+        request,
+        resolveUser: async () => user,
+        executor: governedAiExecutor,
+        providerNameFor: async (id) => (await aiGovernancePersistence.listProviders(user)).find((provider) => provider.id === id)?.name,
+        providerAdapterFor: async (id) => (await aiGovernancePersistence.listProviders(user)).find((provider) => provider.id === id)?.adapter,
+        legacyTest: () => {
+          throw new Error("legacy AI test is unavailable in persistence mode");
+        }
+      });
+      return {
+        status: result?.status ?? HttpStatus.NOT_FOUND,
+        body: result?.body ?? failure("NOT_FOUND", "route not found")
+      };
+    }
+
+    const durableAiJobMatch = request.path.match(/^\/projects\/([^/]+)\/ai-jobs(?:\/([^/]+))?$/);
+    if (durableAiJobMatch && ((request.method === "POST" && !durableAiJobMatch[2]) || (request.method === "GET" && durableAiJobMatch[2]))) {
+      const actor = await resolvePersistenceUser(services, request.headers ?? {});
+      const project = services.corePersistence ? await resolvePersistenceProject(services, actor, durableAiJobMatch[1]) : services.projects.getProjectForActor(actor, durableAiJobMatch[1]);
+      const result = await handleDurableAiJob({
+        method: request.method,
+        jobId: durableAiJobMatch[2],
+        body: request.body,
+        projectId: project.id,
+        actorId: actor.id,
+        store: services.durableAiJobs,
+        cipher: services.durableAiJobPayloadCipher
+      });
+      return result.status === HttpStatus.NOT_FOUND ? { status: HttpStatus.NOT_FOUND, body: failure("NOT_FOUND", "AI job not found") } : { status: result.status, body: success(result.data) };
+    }
+
+    const setup = await resolveSetupRequest(request, services, () => resolvePersistenceUser(services, request.headers ?? {}));
     if (setup) return setup;
 
     const prdGenerateMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/generate$/);
-    if (corePersistence && prdPersistence && request.method === "POST" && prdGenerateMatch) {
+    if (corePersistence && prdPersistence && governedAiExecutor && request.method === "POST" && prdGenerateMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, prdGenerateMatch[1]);
       const sourcePrompt = buildPersistencePrdPrompt(project);
@@ -1113,52 +927,27 @@ export async function executePlatformApiRequestAsync(
         scenario: "prd_generation"
       });
       if (guardrail.decision === "block") {
-        throw new ValidationError(
-          `PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`
-        );
+        throw new ValidationError(`PRD generation blocked by guardrail: ${guardrail.matchedRule?.name ?? guardrail.severity}`);
       }
-      const deterministicFallbackText = buildDeterministicPrdSummary(project);
-      let completion: {
-        text: string;
-        providerId: string;
-        model: string;
-        usageLogId?: string;
-        status?: string;
-        fallbackUsed?: boolean;
-        tokensUsed?: number;
-      };
-      try {
-        completion = services.aiGovernance.invokeCompletion(user, {
-          projectId: project.id,
-          scenario: "prd_generation",
-          prompt: sourcePrompt,
-          requestedTokens: 300,
-          guardrailDecision: guardrail.decision,
-          dryRun: true,
-          allowDeterministicFallback: true,
-          deterministicFallbackText
-        });
-      } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes("No route configured"))
-          throw error;
-        completion = {
-          text: deterministicFallbackText,
-          providerId: "deterministic_prd_fallback",
-          model: "local-deterministic-prd",
-          status: "fallback",
-          fallbackUsed: true,
-          tokensUsed: 0
-        };
+      const execution = await governedAiExecutor.execute(user, {
+        scenario: "prd_generation",
+        projectId: project.id,
+        prompt: sourcePrompt,
+        requestId: String(request.body?.requestId ?? crypto.randomUUID()),
+        requestedTokens: 300
+      });
+      if (execution.status === "blocked" || execution.status === "failed" || !execution.text) {
+        throw new ValidationError(`PRD generation unavailable: ${execution.evidence.failureReason ?? execution.status}`);
       }
       const draft = await prdPersistence.generateDraft(user, {
         project,
         sourcePrompt,
         generatedBy: {
           scenario: "prd_generation",
-          providerId: completion.providerId,
-          model: completion.model
+          providerId: execution.evidence.providerId,
+          model: execution.evidence.model
         },
-        aiSummary: completion.text
+        aiSummary: execution.text
       });
       await corePersistence.recordAudit({
         actorId: user.id,
@@ -1168,10 +957,10 @@ export async function executePlatformApiRequestAsync(
         metadata: {
           projectId: project.id,
           guardrailDecision: guardrail.decision,
-          aiUsageLogId: completion.usageLogId,
-          aiStatus: completion.status,
-          fallbackUsed: completion.fallbackUsed,
-          tokensUsed: completion.tokensUsed
+          executionId: execution.evidence.id,
+          aiStatus: execution.status,
+          fallbackUsed: execution.evidence.fallbackUsed,
+          tokensUsed: execution.evidence.tokensUsed
         }
       });
       return { status: HttpStatus.CREATED, body: success(draft) };
@@ -1181,11 +970,7 @@ export async function executePlatformApiRequestAsync(
     if (corePersistence && prdPersistence && request.method === "POST" && prdBaselineMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, prdBaselineMatch[1]);
-      const baseline = await prdPersistence.confirmBaseline(
-        user,
-        project,
-        String(request.body?.versionId ?? "")
-      );
+      const baseline = await prdPersistence.confirmBaseline(user, project, String(request.body?.versionId ?? ""));
       await corePersistence.recordAudit({
         actorId: user.id,
         action: "prd.baseline.confirmed",
@@ -1220,43 +1005,18 @@ export async function executePlatformApiRequestAsync(
     }
 
     const workspacePromptMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/prompts$/);
-    if (
-      corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      request.method === "POST" &&
-      workspacePromptMatch
-    ) {
+    if (corePersistence && prdPersistence && workspacePersistence && governedAiExecutor && request.method === "POST" && workspacePromptMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       services.auth.requireRole(user, ["admin", "creator"]);
       const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
       const prompt = String(request.body?.prompt ?? "");
       const agentMode = resolveWorkspaceAgentMode(request.body);
-      const guardrail = services.guardrails.evaluatePrompt(user, {
-        prompt,
-        scenario: "frontend_coding"
-      });
-
-      if (guardrail.decision === "block") {
-        const blocked = await workspacePersistence.blockPrompt(user, {
-          project,
-          baseline,
-          prompt,
-          guardrail
-        });
-        await corePersistence.recordAudit({
-          actorId: user.id,
-          action: "workspace.prompt.blocked",
-          resourceType: "workspace_task",
-          resourceId: blocked.task.id,
-          severity: "warning",
-          metadata: { projectId: project.id, guardrailEventId: guardrail.eventId }
-        });
-        return { status: HttpStatus.OK, body: success(blocked) };
-      }
-
       if (agentMode === "plan") {
+        const guardrail = services.guardrails.evaluatePrompt(user, {
+          prompt,
+          scenario: "frontend_coding"
+        });
         const planned = await workspacePersistence.planPrompt(user, {
           project,
           baseline,
@@ -1273,47 +1033,29 @@ export async function executePlatformApiRequestAsync(
         });
         return { status: HttpStatus.OK, body: success(planned) };
       }
-
-      const route = services.aiGovernance.resolveRoute("frontend_coding");
-      const requestEstimate = 120;
-      const quota = services.aiGovernance.checkQuota("creator", requestEstimate);
-      if (!quota.allowed) {
-        throw new QuotaExceededError(
-          `Creator quota exceeded. Remaining today: ${quota.remainingToday}`
-        );
-      }
-      services.aiGovernance.recordProviderCall();
-      const result = await workspacePersistence.submitPrompt(user, {
+      const result = await handlePersistedWorkspacePrompt({
+        actor: user,
         project,
         baseline,
         prompt,
-        guardrail,
-        route: route.primary,
-        tokensUsed: requestEstimate
+        requestId: String(request.body?.requestId ?? crypto.randomUUID()),
+        executor: governedAiExecutor,
+        workspace: workspacePersistence,
+        audit: ({ actorId, action, resourceId, severity, metadata }) =>
+          corePersistence.recordAudit({
+            actorId,
+            action,
+            resourceType: "workspace_task",
+            resourceId,
+            severity,
+            metadata
+          })
       });
-      await corePersistence.recordAudit({
-        actorId: user.id,
-        action: "workspace.prompt.accepted",
-        resourceType: "workspace_task",
-        resourceId: result.task.id,
-        metadata: {
-          projectId: project.id,
-          previewVersion: result.preview.version,
-          tokensUsed: result.usage?.tokensUsed ?? 0
-        }
-      });
-      return { status: HttpStatus.CREATED, body: success(result) };
+      return { status: result.status, body: success(result.body) };
     }
 
-    const workspaceRefreshMatch = request.path.match(
-      /^\/projects\/([^/]+)\/workspace\/preview\/refresh$/
-    );
-    if (
-      prdPersistence &&
-      workspacePersistence &&
-      request.method === "POST" &&
-      workspaceRefreshMatch
-    ) {
+    const workspaceRefreshMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/preview\/refresh$/);
+    if (prdPersistence && workspacePersistence && request.method === "POST" && workspaceRefreshMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, workspaceRefreshMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
@@ -1335,12 +1077,7 @@ export async function executePlatformApiRequestAsync(
     }
 
     const persistedAppUsersMatch = request.path.match(/^\/projects\/([^/]+)\/app\/users$/);
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "GET" &&
-      persistedAppUsersMatch
-    ) {
+    if (corePersistence && publishStorePersistence && request.method === "GET" && persistedAppUsersMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, persistedAppUsersMatch[1]);
       return {
@@ -1350,12 +1087,7 @@ export async function executePlatformApiRequestAsync(
     }
 
     const persistedAppRolesMatch = request.path.match(/^\/projects\/([^/]+)\/app\/roles$/);
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedAppRolesMatch
-    ) {
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppRolesMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, persistedAppRolesMatch[1]);
       const role = await publishStorePersistence.createRole(user, {
@@ -1363,9 +1095,7 @@ export async function executePlatformApiRequestAsync(
         key: String(request.body?.key ?? ""),
         name: String(request.body?.name ?? ""),
         description: request.body?.description ? String(request.body.description) : undefined,
-        permissions: Array.isArray(request.body?.permissions)
-          ? request.body.permissions.map(String)
-          : undefined
+        permissions: Array.isArray(request.body?.permissions) ? request.body.permissions.map(String) : undefined
       });
       await corePersistence.recordAudit({
         actorId: user.id,
@@ -1377,21 +1107,10 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.CREATED, body: success(role) };
     }
 
-    const persistedAppInvitationsMatch = request.path.match(
-      /^\/projects\/([^/]+)\/app\/invitations$/
-    );
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedAppInvitationsMatch
-    ) {
+    const persistedAppInvitationsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/invitations$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppInvitationsMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const project = await resolvePersistenceProject(
-        services,
-        user,
-        persistedAppInvitationsMatch[1]
-      );
+      const project = await resolvePersistenceProject(services, user, persistedAppInvitationsMatch[1]);
       const invitation = await publishStorePersistence.createInvitation(user, {
         project,
         email: String(request.body?.email ?? ""),
@@ -1402,10 +1121,7 @@ export async function executePlatformApiRequestAsync(
       });
       await corePersistence.recordAudit({
         actorId: user.id,
-        action:
-          invitation.status === "approval_required"
-            ? "app.invitation.policy_required"
-            : "app.invitation.created",
+        action: invitation.status === "approval_required" ? "app.invitation.policy_required" : "app.invitation.created",
         resourceType: "app_invitation",
         resourceId: invitation.id,
         severity: invitation.status === "approval_required" ? "warning" : "info",
@@ -1419,21 +1135,10 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.CREATED, body: success(invitation) };
     }
 
-    const persistedAppAccessRequestsMatch = request.path.match(
-      /^\/projects\/([^/]+)\/app\/access-requests$/
-    );
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedAppAccessRequestsMatch
-    ) {
+    const persistedAppAccessRequestsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppAccessRequestsMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const project = await resolvePersistenceProject(
-        services,
-        user,
-        persistedAppAccessRequestsMatch[1]
-      );
+      const project = await resolvePersistenceProject(services, user, persistedAppAccessRequestsMatch[1]);
       const accessRequest = await publishStorePersistence.createAccessRequest(user, {
         project,
         requesterEmail: String(request.body?.requesterEmail ?? ""),
@@ -1454,35 +1159,19 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.CREATED, body: success(accessRequest) };
     }
 
-    const persistedAppAccessDecisionMatch = request.path.match(
-      /^\/projects\/([^/]+)\/app\/access-requests\/decision$/
-    );
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedAppAccessDecisionMatch
-    ) {
+    const persistedAppAccessDecisionMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests\/decision$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedAppAccessDecisionMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const project = await resolvePersistenceProject(
-        services,
-        user,
-        persistedAppAccessDecisionMatch[1]
-      );
+      const project = await resolvePersistenceProject(services, user, persistedAppAccessDecisionMatch[1]);
       const accessRequest = await publishStorePersistence.decideAccessRequest(user, {
         project,
         requestId: String(request.body?.requestId ?? ""),
         decision: String(request.body?.decision ?? "approved") as never,
-        decidedByUserId: request.body?.decidedByUserId
-          ? String(request.body.decidedByUserId)
-          : undefined
+        decidedByUserId: request.body?.decidedByUserId ? String(request.body.decidedByUserId) : undefined
       });
       await corePersistence.recordAudit({
         actorId: user.id,
-        action:
-          accessRequest.status === "approved"
-            ? "app.access_request.approved"
-            : "app.access_request.rejected",
+        action: accessRequest.status === "approved" ? "app.access_request.approved" : "app.access_request.rejected",
         resourceType: "app_access_request",
         resourceId: accessRequest.id,
         metadata: { projectId: project.id, requestedRoleKey: accessRequest.requestedRoleKey }
@@ -1490,42 +1179,20 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.OK, body: success(accessRequest) };
     }
 
-    const persistedPublishReviewMatch = request.path.match(
-      /^\/projects\/([^/]+)\/publish\/review$/
-    );
-    if (
-      corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      publishStorePersistence &&
-      request.method === "GET" &&
-      persistedPublishReviewMatch
-    ) {
+    const persistedPublishReviewMatch = request.path.match(/^\/projects\/([^/]+)\/publish\/review$/);
+    if (corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && request.method === "GET" && persistedPublishReviewMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const project = await resolvePersistenceProject(
-        services,
-        user,
-        persistedPublishReviewMatch[1]
-      );
+      const project = await resolvePersistenceProject(services, user, persistedPublishReviewMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
       const preview = await workspacePersistence.refreshPreview(user, { project, baseline });
       return {
         status: HttpStatus.OK,
-        body: success(
-          await publishStorePersistence.getPublishReview(user, { project, baseline, preview })
-        )
+        body: success(await publishStorePersistence.getPublishReview(user, { project, baseline, preview }))
       };
     }
 
     const persistedPublishMatch = request.path.match(/^\/projects\/([^/]+)\/publish$/);
-    if (
-      corePersistence &&
-      prdPersistence &&
-      workspacePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedPublishMatch
-    ) {
+    if (corePersistence && prdPersistence && workspacePersistence && publishStorePersistence && request.method === "POST" && persistedPublishMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, persistedPublishMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
@@ -1546,11 +1213,7 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.CREATED, body: success(result) };
     }
 
-    if (
-      publishStorePersistence &&
-      request.method === "GET" &&
-      request.path === "/app-store/registry"
-    ) {
+    if (publishStorePersistence && request.method === "GET" && request.path === "/app-store/registry") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return {
         status: HttpStatus.OK,
@@ -1567,12 +1230,7 @@ export async function executePlatformApiRequestAsync(
     }
 
     const persistedStoreInstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/install$/);
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedStoreInstallMatch
-    ) {
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreInstallMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const installation = await publishStorePersistence.installStoreApp(user, {
         appSlug: persistedStoreInstallMatch[1]
@@ -1592,12 +1250,7 @@ export async function executePlatformApiRequestAsync(
     }
 
     const persistedStoreUninstallMatch = request.path.match(/^\/store\/apps\/([^/]+)\/uninstall$/);
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedStoreUninstallMatch
-    ) {
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreUninstallMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const installation = await publishStorePersistence.uninstallStoreApp(user, {
         appSlug: persistedStoreUninstallMatch[1]
@@ -1616,15 +1269,8 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.OK, body: success(installation) };
     }
 
-    const persistedStoreAccessMatch = request.path.match(
-      /^\/store\/apps\/([^/]+)\/access-requests$/
-    );
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedStoreAccessMatch
-    ) {
+    const persistedStoreAccessMatch = request.path.match(/^\/store\/apps\/([^/]+)\/access-requests$/);
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreAccessMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const accessRequest = await publishStorePersistence.requestStoreAccess(user, {
         appSlug: persistedStoreAccessMatch[1],
@@ -1647,12 +1293,7 @@ export async function executePlatformApiRequestAsync(
     }
 
     const persistedStoreTicketCreateMatch = request.path.match(/^\/store\/apps\/([^/]+)\/tickets$/);
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "POST" &&
-      persistedStoreTicketCreateMatch
-    ) {
+    if (corePersistence && publishStorePersistence && request.method === "POST" && persistedStoreTicketCreateMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const ticket = await publishStorePersistence.createTicket(user, {
         appSlug: persistedStoreTicketCreateMatch[1],
@@ -1683,28 +1324,17 @@ export async function executePlatformApiRequestAsync(
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return {
         status: HttpStatus.OK,
-        body: success(
-          await publishStorePersistence.getTicketStatus(user, persistedStoreTicketStatusMatch[1])
-        )
+        body: success(await publishStorePersistence.getTicketStatus(user, persistedStoreTicketStatusMatch[1]))
       };
     }
 
-    const persistedCreatorTicketInboxMatch = request.path.match(
-      /^\/creator\/projects\/([^/]+)\/tickets$/
-    );
-    if (
-      corePersistence &&
-      publishStorePersistence &&
-      request.method === "GET" &&
-      persistedCreatorTicketInboxMatch
-    ) {
+    const persistedCreatorTicketInboxMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/tickets$/);
+    if (corePersistence && publishStorePersistence && request.method === "GET" && persistedCreatorTicketInboxMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       await resolvePersistenceProject(services, user, persistedCreatorTicketInboxMatch[1]);
       return {
         status: HttpStatus.OK,
-        body: success(
-          await publishStorePersistence.listCreatorInbox(user, persistedCreatorTicketInboxMatch[1])
-        )
+        body: success(await publishStorePersistence.listCreatorInbox(user, persistedCreatorTicketInboxMatch[1]))
       };
     }
 
@@ -1713,48 +1343,24 @@ export async function executePlatformApiRequestAsync(
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       return {
         status: HttpStatus.OK,
-        body: success(
-          await publishStorePersistence.getStoreAppDetail(user, persistedStoreAppDetailMatch[1])
-        )
+        body: success(await publishStorePersistence.getStoreAppDetail(user, persistedStoreAppDetailMatch[1]))
       };
     }
 
-    const persistedRuntimeOverviewMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)$/
-    );
-    if (
-      corePersistence &&
-      generatedRuntimePersistence &&
-      request.method === "GET" &&
-      persistedRuntimeOverviewMatch
-    ) {
+    const persistedRuntimeOverviewMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOverviewMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const runtimeInput = await resolvePersistedRuntimeInput(
-        services,
-        user,
-        persistedRuntimeOverviewMatch[1]
-      );
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOverviewMatch[1]);
       return {
         status: HttpStatus.OK,
         body: success(await generatedRuntimePersistence.getRuntimeOverview(user, runtimeInput))
       };
     }
 
-    const persistedRuntimeSchemaCheckMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/
-    );
-    if (
-      corePersistence &&
-      generatedRuntimePersistence &&
-      request.method === "POST" &&
-      persistedRuntimeSchemaCheckMatch
-    ) {
+    const persistedRuntimeSchemaCheckMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeSchemaCheckMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const runtimeInput = await resolvePersistedRuntimeInput(
-        services,
-        user,
-        persistedRuntimeSchemaCheckMatch[1]
-      );
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeSchemaCheckMatch[1]);
       const result = await generatedRuntimePersistence.checkSchemaAccess(user, {
         ...runtimeInput,
         attemptedSchema: String(request.body?.attemptedSchema ?? ""),
@@ -1762,9 +1368,7 @@ export async function executePlatformApiRequestAsync(
       });
       await corePersistence.recordAudit({
         actorId: user.id,
-        action: result.allowed
-          ? "generated_runtime.schema_access.allowed"
-          : "generated_runtime.schema_access.denied",
+        action: result.allowed ? "generated_runtime.schema_access.allowed" : "generated_runtime.schema_access.denied",
         resourceType: "generated_app_runtime",
         resourceId: runtimeInput.deployment.id,
         severity: result.allowed ? "info" : "warning",
@@ -1777,67 +1381,39 @@ export async function executePlatformApiRequestAsync(
       return { status: HttpStatus.OK, body: success(result) };
     }
 
-    const persistedRuntimeHealthMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/health$/
-    );
+    const persistedRuntimeHealthMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/health$/);
     if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeHealthMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const runtimeInput = await resolvePersistedRuntimeInput(
-        services,
-        user,
-        persistedRuntimeHealthMatch[1]
-      );
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeHealthMatch[1]);
       return {
         status: HttpStatus.OK,
         body: success(await generatedRuntimePersistence.getRuntimeHealth(user, runtimeInput))
       };
     }
 
-    const persistedRuntimeOpenApiMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/openapi$/
-    );
+    const persistedRuntimeOpenApiMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/openapi$/);
     if (generatedRuntimePersistence && request.method === "GET" && persistedRuntimeOpenApiMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const runtimeInput = await resolvePersistedRuntimeInput(
-        services,
-        user,
-        persistedRuntimeOpenApiMatch[1]
-      );
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeOpenApiMatch[1]);
       return {
         status: HttpStatus.OK,
         body: success(await generatedRuntimePersistence.getOpenApiContract(user, runtimeInput))
       };
     }
 
-    const persistedRuntimeMigrationDryRunMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/
-    );
-    if (
-      corePersistence &&
-      generatedRuntimePersistence &&
-      request.method === "POST" &&
-      persistedRuntimeMigrationDryRunMatch
-    ) {
+    const persistedRuntimeMigrationDryRunMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/);
+    if (corePersistence && generatedRuntimePersistence && request.method === "POST" && persistedRuntimeMigrationDryRunMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const runtimeInput = await resolvePersistedRuntimeInput(
-        services,
-        user,
-        persistedRuntimeMigrationDryRunMatch[1]
-      );
+      const runtimeInput = await resolvePersistedRuntimeInput(services, user, persistedRuntimeMigrationDryRunMatch[1]);
       const result = await generatedRuntimePersistence.runMigrationDryRun(user, {
         ...runtimeInput,
         migrationId: String(request.body?.migrationId ?? ""),
-        destructiveChanges: Array.isArray(request.body?.destructiveChanges)
-          ? request.body.destructiveChanges.map(String)
-          : [],
+        destructiveChanges: Array.isArray(request.body?.destructiveChanges) ? request.body.destructiveChanges.map(String) : [],
         approvalId: request.body?.approvalId ? String(request.body.approvalId) : undefined
       });
       await corePersistence.recordAudit({
         actorId: user.id,
-        action:
-          result.status === "blocked"
-            ? "generated_runtime.migration_dry_run.blocked"
-            : "generated_runtime.migration_dry_run.passed",
+        action: result.status === "blocked" ? "generated_runtime.migration_dry_run.blocked" : "generated_runtime.migration_dry_run.passed",
         resourceType: "generated_app_runtime",
         resourceId: runtimeInput.deployment.id,
         severity: result.status === "blocked" ? "warning" : "info",
@@ -1856,10 +1432,7 @@ export async function executePlatformApiRequestAsync(
   }
 }
 
-export function executePlatformApiRequest(
-  services: PlatformApiServices,
-  request: PlatformRequest
-): PlatformResponse {
+export function executePlatformApiRequest(services: PlatformApiServices, request: PlatformRequest): PlatformResponse {
   try {
     if (request.method === "GET" && request.path === "/health") {
       return {
@@ -1869,7 +1442,7 @@ export function executePlatformApiRequest(
           status: "healthy",
           dependencies: {
             database: "configured",
-            authMode: "platform_session_with_mock_fallback"
+            authMode: String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "0") === "1" ? "platform_session_with_mock_header_for_tests" : "platform_session"
           }
         })
       };
@@ -1909,18 +1482,10 @@ export function executePlatformApiRequest(
         actor: user,
         name: String(request.body?.name ?? "Untitled Project"),
         appType: request.body?.appType ? String(request.body.appType) : undefined,
-        businessProblem: request.body?.businessProblem
-          ? String(request.body.businessProblem)
-          : undefined,
-        targetDepartment: request.body?.targetDepartment
-          ? String(request.body.targetDepartment)
-          : undefined,
-        intendedUsers: Array.isArray(request.body?.intendedUsers)
-          ? request.body.intendedUsers.map(String)
-          : undefined,
-        dataSensitivity: request.body?.dataSensitivity
-          ? (String(request.body.dataSensitivity) as never)
-          : undefined
+        businessProblem: request.body?.businessProblem ? String(request.body.businessProblem) : undefined,
+        targetDepartment: request.body?.targetDepartment ? String(request.body.targetDepartment) : undefined,
+        intendedUsers: Array.isArray(request.body?.intendedUsers) ? request.body.intendedUsers.map(String) : undefined,
+        dataSensitivity: request.body?.dataSensitivity ? (String(request.body.dataSensitivity) as never) : undefined
       });
 
       return { status: HttpStatus.CREATED, body: success(project) };
@@ -1936,11 +1501,7 @@ export function executePlatformApiRequest(
     const prdBaselineMatch = request.path.match(/^\/projects\/([^/]+)\/prd\/baseline$/);
     if (request.method === "POST" && prdBaselineMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const baseline = services.prds.confirmBaseline(
-        user,
-        prdBaselineMatch[1],
-        String(request.body?.versionId ?? "")
-      );
+      const baseline = services.prds.confirmBaseline(user, prdBaselineMatch[1], String(request.body?.versionId ?? ""));
       return { status: HttpStatus.OK, body: success(baseline) };
     }
 
@@ -1975,9 +1536,7 @@ export function executePlatformApiRequest(
       };
     }
 
-    const workspaceRefreshMatch = request.path.match(
-      /^\/projects\/([^/]+)\/workspace\/preview\/refresh$/
-    );
+    const workspaceRefreshMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/preview\/refresh$/);
     if (request.method === "POST" && workspaceRefreshMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
@@ -1995,9 +1554,7 @@ export function executePlatformApiRequest(
       };
     }
 
-    const frontendCheckpointsMatch = request.path.match(
-      /^\/projects\/([^/]+)\/frontend\/checkpoints$/
-    );
+    const frontendCheckpointsMatch = request.path.match(/^\/projects\/([^/]+)\/frontend\/checkpoints$/);
     if (request.method === "GET" && frontendCheckpointsMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
@@ -2014,9 +1571,7 @@ export function executePlatformApiRequest(
         body: success(
           services.frontendVersions.compareCheckpoints(user, frontendCompareMatch[1], {
             fromCheckpointId: String(request.body?.fromCheckpointId ?? ""),
-            toCheckpointId: request.body?.toCheckpointId
-              ? String(request.body.toCheckpointId)
-              : undefined
+            toCheckpointId: request.body?.toCheckpointId ? String(request.body.toCheckpointId) : undefined
           })
         )
       };
@@ -2027,13 +1582,7 @@ export function executePlatformApiRequest(
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
         status: HttpStatus.OK,
-        body: success(
-          services.frontendVersions.restoreFrontend(
-            user,
-            frontendRestoreMatch[1],
-            String(request.body?.checkpointId ?? "")
-          )
-        )
+        body: success(services.frontendVersions.restoreFrontend(user, frontendRestoreMatch[1], String(request.body?.checkpointId ?? "")))
       };
     }
 
@@ -2053,9 +1602,7 @@ export function executePlatformApiRequest(
         key: String(request.body?.key ?? ""),
         name: String(request.body?.name ?? ""),
         description: request.body?.description ? String(request.body.description) : undefined,
-        permissions: Array.isArray(request.body?.permissions)
-          ? request.body.permissions.map(String)
-          : undefined
+        permissions: Array.isArray(request.body?.permissions) ? request.body.permissions.map(String) : undefined
       });
       return { status: HttpStatus.CREATED, body: success(role) };
     }
@@ -2073,39 +1620,25 @@ export function executePlatformApiRequest(
       return { status: HttpStatus.CREATED, body: success(invitation) };
     }
 
-    const appAccessRequestsMatch = request.path.match(
-      /^\/projects\/([^/]+)\/app\/access-requests$/
-    );
+    const appAccessRequestsMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests$/);
     if (request.method === "POST" && appAccessRequestsMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const accessRequest = services.appAccess.createAccessRequest(
-        user,
-        appAccessRequestsMatch[1],
-        {
-          requesterEmail: String(request.body?.requesterEmail ?? ""),
-          requestedRoleKey: String(request.body?.requestedRoleKey ?? ""),
-          reason: String(request.body?.reason ?? "")
-        }
-      );
+      const accessRequest = services.appAccess.createAccessRequest(user, appAccessRequestsMatch[1], {
+        requesterEmail: String(request.body?.requesterEmail ?? ""),
+        requestedRoleKey: String(request.body?.requestedRoleKey ?? ""),
+        reason: String(request.body?.reason ?? "")
+      });
       return { status: HttpStatus.CREATED, body: success(accessRequest) };
     }
 
-    const appAccessDecisionMatch = request.path.match(
-      /^\/projects\/([^/]+)\/app\/access-requests\/decision$/
-    );
+    const appAccessDecisionMatch = request.path.match(/^\/projects\/([^/]+)\/app\/access-requests\/decision$/);
     if (request.method === "POST" && appAccessDecisionMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const accessRequest = services.appAccess.decideAccessRequest(
-        user,
-        appAccessDecisionMatch[1],
-        {
-          requestId: String(request.body?.requestId ?? ""),
-          decision: String(request.body?.decision ?? "approved") as never,
-          decidedByUserId: request.body?.decidedByUserId
-            ? String(request.body.decidedByUserId)
-            : undefined
-        }
-      );
+      const accessRequest = services.appAccess.decideAccessRequest(user, appAccessDecisionMatch[1], {
+        requestId: String(request.body?.requestId ?? ""),
+        decision: String(request.body?.decision ?? "approved") as never,
+        decidedByUserId: request.body?.decidedByUserId ? String(request.body.decidedByUserId) : undefined
+      });
       return { status: HttpStatus.OK, body: success(accessRequest) };
     }
 
@@ -2226,20 +1759,14 @@ export function executePlatformApiRequest(
         sourceType: String(request.body?.sourceType ?? "text") as never,
         ownerUserId: String(request.body?.ownerUserId ?? user.id),
         scope: (request.body?.scope ?? { visibility: "global" }) as never,
-        uploadStatus: request.body?.uploadStatus
-          ? (String(request.body.uploadStatus) as never)
-          : undefined,
-        indexStatus: request.body?.indexStatus
-          ? (String(request.body.indexStatus) as never)
-          : undefined,
+        uploadStatus: request.body?.uploadStatus ? (String(request.body.uploadStatus) as never) : undefined,
+        indexStatus: request.body?.indexStatus ? (String(request.body.indexStatus) as never) : undefined,
         tags: Array.isArray(request.body?.tags) ? request.body.tags.map(String) : undefined
       });
       return { status: HttpStatus.CREATED, body: success(source) };
     }
 
-    const knowledgeVersionMatch = request.path.match(
-      /^\/admin\/knowledge\/sources\/([^/]+)\/versions$/
-    );
+    const knowledgeVersionMatch = request.path.match(/^\/admin\/knowledge\/sources\/([^/]+)\/versions$/);
     if (request.method === "POST" && knowledgeVersionMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const version = services.knowledge.submitVersion(user, knowledgeVersionMatch[1], {
@@ -2247,16 +1774,12 @@ export function executePlatformApiRequest(
         contentHash: String(request.body?.contentHash ?? ""),
         changelog: String(request.body?.changelog ?? ""),
         chunkCount: Number(request.body?.chunkCount ?? 0),
-        excerpts: Array.isArray(request.body?.excerpts)
-          ? request.body.excerpts.map(String)
-          : undefined
+        excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
       });
       return { status: HttpStatus.CREATED, body: success(version) };
     }
 
-    const knowledgeApproveMatch = request.path.match(
-      /^\/admin\/knowledge\/versions\/([^/]+)\/approve$/
-    );
+    const knowledgeApproveMatch = request.path.match(/^\/admin\/knowledge\/versions\/([^/]+)\/approve$/);
     if (request.method === "POST" && knowledgeApproveMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const result = services.knowledge.approveVersion(user, {
@@ -2276,9 +1799,7 @@ export function executePlatformApiRequest(
         agentRole: String(request.body?.agentRole ?? "frontend_developer") as never,
         scenario: String(request.body?.scenario ?? "frontend_coding") as never,
         query: request.body?.query ? String(request.body.query) : undefined,
-        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds)
-          ? request.body.requiredKnowledgeSourceIds.map(String)
-          : undefined
+        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds) ? request.body.requiredKnowledgeSourceIds.map(String) : undefined
       });
       return { status: HttpStatus.OK, body: success(result) };
     }
@@ -2312,12 +1833,8 @@ export function executePlatformApiRequest(
         instruction: String(request.body?.instruction ?? ""),
         inputSchema: (request.body?.inputSchema ?? {}) as Record<string, unknown>,
         outputSchema: (request.body?.outputSchema ?? {}) as Record<string, unknown>,
-        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds)
-          ? request.body.requiredKnowledgeSourceIds.map(String)
-          : undefined,
-        allowedTools: Array.isArray(request.body?.allowedTools)
-          ? request.body.allowedTools.map(String)
-          : undefined
+        requiredKnowledgeSourceIds: Array.isArray(request.body?.requiredKnowledgeSourceIds) ? request.body.requiredKnowledgeSourceIds.map(String) : undefined,
+        allowedTools: Array.isArray(request.body?.allowedTools) ? request.body.allowedTools.map(String) : undefined
       });
       return { status: HttpStatus.CREATED, body: success(version) };
     }
@@ -2336,11 +1853,7 @@ export function executePlatformApiRequest(
     const skillDisableMatch = request.path.match(/^\/admin\/skills\/([^/]+)\/disable$/);
     if (request.method === "POST" && skillDisableMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const skill = services.skills.disableSkill(
-        user,
-        skillDisableMatch[1],
-        String(request.body?.reason ?? "")
-      );
+      const skill = services.skills.disableSkill(user, skillDisableMatch[1], String(request.body?.reason ?? ""));
       return { status: HttpStatus.OK, body: success(skill) };
     }
 
@@ -2377,12 +1890,8 @@ export function executePlatformApiRequest(
         diskFreeGb: Number(request.body?.diskFreeGb ?? 0),
         os: request.body?.os ? String(request.body.os) : undefined,
         dockerVersion: request.body?.dockerVersion ? String(request.body.dockerVersion) : undefined,
-        composeVersion: request.body?.composeVersion
-          ? String(request.body.composeVersion)
-          : undefined,
-        portsAvailable: Array.isArray(request.body?.portsAvailable)
-          ? request.body.portsAvailable.map(Number)
-          : undefined,
+        composeVersion: request.body?.composeVersion ? String(request.body.composeVersion) : undefined,
+        portsAvailable: Array.isArray(request.body?.portsAvailable) ? request.body.portsAvailable.map(Number) : undefined,
         dnsReady: Boolean(request.body?.dnsReady),
         tlsReady: Boolean(request.body?.tlsReady),
         networkReady: Boolean(request.body?.networkReady)
@@ -2456,12 +1965,8 @@ export function executePlatformApiRequest(
         backupRunId: String(request.body?.backupRunId ?? ""),
         pitrConfigId: String(request.body?.pitrConfigId ?? ""),
         targetTimestamp: String(request.body?.targetTimestamp ?? ""),
-        validationChecks: Array.isArray(request.body?.validationChecks)
-          ? request.body.validationChecks.map(String)
-          : [],
-        forceFailureChecks: Array.isArray(request.body?.forceFailureChecks)
-          ? request.body.forceFailureChecks.map(String)
-          : undefined
+        validationChecks: Array.isArray(request.body?.validationChecks) ? request.body.validationChecks.map(String) : [],
+        forceFailureChecks: Array.isArray(request.body?.forceFailureChecks) ? request.body.forceFailureChecks.map(String) : undefined
       });
       return { status: HttpStatus.CREATED, body: success(result) };
     }
@@ -2544,12 +2049,7 @@ export function executePlatformApiRequest(
 
     if (request.method === "POST" && request.path === "/admin/security/redaction/preview") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const requestPayload =
-        request.body?.requestPayload &&
-        typeof request.body.requestPayload === "object" &&
-        !Array.isArray(request.body.requestPayload)
-          ? (request.body.requestPayload as Record<string, unknown>)
-          : {};
+      const requestPayload = request.body?.requestPayload && typeof request.body.requestPayload === "object" && !Array.isArray(request.body.requestPayload) ? (request.body.requestPayload as Record<string, unknown>) : {};
       const result = services.securityRelease.redactSensitivePayload(user, {
         classification: String(request.body?.classification ?? "Internal") as never,
         prompt: String(request.body?.prompt ?? ""),
@@ -2607,35 +2107,19 @@ export function executePlatformApiRequest(
         sizeBytes: Number(request.body?.sizeBytes ?? 0),
         sha256: String(request.body?.sha256 ?? ""),
         purpose: request.body?.purpose ? (String(request.body.purpose) as never) : undefined,
-        includeByDefault:
-          request.body?.includeByDefault === undefined
-            ? undefined
-            : Boolean(request.body.includeByDefault)
+        includeByDefault: request.body?.includeByDefault === undefined ? undefined : Boolean(request.body.includeByDefault)
       });
       return { status: HttpStatus.CREATED, body: success(result) };
     }
 
-    const projectFileCompleteMatch = request.path.match(
-      /^\/creator\/projects\/([^/]+)\/files\/([^/]+)\/complete$/
-    );
+    const projectFileCompleteMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/files\/([^/]+)\/complete$/);
     if (request.method === "POST" && projectFileCompleteMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.projectFiles.completeUpload(
-        user,
-        projectFileCompleteMatch[1],
-        projectFileCompleteMatch[2],
-        {
-          scanStatus: request.body?.scanStatus
-            ? (String(request.body.scanStatus) as never)
-            : undefined,
-          extractedText: request.body?.extractedText
-            ? String(request.body.extractedText)
-            : undefined,
-          excerpts: Array.isArray(request.body?.excerpts)
-            ? request.body.excerpts.map(String)
-            : undefined
-        }
-      );
+      const result = services.projectFiles.completeUpload(user, projectFileCompleteMatch[1], projectFileCompleteMatch[2], {
+        scanStatus: request.body?.scanStatus ? (String(request.body.scanStatus) as never) : undefined,
+        extractedText: request.body?.extractedText ? String(request.body.extractedText) : undefined,
+        excerpts: Array.isArray(request.body?.excerpts) ? request.body.excerpts.map(String) : undefined
+      });
       return { status: HttpStatus.OK, body: success(result) };
     }
 
@@ -2653,9 +2137,7 @@ export function executePlatformApiRequest(
       };
     }
 
-    const runtimeSchemaCheckMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/
-    );
+    const runtimeSchemaCheckMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/schema\/check$/);
     if (request.method === "POST" && runtimeSchemaCheckMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
@@ -2684,22 +2166,16 @@ export function executePlatformApiRequest(
       };
     }
 
-    const runtimeOpenApiMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/openapi$/
-    );
+    const runtimeOpenApiMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/openapi$/);
     if (request.method === "GET" && runtimeOpenApiMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
         status: HttpStatus.OK,
-        body: success(
-          services.generatedRuntime.getRuntimeOverview(user, runtimeOpenApiMatch[1]).openApi
-        )
+        body: success(services.generatedRuntime.getRuntimeOverview(user, runtimeOpenApiMatch[1]).openApi)
       };
     }
 
-    const runtimeMigrationDryRunMatch = request.path.match(
-      /^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/
-    );
+    const runtimeMigrationDryRunMatch = request.path.match(/^\/admin\/runtime\/projects\/([^/]+)\/migrations\/dry-run$/);
     if (request.method === "POST" && runtimeMigrationDryRunMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       return {
@@ -2707,9 +2183,7 @@ export function executePlatformApiRequest(
         body: success(
           services.generatedRuntime.runMigrationDryRun(user, runtimeMigrationDryRunMatch[1], {
             migrationId: String(request.body?.migrationId ?? ""),
-            destructiveChanges: Array.isArray(request.body?.destructiveChanges)
-              ? request.body.destructiveChanges.map(String)
-              : [],
+            destructiveChanges: Array.isArray(request.body?.destructiveChanges) ? request.body.destructiveChanges.map(String) : [],
             approvalId: request.body?.approvalId ? String(request.body.approvalId) : undefined
           })
         )
@@ -2778,19 +2252,13 @@ export function executePlatformApiRequest(
       return { status: HttpStatus.CREATED, body: success(session) };
     }
 
-    if (
-      request.method === "POST" &&
-      request.path === "/admin/auth/generated-app/validate-session"
-    ) {
+    if (request.method === "POST" && request.path === "/admin/auth/generated-app/validate-session") {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       services.auth.requireRole(user, ["admin"]);
-      const result = services.authSso.validateGeneratedAppSession(
-        String(request.body?.token ?? ""),
-        {
-          appSlug: String(request.body?.appSlug ?? ""),
-          requiredRole: request.body?.requiredRole ? String(request.body.requiredRole) : undefined
-        }
-      );
+      const result = services.authSso.validateGeneratedAppSession(String(request.body?.token ?? ""), {
+        appSlug: String(request.body?.appSlug ?? ""),
+        requiredRole: request.body?.requiredRole ? String(request.body.requiredRole) : undefined
+      });
       return { status: HttpStatus.OK, body: success(result) };
     }
 
@@ -2830,29 +2298,21 @@ export function executePlatformApiRequest(
       };
     }
 
-    const prdChangeFromTicketMatch = request.path.match(
-      /^\/creator\/projects\/([^/]+)\/prd\/changes\/from-ticket$/
-    );
+    const prdChangeFromTicketMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes\/from-ticket$/);
     if (request.method === "POST" && prdChangeFromTicketMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const change = services.prdChanges.convertTicketToChange(user, prdChangeFromTicketMatch[1], {
         ticketId: String(request.body?.ticketId ?? ""),
         title: String(request.body?.title ?? ""),
         proposedRequirement: String(request.body?.proposedRequirement ?? ""),
-        affectedSections: Array.isArray(request.body?.affectedSections)
-          ? request.body.affectedSections.map(String)
-          : [],
-        acceptanceCriteria: Array.isArray(request.body?.acceptanceCriteria)
-          ? request.body.acceptanceCriteria.map(String)
-          : [],
+        affectedSections: Array.isArray(request.body?.affectedSections) ? request.body.affectedSections.map(String) : [],
+        acceptanceCriteria: Array.isArray(request.body?.acceptanceCriteria) ? request.body.acceptanceCriteria.map(String) : [],
         riskLevel: String(request.body?.riskLevel ?? "medium") as never
       });
       return { status: HttpStatus.CREATED, body: success(change) };
     }
 
-    const prdChangeDecisionMatch = request.path.match(
-      /^\/creator\/projects\/([^/]+)\/prd\/changes\/decision$/
-    );
+    const prdChangeDecisionMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/prd\/changes\/decision$/);
     if (request.method === "POST" && prdChangeDecisionMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const decision = services.prdChanges.decideChange(user, prdChangeDecisionMatch[1], {
@@ -2872,9 +2332,7 @@ export function executePlatformApiRequest(
       };
     }
 
-    const domainRequestMatch = request.path.match(
-      /^\/creator\/projects\/([^/]+)\/domains\/requests$/
-    );
+    const domainRequestMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/domains\/requests$/);
     if (request.method === "POST" && domainRequestMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
       const requestRecord = services.domains.requestPublicDomain(user, domainRequestMatch[1], {
@@ -2949,9 +2407,7 @@ export function executePlatformApiRequest(
         scenario: String(request.body?.scenario ?? "prd_generation") as never,
         primaryProviderId: String(request.body?.primaryProviderId ?? ""),
         primaryModel: String(request.body?.primaryModel ?? ""),
-        fallbackProviderId: request.body?.fallbackProviderId
-          ? String(request.body.fallbackProviderId)
-          : undefined,
+        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
         fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
       });
       return { status: HttpStatus.OK, body: success(route) };
@@ -2971,17 +2427,15 @@ export function executePlatformApiRequest(
     }
 
     if (request.method === "POST" && request.path === "/ai/provider-test-call") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.aiGovernance.testProviderCall(user, {
-        scenario: String(request.body?.scenario ?? "prd_generation") as never,
-        prompt: request.body?.prompt ? String(request.body.prompt) : undefined,
-        requestedTokens:
-          request.body?.requestedTokens === undefined
-            ? undefined
-            : Number(request.body.requestedTokens),
-        dryRun: request.body?.dryRun === undefined ? undefined : Boolean(request.body.dryRun)
+      const result = handleLegacyAiProviderTestCall({
+        request,
+        resolveUser: () => services.auth.resolveCurrentUser(request.headers ?? {}),
+        legacyTest: (user, input) => services.aiGovernance.testProviderCall(user, input)
       });
-      return { status: HttpStatus.CREATED, body: success(result) };
+      return {
+        status: result?.status ?? HttpStatus.NOT_FOUND,
+        body: result?.body ?? failure("NOT_FOUND", "route not found")
+      };
     }
 
     if (request.method === "POST" && request.path === "/guardrails/rules") {
@@ -3021,10 +2475,7 @@ export function executePlatformApiRequest(
   }
 }
 
-async function registerPlatformRoutes(
-  app: INestApplication,
-  services: PersistenceAwarePlatformApiServices
-): Promise<void> {
+async function registerPlatformRoutes(app: INestApplication, services: PersistenceAwarePlatformApiServices): Promise<void> {
   const routes = app.getHttpAdapter().getInstance() as RouteRegistry;
 
   if (services.keycloakUserManagement) {
@@ -3083,9 +2534,7 @@ async function registerPlatformRoutes(
       })
     )
   );
-  registerSetupRoutes(routes, (response, platformRequest) =>
-    sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, platformRequest))
-  );
+  registerSetupRoutes(routes, (response, platformRequest) => sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, platformRequest)));
   routes.post("/auth/login", (request, response) =>
     sendPlatformResponseAsync(
       response,
@@ -3195,20 +2644,10 @@ async function registerPlatformRoutes(
       ) => void
     ) => void;
   };
-  type PreviewReq = Parameters<RawExpress["all"]>[1] extends (req: infer Q, res: infer _S) => void
-    ? Q
-    : never;
-  type PreviewRes = Parameters<RawExpress["all"]>[1] extends (req: infer _Q, res: infer S) => void
-    ? S
-    : never;
+  type PreviewReq = Parameters<RawExpress["all"]>[1] extends (req: infer Q, res: infer _S) => void ? Q : never;
+  type PreviewRes = Parameters<RawExpress["all"]>[1] extends (req: infer _Q, res: infer S) => void ? S : never;
   const rawApp = app.getHttpAdapter().getInstance() as unknown as RawExpress;
-  const sendPreviewUnavailable = (
-    req: PreviewReq,
-    res: PreviewRes,
-    status: number,
-    error: string,
-    message?: string
-  ) => {
+  const sendPreviewUnavailable = (req: PreviewReq, res: PreviewRes, status: number, error: string, message?: string) => {
     if (wantsPreviewJson(req.headers)) {
       res.status(status).json({ error });
       return;
@@ -3220,35 +2659,14 @@ async function registerPlatformRoutes(
   };
   const previewHandler = async (req: PreviewReq, res: PreviewRes) => {
     const slug = String(req.params?.slug ?? "");
-    // Iframes cannot send an Authorization header, so accept a ?token= query param as an
-    // alternative for browser preview embedding. (Local MVP: token appears in the URL —
-    // switch to an httpOnly session cookie for production.)
-    const queryToken = (req.url ?? "").match(/[?&]token=([^&]+)/)?.[1];
-    // Iframe subresources (/_next/*, images) can't carry ?token=, so on the first (page)
-    // request persist the token as a short-lived cookie scoped to this project's preview path;
-    // subsequent asset requests carry the cookie and authenticate. (Local MVP — production
-    // should mint an httpOnly, Secure cookie server-side rather than echo the session token.)
-    const cookieToken = String(req.headers.cookie ?? "").match(
-      /(?:^|;\s*)evcp_preview_token=([^;]+)/
-    )?.[1];
-    const previewToken = queryToken ?? cookieToken;
-    if (queryToken) {
-      res.setHeader(
-        "Set-Cookie",
-        `evcp_preview_token=${queryToken}; Path=/preview/${slug}; HttpOnly; SameSite=Lax`
-      );
-    }
-    const previewHeaders = previewToken
-      ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(previewToken)}` }
-      : req.headers;
+    const cookieToken = String(req.headers.cookie ?? "").match(/(?:^|;\s*)evcp_preview_token=([^;]+)/)?.[1];
+    const previewHeaders = cookieToken ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(cookieToken)}` } : req.headers;
     const decision = await resolvePreviewProxyDecision(services, previewHeaders, slug);
     if ("status" in decision) {
       sendPreviewUnavailable(req, res, decision.status, "preview_unavailable");
       return;
     }
     const target = new URL(decision.upstream);
-    // basePath mode: the workspace Next app runs with basePath=/preview/<slug>, so forward
-    // the FULL path (no prefix strip) — routes AND _next assets resolve back through this proxy.
     const forwardPath = req.originalUrl || "/";
     const forwardHeaders: Record<string, string | string[] | undefined> = {
       ...req.headers,
@@ -3277,13 +2695,7 @@ async function registerPlatformRoutes(
     );
     proxyReq.on("error", () => {
       if (!res.headersSent) {
-        sendPreviewUnavailable(
-          req,
-          res,
-          503,
-          "preview_upstream_unreachable",
-          "The workspace container is booting or installing dependencies. The preview will refresh automatically."
-        );
+        sendPreviewUnavailable(req, res, 503, "preview_upstream_unreachable", "The workspace container is booting or installing dependencies. The preview will refresh automatically.");
       }
     });
     const method = String(req.method ?? "GET").toUpperCase();
@@ -3300,16 +2712,36 @@ async function registerPlatformRoutes(
   rawApp.all("/preview/:slug", previewHandler);
   rawApp.all("/preview/:slug/*splat", previewHandler);
 
-  // NOTE: the shared DockerEngine is not exposed from the orchestrator yet, so
-  // generated shell/file/migration actions still use the generation placeholder.
-  // Shared across the generation loop AND the publish pre-checks so publish sees the migrations the
-  // generation loop actually applied (rather than a fresh, empty store).
-  const sharedMigrationStore = resolveCorePersistenceMode() === "prisma"
-    ? await createPrismaWorkspaceMigrationStore(process.env.DATABASE_URL)
-    : createMemoryMigrationStore();
+  const sharedMigrationStore = resolveCorePersistenceMode() === "prisma" ? await createPrismaWorkspaceMigrationStore(process.env.DATABASE_URL) : createMemoryMigrationStore();
   const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
+    ...(services.governedAiExecutor ? { governedAiExecutor: services.governedAiExecutor } : {}),
+    onGovernedExecution: async (evidence) => {
+      const audit = {
+        actorId: evidence.actorId,
+        action: "ai.workspace_chat.executed",
+        resourceType: "ai_execution",
+        resourceId: evidence.id,
+        metadata: {
+          projectId: evidence.projectId,
+          scenario: evidence.scenario,
+          providerId: evidence.providerId,
+          model: evidence.model,
+          status: evidence.status,
+          fallbackUsed: evidence.fallbackUsed,
+          tokensUsed: evidence.tokensUsed,
+          latencyMs: evidence.latencyMs,
+          costUsd: evidence.costUsd,
+          quotaScope: evidence.quotaScope
+        }
+      };
+      if (services.corePersistence) {
+        await services.corePersistence.recordAudit(audit);
+        return;
+      }
+      services.audit.record(audit);
+    },
     onAudit: (event) =>
       services.audit.record({
         actorId: "system",
@@ -3334,13 +2766,13 @@ async function registerPlatformRoutes(
       }
     },
     resolveAttachmentContext: async (req, projectId, attachmentIds) => {
-      const user = services.auth.resolveCurrentUser((req as { headers?: HeaderBag }).headers ?? {});
-      const project = services.projects.getProjectForActor(user, projectId);
-      const attachmentSelection = services.projectFiles.resolveAttachmentSources(
-        user,
-        project.id,
-        attachmentIds
-      );
+      const user = await resolvePersistenceUser(services, (req as { headers?: HeaderBag }).headers ?? {});
+      const project = services.corePersistence ? await resolvePersistenceProject(services, user, projectId) : services.projects.getProjectForActor(user, projectId);
+      if (services.projectFilePersistence) {
+        const selection = await services.projectFilePersistence.resolveAttachments(project.id, attachmentIds);
+        return { versionIds: selection.versionIds, excerpts: selection.excerpts };
+      }
+      const attachmentSelection = services.projectFiles.resolveAttachmentSources(user, project.id, attachmentIds);
       const retrieval = services.knowledge.retrieve(user, {
         projectId: project.id,
         appId: project.appId,
@@ -3352,30 +2784,18 @@ async function registerPlatformRoutes(
       });
       return {
         versionIds: retrieval.matchedVersionIds,
-        excerpts: retrieval.sources.flatMap((source) =>
-          source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`)
-        )
+        excerpts: retrieval.sources.flatMap((source) => source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`))
       };
     }
   });
-  rawApp.all(
-    "/projects/:projectId/chat",
-    chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
-  );
-  rawApp.all(
-    "/projects/:projectId/chat/history",
-    chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]
-  );
+  rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
+  rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
 
-  // Container-publish + /apps serve routes (staging → production). Real Docker/git/secrets are
-  // wired behind the real-adapter guard inside createDefaultPublishStack; memory mode keeps stubs.
   registerPublishHttpRoutes({
     rawApp,
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
     nodeHttp,
-    // Resolve via persisted auth (resolveWorkspaceAuth handles corePersistence + memory fallback);
-    // the legacy services.projects path 401s for real Postgres-backed sessions.
     resolvePublishAuth: async (headers) => {
       try {
         return await resolveWorkspaceAuth(services, headers ?? {});
@@ -3383,6 +2803,7 @@ async function registerPlatformRoutes(
         return null;
       }
     },
+    canAccessDeployment: (auth, projectId) => canAccessPublishedDeployment(auth, projectId, services.publishStorePersistence),
     recordAudit: (event) =>
       services.audit.record({
         actorId: "system",
@@ -3843,6 +3264,11 @@ async function registerPlatformRoutes(
       })
     )
   );
+  registerDurableAiJobHttpRoutes({
+    routes,
+    respond: sendPlatformResponseAsync,
+    execute: (request) => executePlatformApiRequestAsync(services, request)
+  });
   routes.post("/projects/:projectId/prd/baseline", (request, response) =>
     sendPlatformResponseAsync(
       response,
@@ -3949,19 +3375,28 @@ async function registerPlatformRoutes(
     )
   );
   routes.get("/projects/:projectId/workspace", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace`,
         headers: request.headers
       })
     )
   );
+  registerPreviewSessionRoute({
+    routes,
+    authorize: async (headers, projectId) => {
+      const actor = await resolvePersistenceUser(services, headers);
+      const project = await resolvePersistenceProject(services, actor, projectId);
+      return { previewKey: project.id.replaceAll("_", "-") };
+    },
+    secureCookie: process.env.NODE_ENV === "production"
+  });
   routes.post("/projects/:projectId/workspace/prompts", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace/prompts`,
         headers: request.headers,
@@ -3970,9 +3405,9 @@ async function registerPlatformRoutes(
     )
   );
   routes.post("/projects/:projectId/workspace/preview/refresh", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/workspace/preview/refresh`,
         headers: request.headers,
@@ -4004,10 +3439,8 @@ async function registerPlatformRoutes(
         }
       })();
     },
-    ok: (response, body) =>
-      sendPlatformResponse(response, { status: HttpStatus.OK, body: success(body) }),
-    fail: (response, status, code, message) =>
-      sendPlatformResponse(response, { status, body: failure(code, message) })
+    ok: (response, body) => sendPlatformResponse(response, { status: HttpStatus.OK, body: success(body) }),
+    fail: (response, status, code, message) => sendPlatformResponse(response, { status, body: failure(code, message) })
   });
   routes.get("/projects/:projectId/frontend/checkpoints", (request, response) =>
     sendPlatformResponse(
@@ -4314,8 +3747,6 @@ async function registerPlatformRoutes(
       })
     )
   );
-  // AI governance + guardrail routes share one dispatch shape (sync executor, success/failure
-  // envelope), so register them table-driven to keep this file focused.
   const aiGovernanceRoutes: Array<{ method: "GET" | "POST"; path: PlatformRequest["path"] }> = [
     { method: "GET", path: "/ai/providers" },
     { method: "POST", path: "/ai/providers" },
@@ -4331,9 +3762,9 @@ async function registerPlatformRoutes(
   for (const { method, path } of aiGovernanceRoutes) {
     const verb = method === "GET" ? "get" : "post";
     routes[verb](path, (request, response) =>
-      sendPlatformResponse(
+      sendPlatformResponseAsync(
         response,
-        executePlatformApiRequest(services, {
+        executePlatformApiRequestAsync(services, {
           method,
           path,
           headers: request.headers,
@@ -4344,23 +3775,16 @@ async function registerPlatformRoutes(
   }
 }
 
-export function startWorkspaceIdleSweep(
-  services: PersistenceAwarePlatformApiServices,
-  opts: { intervalMs?: number } = {}
-): { stop(): void } {
+export function startWorkspaceIdleSweep(services: PersistenceAwarePlatformApiServices, opts: { intervalMs?: number } = {}): { stop(): void } {
   return startIdleSweep(services.workspaceOrchestrator, opts);
 }
 
-export async function createPlatformApiApp(
-  services: PersistenceAwarePlatformApiServices = createPlatformApiServices()
-): Promise<INestApplication> {
+export async function createPlatformApiApp(services: PersistenceAwarePlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
   const app = await NestFactory.create(PlatformApiModule, {
     logger: false
   });
 
-  (
-    app as INestApplication & { useBodyParser: (type: "json", options: { limit: string }) => void }
-  ).useBodyParser("json", { limit: "1mb" });
+  (app as INestApplication & { useBodyParser: (type: "json", options: { limit: string }) => void }).useBodyParser("json", { limit: "1mb" });
   app.enableCors({
     origin: true,
     credentials: true

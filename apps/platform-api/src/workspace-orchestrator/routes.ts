@@ -1,10 +1,12 @@
 import type { WorkspaceOrchestrator } from "./orchestrator";
 import { resourceKeyForProject } from "./resource-ports";
+import type { PlatformUser } from "../platform-services";
 
 export interface WorkspaceAuthContext {
   userId: string;
   roles: string[];
   projectIds: string[];
+  actor?: PlatformUser;
 }
 
 interface RouteResponse {
@@ -52,7 +54,7 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
       }
       return {
         status: 200,
-        body: { workspace, secretNames: orchestrator.listSecretNames(input.projectId) }
+        body: { workspace, secretNames: await orchestrator.listSecretNames(input.projectId) }
       };
     },
 

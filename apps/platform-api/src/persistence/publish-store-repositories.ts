@@ -1,289 +1,15 @@
-import type {
-  AppAccessRequest,
-  AppAccessRequestStatus,
-  AppAccessSnapshot,
-  AppInvitation,
-  AppInvitationStatus,
-  AppManifest,
-  AppMemberRecord,
-  AppRoleDefinition,
-  AppStoreRegistryEntry,
-  AppUserType,
-  CreatorTicketInboxItem,
-  DeploymentRecord,
-  InAppNotification,
-  ManagedApp,
-  PlatformProject,
-  PlatformUser,
-  PreviewVersion,
-  PrdVersion,
-  PublishChecklistItem,
-  PublishRequestRecord,
-  PublishResult,
-  PublishReview,
-  StoreAccessRequestResult,
-  StoreAppInstallation,
-  StorefrontAppCard,
-  StorefrontAppDetail,
-  StorefrontHome,
-  SupportTicket,
-  SupportTicketTimelineEntry,
-  TicketPriority,
-  TicketStatus,
-  TicketStatusView,
-  TicketType
-} from "../platform-services";
+import type { AppAccessRequest, AppAccessRequestStatus, AppAccessSnapshot, AppInvitation, AppInvitationStatus, AppManifest, AppMemberRecord, AppRoleDefinition, AppStoreRegistryEntry, AppUserType, CreatorTicketInboxItem, DeploymentRecord, InAppNotification, ManagedApp, PlatformProject, PlatformUser, PrdVersion, PreviewVersion, PublishChecklistItem, PublishRequestRecord, PublishResult, PublishReview, StoreAccessRequestResult, StoreAppInstallation, StorefrontAppCard, StorefrontAppDetail, StorefrontHome, SupportTicket, SupportTicketTimelineEntry, TicketPriority, TicketStatus, TicketStatusView, TicketType } from "../platform-services";
 import { PermissionError, ValidationError } from "../platform-services";
-
-type DateValue = Date | string;
-type JsonValue = unknown;
-
-interface AppRecord {
-  id: string;
-  slug: string;
-  name: string;
-  status: string;
-  projectId: string;
-  databaseSchemaName?: string | null;
-  roles?: AppRoleRecord[];
-  members?: AppMemberRecordData[];
-  invitations?: AppInvitationRecord[];
-  accessRequests?: AppAccessRequestRecord[];
-  createdAt?: DateValue;
-  updatedAt?: DateValue;
-}
-
-interface AppRoleRecord {
-  id: string;
-  appId: string;
-  key: string;
-  name: string;
-  permissions: string[];
-}
-
-interface UserRecord {
-  id: string;
-  email: string;
-  name: string;
-}
-
-interface AppMemberRecordData {
-  appId: string;
-  userId: string;
-  roleId: string;
-  user?: UserRecord;
-  role?: AppRoleRecord;
-  userType?: string;
-  status?: string;
-  lastAccessAt?: DateValue | null;
-}
-
-interface AppInstallationRecord {
-  id: string;
-  appId: string;
-  userId: string;
-  status: string;
-  installedAt: DateValue;
-  disabledAt?: DateValue | null;
-  lastOpenedAt?: DateValue | null;
-}
-
-interface AppInvitationRecord {
-  id: string;
-  appId: string;
-  projectId: string;
-  email: string;
-  userType: string;
-  roleKey: string;
-  invitedByUserId: string;
-  status: string;
-  policyWarning?: string | null;
-  expiresAt?: DateValue | null;
-  note?: string | null;
-  createdAt: DateValue;
-}
-
-interface AppAccessRequestRecord {
-  id: string;
-  appId: string;
-  projectId: string;
-  requesterEmail: string;
-  requestedRoleKey: string;
-  reason: string;
-  status: string;
-  decidedByUserId?: string | null;
-  decidedAt?: DateValue | null;
-  createdAt: DateValue;
-}
-
-interface AppManifestRecord {
-  id: string;
-  appId: string;
-  projectId: string;
-  manifestVersion: string;
-  prdVersionId: string;
-  prdVersion: string;
-  frontendCheckpointId: string;
-  route: string;
-  authMode: string;
-  roleSnapshot: JsonValue;
-  databaseSnapshot: JsonValue;
-  manifest: JsonValue;
-  generatedAt: DateValue;
-}
-
-interface PublishRequestRecordData {
-  id: string;
-  appId: string;
-  projectId: string;
-  status: string;
-  requestedByUserId: string;
-  manifestVersion: string;
-  blockingItems: JsonValue;
-  createdAt: DateValue;
-  publishedAt?: DateValue | null;
-}
-
-interface DeploymentRecordData {
-  id: string;
-  appId: string;
-  projectId: string;
-  publishRequestId: string;
-  status: string;
-  environment: string;
-  route: string;
-  manifestVersion: string;
-  prdVersion: string;
-  frontendCheckpointId: string;
-  publishedByUserId: string;
-  publishedAt: DateValue;
-}
-
-interface AppStoreRegistryEntryRecord {
-  id: string;
-  appId: string;
-  projectId: string;
-  deploymentRecordId: string;
-  slug: string;
-  name: string;
-  route: string;
-  status: string;
-  visibility: string;
-  accessMode: string;
-  roleKeys: string[];
-  ownerUserId: string;
-  manifestVersion: string;
-  publishedAt: DateValue;
-}
-
-interface SupportTicketRecord {
-  id: string;
-  ticketNumber: string;
-  appId: string;
-  appSlug: string;
-  projectId: string;
-  submittedByUserId: string;
-  submittedByEmail: string;
-  type: string;
-  priority: string;
-  title: string;
-  description: string;
-  deviceInfo: string;
-  screenshotUrl?: string | null;
-  status: string;
-  assignedToUserId: string;
-  createdAt: DateValue;
-  updatedAt: DateValue;
-  timeline?: SupportTicketTimelineEntryRecord[];
-}
-
-interface SupportTicketTimelineEntryRecord {
-  id: string;
-  ticketId: string;
-  status: string;
-  label: string;
-  actorUserId: string;
-  occurredAt: DateValue;
-}
-
-interface InAppNotificationRecord {
-  id: string;
-  userId: string;
-  projectId?: string | null;
-  type: string;
-  title: string;
-  body: string;
-  read: boolean;
-  createdAt: DateValue;
-}
-
-export interface PublishStorePersistenceClient {
-  app: {
-    findFirst(args: { where: { projectId?: string; slug?: string; id?: string }; include?: Record<string, unknown> }): Promise<AppRecord | null>;
-    upsert(args: { where: { id: string }; update: Partial<AppRecord>; create: AppRecord; include?: Record<string, unknown> }): Promise<AppRecord>;
-    update(args: { where: { id: string }; data: Partial<AppRecord> }): Promise<AppRecord>;
-  };
-  appRole: {
-    findMany(args: { where: { appId: string } }): Promise<AppRoleRecord[]>;
-    upsert(args: { where: { appId_key: { appId: string; key: string } }; update: Partial<AppRoleRecord>; create: AppRoleRecord }): Promise<AppRoleRecord>;
-  };
-  appMember: {
-    findMany(args: { where: { appId: string }; include?: Record<string, unknown> }): Promise<AppMemberRecordData[]>;
-    create(args: { data: { appId: string; userId: string; roleId: string } }): Promise<AppMemberRecordData>;
-  };
-  appInstallation: {
-    findFirst(args: { where: { appId?: string; userId?: string; status?: string } }): Promise<AppInstallationRecord | null>;
-    findMany(args: { where: { appId?: string; userId?: string; status?: string }; orderBy?: { installedAt?: "asc" | "desc" } }): Promise<AppInstallationRecord[]>;
-    upsert(args: {
-      where: { appId_userId: { appId: string; userId: string } };
-      update: Partial<AppInstallationRecord>;
-      create: AppInstallationRecord;
-    }): Promise<AppInstallationRecord>;
-    update(args: { where: { id: string }; data: Partial<AppInstallationRecord> }): Promise<AppInstallationRecord>;
-  };
-  appInvitation: {
-    findMany(args: { where: { appId?: string; projectId?: string }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<AppInvitationRecord[]>;
-    create(args: { data: AppInvitationRecord }): Promise<AppInvitationRecord>;
-  };
-  appAccessRequest: {
-    findMany(args: { where: { appId?: string; projectId?: string; requesterEmail?: string; status?: string; requestedRoleKey?: string }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<AppAccessRequestRecord[]>;
-    create(args: { data: AppAccessRequestRecord }): Promise<AppAccessRequestRecord>;
-    update(args: { where: { id: string }; data: Partial<AppAccessRequestRecord> }): Promise<AppAccessRequestRecord>;
-  };
-  appManifest: {
-    findFirst(args: { where: { projectId?: string; appId?: string } }): Promise<AppManifestRecord | null>;
-    upsert(args: { where: { appId: string }; update: Partial<AppManifestRecord>; create: AppManifestRecord }): Promise<AppManifestRecord>;
-  };
-  publishRequest: {
-    findMany(args?: { where?: { projectId?: string; appId?: string }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<PublishRequestRecordData[]>;
-    create(args: { data: PublishRequestRecordData }): Promise<PublishRequestRecordData>;
-  };
-  deploymentRecord: {
-    findMany(args: { where: { projectId?: string; appId?: string }; orderBy?: { publishedAt?: "asc" | "desc" } }): Promise<DeploymentRecordData[]>;
-    create(args: { data: DeploymentRecordData }): Promise<DeploymentRecordData>;
-  };
-  appStoreRegistryEntry: {
-    findMany(args?: { where?: { status?: string }; orderBy?: { publishedAt?: "asc" | "desc" } }): Promise<AppStoreRegistryEntryRecord[]>;
-    findFirst(args: { where: { slug?: string; projectId?: string; appId?: string } }): Promise<AppStoreRegistryEntryRecord | null>;
-    upsert(args: { where: { appId: string }; update: Partial<AppStoreRegistryEntryRecord>; create: AppStoreRegistryEntryRecord }): Promise<AppStoreRegistryEntryRecord>;
-  };
-  supportTicket: {
-    findUnique(args: { where: { id: string }; include?: { timeline?: boolean } }): Promise<SupportTicketRecord | null>;
-    findMany(args?: { where?: { projectId?: string; submittedByUserId?: string }; include?: { timeline?: boolean }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<SupportTicketRecord[]>;
-    create(args: { data: SupportTicketRecord }): Promise<SupportTicketRecord>;
-  };
-  supportTicketTimelineEntry: {
-    findMany(args: { where: { ticketId: string }; orderBy?: { occurredAt?: "asc" | "desc" } }): Promise<SupportTicketTimelineEntryRecord[]>;
-    create(args: { data: SupportTicketTimelineEntryRecord }): Promise<SupportTicketTimelineEntryRecord>;
-  };
-  inAppNotification: {
-    findMany(args: { where: { userId: string }; orderBy?: { createdAt?: "asc" | "desc" } }): Promise<InAppNotificationRecord[]>;
-    create(args: { data: InAppNotificationRecord }): Promise<InAppNotificationRecord>;
-  };
-}
+import { canAccessPublishedProject, storeActionsForCard } from "./published-app-access";
+import type { AppAccessRequestRecord, AppInstallationRecord, AppInvitationRecord, AppManifestRecord, AppMemberRecordData, AppRecord, AppRoleRecord, AppStoreRegistryEntryRecord, DateValue, DeploymentRecordData, InAppNotificationRecord, PublishRequestRecordData, PublishStorePersistenceClient, SupportTicketRecord, SupportTicketTimelineEntryRecord, UserRecord } from "./publish-store-persistence-types";
+export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 
 export class PublishStoreRepositoryBackedService {
   constructor(private readonly client: PublishStorePersistenceClient) {}
+
+  async canAccessPublishedProject(actor: PlatformUser, projectId: string): Promise<boolean> {
+    return canAccessPublishedProject(this.client, actor, projectId);
+  }
 
   async getAppAccessSnapshot(actor: PlatformUser, input: { project: PlatformProject }): Promise<AppAccessSnapshot> {
     requireProjectAccess(actor, input.project);
@@ -294,7 +20,14 @@ export class PublishStoreRepositoryBackedService {
 
   async createInvitation(
     actor: PlatformUser,
-    input: { project: PlatformProject; email: string; roleKey: string; userType: AppUserType; expiresAt?: string; note?: string }
+    input: {
+      project: PlatformProject;
+      email: string;
+      roleKey: string;
+      userType: AppUserType;
+      expiresAt?: string;
+      note?: string;
+    },
   ): Promise<AppInvitation> {
     requireProjectAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
@@ -317,15 +50,21 @@ export class PublishStoreRepositoryBackedService {
         expiresAt: input.expiresAt,
         note: input.note,
         policyWarning: isExternal ? "External invite requires approval before app access is activated." : undefined,
-        createdAt: new Date()
-      }
+        createdAt: new Date(),
+      },
     });
     return mapInvitation(record);
   }
 
   async createRole(
     actor: PlatformUser,
-    input: { project: PlatformProject; key: string; name: string; description?: string; permissions?: string[] }
+    input: {
+      project: PlatformProject;
+      key: string;
+      name: string;
+      description?: string;
+      permissions?: string[];
+    },
   ): Promise<AppRoleDefinition> {
     requireProjectAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
@@ -337,22 +76,30 @@ export class PublishStoreRepositoryBackedService {
       update: {
         key,
         name: input.name.trim() || key,
-        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`]
+        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`],
       },
       create: {
         id: `approle_${app.id}_${key}`,
         appId: app.id,
         key,
         name: input.name.trim() || key,
-        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`]
-      }
+        permissions: input.permissions?.length ? input.permissions : [`${input.project.id}:read`],
+      },
     });
     const mapped = (await this.rolesForApp(app.id)).find((candidate) => candidate.id === role.id);
     if (!mapped) throw new ValidationError(`Unknown app role: ${role.id}`);
     return mapped;
   }
 
-  async createAccessRequest(actor: PlatformUser, input: { project: PlatformProject; requesterEmail: string; requestedRoleKey: string; reason: string }): Promise<AppAccessRequest> {
+  async createAccessRequest(
+    actor: PlatformUser,
+    input: {
+      project: PlatformProject;
+      requesterEmail: string;
+      requestedRoleKey: string;
+      reason: string;
+    },
+  ): Promise<AppAccessRequest> {
     requireProjectAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
@@ -363,7 +110,15 @@ export class PublishStoreRepositoryBackedService {
     return mapAccessRequest(record);
   }
 
-  async decideAccessRequest(actor: PlatformUser, input: { project: PlatformProject; requestId: string; decision: "approved" | "rejected"; decidedByUserId?: string }): Promise<AppAccessRequest> {
+  async decideAccessRequest(
+    actor: PlatformUser,
+    input: {
+      project: PlatformProject;
+      requestId: string;
+      decision: "approved" | "rejected";
+      decidedByUserId?: string;
+    },
+  ): Promise<AppAccessRequest> {
     requireProjectAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
@@ -376,8 +131,8 @@ export class PublishStoreRepositoryBackedService {
       data: {
         status: input.decision,
         decidedByUserId: input.decidedByUserId ?? actor.id,
-        decidedAt: new Date()
-      }
+        decidedAt: new Date(),
+      },
     });
     if (input.decision === "approved") {
       await this.addMember(app, request.requesterEmail, request.requestedRoleKey, "internal", "active");
@@ -395,7 +150,7 @@ export class PublishStoreRepositoryBackedService {
       project: input.project,
       manifest,
       checklist,
-      ready: checklist.every((item) => item.status === "pass")
+      ready: checklist.every((item) => item.status === "pass"),
     };
   }
 
@@ -415,17 +170,20 @@ export class PublishStoreRepositoryBackedService {
         manifestVersion: review.manifest.manifestVersion,
         blockingItems,
         createdAt: now,
-        publishedAt: blockingItems.length > 0 ? null : now
-      }
+        publishedAt: blockingItems.length > 0 ? null : now,
+      },
     });
     if (blockingItems.length > 0) throw new ValidationError(`Publish blocked: ${blockingItems.join(", ")}`);
 
     await this.client.appManifest.upsert({
       where: { appId: review.manifest.appId },
       update: manifestRecord(review.manifest),
-      create: manifestRecord(review.manifest)
+      create: manifestRecord(review.manifest),
     });
-    await this.client.app.update({ where: { id: review.manifest.appId }, data: { status: "published" } });
+    await this.client.app.update({
+      where: { id: review.manifest.appId },
+      data: { status: "published" },
+    });
 
     const deploymentCount = (await this.client.deploymentRecord.findMany({ where: { projectId: input.project.id } })).length;
     const deployment = await this.client.deploymentRecord.create({
@@ -441,8 +199,8 @@ export class PublishStoreRepositoryBackedService {
         prdVersion: review.manifest.prd.version,
         frontendCheckpointId: review.manifest.frontend.checkpointId,
         publishedByUserId: actor.id,
-        publishedAt: now
-      }
+        publishedAt: now,
+      },
     });
     const registryEntry = await this.client.appStoreRegistryEntry.upsert({
       where: { appId: review.manifest.appId },
@@ -457,7 +215,7 @@ export class PublishStoreRepositoryBackedService {
         roleKeys: review.manifest.roles.map((role) => role.key),
         ownerUserId: input.project.ownerUserId,
         manifestVersion: review.manifest.manifestVersion,
-        publishedAt: now
+        publishedAt: now,
       },
       create: {
         id: `store_${review.manifest.app.slug}`,
@@ -473,21 +231,24 @@ export class PublishStoreRepositoryBackedService {
         roleKeys: review.manifest.roles.map((role) => role.key),
         ownerUserId: input.project.ownerUserId,
         manifestVersion: review.manifest.manifestVersion,
-        publishedAt: now
-      }
+        publishedAt: now,
+      },
     });
 
     return {
       publishRequest: mapPublishRequest(publishRequest),
       deployment: mapDeployment(deployment),
       registryEntry: mapRegistry(registryEntry),
-      manifest: review.manifest
+      manifest: review.manifest,
     };
   }
 
   async listRegistry(actor: PlatformUser): Promise<AppStoreRegistryEntry[]> {
     requireAnyRole(actor, ["admin", "creator", "end_user"]);
-    const records = await this.client.appStoreRegistryEntry.findMany({ where: { status: "published" }, orderBy: { publishedAt: "asc" } });
+    const records = await this.client.appStoreRegistryEntry.findMany({
+      where: { status: "published" },
+      orderBy: { publishedAt: "asc" },
+    });
     return records.map(mapRegistry);
   }
 
@@ -498,11 +259,11 @@ export class PublishStoreRepositoryBackedService {
     return {
       profile: {
         userName: actor.name,
-        email: actor.email
+        email: actor.email,
       },
       myApps: cards.filter((card) => card.installStatus === "installed"),
       availableApps: cards.filter((card) => card.installStatus !== "installed"),
-      notifications
+      notifications,
     };
   }
 
@@ -518,7 +279,7 @@ export class PublishStoreRepositoryBackedService {
       accessMode: entry.accessMode,
       releaseNotes: ["Published from persisted manifest", "WFH leave type and manager approval preview are available"],
       supportContact: "Creator User",
-      actions: this.storeActionsForCard(card)
+      actions: storeActionsForCard(card),
     };
   }
 
@@ -527,14 +288,16 @@ export class PublishStoreRepositoryBackedService {
     const entry = await this.requireRegistryEntry(input.appSlug);
     const member = await this.getMemberForEmail(entry.appId, actor.email);
     if (!member) throw new PermissionError(`App ${input.appSlug} requires active access before install`);
-    const existing = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
+    const existing = await this.client.appInstallation.findFirst({
+      where: { appId: entry.appId, userId: actor.id },
+    });
     const now = new Date();
     const record = await this.client.appInstallation.upsert({
       where: { appId_userId: { appId: entry.appId, userId: actor.id } },
       update: {
         status: "active",
         disabledAt: null,
-        lastOpenedAt: now
+        lastOpenedAt: now,
       },
       create: {
         id: `appinst_${entry.appId}_${actor.id}`,
@@ -543,8 +306,8 @@ export class PublishStoreRepositoryBackedService {
         status: "active",
         installedAt: existing?.installedAt ?? now,
         disabledAt: null,
-        lastOpenedAt: now
-      }
+        lastOpenedAt: now,
+      },
     });
     return mapInstallation(record, entry, actor);
   }
@@ -552,14 +315,16 @@ export class PublishStoreRepositoryBackedService {
   async uninstallStoreApp(actor: PlatformUser, input: { appSlug: string }): Promise<StoreAppInstallation> {
     requireAnyRole(actor, ["end_user"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
-    const existing = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
+    const existing = await this.client.appInstallation.findFirst({
+      where: { appId: entry.appId, userId: actor.id },
+    });
     if (!existing || existing.status !== "active") throw new ValidationError(`App ${input.appSlug} is not installed`);
     const record = await this.client.appInstallation.update({
       where: { id: existing.id },
       data: {
         status: "disabled",
-        disabledAt: new Date()
-      }
+        disabledAt: new Date(),
+      },
     });
     return mapInstallation(record, entry, actor);
   }
@@ -567,11 +332,30 @@ export class PublishStoreRepositoryBackedService {
   async requestStoreAccess(actor: PlatformUser, input: { appSlug: string; requestedRoleKey: string; reason: string; department?: string }): Promise<StoreAccessRequestResult> {
     requireAnyRole(actor, ["end_user"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
-    const app = await this.ensureApp({ id: entry.projectId, name: entry.name, status: "published", ownerUserId: entry.ownerUserId, appType: "Workflow App", businessProblem: "", targetDepartment: "HR Department", intendedUsers: [], dataSensitivity: "internal", appId: entry.appId, createdAt: entry.publishedAt });
+    const app = await this.ensureApp({
+      id: entry.projectId,
+      name: entry.name,
+      status: "published",
+      ownerUserId: entry.ownerUserId,
+      appType: "Workflow App",
+      businessProblem: "",
+      targetDepartment: "HR Department",
+      intendedUsers: [],
+      dataSensitivity: "internal",
+      appId: entry.appId,
+      createdAt: entry.publishedAt,
+    });
     await this.requireRoleKey(app.id, input.requestedRoleKey);
-    const existing = (await this.client.appAccessRequest.findMany({
-      where: { appId: app.id, requesterEmail: actor.email, requestedRoleKey: input.requestedRoleKey, status: "pending" }
-    }))[0];
+    const existing = (
+      await this.client.appAccessRequest.findMany({
+        where: {
+          appId: app.id,
+          requesterEmail: actor.email,
+          requestedRoleKey: input.requestedRoleKey,
+          status: "pending",
+        },
+      })
+    )[0];
     const record = existing ?? (await this.createAccessRequestRecord(app, entry.projectId, actor.email, input.requestedRoleKey, input.reason));
     return {
       id: record.id,
@@ -581,13 +365,21 @@ export class PublishStoreRepositoryBackedService {
       status: "pending",
       reason: record.reason,
       department: input.department,
-      createdAt: toIsoString(record.createdAt)
+      createdAt: toIsoString(record.createdAt),
     };
   }
 
   async createTicket(
     actor: PlatformUser,
-    input: { appSlug: string; type: TicketType; priority: TicketPriority; title: string; description: string; deviceInfo: string; screenshotUrl?: string }
+    input: {
+      appSlug: string;
+      type: TicketType;
+      priority: TicketPriority;
+      title: string;
+      description: string;
+      deviceInfo: string;
+      screenshotUrl?: string;
+    },
   ): Promise<SupportTicket> {
     requireAnyRole(actor, ["end_user"]);
     const detail = await this.canSubmitTicket(actor, input.appSlug);
@@ -602,7 +394,7 @@ export class PublishStoreRepositoryBackedService {
       status: "submitted",
       label: "Ticket submitted",
       actorUserId: actor.id,
-      occurredAt: now
+      occurredAt: now,
     };
     const ticket = await this.client.supportTicket.create({
       data: {
@@ -623,8 +415,8 @@ export class PublishStoreRepositoryBackedService {
         assignedToUserId: detail.ownerUserId,
         createdAt: now,
         updatedAt: now,
-        timeline: [timeline]
-      }
+        timeline: [timeline],
+      },
     });
     await this.client.supportTicketTimelineEntry.create({ data: timeline });
     return mapTicket({ ...ticket, timeline: [timeline] });
@@ -641,21 +433,30 @@ export class PublishStoreRepositoryBackedService {
 
   async listCreatorInbox(actor: PlatformUser, projectId: string): Promise<CreatorTicketInboxItem[]> {
     requireAnyRole(actor, ["admin", "creator"]);
-    const tickets = await this.client.supportTicket.findMany({ where: { projectId }, include: { timeline: true }, orderBy: { createdAt: "asc" } });
-    return Promise.all(tickets.map(async (ticket) => {
-      const mapped = mapTicket(ticket);
-      const detail = await this.getStoreAppDetail({ ...actor, role: "end_user", email: mapped.submittedByEmail }, mapped.appSlug);
-      return {
-        ...mapped,
-        appName: detail.name,
-        actions: ["reply", "convert_to_prd_change", "convert_to_ai_prompt", "resolve"]
-      };
-    }));
+    const tickets = await this.client.supportTicket.findMany({
+      where: { projectId },
+      include: { timeline: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return Promise.all(
+      tickets.map(async (ticket) => {
+        const mapped = mapTicket(ticket);
+        const detail = await this.getStoreAppDetail({ ...actor, role: "end_user", email: mapped.submittedByEmail }, mapped.appSlug);
+        return {
+          ...mapped,
+          appName: detail.name,
+          actions: ["reply", "convert_to_prd_change", "convert_to_ai_prompt", "resolve"],
+        };
+      }),
+    );
   }
 
   async getLatestDeploymentForProject(actor: PlatformUser, project: PlatformProject): Promise<DeploymentRecord> {
     requireProjectAccess(actor, project);
-    const deployments = await this.client.deploymentRecord.findMany({ where: { projectId: project.id }, orderBy: { publishedAt: "asc" } });
+    const deployments = await this.client.deploymentRecord.findMany({
+      where: { projectId: project.id },
+      orderBy: { publishedAt: "asc" },
+    });
     const deployment = deployments.at(-1);
     if (!deployment) throw new ValidationError(`No deployment record for project ${project.id}`);
     return mapDeployment(deployment);
@@ -677,15 +478,21 @@ export class PublishStoreRepositoryBackedService {
   private async snapshot(project: PlatformProject, app: ManagedApp): Promise<AppAccessSnapshot> {
     const roles = await this.rolesForApp(app.id);
     const members = await this.membersForApp(app.id);
-    const invitations = await this.client.appInvitation.findMany({ where: { appId: app.id }, orderBy: { createdAt: "asc" } });
-    const accessRequests = await this.client.appAccessRequest.findMany({ where: { appId: app.id }, orderBy: { createdAt: "asc" } });
+    const invitations = await this.client.appInvitation.findMany({
+      where: { appId: app.id },
+      orderBy: { createdAt: "asc" },
+    });
+    const accessRequests = await this.client.appAccessRequest.findMany({
+      where: { appId: app.id },
+      orderBy: { createdAt: "asc" },
+    });
     return {
       project,
       app,
       roles,
       members,
       invitations: invitations.map(mapInvitation),
-      accessRequests: accessRequests.map(mapAccessRequest)
+      accessRequests: accessRequests.map(mapAccessRequest),
     };
   }
 
@@ -697,7 +504,7 @@ export class PublishStoreRepositoryBackedService {
         slug: id,
         name: project.name,
         projectId: project.id,
-        databaseSchemaName: `app_${slugToId(project.id)}`
+        databaseSchemaName: `app_${slugToId(project.id)}`,
       },
       create: {
         id,
@@ -705,8 +512,8 @@ export class PublishStoreRepositoryBackedService {
         name: project.name,
         status: project.status === "published" ? "published" : "draft",
         projectId: project.id,
-        databaseSchemaName: `app_${slugToId(project.id)}`
-      }
+        databaseSchemaName: `app_${slugToId(project.id)}`,
+      },
     });
     return mapApp(record);
   }
@@ -721,13 +528,16 @@ export class PublishStoreRepositoryBackedService {
           create: {
             ...role,
             id: `approle_${app.id}_${role.key}`,
-            appId: app.id
-          }
+            appId: app.id,
+          },
         });
       }
     }
 
-    const members = await this.client.appMember.findMany({ where: { appId: app.id }, include: { user: true, role: true } });
+    const members = await this.client.appMember.findMany({
+      where: { appId: app.id },
+      include: { user: true, role: true },
+    });
     if (members.length === 0) {
       await this.addMember(app, "creator@company.com", "hr_admin", "internal", "active", project.ownerUserId);
       await this.addMember(app, "user@company.com", "employee", "internal", "active", "usr_end_user");
@@ -745,8 +555,8 @@ export class PublishStoreRepositoryBackedService {
           invitedByUserId: project.ownerUserId,
           status: "pending",
           note: "Join manager approval queue",
-          createdAt: new Date("2026-08-17T09:00:00.000Z")
-        }
+          createdAt: new Date("2026-08-17T09:00:00.000Z"),
+        },
       });
     }
 
@@ -760,8 +570,8 @@ export class PublishStoreRepositoryBackedService {
           requestedRoleKey: "manager",
           reason: "Needs approval queue access",
           status: "pending",
-          createdAt: new Date("2026-08-17T10:00:00.000Z")
-        }
+          createdAt: new Date("2026-08-17T10:00:00.000Z"),
+        },
       });
     }
   }
@@ -778,28 +588,32 @@ export class PublishStoreRepositoryBackedService {
         slug: app.slug,
         name: app.name,
         route: app.route,
-        status: app.status
+        status: app.status,
       },
       prd: {
         versionId: baseline.isBaseline ? baseline.id : "",
-        version: baseline.isBaseline ? baseline.version : ""
+        version: baseline.isBaseline ? baseline.version : "",
       },
       frontend: {
         checkpointId: preview.version === "preview-0000" ? "" : preview.id,
         version: preview.version === "preview-0000" ? "" : preview.version,
         checksum: `sha256:${slugToId(preview.id).padEnd(16, "0")}`,
-        routes: [`/apps/${app.slug}`, `/apps/${app.slug}/leave-requests`]
+        routes: [`/apps/${app.slug}`, `/apps/${app.slug}/leave-requests`],
       },
       auth: {
         mode: "platform_auth_sdk",
-        accessMode: "restricted"
+        accessMode: "restricted",
       },
-      roles: roles.map((role) => ({ key: role.key, name: role.name, permissions: [...role.permissions] })),
+      roles: roles.map((role) => ({
+        key: role.key,
+        name: role.name,
+        permissions: [...role.permissions],
+      })),
       database: {
         schemaName: `app_${slugToId(project.id)}`,
-        tables: ["leave_requests", "approval_steps", "leave_balances"]
+        tables: ["leave_requests", "approval_steps", "leave_balances"],
       },
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
     };
   }
 
@@ -810,38 +624,41 @@ export class PublishStoreRepositoryBackedService {
         key: "prd_baseline",
         label: "PRD baseline",
         status: manifest.prd.versionId ? "pass" : "fail",
-        detail: manifest.prd.versionId ? `Baseline ${manifest.prd.version}` : "Confirm PRD baseline before publishing"
+        detail: manifest.prd.versionId ? `Baseline ${manifest.prd.version}` : "Confirm PRD baseline before publishing",
       },
       {
         key: "active_frontend",
         label: "Active frontend checkpoint",
         status: manifest.frontend.checkpointId && manifest.frontend.version ? "pass" : "fail",
-        detail: manifest.frontend.checkpointId ? manifest.frontend.version : "Generate or restore an active frontend checkpoint"
+        detail: manifest.frontend.checkpointId ? manifest.frontend.version : "Generate or restore an active frontend checkpoint",
       },
       {
         key: "app_roles",
         label: "App roles",
         status: manifest.roles.length > 0 ? "pass" : "fail",
-        detail: manifest.roles.length > 0 ? `${manifest.roles.length} roles configured` : "Create at least one app role"
+        detail: manifest.roles.length > 0 ? `${manifest.roles.length} roles configured` : "Create at least one app role",
       },
       {
         key: "app_owner",
         label: "At least one owner",
         status: project.ownerUserId || members.some((member) => member.roleKey === "hr_admin") ? "pass" : "fail",
-        detail: project.ownerUserId ? `Owner ${project.ownerUserId}` : "Assign an owner before publishing"
+        detail: project.ownerUserId ? `Owner ${project.ownerUserId}` : "Assign an owner before publishing",
       },
       {
         key: "blocking_guardrail",
         label: "No blocking guardrail event",
         status: "pass",
-        detail: "No blocking guardrail event is attached to this publish review"
-      }
+        detail: "No blocking guardrail event is attached to this publish review",
+      },
     ];
   }
 
   private async rolesForApp(appId: string): Promise<AppRoleDefinition[]> {
     const roles = await this.client.appRole.findMany({ where: { appId } });
-    const members = await this.client.appMember.findMany({ where: { appId }, include: { user: true, role: true } });
+    const members = await this.client.appMember.findMany({
+      where: { appId },
+      include: { user: true, role: true },
+    });
     return roles.map((role) => ({
       id: role.id,
       appId: role.appId,
@@ -849,12 +666,15 @@ export class PublishStoreRepositoryBackedService {
       name: role.name,
       description: defaultRoleDescription(role.key),
       permissions: [...role.permissions],
-      memberCount: members.filter((member) => member.roleId === role.id).length
+      memberCount: members.filter((member) => member.roleId === role.id).length,
     }));
   }
 
   private async membersForApp(appId: string): Promise<AppMemberRecord[]> {
-    const records = await this.client.appMember.findMany({ where: { appId }, include: { user: true, role: true } });
+    const records = await this.client.appMember.findMany({
+      where: { appId },
+      include: { user: true, role: true },
+    });
     return records.map(mapMember);
   }
 
@@ -863,7 +683,9 @@ export class PublishStoreRepositoryBackedService {
   }
 
   private async getPendingRequestForEmail(appId: string, email: string, roleKey?: string): Promise<AppAccessRequest | undefined> {
-    const requests = await this.client.appAccessRequest.findMany({ where: { appId, requesterEmail: email, status: "pending", requestedRoleKey: roleKey } });
+    const requests = await this.client.appAccessRequest.findMany({
+      where: { appId, requesterEmail: email, status: "pending", requestedRoleKey: roleKey },
+    });
     return requests[0] ? mapAccessRequest(requests[0]) : undefined;
   }
 
@@ -878,7 +700,9 @@ export class PublishStoreRepositoryBackedService {
     const existing = (await this.membersForApp(app.id)).find((member) => member.email === email && member.roleKey === roleKey);
     if (existing) return existing;
     const user = defaultUserRecord(userId, email);
-    await this.client.appMember.create({ data: { appId: app.id, userId: user.id, roleId: role.id } });
+    await this.client.appMember.create({
+      data: { appId: app.id, userId: user.id, roleId: role.id },
+    });
     return {
       id: `appmem_${app.id}_${user.id}_${role.id}`,
       appId: app.id,
@@ -890,7 +714,7 @@ export class PublishStoreRepositoryBackedService {
       roleKey: role.key,
       roleName: role.name,
       status,
-      lastAccessAt: status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
+      lastAccessAt: status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined,
     };
   }
 
@@ -905,8 +729,8 @@ export class PublishStoreRepositoryBackedService {
         requestedRoleKey,
         reason: reason.trim() || "Access requested from App Store",
         status: "pending",
-        createdAt: new Date()
-      }
+        createdAt: new Date(),
+      },
     });
   }
 
@@ -917,7 +741,10 @@ export class PublishStoreRepositoryBackedService {
   }
 
   private async requireTicket(ticketId: string): Promise<SupportTicket> {
-    const ticket = await this.client.supportTicket.findUnique({ where: { id: ticketId }, include: { timeline: true } });
+    const ticket = await this.client.supportTicket.findUnique({
+      where: { id: ticketId },
+      include: { timeline: true },
+    });
     if (!ticket) throw new ValidationError(`Unknown ticket: ${ticketId}`);
     return mapTicket(ticket);
   }
@@ -925,7 +752,9 @@ export class PublishStoreRepositoryBackedService {
   private async toCard(actor: PlatformUser, entry: AppStoreRegistryEntry): Promise<StorefrontAppCard> {
     const member = await this.getMemberForEmail(entry.appId, actor.email);
     const pending = await this.getPendingRequestForEmail(entry.appId, actor.email);
-    const installation = await this.client.appInstallation.findFirst({ where: { appId: entry.appId, userId: actor.id } });
+    const installation = await this.client.appInstallation.findFirst({
+      where: { appId: entry.appId, userId: actor.id },
+    });
     const accessStatus = member ? "active" : pending ? "pending" : "available";
     const installStatus = installation?.status === "active" ? "installed" : installation ? "disabled" : "not_installed";
     return {
@@ -945,18 +774,15 @@ export class PublishStoreRepositoryBackedService {
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
       lastUpdated: entry.publishedAt,
-      primaryAction: installStatus === "installed" ? "open" : accessStatus === "active" ? "install" : accessStatus === "pending" ? "view_status" : "request_access"
+      primaryAction: installStatus === "installed" ? "open" : accessStatus === "active" ? "install" : accessStatus === "pending" ? "view_status" : "request_access",
     };
   }
 
-  private storeActionsForCard(card: StorefrontAppCard): StorefrontAppDetail["actions"] {
-    if (card.installStatus === "installed") return ["open", "uninstall", "submit_ticket", "send_feedback"];
-    if (card.accessStatus === "active") return ["install", "submit_ticket", "send_feedback"];
-    return card.accessStatus === "pending" ? ["view_status"] : ["request_access"];
-  }
-
   private async ensureNotifications(actor: PlatformUser, cards: StorefrontAppCard[]): Promise<InAppNotification[]> {
-    const existing = await this.client.inAppNotification.findMany({ where: { userId: actor.id }, orderBy: { createdAt: "asc" } });
+    const existing = await this.client.inAppNotification.findMany({
+      where: { userId: actor.id },
+      orderBy: { createdAt: "asc" },
+    });
     if (existing.length === 0) {
       for (const card of cards) {
         await this.client.inAppNotification.create({
@@ -968,12 +794,17 @@ export class PublishStoreRepositoryBackedService {
             title: `${card.name} is available`,
             body: card.accessStatus === "active" ? "You can open this app from My Apps." : "Request access from the app detail page.",
             read: false,
-            createdAt: card.lastUpdated
-          }
+            createdAt: card.lastUpdated,
+          },
         });
       }
     }
-    return (await this.client.inAppNotification.findMany({ where: { userId: actor.id }, orderBy: { createdAt: "asc" } })).map(mapNotification);
+    return (
+      await this.client.inAppNotification.findMany({
+        where: { userId: actor.id },
+        orderBy: { createdAt: "asc" },
+      })
+    ).map(mapNotification);
   }
 }
 
@@ -1006,21 +837,23 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
   private readonly ticketTimeline: SupportTicketTimelineEntryRecord[] = [];
   private readonly notifications: InAppNotificationRecord[] = [];
 
-  constructor(seed: Partial<{
-    apps: AppRecord[];
-    roles: AppRoleRecord[];
-    members: AppMemberRecordData[];
-    installations: AppInstallationRecord[];
-    invitations: AppInvitationRecord[];
-    accessRequests: AppAccessRequestRecord[];
-    manifests: AppManifestRecord[];
-    publishRequests: PublishRequestRecordData[];
-    deployments: DeploymentRecordData[];
-    registry: AppStoreRegistryEntryRecord[];
-    tickets: SupportTicketRecord[];
-    ticketTimeline: SupportTicketTimelineEntryRecord[];
-    notifications: InAppNotificationRecord[];
-  }> = {}) {
+  constructor(
+    seed: Partial<{
+      apps: AppRecord[];
+      roles: AppRoleRecord[];
+      members: AppMemberRecordData[];
+      installations: AppInstallationRecord[];
+      invitations: AppInvitationRecord[];
+      accessRequests: AppAccessRequestRecord[];
+      manifests: AppManifestRecord[];
+      publishRequests: PublishRequestRecordData[];
+      deployments: DeploymentRecordData[];
+      registry: AppStoreRegistryEntryRecord[];
+      tickets: SupportTicketRecord[];
+      ticketTimeline: SupportTicketTimelineEntryRecord[];
+      notifications: InAppNotificationRecord[];
+    }> = {},
+  ) {
     this.apps = seed.apps ?? [];
     this.roles = seed.roles ?? [];
     this.members = seed.members ?? [];
@@ -1047,7 +880,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         this.apps.push(create);
         return create;
       },
-      update: async ({ where, data }) => updateById(this.apps, where.id, data, "app")
+      update: async ({ where, data }) => updateById(this.apps, where.id, data, "app"),
     };
     this.appRole = {
       findMany: async ({ where }) => this.roles.filter((role) => role.appId === where.appId),
@@ -1060,19 +893,28 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         }
         this.roles.push(create);
         return create;
-      }
+      },
     };
     this.appMember = {
       findMany: async ({ where }) => this.members.filter((member) => member.appId === where.appId).map((member) => this.withMemberRelations(member)),
       create: async ({ data }) => {
-        const member = { ...data, user: defaultUserRecord(data.userId), role: this.roles.find((role) => role.id === data.roleId) };
+        const member = {
+          ...data,
+          user: defaultUserRecord(data.userId),
+          role: this.roles.find((role) => role.id === data.roleId),
+        };
         this.members.push(member);
         return this.withMemberRelations(member);
-      }
+      },
     };
     this.appInstallation = {
       findFirst: async ({ where }) => this.installations.find((installation) => matchesInstallation(installation, where)) ?? null,
-      findMany: async ({ where, orderBy }) => sortByDate(this.installations.filter((installation) => matchesInstallation(installation, where)), "installedAt", orderBy?.installedAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.installations.filter((installation) => matchesInstallation(installation, where)),
+          "installedAt",
+          orderBy?.installedAt,
+        ),
       upsert: async ({ where, update, create }) => {
         const index = this.installations.findIndex((installation) => installation.appId === where.appId_userId.appId && installation.userId === where.appId_userId.userId);
         if (index >= 0) {
@@ -1083,22 +925,32 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         this.installations.push(create);
         return create;
       },
-      update: async ({ where, data }) => updateById(this.installations, where.id, data, "app installation")
+      update: async ({ where, data }) => updateById(this.installations, where.id, data, "app installation"),
     };
     this.appInvitation = {
-      findMany: async ({ where, orderBy }) => sortByDate(this.invitations.filter((invitation) => matchesAppScoped(invitation, where)), "createdAt", orderBy?.createdAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.invitations.filter((invitation) => matchesAppScoped(invitation, where)),
+          "createdAt",
+          orderBy?.createdAt,
+        ),
       create: async ({ data }) => {
         this.invitations.push(data);
         return data;
-      }
+      },
     };
     this.appAccessRequest = {
-      findMany: async ({ where, orderBy }) => sortByDate(this.accessRequests.filter((request) => matchesAccessRequest(request, where)), "createdAt", orderBy?.createdAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.accessRequests.filter((request) => matchesAccessRequest(request, where)),
+          "createdAt",
+          orderBy?.createdAt,
+        ),
       create: async ({ data }) => {
         this.accessRequests.push(data);
         return data;
       },
-      update: async ({ where, data }) => updateById(this.accessRequests, where.id, data, "app access request")
+      update: async ({ where, data }) => updateById(this.accessRequests, where.id, data, "app access request"),
     };
     this.appManifest = {
       findFirst: async ({ where }) => this.manifests.find((manifest) => (!where.projectId || manifest.projectId === where.projectId) && (!where.appId || manifest.appId === where.appId)) ?? null,
@@ -1111,24 +963,39 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         }
         this.manifests.push(create);
         return create;
-      }
+      },
     };
     this.publishRequest = {
-      findMany: async (args = {}) => sortByDate(this.publishRequests.filter((record) => matchesAppScoped(record, args.where ?? {})), "createdAt", args.orderBy?.createdAt),
+      findMany: async (args = {}) =>
+        sortByDate(
+          this.publishRequests.filter((record) => matchesAppScoped(record, args.where ?? {})),
+          "createdAt",
+          args.orderBy?.createdAt,
+        ),
       create: async ({ data }) => {
         this.publishRequests.push(data);
         return data;
-      }
+      },
     };
     this.deploymentRecord = {
-      findMany: async ({ where, orderBy }) => sortByDate(this.deployments.filter((record) => matchesAppScoped(record, where)), "publishedAt", orderBy?.publishedAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.deployments.filter((record) => matchesAppScoped(record, where)),
+          "publishedAt",
+          orderBy?.publishedAt,
+        ),
       create: async ({ data }) => {
         this.deployments.push(data);
         return data;
-      }
+      },
     };
     this.appStoreRegistryEntry = {
-      findMany: async (args = {}) => sortByDate(this.registry.filter((entry) => !args.where?.status || entry.status === args.where.status), "publishedAt", args.orderBy?.publishedAt),
+      findMany: async (args = {}) =>
+        sortByDate(
+          this.registry.filter((entry) => !args.where?.status || entry.status === args.where.status),
+          "publishedAt",
+          args.orderBy?.publishedAt,
+        ),
       findFirst: async ({ where }) => this.registry.find((entry) => (!where.slug || entry.slug === where.slug) && (!where.projectId || entry.projectId === where.projectId) && (!where.appId || entry.appId === where.appId)) ?? null,
       upsert: async ({ where, update, create }) => {
         const index = this.registry.findIndex((entry) => entry.appId === where.appId);
@@ -1139,34 +1006,49 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         }
         this.registry.push(create);
         return create;
-      }
+      },
     };
     this.supportTicket = {
       findUnique: async ({ where }) => {
         const ticket = this.tickets.find((candidate) => candidate.id === where.id);
         return ticket ? this.withTicketTimeline(ticket) : null;
       },
-      findMany: async (args = {}) => sortByDate(this.tickets.filter((ticket) => matchesTicket(ticket, args.where ?? {})), "createdAt", args.orderBy?.createdAt).map((ticket) => this.withTicketTimeline(ticket)),
+      findMany: async (args = {}) =>
+        sortByDate(
+          this.tickets.filter((ticket) => matchesTicket(ticket, args.where ?? {})),
+          "createdAt",
+          args.orderBy?.createdAt,
+        ).map((ticket) => this.withTicketTimeline(ticket)),
       create: async ({ data }) => {
         const { timeline, ...ticket } = data;
         this.tickets.push(ticket);
         if (timeline) this.ticketTimeline.push(...timeline);
         return this.withTicketTimeline(ticket);
-      }
+      },
     };
     this.supportTicketTimelineEntry = {
-      findMany: async ({ where, orderBy }) => sortByDate(this.ticketTimeline.filter((entry) => entry.ticketId === where.ticketId), "occurredAt", orderBy?.occurredAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.ticketTimeline.filter((entry) => entry.ticketId === where.ticketId),
+          "occurredAt",
+          orderBy?.occurredAt,
+        ),
       create: async ({ data }) => {
         if (!this.ticketTimeline.some((entry) => entry.id === data.id)) this.ticketTimeline.push(data);
         return data;
-      }
+      },
     };
     this.inAppNotification = {
-      findMany: async ({ where, orderBy }) => sortByDate(this.notifications.filter((notification) => notification.userId === where.userId), "createdAt", orderBy?.createdAt),
+      findMany: async ({ where, orderBy }) =>
+        sortByDate(
+          this.notifications.filter((notification) => notification.userId === where.userId),
+          "createdAt",
+          orderBy?.createdAt,
+        ),
       create: async ({ data }) => {
         this.notifications.push(data);
         return data;
-      }
+      },
     };
   }
 
@@ -1174,14 +1056,14 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
     return {
       ...member,
       user: member.user ?? defaultUserRecord(member.userId),
-      role: member.role ?? this.roles.find((role) => role.id === member.roleId)
+      role: member.role ?? this.roles.find((role) => role.id === member.roleId),
     };
   }
 
   private withTicketTimeline(ticket: Omit<SupportTicketRecord, "timeline">): SupportTicketRecord {
     return {
       ...ticket,
-      timeline: this.ticketTimeline.filter((entry) => entry.ticketId === ticket.id).sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime())
+      timeline: this.ticketTimeline.filter((entry) => entry.ticketId === ticket.id).sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime()),
     };
   }
 }
@@ -1190,12 +1072,15 @@ export function createPublishStoreRepositoryBackedService(client: PublishStorePe
   return new PublishStoreRepositoryBackedService(client);
 }
 
-export async function createPrismaPublishStorePersistence(databaseUrl = process.env.DATABASE_URL): Promise<{ client: PublishStorePersistenceClient; service: PublishStoreRepositoryBackedService }> {
+export async function createPrismaPublishStorePersistence(databaseUrl = process.env.DATABASE_URL): Promise<{
+  client: PublishStorePersistenceClient;
+  service: PublishStoreRepositoryBackedService;
+}> {
   const { PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined) as unknown as PublishStorePersistenceClient;
   return {
     client,
-    service: new PublishStoreRepositoryBackedService(client)
+    service: new PublishStoreRepositoryBackedService(client),
   };
 }
 
@@ -1206,7 +1091,7 @@ function mapApp(record: AppRecord): ManagedApp {
     slug: record.slug,
     name: record.name,
     status: normalizeAppStatus(record.status),
-    route: `/apps/${record.slug}`
+    route: `/apps/${record.slug}`,
   };
 }
 
@@ -1224,7 +1109,7 @@ function mapMember(record: AppMemberRecordData): AppMemberRecord {
     roleKey: role?.key ?? "employee",
     roleName: role?.name ?? "Employee",
     status: normalizeMemberStatus(record.status),
-    lastAccessAt: record.lastAccessAt ? toIsoString(record.lastAccessAt) : new Date("2026-08-20T09:00:00.000Z").toISOString()
+    lastAccessAt: record.lastAccessAt ? toIsoString(record.lastAccessAt) : new Date("2026-08-20T09:00:00.000Z").toISOString(),
   };
 }
 
@@ -1241,7 +1126,7 @@ function mapInvitation(record: AppInvitationRecord): AppInvitation {
     expiresAt: record.expiresAt ? toIsoString(record.expiresAt) : undefined,
     note: record.note ?? undefined,
     policyWarning: record.policyWarning ?? undefined,
-    createdAt: toIsoString(record.createdAt)
+    createdAt: toIsoString(record.createdAt),
   };
 }
 
@@ -1256,7 +1141,7 @@ function mapAccessRequest(record: AppAccessRequestRecord): AppAccessRequest {
     status: normalizeAccessRequestStatus(record.status),
     decidedByUserId: record.decidedByUserId ?? undefined,
     decidedAt: record.decidedAt ? toIsoString(record.decidedAt) : undefined,
-    createdAt: toIsoString(record.createdAt)
+    createdAt: toIsoString(record.createdAt),
   };
 }
 
@@ -1271,7 +1156,7 @@ function mapInstallation(record: AppInstallationRecord, entry: AppStoreRegistryE
     status: record.status === "disabled" ? "disabled" : "active",
     installedAt: toIsoString(record.installedAt),
     disabledAt: record.disabledAt ? toIsoString(record.disabledAt) : undefined,
-    lastOpenedAt: record.lastOpenedAt ? toIsoString(record.lastOpenedAt) : undefined
+    lastOpenedAt: record.lastOpenedAt ? toIsoString(record.lastOpenedAt) : undefined,
   };
 }
 
@@ -1285,7 +1170,7 @@ function mapPublishRequest(record: PublishRequestRecordData): PublishRequestReco
     manifestVersion: record.manifestVersion,
     blockingItems: Array.isArray(record.blockingItems) ? record.blockingItems.map(String) : [],
     createdAt: toIsoString(record.createdAt),
-    publishedAt: record.publishedAt ? toIsoString(record.publishedAt) : undefined
+    publishedAt: record.publishedAt ? toIsoString(record.publishedAt) : undefined,
   };
 }
 
@@ -1302,7 +1187,7 @@ function mapDeployment(record: DeploymentRecordData): DeploymentRecord {
     prdVersion: record.prdVersion,
     frontendCheckpointId: record.frontendCheckpointId,
     publishedByUserId: record.publishedByUserId,
-    publishedAt: toIsoString(record.publishedAt)
+    publishedAt: toIsoString(record.publishedAt),
   };
 }
 
@@ -1321,7 +1206,7 @@ function mapRegistry(record: AppStoreRegistryEntryRecord): AppStoreRegistryEntry
     ownerUserId: record.ownerUserId,
     deploymentId: record.deploymentRecordId,
     manifestVersion: record.manifestVersion,
-    publishedAt: toIsoString(record.publishedAt)
+    publishedAt: toIsoString(record.publishedAt),
   };
 }
 
@@ -1336,9 +1221,9 @@ function mapManifest(record: AppManifestRecord): AppManifest {
     prd: { versionId: record.prdVersionId, version: record.prdVersion },
     frontend: { checkpointId: record.frontendCheckpointId, version: "", checksum: "", routes: [] },
     auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
-    roles: Array.isArray(record.roleSnapshot) ? record.roleSnapshot as AppManifest["roles"] : [],
-    database: record.databaseSnapshot && typeof record.databaseSnapshot === "object" ? record.databaseSnapshot as AppManifest["database"] : { schemaName: "", tables: [] },
-    generatedAt: toIsoString(record.generatedAt)
+    roles: Array.isArray(record.roleSnapshot) ? (record.roleSnapshot as AppManifest["roles"]) : [],
+    database: record.databaseSnapshot && typeof record.databaseSnapshot === "object" ? (record.databaseSnapshot as AppManifest["database"]) : { schemaName: "", tables: [] },
+    generatedAt: toIsoString(record.generatedAt),
   };
 }
 
@@ -1356,7 +1241,7 @@ function manifestRecord(manifest: AppManifest): AppManifestRecord {
     roleSnapshot: manifest.roles,
     databaseSnapshot: manifest.database,
     manifest,
-    generatedAt: new Date(manifest.generatedAt)
+    generatedAt: new Date(manifest.generatedAt),
   };
 }
 
@@ -1379,7 +1264,7 @@ function mapTicket(record: SupportTicketRecord): SupportTicket {
     assignedToUserId: record.assignedToUserId,
     createdAt: toIsoString(record.createdAt),
     updatedAt: toIsoString(record.updatedAt),
-    timeline: (record.timeline ?? []).map(mapTimeline)
+    timeline: (record.timeline ?? []).map(mapTimeline),
   };
 }
 
@@ -1390,7 +1275,7 @@ function mapTimeline(record: SupportTicketTimelineEntryRecord): SupportTicketTim
     status: normalizeTicketStatus(record.status),
     label: record.label,
     actorId: record.actorUserId,
-    occurredAt: toIsoString(record.occurredAt)
+    occurredAt: toIsoString(record.occurredAt),
   };
 }
 
@@ -1402,7 +1287,7 @@ function mapNotification(record: InAppNotificationRecord): InAppNotification {
     title: record.title,
     body: record.body,
     read: record.read,
-    createdAt: toIsoString(record.createdAt)
+    createdAt: toIsoString(record.createdAt),
   };
 }
 
@@ -1419,7 +1304,11 @@ function defaultRoles(projectSlug: string): Array<Omit<AppRoleRecord, "id" | "ap
   return [
     { key: "employee", name: "Employee", permissions: ["leave:request", "leave:view-own"] },
     { key: "manager", name: "Manager", permissions: ["leave:approve", "leave:view-team"] },
-    { key: "hr_admin", name: "HR Admin", permissions: ["leave:admin", "leave:report", `${projectSlug}:admin`] }
+    {
+      key: "hr_admin",
+      name: "HR Admin",
+      permissions: ["leave:admin", "leave:report", `${projectSlug}:admin`],
+    },
   ];
 }
 
@@ -1495,7 +1384,16 @@ function matchesAppScoped(record: { appId?: string; projectId?: string }, where:
   return true;
 }
 
-function matchesAccessRequest(record: AppAccessRequestRecord, where: { appId?: string; projectId?: string; requesterEmail?: string; status?: string; requestedRoleKey?: string }): boolean {
+function matchesAccessRequest(
+  record: AppAccessRequestRecord,
+  where: {
+    appId?: string;
+    projectId?: string;
+    requesterEmail?: string;
+    status?: string;
+    requestedRoleKey?: string;
+  },
+): boolean {
   if (!matchesAppScoped(record, where)) return false;
   if (where.requesterEmail && record.requesterEmail !== where.requesterEmail) return false;
   if (where.status && record.status !== where.status) return false;
@@ -1536,7 +1434,10 @@ function toIsoString(value: DateValue): string {
 }
 
 function slugToId(slug: string): string {
-  return slug.replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  return slug
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 }
 
 function slugId(prefix: string, value: string): string {

@@ -141,6 +141,10 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setMessage(`Guardrail active: ${rule.name}`);
     return rule;
   };
+  const testProvider = async (input: Parameters<PlatformApiClient["testAiProvider"]>[0]) => {
+    const readyClient = requireReadyClient();
+    return readyClient.testAiProvider(input);
+  };
   return {
     availability: visibleAvailability,
     message: visibleMessage,
@@ -150,6 +154,7 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     saveApiKey,
     configureRoute,
     configureQuota,
-    createGuardrailRule
+    createGuardrailRule,
+    testProvider
   };
 }

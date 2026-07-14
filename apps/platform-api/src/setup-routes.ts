@@ -98,6 +98,27 @@ export async function resolveSetupRequest(
     }
 
     const id = `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const bootstrapAdmin = {
+      id,
+      email,
+      name,
+      role: "admin" as const,
+      status: "active" as const,
+      permissions: getMockPermissions("admin")
+    };
+
+    // A completed private-server setup must leave an account that can actually use the
+    // configured OIDC login. Local credentials exist only for legacy/internal flows;
+    // Keycloak owns interactive sign-in.
+    if (services.keycloakUserManagement) {
+      await services.keycloakUserManagement.create(bootstrapAdmin, {
+        email,
+        name,
+        role: "admin",
+        temporaryPassword: password
+      });
+    }
+
     const created = await createUserWithRole(corePersistenceClient, {
       id,
       email,
@@ -116,12 +137,9 @@ export async function resolveSetupRequest(
     }
 
     services.identity.registerUser({
+      ...bootstrapAdmin,
       id: created.id,
-      email: created.email,
-      name: created.name,
-      role: "admin",
-      status: created.status as PlatformUser["status"],
-      permissions: getMockPermissions("admin")
+      status: created.status as PlatformUser["status"]
     } as PlatformUser);
 
     await businessSettingsPersistence.completeSetup({

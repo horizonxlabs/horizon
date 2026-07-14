@@ -18,6 +18,7 @@ export interface DevContainerSpec {
 }
 
 export function buildDevContainerSpec(input: {
+  projectId?: string;
   slug: string;
   image: string;
   env: Record<string, string>;
@@ -37,7 +38,11 @@ export function buildDevContainerSpec(input: {
       NetworkMode: input.network,
       Binds: [`${input.workspaceVolume}:/workspace`]
     },
-    labels: { "evcp.managed": "true", "evcp.project-slug": input.slug },
+    labels: {
+      "evcp.managed": "true",
+      "evcp.project-slug": input.slug,
+      ...(input.projectId ? { "evcp.project-id": input.projectId } : {})
+    },
     exposedPort: 3000,
     publishPorts: false
   };
@@ -117,6 +122,12 @@ export interface DockerEngine {
     labels: Record<string, string>;
     env: string[];
   } | null>;
+  listManagedContainers(): Promise<Array<{
+    containerId: string;
+    name: string;
+    running: boolean;
+    labels: Record<string, string>;
+  }>>;
   execInContainer(
     containerId: string,
     cmd: string[]
@@ -199,6 +210,16 @@ export function createMemoryDockerEngine(): DockerEngine & {
             env: [...container.spec.env]
           }
         : null;
+    },
+    async listManagedContainers() {
+      return state.containers
+        .filter((container) => container.spec.labels["evcp.managed"] === "true")
+        .map((container) => ({
+          containerId: container.containerId,
+          name: container.spec.name,
+          running: container.status === "running",
+          labels: { ...container.spec.labels }
+        }));
     },
     async execInContainer(containerId, cmd) {
       find(containerId);

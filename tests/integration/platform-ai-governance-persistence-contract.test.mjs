@@ -81,9 +81,14 @@ test("runtime persistence wiring exposes AI governance service and routes", () =
   assert.match(appFactory, /aiGovernancePersistence\?: AiGovernanceRepositoryBackedService/);
   assert.match(
     appFactory,
-    /createAiGovernanceRepositoryBackedService\(\s*new MemoryAiGovernancePersistenceClient\(\)\s*\)/
+    /const aiClient = new MemoryAiGovernancePersistenceClient\(\);[\s\S]*createAiGovernanceRepositoryBackedService\(\s*aiClient\s*\)[\s\S]*createPersistedGovernedAiExecutor\(aiClient\)/
   );
-  assert.match(appFactory, /createPrismaAiGovernancePersistence\(\s*env\.DATABASE_URL\s*\)/);
+  assert.match(
+    appFactory,
+    /createPrismaAiGovernancePersistence\(\s*env\.DATABASE_URL\s*,\s*productionAiSecretStore\s*\)/
+  );
+  assert.match(appFactory, /new VaultKvV2AiSecretStore/);
+  assert.match(appFactory, /new UnavailableAiSecretStore/);
   assert.match(appFactory, /isPersistenceAiGovernanceRoute/);
   assert.match(persistenceDoc, /AI Governance Route-Level Coverage/);
 });

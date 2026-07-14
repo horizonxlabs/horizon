@@ -211,7 +211,8 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
     "Submit Ticket",
     "Ticket Status",
     "No ticket yet",
-    "Ticket submitted",
+    "Install",
+    "Open",
     "Offline"
   ]) {
     assert.match(storeSource, new RegExp(text));
@@ -219,9 +220,9 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
 
   for (const text of [
     "Creator Ticket Inbox",
-    "Convert to PRD Change",
-    "Convert to AI Prompt",
-    "Resolve"
+    "PRD Change Requests",
+    "No local PRD change records",
+    "Convert a ticket through the governed API"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }

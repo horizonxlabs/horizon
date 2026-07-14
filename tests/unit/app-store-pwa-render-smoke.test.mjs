@@ -23,8 +23,12 @@ test("shared platform client remains generic while storefront owns Store configu
   ]);
 
   assert.match(sharedClient, /createConfiguredPlatformApiClient/);
+  assert.match(sharedClient, /\(configured \|\| "\/api"\)\.replace/);
+  assert.doesNotMatch(sharedClient, /!configured && import\.meta\.env\.DEV \? undefined/);
   assert.doesNotMatch(sharedClient, /createStorePlatformClient|@company\.com/);
   assert.match(storefrontClient, /createStorePlatformClient/);
   assert.match(storefrontClient, /startStoreKeycloakLogin/);
+  assert.match(storefrontClient, /startStoreKeycloakLogout/);
+  assert.match(storefrontClient, /startKeycloakLogout/);
   assert.doesNotMatch(storefrontClient, /legacyUserEmail|user@company\.com/);
 });

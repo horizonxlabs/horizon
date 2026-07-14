@@ -10,7 +10,7 @@ import type { CreatorProjectView } from "@/shared/types";
 import { loadWorkspaceState } from "./api";
 import { useProjectFiles } from "./use-project-files";
 import { useVibeChat } from "./use-vibe-chat";
-import { fallbackWorkspacePromptResult, workspaceViewState } from "./workspace-view-state";
+import { workspaceViewState } from "./workspace-view-state";
 import { normalizeWorkspaceMode, persistWorkspaceMode, readWorkspaceMode } from "./workspace-mode";
 
 function browserStorage() {
@@ -23,7 +23,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
   const [workspaceResult, setWorkspaceResult] = useState<WorkspacePromptResultDto>();
   const [previewOverride, setPreviewOverride] = useState<PreviewVersionDto>();
   const [workspaceMessage, setWorkspaceMessage] = useState(
-    "Using deterministic local workspace evidence until Platform API is configured."
+    "Loading workspace state from Platform API."
   );
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
   const [vibeTab, setVibeTab] = useState<"preview" | "code" | "database">("preview");
@@ -79,23 +79,11 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
           : "Prompt accepted. Workspace preview and token evidence updated from Platform API."
       );
     } catch (error) {
-      if (error instanceof Error && error.message.includes("not configured")) {
-        setWorkspaceResult(
-          fallbackWorkspacePromptResult({
-            selectedProjectId: selectedProject.id,
-            promptDraft,
-            selectedFallbackPreview: view.selectedFallbackPreview
-          })
-        );
-        setPreviewOverride(undefined);
-        setWorkspaceMessage(
-          "Local fallback generated deterministic workspace evidence. Configure Platform API to persist it."
-        );
-      } else {
-        setWorkspaceMessage(
-          "Prompt failed. Existing preview was preserved; check Platform API logs for details."
-        );
-      }
+      setWorkspaceMessage(
+        error instanceof Error
+          ? `Prompt failed. Existing preview was preserved. ${error.message}`
+          : "Prompt failed. Existing preview was preserved; check Platform API logs for details."
+      );
     } finally {
       setIsSubmittingPrompt(false);
     }
@@ -109,12 +97,11 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
       );
       setWorkspaceMessage("Preview refreshed from Platform API.");
     } catch (error) {
-      if (error instanceof Error && error.message.includes("not configured")) {
-        setPreviewOverride(view.visiblePreview);
-        setWorkspaceMessage("Local fallback preview refreshed deterministically.");
-      } else {
-        setWorkspaceMessage("Preview refresh failed. Existing preview remains visible.");
-      }
+      setWorkspaceMessage(
+        error instanceof Error
+          ? `Preview refresh failed. Existing preview remains visible. ${error.message}`
+          : "Preview refresh failed. Existing preview remains visible."
+      );
     } finally {
       setIsRefreshingPreview(false);
     }

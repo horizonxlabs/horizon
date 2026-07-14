@@ -45,7 +45,7 @@ flowchart LR
   C["App Store PWA"] --> D
   D --> E[("PostgreSQL")]
   D --> F["Keycloak / SSO"]
-  D --> G["AI Provider Gateway"]
+  D --> G["OpenBao + AI Provider Gateway"]
   D --> H["Redis + MinIO"]
   D --> I["Generated App Runtime"]
 ```
@@ -135,10 +135,38 @@ pnpm check:changed --base origin/main
 
 - [Platform service design](./docs/architecture/platform-service-design.md)
 - [Private-server installation](./docs/operations/real-mvp-install.md)
+- [AI provider secret-store runbook](./docs/operations/ai-secret-store.md)
 - [Production candidate readiness](./docs/delivery/production-candidate-readiness.md)
 
-## Current Status
+## MVP Progress
 
-Horizon includes the Sprint 0–14 MVP and production-hardening foundation: governed AI workflows, creator-to-publish lifecycle, App Store feedback loop, identity and runtime controls, knowledge governance, install/backup operations, observability, licensing, and security release readiness.
+**Status legend:** ✅ complete foundation or implemented path · 🟡 in progress / requires pilot verification · ⛔ blocked by an environment or product decision.
 
-The private-server install and core persistence work is in progress. Refer to the [installation guide](./docs/operations/real-mvp-install.md) for the supported path and remaining mock-to-real work.
+Detailed, phase-by-phase release work is tracked in the authoritative [MVP pending-task checklist](./docs/MVP_PENDING_TASKS.md). The summary below is intentionally concise and does not replace its exit gates.
+
+### Completed foundation
+
+- ✅ pnpm monorepo with Admin Console, Creator App, App Store PWA, Platform API, shared packages, Prisma migrations, Compose, and automated verification.
+- ✅ Private-stack components for PostgreSQL, Redis, MinIO, Keycloak, LiteLLM, Caddy, Platform API, and all three product surfaces.
+- ✅ API-backed core product flows, including key Admin, Creator, publishing, App Store, audit, and ticket paths, with fail-closed behavior when live data is unavailable.
+- ✅ Governed AI execution: provider routing and fallback, scoped quota accounting, guardrails, timeout/retry/circuit-breaker controls, and persisted sanitized evidence for usage, latency, tokens, and cost.
+- ✅ PostgreSQL-backed platform session verification, refresh/logout/revocation APIs, frontend refresh lifecycle, and Admin session management UI.
+- ✅ Restart-safe PostgreSQL AI job worker with encrypted payloads, lease recovery/heartbeat, request idempotency, and persisted execution evidence.
+- ✅ Project file/attachment metadata in Prisma with object payloads in MinIO; Creator no longer treats legacy in-memory upload state as authoritative.
+- ✅ Immutable generation checkpoints in PostgreSQL, migration-aware rollback protection, restart rehydration, and safe orphan-workspace cleanup.
+- ✅ Release ingress publishes only Caddy HTTP/HTTPS; generated apps remain internal and require Platform Auth plus active app/project membership.
+- ✅ Local real-Keycloak browser proof for Admin, Creator, and App Store plus live Anthropic calls for all six governed scenarios, quota/guardrail blocking, and fallback recovery.
+
+### In progress: pilot proof
+
+- 🟡 Repeat the proven local Creator-first flows on the clean pilot hostname: live AI change, token-free preview session, publish, and end-user access.
+- 🟡 Promote the successful local restart, encrypted PostgreSQL/MinIO restore, and provider-outage drills to the operator-owned pilot environment; add registry rollback evidence.
+- 🟡 Retire remaining legacy-only regression services after every consumer has moved to the Prisma/runtime path.
+
+### Required before a production pilot
+
+- ⛔ Confirm the Phase 0 cutline and environment ownership: DNS/TLS, container registry, backup destination and retention, target IdP, AI provider/model, and release evidence owner.
+- ⛔ Initialize operator-owned OpenBao/KMS credentials and an external encrypted backup destination before accepting customer data; the local proof volume is not production ownership.
+- 🟡 Close remaining persistence, isolation, security, backup/restore, and rollback gates in the checklist before declaring the MVP pilot-ready.
+
+For installation steps and current operational boundaries, see [the private-server installation guide](./docs/operations/real-mvp-install.md).

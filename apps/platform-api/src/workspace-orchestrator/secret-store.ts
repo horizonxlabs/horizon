@@ -11,11 +11,11 @@ interface StoredSecret {
 }
 
 export interface ProjectSecretStore {
-  put(projectId: string, name: string, value: string): void;
-  listNames(projectId: string): string[];
-  resolveEnv(projectId: string): Record<string, string>;
-  rotate(projectId: string, name: string, value: string): void;
-  removeAll(projectId: string): void;
+  put(projectId: string, name: string, value: string): Promise<void>;
+  listNames(projectId: string): Promise<string[]>;
+  resolveEnv(projectId: string): Promise<Record<string, string>>;
+  rotate(projectId: string, name: string, value: string): Promise<void>;
+  removeAll(projectId: string): Promise<void>;
   /** Load persisted (encrypted) secrets from the at-rest store into memory. Awaited at startup. */
   hydrate(): Promise<void>;
 }
@@ -31,12 +31,8 @@ export function createProjectSecretStore(opts: {
   const persistence = opts.persistence;
   const byProject = new Map<string, Map<string, StoredSecret>>();
 
-  // Write-through to the at-rest store is best-effort: the in-memory Map is authoritative for the
-  // running process; persistence is the restart backup. Failures are logged, never thrown.
-  const persist = (projectId: string, secret: StoredSecret) => {
-    void persistence?.upsert({ projectId, ...secret }).catch((error: unknown) => {
-      console.warn(`[secret-store] persist failed for ${projectId}/${secret.name}:`, error);
-    });
+  const persist = async (projectId: string, secret: StoredSecret) => {
+    await persistence?.upsert({ projectId, ...secret });
   };
 
   const encrypt = (value: string) => {
@@ -69,27 +65,27 @@ export function createProjectSecretStore(opts: {
   };
 
   return {
-    put(projectId, name, value) {
+    async put(projectId, name, value) {
       const secret: StoredSecret = {
         name,
         ...encrypt(value),
         rotatedAt: null,
         createdAt: new Date().toISOString()
       };
+      await persist(projectId, secret);
       bucketFor(projectId).set(name, secret);
-      persist(projectId, secret);
     },
-    listNames(projectId) {
+    async listNames(projectId) {
       return [...bucketFor(projectId).keys()];
     },
-    resolveEnv(projectId) {
+    async resolveEnv(projectId) {
       const env: Record<string, string> = {};
       for (const secret of bucketFor(projectId).values()) {
         env[secret.name] = decrypt(secret);
       }
       return env;
     },
-    rotate(projectId, name, value) {
+    async rotate(projectId, name, value) {
       const existing = bucketFor(projectId).get(name);
       const secret: StoredSecret = {
         name,
@@ -97,14 +93,12 @@ export function createProjectSecretStore(opts: {
         rotatedAt: new Date().toISOString(),
         createdAt: existing?.createdAt ?? new Date().toISOString()
       };
+      await persist(projectId, secret);
       bucketFor(projectId).set(name, secret);
-      persist(projectId, secret);
     },
-    removeAll(projectId) {
+    async removeAll(projectId) {
+      await persistence?.deleteAll(projectId);
       byProject.delete(projectId);
-      void persistence?.deleteAll(projectId).catch((error: unknown) => {
-        console.warn(`[secret-store] delete failed for ${projectId}:`, error);
-      });
     },
     async hydrate() {
       if (!persistence) return;

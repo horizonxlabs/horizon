@@ -266,28 +266,24 @@ test("Sprint 8 API exposes monitoring dashboard and filtered audit log", () => {
   assert.ok(audit.body.data.every((event) => event.action === "prd.change.approved"));
 });
 
-test("Sprint 8 UI exposes ticket-to-PRD domain traceability monitoring and demo surfaces", () => {
+test("Sprint 8 UI exposes fail-closed ticket changes and API-backed operational evidence", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
   const adminSource = readAllSourceFiles("apps/admin-web/src");
 
   for (const text of [
-    "Ticket-to-PRD Change",
+    "Tickets & Changes",
+    "Creator Ticket Inbox",
     "PRD Change Requests",
-    "Domain Settings",
-    "Public Domain Request",
-    "Deployment Traceability",
-    "MVP Demo Checklist",
-    "Approve PRD Change",
-    "Reject PRD Change"
+    "No local PRD change records",
+    "Convert a ticket through the governed API"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   for (const text of [
     "AuditEvidenceSection",
-    "Service Health",
+    "Service health",
     "Audit Filters",
-    "domainRequestRows",
     "Platform API"
   ]) {
     assert.match(adminSource, new RegExp(text));

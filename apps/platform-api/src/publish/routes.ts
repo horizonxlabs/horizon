@@ -101,7 +101,7 @@ export function createPublishRoutes(deps: {
   };
 }
 
-export type AppsResolution = { ok: true; upstream: string } | { ok: false; status: 404 | 503 };
+export type AppsResolution = { ok: true; upstream: string; projectId: string } | { ok: false; status: 404 | 503 };
 
 export async function resolveAppsTarget(
   deployments: DeploymentStore,
@@ -120,5 +120,5 @@ export async function resolveAppsTarget(
   }
   // Both deployed tiers are public once healthy. Publish, rollback, promote, and deployment-list
   // routes remain member-authorized; this route only exposes a completed app to its users.
-  return { ok: true, upstream: `http://evcp-${environment}-${slug}:3000` };
+  return { ok: true, upstream: `http://evcp-${environment}-${slug}:3000`, projectId: current.projectId };
 }

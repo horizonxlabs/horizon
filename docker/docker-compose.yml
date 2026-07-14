@@ -5,6 +5,7 @@ x-evcp-node-service: &evcp-node-service
   working_dir: /workspace
   volumes:
     - ..:/workspace
+    - evcp_node_modules:/workspace/node_modules
     - evcp_pnpm_store:/workspace/.pnpm-store
   command: sh -lc "corepack enable && pnpm install --frozen-lockfile"
 
@@ -106,6 +107,9 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
       KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
+      EVCP_ADMIN_WEB_URL: ${EVCP_ADMIN_WEB_URL:-http://localhost:8088}
+      EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:-http://localhost:8088}
+      EVCP_STORE_WEB_URL: ${EVCP_STORE_WEB_URL:-http://localhost:8088}
     entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
     volumes:
       - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
@@ -124,6 +128,7 @@ services:
       - "${EVCP_API_PORT:-3100}:3100"
     volumes:
       - ..:/workspace
+      - evcp_node_modules:/workspace/node_modules
       - evcp_pnpm_store:/workspace/.pnpm-store
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -142,6 +147,8 @@ services:
       EVCP_S3_HOST: minio
       EVCP_S3_PORT: "9000"
       EVCP_S3_SSL: "false"
+      EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:-http://localhost:9000}
+      EVCP_AI_JOB_ENCRYPTION_KEY: ${EVCP_AI_JOB_ENCRYPTION_KEY:-}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"
@@ -233,8 +240,6 @@ services:
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
@@ -246,6 +251,7 @@ volumes:
   evcp_minio_data:
   evcp_caddy_data:
   evcp_caddy_config:
+  evcp_node_modules:
   evcp_pnpm_store:
 
 networks:

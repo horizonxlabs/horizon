@@ -83,6 +83,15 @@ export class KeycloakOidcService {
     };
   }
 
+  logout(app: PlatformApp, returnTo: string): string {
+    const safeReturnTo = this.requireAllowedReturnTo(app, returnTo);
+    const params = new URLSearchParams({
+      client_id: this.deps.config.platformClientId,
+      post_logout_redirect_uri: safeReturnTo
+    });
+    return `${this.deps.config.issuerUrl}/protocol/openid-connect/logout?${params}`;
+  }
+
   async complete(input: { code: string; state: string }): Promise<OidcLoginResult> {
     const transaction = this.consumeTransaction(input.state);
     if (!input.code?.trim()) throw new Error("invalid_oidc_code");

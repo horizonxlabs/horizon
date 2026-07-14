@@ -10,6 +10,7 @@ import {
   MemoryAiGovernancePersistenceClient,
   createAiGovernanceRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
+import { createPersistedGovernedAiExecutor } from "../../apps/platform-api/src/ai-governance/execution-runtime.ts";
 import {
   MemoryPrdPersistenceClient,
   createPrdRepositoryBackedService
@@ -18,26 +19,32 @@ import {
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 
-function createPersistentServices(coreClient, aiClient, prdClient) {
+async function createPersistentServices(coreClient, aiClient, prdClient) {
+  const aiGovernance = createAiGovernanceRepositoryBackedService(aiClient);
   const services = {
     ...createPlatformApiServices(),
     corePersistence: createCoreRepositoryBackedService(coreClient),
-    aiGovernancePersistence: createAiGovernanceRepositoryBackedService(aiClient),
-    prdPersistence: createPrdRepositoryBackedService(prdClient)
+    aiGovernancePersistence: aiGovernance,
+    prdPersistence: createPrdRepositoryBackedService(prdClient),
+    governedAiExecutor: createPersistedGovernedAiExecutor(aiClient, {
+      fetcher: async () => new Response(JSON.stringify({
+        choices: [{ message: { content: "Governed AI PRD summary" } }],
+        usage: { total_tokens: 137 }
+      }), { status: 200, headers: { "content-type": "application/json" } })
+    })
   };
-  seedLegacyAiGatewayRoute(services);
+  await seedPersistedAiGatewayRoute(aiGovernance, services.auth.resolveCurrentUser(adminHeaders));
   return services;
 }
 
-function seedLegacyAiGatewayRoute(services) {
-  const admin = services.auth.resolveCurrentUser(adminHeaders);
-  const provider = services.aiGovernance.createProvider(admin, {
+async function seedPersistedAiGatewayRoute(aiGovernance, admin) {
+  const provider = await aiGovernance.createProvider(admin, {
     name: "OpenAI PRD Persisted",
     adapter: "openai",
     baseUrl: "https://api.openai.com/v1",
     models: ["gpt-4.1-mini"]
   });
-  services.aiGovernance.createApiKey(admin, {
+  await aiGovernance.createApiKey(admin, {
     providerId: provider.id,
     name: "PRD Runtime Key",
     secret: "secret-that-must-not-return",
@@ -45,12 +52,12 @@ function seedLegacyAiGatewayRoute(services) {
     quotaTokens: 100000,
     fallbackPriority: 1
   });
-  services.aiGovernance.configureRoute(admin, {
+  await aiGovernance.configureRoute(admin, {
     scenario: "prd_generation",
     primaryProviderId: provider.id,
     primaryModel: "gpt-4.1-mini"
   });
-  services.aiGovernance.configureQuota(admin, {
+  await aiGovernance.configureQuota(admin, {
     scope: "creator",
     dailyLimit: 1000,
     monthlyLimit: 30000,
@@ -64,7 +71,7 @@ test("runtime memory persistence keeps PRD draft and baseline across service rec
   const coreClient = new MemoryCorePersistenceClient();
   const aiClient = new MemoryAiGovernancePersistenceClient();
   const prdClient = new MemoryPrdPersistenceClient();
-  const firstServices = createPersistentServices(coreClient, aiClient, prdClient);
+  const firstServices = await createPersistentServices(coreClient, aiClient, prdClient);
 
   const project = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
@@ -89,7 +96,15 @@ test("runtime memory persistence keeps PRD draft and baseline across service rec
   });
   assert.equal(draft.status, 201);
   assert.equal(draft.body.data.version, "0.1");
+  assert.equal(draft.body.data.sections.some((section) => section.body.includes("Governed AI PRD summary")), true);
   assert.equal(JSON.stringify(draft.body).includes("secret-that-must-not-return"), false);
+  const draftAudit = (await firstServices.corePersistence.filterAudit({
+    actorId: "usr_creator",
+    action: "prd.draft.generated"
+  }))[0];
+  assert.equal(typeof draftAudit.metadata.executionId, "string");
+  assert.equal(draftAudit.metadata.aiStatus, "succeeded");
+  assert.equal(draftAudit.metadata.tokensUsed, 137);
 
   const baseline = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
@@ -100,7 +115,7 @@ test("runtime memory persistence keeps PRD draft and baseline across service rec
   assert.equal(baseline.status, 200);
   assert.equal(baseline.body.data.version, "1.0");
 
-  const recreatedServices = createPersistentServices(coreClient, aiClient, prdClient);
+  const recreatedServices = await createPersistentServices(coreClient, aiClient, prdClient);
   const current = await executePlatformApiRequestAsync(recreatedServices, {
     method: "GET",
     path: `/projects/${project.body.data.id}/prd`,

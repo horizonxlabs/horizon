@@ -6,10 +6,7 @@ import {
   MemoryCorePersistenceClient,
   createCoreRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/core-repositories.ts";
-import {
-  MemoryAiGovernancePersistenceClient,
-  createAiGovernanceRepositoryBackedService
-} from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
+import { MemoryAiGovernancePersistenceClient } from "../../apps/platform-api/src/persistence/ai-governance-repositories.ts";
 import {
   MemoryPrdPersistenceClient,
   createPrdRepositoryBackedService
@@ -18,53 +15,24 @@ import {
   MemoryWorkspacePersistenceClient,
   createWorkspaceRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/workspace-repositories.ts";
+import { createPersistedGovernedAiFixture } from "../helpers/persisted-governed-ai-fixture.ts";
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
 
-function createPersistentServices(coreClient, aiClient, prdClient, workspaceClient) {
+async function createPersistentServices(coreClient, aiClient, prdClient, workspaceClient) {
+  const legacyServices = createPlatformApiServices();
+  const admin = legacyServices.auth.resolveCurrentUser(adminHeaders);
+  const governedAi = await createPersistedGovernedAiFixture(aiClient, admin);
   const services = {
-    ...createPlatformApiServices(),
+    ...legacyServices,
     corePersistence: createCoreRepositoryBackedService(coreClient),
-    aiGovernancePersistence: createAiGovernanceRepositoryBackedService(aiClient),
+    aiGovernancePersistence: governedAi.service,
+    governedAiExecutor: governedAi.executor,
     prdPersistence: createPrdRepositoryBackedService(prdClient),
     workspacePersistence: createWorkspaceRepositoryBackedService(workspaceClient)
   };
-  seedLegacyAiGatewayRoutes(services);
   return services;
-}
-
-function seedLegacyAiGatewayRoutes(services) {
-  const admin = services.auth.resolveCurrentUser(adminHeaders);
-  const provider = services.aiGovernance.createProvider(admin, {
-    name: "OpenAI Workspace Persisted",
-    adapter: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    models: ["gpt-4.1-mini"]
-  });
-  services.aiGovernance.createApiKey(admin, {
-    providerId: provider.id,
-    name: "Workspace Runtime Key",
-    secret: "secret-that-must-not-return",
-    usageMode: "production",
-    quotaTokens: 100000,
-    fallbackPriority: 1
-  });
-  for (const scenario of ["prd_generation", "frontend_coding"]) {
-    services.aiGovernance.configureRoute(admin, {
-      scenario,
-      primaryProviderId: provider.id,
-      primaryModel: "gpt-4.1-mini"
-    });
-  }
-  services.aiGovernance.configureQuota(admin, {
-    scope: "creator",
-    dailyLimit: 1000,
-    monthlyLimit: 30000,
-    warningThreshold: 900,
-    hardStop: true,
-    usedToday: 0
-  });
 }
 
 async function createProjectWithBaseline(services) {
@@ -106,7 +74,7 @@ test("runtime memory persistence keeps workspace task preview and usage across s
   const aiClient = new MemoryAiGovernancePersistenceClient();
   const prdClient = new MemoryPrdPersistenceClient();
   const workspaceClient = new MemoryWorkspacePersistenceClient();
-  const firstServices = createPersistentServices(coreClient, aiClient, prdClient, workspaceClient);
+  const firstServices = await createPersistentServices(coreClient, aiClient, prdClient, workspaceClient);
   const project = await createProjectWithBaseline(firstServices);
 
   const prompt = await executePlatformApiRequestAsync(firstServices, {
@@ -120,7 +88,7 @@ test("runtime memory persistence keeps workspace task preview and usage across s
   assert.equal(prompt.body.data.usage.tokensUsed, 120);
   assert.equal(JSON.stringify(prompt.body).includes("secret-that-must-not-return"), false);
 
-  const recreatedServices = createPersistentServices(
+  const recreatedServices = await createPersistentServices(
     coreClient,
     aiClient,
     prdClient,

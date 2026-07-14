@@ -12,10 +12,12 @@ export type CreatorProjectView = {
 };
 
 export type CreatorBootstrapState = {
+  status: "loading" | "ready" | "empty" | "error";
+  message?: string;
   userName: string;
   selectedProject: CreatorProjectView;
   projects: CreatorProjectView[];
-  source: "Platform API" | "local fallback";
+  source: "Platform API";
 };
 
 export type CreateProjectFormState = {

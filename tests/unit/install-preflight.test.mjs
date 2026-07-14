@@ -24,9 +24,12 @@ const validEnv = {
   STORAGE_ACCESS_KEY: "evcpminio",
   STORAGE_SECRET_KEY: "example-minio-password-change-before-use",
   REDIS_URL: "redis://redis:6379",
-  AI_PROVIDER: "openai",
-  AI_MODEL: "gpt-4.1-mini",
-  AI_API_KEY: "example-ai-api-key-change-before-use",
+  EVCP_S3_PUBLIC_URL: "https://storage.localhost",
+  VAULT_ADDR: "http://openbao:8200",
+  VAULT_TOKEN_FILE: "/run/secrets/evcp-vault-token",
+  EVCP_WORKSPACE_SECRET_KEY: "example-workspace-encryption-key-change-before-use",
+  EVCP_AI_JOB_ENCRYPTION_KEY: "example-ai-job-encryption-key-change-before-use",
+  LITELLM_MASTER_KEY: "example-litellm-master-key-change-before-use",
   BACKUP_BUCKET: "evcp-backups",
   BACKUP_RETENTION_DAYS: "30"
 };
@@ -71,12 +74,31 @@ test("install preflight passes example contract when example secrets are explici
 test("install preflight blocks example secrets for real install mode", () => {
   const report = evaluateInstallContract({ env: validEnv, composeText, allowExampleSecrets: false });
   assert.equal(report.passed, false);
-  assert.ok(report.checks.some((item) => item.name === "secret:AI_API_KEY" && item.passed === false));
+  assert.ok(report.checks.some((item) => item.name === "secret:EVCP_AI_JOB_ENCRYPTION_KEY" && item.passed === false));
 });
 
 test("install preflight redacts secret values", () => {
   assert.equal(maskSecret("abcdefghijklmnopqrstuvwxyz"), "abc...xyz");
   const redacted = redactEnv(validEnv);
-  assert.notEqual(redacted.AI_API_KEY, validEnv.AI_API_KEY);
+  assert.notEqual(redacted.EVCP_AI_JOB_ENCRYPTION_KEY, validEnv.EVCP_AI_JOB_ENCRYPTION_KEY);
   assert.equal(redacted.EVCP_ORG_NAME, validEnv.EVCP_ORG_NAME);
+});
+
+test("install preflight redacts provider, token, and encryption credentials", () => {
+  const credentials = {
+    ANTHROPIC_API_KEY: "anthropic-provider-key-value",
+    OPENAI_API_KEY: "openai-provider-key-value",
+    LITELLM_MASTER_KEY: "litellm-master-key-value",
+    EVCP_WORKSPACE_SECRET_KEY: "workspace-secret-key-value",
+    EVCP_AI_JOB_ENCRYPTION_KEY: "ai-job-encryption-key-value",
+    VAULT_TOKEN: "openbao-token-value",
+    VAULT_TOKEN_FILE: "/run/secrets/openbao-token",
+    EVCP_PUBLIC_DOMAIN: "pilot.example.test"
+  };
+
+  const redacted = redactEnv(credentials);
+  for (const key of Object.keys(credentials).filter((key) => key !== "EVCP_PUBLIC_DOMAIN")) {
+    assert.notEqual(redacted[key], credentials[key], `${key} must not be exposed`);
+  }
+  assert.equal(redacted.EVCP_PUBLIC_DOMAIN, credentials.EVCP_PUBLIC_DOMAIN);
 });

@@ -1,12 +1,7 @@
-model_list:
-  - model_name: coding-default
-    litellm_params:
-      model: anthropic/claude-sonnet-5
-      api_key: os.environ/ANTHROPIC_API_KEY
-  - model_name: coding-fallback
-    litellm_params:
-      model: openai/gpt-4.1
-      api_key: os.environ/OPENAI_API_KEY
+# Provider credentials are intentionally absent. Platform API invokes approved providers
+# through its governed executor, resolving each credential from OpenBao at request time.
+# LiteLLM remains an internal virtual-key gateway for isolated workspaces only.
+model_list: []
 
 litellm_settings:
   drop_params: true

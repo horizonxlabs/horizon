@@ -45,8 +45,15 @@ export function createDefaultWorkspaceOrchestrator(
   } = {}
 ): WorkspaceOrchestrator {
   const env = opts.env ?? process.env;
-  const encryptionKeyHex = opts.secretKeyHex ?? env.EVCP_WORKSPACE_SECRET_KEY ?? DEV_SECRET_KEY;
   const mode = resolveWorkspaceAdapterMode(env);
+  const encryptionKeyHex = opts.secretKeyHex ?? env.EVCP_WORKSPACE_SECRET_KEY;
+
+  if (mode === "real" && !encryptionKeyHex) {
+    throw new Error(
+      "EVCP_WORKSPACE_SECRET_KEY is required when EVCP_WORKSPACE_REAL_ADAPTERS=1"
+    );
+  }
+  const resolvedEncryptionKeyHex = encryptionKeyHex ?? DEV_SECRET_KEY;
 
   if (mode === "real") {
     const runtimeOptions = resolveWorkspaceRuntimeOptions(env);
@@ -79,7 +86,7 @@ export function createDefaultWorkspaceOrchestrator(
     const secretPort = Number(env.EVCP_PG_PORT ?? 5432);
     const secretDb = env.POSTGRES_DB ?? "evcp";
     const secrets = createProjectSecretStore({
-      encryptionKeyHex,
+      encryptionKeyHex: resolvedEncryptionKeyHex,
       persistence: createPgSecretPersistence(
         `postgresql://${secretUser}:${secretPass}@${secretHost}:${secretPort}/${secretDb}`
       )
@@ -106,7 +113,7 @@ export function createDefaultWorkspaceOrchestrator(
     postgres: createPgClientPostgresProvisioner(async () => {}),
     objectStorage: createMemoryObjectStorageProvisioner(),
     llmGateway: createMemoryLlmGatewayAdmin(),
-    secrets: createProjectSecretStore({ encryptionKeyHex }),
+    secrets: createProjectSecretStore({ encryptionKeyHex: resolvedEncryptionKeyHex }),
     docker: createMemoryDockerEngine(),
     onAudit: opts.onAudit
   });
