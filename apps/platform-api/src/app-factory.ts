@@ -3266,6 +3266,7 @@ async function registerPlatformRoutes(
           fallbackUsed: evidence.fallbackUsed,
           tokensUsed: evidence.tokensUsed,
           latencyMs: evidence.latencyMs,
+          costUsd: evidence.costUsd,
           quotaScope: evidence.quotaScope
         }
       };

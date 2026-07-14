@@ -26,13 +26,14 @@ test("persisted executor resolves the configured route, key, guardrail and quota
     executionStore: new MemoryAiExecutionStore(),
     fetcher: async (url, init) => {
       requests.push({ url, authorization: new Headers(init.headers).get("authorization") });
-      return new Response(JSON.stringify({ choices: [{ message: { content: "Generated safely" } }], usage: { total_tokens: 37 } }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "Generated safely" } }], usage: { total_tokens: 37 }, response_cost: 0.00125 }), { status: 200 });
     }
   });
   const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a leave view", requestId: "req_live_1", requestedTokens: 100 });
   assert.equal(result.status, "succeeded");
   assert.equal(result.evidence.providerId, "aip_primary");
   assert.equal(result.evidence.tokensUsed, 37);
+  assert.equal(result.evidence.costUsd, 0.00125);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].authorization, "Bearer secret");
   assert.equal((await client.aiQuotaUsage.findUnique({ where: { scope_scopeId: { scope: "creator", scopeId: actor.id } } }))?.usedToday, 37);

@@ -113,11 +113,25 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
         error.retryable = response.status >= 500;
         throw error;
       }
-      const body = await response.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { total_tokens?: unknown } };
+      const body = await response.json() as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: { total_tokens?: unknown };
+        response_cost?: unknown;
+        _hidden_params?: { response_cost?: unknown };
+      };
       const text = String(body.choices?.[0]?.message?.content ?? "").trim();
       if (!text) throw new Error("AI provider returned an empty completion");
       const tokensUsed = Number(body.usage?.total_tokens ?? Math.max(1, Math.ceil((prompt.length + text.length) / 4)));
-      return { text, tokensUsed: Number.isFinite(tokensUsed) && tokensUsed > 0 ? tokensUsed : 1, latencyMs: 1, providerId: provider.id, model: provider.model };
+      const rawCost = body.response_cost ?? body._hidden_params?.response_cost;
+      const costUsd = Number(rawCost);
+      return {
+        text,
+        tokensUsed: Number.isFinite(tokensUsed) && tokensUsed > 0 ? tokensUsed : 1,
+        latencyMs: 1,
+        costUsd: Number.isFinite(costUsd) && costUsd >= 0 ? costUsd : 0,
+        providerId: provider.id,
+        model: provider.model
+      };
     } catch (error) {
       lastError = error;
       if (attempt === 0 && (isRetryable(error) || !(error instanceof Error))) continue;

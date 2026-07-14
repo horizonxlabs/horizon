@@ -399,6 +399,7 @@ model AiExecutionEvidence {
   status              String
   tokensUsed          Int      @map("tokens_used")
   latencyMs           Int      @map("latency_ms")
+  costUsd             Decimal  @default(0) @map("cost_usd") @db.Decimal(18, 8)
   fallbackUsed        Boolean  @default(false) @map("fallback_used")
   failureReason       String?  @map("failure_reason")
   quotaScope          String   @map("quota_scope")
