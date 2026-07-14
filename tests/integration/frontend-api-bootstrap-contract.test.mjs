@@ -29,6 +29,8 @@ const adminClientSource = readFileSync("apps/admin-web/src/shared/platform-clien
 const adminConsoleSource = readAllSourceFiles("apps/admin-web/src/features/admin-console");
 const adminOperationsSource = readFileSync("apps/admin-web/src/features/platform-operations/use-production-observability.ts", "utf8");
 const adminAuditSource = readFileSync("apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx", "utf8");
+const creatorTicketsSource = readFileSync("apps/creator-web/src/features/tickets/TicketsPage.tsx", "utf8");
+const creatorTicketInboxSource = readFileSync("apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts", "utf8");
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
 const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
@@ -157,6 +159,9 @@ test("Store and Creator fail closed instead of creating local success evidence",
     assert.doesNotMatch(source, /Local fallback (generated|produced|recorded|kept)/);
     assert.doesNotMatch(source, /fallbackWorkspacePromptResult/);
   }
+  assert.match(creatorTicketInboxSource, /\/creator\/projects\//);
+  assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
+  assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
 });
 
 test("Admin operations and audit views use Platform API data and fail closed", () => {
