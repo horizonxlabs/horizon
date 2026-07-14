@@ -19,6 +19,7 @@ import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socke
 import { createContainerGitCommitter } from "./container-git";
 import { createContainerFileReader, createWorkspaceFileBrowserReader } from "./container-files";
 import { createPgMigrationRunner } from "./migration-runner";
+import type { GovernedAiExecutor } from "../ai-governance/execution-service";
 
 export { createMessageParser };
 
@@ -40,6 +41,7 @@ export async function createDefaultGenerationService(opts: {
   // Optional ChatHistoryStore override (tests inject a memory store directly). Falls back to a
   // Prisma-backed store when EVCP_CORE_PERSISTENCE=prisma, so chat history survives restarts.
   chatHistory?: ChatHistoryStore;
+  governedAiExecutor?: Pick<GovernedAiExecutor, "execute">;
 }) {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
@@ -76,6 +78,23 @@ export async function createDefaultGenerationService(opts: {
 
   return createGenerationService({
     llmClient,
+    ...(opts.governedAiExecutor
+      ? {
+          governedCompletion: async ({ actor, projectId, scenario, prompt, requestId }) => {
+            const execution = await opts.governedAiExecutor!.execute(actor, {
+              scenario,
+              projectId,
+              prompt,
+              requestId,
+              requestedTokens: 1_200
+            });
+            if ((execution.status === "blocked" || execution.status === "failed") || !execution.text) {
+              throw new Error(`Governed AI completion unavailable: ${execution.evidence.failureReason ?? execution.status}`);
+            }
+            return execution.text;
+          }
+        }
+      : {}),
     chatHistory,
     actionRunner: createActionRunner({
       docker,

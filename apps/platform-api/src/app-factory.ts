@@ -501,7 +501,7 @@ async function resolveWorkspaceAuth(
   const projectIds = services.corePersistence
     ? (await services.corePersistence.listProjects(user)).map((project) => project.id)
     : services.projects.listProjects(user).map((project) => project.id);
-  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds };
+  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds, actor: user };
 }
 
 async function resolvePersistenceProject(
@@ -3248,6 +3248,9 @@ async function registerPlatformRoutes(
   const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
+    ...(services.governedAiExecutor
+      ? { governedAiExecutor: services.governedAiExecutor }
+      : {}),
     onAudit: (event) =>
       services.audit.record({
         actorId: "system",

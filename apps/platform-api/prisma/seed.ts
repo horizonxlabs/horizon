@@ -262,37 +262,30 @@ async function main() {
     }
   });
 
-  await prisma.aiScenarioRoute.upsert({
-    where: { scenario: "prd_generation" },
-    update: {
-      primaryProviderId: "aip_openai_production",
-      primaryModel: "gpt-4.1",
-      fallbackProviderId: null,
-      fallbackModel: null
-    },
-    create: {
-      id: "air_prd_generation",
-      scenario: "prd_generation",
-      primaryProviderId: "aip_openai_production",
-      primaryModel: "gpt-4.1"
-    }
-  });
-
-  await prisma.aiScenarioRoute.upsert({
-    where: { scenario: "frontend_coding" },
-    update: {
-      primaryProviderId: "aip_openai_production",
-      primaryModel: "gpt-4.1",
-      fallbackProviderId: null,
-      fallbackModel: null
-    },
-    create: {
-      id: "air_frontend_coding",
-      scenario: "frontend_coding",
-      primaryProviderId: "aip_openai_production",
-      primaryModel: "gpt-4.1"
-    }
-  });
+  for (const scenario of [
+    "prd_generation",
+    "requirement_analysis",
+    "frontend_coding",
+    "backend_coding",
+    "review",
+    "documentation"
+  ]) {
+    await prisma.aiScenarioRoute.upsert({
+      where: { scenario },
+      update: {
+        primaryProviderId: "aip_openai_production",
+        primaryModel: "gpt-4.1",
+        fallbackProviderId: null,
+        fallbackModel: null
+      },
+      create: {
+        id: `air_${scenario}`,
+        scenario,
+        primaryProviderId: "aip_openai_production",
+        primaryModel: "gpt-4.1"
+      }
+    });
+  }
 
   await prisma.aiQuota.upsert({
     where: { scope: "organization" },

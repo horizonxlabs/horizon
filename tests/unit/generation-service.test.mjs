@@ -61,6 +61,43 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   assert.equal(events.at(-1).type, "done");
 });
 
+test("governed completion owns workspace model calls and receives the authenticated actor", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await docker.createContainer({
+    name: "evcp-ws-governed", image: "img", env: [],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
+    labels: {}, exposedPort: 3000, publishPorts: false
+  });
+  let legacyCalls = 0;
+  const governedCalls = [];
+  const service = createGenerationService({
+    llmClient: { async *streamChat() { legacyCalls += 1; yield "must not be used"; } },
+    governedCompletion: async (input) => {
+      governedCalls.push(input);
+      return 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">export default function Home(){}</action></artifact>';
+    },
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: createActionRunner({ docker, checkpoints: createMemoryCheckpointStore(), migrations: createMemoryMigrationStore() }),
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "must-not-reach-provider-directly",
+    getContainerId: () => containerId,
+    commitAllChanges: async () => "commit-governed"
+  });
+
+  const events = await collect(service.runTurn({
+    projectId: "p1",
+    prompt: "add home page",
+    actor: { id: "usr_creator", email: "creator@example.test", name: "Creator", role: "creator" }
+  }));
+
+  assert.equal(legacyCalls, 0);
+  assert.equal(governedCalls.length, 1);
+  assert.equal(governedCalls[0].scenario, "frontend_coding");
+  assert.equal(governedCalls[0].actor.id, "usr_creator");
+  assert.ok(events.some((event) => event.type === "action_result" && event.ok));
+});
+
 test("message ids are unique across service instances (survive a process restart)", async () => {
   // Regression: nextMessageId used to be an in-memory counter (msg-1, msg-2, …) that reset on every
   // restart and was shared across projects, so a fresh instance re-issued msg-1 and collided with a

@@ -1,10 +1,12 @@
 import type { WorkspaceOrchestrator } from "./orchestrator";
 import { resourceKeyForProject } from "./resource-ports";
+import type { PlatformUser } from "../platform-services";
 
 export interface WorkspaceAuthContext {
   userId: string;
   roles: string[];
   projectIds: string[];
+  actor?: PlatformUser;
 }
 
 interface RouteResponse {

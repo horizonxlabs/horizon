@@ -8,6 +8,7 @@ import type { ActionRunner, RunnableAction } from "./action-runner";
 import type { createErrorFeedbackTracker } from "./error-feedback";
 import { selectContextFiles } from "./context-selector";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
+import type { AiScenario, PlatformUser } from "../platform-services";
 
 export type ActionActionType = "file" | "edit" | "shell" | "migration";
 
@@ -42,6 +43,18 @@ function clip(text: string): string {
 
 export interface GenerationServiceDeps {
   llmClient: LlmCompletionClient;
+  /**
+   * The private-server path supplies this adapter so workspace chat uses the same
+   * governed route, guardrails, quota, retry and evidence store as every other AI action.
+   * Keeping the LLM client as the explicit fallback preserves isolated memory tests only.
+   */
+  governedCompletion?: (input: {
+    actor: PlatformUser;
+    projectId: string;
+    scenario: AiScenario;
+    prompt: string;
+    requestId: string;
+  }) => Promise<string>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
   errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
@@ -112,6 +125,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       projectId: string;
       prompt: string;
       agentMode?: WorkspaceAgentMode;
+      actor?: PlatformUser;
     }): AsyncIterable<ChatStreamEvent> {
       const agentMode: WorkspaceAgentMode = input.agentMode === "plan" ? "plan" : "build";
       const userMessage: WorkspaceChatMessage = {
@@ -168,16 +182,27 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           systemPrompt,
           messages: [...priorMessages, { role: "user" as const, content: prompt }]
         };
+        const governedPrompt = [
+          systemPrompt,
+          "\nConversation:",
+          ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)
+        ].join("\n");
+        const completion = deps.governedCompletion
+          ? await resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
+          : undefined;
+        const tokens = completion === undefined
+          ? deps.llmClient.streamChat(chatInput)
+          : streamText(completion);
 
         if (agentMode === "plan") {
-          for await (const token of deps.llmClient.streamChat(chatInput)) {
+          for await (const token of tokens) {
             assistantText += token;
             yield { type: "token", content: token };
           }
           break roundLoop;
         }
 
-        for await (const token of deps.llmClient.streamChat(chatInput)) {
+        for await (const token of tokens) {
           for (const event of parser.push(token)) {
             if (event.type === "text") {
               assistantText += event.content;
@@ -347,4 +372,29 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       yield { type: "done" };
     }
   };
+}
+
+async function resolveGovernedCompletion(
+  completion: NonNullable<GenerationServiceDeps["governedCompletion"]>,
+  input: { actor?: PlatformUser; projectId: string },
+  prompt: string,
+  agentMode: WorkspaceAgentMode
+): Promise<string> {
+  if (!input.actor) throw new Error("Governed AI execution requires the authenticated workspace actor");
+  return completion({
+    actor: input.actor,
+    projectId: input.projectId,
+    scenario: agentMode === "plan" ? "requirement_analysis" : "frontend_coding",
+    prompt,
+    requestId: `workspace_chat_${randomUUID()}`
+  });
+}
+
+async function* streamText(text: string): AsyncIterable<string> {
+  // The governed provider returns one audited completion. Chunking it here keeps the existing
+  // SSE parser/progress contract without opening a second, bypassing provider stream.
+  const chunkSize = 256;
+  for (let offset = 0; offset < text.length; offset += chunkSize) {
+    yield text.slice(offset, offset + chunkSize);
+  }
 }

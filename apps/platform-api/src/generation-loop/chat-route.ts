@@ -140,7 +140,12 @@ export function createChatSseHandler(deps: {
     res.write(": open\n\n");
 
     try {
-      for await (const event of deps.generationService.runTurn({ projectId, prompt, agentMode })) {
+      for await (const event of deps.generationService.runTurn({
+        projectId,
+        prompt,
+        agentMode,
+        actor: auth.actor
+      })) {
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
     } catch (error) {
