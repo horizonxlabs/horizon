@@ -27,6 +27,8 @@ export type AiExecutionEvidence = {
   tokensUsed: number;
   latencyMs: number;
   fallbackUsed: boolean;
+  quotaScope: string;
+  quotaTokensReserved: number;
   failureReason?: string;
   occurredAt: string;
 };
@@ -69,7 +71,7 @@ export type GovernedAiExecutorDependencies = {
   store: AiExecutionStore;
   resolvePlan: (actor: PlatformUser, scenario: AiScenario) => Promise<ResolvedAiExecutionPlan>;
   evaluateGuardrail: (input: { actor: PlatformUser; scenario: AiScenario; prompt: string }) => Promise<{ decision: "allow" | "warn" | "block"; reason?: string }>;
-  reserveQuota: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number }) => Promise<{ allowed: boolean; remainingToday: number }>;
+  reserveQuota: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number }) => Promise<{ allowed: boolean; remainingToday: number; quotaScope: string }>;
   reconcileQuota?: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number; actualTokens: number }) => Promise<void>;
   invoke: (input: { provider: ResolvedAiProvider; prompt: string; scenario: AiScenario }) => Promise<{ text: string; tokensUsed: number; latencyMs: number; providerId: string; model: string }>;
   now?: () => Date;
@@ -96,30 +98,32 @@ export class GovernedAiExecutor {
     });
     if (!quota.allowed) {
       return this.persist(input, actor, plan.provider, {
-        status: "blocked", tokensUsed: 0, latencyMs: 0, fallbackUsed: false, failureReason: "quota_exceeded"
+        status: "blocked", tokensUsed: 0, latencyMs: 0, fallbackUsed: false, quotaScope: quota.quotaScope, quotaTokensReserved: 0, failureReason: "quota_exceeded"
       });
     }
     try {
       const completed = await this.dependencies.invoke({ provider: plan.provider, prompt, scenario: input.scenario });
       await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: completed.tokensUsed });
       return this.persist(input, actor, plan.provider, {
-        status: "succeeded", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: false
+        status: "succeeded", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: false, quotaScope: quota.quotaScope, quotaTokensReserved: requestedTokens
       });
     } catch (error) {
       if (!plan.fallback) {
+        await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: 0 });
         return this.persist(input, actor, plan.provider, {
-          status: "failed", tokensUsed: 0, latencyMs: 0, fallbackUsed: false, failureReason: sanitizeFailure(error, plan.provider.secret)
+          status: "failed", tokensUsed: 0, latencyMs: 0, fallbackUsed: false, quotaScope: quota.quotaScope, quotaTokensReserved: requestedTokens, failureReason: sanitizeFailure(error, plan.provider.secret)
         });
       }
       try {
         const completed = await this.dependencies.invoke({ provider: plan.fallback, prompt, scenario: input.scenario });
         await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: completed.tokensUsed });
         return this.persist(input, actor, plan.fallback, {
-          status: "fallback", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: true, failureReason: sanitizeFailure(error, plan.provider.secret)
+          status: "fallback", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, fallbackUsed: true, quotaScope: quota.quotaScope, quotaTokensReserved: requestedTokens, failureReason: sanitizeFailure(error, plan.provider.secret)
         });
       } catch (fallbackError) {
+        await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: 0 });
         return this.persist(input, actor, plan.fallback, {
-          status: "failed", tokensUsed: 0, latencyMs: 0, fallbackUsed: true, failureReason: sanitizeFailure(fallbackError, plan.fallback.secret)
+          status: "failed", tokensUsed: 0, latencyMs: 0, fallbackUsed: true, quotaScope: quota.quotaScope, quotaTokensReserved: requestedTokens, failureReason: sanitizeFailure(fallbackError, plan.fallback.secret)
         });
       }
     }
@@ -127,7 +131,7 @@ export class GovernedAiExecutor {
 
   private async persist(
     input: GovernedAiExecutionInput, actor: PlatformUser, provider: ResolvedAiProvider,
-    result: Omit<GovernedAiExecutionResult, "evidence"> & { status: GovernedAiExecutionStatus; tokensUsed: number; latencyMs: number; fallbackUsed: boolean; failureReason?: string }
+    result: Omit<GovernedAiExecutionResult, "evidence"> & { status: GovernedAiExecutionStatus; tokensUsed: number; latencyMs: number; fallbackUsed: boolean; quotaScope?: string; quotaTokensReserved?: number; failureReason?: string }
   ): Promise<GovernedAiExecutionResult> {
     const occurredAt = (this.dependencies.now?.() ?? new Date()).toISOString();
     return this.dependencies.store.save({
@@ -135,7 +139,8 @@ export class GovernedAiExecutor {
       evidence: {
         id: `aiexec_${input.requestId}`, requestId: input.requestId, actorId: actor.id, projectId: input.projectId, scenario: input.scenario,
         providerId: provider.id, model: provider.model, status: result.status, tokensUsed: result.tokensUsed, latencyMs: result.latencyMs,
-        fallbackUsed: result.fallbackUsed, ...(result.failureReason ? { failureReason: result.failureReason } : {}), occurredAt
+        fallbackUsed: result.fallbackUsed, quotaScope: result.quotaScope ?? "not_reserved", quotaTokensReserved: result.quotaTokensReserved ?? 0,
+        ...(result.failureReason ? { failureReason: result.failureReason } : {}), occurredAt
       }
     });
   }

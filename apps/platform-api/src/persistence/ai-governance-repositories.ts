@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createMemoryAiQuotaUsagePersistence, type AiQuotaUsagePersistence } from "./ai-quota-usage-store";
 import type {
   AiApiKey,
   AiProvider,
@@ -15,13 +16,11 @@ import type {
   PlatformUser
 } from "../platform-services";
 import { PermissionError, ValidationError } from "../platform-services";
-
 type DateValue = Date | string;
 type ProviderStatus = AiProvider["status"];
 type GuardrailSeverity = GuardrailRule["severity"];
 type GuardrailScope = GuardrailRule["scope"];
 type QuotaScope = AiQuota["scope"];
-
 interface AiProviderRecord {
   id: string;
   name: string;
@@ -31,7 +30,6 @@ interface AiProviderRecord {
   status: ProviderStatus;
   createdAt: DateValue;
 }
-
 interface AiApiKeyRecord {
   id: string;
   providerId: string;
@@ -48,7 +46,6 @@ interface AiApiKeyRecord {
   lastUsedAt?: DateValue | null;
   createdAt: DateValue;
 }
-
 interface AiScenarioRouteRecord {
   id: string;
   scenario: string;
@@ -145,6 +142,7 @@ export interface AiGovernancePersistenceClient {
     findMany(args?: { orderBy?: { scope?: "asc" | "desc" } }): Promise<AiQuotaRecord[]>;
     upsert(args: UpsertQuotaArgs): Promise<AiQuotaRecord>;
   };
+  aiQuotaUsage: AiQuotaUsagePersistence;
   guardrailRule: {
     findMany(args?: { orderBy?: { updatedAt?: "asc" | "desc" } }): Promise<GuardrailRuleRecord[]>;
     upsert(args: UpsertGuardrailRuleArgs): Promise<GuardrailRuleRecord>;
@@ -345,6 +343,7 @@ export class MemoryAiGovernancePersistenceClient implements AiGovernancePersiste
   readonly aiApiKey: AiGovernancePersistenceClient["aiApiKey"];
   readonly aiScenarioRoute: AiGovernancePersistenceClient["aiScenarioRoute"];
   readonly aiQuota: AiGovernancePersistenceClient["aiQuota"];
+  readonly aiQuotaUsage: AiQuotaUsagePersistence;
   readonly guardrailRule: AiGovernancePersistenceClient["guardrailRule"];
   readonly guardrailEvent: AiGovernancePersistenceClient["guardrailEvent"];
 
@@ -385,6 +384,7 @@ export class MemoryAiGovernancePersistenceClient implements AiGovernancePersiste
       findMany: async ({ orderBy } = {}) => sortByString(this.quotas, "scope", orderBy?.scope),
       upsert: async ({ where, update, create }) => upsertByKey(this.quotas, "scope", where.scope, update, create)
     };
+    this.aiQuotaUsage = createMemoryAiQuotaUsagePersistence();
     this.guardrailRule = {
       findMany: async ({ orderBy } = {}) => sortByDate(this.rules, "updatedAt", orderBy?.updatedAt),
       upsert: async ({ where, update, create }) => upsertById(this.rules, where.id, update, create)

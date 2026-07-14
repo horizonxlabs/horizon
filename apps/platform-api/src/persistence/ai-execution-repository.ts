@@ -44,7 +44,7 @@ export class PrismaAiExecutionStore implements AiExecutionStore {
         id: evidence.id, requestId: evidence.requestId, actorUserId: evidence.actorId, projectId: evidence.projectId || null,
         scenario: evidence.scenario, providerId: evidence.providerId, model: evidence.model, status: evidence.status,
         tokensUsed: evidence.tokensUsed, latencyMs: evidence.latencyMs, fallbackUsed: evidence.fallbackUsed,
-        failureReason: evidence.failureReason ?? null, quotaScope: "creator", quotaTokensReserved: evidence.tokensUsed,
+        failureReason: evidence.failureReason ?? null, quotaScope: evidence.quotaScope, quotaTokensReserved: evidence.quotaTokensReserved,
         occurredAt: new Date(evidence.occurredAt)
       }
     });
@@ -61,7 +61,7 @@ function mapEvidence(record: AiExecutionEvidenceRecord): AiExecutionEvidence {
     id: record.id, requestId: record.requestId, actorId: record.actorUserId, projectId: record.projectId ?? "",
     scenario: record.scenario as AiExecutionEvidence["scenario"], providerId: record.providerId, model: record.model,
     status: record.status, tokensUsed: record.tokensUsed, latencyMs: record.latencyMs, fallbackUsed: record.fallbackUsed,
+    quotaScope: record.quotaScope, quotaTokensReserved: record.quotaTokensReserved,
     ...(record.failureReason ? { failureReason: record.failureReason } : {}), occurredAt: new Date(record.occurredAt).toISOString()
   };
 }
-

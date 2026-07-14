@@ -11,8 +11,8 @@ export function createPersistedGovernedAiExecutor(
     store: options.executionStore ?? new MemoryAiExecutionStore(),
     resolvePlan: async (actor, scenario) => resolvePlan(client, actor, scenario),
     evaluateGuardrail: async ({ scenario, prompt }) => evaluateGuardrail(client, scenario, prompt),
-    reserveQuota: async ({ requestedTokens }) => reserveCreatorQuota(client, requestedTokens),
-    reconcileQuota: async ({ requestedTokens, actualTokens }) => reconcileCreatorQuota(client, requestedTokens, actualTokens),
+    reserveQuota: async ({ actor, projectId, requestedTokens }) => reserveScopedQuota(client, actor, projectId, requestedTokens),
+    reconcileQuota: async ({ actor, projectId, requestedTokens, actualTokens }) => reconcileScopedQuota(client, actor, projectId, requestedTokens, actualTokens),
     invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000, circuit)
   });
 }
@@ -60,19 +60,41 @@ async function evaluateGuardrail(client: AiGovernancePersistenceClient, scenario
   return rule ? { decision: rule.action, reason: `guardrail:${rule.id}:${scenario}` } : { decision: "allow" };
 }
 
-async function reserveCreatorQuota(client: AiGovernancePersistenceClient, requestedTokens: number): Promise<{ allowed: boolean; remainingToday: number }> {
-  const quota = (await client.aiQuota.findMany()).find((candidate) => candidate.scope === "creator");
-  if (!quota) return { allowed: true, remainingToday: Number.MAX_SAFE_INTEGER };
-  const remainingToday = Math.max(quota.dailyLimit - quota.usedToday, 0);
-  if (quota.hardStop && requestedTokens > remainingToday) return { allowed: false, remainingToday };
-  await client.aiQuota.upsert({ where: { scope: quota.scope }, update: { usedToday: quota.usedToday + requestedTokens }, create: quota });
-  return { allowed: true, remainingToday: remainingToday - requestedTokens };
+type QuotaTarget = { scope: "organization" | "creator" | "project" | "app"; scopeId: string };
+
+function quotaTargets(actor: PlatformUser, projectId: string): QuotaTarget[] {
+  // A Creator project is the pre-publish app boundary. Once published, the same project ID
+  // remains the stable target for the app policy, avoiding a quota reset during publish.
+  return [
+    { scope: "organization", scopeId: "platform" },
+    { scope: "creator", scopeId: actor.id },
+    { scope: "project", scopeId: projectId },
+    { scope: "app", scopeId: projectId }
+  ];
 }
 
-async function reconcileCreatorQuota(client: AiGovernancePersistenceClient, requestedTokens: number, actualTokens: number): Promise<void> {
-  const quota = (await client.aiQuota.findMany()).find((candidate) => candidate.scope === "creator");
-  if (!quota) return;
-  await client.aiQuota.upsert({ where: { scope: quota.scope }, update: { usedToday: Math.max(0, quota.usedToday - requestedTokens + actualTokens) }, create: quota });
+async function reserveScopedQuota(client: AiGovernancePersistenceClient, actor: PlatformUser, projectId: string, requestedTokens: number): Promise<{ allowed: boolean; remainingToday: number; quotaScope: string }> {
+  const policies = await client.aiQuota.findMany();
+  const targets = quotaTargets(actor, projectId).filter((target) => policies.some((policy) => policy.scope === target.scope));
+  const usage = await Promise.all(targets.map(async (target) => ({ target, policy: policies.find((candidate) => candidate.scope === target.scope)!, usage: await client.aiQuotaUsage.findUnique({ where: { scope_scopeId: target } }) })));
+  const denied = usage.find(({ policy, usage: row }) => policy.hardStop && requestedTokens > Math.max(policy.dailyLimit - (row?.usedToday ?? 0), 0));
+  const quotaScope = targets.map((target) => `${target.scope}:${target.scopeId}`).join(",") || "unlimited";
+  if (denied) return { allowed: false, remainingToday: Math.max(denied.policy.dailyLimit - (denied.usage?.usedToday ?? 0), 0), quotaScope };
+  await Promise.all(usage.map(({ target, usage: row }) => client.aiQuotaUsage.upsert({
+    where: { scope_scopeId: target }, update: { usedToday: (row?.usedToday ?? 0) + requestedTokens },
+    create: { id: `aiqu_${target.scope}_${target.scopeId}`, scope: target.scope, scopeId: target.scopeId, usedToday: requestedTokens }
+  })));
+  const remainingToday = usage.length ? Math.min(...usage.map(({ policy, usage: row }) => Math.max(policy.dailyLimit - (row?.usedToday ?? 0) - requestedTokens, 0))) : Number.MAX_SAFE_INTEGER;
+  return { allowed: true, remainingToday, quotaScope };
+}
+
+async function reconcileScopedQuota(client: AiGovernancePersistenceClient, actor: PlatformUser, projectId: string, requestedTokens: number, actualTokens: number): Promise<void> {
+  const policies = await client.aiQuota.findMany();
+  await Promise.all(quotaTargets(actor, projectId).filter((target) => policies.some((policy) => policy.scope === target.scope)).map(async (target) => {
+    const row = await client.aiQuotaUsage.findUnique({ where: { scope_scopeId: target } });
+    if (!row) return;
+    await client.aiQuotaUsage.upsert({ where: { scope_scopeId: target }, update: { usedToday: Math.max(0, row.usedToday - requestedTokens + actualTokens) }, create: row });
+  }));
 }
 
 async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number) {

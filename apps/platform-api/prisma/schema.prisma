@@ -376,6 +376,18 @@ model AiQuota {
   @@map("ai_quotas")
 }
 
+model AiQuotaUsage {
+  id        String   @id
+  scope     String
+  scopeId   String   @map("scope_id")
+  usedToday Int      @default(0) @map("used_today")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, scopeId])
+  @@map("ai_quota_usage")
+}
+
 model AiExecutionEvidence {
   id                  String   @id
   requestId           String   @unique @map("request_id")

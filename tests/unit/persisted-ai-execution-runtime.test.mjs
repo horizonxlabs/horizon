@@ -35,7 +35,25 @@ test("persisted executor resolves the configured route, key, guardrail and quota
   assert.equal(result.evidence.tokensUsed, 37);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].authorization, "Bearer secret");
-  assert.equal((await client.aiQuota.findMany())[0].usedToday, 37);
+  assert.equal((await client.aiQuotaUsage.findUnique({ where: { scope_scopeId: { scope: "creator", scopeId: actor.id } } }))?.usedToday, 37);
+});
+
+test("persisted executor accounts organization, creator, project, and app quota usage independently", async () => {
+  const client = new MemoryAiGovernancePersistenceClient({
+    providers: [{ id: "aip_primary", name: "Primary", adapter: "openai", baseUrl: "https://gateway.example.test/v1", models: ["gpt-test"], status: "active", createdAt: now }],
+    apiKeys: [{ id: "aik_primary", providerId: "aip_primary", name: "primary", usageMode: "production", quotaTokens: 1000, fallbackPriority: 0, fingerprint: "sha256:abc", maskedValue: "***test", secretCiphertext: "local-envelope:c2VjcmV0", keyVersion: 1, encryptionProvider: "local-envelope", status: "active", createdAt: now }],
+    routes: [{ id: "air_frontend", scenario: "frontend_coding", primaryProviderId: "aip_primary", primaryModel: "gpt-test", createdAt: now }],
+    quotas: ["organization", "creator", "project", "app"].map((scope) => ({ id: `aiq_${scope}`, scope, dailyLimit: 1000, monthlyLimit: 10000, warningThreshold: 800, hardStop: true, usedToday: 0, createdAt: now }))
+  });
+  const executor = createPersistedGovernedAiExecutor(client, {
+    fetcher: async () => new Response(JSON.stringify({ choices: [{ message: { content: "Generated safely" } }], usage: { total_tokens: 31 } }), { status: 200 })
+  });
+  const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "project-a", prompt: "Build a leave view", requestId: "req_scoped_quota" });
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.evidence.quotaScope, "organization:platform,creator:u1,project:project-a,app:project-a");
+  for (const [scope, scopeId] of [["organization", "platform"], ["creator", "u1"], ["project", "project-a"], ["app", "project-a"]]) {
+    assert.equal((await client.aiQuotaUsage.findUnique({ where: { scope_scopeId: { scope, scopeId } } }))?.usedToday, 31);
+  }
 });
 
 test("persisted executor retries one transient provider failure before recording success", async () => {
