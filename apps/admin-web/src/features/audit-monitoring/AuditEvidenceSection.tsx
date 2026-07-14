@@ -1,34 +1,30 @@
 import { DataTable, SectionCard } from "@evcp/ui";
-import { Gauge, ListFilter, Route } from "lucide-react";
+import type { PlatformApiClient } from "@evcp/api-client";
+import { useEffect, useState } from "react";
+import type { ProductionAuditEvent } from "@/features/platform-operations";
 
-const auditFilterRows = [
-  { action: "prd.change.approved", actor: "creator@company.com", severity: "high" },
-  { action: "domain.request.approved", actor: "admin@company.com", severity: "high" },
-  { action: "ticket.converted_to_prd_change", actor: "creator@company.com", severity: "high" }
-];
-
-export function AuditEvidenceSection({ id }: { id?: string }) {
+export function AuditEvidenceSection({ id, client }: { id?: string; client: PlatformApiClient }) {
+  const [events, setEvents] = useState<ProductionAuditEvent[]>([]);
+  const [message, setMessage] = useState("Loading audit evidence from Platform API.");
+  useEffect(() => {
+    let active = true;
+    void client.request<ProductionAuditEvent[]>("/audit-logs")
+      .then((result) => { if (active) { setEvents(result); setMessage("Audit evidence loaded from Platform API."); } })
+      .catch(() => { if (active) { setEvents([]); setMessage("Audit evidence is unavailable. No local records are shown."); } });
+    return () => { active = false; };
+  }, [client]);
   return (
     <div id={id}>
       <SectionCard eyebrow="Audit Filters" title="Governance evidence search">
-        <div className="admin-filter-bar" aria-label="Audit filter controls">
-          <button type="button">
-            <ListFilter size={15} /> action
-          </button>
-          <button type="button" className="secondary-button">
-            <Gauge size={15} /> severity
-          </button>
-          <button type="button" className="secondary-button">
-            <Route size={15} /> project
-          </button>
-        </div>
+        <p>{message}</p>
         <DataTable
           columns={[
             { key: "action", label: "Action" },
-            { key: "actor", label: "Actor" },
-            { key: "severity", label: "Severity", tone: () => "danger" }
+            { key: "actorId", label: "Actor" },
+            { key: "severity", label: "Severity" },
+            { key: "occurredAt", label: "Time" }
           ]}
-          rows={auditFilterRows}
+          rows={events}
         />
       </SectionCard>
     </div>
