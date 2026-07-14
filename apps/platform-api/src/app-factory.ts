@@ -3251,6 +3251,30 @@ async function registerPlatformRoutes(
     ...(services.governedAiExecutor
       ? { governedAiExecutor: services.governedAiExecutor }
       : {}),
+    onGovernedExecution: async (evidence) => {
+      const audit = {
+        actorId: evidence.actorId,
+        action: "ai.workspace_chat.executed",
+        resourceType: "ai_execution",
+        resourceId: evidence.id,
+        metadata: {
+          projectId: evidence.projectId,
+          scenario: evidence.scenario,
+          providerId: evidence.providerId,
+          model: evidence.model,
+          status: evidence.status,
+          fallbackUsed: evidence.fallbackUsed,
+          tokensUsed: evidence.tokensUsed,
+          latencyMs: evidence.latencyMs,
+          quotaScope: evidence.quotaScope
+        }
+      };
+      if (services.corePersistence) {
+        await services.corePersistence.recordAudit(audit);
+        return;
+      }
+      services.audit.record(audit);
+    },
     onAudit: (event) =>
       services.audit.record({
         actorId: "system",

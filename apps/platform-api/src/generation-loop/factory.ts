@@ -20,6 +20,7 @@ import { createContainerGitCommitter } from "./container-git";
 import { createContainerFileReader, createWorkspaceFileBrowserReader } from "./container-files";
 import { createPgMigrationRunner } from "./migration-runner";
 import type { GovernedAiExecutor } from "../ai-governance/execution-service";
+import type { AiExecutionEvidence } from "../ai-governance/execution-service";
 
 export { createMessageParser };
 
@@ -42,6 +43,7 @@ export async function createDefaultGenerationService(opts: {
   // Prisma-backed store when EVCP_CORE_PERSISTENCE=prisma, so chat history survives restarts.
   chatHistory?: ChatHistoryStore;
   governedAiExecutor?: Pick<GovernedAiExecutor, "execute">;
+  onGovernedExecution?: (evidence: AiExecutionEvidence) => void | Promise<void>;
 }) {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
@@ -88,6 +90,7 @@ export async function createDefaultGenerationService(opts: {
               requestId,
               requestedTokens: 1_200
             });
+            await opts.onGovernedExecution?.(execution.evidence);
             if ((execution.status === "blocked" || execution.status === "failed") || !execution.text) {
               throw new Error(`Governed AI completion unavailable: ${execution.evidence.failureReason ?? execution.status}`);
             }
