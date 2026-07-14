@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -188,25 +187,15 @@ test("Sprint 9 API enforces break-glass reason and policy template evaluation", 
   assert.ok(restricted.body.data.requiredChecks.includes("break_glass_disabled"));
 });
 
-test("Sprint 9 Admin UI exposes auth SSO and policy hardening surfaces", () => {
-  const adminSource = readAllSourceFiles("apps/admin-web/src");
+test("Sprint 9 auth SSO evidence remains feature-owned while Admin uses Keycloak management", () => {
   const featureSource = readFileSync(
     "apps/admin-web/src/features/auth-sso/evidence.ts",
     "utf8"
   );
 
-  assert.match(adminSource, /from "@\/features\/auth-sso"/);
-
-  for (const text of [
-    "authProviderRows",
-    "authReadinessRows",
-    "authMappingRows",
-    "policyRows",
-    "Provider registry",
-    "Keycloak Default"
-  ]) {
-    assert.match(adminSource, new RegExp(text));
-  }
+  const adminConsole = readFileSync("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
+  assert.match(adminConsole, /KeycloakUserManagement/);
+  assert.doesNotMatch(adminConsole, /authProviderRows/);
 
   for (const text of [
     "Keycloak Default",

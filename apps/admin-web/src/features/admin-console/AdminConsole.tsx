@@ -1,5 +1,5 @@
 import { navigation } from "@evcp/config";
-import { AppShell, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard } from "@evcp/ui";
+import { AppShell, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard, ServiceStrip } from "@evcp/ui";
 import { BrainCircuit, KeyRound, LockKeyhole, Route, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdminRoutes } from "@/routes/AdminRoutes";
@@ -50,7 +50,7 @@ function OperationsDashboard({ client, ai, page }: { client: ReturnType<typeof c
     { label: "Service healthy", value: String(operations.serviceHealth.filter((item) => item.status === "healthy").length), detail: operations.message, icon: Route },
     { label: "Queues degraded", value: String(operations.queueHealth.filter((item) => item.status !== "healthy").length), detail: "from Platform API", icon: ShieldCheck }
   ];
-  return <section className="admin-page-stack"><section className="ds-metric-grid">{kpis.map(({ icon: Icon, ...item }) => <MetricCard key={item.label} {...item} icon={<Icon size={18} />} tone={operations.status === "ready" ? "success" : "warning"} />)}</section><SectionCard eyebrow="Operations" title={page === "services" ? "Service health" : "Production evidence"}><DataTable columns={[{ key: "name", label: "Service" }, { key: "status", label: "Status" }, { key: "detail", label: "Signal" }]} rows={operations.serviceHealth} /></SectionCard><SectionCard eyebrow="Queues" title="Current backpressure"><DataTable columns={[{ key: "name", label: "Queue" }, { key: "depth", label: "Depth" }, { key: "failedCount", label: "Failed" }, { key: "status", label: "Status" }]} rows={operations.queueHealth} /></SectionCard></section>;
+  return <section className="admin-page-stack"><section className="ds-metric-grid">{kpis.map(({ icon: Icon, ...item }) => <MetricCard key={item.label} {...item} icon={<Icon size={18} />} tone={operations.status === "ready" ? "success" : "warning"} />)}</section><ServiceStrip services={operations.serviceHealth.map(({ name, detail, status }) => ({ name, detail, status: status === "failed" ? "down" : status }))} /><SectionCard eyebrow="Operations" title={page === "services" ? "Service health" : "Production evidence"}><DataTable columns={[{ key: "name", label: "Service" }, { key: "status", label: "Status" }, { key: "detail", label: "Signal" }]} rows={operations.serviceHealth} /></SectionCard><SectionCard eyebrow="Queues" title="Current backpressure"><DataTable columns={[{ key: "name", label: "Queue" }, { key: "depth", label: "Depth" }, { key: "failedCount", label: "Failed" }, { key: "status", label: "Status" }]} rows={operations.queueHealth} /></SectionCard></section>;
 }
 
 function AiGovernancePanel({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
