@@ -5,6 +5,7 @@ import { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps } from "./prim
 export { AppShell } from "./app-shell";
 export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
+export { Drawer } from "./primitives/drawer";
 export { Input, Select, Field } from "./primitives/input";
 export { Table, THead, TRow, TCell } from "./primitives/table";
 export { MetricCard } from "./primitives/metric-card";
