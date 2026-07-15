@@ -160,9 +160,11 @@ export function Select({
         id={id}
         name={name}
         disabled={disabled}
+        role="combobox"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
         aria-label={ariaLabel}
         aria-required={required || undefined}
         onClick={() => (open ? closeMenu() : openMenu())}
@@ -178,7 +180,6 @@ export function Select({
         <ul
           id={listboxId}
           role="listbox"
-          aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
           className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-auto rounded-control border border-border bg-surface py-1 shadow-card"
         >
           {items.map((item, index) => {
