@@ -13,5 +13,8 @@
     "@evcp/types": "workspace:*",
     "react": "^19.0.0",
     "react-data-grid": "7.0.0-beta.59"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.2"
   }
 }

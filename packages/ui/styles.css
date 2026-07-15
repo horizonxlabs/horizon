@@ -1,3 +1,4 @@
+@import "tailwindcss";
 /* react-data-grid base styles for the Database tab grid (imported here so app surfaces only ever
    import @evcp/ui/styles.css, per the design-system governance rule). */
 @import "react-data-grid/lib/styles.css";
