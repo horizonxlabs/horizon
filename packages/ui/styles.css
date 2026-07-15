@@ -1,51 +1,32 @@
 @import "tailwindcss";
-/* react-data-grid base styles for the Database tab grid (imported here so app surfaces only ever
-   import @evcp/ui/styles.css, per the design-system governance rule). */
 @import "react-data-grid/lib/styles.css";
+@import "./theme.css";
 
-:root {
-  --evcp-font-thai:
-    "LINE Seed Sans TH", "Noto Sans Thai", "IBM Plex Sans Thai", "Sarabun", "Thonburi",
-    "Leelawadee UI";
-  --evcp-font-latin: Inter, "SF Pro Text", "Segoe UI", system-ui;
-  --evcp-font-sans: var(--evcp-font-thai), var(--evcp-font-latin), sans-serif;
-  --evcp-color-page: #f1f5f9;
-  --evcp-color-surface: #ffffff;
-  --evcp-color-surface-muted: #f8fafc;
-  --evcp-color-border: #e2e8f0;
-  --evcp-color-border-soft: #eef2f7;
-  --evcp-color-text: #0f172a;
-  --evcp-color-muted: #64748b;
-  /* Sapphire Enterprise: blue-600 primary, sky accent on the dark sidebar. */
-  --evcp-color-primary: #2563eb;
-  --evcp-color-primary-strong: #1d4ed8;
-  --evcp-color-primary-soft: #dbeafe;
-  --evcp-color-accent: #38bdf8;
-  --evcp-color-success-bg: #dcfce7;
-  --evcp-color-success-text: #166534;
-  --evcp-color-warning-bg: #fef3c7;
-  --evcp-color-warning-text: #92400e;
-  --evcp-color-danger-bg: #fee2e2;
-  --evcp-color-danger-text: #991b1b;
-  --evcp-color-info-bg: #e0f2fe;
-  --evcp-color-info-text: #075985;
-  --evcp-color-code-bg: #0b1021;
-  --evcp-color-code-text: #e5e7eb;
-  --evcp-color-diff-add: #86efac;
-  --evcp-color-diff-remove: #fca5a5;
-  --evcp-color-ai-user-bg: #f4f1fe;
-  --evcp-color-ai-user-text: #4c1d95;
-  --evcp-space-1: 4px;
-  --evcp-space-2: 8px;
-  --evcp-space-3: 12px;
-  --evcp-space-4: 16px;
-  --evcp-space-5: 20px;
-  --evcp-space-6: 24px;
-  --evcp-space-7: 28px;
-  --evcp-radius-control: 8px;
-  --evcp-radius-card: 8px;
-  --evcp-radius-pill: 999px;
-  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.05);
+@theme inline {
+  --color-page: var(--evcp-color-page);
+  --color-surface: var(--evcp-color-surface);
+  --color-surface-muted: var(--evcp-color-surface-muted);
+  --color-border: var(--evcp-color-border);
+  --color-border-soft: var(--evcp-color-border-soft);
+  --color-body: var(--evcp-color-text);
+  --color-muted: var(--evcp-color-muted);
+  --color-primary: var(--evcp-color-primary);
+  --color-primary-strong: var(--evcp-color-primary-strong);
+  --color-primary-soft: var(--evcp-color-primary-soft);
+  --color-accent: var(--evcp-color-accent);
+  --color-success: var(--evcp-color-success-text);
+  --color-success-bg: var(--evcp-color-success-bg);
+  --color-warning: var(--evcp-color-warning-text);
+  --color-warning-bg: var(--evcp-color-warning-bg);
+  --color-danger: var(--evcp-color-danger-text);
+  --color-danger-bg: var(--evcp-color-danger-bg);
+  --color-info: var(--evcp-color-info-text);
+  --color-info-bg: var(--evcp-color-info-bg);
+  --radius-control: var(--evcp-radius-control);
+  --radius-card: var(--evcp-radius-card);
+  --radius-pill: var(--evcp-radius-pill);
+  --shadow-card: var(--evcp-shadow-card);
+  --font-sans: var(--evcp-font-sans);
 }
 
 html {

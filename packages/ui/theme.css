@@ -1,0 +1,80 @@
+/* Horizon design tokens — single source of truth.
+   Layer 1 (reference): raw palette values. Raw hex lives ONLY here.
+   Layer 2 (semantic): intent-named tokens mapped from layer 1. Reserved .dark block for future theming. */
+:root {
+  /* Layer 1 — reference palette */
+  --ref-blue-600: #2563eb;
+  --ref-blue-700: #1d4ed8;
+  --ref-blue-100: #dbeafe;
+  --ref-sky-400: #38bdf8;
+  --ref-slate-50: #f8fafc;
+  --ref-slate-100: #f1f5f9;
+  --ref-slate-200: #e2e8f0;
+  --ref-slate-100-soft: #eef2f7;
+  --ref-slate-500: #64748b;
+  --ref-slate-900: #0f172a;
+  --ref-white: #ffffff;
+  --ref-success-bg: #dcfce7;
+  --ref-success-text: #166534;
+  --ref-warning-bg: #fef3c7;
+  --ref-warning-text: #92400e;
+  --ref-danger-bg: #fee2e2;
+  --ref-danger-text: #991b1b;
+  --ref-info-bg: #e0f2fe;
+  --ref-info-text: #075985;
+  --ref-code-bg: #0b1021;
+  --ref-code-text: #e5e7eb;
+  --ref-diff-add: #86efac;
+  --ref-diff-remove: #fca5a5;
+  --ref-ai-user-bg: #f4f1fe;
+  --ref-ai-user-text: #4c1d95;
+
+  /* Fonts */
+  --evcp-font-thai:
+    "LINE Seed Sans TH", "Noto Sans Thai", "IBM Plex Sans Thai", "Sarabun", "Thonburi",
+    "Leelawadee UI";
+  --evcp-font-latin: Inter, "SF Pro Text", "Segoe UI", system-ui;
+  --evcp-font-sans: var(--evcp-font-thai), var(--evcp-font-latin), sans-serif;
+
+  /* Layer 2 — semantic tokens (names kept identical to legacy) */
+  --evcp-color-page: var(--ref-slate-100);
+  --evcp-color-surface: var(--ref-white);
+  --evcp-color-surface-muted: var(--ref-slate-50);
+  --evcp-color-border: var(--ref-slate-200);
+  --evcp-color-border-soft: var(--ref-slate-100-soft);
+  --evcp-color-text: var(--ref-slate-900);
+  --evcp-color-muted: var(--ref-slate-500);
+  --evcp-color-primary: var(--ref-blue-600);
+  --evcp-color-primary-strong: var(--ref-blue-700);
+  --evcp-color-primary-soft: var(--ref-blue-100);
+  --evcp-color-accent: var(--ref-sky-400);
+  --evcp-color-success-bg: var(--ref-success-bg);
+  --evcp-color-success-text: var(--ref-success-text);
+  --evcp-color-warning-bg: var(--ref-warning-bg);
+  --evcp-color-warning-text: var(--ref-warning-text);
+  --evcp-color-danger-bg: var(--ref-danger-bg);
+  --evcp-color-danger-text: var(--ref-danger-text);
+  --evcp-color-info-bg: var(--ref-info-bg);
+  --evcp-color-info-text: var(--ref-info-text);
+  --evcp-color-code-bg: var(--ref-code-bg);
+  --evcp-color-code-text: var(--ref-code-text);
+  --evcp-color-diff-add: var(--ref-diff-add);
+  --evcp-color-diff-remove: var(--ref-diff-remove);
+  --evcp-color-ai-user-bg: var(--ref-ai-user-bg);
+  --evcp-color-ai-user-text: var(--ref-ai-user-text);
+  --evcp-space-1: 4px;
+  --evcp-space-2: 8px;
+  --evcp-space-3: 12px;
+  --evcp-space-4: 16px;
+  --evcp-space-5: 20px;
+  --evcp-space-6: 24px;
+  --evcp-space-7: 28px;
+  --evcp-radius-control: 8px;
+  --evcp-radius-card: 8px;
+  --evcp-radius-pill: 999px;
+  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+/* Reserved for future dark theme — intentionally empty for now (light-only ships). */
+.dark {
+}
