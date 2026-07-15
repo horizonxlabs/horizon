@@ -10,6 +10,7 @@ export function QuotaDrawer({ open, onClose, ai, scope, onDone }: Props) {
   const [selectedScope, setSelectedScope] = useState<AiQuotaDto["scope"]>(scope ?? "organization");
   const [daily, setDaily] = useState("100000");
   const [monthly, setMonthly] = useState("2000000");
+  const [usedToday, setUsedToday] = useState(0);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -17,7 +18,13 @@ export function QuotaDrawer({ open, onClose, ai, scope, onDone }: Props) {
     const target = scope ?? "organization";
     setSelectedScope(target);
     const existing = ai.quotas.find((q) => q.scope === target);
-    if (existing) { setDaily(String(existing.dailyLimit)); setMonthly(String(existing.monthlyLimit)); }
+    if (existing) {
+      setDaily(String(existing.dailyLimit));
+      setMonthly(String(existing.monthlyLimit));
+      setUsedToday(existing.usedToday);
+    } else {
+      setUsedToday(0);
+    }
   }, [open, scope, ai.quotas]);
 
   async function submit(event: FormEvent) {
@@ -26,7 +33,7 @@ export function QuotaDrawer({ open, onClose, ai, scope, onDone }: Props) {
     try {
       await ai.configureQuota({
         scope: selectedScope, dailyLimit: Number(daily), monthlyLimit: Number(monthly),
-        warningThreshold: Math.floor(Number(daily) * 0.8), hardStop: true, usedToday: 0
+        warningThreshold: Math.floor(Number(daily) * 0.8), hardStop: true, usedToday
       });
       onDone?.(`${selectedScope} quota saved with a hard stop.`);
       onClose();

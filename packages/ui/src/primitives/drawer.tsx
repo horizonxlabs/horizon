@@ -49,7 +49,7 @@ export function Drawer({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-xl"
+          "relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-card"
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
