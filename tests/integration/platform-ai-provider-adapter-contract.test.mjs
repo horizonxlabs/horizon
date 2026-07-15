@@ -3,7 +3,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 test("AI provider adapter contract supports external OpenAI-compatible gateway without secret leakage", () => {
-  const servicesSource = readFileSync("apps/platform-api/src/platform-services.ts", "utf8");
+  const platformServicesSource = readFileSync("apps/platform-api/src/platform-services.ts", "utf8");
+  const aiGatewayAdapterSource = readFileSync(
+    "apps/platform-api/src/ai-governance/ai-gateway-adapter.ts",
+    "utf8",
+  );
+  const servicesSource = platformServicesSource + "\n" + aiGatewayAdapterSource;
   const requirements = readFileSync("docs/requirements/production-blueprint-requirements.md", "utf8");
 
   assert.match(servicesSource, /interface AiCompletionAdapter/);
