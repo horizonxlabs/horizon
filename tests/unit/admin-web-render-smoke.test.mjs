@@ -57,6 +57,27 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
   );
 });
 
+test("UsersConsole renders its title with a stub client", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubClient = {
+      request: async () => ({}),
+      requestWithMeta: async () => ({ data: [], meta: { first: 0, max: 10, total: 0 } })
+    };
+    const { UsersConsole } = await import("./apps/admin-web/src/features/user-management/UsersConsole.tsx");
+    const html = renderToStaticMarkup(React.createElement(UsersConsole, { client: stubClient }));
+    if (!html.includes("Users")) throw new Error("UsersConsole did not render its title");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
 test("AdminRoutes retains setup and session guard selection", () => {
   const probe = `
     import React from "react";
