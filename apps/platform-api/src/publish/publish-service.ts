@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { WorkspaceDeployment, EnvironmentName } from "@evcp/types";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { buildAppContainerSpec } from "../workspace-orchestrator/docker-engine";
@@ -111,17 +112,18 @@ export function createPublishService(deps: PublishServiceDeps) {
     slug: string,
     environment: EnvironmentName
   ) => {
-    await deps.docker.buildImage(sourceContainerId, imageTag, "Dockerfile", [
+    const image = await deps.docker.buildImage(sourceContainerId, imageTag, "Dockerfile", [
       { name: "Dockerfile", content: PRODUCTION_DOCKERFILE },
       { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE },
       { name: ".env.production", content: buildDeploymentEnvironment(slug, environment) }
     ]);
+    return image.imageId;
   };
 
   // promote reuses the exact bits validated in staging: snapshot the running (already-built) staging
   // container to the prod tag rather than rebuilding, so production == what staging health-gated.
   const retagFromContainer = async (sourceContainerId: string, imageTag: string) => {
-    await deps.docker.commitContainer(sourceContainerId, imageTag);
+    return (await deps.docker.commitContainer(sourceContainerId, imageTag)).imageId;
   };
 
   // Shared deploy flow: materialize an env-scoped image from a source container, start a SEPARATE
@@ -140,13 +142,21 @@ export function createPublishService(deps: PublishServiceDeps) {
       imageTag: string,
       slug: string,
       environment: EnvironmentName
-    ) => Promise<void>;
+    ) => Promise<string>;
   }): Promise<PublishOutcome> => {
     const { environment } = input;
 
-    // Materialize the environment image from the source container, tagged to the commit.
-    const imageTag = `evcp-${environment}-${input.slug}:${input.commitSha}`;
-    await input.prepareImage(input.sourceContainerId, imageTag, input.slug, environment);
+    // Materialize an immutable deployment artifact. The source commit remains visible in the tag,
+    // while the deployment nonce prevents a repeat publish of the same commit from moving a tag
+    // that an older revision already recorded.
+    const revisionSuffix = `${input.commitSha.slice(0, 12)}-${randomUUID().slice(0, 8)}`;
+    const imageTag = `evcp-${environment}-${input.slug}:${revisionSuffix}`;
+    const imageDigest = await input.prepareImage(
+      input.sourceContainerId,
+      imageTag,
+      input.slug,
+      environment
+    );
 
     // Start a SEPARATE container for this environment. Same secrets as dev + NODE_ENV=production.
     // DB isolation note: staging reuses the project's resolveEnv (same DATABASE_URL) but gets its
@@ -157,11 +167,14 @@ export function createPublishService(deps: PublishServiceDeps) {
         slug: input.slug,
         image: imageTag,
         env: await deps.resolveEnv(input.projectId),
-        network,
-        workspaceVolume: `evcp-ws-${input.slug}-${environment}-data`
+        network
       },
       environment
     );
+    const containerName = `evcp-${environment}-${input.slug}-${revisionSuffix}`;
+    spec.name = containerName;
+    spec.labels["evcp.commit-sha"] = input.commitSha;
+    spec.labels["evcp.container-name"] = containerName;
     const { containerId } = await deps.docker.createContainer(spec);
     await deps.docker.startContainer(containerId);
 
@@ -172,13 +185,18 @@ export function createPublishService(deps: PublishServiceDeps) {
       environment,
       commitSha: input.commitSha,
       imageTag,
+      imageDigest,
       containerId,
+      containerName,
       publishedByUserId: input.publishedByUserId
     });
 
     // Health-check gate.
-    const healthy = await deps.health.check(`http://evcp-${environment}-${input.slug}:3000/`);
+    const basePath =
+      environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
+    const healthy = await deps.health.check(`http://${containerName}:3000${basePath}/api/health`);
     const finalized = deps.deployments.updateHealth(deployment.id, healthy ? "healthy" : "failed");
+    await deps.deployments.flush?.();
 
     if (!healthy) {
       // keep old version live; tear down the failed container (best-effort)
@@ -204,6 +222,21 @@ export function createPublishService(deps: PublishServiceDeps) {
   };
 
   return {
+    async deactivate(deployment: WorkspaceDeployment): Promise<void> {
+      deps.deployments.updateHealth(deployment.id, "failed");
+      await deps.deployments.flush?.();
+      if (deployment.containerId) {
+        await deps.docker.stopContainer(deployment.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(deployment.containerId).catch(() => undefined);
+      }
+      audit("workspace.deploy_compensated", deployment.projectId, {
+        slug: deployment.slug,
+        environment: deployment.environment,
+        commitSha: deployment.commitSha,
+        deploymentId: deployment.id
+      });
+    },
+
     async publish(input: {
       projectId: string;
       slug: string;
@@ -240,19 +273,24 @@ export function createPublishService(deps: PublishServiceDeps) {
 
         // Do not mutate the live development checkout until every rollback boundary has passed.
         // A rejected rollback must leave the current healthy source and preview untouched.
+        const originalCommit = isRollback ? await deps.git.currentCommit(input.projectId) : null;
         if (isRollback) await deps.git.checkoutCommit(input.projectId, commitSha);
 
-        return withDeployQueue(() =>
-          deployFromContainer({
-            projectId: input.projectId,
-            slug: input.slug,
-            environment: input.environment,
-            commitSha,
-            sourceContainerId: devContainerId,
-            publishedByUserId: input.publishedByUserId,
-            prepareImage: buildProductionImage
-          })
-        );
+        try {
+          return await withDeployQueue(() =>
+            deployFromContainer({
+              projectId: input.projectId,
+              slug: input.slug,
+              environment: input.environment,
+              commitSha,
+              sourceContainerId: devContainerId,
+              publishedByUserId: input.publishedByUserId,
+              prepareImage: buildProductionImage
+            })
+          );
+        } finally {
+          if (originalCommit) await deps.git.checkoutCommit(input.projectId, originalCommit);
+        }
       });
     },
 

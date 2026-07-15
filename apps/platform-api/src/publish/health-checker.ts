@@ -27,10 +27,8 @@ export function createHttpHealthChecker(
       for (let attempt = 0; attempt < retries; attempt += 1) {
         try {
           const response = await fetchImpl(url, { method: "GET" });
-          // Any non-server-error response means the container is up and routing (a deployed app may
-          // legitimately 404/401 at "/" — e.g. auth-gated or no root route). Only 5xx / connection
-          // errors count as not-yet-healthy.
-          if (response.status < 500) {
+          // Readiness must be explicit: auth failures and missing routes are not healthy enough to expose.
+          if (response.status >= 200 && response.status < 400) {
             return true;
           }
         } catch {

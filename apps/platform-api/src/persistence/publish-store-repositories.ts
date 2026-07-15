@@ -1,7 +1,10 @@
 import type { AppAccessRequest, AppAccessRequestStatus, AppAccessSnapshot, AppInvitation, AppInvitationStatus, AppManifest, AppMemberRecord, AppRoleDefinition, AppStoreRegistryEntry, AppUserType, CreatorTicketInboxItem, DeploymentRecord, InAppNotification, ManagedApp, PlatformProject, PlatformUser, PrdVersion, PreviewVersion, PublishChecklistItem, PublishRequestRecord, PublishResult, PublishReview, StoreAccessRequestResult, StoreAppInstallation, StorefrontAppCard, StorefrontAppDetail, StorefrontHome, SupportTicket, SupportTicketTimelineEntry, TicketPriority, TicketStatus, TicketStatusView, TicketType } from "../platform-services";
+import type { WorkspaceDeployment } from "@evcp/types";
 import { PermissionError, ValidationError } from "../platform-services";
 import { canAccessPublishedProject, storeActionsForCard } from "./published-app-access";
-import type { AppAccessRequestRecord, AppInstallationRecord, AppInvitationRecord, AppManifestRecord, AppMemberRecordData, AppRecord, AppRoleRecord, AppStoreRegistryEntryRecord, DateValue, DeploymentRecordData, InAppNotificationRecord, PublishRequestRecordData, PublishStorePersistenceClient, SupportTicketRecord, SupportTicketTimelineEntryRecord, UserRecord } from "./publish-store-persistence-types";
+import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
+import type { AppAccessRequestRecord, AppInstallationRecord, AppInvitationRecord, AppManifestRecord, AppMemberRecordData, AppRecord, AppRoleRecord, AppStoreRegistryEntryRecord, DeploymentRecordData, InAppNotificationRecord, PublishRequestRecordData, PublishStorePersistenceClient, SupportTicketRecord, SupportTicketTimelineEntryRecord, UserRecord } from "./publish-store-persistence-types";
+import { matchesAccessRequest, matchesApp, matchesAppScoped, matchesInstallation, matchesTicket, slugId, slugToId, sortByDate, toIsoString, updateById } from "./publish-store-record-utils";
 export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 
 export class PublishStoreRepositoryBackedService {
@@ -154,9 +157,20 @@ export class PublishStoreRepositoryBackedService {
     };
   }
 
-  async publishApp(actor: PlatformUser, input: { project: PlatformProject; baseline: PrdVersion; preview: PreviewVersion }): Promise<PublishResult> {
+  async publishApp(actor: PlatformUser, input: { project: PlatformProject; baseline: PrdVersion; preview: PreviewVersion; runtimeDeployment?: WorkspaceDeployment }): Promise<PublishResult> {
     requireProjectAccess(actor, input.project);
     const review = await this.getPublishReview(actor, input);
+    if (input.runtimeDeployment) {
+      review.manifest.runtime = {
+        deploymentRevisionId: input.runtimeDeployment.id,
+        revision: input.runtimeDeployment.revision,
+        sourceCommitSha: input.runtimeDeployment.commitSha,
+        imageTag: input.runtimeDeployment.imageTag,
+        imageDigest: input.runtimeDeployment.imageDigest
+      };
+      review.manifest.app.route = `/api/apps/${input.runtimeDeployment.slug}`;
+      review.manifest.frontend.routes = [review.manifest.app.route];
+    }
     const blockingItems = review.checklist.filter((item) => item.status === "fail").map((item) => item.label);
     const publishCount = (await this.client.publishRequest.findMany({ where: { projectId: input.project.id } })).length;
     const now = new Date();
@@ -199,8 +213,14 @@ export class PublishStoreRepositoryBackedService {
         prdVersion: review.manifest.prd.version,
         frontendCheckpointId: review.manifest.frontend.checkpointId,
         publishedByUserId: actor.id,
-        publishedAt: now,
-      },
+        deploymentRevisionId: input.runtimeDeployment?.id,
+        runtimeRevision: input.runtimeDeployment?.revision,
+        sourceCommitSha: input.runtimeDeployment?.commitSha,
+        imageTag: input.runtimeDeployment?.imageTag,
+        imageDigest: input.runtimeDeployment?.imageDigest,
+        containerName: input.runtimeDeployment?.containerName,
+        publishedAt: now
+      }
     });
     const registryEntry = await this.client.appStoreRegistryEntry.upsert({
       where: { appId: review.manifest.appId },
@@ -578,17 +598,20 @@ export class PublishStoreRepositoryBackedService {
 
   private async buildManifest(project: PlatformProject, app: ManagedApp, baseline: PrdVersion, preview: PreviewVersion): Promise<AppManifest> {
     const roles = await this.rolesForApp(app.id);
+    const priorManifest = await this.client.appManifest.findFirst({ where: { appId: app.id } });
+    const manifestVersion = String((Number.parseInt(priorManifest?.manifestVersion ?? "0", 10) || 0) + 1);
+    const route = `/api/apps/${resourceKeyForProject(project.id)}`;
     return {
-      id: `manifest_${app.id}_v1`,
+      id: `manifest_${app.id}_v${manifestVersion}`,
       appId: app.id,
       projectId: project.id,
-      manifestVersion: "1",
+      manifestVersion,
       app: {
         id: app.id,
         slug: app.slug,
         name: app.name,
-        route: app.route,
-        status: app.status,
+        route,
+        status: app.status
       },
       prd: {
         versionId: baseline.isBaseline ? baseline.id : "",
@@ -598,7 +621,7 @@ export class PublishStoreRepositoryBackedService {
         checkpointId: preview.version === "preview-0000" ? "" : preview.id,
         version: preview.version === "preview-0000" ? "" : preview.version,
         checksum: `sha256:${slugToId(preview.id).padEnd(16, "0")}`,
-        routes: [`/apps/${app.slug}`, `/apps/${app.slug}/leave-requests`],
+        routes: [route]
       },
       auth: {
         mode: "platform_auth_sdk",
@@ -1187,7 +1210,13 @@ function mapDeployment(record: DeploymentRecordData): DeploymentRecord {
     prdVersion: record.prdVersion,
     frontendCheckpointId: record.frontendCheckpointId,
     publishedByUserId: record.publishedByUserId,
-    publishedAt: toIsoString(record.publishedAt),
+    deploymentRevisionId: record.deploymentRevisionId ?? undefined,
+    runtimeRevision: record.runtimeRevision ?? undefined,
+    sourceCommitSha: record.sourceCommitSha ?? undefined,
+    imageTag: record.imageTag ?? undefined,
+    imageDigest: record.imageDigest ?? undefined,
+    containerName: record.containerName ?? undefined,
+    publishedAt: toIsoString(record.publishedAt)
   };
 }
 
@@ -1241,7 +1270,9 @@ function manifestRecord(manifest: AppManifest): AppManifestRecord {
     roleSnapshot: manifest.roles,
     databaseSnapshot: manifest.database,
     manifest,
-    generatedAt: new Date(manifest.generatedAt),
+    sourceCommitSha: manifest.runtime?.sourceCommitSha,
+    deploymentRevisionId: manifest.runtime?.deploymentRevisionId,
+    generatedAt: new Date(manifest.generatedAt)
   };
 }
 
@@ -1369,77 +1400,4 @@ function normalizeTicketPriority(value: string): TicketPriority {
 function normalizeTicketStatus(value: string): TicketStatus {
   if (value === "in_review" || value === "planned" || value === "resolved" || value === "closed") return value;
   return "submitted";
-}
-
-function matchesApp(app: AppRecord, where: { projectId?: string; slug?: string; id?: string }): boolean {
-  if (where.projectId && app.projectId !== where.projectId) return false;
-  if (where.slug && app.slug !== where.slug) return false;
-  if (where.id && app.id !== where.id) return false;
-  return true;
-}
-
-function matchesAppScoped(record: { appId?: string; projectId?: string }, where: { appId?: string; projectId?: string }): boolean {
-  if (where.appId && record.appId !== where.appId) return false;
-  if (where.projectId && record.projectId !== where.projectId) return false;
-  return true;
-}
-
-function matchesAccessRequest(
-  record: AppAccessRequestRecord,
-  where: {
-    appId?: string;
-    projectId?: string;
-    requesterEmail?: string;
-    status?: string;
-    requestedRoleKey?: string;
-  },
-): boolean {
-  if (!matchesAppScoped(record, where)) return false;
-  if (where.requesterEmail && record.requesterEmail !== where.requesterEmail) return false;
-  if (where.status && record.status !== where.status) return false;
-  if (where.requestedRoleKey && record.requestedRoleKey !== where.requestedRoleKey) return false;
-  return true;
-}
-
-function matchesInstallation(record: AppInstallationRecord, where: { appId?: string; userId?: string; status?: string }): boolean {
-  if (where.appId && record.appId !== where.appId) return false;
-  if (where.userId && record.userId !== where.userId) return false;
-  if (where.status && record.status !== where.status) return false;
-  return true;
-}
-
-function matchesTicket(ticket: SupportTicketRecord, where: { projectId?: string; submittedByUserId?: string }): boolean {
-  if (where.projectId && ticket.projectId !== where.projectId) return false;
-  if (where.submittedByUserId && ticket.submittedByUserId !== where.submittedByUserId) return false;
-  return true;
-}
-
-function updateById<T extends { id: string }>(records: T[], id: string, data: Partial<T>, label: string): T {
-  const index = records.findIndex((record) => record.id === id);
-  if (index < 0) throw new ValidationError(`Unknown ${label}: ${id}`);
-  const next = { ...records[index], ...data };
-  records[index] = next;
-  return next;
-}
-
-function sortByDate<T>(records: T[], key: keyof T, direction: "asc" | "desc" = "asc"): T[] {
-  return [...records].sort((left, right) => {
-    const diff = new Date(left[key] as DateValue).getTime() - new Date(right[key] as DateValue).getTime();
-    return direction === "asc" ? diff : -diff;
-  });
-}
-
-function toIsoString(value: DateValue): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-function slugToId(slug: string): string {
-  return slug
-    .replace(/[^a-z0-9]+/gi, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase();
-}
-
-function slugId(prefix: string, value: string): string {
-  return `${prefix}_${slugToId(value)}`;
 }

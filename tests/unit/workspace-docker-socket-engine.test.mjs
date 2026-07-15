@@ -67,6 +67,47 @@ test("start/stop/remove hit the right endpoints", async () => {
   ]);
 });
 
+test("managed volume lifecycle uses labelled Docker volumes and idempotent removal", async () => {
+  const calls = [];
+  const engine = createDockerSocketEngine({
+    request: async ({ method, path, body }) => {
+      calls.push({ method, path, body });
+      if (path.startsWith("/volumes?")) {
+        return {
+          status: 200,
+          json: async () => ({
+            Volumes: [{ Name: "evcp-ws-prj-1-data", Labels: { "evcp.managed": "true" } }]
+          })
+        };
+      }
+      return { status: method === "POST" ? 201 : 204, json: async () => ({}) };
+    }
+  });
+
+  await engine.ensureVolume("evcp-ws-prj-1-data", {
+    "evcp.managed": "true",
+    "evcp.project-id": "prj_1"
+  });
+  assert.deepEqual(await engine.listManagedVolumes(), [
+    {
+      name: "evcp-ws-prj-1-data",
+      labels: { "evcp.managed": "true" }
+    }
+  ]);
+  await engine.removeVolume("evcp-ws-prj-1-data");
+
+  assert.deepEqual(calls[0], {
+    method: "POST",
+    path: "/volumes/create",
+    body: {
+      Name: "evcp-ws-prj-1-data",
+      Labels: { "evcp.managed": "true", "evcp.project-id": "prj_1" }
+    }
+  });
+  assert.match(calls[1].path, /^\/volumes\?filters=/);
+  assert.equal(calls[2].path, "/volumes/evcp-ws-prj-1-data?force=false");
+});
+
 test("inspectContainer returns image and management labels needed to restore deployed routing", async () => {
   const engine = createDockerSocketEngine({
     request: async () => ({

@@ -63,6 +63,14 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
     "S3_SECRET_KEY"
   ]);
   assert.equal(deps.docker.state.containers[0].status, "running");
+  assert.ok(
+    deps.docker.state.execCalls.some((call) => call.cmd.join(" ").includes("/api/health")),
+    "provisioning must not report running until the preview readiness endpoint responds"
+  );
+  assert.deepEqual(
+    deps.docker.state.volumes.map((volume) => volume.name),
+    ["evcp-ws-prj-leave-tracker-data"]
+  );
   assert.equal(deps.docker.state.containers[0].spec.name, "evcp-ws-prj-leave-tracker");
   assert.ok(
     deps.docker.state.containers[0].spec.env.some((entry) => entry.startsWith("DATABASE_URL="))
@@ -111,9 +119,28 @@ test("provisioning rolls back everything when container start fails", async () =
     [],
     "secrets must be cleared"
   );
+  assert.deepEqual(deps.docker.state.volumes, [], "workspace volume must be rolled back");
   const record = orchestrator.getWorkspace("prj-leave-tracker");
   assert.equal(record.state, "failed");
   assert.equal(record.lastError, "docker daemon exploded");
+});
+
+test("provisioning rolls back when the preview never becomes ready", async () => {
+  const { deps } = createDeps();
+  deps.docker.execInContainer = async () => ({
+    stdout: "",
+    stderr: "preview timeout",
+    exitCode: 1
+  });
+  const orchestrator = createWorkspaceOrchestrator(deps);
+
+  await assert.rejects(
+    () => orchestrator.provisionWorkspace({ projectId: "prj-not-ready", slug: "not-ready" }),
+    /preview readiness/i
+  );
+  assert.deepEqual(deps.docker.state.containers, []);
+  assert.deepEqual(deps.docker.state.volumes, []);
+  assert.deepEqual(deps.objectStorage.state.buckets, []);
 });
 
 test("provisioning fails before Docker when encrypted secret persistence is unavailable", async () => {
@@ -269,6 +296,11 @@ test("stopIdleWorkspaces stops containers idle for 30+ minutes", async () => {
 
 test("startup orphan cleanup removes only labelled development workspaces without runtime records", async () => {
   const { deps, audits } = createDeps();
+  await deps.docker.ensureVolume("evcp-ws-prj-orphan-data", {
+    "evcp.managed": "true",
+    "evcp.project-id": "prj_orphan",
+    "evcp.kind": "workspace-data"
+  });
   const orphan = await deps.docker.createContainer({
     name: "evcp-ws-prj-orphan",
     image: "evcp/workspace-next:1",
@@ -295,9 +327,29 @@ test("startup orphan cleanup removes only labelled development workspaces withou
   await deps.docker.startContainer(deployed.containerId);
   const orchestrator = createWorkspaceOrchestrator(deps);
 
-  assert.deepEqual(await orchestrator.cleanupOrphanContainers(), ["evcp-ws-prj-orphan"]);
-  assert.deepEqual(deps.docker.state.containers.map((item) => item.spec.name), ["evcp-production-prj-live"]);
+  assert.deepEqual((await orchestrator.cleanupOrphanContainers()).sort(), [
+    "evcp-ws-prj-orphan",
+    "evcp-ws-prj-orphan-data"
+  ]);
+  assert.deepEqual(
+    deps.docker.state.containers.map((item) => item.spec.name),
+    ["evcp-production-prj-live"]
+  );
+  assert.deepEqual(deps.docker.state.volumes, []);
   assert.ok(audits.some((event) => event.action === "workspace.orphan_removed"));
+});
+
+test("startup orphan cleanup removes a managed volume even when its container is already gone", async () => {
+  const { deps } = createDeps();
+  await deps.docker.ensureVolume("evcp-ws-prj-volume-only-data", {
+    "evcp.managed": "true",
+    "evcp.project-id": "prj_volume_only",
+    "evcp.kind": "workspace-data"
+  });
+  const orchestrator = createWorkspaceOrchestrator(deps);
+
+  assert.deepEqual(await orchestrator.cleanupOrphanContainers(), ["evcp-ws-prj-volume-only-data"]);
+  assert.deepEqual(deps.docker.state.volumes, []);
 });
 
 test("archiveWorkspace stops container but keeps volume resources", async () => {

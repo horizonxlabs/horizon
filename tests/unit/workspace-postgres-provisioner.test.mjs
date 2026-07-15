@@ -53,3 +53,20 @@ test("pg-client provisioner runs all statements and returns credentials", async 
   assert.ok(result.password.length >= 32);
   assert.ok(executed.length >= 4);
 });
+
+test("pg-client provisioner removes a partially-created role/schema when any step fails", async () => {
+  const executed = [];
+  let provisioningStatements = 0;
+  const provisioner = createPgClientPostgresProvisioner(async (sql) => {
+    executed.push(sql);
+    if (sql.startsWith("CREATE")) {
+      provisioningStatements += 1;
+      if (provisioningStatements === 2) throw new Error("schema create failed");
+    }
+  });
+
+  await assert.rejects(() => provisioner.provisionSchema("leave-tracker"), /schema create failed/);
+
+  assert.ok(executed.some((sql) => /DROP SCHEMA IF EXISTS/.test(sql)));
+  assert.ok(executed.some((sql) => /DROP ROLE IF EXISTS/.test(sql)));
+});

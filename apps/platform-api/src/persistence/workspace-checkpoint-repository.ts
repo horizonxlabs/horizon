@@ -16,7 +16,7 @@ export interface WorkspaceCheckpointPersistenceClient {
   workspaceCodeCheckpoint: {
     upsert(args: {
       where: { projectId_commitSha: { projectId: string; commitSha: string } };
-      update: { label: string };
+      update: Record<string, never>;
       create: WorkspaceCodeCheckpointRecord;
     }): Promise<WorkspaceCodeCheckpointRecord>;
     findMany(args: {
@@ -38,7 +38,7 @@ export class PrismaWorkspaceCheckpointStore implements CheckpointStore {
     const createdAt = new Date();
     return mapCheckpoint(await this.client.workspaceCodeCheckpoint.upsert({
       where: { projectId_commitSha: { projectId: input.projectId, commitSha: input.commitSha } },
-      update: { label: input.label },
+      update: {},
       create: { id: `wcp_${randomUUID().replaceAll("-", "")}`, ...input, createdAt }
     }));
   }

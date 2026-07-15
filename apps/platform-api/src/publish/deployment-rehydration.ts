@@ -1,6 +1,7 @@
 import type { EnvironmentName, WorkspaceDeployment } from "@evcp/types";
 import type { DeploymentStore } from "./deployment-store";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
+import type { HealthChecker } from "./health-checker";
 
 function commitFromImageTag(image: string): string {
   const separator = image.lastIndexOf(":");
@@ -15,13 +16,13 @@ function commitFromImageTag(image: string): string {
 export async function rehydrateRunningDeployment(input: {
   deployments: DeploymentStore;
   docker: Pick<DockerEngine, "inspectContainer">;
+  health: HealthChecker;
   slug: string;
   environment: EnvironmentName;
 }): Promise<WorkspaceDeployment | null> {
   const existing = input.deployments.getCurrent(input.slug, input.environment);
-  if (existing) return existing;
-
-  const inspected = await input.docker.inspectContainer(`evcp-${input.environment}-${input.slug}`);
+  const containerName = existing?.containerName ?? `evcp-${input.environment}-${input.slug}`;
+  const inspected = await input.docker.inspectContainer(containerName);
   if (
     !inspected?.running ||
     !inspected.image ||
@@ -29,8 +30,23 @@ export async function rehydrateRunningDeployment(input: {
     inspected.labels["evcp.project-slug"] !== input.slug ||
     inspected.labels["evcp.env"] !== input.environment
   ) {
+    if (existing) {
+      input.deployments.updateHealth(existing.id, "failed");
+      await input.deployments.flush?.();
+    }
     return null;
   }
+
+  const basePath =
+    input.environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
+  if (!(await input.health.check(`http://${containerName}:3000${basePath}/api/health`))) {
+    if (existing) {
+      input.deployments.updateHealth(existing.id, "failed");
+      await input.deployments.flush?.();
+    }
+    return null;
+  }
+  if (existing) return existing;
 
   const deployment = input.deployments.create({
     // Older running containers do not carry a project id. Do not reverse the resource key: its
@@ -41,8 +57,12 @@ export async function rehydrateRunningDeployment(input: {
     environment: input.environment,
     commitSha: commitFromImageTag(inspected.image),
     imageTag: inspected.image,
+    imageDigest: inspected.image,
     containerId: inspected.containerId,
+    containerName,
     publishedByUserId: "system-rehydration"
   });
-  return input.deployments.updateHealth(deployment.id, "healthy");
+  const healthy = input.deployments.updateHealth(deployment.id, "healthy");
+  await input.deployments.flush?.();
+  return healthy;
 }

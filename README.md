@@ -154,13 +154,15 @@ Detailed, phase-by-phase release work is tracked in the authoritative [MVP pendi
 - ✅ Restart-safe PostgreSQL AI job worker with encrypted payloads, lease recovery/heartbeat, request idempotency, and persisted execution evidence.
 - ✅ Project file/attachment metadata in Prisma with object payloads in MinIO; Creator no longer treats legacy in-memory upload state as authoritative.
 - ✅ Immutable generation checkpoints in PostgreSQL, migration-aware rollback protection, restart rehydration, and safe orphan-workspace cleanup.
+- ✅ Real workspace generation now waits for preview readiness, FIFO-serializes turns per project while allowing different projects to progress concurrently, and enforces `prepare → actions → validate → commit → migrations → checkpoint`; all migrations from one turn share one transaction, and a failure restores last-known-good source without a checkpoint.
+- ✅ Blue-green publish uses unique immutable revision tags/digests and persisted deployment revisions; publish, rollback, and promote compensate persistence failures, failed replacements preserve the healthy route, cross-app rollback stays isolated, and restart rehydration has real local runtime proof.
 - ✅ Release ingress publishes only Caddy HTTP/HTTPS; generated apps remain internal and require Platform Auth plus active app/project membership.
 - ✅ Local real-Keycloak browser proof for Admin, Creator, and App Store plus live Anthropic calls for all six governed scenarios, quota/guardrail blocking, and fallback recovery.
 
 ### In progress: pilot proof
 
 - 🟡 Repeat the proven local Creator-first flows on the clean pilot hostname: live AI change, token-free preview session, publish, and end-user access.
-- 🟡 Promote the successful local restart, encrypted PostgreSQL/MinIO restore, and provider-outage drills to the operator-owned pilot environment; add registry rollback evidence.
+- 🟡 Promote the successful final #149 CI and local workspace/publish restart, rollback, encrypted PostgreSQL/MinIO restore, and provider-outage drills to the operator-owned pilot environment; add registry-outage evidence. See [Phase 7–8 evidence](./docs/operations/phase-7-8-pilot-evidence.md).
 - 🟡 Retire remaining legacy-only regression services after every consumer has moved to the Prisma/runtime path.
 
 ### Required before a production pilot

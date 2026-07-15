@@ -5,7 +5,7 @@ const { PrismaWorkspaceCheckpointStore } = await import(
   "../../apps/platform-api/src/persistence/workspace-checkpoint-repository.ts"
 );
 
-test("workspace code checkpoints persist and remain idempotent per project commit", async () => {
+test("workspace code checkpoints are immutable and idempotent per project commit", async () => {
   const rows = [];
   const store = new PrismaWorkspaceCheckpointStore({
     workspaceCodeCheckpoint: {
@@ -42,5 +42,5 @@ test("workspace code checkpoints persist and remain idempotent per project commi
 
   assert.equal(first.id, repeated.id);
   assert.equal((await store.listCheckpoints("prj_1")).length, 1);
-  assert.equal((await store.listCheckpoints("prj_1"))[0].label, "Updated label");
+  assert.equal((await store.listCheckpoints("prj_1"))[0].label, "First build");
 });

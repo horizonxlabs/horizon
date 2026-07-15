@@ -12,6 +12,17 @@ test("http health checker returns true on a 200", async () => {
   assert.equal(await checker.check("http://evcp-prod-app:3000/"), true);
 });
 
+test("http health checker rejects 401 and 404 responses as not ready", async () => {
+  for (const status of [401, 404]) {
+    const checker = createHttpHealthChecker({
+      fetchImpl: async () => ({ status }),
+      retries: 1,
+      delayMs: 0
+    });
+    assert.equal(await checker.check("http://app/api/health"), false);
+  }
+});
+
 test("http health checker returns false after exhausting retries on 5xx", async () => {
   let calls = 0;
   const fetchImpl = async () => {

@@ -10,8 +10,7 @@ test("prod spec uses evcp-production- name, NODE_ENV=production, defaults CPU 1/
     slug: "my-app",
     image: "evcp-production-my-app:abc123",
     env: { DATABASE_URL: "postgres://x", S3_BUCKET: "proj-my-app" },
-    network: "evcp-internal",
-    workspaceVolume: "evcp-ws-my-app-production-data"
+    network: "evcp-internal"
   });
   assert.equal(spec.name, "evcp-production-my-app");
   assert.equal(spec.publishPorts, false);
@@ -21,18 +20,19 @@ test("prod spec uses evcp-production- name, NODE_ENV=production, defaults CPU 1/
   assert.ok(spec.env.includes("NODE_ENV=production"));
   assert.ok(spec.env.includes("DATABASE_URL=postgres://x"));
   assert.equal(spec.labels["evcp.env"], "production");
+  assert.deepEqual(spec.hostConfig.Binds, []);
 });
 
 test("prod spec honours explicit cpu/memory overrides", () => {
   const spec = buildProdContainerSpec({
-    slug: "app2", image: "img", env: {}, network: "n", workspaceVolume: "v",
+    slug: "app2", image: "img", env: {}, network: "n",
     cpuCores: 2, memoryMb: 2048
   });
   assert.equal(spec.hostConfig.NanoCpus, 2_000_000_000);
   assert.equal(spec.hostConfig.Memory, 2048 * 1024 * 1024);
 });
 
-test("buildAppContainerSpec parametrizes name, label, and per-env volume by environment", () => {
+test("buildAppContainerSpec parametrizes name and label while keeping the image filesystem immutable", () => {
   const staging = buildAppContainerSpec(
     {
       projectId: "prj_123",
@@ -46,8 +46,7 @@ test("buildAppContainerSpec parametrizes name, label, and per-env volume by envi
   assert.equal(staging.name, "evcp-staging-my-app");
   assert.equal(staging.labels["evcp.env"], "staging");
   assert.equal(staging.labels["evcp.project-id"], "prj_123");
-  // default per-env volume keeps staging's disk separate from production's
-  assert.ok(staging.hostConfig.Binds.includes("evcp-ws-my-app-staging-data:/workspace"));
+  assert.deepEqual(staging.hostConfig.Binds, []);
   // NODE_ENV is production in every deployed tier (runs the production build)
   assert.ok(staging.env.includes("NODE_ENV=production"));
 
@@ -57,5 +56,5 @@ test("buildAppContainerSpec parametrizes name, label, and per-env volume by envi
   );
   assert.equal(prod.name, "evcp-production-my-app");
   assert.equal(prod.labels["evcp.env"], "production");
-  assert.ok(prod.hostConfig.Binds.includes("evcp-ws-my-app-production-data:/workspace"));
+  assert.deepEqual(prod.hostConfig.Binds, []);
 });

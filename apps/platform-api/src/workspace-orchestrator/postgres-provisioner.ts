@@ -51,8 +51,19 @@ export function createPgClientPostgresProvisioner(
   return {
     async provisionSchema(slug) {
       const password = randomBytes(24).toString("hex");
-      for (const statement of buildProvisionSchemaSql(slug, password)) {
-        await runSql(statement);
+      try {
+        for (const statement of buildProvisionSchemaSql(slug, password)) {
+          await runSql(statement);
+        }
+      } catch (error) {
+        for (const statement of buildReleaseSchemaSql(slug)) {
+          try {
+            await runSql(statement);
+          } catch {
+            // Preserve the original provisioning error; cleanup is best effort and idempotent.
+          }
+        }
+        throw error;
       }
       return { schemaName: schemaNameFor(slug), roleName: roleNameFor(slug), password };
     },

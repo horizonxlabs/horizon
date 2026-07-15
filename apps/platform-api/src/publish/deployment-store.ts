@@ -7,7 +7,9 @@ export interface DeploymentStore {
     environment: EnvironmentName;
     commitSha: string;
     imageTag: string;
+    imageDigest?: string;
     containerId: string | null;
+    containerName?: string;
     publishedByUserId: string;
   }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
@@ -16,6 +18,7 @@ export interface DeploymentStore {
   // /apps serve path and existing callers get the live production tier. Env-awareness matters:
   // staging and production deploy to the same slug, and the caller must resolve the right tier.
   getCurrent(slug: string, environment?: EnvironmentName): WorkspaceDeployment | null;
+  flush?(): Promise<void>;
 }
 
 export function createMemoryDeploymentStore(): DeploymentStore {
@@ -33,7 +36,15 @@ export function createMemoryDeploymentStore(): DeploymentStore {
         environment: input.environment,
         commitSha: input.commitSha,
         imageTag: input.imageTag,
+        imageDigest: input.imageDigest ?? input.imageTag,
         containerId: input.containerId,
+        containerName: input.containerName ?? `evcp-${input.environment}-${input.slug}`,
+        revision:
+          order
+            .map((id) => byId.get(id)!)
+            .filter(
+              (item) => item.projectId === input.projectId && item.environment === input.environment
+            ).length + 1,
         publishedByUserId: input.publishedByUserId,
         healthStatus: "pending",
         createdAt: new Date().toISOString()

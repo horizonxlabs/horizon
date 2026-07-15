@@ -100,12 +100,51 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.equal(review.manifest.prd.version, "1.0");
   assert.equal(review.manifest.frontend.checkpointId, preview.id);
 
-  const publish = await service.publishApp(creatorActor, { project, baseline, preview });
+  const runtimeDeployment = {
+    id: "wdep_runtime_1",
+    projectId: project.id,
+    slug: "prj-runtime-key",
+    environment: "production",
+    revision: 3,
+    commitSha: "abc123",
+    imageTag: "app:abc123",
+    imageDigest: "sha256:image",
+    containerId: "container-1",
+    containerName: "app-abc123",
+    publishedByUserId: creatorActor.id,
+    healthStatus: "healthy",
+    createdAt: new Date().toISOString()
+  };
+  const publish = await service.publishApp(creatorActor, {
+    project,
+    baseline,
+    preview,
+    runtimeDeployment
+  });
   assert.equal(await service.canAccessPublishedProject(endUserActor, project.id), true);
   assert.equal(await service.canAccessPublishedProject({ ...endUserActor, id: "outsider", email: "outsider@company.com" }, project.id), false);
   const registry = await service.listRegistry(creatorActor);
   assert.equal(publish.publishRequest.status, "published");
   assert.equal(publish.deployment.status, "published");
+  assert.equal(publish.deployment.sourceCommitSha, "abc123");
+  assert.equal(publish.deployment.runtimeRevision, 3);
+  assert.equal(publish.manifest.runtime.deploymentRevisionId, "wdep_runtime_1");
+  assert.equal(publish.registryEntry.route, "/api/apps/prj-runtime-key");
+  const republished = await service.publishApp(creatorActor, {
+    project,
+    baseline,
+    preview,
+    runtimeDeployment: {
+      ...runtimeDeployment,
+      id: "wdep_runtime_2",
+      revision: 4,
+      commitSha: "def456",
+      imageTag: "app:def456"
+    }
+  });
+  assert.equal(republished.manifest.manifestVersion, "2");
+  assert.equal(republished.deployment.sourceCommitSha, "def456");
+  assert.equal(republished.registryEntry.deploymentId, republished.deployment.id);
   assert.equal(publish.registryEntry.slug, project.appId);
   assert.equal(
     registry.some((entry) => entry.slug === project.appId),

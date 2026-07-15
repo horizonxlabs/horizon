@@ -1,11 +1,11 @@
 # Horizon — MVP Pending Tasks
 
-อัปเดตสถานะ: 2026-07-14
+อัปเดตสถานะ: 2026-07-15
 เป้าหมาย: เปลี่ยน integrated mock-first prototype ให้เป็น MVP สำหรับ pilot บน private server ที่พิสูจน์ flow จริงได้
 
 ## 1. สถานะและสมมติฐาน
 
-เอกสารนี้เรียงงานตามลำดับการลงมือทำตั้งแต่ setup ถึง release ไม่ได้ถือว่า Sprint 0–14 ยังไม่ได้ทำ สถานะอ้างอิงจาก `main` commit `bc177ad` (`v0.2.1`), เอกสาร operations/specs และ implementation ที่ตรวจเมื่อ 2026-07-13
+เอกสารนี้เรียงงานตามลำดับการลงมือทำตั้งแต่ setup ถึง release ไม่ได้ถือว่า Sprint 0–14 ยังไม่ได้ทำ สถานะอ้างอิงจาก `main` commit `93ed5fd`, งาน Phase 7–8 บน branch `codex/phase-7-8-completion`, เอกสาร operations/specs และ implementation ที่ตรวจเมื่อ 2026-07-15
 
 - `[x]` ทำแล้วระดับ prototype/foundation
 - `[~]` ทำบางส่วน แต่ยังไม่ผ่าน real/pilot gate
@@ -125,9 +125,11 @@
 
 - [x] Workspace credentials เข้ารหัส AES-GCM และ persist ก่อน recreate; real adapter fail-closed เมื่อไม่มี operator-injected encryption key
 - [x] Local Creator สร้าง project และ provision schema, DB user, bucket, LiteLLM key และ isolated container จริง
-- [x] Local live AI แก้ไฟล์, validate/build, Git commit, สร้าง immutable Prisma checkpoint และ refresh token-free preview จริง
+- [x] Generation เรียง FIFO ต่อ project แต่คนละ project ทำขนานได้; build turn เรียง `prepare → actions → validate → commit → migrations → checkpoint`
+- [x] Migration ทุก statement ใน turn เดียวรันใน PostgreSQL transaction เดียว, ปฏิเสธ transaction-control SQL และเขียน migration evidence เป็น atomic batch แยกหลัง SQL transaction (ไม่ใช่ distributed transaction); statement ใดล้มเหลวจะ rollback ทั้ง SQL batch, คืน source/HEAD และไม่สร้าง checkpoint
+- [x] Local live AI แก้ไฟล์, validate/build, Git commit และ immutable Prisma checkpoint จริง (live 1 pass, 83.98s); validation build จาก disposable temporary source tree โดยไม่แตะ/แย่ง live `.next`; invalid build rollback คืน HEAD/source เดิมและ last-known-good preview ยังตอบ 2xx
 - [x] locked files, project membership, names-only secret list และ schema/bucket isolation มี negative contracts
-- [x] partial-provision rollback, restart recovery, idle stop/wake และ labelled orphan cleanup มี regression proof
+- [x] readiness-gated provision, partial rollback, restart/recreate recovery, idle stop/wake และ labelled container/volume orphan cleanup มี regression และ real-stack proof
 - [x] rollback block เมื่อ code เก่ากว่า applied migration โดยไม่ checkout source และคืน recovery guidance
 
 **Exit gate:** Creator สร้าง/แก้ app โดย fixture ไม่ใช่ authoritative output; restart ไม่ทำ source/chat/checkpoint หาย; failure รักษา last-known-good preview  
@@ -138,10 +140,12 @@
 **Dependencies:** Phase 7; auth/access policy จาก Phase 3  
 **Checklist:**
 
-- [x] build versioned image/tag ผูก source commit และ deployment revision; persisted product manifest/registry ผูก project/app revision
+- [x] build immutable versioned image โดยไม่ mount shared runtime workspace; แต่ละ publish ได้ unique non-moving tag/container แม้ source commit เดิม และ persist image digest, source commit, Prisma deployment revision กับ manifest/registry
 - [x] publish/preview ผ่าน Caddy → Platform API → internal container โดย release Compose publish เฉพาะ ingress ports
 - [x] generated-app proxy บังคับ Platform Auth/app membership และ route เฉพาะ healthy deployment
-- [x] failed publish, restart rehydration, promote และ migration-safe rollback มี regression contracts
+- [x] real publish live 1 pass (169.05s): failed replacement รักษา previous healthy container/route, restart rehydrate exact revision และ rollback คืน content จาก source commit เดิม; promote/migration boundary มี regression contracts
+- [x] publish/rollback/promote ทำ compensation เมื่อ manifest/registry persistence ล้มเหลว โดย deactivate เฉพาะ revision ใหม่; rollback แอปหนึ่งไม่เปลี่ยน route/container ของแอปอื่น
+- [x] Prisma deployment queue ส่ง persistence failure ผ่าน `flush()` โดยไม่เกิด unhandled rejection, rollback optimistic/queued state โดยไม่สร้าง phantom revision และรับ ordered writes ใหม่ได้หลัง `flush()` observe failure
 - [x] App Store list/detail/install/access ใช้ persistent registry และ open action ถูก authorize ซ้ำที่ generated-app proxy
 
 **Exit gate:** end user ที่มีสิทธิ์เปิด published app ได้; ผู้ไม่มีสิทธิ์ถูก deny; rollback กู้ healthy route โดยไม่กระทบ app อื่น  
@@ -165,7 +169,7 @@
 **Dependencies:** Phase 1–8; Phase 9 เฉพาะเมื่ออยู่ใน cutline  
 **Checklist:**
 
-- [ ] รัน `pnpm check:ci`, relevant verify suites และ `pnpm verify:real-mvp-install` จาก clean checkout
+- [~] `CI=true pnpm check:ci` ผ่านบน final #149 branch; fresh `pnpm test:unit` = 540 tests (539 pass, 1 intentional skip, 0 fail), integration 162 pass/8 opt-in skip และ E2E 92/92; ยังเหลือ `pnpm verify:real-mvp-install` จาก clean pilot checkout
 - [ ] Browser E2E: real login → create → live AI change → preview → publish → end-user open app
 - [~] Local restart, provider outage/fallback, durable reclaim และ generated-app rollback contracts ผ่าน; registry outage บน pilot ยังเหลือ
 - [~] Local encrypted PostgreSQL/MinIO restore ผ่าน; external destination/retention และ Keycloak export/restore ยังเหลือ
@@ -201,15 +205,15 @@ Knowledge/Skill, Remix, PRD export, push notification, Durable LangGraph, advanc
 
 ## 5. ความเสี่ยงหลัก
 
-| Risk | Gate / Mitigation |
-| --- | --- |
-| Demo fallback ซ่อน API failure | pilot config ห้าม fallback; browser E2E ตรวจ DB |
-| State แยกระหว่าง memory กับ Prisma | inventory + Prisma-only pilot + restart tests |
-| Provider secret รั่ว | KMS/secret store + masking/redaction + server-only boundary |
-| AI retry สร้าง artifact/usage ซ้ำ | idempotency/fingerprint + bounded retry |
-| Restore ข้าม migration | migration-aware block + manual recovery |
-| Cross-app data exposure | scoped credentials + negative isolation E2E |
-| Scope เปลี่ยนกลาง release | signed-off Phase 0 cutline |
+| Risk                               | Gate / Mitigation                                           |
+| ---------------------------------- | ----------------------------------------------------------- |
+| Demo fallback ซ่อน API failure     | pilot config ห้าม fallback; browser E2E ตรวจ DB             |
+| State แยกระหว่าง memory กับ Prisma | inventory + Prisma-only pilot + restart tests               |
+| Provider secret รั่ว               | KMS/secret store + masking/redaction + server-only boundary |
+| AI retry สร้าง artifact/usage ซ้ำ  | idempotency/fingerprint + bounded retry                     |
+| Restore ข้าม migration             | migration-aware block + manual recovery                     |
+| Cross-app data exposure            | scoped credentials + negative isolation E2E                 |
+| Scope เปลี่ยนกลาง release          | signed-off Phase 0 cutline                                  |
 
 ## 6. Definition of Done
 
@@ -221,4 +225,4 @@ Knowledge/Skill, Remix, PRD export, push notification, Durable LangGraph, advanc
 
 ## 7. แหล่งอ้างอิงสถานะ
 
-`README.md`; `docs/operations/real-mvp-{install,persistence,auth-session,ai-provider-adapter,frontend-api-bootstrap}.md`; Creator-first design และ approved specs ใต้ `docs/superpowers/specs/`; `docs/delivery/production-candidate-readiness.md`
+`README.md`; `docs/operations/phase-7-8-pilot-evidence.md`; `docs/operations/real-mvp-{install,persistence,auth-session,ai-provider-adapter,frontend-api-bootstrap}.md`; Creator-first design และ approved specs ใต้ `docs/superpowers/specs/`; `docs/delivery/production-candidate-readiness.md`

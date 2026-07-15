@@ -28,7 +28,9 @@ test("real mode builds an orchestrator without throwing at construction", () => 
       EVCP_WORKSPACE_REAL_ADAPTERS: "1",
       EVCP_LITELLM_BASE_URL: "http://litellm:4000",
       EVCP_LITELLM_MASTER_KEY: "sk-master",
-      EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64)
+      EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64),
+      MINIO_ROOT_USER: "root",
+      MINIO_ROOT_PASSWORD: "root-secret"
     }
   });
   assert.equal(typeof orchestrator.provisionWorkspace, "function");
@@ -41,6 +43,34 @@ test("real mode refuses to start without an injected workspace encryption key", 
         env: { EVCP_WORKSPACE_REAL_ADAPTERS: "1" }
       }),
     /EVCP_WORKSPACE_SECRET_KEY.*required/i
+  );
+});
+
+test("real mode refuses to silently substitute a memory LiteLLM admin", () => {
+  assert.throws(
+    () =>
+      createDefaultWorkspaceOrchestrator({
+        env: {
+          EVCP_WORKSPACE_REAL_ADAPTERS: "1",
+          EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64)
+        }
+      }),
+    /EVCP_LITELLM_BASE_URL.*EVCP_LITELLM_MASTER_KEY.*required/i
+  );
+});
+
+test("real mode refuses to provision buckets without server-held MinIO admin credentials", () => {
+  assert.throws(
+    () =>
+      createDefaultWorkspaceOrchestrator({
+        env: {
+          EVCP_WORKSPACE_REAL_ADAPTERS: "1",
+          EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64),
+          EVCP_LITELLM_BASE_URL: "http://litellm:4000",
+          EVCP_LITELLM_MASTER_KEY: "sk-master"
+        }
+      }),
+    /MINIO_ROOT_USER.*MINIO_ROOT_PASSWORD.*required/i
   );
 });
 
