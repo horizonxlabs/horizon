@@ -37,3 +37,13 @@ test("SectionCard renders its title and actions", () => {
   assert.match(html, /ปุ่ม/);
   assert.match(html, /ตาราง/);
 });
+
+test("SectionCard supports legacy eyebrow and action props", () => {
+  const html = renderToStaticMarkup(
+    h(SectionCard, { eyebrow: "หมวด", title: "หัวข้อ", action: h("button", null, "ปุ่ม") }, "เนื้อหา")
+  );
+  assert.match(html, /หมวด/);
+  assert.match(html, /หัวข้อ/);
+  assert.match(html, /ปุ่ม/);
+  assert.match(html, /เนื้อหา/);
+});

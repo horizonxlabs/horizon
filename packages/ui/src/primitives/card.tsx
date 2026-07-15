@@ -6,20 +6,32 @@ export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
 }
 
 export function SectionCard({
+  eyebrow,
   title,
+  action,
   actions,
-  children
+  children,
+  className
 }: {
+  eyebrow?: ReactNode;
   title?: ReactNode;
+  action?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
+  const headerActions = actions ?? action;
   return (
-    <Card>
-      {(title || actions) && (
-        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
-          {title && <h2 className="text-sm font-semibold text-body">{title}</h2>}
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+    <Card className={className}>
+      {(title || eyebrow || headerActions) && (
+        <div className="flex items-start justify-between border-b border-border-soft px-4 py-3">
+          <div>
+            {eyebrow && (
+              <span className="text-xs font-semibold uppercase tracking-wide text-primary">{eyebrow}</span>
+            )}
+            {title && <h2 className="text-sm font-semibold text-body">{title}</h2>}
+          </div>
+          {headerActions && <div className="flex items-center gap-2">{headerActions}</div>}
         </div>
       )}
       <div className="p-4">{children}</div>

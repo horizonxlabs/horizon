@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 export { AppShell } from "./app-shell";
 export { Button, type ButtonProps } from "./primitives/button";
+export { Card, SectionCard } from "./primitives/card";
 export { cn } from "./cn";
 
 export type Tone = "success" | "warning" | "danger" | "neutral" | "info";
@@ -69,33 +70,6 @@ export function MetricCard({
       <strong>{value}</strong>
       {detail ? <small>{detail}</small> : null}
     </section>
-  );
-}
-
-export function SectionCard({
-  eyebrow,
-  title,
-  action,
-  children,
-  className = ""
-}: {
-  eyebrow?: string;
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <article className={`card ds-section-card ${className}`.trim()}>
-      <div className="section-heading ds-section-heading">
-        <div>
-          {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
-          <h2>{title}</h2>
-        </div>
-        {action ? <div className="ds-section-action">{action}</div> : null}
-      </div>
-      {children}
-    </article>
   );
 }
 
