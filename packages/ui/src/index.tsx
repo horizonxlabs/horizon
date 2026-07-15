@@ -7,6 +7,7 @@ export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
 export { Input, Select, Field } from "./primitives/input";
 export { Table, THead, TRow, TCell } from "./primitives/table";
+export { MetricCard } from "./primitives/metric-card";
 export { cn } from "./cn";
 export { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps };
 
@@ -31,29 +32,6 @@ export function PageHeader({
         {description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="ds-page-actions">{actions}</div> : null}
-    </section>
-  );
-}
-
-export function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-  tone = "neutral"
-}: {
-  label: string;
-  value: string;
-  detail?: string;
-  icon?: ReactNode;
-  tone?: Tone;
-}) {
-  return (
-    <section className="card metric-card ds-metric-card">
-      {icon ? <span className={`ds-icon-box tone-${tone}`}>{icon}</span> : null}
-      <span>{label}</span>
-      <strong>{value}</strong>
-      {detail ? <small>{detail}</small> : null}
     </section>
   );
 }

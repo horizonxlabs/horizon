@@ -7,6 +7,7 @@ import { Card, SectionCard } from "../../packages/ui/src/primitives/card.tsx";
 import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/badge.tsx";
 import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx";
 import { Table, THead, TRow, TCell } from "../../packages/ui/src/primitives/table.tsx";
+import { MetricCard } from "../../packages/ui/src/primitives/metric-card.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -106,4 +107,26 @@ test("THead renders uppercase muted header labels", () => {
   assert.match(html, /uppercase/);
   assert.match(html, /text-muted/);
   assert.match(html, /หัวตาราง/);
+});
+
+test("MetricCard shows label and value", () => {
+  const html = renderToStaticMarkup(h(MetricCard, { label: "แอปที่ใช้งาน", value: "1,284" }));
+  assert.match(html, /แอปที่ใช้งาน/);
+  assert.match(html, /1,284/);
+  assert.match(html, /bg-surface/);
+});
+
+test("MetricCard supports legacy icon and detail props", () => {
+  const html = renderToStaticMarkup(
+    h(MetricCard, {
+      label: "Service healthy",
+      value: "3",
+      detail: "from Platform API",
+      icon: h("span", null, "ICON")
+    })
+  );
+  assert.match(html, /Service healthy/);
+  assert.match(html, />3</);
+  assert.match(html, /from Platform API/);
+  assert.match(html, /ICON/);
 });
