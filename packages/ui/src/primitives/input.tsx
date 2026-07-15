@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { cn } from "../cn";
 
 // px-3 sets horizontal padding only; py-0 is required so the fixed h-10 height
@@ -9,10 +9,6 @@ const control =
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(control, className)} {...rest} />;
-}
-
-export function Select({ className, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cn(control, className)} {...rest} />;
 }
 
 export function Field({
