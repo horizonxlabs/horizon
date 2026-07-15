@@ -23,9 +23,10 @@ tracked in Phase 10; it is not claimed by this document.
   the existing dependency directory through a symlink, builds only in the temporary tree, and
   always removes it. Validation therefore does not mutate or race the live preview's `.next`.
 - All migration actions emitted by one turn execute as one PostgreSQL transaction after code
-  validation and commit. Generated transaction-control SQL is rejected before database execution,
-  so an action cannot escape the managed transaction boundary. The transaction uses the project
-  schema search path; after it succeeds, all migration evidence is written as one atomic Prisma
+  validation and commit. Generated transaction-control SQL—including `ABORT`, `ABORT WORK`,
+  `ABORT TRANSACTION`, bare `END`, `END WORK`, and `END TRANSACTION`—is rejected before database
+  execution, so an action cannot escape the managed transaction boundary. The transaction uses the
+  project schema search path; after it succeeds, all migration evidence is written as one atomic Prisma
   batch and records the resulting source commit. If any migration statement fails, PostgreSQL rolls
   back the whole SQL batch, the workspace source is restored, and no checkpoint is created. The
   application-schema transaction and the subsequent platform evidence transaction are intentionally
@@ -42,9 +43,10 @@ tracked in Phase 10; it is not claimed by this document.
   current route and container remain unchanged.
 - Routing selects only a healthy persisted deployment revision. Rehydration re-inspects and
   re-probes the exact persisted container after a Platform API restart.
-- The Prisma deployment write queue surfaces its first persistence rejection through `flush()`,
-  rolls back queued optimistic state, skips dependent writes, and leaves no phantom revision. After
-  that failure is observed by `flush()`, the queue accepts and persists subsequent ordered writes.
+- The Prisma deployment write queue flushes revision creation and its health update in one
+  transaction. If health persistence is rejected, it rolls back durable and optimistic state,
+  removes the candidate container, and leaves no phantom revision. The queue then recovers; the next
+  successful publish persists as revision 1 rather than inheriting the rejected candidate's number.
 - Generated-app proxy contracts enforce `401` for no session, `403` for a nonmember, and strip
   platform authorization/cookie headers before forwarding an authorized request.
 
@@ -99,7 +101,7 @@ EVCP_PUBLISH_LIVE=1 EVCP_TEST_SEED=<unique-number> \
   pnpm exec tsx --test tests/integration/publish-runtime-live.test.mjs
 ```
 
-Result: 1 passing, 0 failing; test duration 169,047.44 ms (169.05 seconds).
+Result: 1 passing, 0 failing; test duration 167,131.74 ms (167.13 seconds).
 
 The test built and ran real production images on the internal Docker network:
 
@@ -117,12 +119,15 @@ Focused proxy, persistence, and deployment-invariant contracts cover member auth
 environment-isolated routing, no-environment publish linkage, restart readiness re-probe, Prisma
 deployment reconstruction, unique immutable tags for repeated publishes, publish/rollback/promote
 persistence compensation, cross-app rollback isolation, and Prisma queue failure/recovery without
-phantom revisions:
+phantom revisions. The safety contract additionally injects a rejected health write, proves the
+create/update transaction rollback and candidate cleanup, then proves the next publish persists as
+revision 1:
 
 ```sh
 pnpm exec tsx --test \
   tests/unit/publish-deployment-invariants.test.mjs \
   tests/unit/prisma-deployment-store.test.mjs \
+  tests/unit/publish-service-safety.test.mjs \
   tests/integration/publish-apps-proxy.test.mjs
 ```
 
@@ -134,7 +139,7 @@ contained `workspace_deployment_revisions`, and the database was dropped after v
 The final #149 branch passed `CI=true pnpm check:ci` with exit code 0 on 2026-07-15. A subsequent
 fresh `pnpm test:unit` rerun also exited 0:
 
-- latest unit rerun: 540 tests, 539 passed, 1 intentional skip, 0 failed;
+- latest unit rerun: 542 tests, 541 passed, 1 intentional skip, 0 failed;
 - integration: 162 passed, 8 opt-in live skips;
 - E2E: 92/92 passed;
 - repository hygiene, install contract, conflict-marker scan, workspace scripts, design-system and

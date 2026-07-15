@@ -126,7 +126,7 @@
 - [x] Workspace credentials เข้ารหัส AES-GCM และ persist ก่อน recreate; real adapter fail-closed เมื่อไม่มี operator-injected encryption key
 - [x] Local Creator สร้าง project และ provision schema, DB user, bucket, LiteLLM key และ isolated container จริง
 - [x] Generation เรียง FIFO ต่อ project แต่คนละ project ทำขนานได้; build turn เรียง `prepare → actions → validate → commit → migrations → checkpoint`
-- [x] Migration ทุก statement ใน turn เดียวรันใน PostgreSQL transaction เดียว, ปฏิเสธ transaction-control SQL และเขียน migration evidence เป็น atomic batch แยกหลัง SQL transaction (ไม่ใช่ distributed transaction); statement ใดล้มเหลวจะ rollback ทั้ง SQL batch, คืน source/HEAD และไม่สร้าง checkpoint
+- [x] Migration ทุก statement ใน turn เดียวรันใน PostgreSQL transaction เดียว, ปฏิเสธ transaction-control SQL รวม `ABORT [WORK|TRANSACTION]` และ `END [WORK|TRANSACTION]`, และเขียน migration evidence เป็น atomic batch แยกหลัง SQL transaction (ไม่ใช่ distributed transaction); statement ใดล้มเหลวจะ rollback ทั้ง SQL batch, คืน source/HEAD และไม่สร้าง checkpoint
 - [x] Local live AI แก้ไฟล์, validate/build, Git commit และ immutable Prisma checkpoint จริง (live 1 pass, 83.98s); validation build จาก disposable temporary source tree โดยไม่แตะ/แย่ง live `.next`; invalid build rollback คืน HEAD/source เดิมและ last-known-good preview ยังตอบ 2xx
 - [x] locked files, project membership, names-only secret list และ schema/bucket isolation มี negative contracts
 - [x] readiness-gated provision, partial rollback, restart/recreate recovery, idle stop/wake และ labelled container/volume orphan cleanup มี regression และ real-stack proof
@@ -143,9 +143,9 @@
 - [x] build immutable versioned image โดยไม่ mount shared runtime workspace; แต่ละ publish ได้ unique non-moving tag/container แม้ source commit เดิม และ persist image digest, source commit, Prisma deployment revision กับ manifest/registry
 - [x] publish/preview ผ่าน Caddy → Platform API → internal container โดย release Compose publish เฉพาะ ingress ports
 - [x] generated-app proxy บังคับ Platform Auth/app membership และ route เฉพาะ healthy deployment
-- [x] real publish live 1 pass (169.05s): failed replacement รักษา previous healthy container/route, restart rehydrate exact revision และ rollback คืน content จาก source commit เดิม; promote/migration boundary มี regression contracts
+- [x] real publish live 1 pass (167.13s): failed replacement รักษา previous healthy container/route, restart rehydrate exact revision และ rollback คืน content จาก source commit เดิม; promote/migration boundary มี regression contracts
 - [x] publish/rollback/promote ทำ compensation เมื่อ manifest/registry persistence ล้มเหลว โดย deactivate เฉพาะ revision ใหม่; rollback แอปหนึ่งไม่เปลี่ยน route/container ของแอปอื่น
-- [x] Prisma deployment queue ส่ง persistence failure ผ่าน `flush()` โดยไม่เกิด unhandled rejection, rollback optimistic/queued state โดยไม่สร้าง phantom revision และรับ ordered writes ใหม่ได้หลัง `flush()` observe failure
+- [x] Prisma deployment queue flush create+health ใน transaction เดียว; rejected health persistence rollback ทั้ง durable/optimistic state, cleanup candidate, ไม่เกิด phantom revision, queue กลับมาทำงาน และ publish ถัดไป persist เป็น revision 1
 - [x] App Store list/detail/install/access ใช้ persistent registry และ open action ถูก authorize ซ้ำที่ generated-app proxy
 
 **Exit gate:** end user ที่มีสิทธิ์เปิด published app ได้; ผู้ไม่มีสิทธิ์ถูก deny; rollback กู้ healthy route โดยไม่กระทบ app อื่น  
@@ -169,7 +169,7 @@
 **Dependencies:** Phase 1–8; Phase 9 เฉพาะเมื่ออยู่ใน cutline  
 **Checklist:**
 
-- [~] `CI=true pnpm check:ci` ผ่านบน final #149 branch; fresh `pnpm test:unit` = 540 tests (539 pass, 1 intentional skip, 0 fail), integration 162 pass/8 opt-in skip และ E2E 92/92; ยังเหลือ `pnpm verify:real-mvp-install` จาก clean pilot checkout
+- [~] `CI=true pnpm check:ci` ผ่านบน final #149 branch; fresh `pnpm test:unit` = 542 tests (541 pass, 1 intentional skip, 0 fail), integration 162 pass/8 opt-in skip และ E2E 92/92; ยังเหลือ `pnpm verify:real-mvp-install` จาก clean pilot checkout
 - [ ] Browser E2E: real login → create → live AI change → preview → publish → end-user open app
 - [~] Local restart, provider outage/fallback, durable reclaim และ generated-app rollback contracts ผ่าน; registry outage บน pilot ยังเหลือ
 - [~] Local encrypted PostgreSQL/MinIO restore ผ่าน; external destination/retention และ Keycloak export/restore ยังเหลือ
