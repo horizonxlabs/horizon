@@ -34,6 +34,45 @@ export type {
 } from "./workspace-resources";
 import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
 export type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
+import type {
+  AiUsageLogDto,
+  GuardrailResultDto,
+  AiProviderTestCallInput,
+  AiProviderTestCallResponse,
+  DurableAiJobDto,
+  CreateDurableAiJobInput,
+  AiProviderDto,
+  CreateAiProviderInput,
+  AiApiKeyDto,
+  CreateAiApiKeyInput,
+  AiScenarioRouteDto,
+  ConfigureAiRouteInput,
+  AiQuotaDto,
+  GuardrailRuleDto,
+  CreateGuardrailRuleInput,
+  GuardrailEventDto,
+} from "./ai-governance-types";
+export type {
+  AiUsageLogDto,
+  GuardrailResultDto,
+  AiProviderTestCallInput,
+  AiProviderTestCallResponse,
+  DurableAiJobDto,
+  CreateDurableAiJobInput,
+  AiProviderAdapterDto,
+  AiScenarioDto,
+  AiUsageModeDto,
+  AiProviderDto,
+  CreateAiProviderInput,
+  AiApiKeyDto,
+  CreateAiApiKeyInput,
+  AiScenarioRouteDto,
+  ConfigureAiRouteInput,
+  AiQuotaDto,
+  GuardrailRuleDto,
+  CreateGuardrailRuleInput,
+  GuardrailEventDto,
+} from "./ai-governance-types";
 export type {
   BusinessSettingsDto,
   BusinessSettingsInput,
@@ -288,31 +327,10 @@ export type PreviewVersionDto = {
   createdAt: string;
 };
 
-export type AiUsageLogDto = {
-  id: string;
-  projectId: string;
-  taskId: string;
-  actorId: string;
-  scenario: string;
-  providerId: string;
-  model: string;
-  prompt: string;
-  tokensUsed: number;
-  occurredAt: string;
-  status?: "succeeded" | "blocked" | "fallback" | "failed";
-};
-
 export type WorkspaceTokenBudgetDto = {
   remainingToday: number;
   remainingMonth: number;
   requestEstimate: number;
-};
-
-export type GuardrailResultDto = {
-  decision: "allow" | "warn" | "block";
-  eventId: string;
-  matchedRuleIds?: string[];
-  reason?: string;
 };
 
 export type WorkspaceAgentMode = "plan" | "build";
@@ -558,148 +576,6 @@ export type PublishResultResponse = {
   deployment: DeploymentRecordDto;
   registryEntry: AppStoreRegistryEntryDto;
   manifest: AppManifestDto;
-};
-
-export type AiProviderTestCallInput = {
-  scenario: string;
-  prompt: string;
-  dryRun?: boolean;
-};
-
-export type AiProviderTestCallResponse = {
-  providerId: string;
-  providerName: string;
-  adapter: string;
-  model: string;
-  status: "succeeded" | "fallback";
-  fallbackUsed: boolean;
-  tokensUsed: number;
-  latencyMs: number;
-  usageLogId: string;
-  outputExcerpt: string;
-};
-
-export type DurableAiJobDto = {
-  id: string;
-  requestId: string;
-  scenario: AiScenarioDto;
-  status: "queued" | "running" | "succeeded" | "failed";
-  attempts: number;
-  result?: { evidenceRequestId: string };
-  failureReason?: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type CreateDurableAiJobInput = {
-  prompt: string;
-  scenario: AiScenarioDto;
-  requestId?: string;
-  requestedTokens?: number;
-};
-export type AiProviderAdapterDto = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
-export type AiScenarioDto =
-  | "prd_generation"
-  | "requirement_analysis"
-  | "frontend_coding"
-  | "backend_coding"
-  | "review"
-  | "documentation";
-export type AiUsageModeDto = "production" | "development" | "fallback";
-
-export type AiProviderDto = {
-  id: string;
-  name: string;
-  adapter: AiProviderAdapterDto;
-  baseUrl?: string;
-  models: string[];
-  status: "active" | "disabled";
-  createdAt?: string;
-};
-
-export type CreateAiProviderInput = {
-  name: string;
-  adapter: AiProviderAdapterDto;
-  baseUrl: string;
-  models: string[];
-};
-
-export type AiApiKeyDto = {
-  id: string;
-  providerId: string;
-  name: string;
-  usageMode: AiUsageModeDto;
-  quotaTokens?: number;
-  fallbackPriority?: number;
-  fingerprint: string;
-  maskedValue: string;
-  status: "active" | "disabled";
-  createdAt?: string;
-  lastUsedAt?: string;
-};
-
-export type CreateAiApiKeyInput = {
-  providerId: string;
-  name: string;
-  secret: string;
-  usageMode: AiUsageModeDto;
-  quotaTokens: number;
-  fallbackPriority: number;
-};
-
-export type AiScenarioRouteDto = {
-  scenario: AiScenarioDto;
-  primary: {
-    providerId: string;
-    model: string;
-  };
-  fallback?: {
-    providerId: string;
-    model: string;
-  };
-};
-
-export type ConfigureAiRouteInput = {
-  scenario: AiScenarioDto;
-  primaryProviderId: string;
-  primaryModel: string;
-  fallbackProviderId?: string;
-  fallbackModel?: string;
-};
-
-export type AiQuotaDto = {
-  scope: "organization" | "creator" | "project" | "app";
-  dailyLimit: number;
-  monthlyLimit: number;
-  warningThreshold: number;
-  hardStop: boolean;
-  usedToday: number;
-};
-
-export type GuardrailRuleDto = {
-  id: string;
-  name: string;
-  type: "keyword" | "regex" | "policy_classifier";
-  pattern: string;
-  severity: "info" | "warning" | "high" | "critical";
-  action: "allow" | "warn" | "block";
-  scope: "organization" | "project" | "app";
-  status: "active" | "disabled";
-  updatedAt?: string;
-};
-
-export type CreateGuardrailRuleInput = Omit<GuardrailRuleDto, "id" | "status" | "updatedAt">;
-
-export type GuardrailEventDto = {
-  id: string;
-  actorId?: string;
-  prompt?: string;
-  scenario: string;
-  decision: "allow" | "warn" | "block";
-  matchedRuleId?: string;
-  matchedRuleName?: string;
-  severity?: GuardrailRuleDto["severity"];
-  occurredAt?: string;
 };
 
 export type PlatformAuthClaimsDto = {
@@ -1105,6 +981,14 @@ export class PlatformApiClient {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input)
     });
+  }
+
+  listAiScenarioRoutes(): Promise<AiScenarioRouteDto[]> {
+    return this.request<AiScenarioRouteDto[]>("/ai/routes");
+  }
+
+  listAiQuotas(): Promise<AiQuotaDto[]> {
+    return this.request<AiQuotaDto[]>("/ai/quotas");
   }
 
   createGuardrailRule(input: CreateGuardrailRuleInput): Promise<GuardrailRuleDto> {
