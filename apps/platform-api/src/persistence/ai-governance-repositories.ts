@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { createMemoryAiQuotaUsagePersistence, type AiQuotaUsagePersistence } from "./ai-quota-usage-store";
+import { mapProvider, mapApiKey, mapRoute, mapQuota } from "./ai-governance-mappers";
 import type {
   AiApiKey,
   AiProvider,
-  AiProviderAdapter,
   AiQuota,
-  AiScenario,
   AiScenarioRoute,
   AiUsageMode,
   ConfigureRouteInput,
@@ -21,8 +20,7 @@ type DateValue = Date | string;
 type ProviderStatus = AiProvider["status"];
 type GuardrailSeverity = GuardrailRule["severity"];
 type GuardrailScope = GuardrailRule["scope"];
-type QuotaScope = AiQuota["scope"];
-interface AiProviderRecord {
+export interface AiProviderRecord {
   id: string;
   name: string;
   adapter: string;
@@ -31,7 +29,7 @@ interface AiProviderRecord {
   status: ProviderStatus;
   createdAt: DateValue;
 }
-interface AiApiKeyRecord {
+export interface AiApiKeyRecord {
   id: string;
   providerId: string;
   name: string;
@@ -47,7 +45,7 @@ interface AiApiKeyRecord {
   lastUsedAt?: DateValue | null;
   createdAt: DateValue;
 }
-interface AiScenarioRouteRecord {
+export interface AiScenarioRouteRecord {
   id: string;
   scenario: string;
   primaryProviderId: string;
@@ -57,7 +55,7 @@ interface AiScenarioRouteRecord {
   createdAt?: DateValue;
 }
 
-interface AiQuotaRecord {
+export interface AiQuotaRecord {
   id: string;
   scope: string;
   dailyLimit: number;
@@ -195,6 +193,18 @@ export class AiGovernanceRepositoryBackedService {
     requireAdmin(actor);
     const records = await this.client.aiApiKey.findMany({ orderBy: { createdAt: "asc" } });
     return records.map(mapApiKey);
+  }
+
+  async listRoutes(actor: PlatformUser): Promise<AiScenarioRoute[]> {
+    requireAdmin(actor);
+    const records = await this.client.aiScenarioRoute.findMany({ orderBy: { scenario: "asc" } });
+    return records.map(mapRoute);
+  }
+
+  async listQuotas(actor: PlatformUser): Promise<AiQuota[]> {
+    requireAdmin(actor);
+    const records = await this.client.aiQuota.findMany({ orderBy: { scope: "asc" } });
+    return records.map(mapQuota);
   }
 
   async createApiKey(
@@ -415,61 +425,6 @@ export async function createPrismaAiGovernancePersistence(databaseUrl = process.
 
 function requireAdmin(actor: PlatformUser): void {
   if (actor.role !== "admin") throw new PermissionError(`Role ${actor.role} cannot manage AI governance persistence`);
-}
-
-function mapProvider(record: AiProviderRecord): AiProvider {
-  return {
-    id: record.id,
-    name: record.name,
-    adapter: record.adapter as AiProviderAdapter,
-    baseUrl: record.baseUrl,
-    models: [...record.models],
-    status: record.status,
-    createdAt: toIsoString(record.createdAt)
-  };
-}
-
-function mapApiKey(record: AiApiKeyRecord): AiApiKey {
-  return {
-    id: record.id,
-    providerId: record.providerId,
-    name: record.name,
-    usageMode: record.usageMode,
-    quotaTokens: record.quotaTokens,
-    fallbackPriority: record.fallbackPriority,
-    fingerprint: record.fingerprint,
-    maskedValue: record.maskedValue,
-    status: record.status,
-    createdAt: toIsoString(record.createdAt),
-    lastUsedAt: record.lastUsedAt ? toIsoString(record.lastUsedAt) : undefined
-  };
-}
-
-function mapRoute(record: AiScenarioRouteRecord): AiScenarioRoute {
-  return {
-    scenario: record.scenario as AiScenario,
-    primary: {
-      providerId: record.primaryProviderId,
-      model: record.primaryModel
-    },
-    fallback: record.fallbackProviderId
-      ? {
-          providerId: record.fallbackProviderId,
-          model: record.fallbackModel ?? record.primaryModel
-        }
-      : undefined
-  };
-}
-
-function mapQuota(record: AiQuotaRecord): AiQuota {
-  return {
-    scope: record.scope as QuotaScope,
-    dailyLimit: record.dailyLimit,
-    monthlyLimit: record.monthlyLimit,
-    warningThreshold: record.warningThreshold,
-    hardStop: record.hardStop,
-    usedToday: record.usedToday
-  };
 }
 
 function mapRule(record: GuardrailRuleRecord): GuardrailRule {

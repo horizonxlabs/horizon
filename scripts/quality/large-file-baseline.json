@@ -8,5 +8,5 @@
   "tests/unit/platform-governance-services.test.mjs": 707,
   "apps/platform-api/src/persistence/core-repositories.ts": 626,
   "apps/platform-api/src/persistence/generated-runtime-repositories.ts": 620,
-  "apps/platform-api/src/persistence/ai-governance-repositories.ts": 553
+  "apps/platform-api/src/persistence/ai-governance-repositories.ts": 508
 }
