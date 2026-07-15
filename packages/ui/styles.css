@@ -55,12 +55,19 @@ body {
   line-height: 1.5;
 }
 
-button,
-input,
-select,
-textarea,
-table {
-  font: inherit;
+/* Form-control resets belong in @layer base so Tailwind utility classes
+   (text-sm, px-3, h-10, flex, …) on the @evcp/ui Input/Select/Field primitives
+   always win. An unlayered rule here beats @layer utilities regardless of
+   specificity, which forced selects to inherit the body font-size and vertical
+   padding — clipping the option text on every dropdown. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea,
+  table {
+    font: inherit;
+  }
 }
 
 .app-shell {
@@ -1349,29 +1356,37 @@ th {
   min-width: 0;
 }
 
-label {
-  display: grid;
-  gap: 6px;
+@layer base {
+  label {
+    display: grid;
+    gap: 6px;
+  }
+
+  input,
+  select {
+    border: 1px solid var(--evcp-color-border);
+    border-radius: var(--evcp-radius-control);
+    padding: var(--evcp-space-3);
+  }
 }
 
-input,
-select {
-  border: 1px solid var(--evcp-color-border);
-  border-radius: var(--evcp-radius-control);
-  padding: var(--evcp-space-3);
-}
-
-button {
-  align-items: center;
-  border: 0;
-  border-radius: var(--evcp-radius-control);
-  background: var(--evcp-color-primary);
-  color: white;
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 700;
-  gap: 8px;
-  padding: 10px 12px;
+/* Base element defaults for buttons. Wrapped in @layer base so Tailwind utility
+   classes (e.g. `hidden`, `md:hidden`) always override them — an unlayered rule
+   here would beat @layer utilities regardless of specificity and force every
+   button visible/blue (broke the AppShell mobile controls on desktop). */
+@layer base {
+  button {
+    align-items: center;
+    border: 0;
+    border-radius: var(--evcp-radius-control);
+    background: var(--evcp-color-primary);
+    color: white;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 700;
+    gap: 8px;
+    padding: 10px 12px;
+  }
 }
 
 .button-link {
