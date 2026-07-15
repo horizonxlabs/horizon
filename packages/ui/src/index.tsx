@@ -8,33 +8,9 @@ export { Card, SectionCard } from "./primitives/card";
 export { Input, Select, Field } from "./primitives/input";
 export { Table, THead, TRow, TCell } from "./primitives/table";
 export { MetricCard } from "./primitives/metric-card";
+export { PageHeader } from "./primitives/page-header";
 export { cn } from "./cn";
 export { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps };
-
-export function PageHeader({
-  eyebrow,
-  title,
-  description,
-  actions,
-  tone = "primary"
-}: {
-  eyebrow?: string;
-  title: string;
-  description?: string;
-  actions?: ReactNode;
-  tone?: "primary" | "surface";
-}) {
-  return (
-    <section className={`ds-page-header ds-page-header-${tone}`}>
-      <div>
-        {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
-        <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
-      </div>
-      {actions ? <div className="ds-page-actions">{actions}</div> : null}
-    </section>
-  );
-}
 
 export type DataTableColumn<Row extends Record<string, ReactNode>> = {
   key: keyof Row & string;

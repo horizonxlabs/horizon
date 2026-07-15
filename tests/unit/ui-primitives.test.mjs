@@ -8,6 +8,7 @@ import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/b
 import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx";
 import { Table, THead, TRow, TCell } from "../../packages/ui/src/primitives/table.tsx";
 import { MetricCard } from "../../packages/ui/src/primitives/metric-card.tsx";
+import { PageHeader } from "../../packages/ui/src/primitives/page-header.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -129,4 +130,29 @@ test("MetricCard supports legacy icon and detail props", () => {
   assert.match(html, />3</);
   assert.match(html, /from Platform API/);
   assert.match(html, /ICON/);
+});
+
+test("PageHeader renders title, description and actions", () => {
+  const html = renderToStaticMarkup(
+    h(PageHeader, {
+      title: "ภาพรวมระบบ",
+      description: "สถานะแพลตฟอร์ม",
+      actions: h("button", null, "รีเฟรช")
+    })
+  );
+  assert.match(html, /ภาพรวมระบบ/);
+  assert.match(html, /สถานะแพลตฟอร์ม/);
+  assert.match(html, /รีเฟรช/);
+});
+
+test("PageHeader renders eyebrow and accepts legacy tone prop", () => {
+  const html = renderToStaticMarkup(
+    h(PageHeader, {
+      eyebrow: "หมวดหมู่",
+      title: "หัวข้อ",
+      tone: "surface"
+    })
+  );
+  assert.match(html, /หมวดหมู่/);
+  assert.match(html, /หัวข้อ/);
 });
