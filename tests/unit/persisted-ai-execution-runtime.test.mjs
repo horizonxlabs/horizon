@@ -16,6 +16,8 @@ const { MemoryAiSecretStore } = await import(
 const secretStore = new MemoryAiSecretStore();
 await secretStore.write("aik_primary", "secret");
 await secretStore.write("aik_anthropic", "anthropic-secret");
+await secretStore.write("aik_openrouter", "or-secret");
+await secretStore.write("aik_lmstudio", "lm-secret");
 
 const now = new Date("2026-07-13T00:00:00.000Z");
 const actor = { id: "u1", email: "creator@example.test", name: "Creator", role: "creator" };
@@ -148,3 +150,28 @@ test("persisted executor opens a provider circuit after repeated failed executio
   for (const requestId of ["req-circuit-1", "req-circuit-2", "req-circuit-3", "req-circuit-4"]) await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a leave view", requestId });
   assert.equal(attempts, 3);
 });
+
+for (const variant of [
+  { adapter: "openrouter", keyId: "aik_openrouter", secret: "or-secret", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4.1-mini" },
+  { adapter: "lm_studio", keyId: "aik_lmstudio", secret: "lm-secret", baseUrl: "http://host.docker.internal:1234/v1", model: "local-model" }
+]) {
+  test(`persisted executor accepts ${variant.adapter} over the OpenAI-compatible transport`, async () => {
+    const client = new MemoryAiGovernancePersistenceClient({
+      providers: [{ id: `aip_${variant.adapter}`, name: variant.adapter, adapter: variant.adapter, baseUrl: variant.baseUrl, models: [variant.model], status: "active", createdAt: now }],
+      apiKeys: [{ id: variant.keyId, providerId: `aip_${variant.adapter}`, name: "primary", usageMode: "production", quotaTokens: 1000, fallbackPriority: 0, fingerprint: "sha256:abc", maskedValue: "***test", secretCiphertext: `memory://ai-provider-keys/${variant.keyId}`, keyVersion: 1, encryptionProvider: "memory-test-only", status: "active", createdAt: now }],
+      routes: [{ id: `air_${variant.adapter}`, scenario: "frontend_coding", primaryProviderId: `aip_${variant.adapter}`, primaryModel: variant.model, createdAt: now }]
+    });
+    let observed;
+    const executor = createPersistedGovernedAiExecutor(client, {
+      fetcher: async (url, init) => {
+        observed = { url, authorization: new Headers(init.headers).get("authorization"), body: JSON.parse(String(init.body)) };
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }], usage: { total_tokens: 12 } }), { status: 200 });
+      }
+    });
+    const result = await executor.execute(actor, { scenario: "frontend_coding", projectId: "p1", prompt: "Build a view", requestId: `req_${variant.adapter}` });
+    assert.equal(result.status, "succeeded");
+    assert.equal(observed.url, `${variant.baseUrl}/chat/completions`);
+    assert.equal(observed.authorization, `Bearer ${variant.secret}`);
+    assert.equal(observed.body.model, variant.model);
+  });
+}

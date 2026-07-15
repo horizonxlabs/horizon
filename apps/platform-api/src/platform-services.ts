@@ -1285,7 +1285,7 @@ export interface PolicyTemplate {
   externalExposureAllowed: boolean;
 }
 
-export type AiProviderAdapter = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
+export type AiProviderAdapter = "openai" | "openrouter" | "lm_studio" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
 export type AiScenario =
@@ -3484,7 +3484,7 @@ export class AiGovernanceService {
   }
 
   private createAdapter(provider: AiProvider): AiCompletionAdapter {
-    if (provider.adapter === "openai" || provider.adapter === "azure_openai")
+    if (["openai", "openrouter", "lm_studio", "azure_openai"].includes(provider.adapter))
       return new OpenAiCompatibleCompletionAdapter(this.runtime);
     throw new ValidationError(
       `AI provider adapter ${provider.adapter} is not implemented for external calls yet`

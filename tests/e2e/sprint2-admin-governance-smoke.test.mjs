@@ -263,3 +263,31 @@ test("Admin hides local route and rule rows until governance is ready", () => {
     /const visibleAvailability: AiGovernanceAvailability = isSnapshotCurrent/
   );
 });
+
+test("Sprint 2 API accepts OpenRouter and LM Studio providers for governed test calls", () => {
+  const services = createPlatformApiServices();
+  for (const variant of [
+    { name: "OpenRouter Gateway", adapter: "openrouter", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4.1-mini" },
+    { name: "LM Studio Local", adapter: "lm_studio", baseUrl: "http://host.docker.internal:1234/v1", model: "local-model" }
+  ]) {
+    const provider = executePlatformApiRequest(services, {
+      method: "POST", path: "/ai/providers", headers: adminHeaders,
+      body: { name: variant.name, adapter: variant.adapter, baseUrl: variant.baseUrl, models: [variant.model] }
+    });
+    assert.equal(provider.status, 201);
+    executePlatformApiRequest(services, {
+      method: "POST", path: "/ai/api-keys", headers: adminHeaders,
+      body: { providerId: provider.body.data.id, name: "Key", secret: "sk-any-value", usageMode: "production", quotaTokens: 100000, fallbackPriority: 1 }
+    });
+    executePlatformApiRequest(services, {
+      method: "POST", path: "/ai/routes", headers: adminHeaders,
+      body: { scenario: "prd_generation", primaryProviderId: provider.body.data.id, primaryModel: variant.model }
+    });
+    const result = executePlatformApiRequest(services, {
+      method: "POST", path: "/ai/provider-test-call", headers: adminHeaders,
+      body: { scenario: "prd_generation", prompt: "Validate provider route", dryRun: true }
+    });
+    assert.equal(result.status, 201);
+    assert.equal(result.body.data.status, "succeeded");
+  }
+});

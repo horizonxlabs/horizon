@@ -60,7 +60,7 @@ export type CreateDurableAiJobInput = {
   requestId?: string;
   requestedTokens?: number;
 };
-export type AiProviderAdapterDto = "openai" | "anthropic" | "google" | "azure_openai" | "mock";
+export type AiProviderAdapterDto = "openai" | "openrouter" | "lm_studio" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiScenarioDto =
   | "prd_generation"
   | "requirement_analysis"
