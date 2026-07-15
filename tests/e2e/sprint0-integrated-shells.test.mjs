@@ -9,7 +9,7 @@ const storeApp = readAllSourceFiles("apps/app-store-pwa/src");
 const navigation = readFileSync("packages/config/src/index.ts", "utf8");
 
 test("admin creator and store shells expose the expected sprint 0 user journeys", () => {
-  assert.match(adminApp, /Register approved endpoint/);
+  assert.match(adminApp, /Approved endpoints/);
   assert.match(adminApp, /AppShell/);
   assert.match(adminApp, /PageHeader/);
   assert.match(adminApp, /ServiceStrip/);

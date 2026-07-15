@@ -176,9 +176,9 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
 
   for (const text of [
     "useAiGovernance",
-    "Register approved endpoint",
-    "Persisted records",
-    "Providers, masked credentials, and guardrail evidence",
+    "Approved endpoints",
+    "Stored credentials",
+    "Recent guardrail events",
     "Provider secrets are sent only to Platform API",
     "createProvider",
     "saveApiKey",
