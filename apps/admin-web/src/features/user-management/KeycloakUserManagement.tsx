@@ -1,5 +1,5 @@
 import { createKeycloakUserClient, type CreateKeycloakUserInput, type KeycloakUserDto, type PlatformApiClient, type PlatformSessionSummary } from "@evcp/api-client";
-import { DecisionPanel, SectionCard } from "@evcp/ui";
+import { DecisionPanel, SectionCard, Select } from "@evcp/ui";
 import { useEffect, useState } from "react";
 
 type UserDraft = CreateKeycloakUserInput;
@@ -47,7 +47,7 @@ export function KeycloakUserManagement({ client }: { client: PlatformApiClient }
       <div className="ai-governance-action-panel compact">
         <label>Email<input type="email" value={draft.email} onChange={(event) => update("email", event.target.value)} /></label>
         <label>Name<input value={draft.name} onChange={(event) => update("name", event.target.value)} /></label>
-        <label>Role<select value={draft.role} onChange={(event) => update("role", event.target.value)}><option value="admin">Admin</option><option value="creator">Creator</option><option value="end_user">End user</option></select></label>
+        <label>Role<Select value={draft.role} onChange={(event) => update("role", event.target.value)}><option value="admin">Admin</option><option value="creator">Creator</option><option value="end_user">End user</option></Select></label>
         <label>Temporary password<input type="password" value={draft.temporaryPassword} onChange={(event) => update("temporaryPassword", event.target.value)} autoComplete="new-password" /></label>
         <button type="button" onClick={() => void perform(async () => { await keycloak.create(draft); setDraft(emptyDraft); }, "User created. Share the temporary password through an approved channel.")} disabled={!draft.email || !draft.name || !draft.temporaryPassword}>Create user</button>
       </div>
@@ -57,7 +57,7 @@ export function KeycloakUserManagement({ client }: { client: PlatformApiClient }
     <SectionCard eyebrow="Lifecycle" title="Directory users">
       <div className="data-table-wrap"><table className="data-table"><thead><tr><th>User</th><th>Status</th><th>Role</th><th>Actions</th></tr></thead><tbody>{users.map((user) => <tr key={user.id}>
         <td><strong>{user.name}</strong><br /><span>{user.email}</span></td><td>{user.enabled ? "Enabled" : "Disabled"}</td>
-        <td><select aria-label={`Role for ${user.email}`} value={userRole(user)} onChange={(event) => void perform(() => keycloak.setRole(user.id, event.target.value as UserDraft["role"]), "Role updated.")}><option value="admin">Admin</option><option value="creator">Creator</option><option value="end_user">End user</option></select></td>
+        <td><Select className="w-auto" aria-label={`Role for ${user.email}`} value={userRole(user)} onChange={(event) => void perform(() => keycloak.setRole(user.id, event.target.value as UserDraft["role"]), "Role updated.")}><option value="admin">Admin</option><option value="creator">Creator</option><option value="end_user">End user</option></Select></td>
         <td><button type="button" className="secondary-button" onClick={() => { const name = window.prompt("Name", user.name); const email = window.prompt("Email", user.email); if (name && email) void perform(() => keycloak.update(user.id, { name, email }), "User updated."); }}>Edit</button> {user.enabled ? <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, false), "User disabled.")}>Disable</button> : <button type="button" className="secondary-button" onClick={() => void perform(() => keycloak.setEnabled(user.id, true), "User enabled.")}>Enable</button>} <button type="button" className="secondary-button" onClick={() => { const temporaryPassword = window.prompt("Temporary password"); if (temporaryPassword) void perform(() => keycloak.resetPassword(user.id, temporaryPassword), "Password reset requested."); }}>Reset password</button> <button type="button" className="secondary-button" onClick={() => void loadSessions(user)}>View sessions</button> <button type="button" className="secondary-button danger-action" onClick={() => { if (window.confirm(`Revoke every active Horizon session for ${user.email}? They will need to sign in again.`)) void perform(async () => { await keycloak.revokeSessions(user.id); if (sessionUser?.id === user.id) await loadSessions(user); }, "All active Horizon sessions were revoked."); }}>Revoke sessions</button></td>
       </tr>)}</tbody></table></div>
       <div><button type="button" className="secondary-button" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous page</button> <span>Page {page + 1}</span> <button type="button" className="secondary-button" disabled={(page + 1) * pageSize >= total} onClick={() => setPage(page + 1)}>Next page</button></div>

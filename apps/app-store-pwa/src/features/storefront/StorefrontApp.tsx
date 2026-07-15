@@ -3,7 +3,7 @@ import {
   type StoreAccessRequestResponse,
   type StoreTicketResponse
 } from "@evcp/api-client";
-import { DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
+import { DefinitionGrid, SectionCard, Select, ToneBadge } from "@evcp/ui";
 import { Bug, Download, MessageSquare, Send, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -315,7 +315,7 @@ export function StorefrontApp() {
           <div className="store-form">
             <label>
               Type
-              <select
+              <Select
                 value={ticketType}
                 onChange={(event) =>
                   setTicketType(event.target.value as "bug" | "feedback" | "feature_request")
@@ -324,7 +324,7 @@ export function StorefrontApp() {
                 <option value="bug">Bug</option>
                 <option value="feedback">Feedback</option>
                 <option value="feature_request">Feature request</option>
-              </select>
+              </Select>
             </label>
             <label>
               Description

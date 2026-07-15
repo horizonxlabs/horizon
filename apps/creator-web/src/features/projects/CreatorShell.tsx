@@ -1,4 +1,4 @@
-import { AppShell, DecisionPanel, PageHeader } from "@evcp/ui";
+import { AppShell, DecisionPanel, PageHeader, Select } from "@evcp/ui";
 import { WandSparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { HorizonLogo } from "@/shared/HorizonLogo";
@@ -123,7 +123,7 @@ export function CreatorShell({
               </label>
               <label>
                 Data sensitivity
-                <select
+                <Select
                   value={createProjectForm.dataSensitivity}
                   onChange={(event) =>
                     handleCreateProjectField("dataSensitivity", event.target.value)
@@ -133,7 +133,7 @@ export function CreatorShell({
                   <option value="confidential">Confidential</option>
                   <option value="restricted">Restricted</option>
                   <option value="public">Public</option>
-                </select>
+                </Select>
               </label>
             </div>
             <DecisionPanel
