@@ -194,7 +194,7 @@ test("Sprint 9 auth SSO evidence remains feature-owned while Admin uses Keycloak
   );
 
   const adminConsole = readFileSync("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
-  assert.match(adminConsole, /KeycloakUserManagement/);
+  assert.match(adminConsole, /UsersConsole/);
   assert.doesNotMatch(adminConsole, /authProviderRows/);
 
   for (const text of [
