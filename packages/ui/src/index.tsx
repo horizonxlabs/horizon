@@ -2,6 +2,8 @@ import type { AppStoreItem, ProjectSummary, ServiceStatus, Status } from "@evcp/
 import type { ReactNode } from "react";
 
 export { AppShell } from "./app-shell";
+export { Button, type ButtonProps } from "./primitives/button";
+export { cn } from "./cn";
 
 export type Tone = "success" | "warning" | "danger" | "neutral" | "info";
 
