@@ -1,5 +1,5 @@
 {
-  "apps/platform-api/src/platform-services.ts": 8560,
+  "apps/platform-api/src/platform-services.ts": 8429,
   "apps/platform-api/src/app-factory.ts": 3792,
   "apps/platform-api/prisma/seed.ts": 2490,
   "apps/platform-api/src/persistence/publish-store-repositories.ts": 1403,
