@@ -163,7 +163,10 @@ export interface WorkspaceDeployment {
   environment: EnvironmentName;
   commitSha: string;
   imageTag: string;
+  imageDigest: string;
   containerId: string | null;
+  containerName: string;
+  revision: number;
   publishedByUserId: string;
   healthStatus: DeploymentHealthStatus;
   createdAt: string;

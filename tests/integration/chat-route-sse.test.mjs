@@ -42,6 +42,11 @@ async function setup(resolveAuth, options = {}) {
     template,
     getApiKey: () => "sk-fake",
     getContainerId: () => containerId,
+    workspaceGuard: {
+      prepare: async () => "base-sha",
+      validate: async () => {},
+      restore: async () => {}
+    },
     commitAllChanges: async () => "commit-sha-1"
   });
 

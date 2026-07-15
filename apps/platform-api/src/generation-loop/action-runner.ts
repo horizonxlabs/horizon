@@ -3,6 +3,7 @@ import { isLockedFile, type GoldenTemplate } from "../workspace-orchestrator/tem
 import type { CheckpointStore } from "./checkpoint-store";
 import type { MigrationStore } from "./migration-store";
 import { applyFindReplace } from "./find-replace";
+import { containsTransactionControl } from "./migration-runner";
 
 export { applyFindReplace };
 
@@ -39,6 +40,12 @@ export interface ActionRunner {
     action: RunnableAction;
     commitSha?: string;
   }): Promise<ActionResult>;
+  runMigrationBatch(input: {
+    containerId: string;
+    projectId: string;
+    actions: Array<Extract<RunnableAction, { type: "migration" }>>;
+    commitSha: string;
+  }): Promise<ActionResult>;
 }
 
 export function createActionRunner(deps: {
@@ -48,8 +55,69 @@ export function createActionRunner(deps: {
   // Executes migration SQL against the project's real Postgres (via the container's
   // DATABASE_URL). Absent in memory/test mode, where migrations are only recorded.
   runMigrationSql?: (databaseUrl: string, sql: string) => Promise<void>;
+  runMigrationBatchSql?: (databaseUrl: string, statements: string[]) => Promise<void>;
 }): ActionRunner {
+  const runMigrationBatch = async (input: {
+    containerId: string;
+    projectId: string;
+    actions: Array<Extract<RunnableAction, { type: "migration" }>>;
+    commitSha: string;
+  }): Promise<ActionResult> => {
+    try {
+      const statements = input.actions.map((action) => action.sql);
+      if (containsTransactionControl(statements)) {
+        return {
+          ok: false,
+          error: "migration rejected: transaction control commands are not allowed",
+          stdout: "",
+          stderr: "",
+          exitCode: 1
+        };
+      }
+      if (deps.runMigrationBatchSql || deps.runMigrationSql) {
+        const envResult = await deps.docker.execInContainer(input.containerId, [
+          "sh",
+          "-c",
+          'printf %s "$DATABASE_URL"'
+        ]);
+        const databaseUrl = (envResult.stdout ?? "").trim();
+        if (!databaseUrl) {
+          return {
+            ok: false,
+            error: "DATABASE_URL is not set in the workspace container; cannot run migration",
+            stdout: "",
+            stderr: "",
+            exitCode: 1
+          };
+        }
+        if (deps.runMigrationBatchSql) {
+          await deps.runMigrationBatchSql(databaseUrl, statements);
+        } else {
+          await deps.runMigrationSql!(databaseUrl, statements.join(";\n"));
+        }
+      }
+      await deps.migrations.recordMigrations(
+        input.actions.map((action) => ({
+          projectId: input.projectId,
+          name: action.name,
+          sql: action.sql,
+          commitSha: input.commitSha
+        }))
+      );
+      return { ok: true, stdout: "" };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `migration failed: ${(error as Error).message}`,
+        stdout: "",
+        stderr: (error as Error).message,
+        exitCode: 1
+      };
+    }
+  };
+
   return {
+    runMigrationBatch,
     async runAction(input) {
       const { action } = input;
 
@@ -215,42 +283,12 @@ export function createActionRunner(deps: {
         return { ok: true, stdout: result.stdout };
       }
 
-      // migration — execute the SQL against the project's real Postgres schema, then record it.
-      if (deps.runMigrationSql) {
-        const envResult = await deps.docker.execInContainer(input.containerId, [
-          "sh",
-          "-c",
-          'printf %s "$DATABASE_URL"'
-        ]);
-        const databaseUrl = (envResult.stdout ?? "").trim();
-        if (!databaseUrl) {
-          return {
-            ok: false,
-            error: "DATABASE_URL is not set in the workspace container; cannot run migration",
-            stdout: "",
-            stderr: "",
-            exitCode: 1
-          };
-        }
-        try {
-          await deps.runMigrationSql(databaseUrl, action.sql);
-        } catch (error) {
-          return {
-            ok: false,
-            error: `migration failed: ${(error as Error).message}`,
-            stdout: "",
-            stderr: (error as Error).message,
-            exitCode: 1
-          };
-        }
-      }
-      await deps.migrations.recordMigration({
+      return runMigrationBatch({
+        containerId: input.containerId,
         projectId: input.projectId,
-        name: action.name,
-        sql: action.sql,
+        actions: [action],
         commitSha: input.commitSha ?? ""
       });
-      return { ok: true, stdout: "" };
     }
   };
 }

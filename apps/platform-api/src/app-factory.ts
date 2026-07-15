@@ -1197,7 +1197,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       const project = await resolvePersistenceProject(services, user, persistedPublishMatch[1]);
       const baseline = await prdPersistence.getCurrent(user, project);
       const preview = await workspacePersistence.refreshPreview(user, { project, baseline });
-      const result = await publishStorePersistence.publishApp(user, { project, baseline, preview });
+      const result = await publishStorePersistence.publishApp(user, { project, baseline, preview, runtimeDeployment: request.body?.runtimeDeployment as never });
       await corePersistence.recordAudit({
         actorId: user.id,
         action: "app.publish.completed",
@@ -2791,7 +2791,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
 
-  registerPublishHttpRoutes({
+  await registerPublishHttpRoutes({
     rawApp,
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
@@ -2804,6 +2804,13 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       }
     },
     canAccessDeployment: (auth, projectId) => canAccessPublishedDeployment(auth, projectId, services.publishStorePersistence),
+    persistPublishedDeployment: ({ headers, projectId, deployment }) =>
+      executePlatformApiRequestAsync(services, {
+        method: "POST",
+        path: `/projects/${projectId}/publish`,
+        headers,
+        body: { runtimeDeployment: deployment }
+      }),
     recordAudit: (event) =>
       services.audit.record({
         actorId: "system",
@@ -3535,17 +3542,6 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/publish/review`,
         headers: request.headers
-      })
-    )
-  );
-  routes.post("/projects/:projectId/publish", (request, response) =>
-    sendPlatformResponse(
-      response,
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: `/projects/${String(request.params?.projectId ?? "")}/publish`,
-        headers: request.headers,
-        body: request.body
       })
     )
   );

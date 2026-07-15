@@ -32,6 +32,14 @@ test("builds a locked-down dev container spec", () => {
 
 test("memory docker engine tracks lifecycle", async () => {
   const engine = createMemoryDockerEngine();
+  await engine.ensureVolume("evcp-ws-leave-tracker-data", {
+    "evcp.managed": "true",
+    "evcp.project-id": "prj_leave_tracker"
+  });
+  assert.deepEqual(
+    (await engine.listManagedVolumes()).map((volume) => volume.name),
+    ["evcp-ws-leave-tracker-data"]
+  );
   const spec = buildDevContainerSpec(baseInput);
   const { containerId } = await engine.createContainer(spec);
   await engine.startContainer(containerId);
@@ -41,6 +49,8 @@ test("memory docker engine tracks lifecycle", async () => {
   assert.equal(engine.state.containers[0].status, "stopped");
   await engine.removeContainer(containerId);
   assert.equal(engine.state.containers.length, 0);
+  await engine.removeVolume("evcp-ws-leave-tracker-data");
+  assert.equal(engine.state.volumes.length, 0);
 });
 
 test("stopping an unknown container throws", async () => {

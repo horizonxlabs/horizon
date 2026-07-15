@@ -3,9 +3,11 @@
 // so the browser requests them back through the proxy. The orchestrator injects
 // EVCP_PREVIEW_BASE=/preview/<slug> into the container env at provision time.
 const previewBase = process.env.EVCP_PREVIEW_BASE;
+const validationDistDir = process.env.EVCP_VALIDATION_DIST_DIR;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  ...(validationDistDir ? { distDir: validationDistDir } : {}),
   ...(previewBase ? { basePath: previewBase, assetPrefix: previewBase } : {}),
   // Expose the base path to client code so fetches to same-app API routes resolve through the
   // proxy: fetch(`${process.env.NEXT_PUBLIC_BASE_PATH}/api/...`). (Next prepends basePath to

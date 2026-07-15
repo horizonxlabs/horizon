@@ -43,6 +43,7 @@ test("deleteWorkspace releases schema, bucket, llm key, secrets, container and d
   assert.equal(deps.llmGateway.state.keys[0].revoked, true, "llm key revoked");
   assert.deepEqual(await orchestrator.listSecretNames("prj-leave-tracker"), [], "secrets cleared");
   assert.deepEqual(deps.docker.state.containers, [], "container removed");
+  assert.deepEqual(deps.docker.state.volumes, [], "workspace volume removed");
   assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null, "record dropped");
   assert.ok(audits.includes("workspace.deleted"), "audited");
 });

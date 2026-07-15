@@ -7,15 +7,19 @@ export interface DeploymentStore {
     environment: EnvironmentName;
     commitSha: string;
     imageTag: string;
+    imageDigest?: string;
     containerId: string | null;
+    containerName?: string;
     publishedByUserId: string;
   }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
+  discard(id: string): void;
   list(projectId: string): WorkspaceDeployment[];
   // Latest healthy deployment for a slug in a given environment. Defaults to "production" so the
   // /apps serve path and existing callers get the live production tier. Env-awareness matters:
   // staging and production deploy to the same slug, and the caller must resolve the right tier.
   getCurrent(slug: string, environment?: EnvironmentName): WorkspaceDeployment | null;
+  flush?(): Promise<void>;
 }
 
 export function createMemoryDeploymentStore(): DeploymentStore {
@@ -33,7 +37,15 @@ export function createMemoryDeploymentStore(): DeploymentStore {
         environment: input.environment,
         commitSha: input.commitSha,
         imageTag: input.imageTag,
+        imageDigest: input.imageDigest ?? input.imageTag,
         containerId: input.containerId,
+        containerName: input.containerName ?? `evcp-${input.environment}-${input.slug}`,
+        revision:
+          order
+            .map((id) => byId.get(id)!)
+            .filter(
+              (item) => item.projectId === input.projectId && item.environment === input.environment
+            ).length + 1,
         publishedByUserId: input.publishedByUserId,
         healthStatus: "pending",
         createdAt: new Date().toISOString()
@@ -51,6 +63,11 @@ export function createMemoryDeploymentStore(): DeploymentStore {
       byId.set(id, next);
       return next;
     },
+    discard(id) {
+      byId.delete(id);
+      const index = order.indexOf(id);
+      if (index >= 0) order.splice(index, 1);
+    },
     list(projectId) {
       return order
         .map((id) => byId.get(id)!)
@@ -60,7 +77,11 @@ export function createMemoryDeploymentStore(): DeploymentStore {
     getCurrent(slug, environment = "production") {
       for (let i = order.length - 1; i >= 0; i -= 1) {
         const dep = byId.get(order[i])!;
-        if (dep.slug === slug && dep.environment === environment && dep.healthStatus === "healthy") {
+        if (
+          dep.slug === slug &&
+          dep.environment === environment &&
+          dep.healthStatus === "healthy"
+        ) {
           return dep;
         }
       }

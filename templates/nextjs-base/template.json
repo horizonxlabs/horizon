@@ -1,4 +1,12 @@
 {
   "name": "nextjs-base",
-  "lockedFiles": ["platform.config.ts", "lib/storage.ts", "package.json", "next.config.js"]
+  "lockedFiles": [
+    "platform.config.ts",
+    "lib/storage.ts",
+    "package.json",
+    "next.config.js",
+    "tsconfig.json",
+    "next-env.d.ts",
+    "app/api/health/route.ts"
+  ]
 }

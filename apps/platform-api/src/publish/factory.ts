@@ -12,6 +12,7 @@ import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socke
 import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { rehydrateRunningDeployment } from "./deployment-rehydration";
+import { createPrismaDeploymentStore } from "./prisma-deployment-store";
 
 /**
  * Publish routes survive a Platform API restart: the workspace record is in-memory, whereas its
@@ -32,7 +33,7 @@ export async function getOrRecoverDevContainerId(
 }
 
 // Shared deployment store so routes + /apps proxy read the same deployments.
-export function createDefaultPublishStack(opts: {
+export async function createDefaultPublishStack(opts: {
   orchestrator: WorkspaceOrchestrator;
   // Shared MigrationStore from the generation loop so the publish pre-checks see the migrations
   // the generation loop actually applied. Falls back to a fresh memory store when omitted.
@@ -43,14 +44,17 @@ export function createDefaultPublishStack(opts: {
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
-}): {
+}): Promise<{
   publishService: ReturnType<typeof createPublishService>;
   deployments: DeploymentStore;
   rehydrateDeployment: (slug: string, environment: EnvironmentName) => Promise<unknown>;
-} {
+}> {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
-  const deployments = createMemoryDeploymentStore();
+  const deployments =
+    (env.EVCP_CORE_PERSISTENCE ?? "legacy").trim().toLowerCase() === "prisma"
+      ? await createPrismaDeploymentStore(env.DATABASE_URL)
+      : createMemoryDeploymentStore();
   const migrations = opts.migrations ?? createMemoryMigrationStore();
 
   const getDevContainerId = (projectId: string) =>
@@ -92,6 +96,7 @@ export function createDefaultPublishStack(opts: {
     resolveEnv = async () => ({});
   }
 
+  const health = createHttpHealthChecker({ retries: 30, delayMs: 2000 });
   const publishService = createPublishService({
     docker,
     git,
@@ -100,7 +105,7 @@ export function createDefaultPublishStack(opts: {
     // Published containers boot via npm install + next dev, which can take tens of seconds — give
     // the health gate a ~60s window (30 × 2s) instead of the ~5s default so a slow-but-healthy
     // start isn't reported as failed.
-    health: createHttpHealthChecker({ retries: 30, delayMs: 2000 }),
+    health,
     resolveEnv,
     getDevContainerId,
     // Attach published containers to the same network the orchestrator puts dev containers on
@@ -114,7 +119,7 @@ export function createDefaultPublishStack(opts: {
     deployments,
     rehydrateDeployment: async (slug, environment) => {
       if (mode !== "real") return null;
-      return rehydrateRunningDeployment({ deployments, docker, slug, environment });
+      return rehydrateRunningDeployment({ deployments, docker, health, slug, environment });
     }
   };
 }

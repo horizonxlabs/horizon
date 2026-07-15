@@ -55,9 +55,10 @@ export async function createDefaultGenerationService(opts: {
     (corePersistenceMode === "prisma"
       ? await createPrismaChatHistoryStore(env.DATABASE_URL)
       : createMemoryChatHistoryStore());
-  const checkpoints = corePersistenceMode === "prisma"
-    ? await createPrismaWorkspaceCheckpointStore(env.DATABASE_URL)
-    : createMemoryCheckpointStore();
+  const checkpoints =
+    corePersistenceMode === "prisma"
+      ? await createPrismaWorkspaceCheckpointStore(env.DATABASE_URL)
+      : createMemoryCheckpointStore();
 
   const llmClient: LlmCompletionClient =
     mode === "real" && hasLiteLlmConfig
@@ -95,8 +96,14 @@ export async function createDefaultGenerationService(opts: {
               requestedTokens: 1_200
             });
             await opts.onGovernedExecution?.(execution.evidence);
-            if ((execution.status === "blocked" || execution.status === "failed") || !execution.text) {
-              throw new Error(`Governed AI completion unavailable: ${execution.evidence.failureReason ?? execution.status}`);
+            if (
+              execution.status === "blocked" ||
+              execution.status === "failed" ||
+              !execution.text
+            ) {
+              throw new Error(
+                `Governed AI completion unavailable: ${execution.evidence.failureReason ?? execution.status}`
+              );
             }
             return execution.text;
           }
@@ -108,7 +115,12 @@ export async function createDefaultGenerationService(opts: {
       docker,
       checkpoints,
       migrations: opts.migrations ?? createMemoryMigrationStore(),
-      ...(mode === "real" ? { runMigrationSql: createPgMigrationRunner().run } : {})
+      ...(mode === "real"
+        ? {
+            runMigrationSql: createPgMigrationRunner().run,
+            runMigrationBatchSql: createPgMigrationRunner().runBatch
+          }
+        : {})
     }),
     errorFeedback: createErrorFeedbackTracker(),
     template: env.EVCP_TEMPLATE_DIR
@@ -126,6 +138,27 @@ export async function createDefaultGenerationService(opts: {
     },
     readContextFiles: (containerId) => fileReader.read(containerId),
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
+    workspaceGuard: {
+      prepare: async (projectId) => {
+        opts.orchestrator.markActivity(projectId);
+        const workspace = opts.orchestrator.getWorkspace(projectId);
+        if (!workspace?.containerId)
+          throw new Error(`no running container for project '${projectId}'`);
+        return gitCommitter.prepare(workspace.containerId);
+      },
+      validate: async (projectId) => {
+        const workspace = opts.orchestrator.getWorkspace(projectId);
+        if (!workspace?.containerId)
+          throw new Error(`no running container for project '${projectId}'`);
+        await gitCommitter.validate(workspace.containerId);
+      },
+      restore: async (projectId, commitSha) => {
+        const workspace = opts.orchestrator.getWorkspace(projectId);
+        if (!workspace?.containerId)
+          throw new Error(`no running container for project '${projectId}'`);
+        await gitCommitter.restore(workspace.containerId, commitSha);
+      }
+    },
     commitAllChanges: async (projectId, message) => {
       opts.orchestrator.markActivity(projectId);
       const workspace = opts.orchestrator.getWorkspace(projectId);

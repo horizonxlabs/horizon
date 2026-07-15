@@ -119,6 +119,36 @@ export function createDockerSocketEngine(
   };
 
   return {
+    async ensureVolume(name, labels) {
+      const result = await request({
+        method: "POST",
+        path: "/volumes/create",
+        body: { Name: name, Labels: labels }
+      });
+      await expect("volume-create", result, [201]);
+    },
+    async removeVolume(name) {
+      const result = await request({
+        method: "DELETE",
+        path: `/volumes/${encodeURIComponent(name)}?force=false`
+      });
+      await expect("volume-remove", result, [204, 404]);
+    },
+    async listManagedVolumes() {
+      const filters = encodeURIComponent(JSON.stringify({ label: ["evcp.managed=true"] }));
+      const result = await request({ method: "GET", path: `/volumes?filters=${filters}` });
+      await expect("list-managed-volumes", result, [200]);
+      const payload = await result.json();
+      return (Array.isArray(payload?.Volumes) ? payload.Volumes : []).map((volume: any) => ({
+        name: String(volume.Name),
+        labels:
+          volume.Labels && typeof volume.Labels === "object"
+            ? Object.fromEntries(
+                Object.entries(volume.Labels).map(([key, value]) => [key, String(value)])
+              )
+            : {}
+      }));
+    },
     async createContainer(spec) {
       const createOnce = () =>
         request({

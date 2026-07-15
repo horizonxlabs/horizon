@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createDefaultWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/factory.ts";
 import { schemaNameFor } from "../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts";
+import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts";
 
 const LIVE = process.env.EVCP_PROVISION_LIVE === "1";
 
@@ -15,6 +16,7 @@ test(
     });
     const slug = "e2e" + Math.floor(Number(process.env.EVCP_TEST_SEED ?? "1"));
     const projectId = `proj-${slug}`;
+    const resourceKey = resourceKeyForProject(projectId);
 
     const record = await orchestrator.provisionWorkspace({ projectId, slug });
     try {
@@ -23,14 +25,28 @@ test(
 
       // real container is up
       const running = execFileSync("docker", ["ps", "--format", "{{.Names}}"]).toString();
-      assert.ok(running.includes(`evcp-ws-${slug}`), "expected evcp-ws-<slug> container to be running");
+      assert.ok(
+        running.includes(`evcp-ws-${resourceKey}`),
+        "expected id-derived workspace container to be running"
+      );
+      assert.deepEqual((await orchestrator.listSecretNames(projectId)).sort(), [
+        "DATABASE_URL",
+        "LLM_GATEWAY_KEY",
+        "S3_ACCESS_KEY",
+        "S3_BUCKET",
+        "S3_ENDPOINT",
+        "S3_SECRET_KEY"
+      ]);
     } finally {
       await orchestrator.deleteWorkspace(projectId);
       // container gone
       const after = execFileSync("docker", ["ps", "-a", "--format", "{{.Names}}"]).toString();
-      assert.ok(!after.includes(`evcp-ws-${slug}`), "expected the container removed after deleteWorkspace");
+      assert.ok(
+        !after.includes(`evcp-ws-${resourceKey}`),
+        "expected the container removed after deleteWorkspace"
+      );
     }
     // NOTE: also assert schema/bucket removal via psql/mc if desired; deleteWorkspace calls releaseSchema+releaseBucket best-effort.
-    assert.ok(schemaNameFor(slug).includes(slug));
+    assert.ok(schemaNameFor(resourceKey).includes(slug));
   }
 );

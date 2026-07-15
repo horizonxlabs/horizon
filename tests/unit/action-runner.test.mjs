@@ -195,6 +195,58 @@ test("runs a migration action, records it, and treats it as a hard checkpoint bo
   assert.equal(recorded[0].commitSha, "deadbeef");
 });
 
+test("migration batch is one database transaction and records nothing when a later statement fails", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await docker.createContainer({
+    name: "evcp-ws-demo",
+    image: "img",
+    env: ["DATABASE_URL=postgresql://project@postgres/evcp?schema=app_project"],
+    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
+    labels: {},
+    exposedPort: 3000,
+    publishPorts: false
+  });
+  docker.execInContainer = async (_containerId, command) =>
+    command.at(-1) === 'printf %s "$DATABASE_URL"'
+      ? {
+          stdout: "postgresql://project@postgres/evcp?schema=app_project",
+          stderr: "",
+          exitCode: 0
+        }
+      : { stdout: "", stderr: "", exitCode: 0 };
+  const migrations = createMemoryMigrationStore();
+  const batches = [];
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations,
+    runMigrationBatchSql: async (databaseUrl, statements) => {
+      batches.push({ databaseUrl, statements });
+      throw new Error("second migration failed");
+    }
+  });
+
+  const result = await runner.runMigrationBatch({
+    containerId,
+    projectId: "p1",
+    commitSha: "deadbeef",
+    actions: [
+      { id: "m1", type: "migration", name: "create_users", sql: "CREATE TABLE users(id text)" },
+      { id: "m2", type: "migration", name: "broken_index", sql: "CREATE INDEX broken" }
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /second migration failed/);
+  assert.deepEqual(batches, [
+    {
+      databaseUrl: "postgresql://project@postgres/evcp?schema=app_project",
+      statements: ["CREATE TABLE users(id text)", "CREATE INDEX broken"]
+    }
+  ]);
+  assert.deepEqual(await migrations.listMigrations("p1"), []);
+});
+
 // Drift guard: a whole-file write to a substantial existing file is rejected and redirected to edit.
 function stubDockerWithSizes(sizeByPath) {
   const execCalls = [];

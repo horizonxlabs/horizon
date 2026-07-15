@@ -770,9 +770,9 @@ export interface AppManifest {
   };
   roles: Array<Pick<AppRoleDefinition, "key" | "name" | "permissions">>;
   database: {
-    schemaName: string;
-    tables: string[];
+    schemaName: string; tables: string[];
   };
+  runtime?: { deploymentRevisionId: string; revision: number; sourceCommitSha: string; imageTag: string; imageDigest: string };
   generatedAt: string;
 }
 
@@ -812,8 +812,8 @@ export interface DeploymentRecord {
   route: string;
   manifestVersion: string;
   prdVersion: string;
-  frontendCheckpointId: string;
-  publishedByUserId: string;
+  frontendCheckpointId: string; publishedByUserId: string;
+  deploymentRevisionId?: string; runtimeRevision?: number; sourceCommitSha?: string; imageTag?: string; imageDigest?: string; containerName?: string;
   publishedAt: string;
 }
 

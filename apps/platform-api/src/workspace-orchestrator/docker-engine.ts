@@ -63,7 +63,6 @@ export function buildAppContainerSpec(
     cpuCores?: number;
     memoryMb?: number;
     network: string;
-    workspaceVolume?: string;
   },
   environment: EnvironmentName
 ): DevContainerSpec {
@@ -71,7 +70,6 @@ export function buildAppContainerSpec(
   const cpuCores = input.cpuCores ?? 1;
   const memoryMb = input.memoryMb ?? 1024;
   const env = { ...input.env, NODE_ENV: "production" };
-  const workspaceVolume = input.workspaceVolume ?? `evcp-ws-${input.slug}-${environment}-data`;
   return {
     name: `evcp-${environment}-${input.slug}`,
     image: input.image,
@@ -80,7 +78,7 @@ export function buildAppContainerSpec(
       NanoCpus: Math.round(cpuCores * 1_000_000_000),
       Memory: memoryMb * 1024 * 1024,
       NetworkMode: input.network,
-      Binds: [`${workspaceVolume}:/workspace`]
+      Binds: []
     },
     labels: {
       "evcp.managed": "true",
@@ -101,12 +99,19 @@ export function buildProdContainerSpec(input: {
   cpuCores?: number;
   memoryMb?: number;
   network: string;
-  workspaceVolume?: string;
 }): DevContainerSpec {
   return buildAppContainerSpec(input, "production");
 }
 
 export interface DockerEngine {
+  ensureVolume(name: string, labels: Record<string, string>): Promise<void>;
+  removeVolume(name: string): Promise<void>;
+  listManagedVolumes(): Promise<
+    Array<{
+      name: string;
+      labels: Record<string, string>;
+    }>
+  >;
   createContainer(spec: DevContainerSpec): Promise<{ containerId: string }>;
   startContainer(containerId: string): Promise<void>;
   stopContainer(containerId: string): Promise<void>;
@@ -151,9 +156,15 @@ interface MemoryContainer {
   status: "created" | "running" | "stopped";
 }
 
+interface MemoryVolume {
+  name: string;
+  labels: Record<string, string>;
+}
+
 export function createMemoryDockerEngine(): DockerEngine & {
   state: {
     containers: MemoryContainer[];
+    volumes: MemoryVolume[];
     execCalls: Array<{ containerId: string; cmd: string[] }>;
     commits: Array<{ containerId: string; imageTag: string }>;
     builds: Array<{
@@ -166,6 +177,7 @@ export function createMemoryDockerEngine(): DockerEngine & {
 } {
   const state = {
     containers: [] as MemoryContainer[],
+    volumes: [] as MemoryVolume[],
     execCalls: [] as Array<{ containerId: string; cmd: string[] }>,
     commits: [] as Array<{ containerId: string; imageTag: string }>,
     builds: [] as Array<{
@@ -184,6 +196,19 @@ export function createMemoryDockerEngine(): DockerEngine & {
   };
   return {
     state,
+    async ensureVolume(name, labels) {
+      const existing = state.volumes.find((volume) => volume.name === name);
+      if (existing) return;
+      state.volumes.push({ name, labels: { ...labels } });
+    },
+    async removeVolume(name) {
+      state.volumes = state.volumes.filter((volume) => volume.name !== name);
+    },
+    async listManagedVolumes() {
+      return state.volumes
+        .filter((volume) => volume.labels["evcp.managed"] === "true")
+        .map((volume) => ({ name: volume.name, labels: { ...volume.labels } }));
+    },
     async createContainer(spec) {
       const containerId = `mem-${state.containers.length + 1}-${spec.name}`;
       state.containers.push({ containerId, spec, status: "created" });

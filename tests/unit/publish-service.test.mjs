@@ -31,24 +31,27 @@ test("happy path: checks pass, image built, prod container started, healthy depl
   assert.equal(outcome.deployment.healthStatus, "healthy");
   assert.equal(outcome.deployment.environment, "production");
   assert.equal(outcome.deployment.commitSha, "sha1");
-  assert.match(outcome.deployment.imageTag, /^evcp-production-app:sha1$/);
+  assert.match(outcome.deployment.imageTag, /^evcp-production-app:sha1-[a-f0-9]{8}$/);
   // built a REAL production image (Dockerfile /build), not a `docker commit` snapshot
   assert.equal(deps.docker.state.builds.length, 1);
   assert.equal(deps.docker.state.commits.length, 0);
-  assert.equal(deps.docker.state.builds[0].imageTag, "evcp-production-app:sha1");
+  assert.equal(deps.docker.state.builds[0].imageTag, outcome.deployment.imageTag);
   // the production Dockerfile + .dockerignore are injected into the build-context tar (extraFiles),
   // NOT written into the dev container's /workspace — writing them there would dirty the app's git
   // tree and break the clean-tree pre-check on the next publish.
   assert.deepEqual(deps.docker.state.builds[0].extraFiles.map((file) => file.name).sort(), [
     ".dockerignore",
     ".env.production",
-    "Dockerfile",
+    "Dockerfile"
   ]);
   assert.ok(
     !deps.docker.state.execCalls.some((c) => c.cmd.join(" ").includes("/workspace/Dockerfile")),
     "must NOT write a Dockerfile into the workspace"
   );
-  assert.ok(deps.docker.state.containers.some((c) => c.spec.name === "evcp-production-app"));
+  assert.match(outcome.deployment.containerName, /^evcp-production-app-sha1-[a-f0-9]{8}$/);
+  assert.ok(
+    deps.docker.state.containers.some((c) => c.spec.name === outcome.deployment.containerName)
+  );
   // audit events: publish + deploy
   assert.ok(deps._audits.some((e) => e.action === "workspace.publish"));
   assert.ok(deps._audits.some((e) => e.action === "workspace.deploy"));
@@ -92,7 +95,7 @@ test("production image is built with its public app proxy base path", async () =
   assert.equal(environmentFile.content, "EVCP_PREVIEW_BASE=/api/apps/prj-123\n");
 });
 
-test("staging publish: produces an evcp-staging-<slug> container/image + records environment 'staging'", async () => {
+test("staging publish runs the immutable image without a shared writable workspace volume", async () => {
   const deps = buildDeps();
   const service = createPublishService(deps);
   const outcome = await service.publish({
@@ -104,11 +107,15 @@ test("staging publish: produces an evcp-staging-<slug> container/image + records
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.deployment.environment, "staging");
-  assert.match(outcome.deployment.imageTag, /^evcp-staging-app:sha1$/);
-  assert.ok(deps.docker.state.containers.some((c) => c.spec.name === "evcp-staging-app"));
-  // its own per-env workspace volume (staging cannot corrupt production's disk)
-  const staging = deps.docker.state.containers.find((c) => c.spec.name === "evcp-staging-app");
-  assert.ok(staging.spec.hostConfig.Binds.includes("evcp-ws-app-staging-data:/workspace"));
+  assert.match(outcome.deployment.imageTag, /^evcp-staging-app:sha1-[a-f0-9]{8}$/);
+  assert.match(outcome.deployment.containerName, /^evcp-staging-app-sha1-[a-f0-9]{8}$/);
+  assert.ok(
+    deps.docker.state.containers.some((c) => c.spec.name === outcome.deployment.containerName)
+  );
+  const staging = deps.docker.state.containers.find(
+    (c) => c.spec.name === outcome.deployment.containerName
+  );
+  assert.deepEqual(staging.spec.hostConfig.Binds, []);
 });
 
 test("pre-checks fail: no image built, returns failures, no deployment recorded", async () => {
@@ -190,7 +197,7 @@ test("serializes concurrent publish and rollback for the same project", async ()
   );
   releaseFirstBuild();
   await Promise.all([first, rollback]);
-  assert.deepEqual(deps.git.state.projects.p1.checkouts, ["sha0"]);
+  assert.deepEqual(deps.git.state.projects.p1.checkouts, ["sha0", "sha1"]);
 });
 
 test("queues image builds across projects so a second deploy cannot compete for host resources", async () => {
@@ -200,7 +207,7 @@ test("queues image builds across projects so a second deploy cannot compete for 
   let releaseFirstBuild;
   const firstBuildStarted = new Promise((resolve) => {
     deps.docker.buildImage = async (...args) => {
-      if (args[1] === "evcp-staging-app-one:sha1") {
+      if (args[1].startsWith("evcp-staging-app-one:sha1-")) {
         resolve();
         await new Promise((release) => {
           releaseFirstBuild = release;
@@ -233,10 +240,8 @@ test("queues image builds across projects so a second deploy cannot compete for 
   );
   releaseFirstBuild();
   await Promise.all([first, second]);
-  assert.deepEqual(
-    deps.docker.state.builds.map((build) => build.imageTag),
-    ["evcp-staging-app-one:sha1", "evcp-staging-app-two:sha2"]
-  );
+  assert.match(deps.docker.state.builds[0].imageTag, /^evcp-staging-app-one:sha1-[a-f0-9]{8}$/);
+  assert.match(deps.docker.state.builds[1].imageTag, /^evcp-staging-app-two:sha2-[a-f0-9]{8}$/);
 });
 
 test("health check fails: deployment recorded as failed, marked not-current", async () => {
@@ -255,6 +260,34 @@ test("health check fails: deployment recorded as failed, marked not-current", as
   assert.equal(deps.deployments.getCurrent("app"), null, "a failed deploy must not become current");
 });
 
+test("failed replacement uses blue-green naming and preserves the previous healthy container and route", async () => {
+  const deps = buildDeps();
+  const service = createPublishService(deps);
+  const first = await service.publish({
+    projectId: "p1",
+    slug: "app",
+    environment: "production",
+    publishedByUserId: "u1"
+  });
+  assert.equal(first.ok, true);
+
+  deps.git.state.projects.p1.head = "sha2";
+  deps.health.check = async () => false;
+  const failed = await service.publish({
+    projectId: "p1",
+    slug: "app",
+    environment: "production",
+    publishedByUserId: "u1"
+  });
+
+  assert.equal(failed.ok, false);
+  assert.notEqual(failed.deployment.containerName, first.deployment.containerName);
+  assert.equal(deps.deployments.getCurrent("app").id, first.deployment.id);
+  assert.ok(
+    deps.docker.state.containers.some((item) => item.containerId === first.deployment.containerId)
+  );
+});
+
 test("rollback: publishing an explicit older commit checks out that commit and tags the image with it", async () => {
   const deps = buildDeps();
   deps.git.state.projects.p1.head = "sha2"; // HEAD is newer
@@ -269,7 +302,7 @@ test("rollback: publishing an explicit older commit checks out that commit and t
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.deployment.commitSha, "sha1");
-  assert.deepEqual(deps.git.state.projects.p1.checkouts, ["sha1"]);
+  assert.deepEqual(deps.git.state.projects.p1.checkouts, ["sha1", "sha2"]);
   assert.ok(deps._audits.some((e) => e.action === "workspace.rollback"));
 });
 
@@ -295,7 +328,7 @@ test("promote: reuses the healthy staging commitSha for production WITHOUT a reb
   assert.equal(promoted.deployment.environment, "production");
   // production runs the exact bits validated in staging (same commit), not the newer HEAD
   assert.equal(promoted.deployment.commitSha, "sha1");
-  assert.match(promoted.deployment.imageTag, /^evcp-production-app:sha1$/);
+  assert.match(promoted.deployment.imageTag, /^evcp-production-app:sha1-[a-f0-9]{8}$/);
   // the source of the promote image is the running staging container (no dev rebuild / pre-checks)
   const lastCommit = deps.docker.state.commits[deps.docker.state.commits.length - 1];
   assert.equal(lastCommit.containerId, staging.deployment.containerId);
@@ -322,17 +355,13 @@ test("containers are keyed by the id-derived resource key (evcp-<env>-<resourceK
   assert.equal(outcome.deployment.slug, resourceKey);
   assert.match(
     outcome.deployment.imageTag,
-    /^evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af:sha1$/
+    /^evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af:sha1-[a-f0-9]{8}$/
   );
   const container = deps.docker.state.containers.find(
-    (c) => c.spec.name === "evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af"
+    (c) => c.spec.name === outcome.deployment.containerName
   );
   assert.ok(container, "container name must be evcp-<env>-<resourceKey>");
-  assert.ok(
-    container.spec.hostConfig.Binds.includes(
-      "evcp-ws-prj-d91441edb0024adc874d6cb80cf2c6af-staging-data:/workspace"
-    )
-  );
+  assert.deepEqual(container.spec.hostConfig.Binds, []);
 });
 
 test("promote: errors when there is no healthy staging deployment to promote", async () => {

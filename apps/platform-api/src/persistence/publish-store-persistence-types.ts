@@ -31,6 +31,8 @@ export interface AppManifestRecord {
   id: string; appId: string; projectId: string; manifestVersion: string; prdVersionId: string;
   prdVersion: string; frontendCheckpointId: string; route: string; authMode: string;
   roleSnapshot: JsonValue; databaseSnapshot: JsonValue; manifest: JsonValue; generatedAt: DateValue;
+  sourceCommitSha?: string | null;
+  deploymentRevisionId?: string | null;
 }
 export interface PublishRequestRecordData {
   id: string; appId: string; projectId: string; status: string; requestedByUserId: string;
@@ -40,6 +42,12 @@ export interface DeploymentRecordData {
   id: string; appId: string; projectId: string; publishRequestId: string; status: string;
   environment: string; route: string; manifestVersion: string; prdVersion: string;
   frontendCheckpointId: string; publishedByUserId: string; publishedAt: DateValue;
+  deploymentRevisionId?: string | null;
+  runtimeRevision?: number | null;
+  sourceCommitSha?: string | null;
+  imageTag?: string | null;
+  imageDigest?: string | null;
+  containerName?: string | null;
 }
 export interface AppStoreRegistryEntryRecord {
   id: string; appId: string; projectId: string; deploymentRecordId: string; slug: string;

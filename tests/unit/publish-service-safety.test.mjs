@@ -1,20 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPublishService } from "../../apps/platform-api/src/publish/publish-service.ts";
+import { createPrismaDeploymentStore } from "../../apps/platform-api/src/publish/prisma-deployment-store.ts";
 import { buildPublishServiceDeps } from "./publish-service-test-helpers.mjs";
 
 test("publish fails before starting a deployment when workspace secrets cannot be resolved", async () => {
   const deps = buildPublishServiceDeps();
-  deps.resolveEnv = async () => { throw new Error("workspace secrets unavailable"); };
+  deps.resolveEnv = async () => {
+    throw new Error("workspace secrets unavailable");
+  };
   const service = createPublishService(deps);
 
-  await assert.rejects(() => service.publish({
-    projectId: "p1",
-    slug: "app",
-    environment: "production",
-    publishedByUserId: "u1"
-  }), /workspace secrets unavailable/);
-  assert.equal(deps.docker.state.containers.some((item) => item.spec.name === "evcp-production-app"), false);
+  await assert.rejects(
+    () =>
+      service.publish({
+        projectId: "p1",
+        slug: "app",
+        environment: "production",
+        publishedByUserId: "u1"
+      }),
+    /workspace secrets unavailable/
+  );
+  assert.equal(
+    deps.docker.state.containers.some((item) => item.spec.name === "evcp-production-app"),
+    false
+  );
 });
 
 test("rollback is rejected before checkout when the target predates an applied migration", async () => {
@@ -43,4 +53,141 @@ test("rollback is rejected before checkout when the target predates an applied m
   assert.equal(deps.git.state.projects.p1.head, "sha2");
   assert.deepEqual(deps.git.state.projects.p1.checkouts ?? [], []);
   assert.equal(deps.docker.state.builds.length, 0);
+});
+
+test("publish compensates a rejected Prisma lifecycle batch and the next publish succeeds", async () => {
+  const rows = [];
+  let rejectNextUpdate = true;
+  const revisionTable = {
+    async findMany() {
+      return rows.map((row) => ({ ...row }));
+    },
+    async create({ data }) {
+      rows.push({ ...data });
+      return data;
+    },
+    async update({ where, data }) {
+      if (rejectNextUpdate) {
+        rejectNextUpdate = false;
+        throw new Error("updateHealth rejected");
+      }
+      const row = rows.find((item) => item.id === where.id);
+      if (!row) throw new Error(`missing revision '${where.id}'`);
+      Object.assign(row, data);
+      return row;
+    }
+  };
+  const client = {
+    workspaceDeploymentRevision: revisionTable,
+    async $transaction(operation) {
+      const snapshot = rows.map((row) => ({ ...row }));
+      try {
+        return await operation({ workspaceDeploymentRevision: revisionTable });
+      } catch (error) {
+        rows.splice(0, rows.length, ...snapshot);
+        throw error;
+      }
+    }
+  };
+  const deps = buildPublishServiceDeps();
+  deps.deployments = await createPrismaDeploymentStore(undefined, client);
+  const service = createPublishService(deps);
+
+  await assert.rejects(
+    service.publish({
+      projectId: "p1",
+      slug: "app",
+      environment: "production",
+      publishedByUserId: "u1"
+    }),
+    /updateHealth rejected/
+  );
+
+  assert.deepEqual(rows, [], "the failed lifecycle must leave no durable pending revision");
+  assert.deepEqual(deps.deployments.list("p1"), [], "optimistic state must match durability");
+  assert.equal(
+    deps.docker.state.containers.filter((item) =>
+      item.spec.name?.startsWith("evcp-production-app-")
+    ).length,
+    0,
+    "the failed publish must remove its candidate container"
+  );
+
+  const recovered = await service.publish({
+    projectId: "p1",
+    slug: "app",
+    environment: "production",
+    publishedByUserId: "u1"
+  });
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.deployment.revision, 1);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].healthStatus, "healthy");
+});
+
+test("a thrown health check discards the queued candidate before the next publish", async () => {
+  const rows = [];
+  const revisionTable = {
+    async findMany() {
+      return rows.map((row) => ({ ...row }));
+    },
+    async create({ data }) {
+      rows.push({ ...data });
+      return data;
+    },
+    async update({ where, data }) {
+      const row = rows.find((item) => item.id === where.id);
+      if (!row) throw new Error(`missing revision '${where.id}'`);
+      Object.assign(row, data);
+      return row;
+    }
+  };
+  const client = {
+    workspaceDeploymentRevision: revisionTable,
+    async $transaction(operation) {
+      const snapshot = rows.map((row) => ({ ...row }));
+      try {
+        return await operation({ workspaceDeploymentRevision: revisionTable });
+      } catch (error) {
+        rows.splice(0, rows.length, ...snapshot);
+        throw error;
+      }
+    }
+  };
+  const deps = buildPublishServiceDeps();
+  deps.deployments = await createPrismaDeploymentStore(undefined, client);
+  const healthError = new Error("health probe connection reset");
+  deps.health.check = async () => {
+    throw healthError;
+  };
+  const service = createPublishService(deps);
+
+  await assert.rejects(
+    service.publish({
+      projectId: "p1",
+      slug: "app",
+      environment: "production",
+      publishedByUserId: "u1"
+    }),
+    (error) => error === healthError
+  );
+  assert.deepEqual(rows, []);
+  assert.equal(
+    deps.docker.state.containers.filter((item) =>
+      item.spec.name?.startsWith("evcp-production-app-")
+    ).length,
+    0
+  );
+
+  deps.health.check = async () => true;
+  const recovered = await service.publish({
+    projectId: "p1",
+    slug: "app",
+    environment: "production",
+    publishedByUserId: "u1"
+  });
+  assert.equal(recovered.ok, true);
+  assert.equal(recovered.deployment.revision, 1);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].healthStatus, "healthy");
 });

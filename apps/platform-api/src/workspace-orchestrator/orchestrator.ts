@@ -5,6 +5,13 @@ import { resourceKeyForProject } from "./resource-ports";
 import { buildDevContainerSpec } from "./docker-engine";
 import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
+import {
+  cleanupOrphanWorkspaceResources,
+  waitForPreviewReady,
+  workspaceSecretEntries,
+  workspaceVolumeLabels,
+  workspaceVolumeName
+} from "./workspace-lifecycle";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -45,7 +52,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       cpuCores,
       memoryMb,
       network,
-      workspaceVolume: `evcp-ws-${resourceKey}-data`
+      workspaceVolume: workspaceVolumeName(resourceKey)
     });
 
   const recoverExistingWorkspace = async (
@@ -56,6 +63,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
+      await waitForPreviewReady(deps.docker, found.containerId);
       const recovered = save({
         ...existing,
         slug: input.slug,
@@ -82,11 +90,16 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         `cannot recover workspace '${input.projectId}': managed secrets are unavailable`
       );
     }
+    await deps.docker.ensureVolume(
+      workspaceVolumeName(resourceKey),
+      workspaceVolumeLabels(input.projectId)
+    );
     const { containerId } = await deps.docker.createContainer(
       await buildWorkspaceSpec(input.projectId, resourceKey)
     );
     await deps.docker.startContainer(containerId);
-      const recovered = save({
+    await waitForPreviewReady(deps.docker, containerId);
+    const recovered = save({
       ...existing,
       slug: input.slug,
       state: "running",
@@ -120,19 +133,16 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
     },
     async cleanupOrphanContainers(): Promise<string[]> {
-      const removed: string[] = [];
-      for (const container of await deps.docker.listManagedContainers()) {
-        const projectId = container.labels["evcp.project-id"];
-        const isDevelopmentWorkspace = container.name.startsWith("evcp-ws-") && !container.labels["evcp.env"];
-        // Older containers without a stable project-id label are left untouched: deletion must be
-        // provably safe. They are adopted by provisionWorkspace and relabelled on recreation.
-        if (!isDevelopmentWorkspace || !projectId || records.has(projectId)) continue;
-        if (container.running) await deps.docker.stopContainer(container.containerId).catch(() => undefined);
-        await deps.docker.removeContainer(container.containerId);
-        removed.push(container.name);
-        audit({ action: "workspace.orphan_removed", projectId, metadata: { containerName: container.name } });
-      }
-      return removed;
+      return cleanupOrphanWorkspaceResources({
+        docker: deps.docker,
+        activeProjectIds: new Set(records.keys()),
+        onRemoved: ({ projectId, containerName, volumeName }) =>
+          audit({
+            action: "workspace.orphan_removed",
+            projectId,
+            metadata: { containerName, volumeName }
+          })
+      });
     },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
@@ -189,24 +199,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         if (!found.running) {
           await deps.docker.startContainer(found.containerId).catch(() => undefined);
         }
+        await waitForPreviewReady(deps.docker, found.containerId);
         // The original container already contains the encrypted-at-rest secrets in its runtime
         // environment. Restore the managed values when a restart happened before they were
         // persisted (or from an older deployment that did not persist them yet).
-        for (const entry of found.env) {
-          const separator = entry.indexOf("=");
-          if (separator <= 0) continue;
-          const name = entry.slice(0, separator);
-          if (
-            name !== "DATABASE_URL" &&
-            name !== "LLM_GATEWAY_KEY" &&
-            name !== "S3_ENDPOINT" &&
-            name !== "S3_BUCKET" &&
-            name !== "S3_ACCESS_KEY" &&
-            name !== "S3_SECRET_KEY"
-          ) {
-            continue;
-          }
-          await deps.secrets.put(input.projectId, name, entry.slice(separator + 1));
+        for (const [name, value] of workspaceSecretEntries(found.env)) {
+          await deps.secrets.put(input.projectId, name, value);
         }
         const healed = save({
           id: `ws-${resourceKey}`,
@@ -272,11 +270,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
         rollbacks.push(() => deps.secrets.removeAll(input.projectId));
 
+        const volumeName = workspaceVolumeName(resourceKey);
+        await deps.docker.ensureVolume(volumeName, workspaceVolumeLabels(input.projectId));
+        rollbacks.push(() => deps.docker.removeVolume(volumeName));
         const { containerId } = await deps.docker.createContainer(
           await buildWorkspaceSpec(input.projectId, resourceKey)
         );
         rollbacks.push(() => deps.docker.removeContainer(containerId));
         await deps.docker.startContainer(containerId);
+        await waitForPreviewReady(deps.docker, containerId);
 
         assertTransition(record.state, "running");
         record = save({
@@ -332,6 +334,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
       await deps.docker.startContainer(record.containerId!);
+      await waitForPreviewReady(deps.docker, record.containerId!);
       const next = save({ ...record, state: "running", lastActivityAt: now() });
       await persist(next);
       audit({ action: "workspace.started", projectId });
@@ -361,6 +364,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.removeContainer(record.containerId).catch(() => undefined);
       }
       const releaseKey = resourceKeyForProject(record.projectId);
+      await deps.docker.removeVolume(workspaceVolumeName(releaseKey)).catch(() => undefined);
       await deps.postgres.releaseSchema(releaseKey).catch(() => undefined);
       await deps.objectStorage.releaseBucket(releaseKey).catch(() => undefined);
       const keyId = llmKeyIds.get(projectId);

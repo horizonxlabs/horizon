@@ -1,5 +1,6 @@
 import type * as NodeHttp from "node:http";
 import type { EnvironmentName } from "@evcp/types";
+import type { WorkspaceDeployment } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import type { MigrationStore } from "../generation-loop/migration-store";
@@ -90,7 +91,7 @@ export function deploymentProxyPath(originalUrl: string): string {
  * (docker/Caddyfile) and is NOT changed here — these handlers are reachable directly on
  * platform-api (and via the dev `/api` proxy) for verification.
  */
-export function registerPublishHttpRoutes(opts: {
+export async function registerPublishHttpRoutes(opts: {
   rawApp: PublishRawExpress;
   orchestrator: WorkspaceOrchestrator;
   migrations: MigrationStore;
@@ -98,13 +99,18 @@ export function registerPublishHttpRoutes(opts: {
   env?: Record<string, string | undefined>;
   resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
   canAccessDeployment: (auth: WorkspaceAuthContext, projectId: string) => Promise<boolean>;
-  publishStack?: ReturnType<typeof createDefaultPublishStack>;
+  persistPublishedDeployment?: (input: {
+    headers: HeaderBag;
+    projectId: string;
+    deployment: WorkspaceDeployment;
+  }) => Promise<{ status: number; body: unknown }>;
+  publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
   recordAudit: (event: {
     action: string;
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
-}): void {
+}): Promise<void> {
   const { rawApp, orchestrator, nodeHttp } = opts;
 
   const {
@@ -112,13 +118,34 @@ export function registerPublishHttpRoutes(opts: {
     deployments: workspaceDeployments,
     rehydrateDeployment
   } = opts.publishStack ??
-  createDefaultPublishStack({
+  (await createDefaultPublishStack({
     orchestrator,
     migrations: opts.migrations,
     env: opts.env,
     onAudit: opts.recordAudit
-  });
+  }));
   const publishRoutes = createPublishRoutes({ publishService, deployments: workspaceDeployments });
+  const persistOrCompensate = async (
+    headers: HeaderBag,
+    projectId: string,
+    deployment: WorkspaceDeployment
+  ): Promise<{ status: number; body: unknown } | null> => {
+    if (!opts.persistPublishedDeployment) return null;
+    try {
+      const persisted = await opts.persistPublishedDeployment({ headers, projectId, deployment });
+      if (persisted.status >= 400) await publishService.deactivate(deployment);
+      return persisted;
+    } catch (error) {
+      await publishService.deactivate(deployment);
+      return {
+        status: 500,
+        body: {
+          error: "publish_persistence_failed",
+          message: error instanceof Error ? error.message : "deployment persistence failed"
+        }
+      };
+    }
+  };
 
   // Publish containers are keyed by the immutable id-derived RESOURCE KEY (evcp-<env>-<resourceKey>),
   // NOT the project slug — projects no longer carry a resource-usable slug after the slug→UUID change.
@@ -137,6 +164,18 @@ export function registerPublishHttpRoutes(opts: {
     const environment = normalizeEnvironment(body?.environment);
     try {
       const result = await publishRoutes.publish(auth, { projectId, slug, environment });
+      if (
+        result.status === 201 &&
+        environment === "production" &&
+        opts.persistPublishedDeployment
+      ) {
+        const deployment = result.body.deployment as WorkspaceDeployment;
+        const persisted = await persistOrCompensate(req.headers ?? {}, projectId, deployment);
+        if (persisted && (persisted.status >= 400 || body?.environment === undefined)) {
+          res.status(persisted.status).json(persisted.body);
+          return;
+        }
+      }
       res.status(result.status).json(result.body);
     } catch (error) {
       // Last-resort guard so an unexpected throw becomes a labelled, logged error instead of the
@@ -160,6 +199,17 @@ export function registerPublishHttpRoutes(opts: {
     const environment = normalizeEnvironment(body?.environment);
     const commitSha = String(body?.commitSha ?? "");
     const result = await publishRoutes.rollback(auth, { projectId, slug, environment, commitSha });
+    if (result.status === 201 && environment === "production" && opts.persistPublishedDeployment) {
+      const persisted = await persistOrCompensate(
+        req.headers ?? {},
+        projectId,
+        result.body.deployment as WorkspaceDeployment
+      );
+      if (persisted && persisted.status >= 400) {
+        res.status(persisted.status).json(persisted.body);
+        return;
+      }
+    }
     res.status(result.status).json(result.body);
   };
 
@@ -172,6 +222,17 @@ export function registerPublishHttpRoutes(opts: {
     const projectId = String(req.params?.projectId ?? "");
     const slug = resolveResourceKey(projectId);
     const result = await publishRoutes.promote(auth, { projectId, slug });
+    if (result.status === 201 && opts.persistPublishedDeployment) {
+      const persisted = await persistOrCompensate(
+        req.headers ?? {},
+        projectId,
+        result.body.deployment as WorkspaceDeployment
+      );
+      if (persisted && persisted.status >= 400) {
+        res.status(persisted.status).json(persisted.body);
+        return;
+      }
+    }
     res.status(result.status).json(result.body);
   };
 

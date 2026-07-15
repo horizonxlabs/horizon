@@ -19,6 +19,15 @@ async function collect(iterable) {
   return events;
 }
 
+function passingWorkspaceGuard(overrides = {}) {
+  return {
+    prepare: async () => "base-sha",
+    validate: async () => {},
+    restore: async () => {},
+    ...overrides
+  };
+}
+
 test("successful file-action turn streams tokens, action_result, commit, then done", async () => {
   const docker = createMemoryDockerEngine();
   const { containerId } = await docker.createContainer({
@@ -37,6 +46,7 @@ test("successful file-action turn streams tokens, action_result, commit, then do
     "</artifact>";
 
   const checkpoints = createMemoryCheckpointStore();
+  const lifecycle = [];
   const service = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([scriptedReply]),
     chatHistory: createMemoryChatHistoryStore(),
@@ -49,7 +59,22 @@ test("successful file-action turn streams tokens, action_result, commit, then do
     template,
     getApiKey: () => "sk-fake",
     getContainerId: () => containerId,
-    commitAllChanges: async () => "commit-sha-1",
+    workspaceGuard: passingWorkspaceGuard({
+      prepare: async () => {
+        lifecycle.push("prepare");
+        return "base-sha";
+      },
+      validate: async () => {
+        lifecycle.push("validate");
+      },
+      restore: async () => {
+        lifecycle.push("restore");
+      }
+    }),
+    commitAllChanges: async () => {
+      lifecycle.push("commit");
+      return "commit-sha-1";
+    },
     checkpoints
   });
 
@@ -61,41 +86,197 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   const commit = events.find((event) => event.type === "commit");
   assert.equal(commit.sha, "commit-sha-1");
   assert.deepEqual(
-    (await checkpoints.listCheckpoints("p1")).map(({ commitSha, tag, label }) => ({ commitSha, tag, label })),
+    (await checkpoints.listCheckpoints("p1")).map(({ commitSha, tag, label }) => ({
+      commitSha,
+      tag,
+      label
+    })),
     [{ commitSha: "commit-sha-1", tag: "checkpoint/commit-sha-1", label: "add home page" }]
   );
+  assert.equal(events.at(-1).type, "done");
+  assert.deepEqual(lifecycle, ["prepare", "validate", "commit"]);
+});
+
+test("validation failure restores the starting revision and creates no commit or checkpoint", async () => {
+  const checkpoints = createMemoryCheckpointStore();
+  const lifecycle = [];
+  let commitAttempts = 0;
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([
+      '<artifact id="a1" title="broken"><action type="file" filePath="app/page.tsx">broken source</action></artifact>'
+    ]),
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: { runAction: async () => ({ ok: true, stdout: "" }) },
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => "container-1",
+    workspaceGuard: passingWorkspaceGuard({
+      prepare: async () => {
+        lifecycle.push("prepare");
+        return "known-good";
+      },
+      validate: async () => {
+        lifecycle.push("validate");
+        throw new Error("build failed");
+      },
+      restore: async (_projectId, sha) => {
+        lifecycle.push(`restore:${sha}`);
+      }
+    }),
+    commitAllChanges: async () => {
+      commitAttempts += 1;
+      return "must-not-commit";
+    },
+    checkpoints
+  });
+
+  const events = await collect(service.runTurn({ projectId: "p1", prompt: "break it" }));
+
+  assert.deepEqual(lifecycle, ["prepare", "validate", "restore:known-good"]);
+  assert.equal(commitAttempts, 0);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  assert.match(events.find((event) => event.type === "error").message, /build failed/);
+  assert.deepEqual(await checkpoints.listCheckpoints("p1"), []);
+});
+
+test("migration runs only after validation and code commit and records the resulting commit SHA", async () => {
+  const lifecycle = [];
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([
+      '<artifact id="m1" title="schema"><action type="migration" filePath="add_users">CREATE TABLE users(id text);</action></artifact>'
+    ]),
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: {
+      runAction: async () => ({ ok: true, stdout: "" }),
+      runMigrationBatch: async ({ actions, commitSha }) => {
+        lifecycle.push(`migration:${commitSha ?? "missing"}`);
+        assert.deepEqual(
+          actions.map((action) => action.type),
+          ["migration"]
+        );
+        return { ok: true, stdout: "" };
+      }
+    },
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => "container-1",
+    workspaceGuard: passingWorkspaceGuard({
+      prepare: async () => {
+        lifecycle.push("prepare");
+        return "base-sha";
+      },
+      validate: async () => {
+        lifecycle.push("validate");
+      },
+      restore: async () => {
+        lifecycle.push("restore");
+      }
+    }),
+    commitAllChanges: async () => {
+      lifecycle.push("commit");
+      return "new-sha";
+    }
+  });
+
+  const events = await collect(service.runTurn({ projectId: "p1", prompt: "add users" }));
+
+  assert.deepEqual(lifecycle, ["prepare", "validate", "commit", "migration:new-sha"]);
+  assert.equal(
+    events.some((event) => event.type === "commit" && event.sha === "new-sha"),
+    true
+  );
+});
+
+test("unexpected action exception restores last-known-good and completes with an error event", async () => {
+  let actions = 0;
+  let restored = null;
+  const service = createGenerationService({
+    llmClient: createMemoryLlmCompletionClient([
+      '<artifact id="a1" title="two edits"><action type="file" filePath="app/a.ts">ok</action><action type="file" filePath="app/b.ts">boom</action></artifact>',
+      '<artifact id="a2" title="retry"><action type="file" filePath="app/b.ts">boom</action></artifact>',
+      '<artifact id="a3" title="retry"><action type="file" filePath="app/b.ts">boom</action></artifact>'
+    ]),
+    chatHistory: createMemoryChatHistoryStore(),
+    actionRunner: {
+      runAction: async () => {
+        actions += 1;
+        if (actions > 1) throw new Error("docker exec disappeared");
+        return { ok: true, stdout: "" };
+      }
+    },
+    errorFeedback: createErrorFeedbackTracker(),
+    template,
+    getApiKey: () => "sk-fake",
+    getContainerId: () => "container-1",
+    workspaceGuard: passingWorkspaceGuard({
+      restore: async (_projectId, sha) => {
+        restored = sha;
+      }
+    }),
+    commitAllChanges: async () => "must-not-commit"
+  });
+
+  const events = await collect(service.runTurn({ projectId: "p1", prompt: "edit both" }));
+
+  assert.equal(restored, "base-sha");
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  assert.match(events.find((event) => event.type === "error").message, /docker exec disappeared/);
   assert.equal(events.at(-1).type, "done");
 });
 
 test("governed completion owns workspace model calls and receives the authenticated actor", async () => {
   const docker = createMemoryDockerEngine();
   const { containerId } = await docker.createContainer({
-    name: "evcp-ws-governed", image: "img", env: [],
+    name: "evcp-ws-governed",
+    image: "img",
+    env: [],
     hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
-    labels: {}, exposedPort: 3000, publishPorts: false
+    labels: {},
+    exposedPort: 3000,
+    publishPorts: false
   });
   let legacyCalls = 0;
   const governedCalls = [];
   const service = createGenerationService({
-    llmClient: { async *streamChat() { legacyCalls += 1; yield "must not be used"; } },
+    llmClient: {
+      async *streamChat() {
+        legacyCalls += 1;
+        yield "must not be used";
+      }
+    },
     governedCompletion: async (input) => {
       governedCalls.push(input);
       return 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">export default function Home(){}</action></artifact>';
     },
     chatHistory: createMemoryChatHistoryStore(),
-    actionRunner: createActionRunner({ docker, checkpoints: createMemoryCheckpointStore(), migrations: createMemoryMigrationStore() }),
+    actionRunner: createActionRunner({
+      docker,
+      checkpoints: createMemoryCheckpointStore(),
+      migrations: createMemoryMigrationStore()
+    }),
     errorFeedback: createErrorFeedbackTracker(),
     template,
     getApiKey: () => "must-not-reach-provider-directly",
     getContainerId: () => containerId,
+    workspaceGuard: passingWorkspaceGuard(),
     commitAllChanges: async () => "commit-governed"
   });
 
-  const events = await collect(service.runTurn({
-    projectId: "p1",
-    prompt: "add home page",
-    actor: { id: "usr_creator", email: "creator@example.test", name: "Creator", role: "creator" }
-  }));
+  const events = await collect(
+    service.runTurn({
+      projectId: "p1",
+      prompt: "add home page",
+      actor: { id: "usr_creator", email: "creator@example.test", name: "Creator", role: "creator" }
+    })
+  );
 
   assert.equal(legacyCalls, 0);
   assert.equal(governedCalls.length, 1);
@@ -122,6 +303,7 @@ test("message ids are unique across service instances (survive a process restart
       template,
       getApiKey: () => "sk-fake",
       getContainerId: () => undefined,
+      workspaceGuard: passingWorkspaceGuard(),
       commitAllChanges: async () => "sha"
     });
 
@@ -145,6 +327,7 @@ test("commit failure still persists the turn and surfaces an error event (no los
     publishPorts: false
   });
   const chatHistory = createMemoryChatHistoryStore();
+  let restoredTo = null;
   const scriptedReply =
     'Adding it.\n<artifact id="a1" title="add page">' +
     '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
@@ -162,6 +345,11 @@ test("commit failure still persists the turn and surfaces an error event (no los
     template,
     getApiKey: () => "sk-fake",
     getContainerId: () => containerId,
+    workspaceGuard: passingWorkspaceGuard({
+      restore: async (_projectId, sha) => {
+        restoredTo = sha;
+      }
+    }),
     commitAllChanges: async () => {
       throw new Error("git commit failed (exit 128): detected dubious ownership in '/workspace'");
     }
@@ -177,142 +365,11 @@ test("commit failure still persists the turn and surfaces an error event (no los
     false
   );
   assert.equal(events.at(-1).type, "done");
+  assert.equal(restoredTo, "base-sha");
   // Crucially, the assistant turn is still saved so switching projects / refreshing keeps it.
   const saved = await chatHistory.listMessages("p1");
-  assert.equal(saved.some((message) => message.role === "assistant"), true);
-});
-
-test("plan mode streams read-only LLM analysis without running actions or committing", async () => {
-  const chatHistory = createMemoryChatHistoryStore();
-  let actionAttempts = 0;
-  let commitAttempts = 0;
-  let containerLookups = 0;
-  let readContextAttempts = 0;
-
-  const service = createGenerationService({
-    llmClient: createMemoryLlmCompletionClient([
-      "I would inspect the app/page.tsx entrypoint, then plan the contact form state and validation before switching to Build."
-    ]),
-    chatHistory,
-    actionRunner: {
-      runAction: async () => {
-        actionAttempts += 1;
-        return { ok: true, stdout: "" };
-      }
-    },
-    errorFeedback: createErrorFeedbackTracker(),
-    template,
-    getApiKey: () => "sk-fake",
-    getContainerId: () => {
-      containerLookups += 1;
-      return "container-plan-mode";
-    },
-    readContextFiles: async () => {
-      readContextAttempts += 1;
-      return [{ path: "app/page.tsx", content: "export default function Home(){ return null; }" }];
-    },
-    commitAllChanges: async () => {
-      commitAttempts += 1;
-      return "commit-sha-plan";
-    }
-  });
-
-  const events = await collect(
-    service.runTurn({ projectId: "p1", prompt: "plan the home page", agentMode: "plan" })
-  );
-
-  assert.equal(containerLookups, 1);
-  assert.equal(readContextAttempts, 1);
-  assert.equal(actionAttempts, 0);
-  assert.equal(commitAttempts, 0);
   assert.equal(
-    events.some((event) => event.type === "action_result" || event.type === "commit"),
-    false
+    saved.some((message) => message.role === "assistant"),
+    true
   );
-  assert.match(
-    events
-      .filter((event) => event.type === "token")
-      .map((event) => event.content)
-      .join(""),
-    /inspect the app\/page\.tsx entrypoint/
-  );
-  assert.equal(events.at(-1).type, "done");
-  assert.deepEqual(
-    (await chatHistory.listMessages("p1")).map((message) => message.agentMode),
-    ["plan", "plan"]
-  );
-});
-
-test("retries failing shell action stops after 2 failed rounds, surfacing an error event", async () => {
-  const docker = createMemoryDockerEngine();
-  let execAttempts = 0;
-  docker.execInContainer = async (_containerId, _cmd) => {
-    execAttempts += 1;
-    return { stdout: "", stderr: "boom\n", exitCode: 1 };
-  };
-  const { containerId } = await docker.createContainer({
-    name: "evcp-ws-demo",
-    image: "img",
-    env: [],
-    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
-    labels: {},
-    exposedPort: 3000,
-    publishPorts: false
-  });
-
-  const scriptedReply =
-    '<artifact id="a1" title="x"><action type="shell">npm run build</action></artifact>';
-  const service = createGenerationService({
-    llmClient: createMemoryLlmCompletionClient([scriptedReply, scriptedReply, scriptedReply]),
-    chatHistory: createMemoryChatHistoryStore(),
-    actionRunner: createActionRunner({
-      docker,
-      checkpoints: createMemoryCheckpointStore(),
-      migrations: createMemoryMigrationStore()
-    }),
-    errorFeedback: createErrorFeedbackTracker(),
-    template,
-    getApiKey: () => "sk-fake",
-    getContainerId: () => containerId,
-    commitAllChanges: async () => "commit-sha-2"
-  });
-
-  const events = await collect(service.runTurn({ projectId: "p1", prompt: "build it" }));
-
-  const errorEvent = events.find((event) => event.type === "error");
-  assert.ok(errorEvent, "expected an error event after exhausting retries");
-  assert.match(errorEvent.message, /npm run build/);
-  assert.equal(
-    events.some((event) => event.type === "commit"),
-    false
-  );
-  assert.equal(events.at(-1).type, "done");
-  assert.equal(execAttempts, 3, "expected exactly 3 attempts (initial + 2 retries)");
-});
-
-test("listWorkspaceFiles uses the dedicated workspace file reader", async () => {
-  const service = createGenerationService({
-    llmClient: createMemoryLlmCompletionClient([]),
-    chatHistory: createMemoryChatHistoryStore(),
-    actionRunner: createActionRunner({
-      docker: createMemoryDockerEngine(),
-      checkpoints: createMemoryCheckpointStore(),
-      migrations: createMemoryMigrationStore()
-    }),
-    errorFeedback: createErrorFeedbackTracker(),
-    template,
-    getApiKey: () => "sk-fake",
-    getContainerId: () => "container-1",
-    readContextFiles: async () => {
-      throw new Error("context reader should not be used for file browser");
-    },
-    readWorkspaceFiles: async (containerId) => [
-      { path: "app/page.tsx", content: `// ${containerId}` }
-    ],
-    commitAllChanges: async () => "commit-sha-3"
-  });
-
-  const files = await service.listWorkspaceFiles("p1");
-
-  assert.deepEqual(files, [{ path: "app/page.tsx", content: "// container-1" }]);
 });

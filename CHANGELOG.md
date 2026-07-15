@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Phase 7–8 workspace generation and publishing now enforce per-project FIFO turns, atomic per-turn migration batches, migration-before-checkpoint ordering, immutable publish revision identities, persistence-failure compensation, and cross-app rollback isolation (#149).
 - Creator's behavior-preserving feature-first layout migration, retaining existing routes, session behavior, API contracts, and user flows (#141, #143).
 - Admin Login now shares the responsive Horizon split-shell, accessible password toggle, and safe loading/error states used by Creator Login, while preserving the existing authentication and session contract; the Admin sidebar account panel now presents Logout only, with the session-source badge and Refresh Session control removed (#131).
 

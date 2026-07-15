@@ -109,16 +109,17 @@ export async function resolveAppsTarget(
   environment: EnvironmentName = "production",
   rehydrate?: () => Promise<unknown>
 ): Promise<AppsResolution> {
-  let current = deployments.getCurrent(slug, environment);
-  if (!current && rehydrate) {
-    await rehydrate();
-    current = deployments.getCurrent(slug, environment);
-  }
+  if (rehydrate) await rehydrate();
+  const current = deployments.getCurrent(slug, environment);
   // Only serve a healthy deployment (never proxy a failed/in-flight container publicly).
   if (!current || current.healthStatus !== "healthy") {
     return { ok: false, status: 404 };
   }
   // Both deployed tiers are public once healthy. Publish, rollback, promote, and deployment-list
   // routes remain member-authorized; this route only exposes a completed app to its users.
-  return { ok: true, upstream: `http://evcp-${environment}-${slug}:3000`, projectId: current.projectId };
+  return {
+    ok: true,
+    upstream: `http://${current.containerName}:3000`,
+    projectId: current.projectId
+  };
 }

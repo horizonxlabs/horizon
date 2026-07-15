@@ -16,29 +16,54 @@ function pgConfig() {
 }
 
 test("provisionSchema creates a real schema + role, releaseSchema removes it", { skip: !LIVE }, async () => {
-  const slug = "livetest" + Math.floor(Number(process.env.EVCP_TEST_SEED ?? "1"));
-  const runSql = createPgRunSql(pgConfig());
-  const provisioner = createPgClientPostgresProvisioner(runSql);
+    const slug = "livetest" + Math.floor(Number(process.env.EVCP_TEST_SEED ?? "1"));
+    const otherSlug = `${slug}other`;
+    const runSql = createPgRunSql(pgConfig());
+    const provisioner = createPgClientPostgresProvisioner(runSql);
 
-  await provisioner.provisionSchema(slug);
-  const schema = schemaNameFor(slug);
+    const project = await provisioner.provisionSchema(slug);
+    const other = await provisioner.provisionSchema(otherSlug);
+    const schema = schemaNameFor(slug);
+    const otherSchema = schemaNameFor(otherSlug);
 
-  const admin = new Client(pgConfig());
-  await admin.connect();
-  try {
-    const found = await admin.query(
-      "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
-      [schema]
-    );
-    assert.equal(found.rowCount, 1, "expected the provisioned schema to exist");
+    const admin = new Client(pgConfig());
+    await admin.connect();
+    try {
+      const found = await admin.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
+        [schema]
+      );
+      assert.equal(found.rowCount, 1, "expected the provisioned schema to exist");
 
-    await provisioner.releaseSchema(slug);
-    const gone = await admin.query(
-      "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
-      [schema]
-    );
-    assert.equal(gone.rowCount, 0, "expected the schema to be dropped after release");
-  } finally {
-    await admin.end();
-  }
+      const scoped = new Client({
+        ...pgConfig(),
+        user: project.roleName,
+        password: project.password
+      });
+      await scoped.connect();
+      try {
+        await scoped.query(`CREATE TABLE "${project.schemaName}".own_scope(id text)`);
+        await assert.rejects(
+          () => scoped.query(`CREATE TABLE "${other.schemaName}".cross_scope(id text)`),
+          /permission denied/i
+        );
+      } finally {
+        await scoped.end();
+      }
+
+      await provisioner.releaseSchema(slug);
+      await provisioner.releaseSchema(otherSlug);
+      const gone = await admin.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
+        [schema]
+      );
+      assert.equal(gone.rowCount, 0, "expected the schema to be dropped after release");
+      const otherGone = await admin.query(
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1",
+        [otherSchema]
+      );
+      assert.equal(otherGone.rowCount, 0);
+    } finally {
+      await admin.end();
+    }
 });

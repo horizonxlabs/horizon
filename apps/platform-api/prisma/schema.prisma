@@ -842,6 +842,8 @@ model AppManifest {
   roleSnapshot         Json     @map("role_snapshot")
   databaseSnapshot     Json     @map("database_snapshot")
   manifest             Json
+  sourceCommitSha      String?  @map("source_commit_sha")
+  deploymentRevisionId String? @map("deployment_revision_id")
   app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
   project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   generatedAt          DateTime @default(now()) @map("generated_at")
@@ -882,11 +884,18 @@ model DeploymentRecord {
   prdVersion           String   @map("prd_version")
   frontendCheckpointId String   @map("frontend_checkpoint_id")
   publishedByUserId    String   @map("published_by_user_id")
+  deploymentRevisionId String?  @unique @map("deployment_revision_id")
+  runtimeRevision      Int?     @map("runtime_revision")
+  sourceCommitSha      String?  @map("source_commit_sha")
+  imageTag             String?  @map("image_tag")
+  imageDigest          String?  @map("image_digest")
+  containerName        String?  @map("container_name")
   app                  App      @relation(fields: [appId], references: [id], onDelete: Cascade)
   project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   publishRequest       PublishRequest @relation(fields: [publishRequestId], references: [id], onDelete: Cascade)
   publishedBy          PlatformUser @relation("DeploymentRecordPublishedBy", fields: [publishedByUserId], references: [id])
   registryEntry        AppStoreRegistryEntry?
+  workspaceRevision    WorkspaceDeploymentRevision? @relation(fields: [deploymentRevisionId], references: [id])
   generatedAppRuntime  GeneratedAppRuntime?
   publishedAt          DateTime @default(now()) @map("published_at")
 
@@ -1804,4 +1813,26 @@ model SensitiveRedactionEvidence {
 
   @@index([classification, surface, createdAt])
   @@map("sensitive_redaction_evidence")
+}
+
+model WorkspaceDeploymentRevision {
+  id                String   @id
+  projectId         String   @map("project_id")
+  slug              String
+  environment       String
+  revision          Int
+  commitSha         String   @map("commit_sha")
+  imageTag          String   @map("image_tag")
+  imageDigest       String   @map("image_digest")
+  containerId       String?  @map("container_id")
+  containerName     String   @map("container_name")
+  publishedByUserId String   @map("published_by_user_id")
+  healthStatus      String   @map("health_status")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  deploymentRecord  DeploymentRecord?
+
+  @@unique([projectId, environment, revision])
+  @@index([slug, environment, healthStatus, createdAt])
+  @@map("workspace_deployment_revisions")
 }
