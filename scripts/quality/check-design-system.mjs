@@ -9,6 +9,9 @@ const COLOR_PATTERN = /#[0-9a-fA-F]{3,8}\b|(?:rgb|rgba|hsl|hsla)\s*\(/;
 const INLINE_STYLE_PATTERN = /\bstyle\s*=\s*\{\s*\{/;
 const LOCAL_CSS_IMPORT_PATTERN = /import\s+["'][^"']+\.css["']/;
 const APPROVED_UI_CSS_IMPORT = 'import "@evcp/ui/styles.css"';
+const ARBITRARY_VALUE_PATTERN = /className\s*=\s*["'`][^"'`]*-\[[^\]]+\]/;
+const COLOR_UTILITY_PATTERN =
+  /className\s*=\s*["'`][^"'`]*\b(?:bg|text|border|ring|from|via|to|shadow|rounded|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
 
 function collectFiles(dir) {
   if (!existsSync(dir)) return [];
@@ -90,6 +93,24 @@ for (const file of files) {
         file,
         lineNumber,
         "local CSS import detected; app surfaces should import only @evcp/ui/styles.css"
+      );
+    }
+
+    if (ARBITRARY_VALUE_PATTERN.test(line)) {
+      reportViolation(
+        violations,
+        file,
+        lineNumber,
+        "Tailwind arbitrary value detected; use @evcp/ui tokens/components instead"
+      );
+    }
+
+    if (COLOR_UTILITY_PATTERN.test(line)) {
+      reportViolation(
+        violations,
+        file,
+        lineNumber,
+        "color utility detected in app layer; color/shadow/radius must come from @evcp/ui components"
       );
     }
   });
