@@ -178,25 +178,37 @@ export function createPublishService(deps: PublishServiceDeps) {
     const { containerId } = await deps.docker.createContainer(spec);
     await deps.docker.startContainer(containerId);
 
-    // Record the deployment (pending) before the health gate.
-    const deployment = deps.deployments.create({
-      projectId: input.projectId,
-      slug: input.slug,
-      environment,
-      commitSha: input.commitSha,
-      imageTag,
-      imageDigest,
-      containerId,
-      containerName,
-      publishedByUserId: input.publishedByUserId
-    });
+    let finalized: WorkspaceDeployment;
+    let healthy: boolean;
+    let deployment: WorkspaceDeployment | undefined;
+    try {
+      // Queue the pending revision and its health result as one durable lifecycle batch. Prisma
+      // stores commit both writes atomically when flush is called below.
+      deployment = deps.deployments.create({
+        projectId: input.projectId,
+        slug: input.slug,
+        environment,
+        commitSha: input.commitSha,
+        imageTag,
+        imageDigest,
+        containerId,
+        containerName,
+        publishedByUserId: input.publishedByUserId
+      });
 
-    // Health-check gate.
-    const basePath =
-      environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
-    const healthy = await deps.health.check(`http://${containerName}:3000${basePath}/api/health`);
-    const finalized = deps.deployments.updateHealth(deployment.id, healthy ? "healthy" : "failed");
-    await deps.deployments.flush?.();
+      const basePath =
+        environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
+      healthy = await deps.health.check(`http://${containerName}:3000${basePath}/api/health`);
+      finalized = deps.deployments.updateHealth(deployment.id, healthy ? "healthy" : "failed");
+      await deps.deployments.flush?.();
+    } catch (error) {
+      // Persistence and health-check failures happen after the candidate starts. It must never
+      // survive as an unmanaged phantom when the lifecycle cannot be finalized.
+      if (deployment) deps.deployments.discard(deployment.id);
+      await deps.docker.stopContainer(containerId).catch(() => undefined);
+      await deps.docker.removeContainer(containerId).catch(() => undefined);
+      throw error;
+    }
 
     if (!healthy) {
       // keep old version live; tear down the failed container (best-effort)

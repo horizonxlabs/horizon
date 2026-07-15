@@ -17,6 +17,11 @@ export interface DeploymentRevisionClient {
       data: { healthStatus: string };
     }): Promise<RevisionRecord>;
   };
+  $transaction<T>(
+    operation: (
+      transaction: Pick<DeploymentRevisionClient, "workspaceDeploymentRevision">
+    ) => Promise<T>
+  ): Promise<T>;
 }
 
 export async function createPrismaDeploymentStore(
@@ -27,35 +32,38 @@ export async function createPrismaDeploymentStore(
   const rows = await client.workspaceDeploymentRevision.findMany({ orderBy: { createdAt: "asc" } });
   const byId = new Map(rows.map((row) => [row.id, mapRecord(row)]));
   const order = rows.map((row) => row.id);
-  let writes = Promise.resolve();
-  let writeFailure: { error: unknown } | null = null;
-  let rollbacks: Array<() => void> = [];
-  const enqueue = (operation: () => Promise<unknown>, rollback: () => void) => {
-    rollbacks.push(rollback);
-    writes = writes.then(async () => {
-      if (writeFailure) {
-        rollback();
-        return;
-      }
-      try {
-        await operation();
-      } catch (error) {
-        for (const revert of [...rollbacks].reverse()) revert();
-        rollbacks = [];
-        writeFailure = { error };
-      }
-    });
+  type TransactionClient = Pick<DeploymentRevisionClient, "workspaceDeploymentRevision">;
+  type PendingOperation = {
+    deploymentId: string;
+    write: (transaction: TransactionClient) => Promise<unknown>;
+    rollback: () => void;
+  };
+  let operations: PendingOperation[] = [];
+  let flushQueue: Promise<void> = Promise.resolve();
+  const enqueue = (
+    deploymentId: string,
+    write: (transaction: TransactionClient) => Promise<unknown>,
+    rollback: () => void
+  ) => {
+    operations.push({ deploymentId, write, rollback });
   };
   const flush = async () => {
-    await writes;
-    if (!writeFailure) {
-      rollbacks = [];
-      return;
-    }
-    const failure = writeFailure.error;
-    writeFailure = null;
-    rollbacks = [];
-    throw failure;
+    const batchOperations = operations;
+    operations = [];
+    if (batchOperations.length === 0) return flushQueue;
+
+    const batch = flushQueue.then(async () => {
+      try {
+        await client.$transaction(async (transaction) => {
+          for (const operation of batchOperations) await operation.write(transaction);
+        });
+      } catch (error) {
+        for (const operation of [...batchOperations].reverse()) operation.rollback();
+        throw error;
+      }
+    });
+    flushQueue = batch.catch(() => undefined);
+    return batch;
   };
 
   return {
@@ -78,7 +86,9 @@ export async function createPrismaDeploymentStore(
       byId.set(deployment.id, deployment);
       order.push(deployment.id);
       enqueue(
-        () => client.workspaceDeploymentRevision.create({ data: toRecord(deployment) }),
+        deployment.id,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.create({ data: toRecord(deployment) }),
         () => {
           byId.delete(deployment.id);
           const index = order.indexOf(deployment.id);
@@ -93,12 +103,19 @@ export async function createPrismaDeploymentStore(
       const next = { ...current, healthStatus };
       byId.set(id, next);
       enqueue(
-        () => client.workspaceDeploymentRevision.update({ where: { id }, data: { healthStatus } }),
+        id,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.update({ where: { id }, data: { healthStatus } }),
         () => {
           if (byId.has(id)) byId.set(id, current);
         }
       );
       return next;
+    },
+    discard(id) {
+      const discarded = operations.filter((operation) => operation.deploymentId === id);
+      operations = operations.filter((operation) => operation.deploymentId !== id);
+      for (const operation of discarded.reverse()) operation.rollback();
     },
     list(projectId) {
       return order

@@ -6,7 +6,7 @@ function fakeClient({ createError } = {}) {
   const rows = [];
   const calls = [];
   let pendingCreateError = createError;
-  return {
+  const client = {
     rows,
     calls,
     recover() {
@@ -29,8 +29,18 @@ function fakeClient({ createError } = {}) {
         Object.assign(row, data);
         return row;
       }
+    },
+    async $transaction(operation) {
+      const snapshot = rows.map((row) => ({ ...row }));
+      try {
+        return await operation(client);
+      } catch (error) {
+        rows.splice(0, rows.length, ...snapshot);
+        throw error;
+      }
     }
   };
+  return client;
 }
 
 test("Prisma deployment store survives reconstruction with immutable revision linkage", async () => {

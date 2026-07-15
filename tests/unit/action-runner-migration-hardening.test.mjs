@@ -38,6 +38,11 @@ test("migration batch rejects transaction-control SQL before Docker or database 
     "PREPARE TRANSACTION 'TOP_SECRET'",
     "COMMIT PREPARED 'TOP_SECRET'",
     "ROLLBACK PREPARED 'TOP_SECRET'",
+    "ABORT",
+    "ABORT WORK",
+    "ABORT TRANSACTION",
+    "END",
+    "END WORK",
     "END TRANSACTION"
   ];
 
