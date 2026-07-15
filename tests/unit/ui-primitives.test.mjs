@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "../../packages/ui/src/primitives/button.tsx";
 import { Card, SectionCard } from "../../packages/ui/src/primitives/card.tsx";
 import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/badge.tsx";
+import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -63,4 +64,28 @@ test("StatusPill maps healthy to success styling", () => {
 test("ToneBadge defaults to neutral", () => {
   const html = renderToStaticMarkup(h(ToneBadge, null, "ป้าย"));
   assert.match(html, /ป้าย/);
+});
+
+test("Input renders a bordered control and forwards props", () => {
+  const html = renderToStaticMarkup(h(Input, { placeholder: "ชื่อแอป", name: "appName" }));
+  assert.match(html, /border-border/);
+  assert.match(html, /placeholder="ชื่อแอป"/);
+  assert.match(html, /name="appName"/);
+});
+
+test("Field renders label bound to control", () => {
+  const html = renderToStaticMarkup(
+    h(Field, { label: "อีเมล", htmlFor: "email" }, h(Input, { id: "email" }))
+  );
+  assert.match(html, /อีเมล/);
+  assert.match(html, /for="email"/);
+});
+
+test("Select renders a bordered control and forwards props", () => {
+  const html = renderToStaticMarkup(
+    h(Select, { name: "role" }, h("option", { value: "admin" }, "ผู้ดูแลระบบ"))
+  );
+  assert.match(html, /border-border/);
+  assert.match(html, /name="role"/);
+  assert.match(html, /ผู้ดูแลระบบ/);
 });
