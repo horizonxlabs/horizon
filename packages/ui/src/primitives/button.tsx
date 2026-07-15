@@ -7,10 +7,10 @@ const button = cva(
   {
     variants: {
       variant: {
-        primary: "bg-primary text-white hover:bg-primary-strong",
+        primary: "bg-primary text-on-primary hover:bg-primary-strong",
         secondary: "bg-surface text-body border border-border hover:bg-surface-muted",
         ghost: "bg-transparent text-primary hover:bg-primary-soft",
-        danger: "bg-danger text-white hover:opacity-90"
+        danger: "bg-danger-strong text-on-primary hover:opacity-90"
       },
       size: {
         sm: "h-8 px-3 text-sm",

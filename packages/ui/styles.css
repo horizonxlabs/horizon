@@ -20,6 +20,8 @@
   --color-warning-bg: var(--evcp-color-warning-bg);
   --color-danger: var(--evcp-color-danger-text);
   --color-danger-bg: var(--evcp-color-danger-bg);
+  --color-danger-strong: var(--evcp-color-danger-strong);
+  --color-on-primary: var(--evcp-color-on-primary);
   --color-info: var(--evcp-color-info-text);
   --color-info-bg: var(--evcp-color-info-bg);
   --radius-control: var(--evcp-radius-control);

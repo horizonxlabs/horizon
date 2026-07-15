@@ -20,6 +20,7 @@
   --ref-warning-text: #92400e;
   --ref-danger-bg: #fee2e2;
   --ref-danger-text: #991b1b;
+  --ref-red-600: #dc2626;
   --ref-info-bg: #e0f2fe;
   --ref-info-text: #075985;
   --ref-code-bg: #0b1021;
@@ -54,6 +55,8 @@
   --evcp-color-warning-text: var(--ref-warning-text);
   --evcp-color-danger-bg: var(--ref-danger-bg);
   --evcp-color-danger-text: var(--ref-danger-text);
+  --evcp-color-danger-strong: var(--ref-red-600);
+  --evcp-color-on-primary: var(--ref-white);
   --evcp-color-info-bg: var(--ref-info-bg);
   --evcp-color-info-text: var(--ref-info-text);
   --evcp-color-code-bg: var(--ref-code-bg);

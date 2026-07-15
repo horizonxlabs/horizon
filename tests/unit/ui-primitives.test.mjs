@@ -12,7 +12,7 @@ test("Button defaults to the primary variant", () => {
 
 test("Button danger variant applies danger utilities", () => {
   const html = renderToStaticMarkup(h(Button, { variant: "danger" }, "ลบ"));
-  assert.match(html, /bg-danger/);
+  assert.match(html, /bg-danger-strong/);
 });
 
 test("Button forwards native button attributes", () => {
