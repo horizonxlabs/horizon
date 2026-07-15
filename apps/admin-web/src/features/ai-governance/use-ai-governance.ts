@@ -20,9 +20,17 @@ import {
 type AiGovernanceSnapshot = {
   providers: AiProviderDto[];
   apiKeys: AiApiKeyDto[];
+  routes: AiScenarioRouteDto[];
+  quotas: AiQuotaDto[];
   guardrailEvents: GuardrailEventDto[];
 };
-const emptySnapshot: AiGovernanceSnapshot = { providers: [], apiKeys: [], guardrailEvents: [] };
+const emptySnapshot: AiGovernanceSnapshot = {
+  providers: [],
+  apiKeys: [],
+  routes: [],
+  quotas: [],
+  guardrailEvents: []
+};
 
 export function useAiGovernance(client: PlatformApiClient | undefined) {
   const [availability, setAvailability] = useState<AiGovernanceAvailability>("loading");
@@ -65,13 +73,15 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setAvailability("loading");
     setMessage("Loading AI governance data.");
     try {
-      const [providers, apiKeys, guardrailEvents] = await Promise.all([
+      const [providers, apiKeys, routes, quotas, guardrailEvents] = await Promise.all([
         client.listAiProviders(),
         client.listAiApiKeys(),
+        client.listAiScenarioRoutes(),
+        client.listAiQuotas(),
         client.listGuardrailEvents()
       ]);
       if (generationRef.current !== requestGeneration || activeClientRef.current !== client) return;
-      setSnapshot({ providers, apiKeys, guardrailEvents });
+      setSnapshot({ providers, apiKeys, routes, quotas, guardrailEvents });
       setAvailability("ready");
       setMessage("Loaded AI governance data from Platform API.");
     } catch (error) {
@@ -122,12 +132,20 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
   ): Promise<AiScenarioRouteDto> => {
     const readyClient = requireReadyClient();
     const route = await readyClient.configureAiRoute(input);
+    setSnapshot((current) => ({
+      ...current,
+      routes: [route, ...current.routes.filter((item) => item.scenario !== route.scenario)]
+    }));
     setMessage(`Route configured for ${route.scenario}.`);
     return route;
   };
   const configureQuota = async (input: AiQuotaDto): Promise<AiQuotaDto> => {
     const readyClient = requireReadyClient();
     const quota = await readyClient.configureAiQuota(input);
+    setSnapshot((current) => ({
+      ...current,
+      quotas: [quota, ...current.quotas.filter((item) => item.scope !== quota.scope)]
+    }));
     setMessage(`Quota configured for ${quota.scope}.`);
     return quota;
   };
