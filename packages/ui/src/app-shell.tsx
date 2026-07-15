@@ -182,7 +182,7 @@ export function AppShell({
             {logo ?? brandMark}
           </span>
           {logo ? null : (
-            <div className={cn("grid min-w-0 gap-px", collapsed && "hidden")}>
+            <div className={cn("grid min-w-0 gap-px", collapsed && "hidden", "max-md:!grid")}>
               <strong
                 className={cn(
                   "block overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold leading-[1.2] tracking-[-0.01em]",
@@ -240,7 +240,8 @@ export function AppShell({
                 <span
                   className={cn(
                     "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
-                    collapsed && "hidden"
+                    collapsed && "hidden",
+                    "max-md:!block"
                   )}
                 >
                   {item.label}
@@ -252,7 +253,7 @@ export function AppShell({
               "before:absolute before:left-[-14px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-[0_3px_3px_0] before:opacity-0 before:transition-opacity before:content-['']",
               isLight ? "before:bg-primary" : "before:bg-accent",
               collapsed
-                ? "grid-cols-[1fr] justify-items-center gap-0 px-0 before:left-[-12px] min-h-[44px]"
+                ? "grid-cols-[1fr] justify-items-center gap-0 px-0 before:left-[-12px] min-h-[44px] max-md:!grid-cols-[20px_minmax(0,1fr)] max-md:!justify-items-stretch max-md:!gap-[11px] max-md:!px-[11px]"
                 : "grid-cols-[20px_minmax(0,1fr)]"
             );
             if (item.disabled) {
@@ -298,7 +299,13 @@ export function AppShell({
           className={cn(
             "mt-auto flex flex-col gap-[10px] rounded-[12px] border p-[10px]",
             collapsed
-              ? "gap-0 border-transparent bg-transparent p-0"
+              ? cn(
+                  "gap-0 border-transparent bg-transparent p-0",
+                  "max-md:!gap-[10px] max-md:!p-[10px]",
+                  isLight
+                    ? "max-md:!border-border max-md:!bg-surface-muted"
+                    : "max-md:!border-[rgba(148,163,184,0.14)] max-md:!bg-[#131a2b]"
+                )
               : isLight
                 ? "border-border bg-surface-muted"
                 : "border-[rgba(148,163,184,0.14)] bg-[#131a2b]"
@@ -321,7 +328,7 @@ export function AppShell({
             >
               {userInitials}
             </span>
-            <div className={cn("grid min-w-0 gap-0.5", collapsed && "hidden")}>
+            <div className={cn("grid min-w-0 gap-0.5", collapsed && "hidden", "max-md:!grid")}>
               <strong
                 className={cn(
                   "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13.5px] font-semibold leading-[1.2]",
@@ -337,7 +344,8 @@ export function AppShell({
             <div
               className={cn(
                 "flex items-center gap-1.5 [&_:is(button,a)]:flex-1 [&_:is(button,a)]:justify-center [&_:is(button,a)]:text-[12px] [&_:is(button,a)]:font-semibold",
-                collapsed && "hidden"
+                collapsed && "hidden",
+                "max-md:!flex"
               )}
             >
               {session}
@@ -345,7 +353,7 @@ export function AppShell({
           ) : null}
         </div>
       </aside>
-      <main className="box-border min-w-0 px-[clamp(20px,3vw,42px)] pt-6 pb-11 has-[.ag-workspace]:pb-0">
+      <main className="box-border min-w-0 px-[clamp(20px,3vw,42px)] pt-6 pb-11 has-[.ag-workspace]:pb-0 max-md:pt-[72px]">
         {children}
       </main>
     </div>

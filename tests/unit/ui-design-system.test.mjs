@@ -101,6 +101,13 @@ test("AppShell provides a professional persistent navigation layout", () => {
   assert.match(uiSource, /aria-current=\{isActive \? "page" : undefined\}/);
   // Responsive mobile drawer breakpoint preserved.
   assert.match(uiSource, /matchMedia\("\(max-width: 760px\)"\)/);
+  // Mobile full-drawer invariant: collapsed desktop state must not hide drawer
+  // controls on mobile. The session/sign-out block and nav labels carry a
+  // max-md: reset that overrides the collapsed `hidden` class.
+  assert.match(uiSource, /max-md:!?flex/);
+  assert.match(uiSource, /max-md:!?(?:block|grid)/);
+  // Page content clears the fixed mobile hamburger trigger.
+  assert.match(uiSource, /max-md:pt-\[72px\]/);
 });
 
 test("AdminApp composes a governance screen that consumes shared design system components", () => {
