@@ -6,6 +6,7 @@ import { Button } from "../../packages/ui/src/primitives/button.tsx";
 import { Card, SectionCard } from "../../packages/ui/src/primitives/card.tsx";
 import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/badge.tsx";
 import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx";
+import { Table, THead, TRow, TCell } from "../../packages/ui/src/primitives/table.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -88,4 +89,21 @@ test("Select renders a bordered control and forwards props", () => {
   assert.match(html, /border-border/);
   assert.match(html, /name="role"/);
   assert.match(html, /ผู้ดูแลระบบ/);
+});
+
+test("Table renders dense rows with hairline dividers", () => {
+  const html = renderToStaticMarkup(
+    h(Table, null, h("tbody", null, h(TRow, null, h(TCell, null, "แถว"))))
+  );
+  assert.match(html, /border-border/);
+  assert.match(html, /แถว/);
+});
+
+test("THead renders uppercase muted header labels", () => {
+  const html = renderToStaticMarkup(
+    h(Table, null, h(THead, null, h(TRow, null, h(TCell, null, "หัวตาราง"))))
+  );
+  assert.match(html, /uppercase/);
+  assert.match(html, /text-muted/);
+  assert.match(html, /หัวตาราง/);
 });
