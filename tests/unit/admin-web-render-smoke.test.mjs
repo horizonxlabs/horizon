@@ -97,3 +97,29 @@ test("AdminRoutes retains setup and session guard selection", () => {
     })
   );
 });
+
+test("ProviderDrawer exposes OpenRouter and LM Studio presets", async () => {
+  const drawer = await readFile("apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx", "utf8");
+  assert.match(drawer, /value="openrouter"/);
+  assert.match(drawer, /value="lm_studio"/);
+  assert.match(drawer, /https:\/\/openrouter\.ai\/api\/v1/);
+  assert.match(drawer, /host\.docker\.internal:1234/);
+});
+
+test("ProviderDrawer renders its open state without throwing", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubAi = { createProvider() {} };
+    const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
+    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
+    if (!html.includes("Add provider")) throw new Error("ProviderDrawer did not render its title");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
