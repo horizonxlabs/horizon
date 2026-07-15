@@ -9,9 +9,22 @@ const COLOR_PATTERN = /#[0-9a-fA-F]{3,8}\b|(?:rgb|rgba|hsl|hsla)\s*\(/;
 const INLINE_STYLE_PATTERN = /\bstyle\s*=\s*\{\s*\{/;
 const LOCAL_CSS_IMPORT_PATTERN = /import\s+["'][^"']+\.css["']/;
 const APPROVED_UI_CSS_IMPORT = 'import "@evcp/ui/styles.css"';
-const ARBITRARY_VALUE_PATTERN = /className\s*=\s*["'`][^"'`]*-\[[^\]]+\]/;
+// Match arbitrary VALUES (a utility root immediately followed by `-[`) while NOT
+// matching Tailwind variant syntax like `data-[state=open]:`, `aria-[expanded]:`,
+// `supports-[...]`, `group-[...]`, `peer-[...]`, `has-[...]` (legit variant prefixes).
+const ARBITRARY_VALUE_PATTERN =
+  /className\s*=\s*["'`][^"'`]*(?<!\b(?:data|aria|supports|group|peer|has))-\[[^\]]+\]/;
 const COLOR_UTILITY_PATTERN =
   /className\s*=\s*["'`][^"'`]*\b(?:bg|text|border|ring|from|via|to|shadow|rounded|fill|stroke)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
+// Bare color keywords (bg-white, text-black, bg-transparent, border-black, …) are not
+// design tokens and must not appear in app code (§6).
+const BARE_COLOR_PATTERN =
+  /className\s*=\s*["'`][^"'`]*\b(?:bg|text|border)-(?:white|black|transparent)\b/;
+// Shadow/radius utilities must come from the design tokens. Only the token utilities
+// `shadow-card`, `rounded-card`, `rounded-control`, `rounded-pill` are allowed; every
+// other `shadow-<scale>` / `rounded-<scale>` (rounded-full, shadow-lg, …) is rejected.
+const NON_TOKEN_SHAPE_PATTERN =
+  /className\s*=\s*["'`][^"'`]*\b(?:shadow-(?!card\b)[a-z0-9-]+|rounded-(?!card\b|control\b|pill\b)[a-z0-9-]+)/;
 
 function collectFiles(dir) {
   if (!existsSync(dir)) return [];
@@ -105,12 +118,21 @@ for (const file of files) {
       );
     }
 
-    if (COLOR_UTILITY_PATTERN.test(line)) {
+    if (COLOR_UTILITY_PATTERN.test(line) || BARE_COLOR_PATTERN.test(line)) {
       reportViolation(
         violations,
         file,
         lineNumber,
         "color utility detected in app layer; color/shadow/radius must come from @evcp/ui components"
+      );
+    }
+
+    if (NON_TOKEN_SHAPE_PATTERN.test(line)) {
+      reportViolation(
+        violations,
+        file,
+        lineNumber,
+        "non-token shadow/radius utility detected in app layer; use design tokens (shadow-card, rounded-card/control/pill) via @evcp/ui"
       );
     }
   });

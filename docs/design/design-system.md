@@ -16,6 +16,8 @@ Application code must compose existing `@evcp/ui` components before creating new
 
 Icons use `lucide-react`. Prefer recognizable icon buttons for common tools and include accessible labels or titles when the icon is not self-explanatory.
 
+Tailwind's Preflight reset (injected by `@import "tailwindcss"` in `packages/ui/styles.css`) is now the base reset for all surfaces — an intentional, accepted part of the redesign baseline during coexistence with legacy styling.
+
 ## Tokens
 
 | Category  | Tokens                                                                             | Usage                                              |

@@ -1,3 +1,10 @@
+/* `@import "tailwindcss"` injects Tailwind's Preflight reset globally. This is an accepted,
+   intentional part of the redesign baseline: Preflight is the redesign's normalized base
+   reset during coexistence with legacy surfaces (see docs/design/design-system.md).
+   `@source "./src"` makes Tailwind scan packages/ui component sources — required because
+   packages/ui is symlinked under node_modules, which Tailwind ignores by default. Without it,
+   design-system utilities never compile even though string-matching tests still pass; that
+   regression is guarded by tests/unit/ui-tailwind-source.test.mjs. */
 @import "tailwindcss";
 @source "./src";
 @import "react-data-grid/lib/styles.css";

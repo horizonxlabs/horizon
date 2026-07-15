@@ -36,3 +36,37 @@ test("app file with only layout utilities passes", () => {
   const result = runCheck("Good.tsx", 'export const x = <div className="flex gap-4 p-2" />;\n');
   assert.equal(result.ok, true);
 });
+
+test("app file with a bare color keyword (bg-white) is rejected", () => {
+  const result = runCheck("BareColor.tsx", 'export const x = <div className="bg-white" />;\n');
+  assert.equal(result.ok, false);
+  assert.match(result.output, /color utility/i);
+});
+
+test("app file with a non-token shadow utility (shadow-lg) is rejected", () => {
+  const result = runCheck("Shadow.tsx", 'export const x = <div className="shadow-lg" />;\n');
+  assert.equal(result.ok, false);
+  assert.match(result.output, /shadow\/radius/i);
+});
+
+test("app file with a non-token radius utility (rounded-full) is rejected", () => {
+  const result = runCheck("Radius.tsx", 'export const x = <div className="rounded-full" />;\n');
+  assert.equal(result.ok, false);
+  assert.match(result.output, /shadow\/radius/i);
+});
+
+test("app file using token radius/shadow utilities passes", () => {
+  const result = runCheck(
+    "Tokens.tsx",
+    'export const x = <div className="rounded-card shadow-card rounded-control rounded-pill" />;\n'
+  );
+  assert.equal(result.ok, true);
+});
+
+test("app file using a Tailwind variant arbitrary value (data-[state=open]:) passes", () => {
+  const result = runCheck(
+    "Variant.tsx",
+    'export const x = <div className="data-[state=open]:flex aria-[expanded=true]:block" />;\n'
+  );
+  assert.equal(result.ok, true);
+});

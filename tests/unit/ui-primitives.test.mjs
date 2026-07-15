@@ -68,6 +68,8 @@ test("StatusPill maps healthy to success styling", () => {
 test("ToneBadge defaults to neutral", () => {
   const html = renderToStaticMarkup(h(ToneBadge, null, "ป้าย"));
   assert.match(html, /ป้าย/);
+  assert.match(html, /bg-surface-muted/);
+  assert.match(html, /text-muted/);
 });
 
 test("Input renders a bordered control and forwards props", () => {
@@ -116,6 +118,19 @@ test("MetricCard shows label and value", () => {
   assert.match(html, /แอปที่ใช้งาน/);
   assert.match(html, /1,284/);
   assert.match(html, /bg-surface/);
+});
+
+test("MetricCard defaults the value to the primary tone", () => {
+  const html = renderToStaticMarkup(h(MetricCard, { label: "แอป", value: "42" }));
+  assert.match(html, /text-primary/);
+});
+
+test("MetricCard colors the value by tone", () => {
+  const html = renderToStaticMarkup(
+    h(MetricCard, { label: "สุขภาพ", value: "3", tone: "success" })
+  );
+  assert.match(html, /text-success/);
+  assert.doesNotMatch(html, /text-primary/);
 });
 
 test("MetricCard supports legacy icon and detail props", () => {
