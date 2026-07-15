@@ -4,6 +4,7 @@ import { createElement as h } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "../../packages/ui/src/primitives/button.tsx";
 import { Card, SectionCard } from "../../packages/ui/src/primitives/card.tsx";
+import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/badge.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -46,4 +47,20 @@ test("SectionCard supports legacy eyebrow and action props", () => {
   assert.match(html, /หัวข้อ/);
   assert.match(html, /ปุ่ม/);
   assert.match(html, /เนื้อหา/);
+});
+
+test("Badge success tone uses success utilities", () => {
+  const html = renderToStaticMarkup(h(Badge, { tone: "success" }, "อนุมัติ"));
+  assert.match(html, /bg-success-bg/);
+  assert.match(html, /text-success/);
+});
+
+test("StatusPill maps healthy to success styling", () => {
+  const html = renderToStaticMarkup(h(StatusPill, { status: "healthy" }));
+  assert.match(html, /bg-success-bg/);
+});
+
+test("ToneBadge defaults to neutral", () => {
+  const html = renderToStaticMarkup(h(ToneBadge, null, "ป้าย"));
+  assert.match(html, /ป้าย/);
 });

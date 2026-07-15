@@ -1,29 +1,12 @@
 import type { AppStoreItem, ProjectSummary, ServiceStatus, Status } from "@evcp/types";
 import type { ReactNode } from "react";
+import { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps } from "./primitives/badge";
 
 export { AppShell } from "./app-shell";
 export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
 export { cn } from "./cn";
-
-export type Tone = "success" | "warning" | "danger" | "neutral" | "info";
-
-export function statusClassName(status: Status): string {
-  if (status === "healthy" || status === "published") return "status status-success";
-  if (status === "warning" || status === "pending" || status === "draft")
-    return "status status-warning";
-  if (status === "degraded") return "status status-warning";
-  if (status === "down") return "status status-danger";
-  return "status";
-}
-
-export function StatusPill({ status }: { status: Status }) {
-  return <span className={statusClassName(status)}>{status}</span>;
-}
-
-export function ToneBadge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={`tone-badge tone-${tone}`}>{children}</span>;
-}
+export { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps };
 
 export function PageHeader({
   eyebrow,
