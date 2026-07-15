@@ -38,6 +38,8 @@ test("shared UI package exposes production design system primitives", () => {
 test("design system uses EVCP tokens instead of page-only hardcoded styling", () => {
   const css = readFileSync("packages/ui/styles.css", "utf8");
 
+  // The --evcp-* token DEFINITIONS live in theme.css (imported by styles.css); read them there.
+  const themeCss = readFileSync("packages/ui/theme.css", "utf8");
   for (const token of [
     "--evcp-font-thai",
     "--evcp-color-primary",
@@ -46,7 +48,7 @@ test("design system uses EVCP tokens instead of page-only hardcoded styling", ()
     "--evcp-radius-card",
     "--evcp-shadow-card"
   ]) {
-    assert.match(css, new RegExp(token));
+    assert.match(themeCss, new RegExp(token));
   }
 
   assert.match(css, /\.ds-page-header/);
