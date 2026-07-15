@@ -33,6 +33,30 @@ test("AdminApp renders its initial root state without throwing", () => {
   );
 });
 
+test("AiProvidersConsole and GuardrailsConsole render distinct content with a stub hook", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubAi = {
+      availability: "ready", message: "ok", providers: [], apiKeys: [], routes: [], quotas: [], guardrailEvents: [],
+      reload() {}, createProvider() {}, saveApiKey() {}, configureRoute() {}, configureQuota() {}, createGuardrailRule() {}, testProvider() {}
+    };
+    const { AiProvidersConsole } = await import("./apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx");
+    const { GuardrailsConsole } = await import("./apps/admin-web/src/features/guardrails/GuardrailsConsole.tsx");
+    const providersHtml = renderToStaticMarkup(React.createElement(AiProvidersConsole, { ai: stubAi }));
+    const guardrailsHtml = renderToStaticMarkup(React.createElement(GuardrailsConsole, { ai: stubAi }));
+    if (!providersHtml.includes("AI Providers")) throw new Error("AiProvidersConsole did not render its title");
+    if (!guardrailsHtml.includes("Guardrails")) throw new Error("GuardrailsConsole did not render its title");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
 test("AdminRoutes retains setup and session guard selection", () => {
   const probe = `
     import React from "react";
