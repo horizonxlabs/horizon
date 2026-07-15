@@ -38,6 +38,8 @@ test("shared UI package exposes production design system primitives", () => {
 test("design system uses EVCP tokens instead of page-only hardcoded styling", () => {
   const css = readFileSync("packages/ui/styles.css", "utf8");
 
+  // The --evcp-* token DEFINITIONS live in theme.css (imported by styles.css); read them there.
+  const themeCss = readFileSync("packages/ui/theme.css", "utf8");
   for (const token of [
     "--evcp-font-thai",
     "--evcp-color-primary",
@@ -46,7 +48,7 @@ test("design system uses EVCP tokens instead of page-only hardcoded styling", ()
     "--evcp-radius-card",
     "--evcp-shadow-card"
   ]) {
-    assert.match(css, new RegExp(token));
+    assert.match(themeCss, new RegExp(token));
   }
 
   assert.match(css, /\.ds-page-header/);
@@ -78,38 +80,36 @@ test("apps preload LINE Seed Thai fonts before React renders", () => {
 
 test("AppShell provides a professional persistent navigation layout", () => {
   const uiSource = readUiSource();
-  const css = readFileSync("packages/ui/styles.css", "utf8");
 
-  for (const shellClass of [
-    "sidebar-brand",
-    "sidebar-mark",
-    "sidebar-title",
-    "sidebar-toggle",
-    "sidebar-nav",
-    "sidebar-nav-short",
-    "sidebar-nav-label",
-    "sidebar-footer",
-    "sidebar-user-avatar",
-    "sidebar-session"
-  ]) {
-    assert.match(uiSource, new RegExp(shellClass));
-    assert.match(css, new RegExp(`\\.${shellClass}`));
-  }
+  // The shell chrome was rebuilt on Tailwind token utilities (Sapphire Clean look); assert the
+  // structural chrome + preserved behavior instead of the retired legacy class names.
+  // Dark sidebar chrome + sticky rail, with a light-tone variant and a collapsed grid.
+  assert.match(uiSource, /bg-\[#0b1220\]/);
+  assert.match(uiSource, /sticky top-0/);
+  assert.match(uiSource, /bg-surface text-body/);
+  assert.match(uiSource, /md:grid-cols-\[84px_minmax\(0,1fr\)\]/);
+  // Nav items: glyph + label, rounded control, active accent bar via the before: pseudo-element.
+  assert.match(uiSource, /NavGlyph/);
+  assert.match(uiSource, /rounded-\[9px\]/);
+  assert.match(uiSource, /before:opacity-100/);
+  // Account footer avatar keeps its status dot via the after: pseudo-element.
+  assert.match(uiSource, /after:content-\['']/);
 
+  // Preserved behavior / accessibility contract.
   assert.match(uiSource, /resolveActiveNavItem/);
   assert.match(uiSource, /useState/);
-  assert.match(uiSource, /app-shell-collapsed/);
   assert.match(uiSource, /evcp-sidebar-collapsed/);
   assert.match(uiSource, /aria-expanded=\{!isSidebarCollapsed\}/);
   assert.match(uiSource, /aria-current=\{isActive \? "page" : undefined\}/);
-  assert.match(css, /grid-template-columns: 280px minmax\(0, 1fr\)/);
-  assert.match(css, /\.app-shell-collapsed\s*\{[^}]*grid-template-columns: 84px minmax\(0, 1fr\)/s);
-  assert.match(css, /position: sticky/);
-  assert.match(css, /\.sidebar-nav a\.active/);
-  assert.match(
-    css,
-    /@media \(max-width: 760px\)\s*\{[\s\S]*?\.app-shell-collapsed \.sidebar-session\s*\{[^}]*display: flex;/
-  );
+  // Responsive mobile drawer breakpoint preserved.
+  assert.match(uiSource, /matchMedia\("\(max-width: 760px\)"\)/);
+  // Mobile full-drawer invariant: collapsed desktop state must not hide drawer
+  // controls on mobile. The session/sign-out block and nav labels carry a
+  // max-md: reset that overrides the collapsed `hidden` class.
+  assert.match(uiSource, /max-md:!?flex/);
+  assert.match(uiSource, /max-md:!?(?:block|grid)/);
+  // Page content clears the fixed mobile hamburger trigger.
+  assert.match(uiSource, /max-md:pt-\[72px\]/);
 });
 
 test("AdminApp composes a governance screen that consumes shared design system components", () => {
