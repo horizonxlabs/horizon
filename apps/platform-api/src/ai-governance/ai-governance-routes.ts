@@ -12,10 +12,11 @@ import type {
 import type { PlatformUser } from "../platform-services";
 
 /**
- * Handles the AI-governance + guardrail HTTP routes extracted from app-factory's request
- * dispatcher. Selection between the persistence-backed and in-memory handlers is unchanged:
- * `ctx.aiGovernancePersistence ? <persistence handlers> : <in-memory handlers>`. Returns the
- * matched response, or `undefined` if no AI/guardrail path matched so the caller can fall through.
+ * Handles the persistence-backed AI-governance + guardrail HTTP routes extracted from
+ * app-factory's async request dispatcher. Returns the matched response, or `undefined` when no
+ * AI/guardrail path matched (or persistence is disabled) so the caller can fall through — the
+ * async dispatcher ultimately delegates to the sync dispatcher, which serves the in-memory
+ * handlers via {@link handleInMemoryAiGovernanceRoute}.
  */
 export async function handleAiGovernanceRoute(
   request: PlatformRequest,
@@ -190,6 +191,20 @@ export async function handleAiGovernanceRoute(
     return undefined;
   }
 
+  return undefined;
+}
+
+/**
+ * Handles the in-memory AI-governance + guardrail HTTP routes. These are the handlers that
+ * originally lived in app-factory's synchronous `executePlatformApiRequest` dispatcher; they are
+ * all synchronous (`services.auth.*`, `services.aiGovernance.*`, `services.guardrails.*`,
+ * `handleLegacyAiProviderTestCall`). Returns the matched response, or `undefined` if no
+ * AI/guardrail path matched so the caller can fall through.
+ */
+export function handleInMemoryAiGovernanceRoute(
+  request: PlatformRequest,
+  services: PersistenceAwarePlatformApiServices
+): PlatformResponse | undefined {
   if (request.method === "GET" && request.path === "/ai/providers") {
     const user = services.auth.resolveCurrentUser(request.headers ?? {});
     services.auth.requireRole(user, ["admin"]);

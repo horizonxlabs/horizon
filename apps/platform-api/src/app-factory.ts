@@ -38,7 +38,7 @@ import { UnavailableAiSecretStore, VaultKvV2AiSecretStore, type AiSecretStore } 
 import { PrismaProjectFileRepository } from "./persistence/project-file-repository";
 import { createMinioProjectFileUploadUrlIssuer, type ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
 import { handlePersistentProjectFilesRoute, isPersistenceProjectFileRoute } from "./persistence/persistent-project-files-route";
-import { handleAiGovernanceRoute } from "./ai-governance/ai-governance-routes";
+import { handleAiGovernanceRoute, handleInMemoryAiGovernanceRoute } from "./ai-governance/ai-governance-routes";
 import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
 import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSettingsPersistence, MemoryBusinessSettingsPersistenceClient, type BusinessSettingsRepositoryBackedService } from "./persistence/business-settings-repositories";
 import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
@@ -2254,11 +2254,11 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     const traceabilityMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/traceability$/);
     if (request.method === "GET" && traceabilityMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(services.traceability.getProjectTrace(user, traceabilityMatch[1]))
-      };
+      return { status: HttpStatus.OK, body: success(services.traceability.getProjectTrace(user, traceabilityMatch[1])) };
     }
+
+    const aiResponse = handleInMemoryAiGovernanceRoute(request, services);
+    if (aiResponse) return aiResponse;
 
     return {
       status: HttpStatus.NOT_FOUND,
