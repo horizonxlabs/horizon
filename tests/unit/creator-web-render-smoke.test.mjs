@@ -146,7 +146,8 @@ test("CreatorRoutes keeps the first-project state inside the shared Creator shel
       app: { ...app, bootstrap: { ...app.bootstrap, status: "empty" } }
     })
   );
-  assert.match(html, /class="[^"]*app-shell-light/);
+  // Light tone is applied to the shared shell (utilities replaced the legacy app-shell-light class).
+  assert.match(html, /<aside[^>]*bg-surface text-body/);
   assert.match(html, /วันนี้อยากสร้างอะไร/);
   assert.match(html, /สร้างด้วย AI/);
 });
@@ -162,11 +163,13 @@ test("ProjectsPage renders the B1 AI studio inside the shared Creator shell", ()
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
   assert.match(html, /class="[^"]*hz-projects-studio/);
-  assert.match(html, /class="[^"]*app-shell-light/);
-  assert.match(html, /class="app-shell-mobile-trigger"[^>]*aria-expanded="false"/);
+  // Shared AppShell chrome, restyled onto token utilities but structurally unchanged:
+  // light tone, mobile open/close controls (by aria), backdrop, and the sidebar aside id.
+  assert.match(html, /<aside[^>]*bg-surface text-body/);
+  assert.match(html, /aria-expanded="false" aria-controls="app-shell-sidebar-[^"]+" aria-label="Open navigation"/);
   assert.match(html, /aria-controls="app-shell-sidebar-[^"]+"/);
-  assert.match(html, /class="app-shell-mobile-backdrop"/);
-  assert.match(html, /class="sidebar-mobile-close"/);
+  assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
+  assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
   assert.match(html, /<aside[^>]*id="app-shell-sidebar-[^"]+"/);
   assert.match(html, /วันนี้อยากสร้างอะไร/);
   assert.match(html, /สร้างด้วย AI/);

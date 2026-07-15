@@ -9,6 +9,7 @@ import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx
 import { Table, THead, TRow, TCell } from "../../packages/ui/src/primitives/table.tsx";
 import { MetricCard } from "../../packages/ui/src/primitives/metric-card.tsx";
 import { PageHeader } from "../../packages/ui/src/primitives/page-header.tsx";
+import { AppShell } from "../../packages/ui/src/app-shell.tsx";
 
 test("Button defaults to the primary variant", () => {
   const html = renderToStaticMarkup(h(Button, null, "บันทึก"));
@@ -155,4 +156,56 @@ test("PageHeader renders eyebrow and accepts legacy tone prop", () => {
   );
   assert.match(html, /หมวดหมู่/);
   assert.match(html, /หัวข้อ/);
+});
+
+test("AppShell renders sidebar chrome, nav, and account with token utilities", () => {
+  const html = renderToStaticMarkup(
+    h(
+      AppShell,
+      {
+        title: "Horizon",
+        navItems: [
+          { label: "ภาพรวม", route: "/admin", icon: "dashboard" },
+          { label: "โปรเจกต์", route: "/admin/projects", icon: "projects", disabled: true }
+        ],
+        userName: "แอดมิน สมชาย",
+        environmentLabel: "Private Server MVP",
+        session: h("button", null, "ออกจากระบบ")
+      },
+      h("div", null, "เนื้อหา")
+    )
+  );
+  // Brand + tagline
+  assert.match(html, /Horizon/);
+  // Nav labels (active + disabled branches both render)
+  assert.match(html, /ภาพรวม/);
+  assert.match(html, /โปรเจกต์/);
+  // Active nav item is highlighted for the first matching route
+  assert.match(html, /aria-current="page"/);
+  // Disabled nav item stays non-interactive
+  assert.match(html, /aria-disabled="true"/);
+  // User + environment label + session control preserved
+  assert.match(html, /แอดมิน สมชาย/);
+  assert.match(html, /Private Server MVP/);
+  assert.match(html, /ออกจากระบบ/);
+  // Content children render inside the shell
+  assert.match(html, /เนื้อหา/);
+  // Sidebar uses the dark Sapphire chrome; content area uses the page token
+  assert.match(html, /bg-\[#0b1220\]/);
+});
+
+test("AppShell light tone recolors the sidebar with surface tokens", () => {
+  const html = renderToStaticMarkup(
+    h(
+      AppShell,
+      {
+        title: "Horizon",
+        navItems: [{ label: "ภาพรวม", route: "/admin" }],
+        userName: "ผู้ใช้",
+        tone: "light"
+      },
+      h("div", null, "x")
+    )
+  );
+  assert.match(html, /bg-surface/);
 });
