@@ -614,11 +614,7 @@ export class PlatformApiClient {
   }
 
   createProject(input: CreateProjectInput): Promise<PlatformProjectDto> {
-    return this.request<PlatformProjectDto>("/projects", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<PlatformProjectDto>("/projects", input);
   }
 
   generatePrdDraft(projectId: string): Promise<PrdVersionDto> {
@@ -898,11 +894,7 @@ export class PlatformApiClient {
   }
 
   createUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
-    return this.request<PlatformUserSummary>("/admin/users", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<PlatformUserSummary>("/admin/users", input);
   }
 
   listAiProviders(): Promise<AiProviderDto[]> {
