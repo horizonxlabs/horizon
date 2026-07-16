@@ -17,7 +17,7 @@
     "check:workspace-scripts": "node scripts/quality/check-workspace-scripts.mjs",
     "check:design-system": "node scripts/quality/check-design-system.mjs",
     "check:frontend-architecture": "node scripts/quality/check-frontend-architecture.mjs",
-    "dev": "pnpm --parallel --filter @evcp/admin-web --filter @evcp/creator-web --filter @evcp/app-store-pwa dev",
+    "dev": "pnpm --parallel --filter @evcp/admin-web --filter @evcp/creator-web --filter @evcp/app-store-pwa --filter @evcp/platform-api dev",
     "dev:admin": "pnpm --filter @evcp/admin-web dev",
     "dev:api": "pnpm --filter @evcp/platform-api dev",
     "dev:creator": "pnpm --filter @evcp/creator-web dev",
@@ -57,7 +57,8 @@
     "verify:sprint12": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint13": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint14": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
-    "verify:real-mvp-install": "pnpm lint && pnpm typecheck && pnpm build && pnpm verify:install && pnpm verify:installer && pnpm test"
+    "verify:real-mvp-install": "pnpm lint && pnpm typecheck && pnpm build && pnpm verify:install && pnpm verify:installer && pnpm test",
+    "dev:setup": "node scripts/dev/setup.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

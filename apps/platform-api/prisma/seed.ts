@@ -97,7 +97,7 @@ async function main() {
     create: { userId: "usr_creator", groupId: "grp_hr_department" }
   });
   await prisma.project.upsert({
-    where: { slug: "leave-management" },
+    where: { id: "prj_leave_management" },
     update: {
       name: "Leave Management",
       status: "draft",
@@ -110,7 +110,6 @@ async function main() {
     },
     create: {
       id: "prj_leave_management",
-      slug: "leave-management",
       name: "Leave Management",
       status: "draft",
       ownerUserId: "usr_creator",
@@ -129,7 +128,7 @@ async function main() {
   });
 
   await prisma.app.upsert({
-    where: { slug: "leave-management" },
+    where: { id: "app_leave_management" },
     update: { name: "Leave Management", status: "draft", projectId: "prj_leave_management" },
     create: {
       id: "app_leave_management",

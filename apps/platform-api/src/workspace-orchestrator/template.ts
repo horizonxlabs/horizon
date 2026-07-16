@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface GoldenTemplate {
   name: string;
@@ -19,7 +20,7 @@ function walk(dir: string, root: string, out: Array<{ path: string; content: str
 }
 
 export function loadGoldenTemplate(
-  rootDir: string = join(process.cwd(), "templates", "nextjs-base")
+  rootDir: string = fileURLToPath(new URL("../../../../templates/nextjs-base", import.meta.url))
 ): GoldenTemplate {
   const manifest = JSON.parse(readFileSync(join(rootDir, "template.json"), "utf8")) as {
     name: string;

@@ -38,3 +38,6 @@ redirect_uris=$(printf '["%s","%s/*","%s/*","%s/*"]' "$callback_url" "${EVCP_ADM
 "$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s "redirectUris=$redirect_uris"
 # `+` means Keycloak permits the already-validated client redirect URIs for RP-initiated logout.
 "$kcadm" update "clients/$platform_client_id" -r "$KEYCLOAK_REALM" -s 'attributes."post.logout.redirect.uris"="+"'
+
+# Dev: disable SSL requirement so the API can reach Keycloak over HTTP from the host
+"$kcadm" update "realms/$KEYCLOAK_REALM" -s sslRequired=none

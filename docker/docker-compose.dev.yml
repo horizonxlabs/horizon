@@ -1,0 +1,115 @@
+name: evcp-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evcp-dev-postgres
+    environment:
+      POSTGRES_DB: evcp
+      POSTGRES_USER: evcp
+      POSTGRES_PASSWORD: devpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - evcp_dev_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evcp -d evcp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: evcp-dev-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: evcp-dev-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: evcpminio
+      MINIO_ROOT_PASSWORD: devminiopassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - evcp_dev_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-dev-keycloak
+    command: start-dev --import-realm --http-port=8080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: devkeycloakpassword
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: http://localhost:8081/auth
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
+      - evcp_dev_keycloak:/opt/keycloak/data
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q '200'"
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  keycloak-bootstrap:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: evcp-dev-keycloak-bootstrap
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: devkeycloakpassword
+      KEYCLOAK_REALM: evcp
+      KEYCLOAK_PLATFORM_CLIENT_ID: evcp-platform-api
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: dev-platform-client-secret
+      KEYCLOAK_ADMIN_CLIENT_ID: evcp-admin-service
+      KEYCLOAK_ADMIN_CLIENT_SECRET: dev-admin-client-secret
+      KEYCLOAK_INTERNAL_ISSUER_URL: http://keycloak:8080/auth/realms/evcp
+      EVCP_PUBLIC_API_URL: http://localhost:3100
+      EVCP_ADMIN_WEB_URL: http://localhost:4100
+      EVCP_CREATOR_WEB_URL: http://localhost:4101
+      EVCP_STORE_WEB_URL: http://localhost:4102
+    entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
+    volumes:
+      - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: evcp-dev-litellm
+    environment:
+      LITELLM_MASTER_KEY: devlitellmmasterkey
+      LITELLM_DATABASE_URL: postgresql://evcp:devpassword@postgres:5432/litellm
+    command: ["--config", "/etc/litellm/litellm-config.yaml"]
+    volumes:
+      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  evcp_dev_postgres:
+  evcp_dev_minio:
+  evcp_dev_keycloak:

@@ -159,19 +159,18 @@ export function AppShell({
         aria-hidden={isMobileViewport && !isMobileMenuOpen ? true : undefined}
         inert={isMobileViewport && !isMobileMenuOpen ? true : undefined}
       >
+        {/* Brand header */}
         <div
           className={cn(
-            "grid items-center gap-[10px] px-1",
-            logo
-              ? "grid-cols-[minmax(0,1fr)_auto] pt-1.5 pb-[18px]"
-              : "grid-cols-[38px_minmax(0,1fr)_auto] pt-1 pb-4",
-            collapsed && "justify-items-center gap-2 grid-cols-[1fr] pb-4",
-            "max-md:grid-cols-[72px_minmax(0,1fr)_auto] max-md:justify-items-start max-md:pb-4"
+            "flex items-center gap-[10px] px-1",
+            logo ? "pb-[18px] pt-1.5" : "pb-4 pt-1",
+            collapsed && "flex-col items-center gap-2 pb-4",
+            "max-md:!flex-row max-md:!items-center max-md:!pb-4"
           )}
         >
           <span
             className={cn(
-              "items-center",
+              "flex-none items-center",
               logo
                 ? "flex h-[44px] w-auto justify-start rounded-none border-0 bg-none"
                 : "inline-flex h-[38px] w-[38px] justify-center rounded-[10px] bg-[linear-gradient(135deg,#2563eb,#38bdf8)] text-[13px] font-extrabold tracking-[0.01em] text-white",
@@ -182,7 +181,13 @@ export function AppShell({
             {logo ?? brandMark}
           </span>
           {logo ? null : (
-            <div className={cn("grid min-w-0 gap-px", collapsed && "hidden", "max-md:!grid")}>
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-col gap-px",
+                collapsed && "hidden",
+                "max-md:!flex max-md:!flex-col"
+              )}
+            >
               <strong
                 className={cn(
                   "block overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-bold leading-[1.2] tracking-[-0.01em]",
@@ -197,8 +202,8 @@ export function AppShell({
           <button
             type="button"
             className={cn(
-              "inline-flex h-[30px] min-h-[30px] items-center justify-center rounded-control p-0 transition-colors [grid-column:-1] max-md:hidden",
-              collapsed ? "w-10 [grid-column:auto]" : "w-[30px]",
+              "ml-auto inline-flex h-[30px] min-h-[30px] flex-none items-center justify-center rounded-control p-0 transition-colors max-md:hidden",
+              collapsed ? "w-10 ml-0" : "w-[30px]",
               isLight
                 ? "border border-border bg-surface-muted text-muted hover:border-primary hover:bg-primary-soft hover:text-primary-strong"
                 : "border border-[rgba(226,232,240,0.1)] bg-transparent text-[#94a3b8] hover:border-[rgba(226,232,240,0.2)] hover:bg-white/[0.06] hover:text-[#f8fafc]"
@@ -217,7 +222,7 @@ export function AppShell({
             ref={closeControlRef}
             className={cn(
               "hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-              "max-md:inline-flex max-md:h-[30px] max-md:w-[30px] max-md:items-center max-md:justify-center max-md:rounded-control max-md:border max-md:border-border max-md:bg-surface-muted max-md:text-[20px] max-md:text-muted"
+              "max-md:ml-auto max-md:inline-flex max-md:h-[30px] max-md:w-[30px] max-md:flex-none max-md:items-center max-md:justify-center max-md:rounded-control max-md:border max-md:border-border max-md:bg-surface-muted max-md:text-[20px] max-md:text-muted"
             )}
             aria-label="Close navigation"
             onClick={() => setIsMobileMenuOpen(false)}
@@ -225,21 +230,23 @@ export function AppShell({
             <span aria-hidden="true">×</span>
           </button>
         </div>
-        <nav className={cn("grid gap-0.5", collapsed && "gap-1")} aria-label="Primary">
+
+        {/* Primary navigation */}
+        <nav className={cn("flex flex-col gap-0.5", collapsed && "gap-1")} aria-label="Primary">
           {navItems.map((item) => {
             const isActive = normalizeRoute(item.route) === activeRoute;
-            const shortClass = cn(
-              "inline-flex h-5 w-5 items-center justify-center",
+            const iconClass = cn(
+              "inline-flex h-5 w-5 flex-none items-center justify-center",
               isActive && (isLight ? "text-primary" : "text-[#56c5f8]")
             );
             const content = (
               <>
-                <span className={shortClass} aria-hidden="true">
+                <span className={iconClass} aria-hidden="true">
                   <NavGlyph name={item.icon} />
                 </span>
                 <span
                   className={cn(
-                    "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
+                    "flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
                     collapsed && "hidden",
                     "max-md:!block"
                   )}
@@ -249,12 +256,11 @@ export function AppShell({
               </>
             );
             const base = cn(
-              "relative grid min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[13.5px] font-semibold no-underline transition-colors",
+              "relative flex min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[13.5px] font-semibold no-underline transition-colors",
               "before:absolute before:left-[-14px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-[0_3px_3px_0] before:opacity-0 before:transition-opacity before:content-['']",
               isLight ? "before:bg-primary" : "before:bg-accent",
-              collapsed
-                ? "grid-cols-[1fr] justify-items-center gap-0 px-0 before:left-[-12px] min-h-[44px] max-md:!grid-cols-[20px_minmax(0,1fr)] max-md:!justify-items-stretch max-md:!gap-[11px] max-md:!px-[11px]"
-                : "grid-cols-[20px_minmax(0,1fr)]"
+              collapsed &&
+                "min-h-[44px] justify-center gap-0 px-0 before:left-[-12px] max-md:!justify-start max-md:!gap-[11px] max-md:!px-[11px]"
             );
             if (item.disabled) {
               return (
@@ -295,6 +301,8 @@ export function AppShell({
             );
           })}
         </nav>
+
+        {/* User / session footer */}
         <div
           className={cn(
             "mt-auto flex flex-col gap-[10px] rounded-[12px] border p-[10px]",
@@ -314,7 +322,7 @@ export function AppShell({
           <div
             className={cn(
               "flex items-center gap-[10px] text-muted",
-              collapsed && "justify-center px-1.5 pt-3 pb-1"
+              collapsed && "justify-center px-1.5 pb-1 pt-3"
             )}
           >
             <span
@@ -328,7 +336,13 @@ export function AppShell({
             >
               {userInitials}
             </span>
-            <div className={cn("grid min-w-0 gap-0.5", collapsed && "hidden", "max-md:!grid")}>
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-col gap-0.5",
+                collapsed && "hidden",
+                "max-md:!flex max-md:!flex-col"
+              )}
+            >
               <strong
                 className={cn(
                   "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13.5px] font-semibold leading-[1.2]",
