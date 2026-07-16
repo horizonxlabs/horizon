@@ -153,6 +153,10 @@ export type GuardrailRuleDto = {
 
 export type CreateGuardrailRuleInput = Omit<GuardrailRuleDto, "id" | "status" | "updatedAt">;
 
+export type ProviderModelCatalogDto = {
+  models: Array<{ id: string; name: string; contextLength?: number }>;
+};
+
 export type GuardrailEventDto = {
   id: string;
   actorId?: string;

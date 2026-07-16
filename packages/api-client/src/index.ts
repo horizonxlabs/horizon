@@ -43,6 +43,7 @@ import type {
   CreateDurableAiJobInput,
   AiProviderDto,
   CreateAiProviderInput,
+  ProviderModelCatalogDto,
   AiApiKeyDto,
   CreateAiApiKeyInput,
   AiScenarioRouteDto,
@@ -52,27 +53,7 @@ import type {
   CreateGuardrailRuleInput,
   GuardrailEventDto,
 } from "./ai-governance-types";
-export type {
-  AiUsageLogDto,
-  GuardrailResultDto,
-  AiProviderTestCallInput,
-  AiProviderTestCallResponse,
-  DurableAiJobDto,
-  CreateDurableAiJobInput,
-  AiProviderAdapterDto,
-  AiScenarioDto,
-  AiUsageModeDto,
-  AiProviderDto,
-  CreateAiProviderInput,
-  AiApiKeyDto,
-  CreateAiApiKeyInput,
-  AiScenarioRouteDto,
-  ConfigureAiRouteInput,
-  AiQuotaDto,
-  GuardrailRuleDto,
-  CreateGuardrailRuleInput,
-  GuardrailEventDto,
-} from "./ai-governance-types";
+export type * from "./ai-governance-types";
 export type {
   BusinessSettingsDto,
   BusinessSettingsInput,
@@ -952,6 +933,14 @@ export class PlatformApiClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input)
+    });
+  }
+
+  listProviderModelCatalog(baseUrl: string): Promise<ProviderModelCatalogDto> {
+    return this.request<ProviderModelCatalogDto>("/ai/provider-catalog", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ baseUrl })
     });
   }
 

@@ -1,9 +1,9 @@
 {
   "apps/platform-api/src/platform-services.ts": 8429,
-  "apps/platform-api/src/app-factory.ts": 3588,
+  "apps/platform-api/src/app-factory.ts": 3576,
   "apps/platform-api/prisma/seed.ts": 2490,
   "apps/platform-api/src/persistence/publish-store-repositories.ts": 1403,
-  "packages/api-client/src/index.ts": 1077,
+  "packages/api-client/src/index.ts": 1066,
   "tests/unit/api-client-runtime.test.mjs": 895,
   "tests/unit/platform-governance-services.test.mjs": 707,
   "apps/platform-api/src/persistence/core-repositories.ts": 626,

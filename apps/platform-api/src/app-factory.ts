@@ -39,6 +39,7 @@ import { PrismaProjectFileRepository } from "./persistence/project-file-reposito
 import { createMinioProjectFileUploadUrlIssuer, type ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
 import { handlePersistentProjectFilesRoute, isPersistenceProjectFileRoute } from "./persistence/persistent-project-files-route";
 import { handleAiGovernanceRoute, handleInMemoryAiGovernanceRoute } from "./ai-governance/ai-governance-routes";
+import { aiGovernanceHttpRoutes } from "./ai-governance/ai-governance-route-manifest";
 import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
 import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSettingsPersistence, MemoryBusinessSettingsPersistenceClient, type BusinessSettingsRepositoryBackedService } from "./persistence/business-settings-repositories";
 import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
@@ -147,6 +148,7 @@ export interface PlatformRequest {
     | "/ai/routes"
     | "/ai/quotas"
     | "/ai/provider-test-call"
+    | "/ai/provider-catalog"
     | "/guardrails/rules"
     | "/guardrails/test"
     | "/guardrails/events"
@@ -508,7 +510,7 @@ function isNativeAuthRoute(request: PlatformRequest): boolean {
 }
 
 function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
-  return request.path === "/ai/providers" || request.path === "/ai/api-keys" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
+  return request.path === "/ai/providers" || request.path === "/ai/api-keys" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/ai/provider-catalog" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
 }
 
 function isPersistencePrdRoute(request: PlatformRequest): boolean {
@@ -3537,21 +3539,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       })
     )
   );
-  const aiGovernanceRoutes: Array<{ method: "GET" | "POST"; path: PlatformRequest["path"] }> = [
-    { method: "GET", path: "/ai/providers" },
-    { method: "POST", path: "/ai/providers" },
-    { method: "GET", path: "/ai/api-keys" },
-    { method: "POST", path: "/ai/api-keys" },
-    { method: "GET", path: "/ai/routes" },
-    { method: "GET", path: "/ai/quotas" },
-    { method: "POST", path: "/ai/routes" },
-    { method: "POST", path: "/ai/quotas" },
-    { method: "POST", path: "/ai/provider-test-call" },
-    { method: "POST", path: "/guardrails/rules" },
-    { method: "POST", path: "/guardrails/test" },
-    { method: "GET", path: "/guardrails/events" }
-  ];
-  for (const { method, path } of aiGovernanceRoutes) {
+  for (const { method, path } of aiGovernanceHttpRoutes) {
     const verb = method === "GET" ? "get" : "post";
     routes[verb](path, (request, response) =>
       sendPlatformResponseAsync(

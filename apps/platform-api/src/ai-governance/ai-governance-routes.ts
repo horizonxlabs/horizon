@@ -1,6 +1,7 @@
 import { HttpStatus } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import { handleAiProviderTestCall, handleLegacyAiProviderTestCall } from "./provider-test-route";
+import { handleProviderCatalogRoute } from "./provider-catalog";
 import type { GovernedAiExecutor } from "./execution-service";
 import type { AiGovernanceRepositoryBackedService } from "../persistence/ai-governance-repositories";
 import type {
@@ -77,6 +78,11 @@ export async function handleAiGovernanceRoute(
         status: HttpStatus.OK,
         body: success(await aiGovernancePersistence.listQuotas(user))
       };
+    }
+
+    if (request.method === "POST" && request.path === "/ai/provider-catalog") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      return handleProviderCatalogRoute({ request, user });
     }
 
     if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/api-keys") {

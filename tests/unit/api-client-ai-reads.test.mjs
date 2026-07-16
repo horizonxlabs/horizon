@@ -45,3 +45,27 @@ test("listAiQuotas issues a GET request to /ai/quotas", async () => {
   assert.equal(observed[0].method, "GET");
   assert.equal(quotas[0].scope, "organization");
 });
+
+test("listProviderModelCatalog POSTs baseUrl to /ai/provider-catalog", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(JSON.stringify(success({ models: [{ id: "openai/gpt-4.1", name: "GPT-4.1" }] })), { status: 200 });
+    }
+  });
+
+  const catalog = await client.listProviderModelCatalog("https://openrouter.ai/api/v1");
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/provider-catalog"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.baseUrl, "https://openrouter.ai/api/v1");
+  assert.equal(catalog.models[0].id, "openai/gpt-4.1");
+});
