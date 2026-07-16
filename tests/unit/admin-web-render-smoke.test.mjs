@@ -123,3 +123,40 @@ test("ProviderDrawer renders its open state without throwing", () => {
     })
   );
 });
+
+test("ModelCatalogPicker renders its loading state without throwing", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const { ModelCatalogPicker } = await import("./apps/admin-web/src/features/ai-governance/drawers/ModelCatalogPicker.tsx");
+    const html = renderToStaticMarkup(React.createElement(ModelCatalogPicker, {
+      baseUrl: "https://openrouter.ai/api/v1", value: [], onChange() {}, loadCatalog: async () => ({ models: [] }), onUnavailable() {}
+    }));
+    if (!html.includes("Loading model catalog")) throw new Error("ModelCatalogPicker did not render loading state");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
+test("ProviderDrawer still renders its open state with the picker wired", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubAi = { createProvider() {}, loadModelCatalog: async () => ({ models: [] }) };
+    const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
+    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
+    if (!html.includes("Add provider")) throw new Error("ProviderDrawer did not render its title");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});

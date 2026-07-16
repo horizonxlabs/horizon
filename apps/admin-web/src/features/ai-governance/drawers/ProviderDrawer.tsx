@@ -1,6 +1,7 @@
 import { Button, Drawer, Field, Input, Select } from "@evcp/ui";
 import { useState, type FormEvent } from "react";
 import type { useAiGovernance } from "../use-ai-governance";
+import { ModelCatalogPicker } from "./ModelCatalogPicker";
 
 type Props = { open: boolean; onClose: () => void; ai: ReturnType<typeof useAiGovernance>; onDone?: (msg: string) => void };
 
@@ -18,24 +19,38 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
   const [adapter, setAdapter] = useState<AdapterKind>("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [models, setModels] = useState("");
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [catalogUnavailable, setCatalogUnavailable] = useState(false);
   const [error, setError] = useState<string>();
   const preset = PRESETS[adapter];
+  const usePicker = adapter === "openrouter" && !catalogUnavailable;
 
   function selectAdapter(next: AdapterKind) {
     setAdapter(next);
     setBaseUrl(PRESETS[next].baseUrl);
+    setSelectedModels([]);
+    setCatalogUnavailable(false);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(undefined);
+    const modelList = usePicker
+      ? selectedModels
+      : models.split(",").map((m) => m.trim()).filter(Boolean);
+    if (modelList.length === 0) {
+      setError("Select at least one model.");
+      return;
+    }
     try {
       const provider = await ai.createProvider({
-        name: name.trim(), adapter, baseUrl: baseUrl.trim(),
-        models: models.split(",").map((m) => m.trim()).filter(Boolean)
+        name: name.trim(),
+        adapter,
+        baseUrl: baseUrl.trim(),
+        models: modelList
       });
       onDone?.(`Provider ${provider.name} saved.`);
-      setName(""); setBaseUrl(""); setModels("");
+      setName(""); setBaseUrl(""); setModels(""); setSelectedModels([]);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Provider could not be saved.");
@@ -58,10 +73,22 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
           <Input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
             placeholder={preset.baseUrl} required />
         </Field>
-        <Field label="Models (comma-separated)" hint="e.g. gpt-4.1, gpt-4.1-mini">
-          <Input value={models} onChange={(e) => setModels(e.target.value)}
-            placeholder={preset.model} required />
-        </Field>
+        {usePicker ? (
+          <Field label="Models">
+            <ModelCatalogPicker
+              baseUrl={baseUrl}
+              value={selectedModels}
+              onChange={setSelectedModels}
+              loadCatalog={ai.loadModelCatalog}
+              onUnavailable={() => setCatalogUnavailable(true)}
+            />
+          </Field>
+        ) : (
+          <Field label="Models (comma-separated)" hint="e.g. gpt-4.1, gpt-4.1-mini">
+            <Input value={models} onChange={(e) => setModels(e.target.value)}
+              placeholder={preset.model} required />
+          </Field>
+        )}
         {adapter === "lm_studio" && (
           <p className="text-xs text-muted">
             LM Studio ignores the API key — add any non-empty value (e.g. lm-studio) in the credential step.

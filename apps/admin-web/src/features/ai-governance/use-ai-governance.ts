@@ -8,7 +8,8 @@ import type {
   CreateGuardrailRuleInput,
   GuardrailEventDto,
   GuardrailRuleDto,
-  PlatformApiClient
+  PlatformApiClient,
+  ProviderModelCatalogDto
 } from "@evcp/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -163,6 +164,13 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     const readyClient = requireReadyClient();
     return readyClient.testAiProvider(input);
   };
+  const loadModelCatalog = useCallback(
+    async (baseUrl: string): Promise<ProviderModelCatalogDto> => {
+      if (!client) throw new Error("AI governance API is unavailable");
+      return client.listProviderModelCatalog(baseUrl);
+    },
+    [client]
+  );
   return {
     availability: visibleAvailability,
     message: visibleMessage,
@@ -173,6 +181,7 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     configureRoute,
     configureQuota,
     createGuardrailRule,
-    testProvider
+    testProvider,
+    loadModelCatalog
   };
 }
