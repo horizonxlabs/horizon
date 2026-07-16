@@ -89,15 +89,13 @@ export async function resolveSetupRequest(
       };
     }
 
+    // Setup is gated by `setupCompleted` above, so reaching here with the admin already in
+    // the DB is a recovery re-run — e.g. Keycloak was rebuilt and lost the account it owns
+    // for interactive sign-in. Re-provision the existing admin (which may own projects and
+    // other records) instead of failing, so login can be restored without data loss.
     const existingUser = await corePersistenceClient.platformUser.findUnique({ where: { email } });
-    if (existingUser) {
-      return {
-        status: HttpStatus.CONFLICT,
-        body: failure("email_exists", "That email already exists")
-      };
-    }
-
-    const id = `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const id =
+      existingUser?.id ?? `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const bootstrapAdmin = {
       id,
       email,
@@ -119,12 +117,14 @@ export async function resolveSetupRequest(
       });
     }
 
-    const created = await createUserWithRole(corePersistenceClient, {
-      id,
-      email,
-      name,
-      role: "admin"
-    });
+    const created =
+      existingUser ??
+      (await createUserWithRole(corePersistenceClient, {
+        id,
+        email,
+        name,
+        role: "admin"
+      }));
 
     const passwordResult = await credentialService.setPassword(created.id, password, {
       mustChange: false
