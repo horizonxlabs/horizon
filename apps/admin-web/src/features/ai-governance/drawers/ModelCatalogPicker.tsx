@@ -68,7 +68,7 @@ export function ModelCatalogPicker({ baseUrl, value, onChange, loadCatalog, onUn
               <button
                 type="button"
                 onClick={() => toggle(model.id)}
-                className={`flex w-full items-center justify-between px-3 py-2 text-sm text-body ${selected ? "bg-surface-muted" : ""}`}
+                className={`flex w-full items-center justify-between px-3 py-2 text-sm font-normal text-body ${selected ? "bg-surface-muted" : "bg-surface hover:bg-surface-muted"}`}
               >
                 <span className="truncate">{model.name}</span>
                 {selected && (
