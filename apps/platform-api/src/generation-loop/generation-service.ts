@@ -11,7 +11,12 @@ import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { AiScenario, PlatformUser } from "../platform-services";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { ChatStreamEvent } from "./generation-types";
-import { resolveGovernedCompletion } from "./governed-completion";
+import { resolveGovernedCompletion, type StreamChunk } from "./governed-completion";
+
+// Wrap a plain token stream (the non-governed path) as tagged chunks so both sources share one loop.
+async function* asTokenChunks(source: AsyncIterable<string>): AsyncIterable<StreamChunk> {
+  for await (const text of source) yield { kind: "token", text };
+}
 import {
   buildActionPreview,
   clipActionText,
@@ -35,7 +40,7 @@ export interface GenerationServiceDeps {
     scenario: AiScenario;
     prompt: string;
     requestId: string;
-  }) => AsyncIterable<string>;
+  }) => AsyncIterable<StreamChunk>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
   errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
@@ -159,18 +164,26 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           ].join("\n");
           const tokens = deps.governedCompletion
             ? resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
-            : deps.llmClient.streamChat(chatInput);
+            : asTokenChunks(deps.llmClient.streamChat(chatInput));
 
           if (agentMode === "plan") {
-            for await (const token of tokens) {
-              assistantText += token;
-              yield { type: "token", content: token };
+            for await (const chunk of tokens) {
+              if (chunk.kind === "reasoning") {
+                yield { type: "reasoning", content: chunk.text };
+                continue;
+              }
+              assistantText += chunk.text;
+              yield { type: "token", content: chunk.text };
             }
             break roundLoop;
           }
 
-          for await (const token of tokens) {
-            for (const event of parser.push(token)) {
+          for await (const chunk of tokens) {
+            if (chunk.kind === "reasoning") {
+              yield { type: "reasoning", content: chunk.text };
+              continue;
+            }
+            for (const event of parser.push(chunk.text)) {
               if (event.type === "text") {
                 assistantText += event.content;
                 yield { type: "token", content: event.content };

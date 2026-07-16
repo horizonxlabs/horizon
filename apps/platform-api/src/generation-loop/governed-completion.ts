@@ -8,6 +8,10 @@ import type {
 } from "../ai-governance/execution-service";
 import type { GenerationServiceDeps } from "./generation-service";
 
+// A chunk from the governed stream: model answer text (fed to the action parser) or chain-of-thought
+// reasoning (surfaced as a separate live "thinking" view, never parsed as code).
+export type StreamChunk = { kind: "token" | "reasoning"; text: string };
+
 // Adapts the generation-service's call into the streaming governed-completion dependency: maps the
 // agent mode to a scenario, mints a request id, and returns the token stream unchanged.
 export function resolveGovernedCompletion(
@@ -15,7 +19,7 @@ export function resolveGovernedCompletion(
   input: { actor?: PlatformUser; projectId: string },
   prompt: string,
   agentMode: WorkspaceAgentMode
-): AsyncIterable<string> {
+): AsyncIterable<StreamChunk> {
   if (!input.actor)
     throw new Error("Governed AI execution requires the authenticated workspace actor");
   return completion({
@@ -35,8 +39,8 @@ export async function* streamGovernedExecution(
   executor: Pick<GovernedAiExecutor, "execute">,
   input: { actor: PlatformUser; projectId: string; scenario: AiScenario; prompt: string; requestId: string },
   onEvidence?: (evidence: AiExecutionEvidence) => Promise<void> | void
-): AsyncIterable<string> {
-  const queue: string[] = [];
+): AsyncIterable<StreamChunk> {
+  const queue: StreamChunk[] = [];
   let notify: (() => void) | null = null;
   let finished = false;
   let failure: unknown;
@@ -60,8 +64,12 @@ export async function* streamGovernedExecution(
         requestedTokens: 1_200
       },
       (delta) => {
-        queue.push(delta);
+        queue.push({ kind: "token", text: delta });
         streamed += delta;
+        wake();
+      },
+      (delta) => {
+        queue.push({ kind: "reasoning", text: delta });
         wake();
       }
     )
@@ -77,7 +85,7 @@ export async function* streamGovernedExecution(
     });
 
   for (;;) {
-    while (queue.length > 0) yield queue.shift() as string;
+    while (queue.length > 0) yield queue.shift() as StreamChunk;
     if (finished) break;
     await new Promise<void>((resolve) => {
       notify = resolve;
@@ -96,5 +104,5 @@ export async function* streamGovernedExecution(
   }
   // A non-streaming provider (e.g. the Anthropic adapter) never fed onToken; emit the full text now
   // so the caller still receives the completion. When tokens did stream, they already carry it.
-  if (streamed === "") yield finalText;
+  if (streamed === "") yield { kind: "token", text: finalText };
 }

@@ -16,17 +16,17 @@ export function createPersistedGovernedAiExecutor(
     reconcileQuota: async ({ actor, projectId, requestedTokens, actualTokens }) => reconcileScopedQuota(client, actor, projectId, requestedTokens, actualTokens),
     // 30s default suits hosted providers; slow local models (a 26B model generating a whole app)
     // exceed it, aborting the run and tripping the breaker. Configurable via EVCP_AI_COMPLETION_TIMEOUT_MS.
-    invoke: async ({ provider, prompt, onToken }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000), circuit, onToken)
+    invoke: async ({ provider, prompt, onToken, onReasoning }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000), circuit, onToken, onReasoning)
   });
 }
 
-async function invokeWithCircuitBreaker(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, circuit: Map<string, { failures: number; blockedUntil?: number }>, onToken?: (delta: string) => void) {
+async function invokeWithCircuitBreaker(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, circuit: Map<string, { failures: number; blockedUntil?: number }>, onToken?: (delta: string) => void, onReasoning?: (delta: string) => void) {
   const state = circuit.get(provider.id);
   if (state?.blockedUntil && state.blockedUntil > Date.now()) throw new Error(`AI provider ${provider.id} circuit is open`);
   try {
     const result = provider.adapter === "anthropic"
       ? await invokeAnthropic(provider, prompt, fetcher, timeoutMs)
-      : await invokeOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken);
+      : await invokeOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken, onReasoning);
     circuit.delete(provider.id);
     return result;
   } catch (error) {
@@ -111,7 +111,8 @@ async function streamOpenAiCompatible(
   prompt: string,
   fetcher: typeof fetch,
   timeoutMs: number,
-  onToken: (delta: string) => void
+  onToken: (delta: string) => void,
+  onReasoning?: (delta: string) => void
 ) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
   const startedAt = performance.now();
@@ -151,14 +152,20 @@ async function streamOpenAiCompatible(
       if (!data || data === "[DONE]") continue;
       try {
         const json = JSON.parse(data) as {
-          choices?: Array<{ delta?: { content?: unknown } }>;
+          choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>;
           usage?: { total_tokens?: unknown };
         };
-        const content = json.choices?.[0]?.delta?.content;
+        const delta = json.choices?.[0]?.delta;
+        const content = delta?.content;
         if (typeof content === "string" && content) {
           text += content;
           onToken(content);
         }
+        // Reasoning models (e.g. gemma-*-a4b) stream chain-of-thought as `reasoning_content`.
+        // Forward it on a SEPARATE channel — it is NOT part of `text` (the answer the action
+        // parser consumes); callers surface it as a live "thinking" view, like opencode.
+        const reasoning = delta?.reasoning_content;
+        if (onReasoning && typeof reasoning === "string" && reasoning) onReasoning(reasoning);
         const total = Number(json.usage?.total_tokens);
         if (Number.isFinite(total) && total > 0) usageTokens = total;
       } catch {
@@ -179,9 +186,9 @@ async function streamOpenAiCompatible(
   };
 }
 
-async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, onToken?: (delta: string) => void) {
+async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, onToken?: (delta: string) => void, onReasoning?: (delta: string) => void) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
-  if (onToken) return streamOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken);
+  if (onToken) return streamOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken, onReasoning);
   const startedAt = performance.now();
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {

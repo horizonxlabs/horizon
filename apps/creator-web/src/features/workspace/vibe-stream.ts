@@ -5,6 +5,9 @@ export type VibeMessage = {
   role: "user" | "assistant";
   text: string;
   actions: VibeAction[];
+  // Streamed chain-of-thought (reasoning models). Shown as a separate, collapsible "thinking"
+  // block — never mixed into `text` or parsed as actions.
+  reasoning?: string;
   commitSha?: string;
 };
 
@@ -26,6 +29,10 @@ export function applyVibeEvent(
 
   if (type === "token") {
     return { ...message, text: message.text + field("content") };
+  }
+
+  if (type === "reasoning") {
+    return { ...message, reasoning: (message.reasoning ?? "") + field("content") };
   }
 
   if (type === "action_start") {

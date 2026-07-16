@@ -10,21 +10,38 @@ const input = { actor, projectId: "p", scenario: "frontend_coding", prompt: "hi"
 
 async function collect(iterable) {
   const out = [];
-  for await (const token of iterable) out.push(token);
+  for await (const chunk of iterable) out.push(chunk);
   return out;
 }
 
-test("streams tokens to the caller as the governed executor emits them", async () => {
+test("streams answer tokens as tagged chunks as the executor emits them", async () => {
   const executor = {
     async execute(_actor, _input, onToken) {
       onToken?.("Hel");
       onToken?.("lo");
-      onToken?.(" world");
-      return { text: "Hello world", status: "succeeded", evidence: {} };
+      return { text: "Hello", status: "succeeded", evidence: {} };
     }
   };
-  const tokens = await collect(streamGovernedExecution(executor, input));
-  assert.deepEqual(tokens, ["Hel", "lo", " world"]);
+  const chunks = await collect(streamGovernedExecution(executor, input));
+  assert.deepEqual(chunks, [
+    { kind: "token", text: "Hel" },
+    { kind: "token", text: "lo" }
+  ]);
+});
+
+test("streams reasoning on a separate channel (never mixed with answer tokens)", async () => {
+  const executor = {
+    async execute(_actor, _input, onToken, onReasoning) {
+      onReasoning?.("thinking...");
+      onToken?.("answer");
+      return { text: "answer", status: "succeeded", evidence: {} };
+    }
+  };
+  const chunks = await collect(streamGovernedExecution(executor, input));
+  assert.deepEqual(chunks, [
+    { kind: "reasoning", text: "thinking..." },
+    { kind: "token", text: "answer" }
+  ]);
 });
 
 test("throws with the failure reason when the governed execution fails", async () => {
@@ -45,8 +62,8 @@ test("emits the full text for a non-streaming provider that never called onToken
       return { text: "whole response", status: "succeeded", evidence: {} };
     }
   };
-  const tokens = await collect(streamGovernedExecution(executor, input));
-  assert.deepEqual(tokens, ["whole response"]);
+  const chunks = await collect(streamGovernedExecution(executor, input));
+  assert.deepEqual(chunks, [{ kind: "token", text: "whole response" }]);
 });
 
 test("forwards the execution evidence to onEvidence", async () => {

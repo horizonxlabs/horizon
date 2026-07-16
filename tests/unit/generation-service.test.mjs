@@ -254,10 +254,14 @@ test("governed completion owns workspace model calls and receives the authentica
     },
     governedCompletion: (input) => {
       governedCalls.push(input);
-      // Streaming source: yield the completion in a couple of chunks (token-by-token in real use).
+      // Streaming source: tagged chunks (reasoning is a separate channel; answer tokens carry code).
       return (async function* () {
-        yield 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">';
-        yield "export default function Home(){}</action></artifact>";
+        yield { kind: "reasoning", text: "I should add a page." };
+        yield {
+          kind: "token",
+          text: 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">'
+        };
+        yield { kind: "token", text: "export default function Home(){}</action></artifact>" };
       })();
     },
     chatHistory: createMemoryChatHistoryStore(),

@@ -2955,6 +2955,48 @@ th {
   margin-top: var(--evcp-space-5);
 }
 
+/* Reasoning ("thinking") block — a reasoning model's streamed chain-of-thought, shown dimmed and
+   collapsible, separate from the answer and from the tool/action rows. */
+.vibe-reasoning {
+  border-left: 2px solid var(--evcp-color-border-soft);
+  margin-bottom: 8px;
+}
+
+.vibe-reasoning-summary {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  gap: 6px;
+  padding: 2px 0 2px 8px;
+  width: 100%;
+}
+
+.vibe-reasoning-title {
+  font-weight: 600;
+}
+
+.vibe-reasoning-toggle {
+  margin-left: auto;
+}
+
+.vibe-reasoning-text {
+  color: var(--evcp-color-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+  max-height: 220px;
+  opacity: 0.85;
+  overflow: auto;
+  padding: 8px 8px 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .vibe-action-row {
   border: 1px solid var(--evcp-color-border-soft);
   border-radius: var(--evcp-radius-control);

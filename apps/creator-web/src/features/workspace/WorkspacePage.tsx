@@ -11,6 +11,7 @@ import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
+import { VibeReasoning } from "./VibeReasoning";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -172,14 +173,22 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   : "Describe what you want. The AI writes code into your live app, runs it, and commits each change."}
               </div>
             )}
-            {vibeMessages.map((message) =>
+            {vibeMessages.map((message, messageIndex) =>
               message.role === "user" ? (
                 <div key={message.id} className="vibe-message vibe-message-user">
                   {message.text}
                 </div>
               ) : (
                 <div key={message.id} className="vibe-message vibe-message-assistant">
-                  <div className="vibe-message-text">{message.text || (isVibing ? "▋" : "")}</div>
+                  {message.reasoning && (
+                    <VibeReasoning
+                      reasoning={message.reasoning}
+                      live={isVibing && messageIndex === vibeMessages.length - 1}
+                    />
+                  )}
+                  <div className="vibe-message-text">
+                    {message.text || (isVibing && !message.reasoning ? "▋" : "")}
+                  </div>
                   {message.actions.length > 0 && (
                     <div className="vibe-message-actions">
                       {message.actions.map((action, actionIndex) => (
