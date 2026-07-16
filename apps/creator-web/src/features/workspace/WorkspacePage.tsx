@@ -8,7 +8,7 @@ import {
   Send
 } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
 import { VibeReasoning } from "./VibeReasoning";
@@ -64,6 +64,19 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     setWorkspaceMode
   } = app;
   const [showPublish, setShowPublish] = useState(false);
+  // Auto-scroll the chat thread to the bottom as messages/tokens/reasoning stream in, so the
+  // reply is always in view — but only while the user is already near the bottom, so scrolling
+  // up to read earlier output is never yanked back down.
+  const threadRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const handleThreadScroll = () => {
+    const el = threadRef.current;
+    if (el) stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [vibeMessages, isVibing, vibeStatus]);
   const [previewAuthorizationState, setPreviewAuthorizationState] = useState<
     "loading" | "ready" | "error"
   >("loading");
@@ -162,7 +175,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       </header>
       <div className="vibe-live-body">
         <div className="vibe-live-chat-panel">
-          <div className="vibe-live-thread">
+          <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && (
               <div className="vibe-live-empty">
                 <div className="vibe-live-empty-title">
