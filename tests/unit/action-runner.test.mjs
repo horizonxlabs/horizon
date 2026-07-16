@@ -262,8 +262,8 @@ function stubDockerWithSizes(sizeByPath) {
   };
 }
 
-test("drift guard: rejects a whole-file write to a substantial existing file, steering to edit", async () => {
-  const docker = stubDockerWithSizes({ "app/page.tsx": 2400 });
+test("drift guard: rejects a whole-file write to a large existing file, steering to edit", async () => {
+  const docker = stubDockerWithSizes({ "app/page.tsx": 5000 });
   const runner = createActionRunner({
     docker,
     checkpoints: createMemoryCheckpointStore(),
@@ -279,6 +279,61 @@ test("drift guard: rejects a whole-file write to a substantial existing file, st
   assert.match(result.error, /edit/i);
   // it must NOT have written anything (no base64 decode write)
   assert.ok(!docker.state.execCalls.some((c) => (c.cmd.at(-1) || "").includes("base64 -d")));
+});
+
+test("drift guard: allows a whole-file write to a small existing file (weaker models do this reliably)", async () => {
+  const docker = stubDockerWithSizes({ "app/api/route.ts": 700 });
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a1", type: "file", filePath: "app/api/route.ts", content: "export const GET = () => Response.json({ ok: true });\n" }
+  });
+  assert.equal(result.ok, true);
+  assert.ok(docker.state.execCalls.some((c) => (c.cmd.at(-1) || "").includes("base64 -d")));
+});
+
+test("recovery: a type=file action carrying a leaked SEARCH/REPLACE block is applied as an edit", async () => {
+  const currentContent = "export const value = 1;\n";
+  const writes = [];
+  const docker = {
+    state: { execCalls: writes },
+    async execInContainer(containerId, cmd) {
+      writes.push({ containerId, cmd });
+      const script = cmd[cmd.length - 1] || "";
+      if (/^base64 \S+ 2>\/dev\/null/.test(script)) {
+        return { stdout: Buffer.from(currentContent, "utf8").toString("base64"), stderr: "", exitCode: 0 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+  };
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: {
+      id: "a1",
+      type: "file",
+      filePath: "app/config.ts",
+      content: "<<<<<<< SEARCH\nexport const value = 1;\n=======\nexport const value = 2;\n>>>>>>> REPLACE"
+    }
+  });
+  assert.equal(result.ok, true, result.error);
+  // The recovery must write the file (base64 decode) with the REPLACE content applied.
+  const write = writes.find((c) => (c.cmd.at(-1) || "").includes("base64 -d"));
+  assert.ok(write, "expected a write from the recovered edit");
+  const encoded = (write.cmd.at(-1).match(/echo (\S+) \| base64 -d/) || [])[1];
+  assert.equal(Buffer.from(encoded, "base64").toString("utf8"), "export const value = 2;\n");
 });
 
 test("drift guard: allows a whole-file write to the tiny starter (first build) and to new files", async () => {

@@ -60,3 +60,19 @@ test("empty replace deletes the matched snippet (a 'delete this' edit)", () => {
   assert.equal(result.ok, true);
   assert.equal(result.content, "  a\n  b\n");
 });
+
+test("escape-normalized strategy: matches when the SEARCH uses \\n escapes for real newlines", () => {
+  const src = "const a = 1;\nconst b = 2;\n";
+  // model emitted a literal backslash-n instead of an actual newline in the SEARCH
+  const find = "const a = 1;\\nconst b = 2;";
+  const result = applyFindReplace(src, find, "const a = 9;\nconst b = 8;");
+  assert.equal(result.ok, true);
+  assert.match(result.content, /const a = 9;\nconst b = 8;/);
+});
+
+test("trimmed-boundary: a SEARCH padded with leading/trailing blank lines still matches", () => {
+  const src = "header\nconst target = 1;\nfooter\n";
+  const result = applyFindReplace(src, "\n\nconst target = 1;\n\n", "const target = 42;");
+  assert.equal(result.ok, true);
+  assert.match(result.content, /const target = 42;/);
+});

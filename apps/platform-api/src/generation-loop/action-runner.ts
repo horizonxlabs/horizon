@@ -3,15 +3,56 @@ import { isLockedFile, type GoldenTemplate } from "../workspace-orchestrator/tem
 import type { CheckpointStore } from "./checkpoint-store";
 import type { MigrationStore } from "./migration-store";
 import { applyFindReplace } from "./find-replace";
+import { parseEditBody } from "./generation-action-utils";
 import { containsTransactionControl } from "./migration-runner";
 
 export { applyFindReplace };
 
+// Read the CURRENT file (base64, byte-safe), apply the fuzzy find/replace so untouched regions
+// stay byte-for-byte identical, and write it back. Shared by the edit action and by the recovery
+// path that reinterprets a leaked SEARCH/REPLACE block wrapped in a type="file" action.
+async function applyEditToFile(
+  docker: DockerEngine,
+  containerId: string,
+  filePath: string,
+  find: string,
+  replace: string
+): Promise<ActionResult> {
+  const read = await docker.execInContainer(containerId, [
+    "sh",
+    "-c",
+    `base64 ${filePath} 2>/dev/null || echo __EVCP_MISSING__`
+  ]);
+  const raw = (read.stdout ?? "").trim();
+  if (raw === "__EVCP_MISSING__" || raw === "") {
+    return { ok: false, error: `cannot edit '${filePath}': file not found`, stdout: "", stderr: "", exitCode: -1 };
+  }
+  const current = Buffer.from(raw, "base64").toString("utf8");
+  const edited = applyFindReplace(current, find, replace);
+  if (!edited.ok) {
+    const detail =
+      edited.reason === "not_found"
+        ? "the SEARCH text was not found in the file (it must match the current file exactly)"
+        : "the SEARCH text appears more than once; include more surrounding context so it is unique";
+    return { ok: false, error: `edit of '${filePath}' failed: ${detail}`, stdout: "", stderr: "", exitCode: -1 };
+  }
+  const encoded = Buffer.from(edited.content, "utf8").toString("base64");
+  const result = await docker.execInContainer(containerId, [
+    "sh",
+    "-c",
+    `echo ${encoded} | base64 -d > ${filePath}`
+  ]);
+  if (result.exitCode !== 0) {
+    return { ok: false, error: "edit write failed", stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+  }
+  return { ok: true, stdout: result.stdout };
+}
+
 // A type="file" (whole-file) write to an EXISTING file larger than this is rejected and redirected
-// to a surgical edit. The untouched Next.js starter files are well under this, so the first build
-// (which replaces the ~115-byte starter page) still uses type="file"; once an app has real content,
-// every change must go through an edit action.
-const WHOLE_FILE_REWRITE_LIMIT = 500;
+// to a surgical edit. Small files (routes, config, a compact page/component) are cheap to rewrite
+// wholesale and weaker models do that far more reliably than a precise SEARCH/REPLACE — mirroring
+// opencode's forgiving `write` tool — so only genuinely large files are forced through edits.
+const WHOLE_FILE_REWRITE_LIMIT = 4000;
 
 // The AI's edit format uses git-conflict-style markers (<<<<<<< SEARCH / ======= / >>>>>>> REPLACE).
 // If such a marker leaks into content that gets written — a REPLACE body the model pasted with a
@@ -133,6 +174,20 @@ export function createActionRunner(deps: {
         }
         const marker = conflictMarkerLine(action.content);
         if (marker) {
+          // Forgiving recovery (opencode-style): a weaker model frequently emits a SEARCH/REPLACE
+          // edit but wraps it in a type="file" action, leaking the conflict markers into the file
+          // body. If the content IS a parseable SEARCH/REPLACE block, apply it as a surgical edit
+          // instead of failing — committing the raw markers would break the build.
+          const recovered = parseEditBody(action.content);
+          if (recovered.find && input.containerId) {
+            return applyEditToFile(
+              deps.docker,
+              input.containerId,
+              action.filePath,
+              recovered.find,
+              recovered.replace
+            );
+          }
           return {
             ok: false,
             error:
@@ -216,53 +271,13 @@ export function createActionRunner(deps: {
         if (!input.containerId) {
           return { ok: false, error: "missing containerId", stdout: "", stderr: "", exitCode: -1 };
         }
-        // Read the CURRENT file (base64, byte-safe) so untouched regions stay byte-for-byte identical.
-        const read = await deps.docker.execInContainer(input.containerId, [
-          "sh",
-          "-c",
-          `base64 ${action.filePath} 2>/dev/null || echo __EVCP_MISSING__`
-        ]);
-        const raw = (read.stdout ?? "").trim();
-        if (raw === "__EVCP_MISSING__" || raw === "") {
-          return {
-            ok: false,
-            error: `cannot edit '${action.filePath}': file not found`,
-            stdout: "",
-            stderr: "",
-            exitCode: -1
-          };
-        }
-        const current = Buffer.from(raw, "base64").toString("utf8");
-        const edited = applyFindReplace(current, action.find, action.replace);
-        if (!edited.ok) {
-          const detail =
-            edited.reason === "not_found"
-              ? "the SEARCH text was not found in the file (it must match the current file exactly)"
-              : "the SEARCH text appears more than once; include more surrounding context so it is unique";
-          return {
-            ok: false,
-            error: `edit of '${action.filePath}' failed: ${detail}`,
-            stdout: "",
-            stderr: "",
-            exitCode: -1
-          };
-        }
-        const encoded = Buffer.from(edited.content, "utf8").toString("base64");
-        const result = await deps.docker.execInContainer(input.containerId, [
-          "sh",
-          "-c",
-          `echo ${encoded} | base64 -d > ${action.filePath}`
-        ]);
-        if (result.exitCode !== 0) {
-          return {
-            ok: false,
-            error: "edit write failed",
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode
-          };
-        }
-        return { ok: true, stdout: result.stdout };
+        return applyEditToFile(
+          deps.docker,
+          input.containerId,
+          action.filePath,
+          action.find,
+          action.replace
+        );
       }
 
       if (action.type === "shell") {
