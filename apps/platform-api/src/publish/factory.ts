@@ -109,7 +109,7 @@ export async function createDefaultPublishStack(opts: {
     resolveEnv,
     getDevContainerId,
     // Attach published containers to the same network the orchestrator puts dev containers on
-    // (docker_evcp-internal in this compose), not the bare "evcp-internal" default.
+    // (EVCP_WORKSPACE_NETWORK, `evcp-internal` in this compose), falling back to the default.
     network: env.EVCP_WORKSPACE_NETWORK ?? undefined,
     onAudit: opts.onAudit
   });

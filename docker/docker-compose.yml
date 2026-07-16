@@ -137,7 +137,7 @@ services:
       EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
       EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
       EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
-      EVCP_WORKSPACE_NETWORK: docker_evcp-internal
+      EVCP_WORKSPACE_NETWORK: evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"
       EVCP_PG_HOST: postgres
       EVCP_PG_PORT: "5432"
@@ -281,4 +281,8 @@ volumes:
 
 networks:
   evcp-internal:
+    # Pin the real network name so it does not depend on the Compose project name. Per-project
+    # workspace containers are attached to EVCP_WORKSPACE_NETWORK by the orchestrator and must
+    # land on this same network to be reachable by the Platform API preview proxy.
+    name: evcp-internal
     driver: bridge
