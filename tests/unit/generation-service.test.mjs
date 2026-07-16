@@ -252,9 +252,13 @@ test("governed completion owns workspace model calls and receives the authentica
         yield "must not be used";
       }
     },
-    governedCompletion: async (input) => {
+    governedCompletion: (input) => {
       governedCalls.push(input);
-      return 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">export default function Home(){}</action></artifact>';
+      // Streaming source: yield the completion in a couple of chunks (token-by-token in real use).
+      return (async function* () {
+        yield 'Governed output\n<artifact id="a1" title="add page"><action type="file" filePath="app/page.tsx">';
+        yield "export default function Home(){}</action></artifact>";
+      })();
     },
     chatHistory: createMemoryChatHistoryStore(),
     actionRunner: createActionRunner({

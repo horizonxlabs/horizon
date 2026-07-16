@@ -11,7 +11,7 @@ import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { AiScenario, PlatformUser } from "../platform-services";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { ChatStreamEvent } from "./generation-types";
-import { resolveGovernedCompletion, streamText } from "./governed-completion";
+import { resolveGovernedCompletion } from "./governed-completion";
 import {
   buildActionPreview,
   clipActionText,
@@ -35,7 +35,7 @@ export interface GenerationServiceDeps {
     scenario: AiScenario;
     prompt: string;
     requestId: string;
-  }) => Promise<string>;
+  }) => AsyncIterable<string>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
   errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
@@ -157,18 +157,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             "\nConversation:",
             ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)
           ].join("\n");
-          const completion = deps.governedCompletion
-            ? await resolveGovernedCompletion(
-                deps.governedCompletion,
-                input,
-                governedPrompt,
-                agentMode
-              )
-            : undefined;
-          const tokens =
-            completion === undefined
-              ? deps.llmClient.streamChat(chatInput)
-              : streamText(completion);
+          const tokens = deps.governedCompletion
+            ? resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
+            : deps.llmClient.streamChat(chatInput);
 
           if (agentMode === "plan") {
             for await (const token of tokens) {

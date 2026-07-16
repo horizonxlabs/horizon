@@ -12,6 +12,7 @@ import { createPrismaWorkspaceCheckpointStore } from "../persistence/workspace-c
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
 import { createErrorFeedbackTracker } from "./error-feedback";
 import { createGenerationService } from "./generation-service";
+import { streamGovernedExecution } from "./governed-completion";
 import { loadGoldenTemplate } from "../workspace-orchestrator/template";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
@@ -87,26 +88,12 @@ export async function createDefaultGenerationService(opts: {
     llmClient,
     ...(opts.governedAiExecutor
       ? {
-          governedCompletion: async ({ actor, projectId, scenario, prompt, requestId }) => {
-            const execution = await opts.governedAiExecutor!.execute(actor, {
-              scenario,
-              projectId,
-              prompt,
-              requestId,
-              requestedTokens: 1_200
-            });
-            await opts.onGovernedExecution?.(execution.evidence);
-            if (
-              execution.status === "blocked" ||
-              execution.status === "failed" ||
-              !execution.text
-            ) {
-              throw new Error(
-                `Governed AI completion unavailable: ${execution.evidence.failureReason ?? execution.status}`
-              );
-            }
-            return execution.text;
-          }
+          governedCompletion: ({ actor, projectId, scenario, prompt, requestId }) =>
+            streamGovernedExecution(
+              opts.governedAiExecutor!,
+              { actor, projectId, scenario, prompt, requestId },
+              opts.onGovernedExecution
+            )
         }
       : {}),
     chatHistory,

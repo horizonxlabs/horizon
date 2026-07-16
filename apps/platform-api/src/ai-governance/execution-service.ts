@@ -82,7 +82,7 @@ export type GovernedAiExecutorDependencies = {
   evaluateGuardrail: (input: { actor: PlatformUser; scenario: AiScenario; prompt: string }) => Promise<{ decision: "allow" | "warn" | "block"; reason?: string }>;
   reserveQuota: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number }) => Promise<{ allowed: boolean; remainingToday: number; quotaScope: string }>;
   reconcileQuota?: (input: { actor: PlatformUser; projectId: string; requestId: string; requestedTokens: number; actualTokens: number }) => Promise<void>;
-  invoke: (input: { provider: ResolvedAiProvider; prompt: string; scenario: AiScenario }) => Promise<{ text: string; tokensUsed: number; latencyMs: number; costUsd?: number; providerId: string; model: string }>;
+  invoke: (input: { provider: ResolvedAiProvider; prompt: string; scenario: AiScenario; onToken?: (delta: string) => void }) => Promise<{ text: string; tokensUsed: number; latencyMs: number; costUsd?: number; providerId: string; model: string }>;
   now?: () => Date;
 };
 
@@ -93,7 +93,7 @@ export class GovernedAiExecutor {
     return this.dependencies.store.listRecent(limit);
   }
 
-  async execute(actor: PlatformUser, input: GovernedAiExecutionInput): Promise<GovernedAiExecutionResult> {
+  async execute(actor: PlatformUser, input: GovernedAiExecutionInput, onToken?: (delta: string) => void): Promise<GovernedAiExecutionResult> {
     const prior = await this.dependencies.store.findByRequestId(input.requestId);
     if (prior) return prior;
     const prompt = input.prompt.trim();
@@ -115,7 +115,7 @@ export class GovernedAiExecutor {
       });
     }
     try {
-      const completed = await this.dependencies.invoke({ provider: plan.provider, prompt, scenario: input.scenario });
+      const completed = await this.dependencies.invoke({ provider: plan.provider, prompt, scenario: input.scenario, onToken });
       await this.dependencies.reconcileQuota?.({ actor, projectId: input.projectId, requestId: input.requestId, requestedTokens, actualTokens: completed.tokensUsed });
       return this.persist(input, actor, plan.provider, {
         status: "succeeded", text: completed.text, tokensUsed: completed.tokensUsed, latencyMs: completed.latencyMs, costUsd: completed.costUsd ?? 0, fallbackUsed: false, quotaScope: quota.quotaScope, quotaTokensReserved: requestedTokens

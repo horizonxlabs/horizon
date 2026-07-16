@@ -16,17 +16,17 @@ export function createPersistedGovernedAiExecutor(
     reconcileQuota: async ({ actor, projectId, requestedTokens, actualTokens }) => reconcileScopedQuota(client, actor, projectId, requestedTokens, actualTokens),
     // 30s default suits hosted providers; slow local models (a 26B model generating a whole app)
     // exceed it, aborting the run and tripping the breaker. Configurable via EVCP_AI_COMPLETION_TIMEOUT_MS.
-    invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000), circuit)
+    invoke: async ({ provider, prompt, onToken }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000), circuit, onToken)
   });
 }
 
-async function invokeWithCircuitBreaker(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, circuit: Map<string, { failures: number; blockedUntil?: number }>) {
+async function invokeWithCircuitBreaker(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, circuit: Map<string, { failures: number; blockedUntil?: number }>, onToken?: (delta: string) => void) {
   const state = circuit.get(provider.id);
   if (state?.blockedUntil && state.blockedUntil > Date.now()) throw new Error(`AI provider ${provider.id} circuit is open`);
   try {
     const result = provider.adapter === "anthropic"
       ? await invokeAnthropic(provider, prompt, fetcher, timeoutMs)
-      : await invokeOpenAiCompatible(provider, prompt, fetcher, timeoutMs);
+      : await invokeOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken);
     circuit.delete(provider.id);
     return result;
   } catch (error) {
@@ -102,8 +102,86 @@ async function reconcileScopedQuota(client: AiGovernancePersistenceClient, actor
   }));
 }
 
-async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number) {
+// SSE streaming variant: request `stream: true` and emit each delta via onToken as it arrives, so
+// the caller sees real token-by-token progress instead of waiting for the whole completion. No
+// retry loop (a partially streamed response cannot be replayed) — the circuit breaker + the
+// executor's fallback provider cover transport failures.
+async function streamOpenAiCompatible(
+  provider: ResolvedAiProvider,
+  prompt: string,
+  fetcher: typeof fetch,
+  timeoutMs: number,
+  onToken: (delta: string) => void
+) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
+  const startedAt = performance.now();
+  const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      stream: true,
+      stream_options: { include_usage: true }
+    }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    const error = new Error(`AI provider returned HTTP ${response.status}`) as Error & { retryable?: boolean };
+    error.retryable = response.status >= 500;
+    throw error;
+  }
+  if (!response.body) throw new Error("AI provider returned no stream body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let usageTokens = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const json = JSON.parse(data) as {
+          choices?: Array<{ delta?: { content?: unknown } }>;
+          usage?: { total_tokens?: unknown };
+        };
+        const content = json.choices?.[0]?.delta?.content;
+        if (typeof content === "string" && content) {
+          text += content;
+          onToken(content);
+        }
+        const total = Number(json.usage?.total_tokens);
+        if (Number.isFinite(total) && total > 0) usageTokens = total;
+      } catch {
+        // skip keep-alive comments / non-JSON frames
+      }
+    }
+  }
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("AI provider returned an empty completion");
+  const tokensUsed = usageTokens > 0 ? usageTokens : Math.max(1, Math.ceil((prompt.length + trimmed.length) / 4));
+  return {
+    text: trimmed,
+    tokensUsed,
+    latencyMs: Math.max(0, Math.round(performance.now() - startedAt)),
+    costUsd: 0,
+    providerId: provider.id,
+    model: provider.model
+  };
+}
+
+async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number, onToken?: (delta: string) => void) {
+  if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
+  if (onToken) return streamOpenAiCompatible(provider, prompt, fetcher, timeoutMs, onToken);
   const startedAt = performance.now();
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
