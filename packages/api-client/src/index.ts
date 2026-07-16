@@ -23,15 +23,7 @@ export function success<T>(data: T, meta?: Record<string, unknown>): ApiSuccess<
 
 export function failure(code: string, message: string, traceId?: string): ApiFailure { return { ok: false, error: { code, message, traceId } }; }
 export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
-export type {
-  AppDatabaseColumnDto,
-  AppDatabaseRelationshipDto,
-  AppDatabaseSampleRecordDto,
-  AppDatabaseTableDto,
-  DatabaseViewSnapshotDto,
-  WorkspaceFileDto,
-  WorkspaceFilesResponse
-} from "./workspace-resources";
+export type * from "./workspace-resources";
 import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
 export type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
 import type {
@@ -51,28 +43,17 @@ import type {
   AiQuotaDto,
   GuardrailRuleDto,
   CreateGuardrailRuleInput,
-  GuardrailEventDto,
+  GuardrailEventDto
 } from "./ai-governance-types";
 export type * from "./ai-governance-types";
-export type {
-  BusinessSettingsDto,
-  BusinessSettingsInput,
-  SetupInitializeInput,
-  SetupStatusDto
-} from "./setup-types";
+export type * from "./setup-types";
 import type {
   BusinessSettingsDto,
   BusinessSettingsInput,
   SetupInitializeInput,
   SetupStatusDto
 } from "./setup-types";
-export type {
-  InstallerCheckDto,
-  InstallerPreflightInput,
-  InstallerReportDto,
-  InstallerSetupInput,
-  InstallerSetupResponse
-} from "./installer-types";
+export type * from "./installer-types";
 import type {
   InstallerPreflightInput,
   InstallerReportDto,
@@ -929,19 +910,19 @@ export class PlatformApiClient {
   }
 
   createAiProvider(input: CreateAiProviderInput): Promise<AiProviderDto> {
-    return this.request<AiProviderDto>("/ai/providers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<AiProviderDto>("/ai/providers", input);
+  }
+
+  setAiProviderStatus(providerId: string, status: AiProviderDto["status"]): Promise<AiProviderDto> {
+    return this.postJson<AiProviderDto>("/ai/providers/status", { providerId, status });
+  }
+
+  deleteAiProvider(providerId: string): Promise<{ id: string }> {
+    return this.postJson<{ id: string }>("/ai/providers/delete", { providerId });
   }
 
   listProviderModelCatalog(baseUrl: string): Promise<ProviderModelCatalogDto> {
-    return this.request<ProviderModelCatalogDto>("/ai/provider-catalog", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ baseUrl })
-    });
+    return this.postJson<ProviderModelCatalogDto>("/ai/provider-catalog", { baseUrl });
   }
 
   listAiApiKeys(): Promise<AiApiKeyDto[]> {
@@ -949,11 +930,15 @@ export class PlatformApiClient {
   }
 
   createAiApiKey(input: CreateAiApiKeyInput): Promise<AiApiKeyDto> {
-    return this.request<AiApiKeyDto>("/ai/api-keys", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<AiApiKeyDto>("/ai/api-keys", input);
+  }
+
+  setAiApiKeyStatus(keyId: string, status: AiApiKeyDto["status"]): Promise<AiApiKeyDto> {
+    return this.postJson<AiApiKeyDto>("/ai/api-keys/status", { keyId, status });
+  }
+
+  deleteAiApiKey(keyId: string): Promise<{ id: string }> {
+    return this.postJson<{ id: string }>("/ai/api-keys/delete", { keyId });
   }
 
   configureAiRoute(input: ConfigureAiRouteInput): Promise<AiScenarioRouteDto> {
@@ -1002,6 +987,14 @@ export class PlatformApiClient {
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     return (await this.requestWithMeta<T>(path, init)).data;
+  }
+
+  private postJson<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
   }
 
   async requestWithMeta<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: Record<string, unknown> }> {

@@ -47,6 +47,7 @@ import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrd
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
 import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
 import { createGeneratedRuntimeRepositoryBackedService, createPrismaGeneratedRuntimePersistence, MemoryGeneratedRuntimePersistenceClient, type GeneratedRuntimeRepositoryBackedService } from "./persistence/generated-runtime-repositories";
+import { isNativeAuthRoute, isPersistenceAiGovernanceRoute, isPersistenceCoreRoute, isPersistenceGeneratedRuntimeRoute, isPersistencePrdRoute, isPersistencePublishStoreRoute, isPersistenceWorkspaceRoute } from "./route-predicates";
 export type HeaderBag = Record<string, string | string[] | undefined>;
 type HttpRequest = {
   headers: HeaderBag;
@@ -144,7 +145,11 @@ export interface PlatformRequest {
     | "/admin/policy-templates"
     | "/admin/policy-templates/evaluate"
     | "/ai/providers"
+    | "/ai/providers/status"
+    | "/ai/providers/delete"
     | "/ai/api-keys"
+    | "/ai/api-keys/status"
+    | "/ai/api-keys/delete"
     | "/ai/routes"
     | "/ai/quotas"
     | "/ai/provider-test-call"
@@ -499,34 +504,6 @@ async function ensureCoreUserForSimulatedSession(corePersistenceClient: CorePers
 
 function buildPersistencePrdPrompt(project: PlatformProject): string {
   return [`Create a PRD for ${project.name}.`, `Problem: ${project.businessProblem}`, `App type: ${project.appType}`, `Department: ${project.targetDepartment}`, `Users: ${project.intendedUsers.join(", ")}`, `Sensitivity: ${project.dataSensitivity}`].join("\n");
-}
-
-function isPersistenceCoreRoute(request: PlatformRequest): boolean {
-  return request.path === "/auth/me" || request.path === "/projects" || request.path === "/audit-logs" || request.path === "/audit-logs/filter";
-}
-
-function isNativeAuthRoute(request: PlatformRequest): boolean {
-  return request.path === "/admin/users" || request.path === "/auth/login" || request.path === "/auth/change-password";
-}
-
-function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
-  return request.path === "/ai/providers" || request.path === "/ai/api-keys" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/ai/provider-catalog" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
-}
-
-function isPersistencePrdRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) || /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) || /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) || /^\/projects\/[^/]+\/prd$/.test(request.path);
-}
-
-function isPersistenceWorkspaceRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/workspace$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path);
-}
-
-function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/app\/users$/.test(request.path) || /^\/projects\/[^/]+\/app\/roles$/.test(request.path) || /^\/projects\/[^/]+\/app\/invitations$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests\/decision$/.test(request.path) || /^\/projects\/[^/]+\/publish\/review$/.test(request.path) || /^\/projects\/[^/]+\/publish$/.test(request.path) || request.path === "/app-store/registry" || request.path === "/store/apps" || /^\/store\/apps\/[^/]+$/.test(request.path) || /^\/store\/apps\/[^/]+\/install$/.test(request.path) || /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) || /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) || /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) || /^\/store\/tickets\/[^/]+$/.test(request.path) || /^\/creator\/projects\/[^/]+\/tickets$/.test(request.path);
-}
-
-function isPersistenceGeneratedRuntimeRoute(request: PlatformRequest): boolean {
-  return /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path);
 }
 
 async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformApiServices, actor: PlatformUser, projectId: string) {

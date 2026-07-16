@@ -69,3 +69,101 @@ test("listProviderModelCatalog POSTs baseUrl to /ai/provider-catalog", async () 
   assert.equal(observed[0].body.baseUrl, "https://openrouter.ai/api/v1");
   assert.equal(catalog.models[0].id, "openai/gpt-4.1");
 });
+
+test("setAiProviderStatus POSTs providerId and status to /ai/providers/status", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(JSON.stringify(success({ id: "prov_1", status: "disabled" })), { status: 200 });
+    }
+  });
+
+  const provider = await client.setAiProviderStatus("prov_1", "disabled");
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/providers/status"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.providerId, "prov_1");
+  assert.equal(observed[0].body.status, "disabled");
+  assert.equal(provider.status, "disabled");
+});
+
+test("deleteAiProvider POSTs providerId to /ai/providers/delete", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(JSON.stringify(success({ id: "prov_1" })), { status: 200 });
+    }
+  });
+
+  const result = await client.deleteAiProvider("prov_1");
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/providers/delete"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.providerId, "prov_1");
+  assert.equal(result.id, "prov_1");
+});
+
+test("setAiApiKeyStatus POSTs keyId and status to /ai/api-keys/status", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(JSON.stringify(success({ id: "key_1", status: "disabled" })), { status: 200 });
+    }
+  });
+
+  const key = await client.setAiApiKeyStatus("key_1", "disabled");
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/api-keys/status"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.keyId, "key_1");
+  assert.equal(observed[0].body.status, "disabled");
+  assert.equal(key.status, "disabled");
+});
+
+test("deleteAiApiKey POSTs keyId to /ai/api-keys/delete", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(JSON.stringify(success({ id: "key_1" })), { status: 200 });
+    }
+  });
+
+  const result = await client.deleteAiApiKey("key_1");
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/api-keys/delete"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.keyId, "key_1");
+  assert.equal(result.id, "key_1");
+});

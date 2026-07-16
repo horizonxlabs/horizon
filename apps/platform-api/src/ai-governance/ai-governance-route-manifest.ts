@@ -6,8 +6,12 @@ import type { PlatformRequest } from "../app-factory";
 export const aiGovernanceHttpRoutes: Array<{ method: "GET" | "POST"; path: PlatformRequest["path"] }> = [
   { method: "GET", path: "/ai/providers" },
   { method: "POST", path: "/ai/providers" },
+  { method: "POST", path: "/ai/providers/status" },
+  { method: "POST", path: "/ai/providers/delete" },
   { method: "GET", path: "/ai/api-keys" },
   { method: "POST", path: "/ai/api-keys" },
+  { method: "POST", path: "/ai/api-keys/status" },
+  { method: "POST", path: "/ai/api-keys/delete" },
   { method: "GET", path: "/ai/routes" },
   { method: "GET", path: "/ai/quotas" },
   { method: "POST", path: "/ai/routes" },

@@ -112,6 +112,56 @@ export async function handleAiGovernanceRoute(
       return { status: HttpStatus.OK, body: success(route) };
     }
 
+    if (
+      aiGovernancePersistence &&
+      request.method === "POST" &&
+      request.path === "/ai/providers/status"
+    ) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const provider = await aiGovernancePersistence.setProviderStatus(
+        user,
+        String(request.body?.providerId ?? ""),
+        String(request.body?.status ?? "active") as never
+      );
+      return { status: HttpStatus.OK, body: success(provider) };
+    }
+
+    if (
+      aiGovernancePersistence &&
+      request.method === "POST" &&
+      request.path === "/ai/providers/delete"
+    ) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const providerId = String(request.body?.providerId ?? "");
+      await aiGovernancePersistence.deleteProvider(user, providerId);
+      return { status: HttpStatus.OK, body: success({ id: providerId }) };
+    }
+
+    if (
+      aiGovernancePersistence &&
+      request.method === "POST" &&
+      request.path === "/ai/api-keys/status"
+    ) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const key = await aiGovernancePersistence.setApiKeyStatus(
+        user,
+        String(request.body?.keyId ?? ""),
+        String(request.body?.status ?? "active") as never
+      );
+      return { status: HttpStatus.OK, body: success(key) };
+    }
+
+    if (
+      aiGovernancePersistence &&
+      request.method === "POST" &&
+      request.path === "/ai/api-keys/delete"
+    ) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const keyId = String(request.body?.keyId ?? "");
+      await aiGovernancePersistence.deleteApiKey(user, keyId);
+      return { status: HttpStatus.OK, body: success({ id: keyId }) };
+    }
+
     if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/quotas") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const quota = await aiGovernancePersistence.configureQuota(user, {
