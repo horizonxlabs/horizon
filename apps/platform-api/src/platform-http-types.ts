@@ -80,6 +80,7 @@ export interface PlatformRequest {
     | "/ai/quotas"
     | "/ai/provider-test-call"
     | "/ai/provider-catalog"
+    | "/ai/usage"
     | "/guardrails/rules"
     | "/guardrails/test"
     | "/guardrails/events"

@@ -25,9 +25,10 @@ export function failure(code: string, message: string, traceId?: string): ApiFai
 export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
 export type * from "./workspace-resources";
 import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
-export type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
+export type * from "./deployment-types";
 import type {
   AiUsageLogDto,
+  AiExecutionEvidenceDto,
   GuardrailResultDto,
   AiProviderTestCallInput,
   AiProviderTestCallResponse,
@@ -938,19 +939,11 @@ export class PlatformApiClient {
   }
 
   configureAiRoute(input: ConfigureAiRouteInput): Promise<AiScenarioRouteDto> {
-    return this.request<AiScenarioRouteDto>("/ai/routes", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<AiScenarioRouteDto>("/ai/routes", input);
   }
 
   configureAiQuota(input: AiQuotaDto): Promise<AiQuotaDto> {
-    return this.request<AiQuotaDto>("/ai/quotas", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<AiQuotaDto>("/ai/quotas", input);
   }
 
   listAiScenarioRoutes(): Promise<AiScenarioRouteDto[]> {
@@ -971,6 +964,10 @@ export class PlatformApiClient {
 
   listGuardrailEvents(): Promise<GuardrailEventDto[]> {
     return this.request<GuardrailEventDto[]>("/guardrails/events");
+  }
+
+  listAiUsage(): Promise<AiExecutionEvidenceDto[]> {
+    return this.request<AiExecutionEvidenceDto[]>("/ai/usage");
   }
 
   testAiProvider(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {

@@ -112,11 +112,7 @@ export async function handleAiGovernanceRoute(
       return { status: HttpStatus.OK, body: success(route) };
     }
 
-    if (
-      aiGovernancePersistence &&
-      request.method === "POST" &&
-      request.path === "/ai/providers/status"
-    ) {
+    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/providers/status") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const provider = await aiGovernancePersistence.setProviderStatus(
         user,
@@ -223,16 +219,9 @@ export async function handleAiGovernanceRoute(
       return { status: HttpStatus.OK, body: success(result) };
     }
 
-    if (
-      aiGovernancePersistence &&
-      request.method === "GET" &&
-      request.path === "/guardrails/events"
-    ) {
+    if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(await aiGovernancePersistence.listGuardrailEvents(user))
-      };
+      return { status: HttpStatus.OK, body: success(await aiGovernancePersistence.listGuardrailEvents(user)) };
     }
 
     if (
@@ -260,6 +249,12 @@ export async function handleAiGovernanceRoute(
         status: result?.status ?? HttpStatus.NOT_FOUND,
         body: result?.body ?? failure("NOT_FOUND", "route not found")
       };
+    }
+
+    if (governedAiExecutor && request.method === "GET" && request.path === "/ai/usage") {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      if (user.role !== "admin") return { status: HttpStatus.FORBIDDEN, body: failure("FORBIDDEN", "Admin role required") };
+      return { status: HttpStatus.OK, body: success(await governedAiExecutor.listRecentEvidence(50)) };
     }
 
     return undefined;

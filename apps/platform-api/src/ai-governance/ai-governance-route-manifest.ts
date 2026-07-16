@@ -19,6 +19,7 @@ export const aiGovernanceHttpRoutes: Array<{ method: "GET" | "POST"; path: Platf
   { method: "POST", path: "/ai/quotas" },
   { method: "POST", path: "/ai/provider-test-call" },
   { method: "POST", path: "/ai/provider-catalog" },
+  { method: "GET", path: "/ai/usage" },
   { method: "POST", path: "/guardrails/rules" },
   { method: "POST", path: "/guardrails/test" },
   { method: "GET", path: "/guardrails/events" }

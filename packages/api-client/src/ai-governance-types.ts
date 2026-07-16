@@ -16,6 +16,25 @@ export type AiUsageLogDto = {
   status?: "succeeded" | "blocked" | "fallback" | "failed";
 };
 
+export type AiExecutionEvidenceDto = {
+  id: string;
+  requestId: string;
+  actorId: string;
+  projectId: string;
+  scenario: string;
+  providerId: string;
+  model: string;
+  status: "succeeded" | "blocked" | "failed" | "fallback";
+  tokensUsed: number;
+  latencyMs: number;
+  costUsd: number;
+  fallbackUsed: boolean;
+  quotaScope: string;
+  quotaTokensReserved: number;
+  failureReason?: string;
+  occurredAt: string;
+};
+
 export type GuardrailResultDto = {
   decision: "allow" | "warn" | "block";
   eventId: string;

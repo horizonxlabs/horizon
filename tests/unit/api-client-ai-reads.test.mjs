@@ -180,6 +180,48 @@ test("setAiApiKeyStatus POSTs keyId and status to /ai/api-keys/status", async ()
   assert.equal(key.status, "disabled");
 });
 
+test("listAiUsage issues a GET request to /ai/usage", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({ url: String(url), method: init?.method ?? "GET" });
+      return new Response(
+        JSON.stringify(
+          success([
+            {
+              id: "aiexec_req_1",
+              requestId: "req_1",
+              actorId: "usr_creator",
+              projectId: "proj_1",
+              scenario: "workspace",
+              providerId: "aip_primary",
+              model: "gpt-test",
+              status: "succeeded",
+              tokensUsed: 42,
+              latencyMs: 8,
+              costUsd: 0.001,
+              fallbackUsed: false,
+              quotaScope: "creator:usr_creator",
+              quotaTokensReserved: 100,
+              occurredAt: "2026-07-15T00:00:00.000Z"
+            }
+          ])
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const rows = await client.listAiUsage();
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/usage"), `expected url to end with /ai/usage, got ${observed[0].url}`);
+  assert.equal(observed[0].method, "GET");
+  assert.equal(rows[0].requestId, "req_1");
+});
+
 test("deleteAiApiKey POSTs keyId to /ai/api-keys/delete", async () => {
   const observed = [];
   const client = createPlatformApiClient({

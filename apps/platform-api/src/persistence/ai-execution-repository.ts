@@ -25,6 +25,7 @@ export interface AiExecutionPersistenceClient {
   aiExecutionEvidence: {
     findUnique(args: { where: { requestId: string } }): Promise<AiExecutionEvidenceRecord | null>;
     create(args: { data: AiExecutionEvidenceRecord }): Promise<AiExecutionEvidenceRecord>;
+    findMany(args: { orderBy: { occurredAt: "desc" }; take: number }): Promise<AiExecutionEvidenceRecord[]>;
   };
 }
 
@@ -50,6 +51,14 @@ export class PrismaAiExecutionStore implements AiExecutionStore {
       }
     });
     return { ...result, evidence: mapEvidence(record) };
+  }
+
+  async listRecent(limit: number): Promise<AiExecutionEvidence[]> {
+    const records = await this.client.aiExecutionEvidence.findMany({
+      orderBy: { occurredAt: "desc" },
+      take: limit
+    });
+    return records.map(mapEvidence);
   }
 }
 
