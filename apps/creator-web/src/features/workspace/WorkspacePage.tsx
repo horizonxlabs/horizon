@@ -196,7 +196,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   {message.reasoning && (
                     <VibeReasoning
                       reasoning={message.reasoning}
-                      live={isVibing && messageIndex === vibeMessages.length - 1}
+                      // "Thinking" only while this is the active turn AND the answer has not started
+                      // yet (no answer text, no actions) — once output begins, the model is done
+                      // reasoning, so it relabels to "Thought process" and collapses.
+                      live={
+                        isVibing &&
+                        messageIndex === vibeMessages.length - 1 &&
+                        !message.text &&
+                        message.actions.length === 0
+                      }
                     />
                   )}
                   <div className="vibe-message-text">
