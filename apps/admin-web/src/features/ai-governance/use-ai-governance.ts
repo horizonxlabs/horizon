@@ -1,5 +1,6 @@
 import type {
   AiApiKeyDto,
+  AiExecutionEvidenceDto,
   AiProviderDto,
   AiQuotaDto,
   AiScenarioRouteDto,
@@ -24,13 +25,15 @@ type AiGovernanceSnapshot = {
   routes: AiScenarioRouteDto[];
   quotas: AiQuotaDto[];
   guardrailEvents: GuardrailEventDto[];
+  executions: AiExecutionEvidenceDto[];
 };
 const emptySnapshot: AiGovernanceSnapshot = {
   providers: [],
   apiKeys: [],
   routes: [],
   quotas: [],
-  guardrailEvents: []
+  guardrailEvents: [],
+  executions: []
 };
 
 export function useAiGovernance(client: PlatformApiClient | undefined) {
@@ -74,15 +77,16 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setAvailability("loading");
     setMessage("Loading AI governance data.");
     try {
-      const [providers, apiKeys, routes, quotas, guardrailEvents] = await Promise.all([
+      const [providers, apiKeys, routes, quotas, guardrailEvents, executions] = await Promise.all([
         client.listAiProviders(),
         client.listAiApiKeys(),
         client.listAiScenarioRoutes(),
         client.listAiQuotas(),
-        client.listGuardrailEvents()
+        client.listGuardrailEvents(),
+        client.listAiUsage()
       ]);
       if (generationRef.current !== requestGeneration || activeClientRef.current !== client) return;
-      setSnapshot({ providers, apiKeys, routes, quotas, guardrailEvents });
+      setSnapshot({ providers, apiKeys, routes, quotas, guardrailEvents, executions });
       setAvailability("ready");
       setMessage("Loaded AI governance data from Platform API.");
     } catch (error) {

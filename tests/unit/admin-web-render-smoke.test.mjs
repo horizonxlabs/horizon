@@ -46,8 +46,14 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
       id: "key-1", providerId: "provider-1", name: "Prod key", usageMode: "production",
       fingerprint: "abc123", maskedValue: "sk-***abc", status: "active"
     };
+    const sampleExecution = {
+      id: "exec-1", requestId: "req-1", actorId: "actor-1", projectId: "project-1", scenario: "prd_generation",
+      providerId: "provider-1", model: "gpt-4o", status: "succeeded", tokensUsed: 120, latencyMs: 340,
+      costUsd: 0.0042, fallbackUsed: false, quotaScope: "org", quotaTokensReserved: 200, occurredAt: "2026-07-15T00:00:00.000Z"
+    };
     const stubAi = {
       availability: "ready", message: "ok", providers: [sampleProvider], apiKeys: [sampleKey], routes: [], quotas: [], guardrailEvents: [],
+      executions: [sampleExecution],
       reload() {}, createProvider() {}, updateProvider() {}, setProviderStatus() {}, removeProvider() {}, setCredentialStatus() {}, removeCredential() {},
       saveApiKey() {}, configureRoute() {}, configureQuota() {}, createGuardrailRule() {}, testProvider() {}
     };
@@ -62,6 +68,7 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     if (!providersHtml.includes("Edit")) throw new Error("AiProvidersConsole did not render a provider Edit control");
     if (!providersHtml.includes("Routing")) throw new Error("AiProvidersConsole did not render the Routing tab label");
     if (!providersHtml.includes("Quota")) throw new Error("AiProvidersConsole did not render the Quota tab label");
+    if (!providersHtml.includes("Usage")) throw new Error("AiProvidersConsole did not render the Usage tab label");
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
@@ -217,4 +224,13 @@ test("ProviderDrawer and AiProvidersConsole source references edit-provider wiri
   assert.match(drawer, /editProvider/);
   assert.match(console, /setEditProvider/);
   assert.match(console, /onEdit/);
+});
+
+test("use-ai-governance hook loads AI usage logs and AiProvidersConsole renders a Usage tab", async () => {
+  const hook = await readFile("apps/admin-web/src/features/ai-governance/use-ai-governance.ts", "utf8");
+  const console = await readFile("apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx", "utf8");
+  assert.match(hook, /client\.listAiUsage\(\)/);
+  assert.match(hook, /executions/);
+  assert.match(console, /"usage"/);
+  assert.match(console, /Usage logs/);
 });

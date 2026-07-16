@@ -1,4 +1,4 @@
-import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard, Tabs } from "@evcp/ui";
+import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard, Tabs, Table, THead, TRow, TCell } from "@evcp/ui";
 import type { AiApiKeyDto, AiProviderDto, AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
 import { useState } from "react";
 import type { useAiGovernance } from "./use-ai-governance";
@@ -61,7 +61,7 @@ function CredentialRow({
   );
 }
 
-type TabId = "providers" | "credentials" | "routing" | "quota" | "test";
+type TabId = "providers" | "credentials" | "routing" | "quota" | "test" | "usage";
 
 export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
@@ -109,7 +109,8 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
           { id: "credentials", label: "Credentials" },
           { id: "routing", label: "Routing" },
           { id: "quota", label: "Quota" },
-          { id: "test", label: "Test" }
+          { id: "test", label: "Test" },
+          { id: "usage", label: "Usage" }
         ]}
         active={tab}
         onSelect={setTab}
@@ -177,6 +178,55 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
       )}
 
       {tab === "test" && <ProviderTestPanel ai={ai} disabled={disabled} onResult={setLastTest} />}
+
+      {tab === "usage" && (
+        <SectionCard eyebrow="Usage" title="Usage logs">
+          {ai.executions.length === 0 ? (
+            <p className="text-sm text-muted">No AI executions recorded yet.</p>
+          ) : (
+            <Table>
+              <THead>
+                <TRow>
+                  <TCell>Time</TCell>
+                  <TCell>Scenario</TCell>
+                  <TCell>Provider</TCell>
+                  <TCell>Model</TCell>
+                  <TCell>Status</TCell>
+                  <TCell>Tokens</TCell>
+                  <TCell>Cost</TCell>
+                  <TCell>Latency</TCell>
+                </TRow>
+              </THead>
+              <tbody>
+                {ai.executions.map((execution) => (
+                  <TRow key={execution.id}>
+                    <TCell>{new Date(execution.occurredAt).toLocaleString()}</TCell>
+                    <TCell>{execution.scenario}</TCell>
+                    <TCell>{execution.providerId}</TCell>
+                    <TCell>{execution.model}</TCell>
+                    <TCell>
+                      <Badge
+                        tone={
+                          execution.status === "succeeded" || execution.status === "fallback"
+                            ? "success"
+                            : execution.status === "blocked"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {execution.status}
+                      </Badge>
+                    </TCell>
+                    <TCell>{execution.tokensUsed}</TCell>
+                    <TCell>${execution.costUsd.toFixed(4)}</TCell>
+                    <TCell>{execution.latencyMs}ms</TCell>
+                  </TRow>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </SectionCard>
+      )}
 
       <ProviderDrawer
         open={providerOpen}
