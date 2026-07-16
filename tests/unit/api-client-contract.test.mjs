@@ -29,7 +29,11 @@ test("api client exposes platform bootstrap client contract", () => {
 });
 
 test("api client exposes workspace file browser contract", () => {
-  assert.match(source, /WorkspaceFilesResponse/);
+  // WorkspaceFilesResponse is declared in workspace-resources.ts and re-exported
+  // from index.ts via `export type * from "./workspace-resources"`, so it is part
+  // of the public api-client surface without appearing literally in index.ts.
+  assert.match(workspaceResources, /WorkspaceFilesResponse/);
+  assert.match(source, /export type \* from "\.\/workspace-resources"/);
   assert.match(source, /getWorkspaceFiles/);
   assert.match(workspaceResources, /\/workspace\/files/);
 });
