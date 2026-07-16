@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { createMemoryAiQuotaUsagePersistence, type AiQuotaUsagePersistence } from "./ai-quota-usage-store";
+import type { AiQuotaUsagePersistence } from "./ai-quota-usage-store";
 import { mapProvider, mapApiKey, mapRoute, mapQuota } from "./ai-governance-mappers";
+import { MemoryAiGovernancePersistenceClient } from "./ai-governance-memory-client";
 import type {
   AiApiKey,
   AiProvider,
@@ -66,7 +67,7 @@ export interface AiQuotaRecord {
   createdAt?: DateValue;
 }
 
-interface GuardrailRuleRecord {
+export interface GuardrailRuleRecord {
   id: string;
   name: string;
   type: GuardrailRuleType;
@@ -79,7 +80,7 @@ interface GuardrailRuleRecord {
   createdAt?: DateValue;
 }
 
-interface GuardrailEventRecord {
+export interface GuardrailEventRecord {
   id: string;
   actorUserId: string;
   prompt: string;
@@ -128,14 +129,18 @@ export interface AiGovernancePersistenceClient {
     findMany(args?: { orderBy?: { createdAt?: "asc" | "desc" } }): Promise<AiProviderRecord[]>;
     findUnique(args: { where: { id: string } }): Promise<AiProviderRecord | null>;
     upsert(args: UpsertProviderArgs): Promise<AiProviderRecord>;
+    delete(args: { where: { id: string } }): Promise<void>;
   };
   aiApiKey: {
     findMany(args?: { orderBy?: { createdAt?: "asc" | "desc" } }): Promise<AiApiKeyRecord[]>;
     create(args: CreateApiKeyArgs): Promise<AiApiKeyRecord>;
+    update(args: { where: { id: string }; data: { status: "active" | "disabled" } }): Promise<AiApiKeyRecord>;
+    delete(args: { where: { id: string } }): Promise<void>;
   };
   aiScenarioRoute: {
     findMany(args?: { orderBy?: { scenario?: "asc" | "desc" } }): Promise<AiScenarioRouteRecord[]>;
     upsert(args: UpsertRouteArgs): Promise<AiScenarioRouteRecord>;
+    deleteMany(args: { where: { OR: Array<{ primaryProviderId?: string; fallbackProviderId?: string }> } }): Promise<void>;
   };
   aiQuota: {
     findMany(args?: { orderBy?: { scope?: "asc" | "desc" } }): Promise<AiQuotaRecord[]>;
@@ -347,68 +352,42 @@ export class AiGovernanceRepositoryBackedService {
     const records = await this.client.guardrailEvent.findMany({ orderBy: { occurredAt: "asc" } });
     return records.map(mapEvent);
   }
-}
 
-export class MemoryAiGovernancePersistenceClient implements AiGovernancePersistenceClient {
-  readonly aiProvider: AiGovernancePersistenceClient["aiProvider"];
-  readonly aiApiKey: AiGovernancePersistenceClient["aiApiKey"];
-  readonly aiScenarioRoute: AiGovernancePersistenceClient["aiScenarioRoute"];
-  readonly aiQuota: AiGovernancePersistenceClient["aiQuota"];
-  readonly aiQuotaUsage: AiQuotaUsagePersistence;
-  readonly guardrailRule: AiGovernancePersistenceClient["guardrailRule"];
-  readonly guardrailEvent: AiGovernancePersistenceClient["guardrailEvent"];
+  async setProviderStatus(actor: PlatformUser, providerId: string, status: ProviderStatus): Promise<AiProvider> {
+    requireAdmin(actor);
+    const existing = await this.client.aiProvider.findUnique({ where: { id: providerId } });
+    if (!existing) throw new ValidationError(`Unknown AI provider: ${providerId}`);
+    const record = await this.client.aiProvider.upsert({
+      where: { id: providerId },
+      update: { status },
+      create: { ...existing, status }
+    });
+    return mapProvider(record);
+  }
 
-  private readonly providers: AiProviderRecord[];
-  private readonly apiKeys: AiApiKeyRecord[];
-  private readonly routes: AiScenarioRouteRecord[];
-  private readonly quotas: AiQuotaRecord[];
-  private readonly rules: GuardrailRuleRecord[];
-  private readonly events: GuardrailEventRecord[];
+  async deleteProvider(actor: PlatformUser, providerId: string): Promise<void> {
+    requireAdmin(actor);
+    const keys = await this.client.aiApiKey.findMany();
+    for (const key of keys.filter((candidate) => candidate.providerId === providerId)) {
+      await this.client.aiApiKey.delete({ where: { id: key.id } });
+    }
+    await this.client.aiScenarioRoute.deleteMany({ where: { OR: [{ primaryProviderId: providerId }, { fallbackProviderId: providerId }] } });
+    await this.client.aiProvider.delete({ where: { id: providerId } });
+  }
 
-  constructor(seed: { providers?: AiProviderRecord[]; apiKeys?: AiApiKeyRecord[]; routes?: AiScenarioRouteRecord[]; quotas?: AiQuotaRecord[]; rules?: GuardrailRuleRecord[]; events?: GuardrailEventRecord[] } = {}) {
-    this.providers = seed.providers ?? [];
-    this.apiKeys = seed.apiKeys ?? [];
-    this.routes = seed.routes ?? [];
-    this.quotas = seed.quotas ?? [];
-    this.rules = seed.rules ?? [];
-    this.events = seed.events ?? [];
+  async setApiKeyStatus(actor: PlatformUser, keyId: string, status: "active" | "disabled"): Promise<AiApiKey> {
+    requireAdmin(actor);
+    const record = await this.client.aiApiKey.update({ where: { id: keyId }, data: { status } });
+    return mapApiKey(record);
+  }
 
-    this.aiProvider = {
-      findMany: async ({ orderBy } = {}) => sortByDate(this.providers, "createdAt", orderBy?.createdAt),
-      findUnique: async ({ where }) => this.providers.find((provider) => provider.id === where.id) ?? null,
-      upsert: async ({ where, update, create }) => upsertById(this.providers, where.id, update, create)
-    };
-    this.aiApiKey = {
-      findMany: async ({ orderBy } = {}) => sortByDate(this.apiKeys, "createdAt", orderBy?.createdAt),
-      create: async ({ data }) => {
-        const existingIndex = this.apiKeys.findIndex((key) => key.id === data.id);
-        if (existingIndex >= 0) this.apiKeys.splice(existingIndex, 1, data);
-        else this.apiKeys.push(data);
-        return data;
-      }
-    };
-    this.aiScenarioRoute = {
-      findMany: async ({ orderBy } = {}) => sortByString(this.routes, "scenario", orderBy?.scenario),
-      upsert: async ({ where, update, create }) => upsertByKey(this.routes, "scenario", where.scenario, update, create)
-    };
-    this.aiQuota = {
-      findMany: async ({ orderBy } = {}) => sortByString(this.quotas, "scope", orderBy?.scope),
-      upsert: async ({ where, update, create }) => upsertByKey(this.quotas, "scope", where.scope, update, create)
-    };
-    this.aiQuotaUsage = createMemoryAiQuotaUsagePersistence();
-    this.guardrailRule = {
-      findMany: async ({ orderBy } = {}) => sortByDate(this.rules, "updatedAt", orderBy?.updatedAt),
-      upsert: async ({ where, update, create }) => upsertById(this.rules, where.id, update, create)
-    };
-    this.guardrailEvent = {
-      findMany: async ({ orderBy } = {}) => sortByDate(this.events, "occurredAt", orderBy?.occurredAt),
-      create: async ({ data }) => {
-        this.events.push(data);
-        return data;
-      }
-    };
+  async deleteApiKey(actor: PlatformUser, keyId: string): Promise<void> {
+    requireAdmin(actor);
+    await this.client.aiApiKey.delete({ where: { id: keyId } });
   }
 }
+
+export { MemoryAiGovernancePersistenceClient };
 
 export function createAiGovernanceRepositoryBackedService(client: AiGovernancePersistenceClient = new MemoryAiGovernancePersistenceClient(), secretStore?: AiSecretStore): AiGovernanceRepositoryBackedService {
   return new AiGovernanceRepositoryBackedService(client, secretStore);
@@ -476,33 +455,4 @@ function maskSecret(secret: string): string {
 
 function toIsoString(value: DateValue): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-function upsertById<T extends { id: string }>(records: T[], id: string, update: Partial<T>, create: T): T {
-  return upsertByKey(records, "id", id, update, create);
-}
-
-function upsertByKey<T, K extends keyof T>(records: T[], key: K, value: T[K], update: Partial<T>, create: T): T {
-  const existingIndex = records.findIndex((record) => record[key] === value);
-  if (existingIndex >= 0) {
-    const next = { ...records[existingIndex], ...update };
-    records[existingIndex] = next;
-    return next;
-  }
-  records.push(create);
-  return create;
-}
-
-function sortByDate<T>(records: T[], key: keyof T, direction: "asc" | "desc" = "asc"): T[] {
-  return [...records].sort((left, right) => {
-    const diff = new Date(left[key] as DateValue).getTime() - new Date(right[key] as DateValue).getTime();
-    return direction === "desc" ? -diff : diff;
-  });
-}
-
-function sortByString<T>(records: T[], key: keyof T, direction: "asc" | "desc" = "asc"): T[] {
-  return [...records].sort((left, right) => {
-    const diff = String(left[key]).localeCompare(String(right[key]));
-    return direction === "desc" ? -diff : diff;
-  });
 }
