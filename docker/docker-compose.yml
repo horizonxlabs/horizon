@@ -153,6 +153,9 @@ services:
       EVCP_S3_SSL: "false"
       EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:-http://localhost:9000}
       EVCP_AI_JOB_ENCRYPTION_KEY: ${EVCP_AI_JOB_ENCRYPTION_KEY:-}
+      # Per-completion abort timeout (ms). Generous default for slow local models — a hosted
+      # provider needs far less. Override in .env for faster/slower providers.
+      EVCP_AI_COMPLETION_TIMEOUT_MS: ${EVCP_AI_COMPLETION_TIMEOUT_MS:-300000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"

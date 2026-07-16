@@ -14,7 +14,9 @@ export function createPersistedGovernedAiExecutor(
     evaluateGuardrail: async ({ scenario, prompt }) => evaluateGuardrail(client, scenario, prompt),
     reserveQuota: async ({ actor, projectId, requestedTokens }) => reserveScopedQuota(client, actor, projectId, requestedTokens),
     reconcileQuota: async ({ actor, projectId, requestedTokens, actualTokens }) => reconcileScopedQuota(client, actor, projectId, requestedTokens, actualTokens),
-    invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? 30_000, circuit)
+    // 30s default suits hosted providers; slow local models (a 26B model generating a whole app)
+    // exceed it, aborting the run and tripping the breaker. Configurable via EVCP_AI_COMPLETION_TIMEOUT_MS.
+    invoke: async ({ provider, prompt }) => invokeWithCircuitBreaker(provider, prompt, options.fetcher ?? globalThis.fetch, options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000), circuit)
   });
 }
 
