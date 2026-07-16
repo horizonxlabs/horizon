@@ -78,6 +78,10 @@ services:
       - "8081:8080"
     volumes:
       - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
+      # Persist Keycloak's H2 store so users provisioned at setup (the first admin — Keycloak
+      # owns interactive sign-in) survive container recreation. Without this, recreating the
+      # stack wipes the admin and locks everyone out. --import-realm skips the existing realm.
+      - evcp_keycloak_data:/opt/keycloak/data
     networks:
       - evcp-internal
     healthcheck:
@@ -274,6 +278,7 @@ services:
 volumes:
   evcp_postgres_data:
   evcp_minio_data:
+  evcp_keycloak_data:
   evcp_caddy_data:
   evcp_caddy_config:
   evcp_node_modules:
