@@ -1,5 +1,5 @@
 import { Button, Drawer, Field, Input, Select } from "@evcp/ui";
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import type { useAiGovernance } from "../use-ai-governance";
 import { ModelCatalogPicker } from "./ModelCatalogPicker";
 
@@ -24,6 +24,9 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
   const [error, setError] = useState<string>();
   const preset = PRESETS[adapter];
   const usePicker = adapter === "openrouter" && !catalogUnavailable;
+  // Stable identity so ModelCatalogPicker's effect doesn't re-run (and re-fetch)
+  // when unrelated drawer state (name, error, …) triggers a parent re-render.
+  const handleCatalogUnavailable = useCallback(() => setCatalogUnavailable(true), []);
 
   function selectAdapter(next: AdapterKind) {
     setAdapter(next);
@@ -80,7 +83,7 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
               value={selectedModels}
               onChange={setSelectedModels}
               loadCatalog={ai.loadModelCatalog}
-              onUnavailable={() => setCatalogUnavailable(true)}
+              onUnavailable={handleCatalogUnavailable}
             />
           </Field>
         ) : (
