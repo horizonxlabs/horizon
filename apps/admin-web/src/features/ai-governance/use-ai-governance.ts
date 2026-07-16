@@ -114,6 +114,55 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setMessage(`Provider saved: ${provider.name}`);
     return provider;
   };
+  const setProviderStatus = async (
+    providerId: string,
+    status: AiProviderDto["status"]
+  ): Promise<AiProviderDto> => {
+    const readyClient = requireReadyClient();
+    const provider = await readyClient.setAiProviderStatus(providerId, status);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.map((item) => (item.id === provider.id ? provider : item))
+    }));
+    setMessage(`Provider ${provider.status}: ${provider.name}`);
+    return provider;
+  };
+  const removeProvider = async (providerId: string): Promise<void> => {
+    const readyClient = requireReadyClient();
+    await readyClient.deleteAiProvider(providerId);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.filter((item) => item.id !== providerId),
+      apiKeys: current.apiKeys.filter((item) => item.providerId !== providerId),
+      routes: current.routes.filter(
+        (route) =>
+          route.primary.providerId !== providerId && route.fallback?.providerId !== providerId
+      )
+    }));
+    setMessage("Provider deleted.");
+  };
+  const setCredentialStatus = async (
+    keyId: string,
+    status: AiApiKeyDto["status"]
+  ): Promise<AiApiKeyDto> => {
+    const readyClient = requireReadyClient();
+    const key = await readyClient.setAiApiKeyStatus(keyId, status);
+    setSnapshot((current) => ({
+      ...current,
+      apiKeys: current.apiKeys.map((item) => (item.id === key.id ? key : item))
+    }));
+    setMessage(`Credential ${key.status}: ${key.name}`);
+    return key;
+  };
+  const removeCredential = async (keyId: string): Promise<void> => {
+    const readyClient = requireReadyClient();
+    await readyClient.deleteAiApiKey(keyId);
+    setSnapshot((current) => ({
+      ...current,
+      apiKeys: current.apiKeys.filter((item) => item.id !== keyId)
+    }));
+    setMessage("Credential deleted.");
+  };
   const saveApiKey = async (
     input: Omit<CreateAiApiKeyInput, "secret">,
     secret: string
@@ -177,6 +226,10 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     ...visibleSnapshot,
     reload,
     createProvider,
+    setProviderStatus,
+    removeProvider,
+    setCredentialStatus,
+    removeCredential,
     saveApiKey,
     configureRoute,
     configureQuota,

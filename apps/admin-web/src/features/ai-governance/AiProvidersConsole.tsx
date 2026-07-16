@@ -1,5 +1,5 @@
-import { Button, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard } from "@evcp/ui";
-import type { AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
+import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard } from "@evcp/ui";
+import type { AiApiKeyDto, AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
 import { useState } from "react";
 import type { useAiGovernance } from "./use-ai-governance";
 import { canMutateAiGovernance } from "./status";
@@ -12,6 +12,54 @@ import { ProviderDrawer } from "./drawers/ProviderDrawer";
 import { CredentialDrawer } from "./drawers/CredentialDrawer";
 import { RouteDrawer } from "./drawers/RouteDrawer";
 import { QuotaDrawer } from "./drawers/QuotaDrawer";
+
+function CredentialRow({
+  credential,
+  onSetStatus,
+  onDelete
+}: {
+  credential: AiApiKeyDto;
+  onSetStatus: (keyId: string, status: AiApiKeyDto["status"]) => void;
+  onDelete: (keyId: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const isActive = credential.status === "active";
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-border bg-surface px-3 py-2">
+      <div className="flex flex-col gap-0.5">
+        <strong className="text-sm font-medium text-body">{credential.name}</strong>
+        <span className="text-xs text-muted">
+          {credential.providerId} · {credential.maskedValue}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge tone={isActive ? "success" : "warning"}>{credential.status}</Badge>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => onSetStatus(credential.id, isActive ? "disabled" : "active")}
+        >
+          {isActive ? "Disable" : "Enable"}
+        </Button>
+        {confirming ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">Confirm delete?</span>
+            <Button size="sm" variant="danger" onClick={() => onDelete(credential.id)}>
+              Delete
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}>
+            Delete
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
@@ -66,6 +114,8 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
                 credentials={ai.apiKeys.filter((k) => k.providerId === provider.id)}
                 routedScenarios={routedByProvider[provider.id] ?? []}
                 onAddCredential={(id) => { setCredentialProvider(id); setCredentialOpen(true); }}
+                onSetStatus={ai.setProviderStatus}
+                onDelete={ai.removeProvider}
               />
             ))}
           </div>
@@ -81,10 +131,20 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
       <ProviderTestPanel ai={ai} disabled={disabled} onResult={setLastTest} />
 
       <SectionCard eyebrow="Records" title="Stored credentials">
-        <DataTable
-          columns={[{ key: "name", label: "Credential" }, { key: "providerId", label: "Provider" }, { key: "maskedValue", label: "Masked value" }, { key: "status", label: "Status" }]}
-          rows={ai.apiKeys}
-        />
+        {ai.apiKeys.length === 0 ? (
+          <p className="text-sm text-muted">No credentials yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {ai.apiKeys.map((credential) => (
+              <CredentialRow
+                key={credential.id}
+                credential={credential}
+                onSetStatus={ai.setCredentialStatus}
+                onDelete={ai.removeCredential}
+              />
+            ))}
+          </ul>
+        )}
       </SectionCard>
 
       <ProviderDrawer open={providerOpen} onClose={() => setProviderOpen(false)} ai={ai} onDone={done} />

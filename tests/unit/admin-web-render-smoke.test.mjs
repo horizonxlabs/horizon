@@ -38,9 +38,18 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     import React from "react";
     import { renderToStaticMarkup } from "react-dom/server";
     globalThis.React = React;
+    const sampleProvider = {
+      id: "provider-1", name: "OpenAI", adapter: "openai", baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4o"], status: "active"
+    };
+    const sampleKey = {
+      id: "key-1", providerId: "provider-1", name: "Prod key", usageMode: "production",
+      fingerprint: "abc123", maskedValue: "sk-***abc", status: "active"
+    };
     const stubAi = {
-      availability: "ready", message: "ok", providers: [], apiKeys: [], routes: [], quotas: [], guardrailEvents: [],
-      reload() {}, createProvider() {}, saveApiKey() {}, configureRoute() {}, configureQuota() {}, createGuardrailRule() {}, testProvider() {}
+      availability: "ready", message: "ok", providers: [sampleProvider], apiKeys: [sampleKey], routes: [], quotas: [], guardrailEvents: [],
+      reload() {}, createProvider() {}, setProviderStatus() {}, removeProvider() {}, setCredentialStatus() {}, removeCredential() {},
+      saveApiKey() {}, configureRoute() {}, configureQuota() {}, createGuardrailRule() {}, testProvider() {}
     };
     const { AiProvidersConsole } = await import("./apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx");
     const { GuardrailsConsole } = await import("./apps/admin-web/src/features/guardrails/GuardrailsConsole.tsx");
@@ -48,6 +57,8 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     const guardrailsHtml = renderToStaticMarkup(React.createElement(GuardrailsConsole, { ai: stubAi }));
     if (!providersHtml.includes("AI Providers")) throw new Error("AiProvidersConsole did not render its title");
     if (!guardrailsHtml.includes("Guardrails")) throw new Error("GuardrailsConsole did not render its title");
+    if (!providersHtml.includes("Disable")) throw new Error("AiProvidersConsole did not render a provider Disable control");
+    if ((providersHtml.match(/Delete/g) ?? []).length < 2) throw new Error("AiProvidersConsole did not render provider + credential Delete controls");
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
@@ -55,6 +66,13 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
       stdio: "pipe"
     })
   );
+});
+
+test("ProviderCard wires status badge, enable/disable, and delete handlers", async () => {
+  const card = await readFile("apps/admin-web/src/features/ai-governance/ProviderCard.tsx", "utf8");
+  assert.match(card, /provider\.status/);
+  assert.match(card, /onDelete/);
+  assert.match(card, /onSetStatus/);
 });
 
 test("UsersConsole renders its title with a stub client", () => {
