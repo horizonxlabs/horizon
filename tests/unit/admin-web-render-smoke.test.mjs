@@ -48,7 +48,7 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     };
     const stubAi = {
       availability: "ready", message: "ok", providers: [sampleProvider], apiKeys: [sampleKey], routes: [], quotas: [], guardrailEvents: [],
-      reload() {}, createProvider() {}, setProviderStatus() {}, removeProvider() {}, setCredentialStatus() {}, removeCredential() {},
+      reload() {}, createProvider() {}, updateProvider() {}, setProviderStatus() {}, removeProvider() {}, setCredentialStatus() {}, removeCredential() {},
       saveApiKey() {}, configureRoute() {}, configureQuota() {}, createGuardrailRule() {}, testProvider() {}
     };
     const { AiProvidersConsole } = await import("./apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx");
@@ -59,6 +59,7 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     if (!guardrailsHtml.includes("Guardrails")) throw new Error("GuardrailsConsole did not render its title");
     if (!providersHtml.includes("Disable")) throw new Error("AiProvidersConsole did not render a provider Disable control");
     if ((providersHtml.match(/Delete/g) ?? []).length < 1) throw new Error("AiProvidersConsole did not render a provider Delete control");
+    if (!providersHtml.includes("Edit")) throw new Error("AiProvidersConsole did not render a provider Edit control");
     if (!providersHtml.includes("Routing")) throw new Error("AiProvidersConsole did not render the Routing tab label");
     if (!providersHtml.includes("Quota")) throw new Error("AiProvidersConsole did not render the Quota tab label");
   `;
@@ -185,4 +186,35 @@ test("ProviderDrawer still renders its open state with the picker wired", () => 
       stdio: "pipe"
     })
   );
+});
+
+test("ProviderDrawer renders edit mode with the editProvider prop", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const editProvider = {
+      id: "provider-1", name: "OpenAI", adapter: "openai", baseUrl: "https://api.openai.com/v1",
+      models: ["gpt-4o"], status: "active"
+    };
+    const stubAi = { updateProvider() {}, loadModelCatalog: async () => ({ models: [] }) };
+    const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
+    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi, editProvider }));
+    if (!html.includes("Edit provider")) throw new Error("ProviderDrawer did not render its edit-mode title");
+    if (!html.includes("Save changes")) throw new Error("ProviderDrawer did not render its edit-mode submit label");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
+test("ProviderDrawer and AiProvidersConsole source references edit-provider wiring", async () => {
+  const drawer = await readFile("apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx", "utf8");
+  const console = await readFile("apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx", "utf8");
+  assert.match(drawer, /editProvider/);
+  assert.match(console, /setEditProvider/);
+  assert.match(console, /onEdit/);
 });

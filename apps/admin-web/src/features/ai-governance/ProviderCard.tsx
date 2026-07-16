@@ -8,6 +8,7 @@ export function ProviderCard({
   routedScenarios,
   onAddCredential,
   onSetStatus,
+  onEdit,
   onDelete
 }: {
   provider: AiProviderDto;
@@ -15,6 +16,7 @@ export function ProviderCard({
   routedScenarios: AiScenarioDto[];
   onAddCredential: (providerId: string) => void;
   onSetStatus: (providerId: string, status: AiProviderDto["status"]) => void;
+  onEdit: (provider: AiProviderDto) => void;
   onDelete: (providerId: string) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -56,6 +58,9 @@ export function ProviderCard({
           onClick={() => onSetStatus(provider.id, isActive ? "disabled" : "active")}
         >
           {isActive ? "Disable" : "Enable"}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => onEdit(provider)}>
+          Edit
         </Button>
         {confirming ? (
           <div className="flex items-center gap-2">

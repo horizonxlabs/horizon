@@ -1,5 +1,5 @@
 import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard, Tabs } from "@evcp/ui";
-import type { AiApiKeyDto, AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
+import type { AiApiKeyDto, AiProviderDto, AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
 import { useState } from "react";
 import type { useAiGovernance } from "./use-ai-governance";
 import { canMutateAiGovernance } from "./status";
@@ -68,6 +68,7 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
   const [message, setMessage] = useState<string>();
   const [lastTest, setLastTest] = useState<string>();
   const [providerOpen, setProviderOpen] = useState(false);
+  const [editProvider, setEditProvider] = useState<AiProviderDto | undefined>();
   const [credentialProvider, setCredentialProvider] = useState<string | undefined>();
   const [credentialOpen, setCredentialOpen] = useState(false);
   const [routeScenario, setRouteScenario] = useState<AiScenarioDto | undefined>();
@@ -118,7 +119,9 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
       {tab === "providers" && (
         <>
           <div className="flex justify-end">
-            <Button disabled={disabled} onClick={() => setProviderOpen(true)}>+ Add provider</Button>
+            <Button disabled={disabled} onClick={() => { setEditProvider(undefined); setProviderOpen(true); }}>
+              + Add provider
+            </Button>
           </div>
 
           <SectionCard eyebrow="Providers" title="Approved endpoints">
@@ -134,6 +137,7 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
                     routedScenarios={routedByProvider[provider.id] ?? []}
                     onAddCredential={(id) => { setCredentialProvider(id); setCredentialOpen(true); }}
                     onSetStatus={ai.setProviderStatus}
+                    onEdit={(p) => { setEditProvider(p); setProviderOpen(true); }}
                     onDelete={ai.removeProvider}
                   />
                 ))}
@@ -174,7 +178,13 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
 
       {tab === "test" && <ProviderTestPanel ai={ai} disabled={disabled} onResult={setLastTest} />}
 
-      <ProviderDrawer open={providerOpen} onClose={() => setProviderOpen(false)} ai={ai} onDone={done} />
+      <ProviderDrawer
+        open={providerOpen}
+        onClose={() => { setProviderOpen(false); setEditProvider(undefined); }}
+        ai={ai}
+        onDone={done}
+        editProvider={editProvider}
+      />
       <CredentialDrawer open={credentialOpen} onClose={() => setCredentialOpen(false)} ai={ai} providerId={credentialProvider} onDone={done} />
       <RouteDrawer open={routeOpen} onClose={() => setRouteOpen(false)} ai={ai} scenario={routeScenario} onDone={done} />
       <QuotaDrawer open={quotaOpen} onClose={() => setQuotaOpen(false)} ai={ai} scope={quotaScope} onDone={done} />

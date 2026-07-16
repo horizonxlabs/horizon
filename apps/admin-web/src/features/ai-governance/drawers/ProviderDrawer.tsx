@@ -1,9 +1,16 @@
 import { Button, Drawer, Field, Input, Select } from "@evcp/ui";
-import { useCallback, useState, type FormEvent } from "react";
+import type { AiProviderDto } from "@evcp/api-client";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { useAiGovernance } from "../use-ai-governance";
 import { ModelCatalogPicker } from "./ModelCatalogPicker";
 
-type Props = { open: boolean; onClose: () => void; ai: ReturnType<typeof useAiGovernance>; onDone?: (msg: string) => void };
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  ai: ReturnType<typeof useAiGovernance>;
+  onDone?: (msg: string) => void;
+  editProvider?: AiProviderDto;
+};
 
 type AdapterKind = "openai" | "openrouter" | "lm_studio" | "anthropic";
 
@@ -14,12 +21,13 @@ const PRESETS: Record<AdapterKind, { baseUrl: string; model: string }> = {
   anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5" }
 };
 
-export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
-  const [name, setName] = useState("");
-  const [adapter, setAdapter] = useState<AdapterKind>("openai");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [models, setModels] = useState("");
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+export function ProviderDrawer({ open, onClose, ai, onDone, editProvider }: Props) {
+  const isEdit = Boolean(editProvider);
+  const [name, setName] = useState(editProvider?.name ?? "");
+  const [adapter, setAdapter] = useState<AdapterKind>((editProvider?.adapter as AdapterKind) ?? "openai");
+  const [baseUrl, setBaseUrl] = useState(editProvider?.baseUrl ?? "");
+  const [models, setModels] = useState(editProvider?.models.join(", ") ?? "");
+  const [selectedModels, setSelectedModels] = useState<string[]>(editProvider ? [...editProvider.models] : []);
   const [catalogUnavailable, setCatalogUnavailable] = useState(false);
   const [error, setError] = useState<string>();
   const preset = PRESETS[adapter];
@@ -28,7 +36,28 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
   // when unrelated drawer state (name, error, …) triggers a parent re-render.
   const handleCatalogUnavailable = useCallback(() => setCatalogUnavailable(true), []);
 
+  // Repopulate the form whenever the drawer is switched to edit a different
+  // provider (or back to create mode).
+  useEffect(() => {
+    if (editProvider) {
+      setName(editProvider.name);
+      setAdapter(editProvider.adapter as AdapterKind);
+      setBaseUrl(editProvider.baseUrl ?? "");
+      setModels(editProvider.models.join(", "));
+      setSelectedModels([...editProvider.models]);
+    } else {
+      setName("");
+      setAdapter("openai");
+      setBaseUrl("");
+      setModels("");
+      setSelectedModels([]);
+    }
+    setCatalogUnavailable(false);
+    setError(undefined);
+  }, [editProvider?.id]);
+
   function selectAdapter(next: AdapterKind) {
+    if (isEdit) return;
     setAdapter(next);
     setBaseUrl(PRESETS[next].baseUrl);
     setSelectedModels([]);
@@ -46,13 +75,22 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
       return;
     }
     try {
-      const provider = await ai.createProvider({
-        name: name.trim(),
-        adapter,
-        baseUrl: baseUrl.trim(),
-        models: modelList
-      });
-      onDone?.(`Provider ${provider.name} saved.`);
+      if (editProvider) {
+        const provider = await ai.updateProvider(editProvider.id, {
+          name: name.trim(),
+          baseUrl: baseUrl.trim(),
+          models: modelList
+        });
+        onDone?.(`Provider ${provider.name} updated.`);
+      } else {
+        const provider = await ai.createProvider({
+          name: name.trim(),
+          adapter,
+          baseUrl: baseUrl.trim(),
+          models: modelList
+        });
+        onDone?.(`Provider ${provider.name} saved.`);
+      }
       setName(""); setBaseUrl(""); setModels(""); setSelectedModels([]);
       onClose();
     } catch (err) {
@@ -61,11 +99,16 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
   }
 
   return (
-    <Drawer open={open} onClose={onClose} title="Add provider" description="Register an approved AI endpoint.">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={isEdit ? "Edit provider" : "Add provider"}
+      description={isEdit ? "Update the name, base URL, or models for this endpoint." : "Register an approved AI endpoint."}
+    >
       <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
         <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
         <Field label="Adapter">
-          <Select value={adapter} onChange={(e) => selectAdapter(e.target.value as AdapterKind)}>
+          <Select value={adapter} onChange={(e) => selectAdapter(e.target.value as AdapterKind)} disabled={isEdit}>
             <option value="openai">OpenAI-compatible</option>
             <option value="openrouter">OpenRouter</option>
             <option value="lm_studio">LM Studio (local)</option>
@@ -92,7 +135,7 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
               placeholder={preset.model} required />
           </Field>
         )}
-        {adapter === "lm_studio" && (
+        {adapter === "lm_studio" && !isEdit && (
           <p className="text-xs text-muted">
             LM Studio ignores the API key — add any non-empty value (e.g. lm-studio) in the credential step.
           </p>
@@ -100,7 +143,7 @@ export function ProviderDrawer({ open, onClose, ai, onDone }: Props) {
         {error && <p className="text-sm text-danger-strong">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit">Save provider</Button>
+          <Button type="submit">{isEdit ? "Save changes" : "Save provider"}</Button>
         </div>
       </form>
     </Drawer>

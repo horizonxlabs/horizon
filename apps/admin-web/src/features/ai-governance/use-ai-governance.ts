@@ -114,6 +114,19 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setMessage(`Provider saved: ${provider.name}`);
     return provider;
   };
+  const updateProvider = async (
+    providerId: string,
+    input: { name: string; baseUrl: string; models: string[] }
+  ): Promise<AiProviderDto> => {
+    const readyClient = requireReadyClient();
+    const provider = await readyClient.updateAiProvider(providerId, input);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.map((item) => (item.id === provider.id ? provider : item))
+    }));
+    setMessage(`Provider updated: ${provider.name}`);
+    return provider;
+  };
   const setProviderStatus = async (
     providerId: string,
     status: AiProviderDto["status"]
@@ -226,6 +239,7 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     ...visibleSnapshot,
     reload,
     createProvider,
+    updateProvider,
     setProviderStatus,
     removeProvider,
     setCredentialStatus,
