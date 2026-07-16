@@ -1,4 +1,5 @@
 import { success } from "@evcp/api-client";
+import { ValidationError } from "../platform-services";
 import type { AiProviderTestCallResult, AiScenario, PlatformUser } from "../platform-services";
 import type { GovernedAiExecutor } from "./execution-service";
 
@@ -45,7 +46,10 @@ export async function handleAiProviderTestCall(input: {
     requestId: `admin_provider_test_${crypto.randomUUID()}`, ...(request.requestedTokens ? { requestedTokens: request.requestedTokens } : {})
   });
   if (execution.status === "failed" || execution.status === "blocked") {
-    throw new Error(
+    // A failed/blocked governed test is an expected outcome (provider unreachable, bad key,
+    // guardrail block) — surface it as a validation error (422) carrying the reason so the
+    // console shows a meaningful message, instead of an opaque 500 INTERNAL_ERROR.
+    throw new ValidationError(
       `Provider test ${execution.status}: ${execution.evidence.failureReason ?? execution.status}`
     );
   }

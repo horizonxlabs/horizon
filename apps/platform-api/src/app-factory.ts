@@ -25,7 +25,7 @@ import { createCoreRepositoryBackedService, createPrismaCorePersistence, MemoryC
 import { createPlatformCredentialService, type PlatformCredentialService } from "./auth/platform-credential-service";
 import { createCorePersistenceCredentialStore, createUserWithRole } from "./auth/prisma-credential-store";
 import { resolvePersistedAuth } from "./auth/persistence-auth-resolver";
-import { PlatformSessionError, type PlatformSessionService } from "./auth/platform-session-service";
+import type { PlatformSessionService } from "./auth/platform-session-service";
 import { getMockPermissions } from "@evcp/auth-sdk";
 import { createAiGovernanceRepositoryBackedService, createPrismaAiGovernancePersistence, MemoryAiGovernancePersistenceClient, type AiGovernanceRepositoryBackedService } from "./persistence/ai-governance-repositories";
 import { createPersistedGovernedAiExecutor } from "./ai-governance/execution-runtime";
@@ -49,6 +49,7 @@ import { createGeneratedRuntimeRepositoryBackedService, createPrismaGeneratedRun
 import { isNativeAuthRoute, isPersistenceAiGovernanceRoute, isPersistenceCoreRoute, isPersistenceGeneratedRuntimeRoute, isPersistencePrdRoute, isPersistencePublishStoreRoute, isPersistenceWorkspaceRoute } from "./route-predicates";
 import type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
 export type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
+import { errorResponse } from "./error-response";
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
@@ -162,42 +163,6 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
     durableAiJobPayloadCipher,
     projectFilePersistence: new PrismaProjectFileRepository(client as never),
     projectFileUploadUrlIssuer
-  };
-}
-
-function errorResponse(error: unknown): PlatformResponse {
-  if (error instanceof PlatformSessionError)
-    return {
-      status: HttpStatus.UNAUTHORIZED,
-      body: failure("UNAUTHORIZED", "Invalid, expired, or revoked platform session")
-    };
-
-  if (error instanceof Error && error.name === "MockAuthError") {
-    return { status: HttpStatus.UNAUTHORIZED, body: failure("UNAUTHORIZED", error.message) };
-  }
-
-  if (error instanceof Error && error.name === "PermissionError") {
-    return { status: HttpStatus.FORBIDDEN, body: failure("FORBIDDEN", error.message) };
-  }
-
-  if (error instanceof Error && error.name === "ValidationError") {
-    return {
-      status: HttpStatus.UNPROCESSABLE_ENTITY,
-      body: failure("VALIDATION_ERROR", error.message)
-    };
-  }
-
-  if (error instanceof Error && error.name === "ConflictError") {
-    return { status: HttpStatus.CONFLICT, body: failure("CONFLICT", error.message) };
-  }
-
-  if (error instanceof Error && error.name === "QuotaExceededError") {
-    return { status: HttpStatus.TOO_MANY_REQUESTS, body: failure("QUOTA_EXCEEDED", error.message) };
-  }
-
-  return {
-    status: HttpStatus.INTERNAL_SERVER_ERROR,
-    body: failure("INTERNAL_ERROR", "Unexpected platform API error")
   };
 }
 

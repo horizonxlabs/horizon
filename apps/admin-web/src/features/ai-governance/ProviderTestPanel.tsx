@@ -1,5 +1,6 @@
 import { Button, Field, Input, SectionCard, Select } from "@evcp/ui";
 import type { AiScenarioDto } from "@evcp/api-client";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { useAiGovernance } from "./use-ai-governance";
 import { SCENARIOS } from "./lib/derivations";
@@ -16,8 +17,11 @@ export function ProviderTestPanel({
   const [scenario, setScenario] = useState<AiScenarioDto>("frontend_coding");
   const [prompt, setPrompt] = useState("Return one short readiness sentence.");
   const [result, setResult] = useState<string>();
+  const [isRunning, setIsRunning] = useState(false);
 
   async function run() {
+    setIsRunning(true);
+    setResult(undefined);
     try {
       const r = await ai.testProvider({ scenario, prompt });
       const summary = `${r.status} · ${r.providerName} · ${r.model} · ${r.tokensUsed} tokens · ${r.latencyMs} ms`;
@@ -25,6 +29,8 @@ export function ProviderTestPanel({
       onResult?.(summary);
     } catch (err) {
       setResult(err instanceof Error ? err.message : "Provider test failed.");
+    } finally {
+      setIsRunning(false);
     }
   }
 
@@ -48,11 +54,21 @@ export function ProviderTestPanel({
           <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={disabled} />
         </Field>
         <p className="text-sm text-muted">
-          {result ?? "Records provider, model, status, latency, tokens and audit evidence; never returns the credential."}
+          {isRunning
+            ? "Running governed test call…"
+            : (result ??
+              "Records provider, model, status, latency, tokens and audit evidence; never returns the credential.")}
         </p>
         <div>
-          <Button onClick={() => void run()} disabled={disabled || !prompt.trim()}>
-            Run test call
+          <Button onClick={() => void run()} disabled={disabled || !prompt.trim() || isRunning}>
+            {isRunning ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Running…
+              </>
+            ) : (
+              "Run test call"
+            )}
           </Button>
         </div>
       </div>
