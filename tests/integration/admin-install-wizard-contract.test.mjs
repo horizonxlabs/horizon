@@ -30,17 +30,19 @@ test("admin install wizard is wired to the installer preflight API contract", ()
 
 test("admin install wizard uses EVCP operational UI classes and responsive styling", () => {
   const setupWizard = readFileSync("apps/admin-web/src/setup-wizard.tsx", "utf8");
-  assert.match(setupWizard, /first-run-shell/);
-  assert.match(setupWizard, /first-run-hero/);
-  assert.match(setupWizard, /first-run-layout/);
-  assert.match(setupWizard, /first-run-form/);
-  assert.match(setupWizard, /first-run-action-row/);
-  assert.match(styles, /\.first-run-shell/);
-  assert.match(styles, /\.first-run-hero/);
-  assert.match(styles, /\.first-run-layout/);
-  assert.match(styles, /\.first-run-form/);
-  assert.match(styles, /\.first-run-action-row/);
-  assert.match(styles, /button:disabled/);
+  // Redesigned to reuse the polished login split-shell (creator-auth-*) plus setup-specific
+  // helpers (setup-shell, stepper, field grid, actions) — all defined in the design system.
+  assert.match(setupWizard, /creator-auth-screen/);
+  assert.match(setupWizard, /creator-auth-shell setup-shell/);
+  assert.match(setupWizard, /creator-auth-steps/);
+  assert.match(setupWizard, /creator-auth-grid/);
+  assert.match(setupWizard, /creator-auth-actions/);
+  assert.match(styles, /\.setup-shell/);
+  assert.match(styles, /\.creator-auth-steps/);
+  assert.match(styles, /\.creator-auth-grid/);
+  assert.match(styles, /\.creator-auth-actions/);
+  assert.match(styles, /@media \(min-width: 860px\)/);
+  assert.match(styles, /\.creator-auth-submit:disabled/);
 });
 
 test("admin first-run screen behaves like an initial product setup gate", () => {

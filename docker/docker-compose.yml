@@ -123,7 +123,7 @@ services:
     env_file:
       - path: ../.env
         required: false
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api exec prisma generate --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
+    command: sh -lc "printf 'dev-root-token' > /tmp/openbao-dev-token && corepack enable && pnpm install --frozen-lockfile && pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api exec prisma generate --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && HOST=0.0.0.0 PORT=3100 pnpm --filter @evcp/platform-api dev"
     ports:
       - "${EVCP_API_PORT:-3100}:3100"
     volumes:
@@ -160,6 +160,13 @@ services:
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL}
+      # AI provider secret store — dev-mode OpenBao (see the `openbao` service below).
+      # `server -dev` only auto-mounts the default `secret/` KV v2 engine, so point at it
+      # (production provisions a `platform/` mount separately). The token file is written
+      # into the container by this service's command from the dev root token.
+      VAULT_ADDR: http://openbao:8200
+      VAULT_KV_MOUNT: secret
+      VAULT_TOKEN_FILE: /tmp/openbao-dev-token
     networks:
       - evcp-internal
     depends_on:
@@ -170,6 +177,8 @@ services:
       minio:
         condition: service_healthy
       litellm:
+        condition: service_started
+      openbao:
         condition: service_started
       keycloak:
         condition: service_healthy
@@ -243,6 +252,22 @@ services:
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    networks:
+      - evcp-internal
+
+  # Dev-mode secret store for the AI Providers console. Ephemeral (in-memory), auto-unsealed,
+  # fixed root token — dev only. The production/persistent OpenBao lives in
+  # docker/docker-compose.openbao.yml (manual init + unseal), used by the release stack.
+  openbao:
+    image: openbao/openbao:2.3.1
+    container_name: evcp-openbao
+    restart: unless-stopped
+    command: server -dev
+    cap_add:
+      - IPC_LOCK
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: dev-root-token
+      BAO_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     networks:
       - evcp-internal
 

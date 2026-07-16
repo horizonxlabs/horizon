@@ -179,7 +179,7 @@ test("Sprint 2 Admin UI exposes governance screens without plaintext secrets", (
     "Approved endpoints",
     "Stored credentials",
     "Recent guardrail events",
-    "Provider secrets are sent only to Platform API",
+    "the plaintext key never leaves this form",
     "createProvider",
     "saveApiKey",
     "configureRoute",
@@ -248,8 +248,10 @@ test("Admin clears derived governance state after a failed read or session trans
 
 test("Dashboard governance shows unavailable guidance instead of provider-test placeholders", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
-  assert.match(source, /DecisionPanel tone=\{disabled \? "warning" : "success"\}/);
-  assert.match(source, /badge=\{ai\.availability\} title=\{message \?\? ai\.message\}/);
+  // Governance consoles surface an availability-gated warning (real unavailable
+  // guidance from Platform API), hidden on success — never demo placeholder data.
+  assert.match(source, /tone="warning" badge=\{ai\.availability\} title=\{ai\.message\}/);
+  assert.match(source, /Data is never replaced with demo values/);
 });
 
 test("Admin hides local route and rule rows until governance is ready", () => {

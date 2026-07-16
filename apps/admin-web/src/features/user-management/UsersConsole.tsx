@@ -42,16 +42,9 @@ export function UsersConsole({ client }: { client: PlatformApiClient }) {
           title={users.error}
           lines={["Try the action again or review Keycloak connectivity."]}
         />
-      ) : users.message ? (
-        <DecisionPanel
-          tone="success"
-          badge="complete"
-          title={users.message}
-          lines={["No password is displayed after submission."]}
-        />
       ) : null}
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <section className="ds-metric-grid">
         <MetricCard label="Total" value={String(counts.total)} detail="Keycloak identities on this page" tone="neutral" />
         <MetricCard label="Admins" value={String(counts.admin)} detail="evcp-admins group" tone="info" />
         <MetricCard label="Creators" value={String(counts.creator)} detail="default builder role" tone="success" />

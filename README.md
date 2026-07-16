@@ -60,19 +60,45 @@ flowchart LR
 
 ### Local development
 
+The whole stack runs in containers from a single Compose file — Postgres, Redis, MinIO,
+Keycloak, LiteLLM, OpenBao (dev-mode secret store), the Platform API, all three frontends,
+and the Caddy reverse proxy. First create your local environment file and set real secrets
+(the file is gitignored, so it is never present on a fresh clone; `preflight` rejects the
+`.env.example` placeholders):
+
 ```bash
-pnpm install
-pnpm dev
+cp .env.example .env        # then replace every example secret (min 24 chars each)
 ```
 
-Run a single surface or the API when needed:
+Then start everything with one command:
 
 ```bash
-pnpm dev:admin
-pnpm dev:creator
-pnpm dev:store
-pnpm dev:api
+pnpm dev:setup              # docker compose up -d, waits for readiness, prints URLs
+# equivalently:
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 ```
+
+On the first run this takes ~90s: the Platform API container installs dependencies, applies
+Prisma migrations, generates the client, and seeds the database, while Keycloak imports its
+realm and bootstraps its clients. No extra commands are needed. Once it is up:
+
+| Surface | URL |
+| --- | --- |
+| App (via Caddy) | http://localhost:8080 — `/admin` · `/creator` · `/store` · `/api` |
+| Platform API | http://localhost:3100 |
+| Keycloak | http://localhost:8081/auth |
+| MinIO console | http://localhost:9001 |
+
+Open http://localhost:8080/admin — a fresh database lands on the first-run setup wizard to
+create the organization and first administrator. Source is bind-mounted, so edits hot-reload
+in the running containers. Stop the stack with:
+
+```bash
+docker compose -f docker/docker-compose.yml down       # add -v to also wipe data volumes
+```
+
+`pnpm install` is still needed on the host to run the quality gate (`pnpm check`), lint,
+typecheck, and tests locally.
 
 ### Private-server installation
 

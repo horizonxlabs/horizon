@@ -6370,7 +6370,9 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr;
   max-width: 424px;
-  overflow: hidden;
+  /* Not `overflow: hidden`: that would clip an open <Select> menu (position:absolute)
+     inside the form back into the card. The brand panel rounds its own left corners
+     (below) so the card still reads as one rounded shell. */
   width: 100%;
 }
 
@@ -6395,6 +6397,9 @@ button:disabled {
       auto,
       18px 18px,
       auto;
+    /* Left corners rounded to the shell's inner radius (22px shell - 1px border) so the
+       blue panel stays clipped to the card now that the shell no longer sets overflow. */
+    border-radius: 21px 0 0 21px;
     color: #fff;
     display: flex;
     flex-direction: column;
@@ -6653,6 +6658,157 @@ button:disabled {
   .creator-auth-submit:active:not(:disabled) {
     transform: none;
   }
+}
+
+/* --- First-time setup: reuses the creator-auth split-shell, adds a stepper, a
+   two-column field grid, and a secondary button so the multi-field wizard keeps
+   the polished login aesthetic. --- */
+.setup-shell {
+  max-width: 424px;
+}
+
+@media (min-width: 860px) {
+  .setup-shell {
+    grid-template-columns: 1fr 1.2fr;
+    max-width: 960px;
+  }
+
+  /* Keep the two-column setup card a constant height across steps. Step 1 (org details)
+     is the taller step, so reserve its height on the form and let the actions row absorb
+     the slack at the bottom — advancing to Step 2 (admin account) no longer shrinks the
+     card. Scoped to the desktop split-shell; the reflowed narrow layout sizes to content. */
+  .setup-shell .creator-auth-form {
+    min-height: 673px;
+  }
+
+  .setup-shell .creator-auth-actions {
+    margin-top: auto;
+  }
+}
+
+.creator-auth-steps {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.creator-auth-step {
+  align-items: flex-start;
+  background: var(--evcp-color-surface, #fff);
+  border: 1px solid var(--evcp-color-border, #e2e8f0);
+  border-radius: 12px;
+  color: var(--evcp-color-muted, #64748b);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 11px 14px;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.creator-auth-step-index {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.creator-auth-step strong {
+  color: var(--evcp-color-text, #0f172a);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.creator-auth-step small {
+  font-size: 11.5px;
+}
+
+.creator-auth-step.is-current {
+  background: var(--evcp-color-primary-soft, #eff6ff);
+  border-color: var(--evcp-color-primary, #2563eb);
+}
+
+.creator-auth-step.is-done {
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.creator-auth-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 560px) {
+  .creator-auth-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.creator-auth-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.creator-auth-actions .creator-auth-submit {
+  margin-top: 0;
+}
+
+.creator-auth-secondary {
+  align-items: center;
+  background: var(--evcp-color-surface, #fff);
+  border: 1px solid var(--evcp-color-border, #e2e8f0);
+  border-radius: 10px;
+  color: var(--evcp-color-text, #0f172a);
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  font-weight: 620;
+  gap: 6px;
+  padding: 12px 16px;
+  transition: background 150ms ease;
+}
+
+.creator-auth-secondary:hover {
+  background: var(--evcp-color-surface-muted, #f8fafc);
+}
+
+/* Match the @evcp/ui Select trigger (default h-10 / rounded-control) to the taller
+   creator-auth-field so text inputs and dropdowns are the same height/radius/border
+   on the auth + setup split-shell. Scoped to the trigger button via [aria-expanded]. */
+.creator-auth-label button[aria-expanded] {
+  border-color: var(--evcp-color-muted, #64748b);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  height: auto;
+  min-height: 48px;
+  padding-left: 13px;
+  padding-right: 13px;
+}
+
+.creator-auth-label button[aria-expanded]:focus,
+.creator-auth-label button[aria-expanded]:focus-visible {
+  border-color: var(--evcp-color-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+/* The Select renders *inside* .creator-auth-label, whose uppercase/tracked/650-weight
+   typography is intended only for the tiny field-label text. Form controls (the trigger
+   button) get UA `text-transform: none`, but the listbox <li> options inherit uppercase,
+   and the trigger value reads heavier than the sibling <input>. Neutralise the leak so
+   the dropdown value and its options read like body text, matching the input fields. */
+.creator-auth-label [role="combobox"] > span {
+  font-weight: 650;
+}
+.creator-auth-label [role="listbox"],
+.creator-auth-label [role="option"] {
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 /* --- Workspace Code tab: file browser + source viewer --- */

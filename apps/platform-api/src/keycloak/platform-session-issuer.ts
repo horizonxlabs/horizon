@@ -14,6 +14,13 @@ type KeycloakPlatformSession = PlatformAuthSession & {
 declare module "../platform-services" {
   interface PlatformAuthSsoService {
     issueKeycloakSession(claims: PlatformAuthClaims): PlatformAuthSession;
+    /**
+     * Dual-writes the Keycloak identity into the shared in-memory IdentityService so the
+     * synchronous admin-ops routes (which resolve users via `MockAuthService.resolveCurrentUser`)
+     * recognise a persistence-mode session. Without this, those routes throw "Unknown mock user"
+     * for Keycloak logins because the persistence issuer never touches the mock identity store.
+     */
+    provisionKeycloakIdentity(claims: PlatformAuthClaims): PlatformUser;
   }
 }
 
@@ -35,6 +42,13 @@ PlatformAuthSsoService.prototype.issueKeycloakSession = function issueKeycloakSe
   });
 };
 
+PlatformAuthSsoService.prototype.provisionKeycloakIdentity = function provisionKeycloakIdentity(claims) {
+  // `identity` is a private field of PlatformAuthSsoService; this prototype augmentation lives
+  // outside the class body, so reach it through a structural cast rather than `this.identity`.
+  const identity = (this as unknown as { identity: { provisionSsoUser(input: { email: string; name: string; platformRoles: PlatformRole[] }): PlatformUser } }).identity;
+  return identity.provisionSsoUser({ email: claims.email, name: claims.name, platformRoles: claims.platformRoles });
+};
+
 export function createKeycloakSessionIssuer(input: {
   authSso: PlatformAuthSsoService;
   corePersistenceClient?: CorePersistenceClient;
@@ -43,6 +57,10 @@ export function createKeycloakSessionIssuer(input: {
   return async (claims) => {
     const role = claims.platformRoles[0] as PlatformRole | undefined;
     if (!role) throw new Error("unmapped_keycloak_group");
+    // Dual-write into the in-memory identity so the synchronous admin-ops routes recognise this
+    // Keycloak session (see provisionKeycloakIdentity). In-memory only, so it is re-established on
+    // each login; the persistence projection above remains the source of truth.
+    input.authSso.provisionKeycloakIdentity(claims);
     if (input.corePersistenceClient) {
       await upsertKeycloakUserProjection(input.corePersistenceClient, {
         subject: claims.subject, email: claims.email, name: claims.name, role

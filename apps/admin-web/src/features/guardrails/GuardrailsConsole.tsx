@@ -6,7 +6,6 @@ import { GuardrailRuleDrawer } from "./GuardrailRuleDrawer";
 export function GuardrailsConsole({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
   const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState<string>();
 
   return (
     <section className="flex flex-col gap-6">
@@ -14,15 +13,17 @@ export function GuardrailsConsole({ ai }: { ai: ReturnType<typeof useAiGovernanc
       <div className="flex justify-end">
         <Button disabled={disabled} onClick={() => setOpen(true)}>+ Add rule</Button>
       </div>
-      <DecisionPanel tone={disabled ? "warning" : "success"} badge={ai.availability} title={message ?? ai.message}
-        lines={["Guardrail rules are evaluated on every governed provider call."]} />
+      {disabled ? (
+        <DecisionPanel tone="warning" badge={ai.availability} title={ai.message}
+          lines={["Guardrails are unavailable; connect to Platform API to manage rules. Data is never replaced with demo values."]} />
+      ) : null}
       <SectionCard eyebrow="Evidence" title="Recent guardrail events">
         <DataTable
           columns={[{ key: "id", label: "Event" }, { key: "decision", label: "Decision" }, { key: "scenario", label: "Scenario" }, { key: "occurredAt", label: "Time" }]}
           rows={ai.guardrailEvents}
         />
       </SectionCard>
-      <GuardrailRuleDrawer open={open} onClose={() => setOpen(false)} ai={ai} onDone={setMessage} />
+      <GuardrailRuleDrawer open={open} onClose={() => setOpen(false)} ai={ai} />
     </section>
   );
 }

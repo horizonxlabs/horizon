@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx watch --env-file ../../.env.dev src/main.ts",
+    "dev": "tsx watch --env-file-if-exists ../../.env src/main.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "seed": "prisma generate --schema prisma/schema.prisma && tsx prisma/seed.ts",

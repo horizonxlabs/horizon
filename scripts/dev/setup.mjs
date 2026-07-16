@@ -1,30 +1,23 @@
 #!/usr/bin/env node
-// Idempotent dev bootstrap: start all services, migrate DB, seed, wait for Keycloak.
+// Idempotent dev bootstrap: bring up the full containerized stack from
+// docker/docker-compose.yml with one command. Prisma migrate/generate/seed run inside
+// the platform-api container on start, so this script only starts the stack and waits
+// for the slow services (Keycloak, platform-api) to become reachable.
 // Run once after clone, safe to re-run.
-import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-function loadEnvFile(path) {
-  const env = {};
-  try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
-      const t = line.trim();
-      if (!t || t.startsWith("#")) continue;
-      const eq = t.indexOf("=");
-      if (eq === -1) continue;
-      env[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-    }
-  } catch {}
-  return env;
-}
-
 function dockerInspect(name, format) {
   const r = spawnSync("docker", ["inspect", `--format=${format}`, name]);
   return r.status === 0 ? r.stdout.toString().trim() : null;
+}
+
+function httpOk(url) {
+  const r = spawnSync("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", url]);
+  return r.status === 0 && /^[23]\d\d$/.test(r.stdout.toString().trim());
 }
 
 async function waitFor(label, checkFn, timeoutMs = 60_000) {
@@ -39,55 +32,45 @@ async function waitFor(label, checkFn, timeoutMs = 60_000) {
   throw new Error(`${label} did not become ready within ${timeoutMs / 1000}s`);
 }
 
-const env = { ...process.env, ...loadEnvFile(resolve(root, ".env.dev")) };
+// ── 1. Start the whole stack ─────────────────────────────────────────────────
+console.log("Starting full dev stack (docker/docker-compose.yml)...");
+execSync("docker compose --env-file .env -f docker/docker-compose.yml up -d", {
+  cwd: root,
+  stdio: "inherit"
+});
 
-// ── 1. Start all dev services ────────────────────────────────────────────────
-console.log("Starting dev services...");
-execSync("docker compose -f docker/docker-compose.dev.yml up -d", { cwd: root, stdio: "inherit" });
-
-// ── 2. Wait for postgres ─────────────────────────────────────────────────────
-await waitFor("postgres", () => {
-  const r = spawnSync("docker", ["exec", "evcp-dev-postgres", "pg_isready", "-U", "evcp", "-d", "evcp"]);
-  return r.status === 0;
-}, 60_000);
-
-// ── 3. Create litellm database (idempotent) ──────────────────────────────────
-spawnSync("docker", ["exec", "evcp-dev-postgres", "psql", "-U", "evcp", "-c", "CREATE DATABASE litellm;"], { cwd: root });
-
-// ── 4. Migrate and seed ──────────────────────────────────────────────────────
-console.log("Running migrations...");
-execSync(
-  "pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma",
-  { cwd: root, stdio: "inherit", env }
+// ── 2. Wait for Keycloak (~60-90 s on first run) ─────────────────────────────
+await waitFor(
+  "Keycloak (may take ~90 s on first run)",
+  () => dockerInspect("evcp-keycloak", "{{.State.Health.Status}}") === "healthy",
+  180_000
 );
-console.log("Seeding database...");
-execSync("pnpm --filter @evcp/platform-api seed", { cwd: root, stdio: "inherit", env });
 
-// ── 5. Wait for Keycloak (~60-90 s on first run) ─────────────────────────────
-await waitFor("Keycloak (may take ~90 s on first run)", () => {
-  const status = dockerInspect("evcp-dev-keycloak", "{{.State.Health.Status}}");
-  return status === "healthy";
-}, 180_000);
+// ── 3. Wait for keycloak-bootstrap to complete ────────────────────────────────
+await waitFor(
+  "Keycloak client bootstrap",
+  () => dockerInspect("evcp-keycloak-bootstrap", "{{.State.Status}}") === "exited",
+  60_000
+);
 
-// ── 6. Wait for keycloak-bootstrap to complete ────────────────────────────────
-await waitFor("Keycloak client bootstrap", () => {
-  const status = dockerInspect("evcp-dev-keycloak-bootstrap", "{{.State.Status}}");
-  return status === "exited";
-}, 60_000);
-
-const bsExit = dockerInspect("evcp-dev-keycloak-bootstrap", "{{.State.ExitCode}}");
+const bsExit = dockerInspect("evcp-keycloak-bootstrap", "{{.State.ExitCode}}");
 if (bsExit !== "0") {
   throw new Error(
-    `keycloak-bootstrap exited with code ${bsExit}. Check logs: docker logs evcp-dev-keycloak-bootstrap`
+    `keycloak-bootstrap exited with code ${bsExit}. Check logs: docker logs evcp-keycloak-bootstrap`
   );
 }
 
+// ── 4. Wait for platform-api (installs deps + migrates + seeds in-container) ──
+await waitFor(
+  "platform-api (installs deps, migrates & seeds on first run)",
+  () => httpOk("http://localhost:3100/health") || httpOk("http://localhost:3100"),
+  300_000
+);
+
 // ── Done ──────────────────────────────────────────────────────────────────────
-console.log("\n✓ Dev setup complete — run `pnpm dev` to start everything with hot reload.");
-console.log("  Admin:    http://localhost:4100");
-console.log("  Creator:  http://localhost:4101");
-console.log("  Store:    http://localhost:4102");
-console.log("  API:      http://localhost:3100");
-console.log("  Keycloak: http://localhost:8081/auth  (admin / devkeycloakpassword)");
-console.log("  MinIO:    http://localhost:9001        (evcpminio / devminiopassword)");
-console.log("  LiteLLM:  http://localhost:4000");
+console.log("\n✓ Dev stack up — everything runs in containers with hot reload.");
+console.log("  App (via Caddy): http://localhost:8080  (/admin · /creator · /store · /api)");
+console.log("  API:             http://localhost:3100");
+console.log("  Keycloak:        http://localhost:8081/auth  (admin / see KEYCLOAK_ADMIN_PASSWORD)");
+console.log("  MinIO console:   http://localhost:9001");
+console.log("\n  Stop: docker compose -f docker/docker-compose.yml down");

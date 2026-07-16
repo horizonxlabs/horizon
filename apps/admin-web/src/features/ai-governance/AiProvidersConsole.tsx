@@ -65,7 +65,6 @@ type TabId = "providers" | "credentials" | "routing" | "quota" | "test" | "usage
 
 export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
-  const [message, setMessage] = useState<string>();
   const [lastTest, setLastTest] = useState<string>();
   const [providerOpen, setProviderOpen] = useState(false);
   const [editProvider, setEditProvider] = useState<AiProviderDto | undefined>();
@@ -79,7 +78,6 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
 
   const routedByProvider = routedScenariosByProvider(ai.routes);
   const counts = summaryCounts(ai.providers, ai.apiKeys, ai.routes);
-  const done = (msg: string) => setMessage(msg);
 
   return (
     <section className="flex flex-col gap-6">
@@ -89,14 +87,16 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
         description="Govern which models power generation and how each scenario is routed."
       />
 
-      <DecisionPanel
-        tone={disabled ? "warning" : "success"}
-        badge={ai.availability}
-        title={message ?? ai.message}
-        lines={["Provider secrets are sent only to Platform API and stored by the configured OpenBao-compatible secret store."]}
-      />
+      {disabled ? (
+        <DecisionPanel
+          tone="warning"
+          badge={ai.availability}
+          title={ai.message}
+          lines={["AI governance is unavailable; connect to Platform API to manage providers. Data is never replaced with demo values."]}
+        />
+      ) : null}
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <section className="ds-metric-grid">
         <MetricCard label="Providers" value={String(counts.providers)} detail="registered endpoints" tone="success" />
         <MetricCard label="Active credentials" value={String(counts.activeCredentials)} detail="masked values only" tone="success" />
         <MetricCard label="Scenarios routed" value={`${counts.routed} / 6`} detail="of 6 generation scenarios" tone="success" />
@@ -232,12 +232,11 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
         open={providerOpen}
         onClose={() => { setProviderOpen(false); setEditProvider(undefined); }}
         ai={ai}
-        onDone={done}
         editProvider={editProvider}
       />
-      <CredentialDrawer open={credentialOpen} onClose={() => setCredentialOpen(false)} ai={ai} providerId={credentialProvider} onDone={done} />
-      <RouteDrawer open={routeOpen} onClose={() => setRouteOpen(false)} ai={ai} scenario={routeScenario} onDone={done} />
-      <QuotaDrawer open={quotaOpen} onClose={() => setQuotaOpen(false)} ai={ai} scope={quotaScope} onDone={done} />
+      <CredentialDrawer open={credentialOpen} onClose={() => setCredentialOpen(false)} ai={ai} providerId={credentialProvider} />
+      <RouteDrawer open={routeOpen} onClose={() => setRouteOpen(false)} ai={ai} scenario={routeScenario} />
+      <QuotaDrawer open={quotaOpen} onClose={() => setQuotaOpen(false)} ai={ai} scope={quotaScope} />
     </section>
   );
 }

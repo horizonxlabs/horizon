@@ -196,7 +196,14 @@ export function Select({
                   if (!item.disabled) setActiveIndex(index);
                 }}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => commit(index)}
+                // preventDefault stops the enclosing <label> (when a caller wraps this
+                // Select in one) from re-firing a synthetic click on its associated
+                // control — the trigger button — which would immediately re-open the
+                // menu we just closed. Without it, selecting an option never sticks.
+                onClick={(event) => {
+                  event.preventDefault();
+                  commit(index);
+                }}
                 className={cn(
                   "flex cursor-pointer items-center px-3 py-2 text-sm text-body",
                   isActive && "bg-surface-muted",
