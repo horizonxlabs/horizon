@@ -11,6 +11,7 @@ export { Select, type SelectProps } from "./primitives/select";
 export { Table, THead, TRow, TCell } from "./primitives/table";
 export { MetricCard } from "./primitives/metric-card";
 export { PageHeader } from "./primitives/page-header";
+export { Tabs, type TabItem } from "./primitives/tabs";
 export { KitchenSink } from "./kitchen-sink";
 export { cn } from "./cn";
 export { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps };

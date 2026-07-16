@@ -58,7 +58,9 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
     if (!providersHtml.includes("AI Providers")) throw new Error("AiProvidersConsole did not render its title");
     if (!guardrailsHtml.includes("Guardrails")) throw new Error("GuardrailsConsole did not render its title");
     if (!providersHtml.includes("Disable")) throw new Error("AiProvidersConsole did not render a provider Disable control");
-    if ((providersHtml.match(/Delete/g) ?? []).length < 2) throw new Error("AiProvidersConsole did not render provider + credential Delete controls");
+    if ((providersHtml.match(/Delete/g) ?? []).length < 1) throw new Error("AiProvidersConsole did not render a provider Delete control");
+    if (!providersHtml.includes("Routing")) throw new Error("AiProvidersConsole did not render the Routing tab label");
+    if (!providersHtml.includes("Quota")) throw new Error("AiProvidersConsole did not render the Quota tab label");
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
@@ -66,6 +68,12 @@ test("AiProvidersConsole and GuardrailsConsole render distinct content with a st
       stdio: "pipe"
     })
   );
+});
+
+test("AiProvidersConsole uses the Tabs primitive with tab state", async () => {
+  const source = await readFile("apps/admin-web/src/features/ai-governance/AiProvidersConsole.tsx", "utf8");
+  assert.match(source, /import\s*\{[^}]*\bTabs\b[^}]*\}\s*from\s*"@evcp\/ui"/);
+  assert.match(source, /useState<TabId>/);
 });
 
 test("ProviderCard wires status badge, enable/disable, and delete handlers", async () => {

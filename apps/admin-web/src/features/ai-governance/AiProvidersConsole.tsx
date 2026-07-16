@@ -1,4 +1,4 @@
-import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard } from "@evcp/ui";
+import { Badge, Button, DecisionPanel, MetricCard, PageHeader, SectionCard, Tabs } from "@evcp/ui";
 import type { AiApiKeyDto, AiQuotaDto, AiScenarioDto } from "@evcp/api-client";
 import { useState } from "react";
 import type { useAiGovernance } from "./use-ai-governance";
@@ -61,6 +61,8 @@ function CredentialRow({
   );
 }
 
+type TabId = "providers" | "credentials" | "routing" | "quota" | "test";
+
 export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernance> }) {
   const disabled = !canMutateAiGovernance(ai.availability);
   const [message, setMessage] = useState<string>();
@@ -72,6 +74,7 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
   const [routeOpen, setRouteOpen] = useState(false);
   const [quotaScope, setQuotaScope] = useState<AiQuotaDto["scope"] | undefined>();
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [tab, setTab] = useState<TabId>("providers");
 
   const routedByProvider = routedScenariosByProvider(ai.routes);
   const counts = summaryCounts(ai.providers, ai.apiKeys, ai.routes);
@@ -84,9 +87,6 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
         title="AI Providers"
         description="Govern which models power generation and how each scenario is routed."
       />
-      <div className="flex justify-end">
-        <Button disabled={disabled} onClick={() => setProviderOpen(true)}>+ Add provider</Button>
-      </div>
 
       <DecisionPanel
         tone={disabled ? "warning" : "success"}
@@ -102,50 +102,77 @@ export function AiProvidersConsole({ ai }: { ai: ReturnType<typeof useAiGovernan
         <MetricCard label="Last test" value={lastTest ? "ok" : "—"} detail={lastTest ?? "no test this session"} tone="success" />
       </section>
 
-      <SectionCard eyebrow="Providers" title="Approved endpoints">
-        {ai.providers.length === 0 ? (
-          <p className="text-sm text-muted">No providers yet — add your first approved endpoint.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {ai.providers.map((provider) => (
-              <ProviderCard
-                key={provider.id}
-                provider={provider}
-                credentials={ai.apiKeys.filter((k) => k.providerId === provider.id)}
-                routedScenarios={routedByProvider[provider.id] ?? []}
-                onAddCredential={(id) => { setCredentialProvider(id); setCredentialOpen(true); }}
-                onSetStatus={ai.setProviderStatus}
-                onDelete={ai.removeProvider}
-              />
-            ))}
+      <Tabs
+        items={[
+          { id: "providers", label: "Providers" },
+          { id: "credentials", label: "Credentials" },
+          { id: "routing", label: "Routing" },
+          { id: "quota", label: "Quota" },
+          { id: "test", label: "Test" }
+        ]}
+        active={tab}
+        onSelect={setTab}
+        aria-label="AI governance sections"
+      />
+
+      {tab === "providers" && (
+        <>
+          <div className="flex justify-end">
+            <Button disabled={disabled} onClick={() => setProviderOpen(true)}>+ Add provider</Button>
           </div>
-        )}
-      </SectionCard>
 
-      <RoutingMatrix routes={ai.routes} providers={ai.providers} disabled={disabled}
-        onConfigure={(scenario) => { setRouteScenario(scenario); setRouteOpen(true); }} />
+          <SectionCard eyebrow="Providers" title="Approved endpoints">
+            {ai.providers.length === 0 ? (
+              <p className="text-sm text-muted">No providers yet — add your first approved endpoint.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {ai.providers.map((provider) => (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    credentials={ai.apiKeys.filter((k) => k.providerId === provider.id)}
+                    routedScenarios={routedByProvider[provider.id] ?? []}
+                    onAddCredential={(id) => { setCredentialProvider(id); setCredentialOpen(true); }}
+                    onSetStatus={ai.setProviderStatus}
+                    onDelete={ai.removeProvider}
+                  />
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </>
+      )}
 
-      <QuotaPanel quotas={ai.quotas} disabled={disabled}
-        onEdit={(scope) => { setQuotaScope(scope); setQuotaOpen(true); }} />
+      {tab === "credentials" && (
+        <SectionCard eyebrow="Records" title="Stored credentials">
+          {ai.apiKeys.length === 0 ? (
+            <p className="text-sm text-muted">No credentials yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {ai.apiKeys.map((credential) => (
+                <CredentialRow
+                  key={credential.id}
+                  credential={credential}
+                  onSetStatus={ai.setCredentialStatus}
+                  onDelete={ai.removeCredential}
+                />
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      )}
 
-      <ProviderTestPanel ai={ai} disabled={disabled} onResult={setLastTest} />
+      {tab === "routing" && (
+        <RoutingMatrix routes={ai.routes} providers={ai.providers} disabled={disabled}
+          onConfigure={(scenario) => { setRouteScenario(scenario); setRouteOpen(true); }} />
+      )}
 
-      <SectionCard eyebrow="Records" title="Stored credentials">
-        {ai.apiKeys.length === 0 ? (
-          <p className="text-sm text-muted">No credentials yet.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {ai.apiKeys.map((credential) => (
-              <CredentialRow
-                key={credential.id}
-                credential={credential}
-                onSetStatus={ai.setCredentialStatus}
-                onDelete={ai.removeCredential}
-              />
-            ))}
-          </ul>
-        )}
-      </SectionCard>
+      {tab === "quota" && (
+        <QuotaPanel quotas={ai.quotas} disabled={disabled}
+          onEdit={(scope) => { setQuotaScope(scope); setQuotaOpen(true); }} />
+      )}
+
+      {tab === "test" && <ProviderTestPanel ai={ai} disabled={disabled} onResult={setLastTest} />}
 
       <ProviderDrawer open={providerOpen} onClose={() => setProviderOpen(false)} ai={ai} onDone={done} />
       <CredentialDrawer open={credentialOpen} onClose={() => setCredentialOpen(false)} ai={ai} providerId={credentialProvider} onDone={done} />
