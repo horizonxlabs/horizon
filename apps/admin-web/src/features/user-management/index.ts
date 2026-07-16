@@ -1,3 +1,3 @@
 export { buildCreateUserPayload, generateTempPassword } from "./creation";
-export { KeycloakUserManagement } from "./KeycloakUserManagement";
+export { UsersConsole } from "./UsersConsole";
 export type { CreateUserForm } from "./creation";

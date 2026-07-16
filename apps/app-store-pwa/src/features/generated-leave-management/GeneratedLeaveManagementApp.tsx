@@ -1,6 +1,6 @@
 import { ArrowLeft, CalendarCheck2, CheckCircle2, Clock3, Plus, UserCheck } from "lucide-react";
 import { useState } from "react";
-import { SectionCard, ToneBadge } from "@evcp/ui";
+import { SectionCard, Select, ToneBadge } from "@evcp/ui";
 
 type LeaveRequest = {
   id: string;
@@ -103,12 +103,12 @@ export function GeneratedLeaveManagementApp() {
           <div className="generated-request-form">
             <label>
               Leave type
-              <select value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
+              <Select value={leaveType} onChange={(event) => setLeaveType(event.target.value)}>
                 <option>Annual Leave</option>
                 <option>Sick Leave</option>
                 <option>WFH</option>
                 <option>Business Trip</option>
-              </select>
+              </Select>
             </label>
             <label>
               Start date

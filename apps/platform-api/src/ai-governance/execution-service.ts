@@ -51,6 +51,7 @@ export type GovernedAiExecutionInput = {
 export interface AiExecutionStore {
   findByRequestId(requestId: string): Promise<GovernedAiExecutionResult | undefined>;
   save(result: GovernedAiExecutionResult): Promise<GovernedAiExecutionResult>;
+  listRecent(limit: number): Promise<AiExecutionEvidence[]>;
 }
 
 export class MemoryAiExecutionStore implements AiExecutionStore {
@@ -66,6 +67,13 @@ export class MemoryAiExecutionStore implements AiExecutionStore {
     this.rows.set(result.evidence.requestId, result);
     return result;
   }
+
+  async listRecent(limit: number): Promise<AiExecutionEvidence[]> {
+    return [...this.rows.values()]
+      .map((result) => result.evidence)
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .slice(0, limit);
+  }
 }
 
 export type GovernedAiExecutorDependencies = {
@@ -80,6 +88,10 @@ export type GovernedAiExecutorDependencies = {
 
 export class GovernedAiExecutor {
   constructor(private readonly dependencies: GovernedAiExecutorDependencies) {}
+
+  async listRecentEvidence(limit = 50): Promise<AiExecutionEvidence[]> {
+    return this.dependencies.store.listRecent(limit);
+  }
 
   async execute(actor: PlatformUser, input: GovernedAiExecutionInput): Promise<GovernedAiExecutionResult> {
     const prior = await this.dependencies.store.findByRequestId(input.requestId);

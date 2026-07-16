@@ -15,14 +15,29 @@ test("browser applications start Keycloak login and do not retain simulated SSO 
 });
 
 test("admin user page exposes Keycloak lifecycle actions", async () => {
-  const source = await readFile(
-    "apps/admin-web/src/features/user-management/KeycloakUserManagement.tsx",
+  const hookSource = await readFile(
+    "apps/admin-web/src/features/user-management/use-keycloak-users.ts",
     "utf8"
   );
-  for (const label of ["Create user", "Edit", "Disable", "Enable", "Reset password", "Role", "Next page"])
-    assert.match(source, new RegExp(label));
-  assert.match(source, /keycloak\.list\(\{ first: page \* pageSize, max: pageSize \}\)/);
-  assert.match(source, /result\.meta\.total/);
+  const [consoleSource, addDrawerSource, manageDrawerSource] = await Promise.all([
+    readFile("apps/admin-web/src/features/user-management/UsersConsole.tsx", "utf8"),
+    readFile("apps/admin-web/src/features/user-management/AddUserDrawer.tsx", "utf8"),
+    readFile("apps/admin-web/src/features/user-management/ManageUserDrawer.tsx", "utf8")
+  ]);
+  const uiSource = [consoleSource, addDrawerSource, manageDrawerSource].join("\n");
+
+  // Lifecycle actions live in the hook.
+  for (const action of ["createUser", "updateUser", "changeRole", "setEnabled", "resetPassword"])
+    assert.match(hookSource, new RegExp(`\\b${action}\\b`));
+
+  // The redesigned UI wires those hook actions to real controls: creation, editing,
+  // enable/disable, reset password, role change, and pagination.
+  for (const label of ["Add user", "Create user", "Manage", "Save profile", "Disable", "Enable", "Reset password", "Save role", "Next"])
+    assert.match(uiSource, new RegExp(label));
+
+  assert.match(hookSource, /keycloak\.list\(\{ first: page \* pageSize, max: pageSize \}\)/);
+  assert.match(hookSource, /result\.meta/);
+  assert.match(uiSource, /meta\.total/);
 });
 
 test("Creator consumes a Platform session handoff before its auth gate and Store has no mock identity", async () => {

@@ -3,7 +3,6 @@ import { HttpStatus } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
-import type { ApiResult } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
 import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-session-route";
@@ -38,7 +37,8 @@ import { UnavailableAiSecretStore, VaultKvV2AiSecretStore, type AiSecretStore } 
 import { PrismaProjectFileRepository } from "./persistence/project-file-repository";
 import { createMinioProjectFileUploadUrlIssuer, type ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
 import { handlePersistentProjectFilesRoute, isPersistenceProjectFileRoute } from "./persistence/persistent-project-files-route";
-import { handleAiProviderTestCall, handleLegacyAiProviderTestCall } from "./ai-governance/provider-test-route";
+import { handleAiGovernanceRoute, handleInMemoryAiGovernanceRoute } from "./ai-governance/ai-governance-routes";
+import { aiGovernanceHttpRoutes } from "./ai-governance/ai-governance-route-manifest";
 import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
 import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSettingsPersistence, MemoryBusinessSettingsPersistenceClient, type BusinessSettingsRepositoryBackedService } from "./persistence/business-settings-repositories";
 import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
@@ -46,7 +46,9 @@ import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrd
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
 import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
 import { createGeneratedRuntimeRepositoryBackedService, createPrismaGeneratedRuntimePersistence, MemoryGeneratedRuntimePersistenceClient, type GeneratedRuntimeRepositoryBackedService } from "./persistence/generated-runtime-repositories";
-type HeaderBag = Record<string, string | string[] | undefined>;
+import { isNativeAuthRoute, isPersistenceAiGovernanceRoute, isPersistenceCoreRoute, isPersistenceGeneratedRuntimeRoute, isPersistencePrdRoute, isPersistencePublishStoreRoute, isPersistenceWorkspaceRoute } from "./route-predicates";
+import type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
+export type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
@@ -81,126 +83,6 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
-
-export interface PlatformRequest {
-  method: "GET" | "POST";
-  path:
-    | "/health"
-    | "/auth/me"
-    | "/auth/login"
-    | "/auth/change-password"
-    | "/admin/users"
-    | "/projects"
-    | "/audit-logs"
-    | "/audit-logs/filter"
-    | "/admin/monitoring"
-    | "/admin/installer/preflight"
-    | "/admin/installer/setup"
-    | "/admin/installer/reports"
-    | "/setup/status"
-    | "/setup/initialize"
-    | "/admin/business-settings"
-    | "/admin/backup/policies"
-    | "/admin/backup/runs"
-    | "/admin/backup/pitr"
-    | "/admin/backup/restore-drills"
-    | "/admin/backup/overview"
-    | "/admin/production/observability"
-    | "/admin/production/upgrade-checks"
-    | "/admin/production/rollback"
-    | "/admin/production/overview"
-    | "/admin/security/readiness"
-    | "/admin/security/uploads/validate"
-    | "/admin/security/release-checklist"
-    | "/admin/security/redaction/preview"
-    | "/admin/license/install"
-    | "/admin/license/validate"
-    | "/license/enforce"
-    | "/admin/knowledge/sources"
-    | `/admin/knowledge/sources/${string}/versions`
-    | `/admin/knowledge/versions/${string}/approve`
-    | "/admin/knowledge/retrieve"
-    | "/admin/knowledge/retrieval-logs"
-    | "/admin/skills"
-    | `/admin/skills/${string}/versions`
-    | `/admin/skills/${string}/disable`
-    | `/admin/skills/versions/${string}/approve`
-    | "/admin/skills/assignments"
-    | "/admin/skills/resolve"
-    | `/admin/runtime/projects/${string}`
-    | `/admin/runtime/projects/${string}/schema/check`
-    | `/admin/runtime/projects/${string}/health`
-    | `/admin/runtime/projects/${string}/openapi`
-    | `/admin/runtime/projects/${string}/migrations/dry-run`
-    | "/admin/auth/providers"
-    | "/admin/auth/providers/oidc"
-    | "/admin/auth/providers/saml"
-    | "/admin/auth/keycloak-defaults"
-    | "/admin/auth/direct-idp-constraints"
-    | "/admin/auth/simulate-login"
-    | "/admin/auth/generated-app/validate-session"
-    | "/admin/auth/break-glass"
-    | "/admin/policy-templates"
-    | "/admin/policy-templates/evaluate"
-    | "/ai/providers"
-    | "/ai/api-keys"
-    | "/ai/routes"
-    | "/ai/quotas"
-    | "/ai/provider-test-call"
-    | "/guardrails/rules"
-    | "/guardrails/test"
-    | "/guardrails/events"
-    | `/projects/${string}/prd`
-    | `/projects/${string}/prd/generate`
-    | `/projects/${string}/ai-jobs`
-    | `/projects/${string}/ai-jobs/${string}`
-    | `/projects/${string}/prd/baseline`
-    | `/projects/${string}/prd/versions`
-    | `/creator/projects/${string}/prd/changes`
-    | `/creator/projects/${string}/prd/changes/from-ticket`
-    | `/creator/projects/${string}/prd/changes/decision`
-    | `/creator/projects/${string}/files`
-    | `/creator/projects/${string}/files/init`
-    | `/creator/projects/${string}/files/${string}/complete`
-    | `/creator/projects/${string}/domains`
-    | `/creator/projects/${string}/domains/requests`
-    | `/creator/projects/${string}/traceability`
-    | `/admin/domain-requests/${string}/decision`
-    | `/projects/${string}/workspace`
-    | `/projects/${string}/workspace/prompts`
-    | `/projects/${string}/workspace/preview/refresh`
-    | `/projects/${string}/workspace/container`
-    | `/projects/${string}/workspace/container/stop`
-    | `/projects/${string}/workspace/container/wake`
-    | `/projects/${string}/database`
-    | `/projects/${string}/database/sql`
-    | `/projects/${string}/frontend/checkpoints`
-    | `/projects/${string}/frontend/compare`
-    | `/projects/${string}/frontend/restore`
-    | `/projects/${string}/app/users`
-    | `/projects/${string}/app/roles`
-    | `/projects/${string}/app/invitations`
-    | `/projects/${string}/app/access-requests`
-    | `/projects/${string}/app/access-requests/decision`
-    | `/projects/${string}/publish/review`
-    | `/projects/${string}/publish`
-    | "/app-store/registry"
-    | "/store/apps"
-    | `/store/apps/${string}`
-    | `/store/apps/${string}/install`
-    | `/store/apps/${string}/uninstall`
-    | `/store/apps/${string}/access-requests`
-    | `/store/apps/${string}/tickets`
-    | `/store/tickets/${string}`
-    | `/creator/projects/${string}/tickets`;
-  headers?: HeaderBag;
-  body?: Record<string, unknown>;
-}
-
-export interface PlatformResponse<T = unknown> {
-  status: number;
-  body: ApiResult<T>;
-}
 
 export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CorePersistenceMode {
   const mode = (env.EVCP_CORE_PERSISTENCE ?? "legacy").trim().toLowerCase();
@@ -499,34 +381,6 @@ function buildPersistencePrdPrompt(project: PlatformProject): string {
   return [`Create a PRD for ${project.name}.`, `Problem: ${project.businessProblem}`, `App type: ${project.appType}`, `Department: ${project.targetDepartment}`, `Users: ${project.intendedUsers.join(", ")}`, `Sensitivity: ${project.dataSensitivity}`].join("\n");
 }
 
-function isPersistenceCoreRoute(request: PlatformRequest): boolean {
-  return request.path === "/auth/me" || request.path === "/projects" || request.path === "/audit-logs" || request.path === "/audit-logs/filter";
-}
-
-function isNativeAuthRoute(request: PlatformRequest): boolean {
-  return request.path === "/admin/users" || request.path === "/auth/login" || request.path === "/auth/change-password";
-}
-
-function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
-  return request.path === "/ai/providers" || request.path === "/ai/api-keys" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
-}
-
-function isPersistencePrdRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/prd\/generate$/.test(request.path) || /^\/projects\/[^/]+\/prd\/baseline$/.test(request.path) || /^\/projects\/[^/]+\/prd\/versions$/.test(request.path) || /^\/projects\/[^/]+\/prd$/.test(request.path);
-}
-
-function isPersistenceWorkspaceRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/workspace$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/prompts$/.test(request.path) || /^\/projects\/[^/]+\/workspace\/preview\/refresh$/.test(request.path);
-}
-
-function isPersistencePublishStoreRoute(request: PlatformRequest): boolean {
-  return /^\/projects\/[^/]+\/app\/users$/.test(request.path) || /^\/projects\/[^/]+\/app\/roles$/.test(request.path) || /^\/projects\/[^/]+\/app\/invitations$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests$/.test(request.path) || /^\/projects\/[^/]+\/app\/access-requests\/decision$/.test(request.path) || /^\/projects\/[^/]+\/publish\/review$/.test(request.path) || /^\/projects\/[^/]+\/publish$/.test(request.path) || request.path === "/app-store/registry" || request.path === "/store/apps" || /^\/store\/apps\/[^/]+$/.test(request.path) || /^\/store\/apps\/[^/]+\/install$/.test(request.path) || /^\/store\/apps\/[^/]+\/uninstall$/.test(request.path) || /^\/store\/apps\/[^/]+\/access-requests$/.test(request.path) || /^\/store\/apps\/[^/]+\/tickets$/.test(request.path) || /^\/store\/tickets\/[^/]+$/.test(request.path) || /^\/creator\/projects\/[^/]+\/tickets$/.test(request.path);
-}
-
-function isPersistenceGeneratedRuntimeRoute(request: PlatformRequest): boolean {
-  return /^\/admin\/runtime\/projects\/[^/]+$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/schema\/check$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/health$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/openapi$/.test(request.path) || /^\/admin\/runtime\/projects\/[^/]+\/migrations\/dry-run$/.test(request.path);
-}
-
 async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformApiServices, actor: PlatformUser, projectId: string) {
   if (!services.publishStorePersistence) throw new Error("Publish Store persistence service is not configured");
   const project = await resolvePersistenceProject(services, actor, projectId);
@@ -785,118 +639,13 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       };
     }
 
-    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/providers") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(await aiGovernancePersistence.listProviders(user))
-      };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/providers") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const provider = await aiGovernancePersistence.createProvider(user, {
-        name: String(request.body?.name ?? ""),
-        adapter: String(request.body?.adapter ?? "mock") as never,
-        baseUrl: String(request.body?.baseUrl ?? ""),
-        models: Array.isArray(request.body?.models) ? request.body.models.map(String) : []
-      });
-      return { status: HttpStatus.CREATED, body: success(provider) };
-    }
-
-    if (aiGovernancePersistence && request.method === "GET" && request.path === "/ai/api-keys") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(await aiGovernancePersistence.listApiKeys(user))
-      };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/api-keys") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const key = await aiGovernancePersistence.createApiKey(user, {
-        providerId: String(request.body?.providerId ?? ""),
-        name: String(request.body?.name ?? ""),
-        secret: String(request.body?.secret ?? ""),
-        usageMode: String(request.body?.usageMode ?? "production") as never,
-        quotaTokens: Number(request.body?.quotaTokens ?? 0),
-        fallbackPriority: Number(request.body?.fallbackPriority ?? 0)
-      });
-      return { status: HttpStatus.CREATED, body: success(key) };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/routes") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const route = await aiGovernancePersistence.configureRoute(user, {
-        scenario: String(request.body?.scenario ?? "prd_generation") as never,
-        primaryProviderId: String(request.body?.primaryProviderId ?? ""),
-        primaryModel: String(request.body?.primaryModel ?? ""),
-        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
-        fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
-      });
-      return { status: HttpStatus.OK, body: success(route) };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/ai/quotas") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const quota = await aiGovernancePersistence.configureQuota(user, {
-        scope: String(request.body?.scope ?? "organization") as never,
-        dailyLimit: Number(request.body?.dailyLimit ?? 0),
-        monthlyLimit: Number(request.body?.monthlyLimit ?? 0),
-        warningThreshold: Number(request.body?.warningThreshold ?? 0),
-        hardStop: Boolean(request.body?.hardStop ?? true),
-        usedToday: Number(request.body?.usedToday ?? 0)
-      });
-      return { status: HttpStatus.OK, body: success(quota) };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/rules") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const rule = await aiGovernancePersistence.createGuardrailRule(user, {
-        name: String(request.body?.name ?? ""),
-        type: String(request.body?.type ?? "keyword") as never,
-        pattern: String(request.body?.pattern ?? ""),
-        severity: String(request.body?.severity ?? "warning") as never,
-        action: String(request.body?.action ?? "warn") as never,
-        scope: String(request.body?.scope ?? "organization") as never
-      });
-      return { status: HttpStatus.CREATED, body: success(rule) };
-    }
-
-    if (aiGovernancePersistence && request.method === "POST" && request.path === "/guardrails/test") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const result = await aiGovernancePersistence.testPrompt(user, {
-        prompt: String(request.body?.prompt ?? ""),
-        scenario: String(request.body?.scenario ?? "prd_generation")
-      });
-      return { status: HttpStatus.OK, body: success(result) };
-    }
-
-    if (aiGovernancePersistence && request.method === "GET" && request.path === "/guardrails/events") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(await aiGovernancePersistence.listGuardrailEvents(user))
-      };
-    }
-
-    if (aiGovernancePersistence && governedAiExecutor && request.method === "POST" && request.path === "/ai/provider-test-call") {
-      const user = await resolvePersistenceUser(services, request.headers ?? {});
-      const result = await handleAiProviderTestCall({
-        request,
-        resolveUser: async () => user,
-        executor: governedAiExecutor,
-        providerNameFor: async (id) => (await aiGovernancePersistence.listProviders(user)).find((provider) => provider.id === id)?.name,
-        providerAdapterFor: async (id) => (await aiGovernancePersistence.listProviders(user)).find((provider) => provider.id === id)?.adapter,
-        legacyTest: () => {
-          throw new Error("legacy AI test is unavailable in persistence mode");
-        }
-      });
-      return {
-        status: result?.status ?? HttpStatus.NOT_FOUND,
-        body: result?.body ?? failure("NOT_FOUND", "route not found")
-      };
-    }
+    const aiResponse = await handleAiGovernanceRoute(request, {
+      services,
+      aiGovernancePersistence,
+      governedAiExecutor,
+      resolvePersistenceUser
+    });
+    if (aiResponse) return aiResponse;
 
     const durableAiJobMatch = request.path.match(/^\/projects\/([^/]+)\/ai-jobs(?:\/([^/]+))?$/);
     if (durableAiJobMatch && ((request.method === "POST" && !durableAiJobMatch[2]) || (request.method === "GET" && durableAiJobMatch[2]))) {
@@ -2359,112 +2108,11 @@ export function executePlatformApiRequest(services: PlatformApiServices, request
     const traceabilityMatch = request.path.match(/^\/creator\/projects\/([^/]+)\/traceability$/);
     if (request.method === "GET" && traceabilityMatch) {
       const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      return {
-        status: HttpStatus.OK,
-        body: success(services.traceability.getProjectTrace(user, traceabilityMatch[1]))
-      };
+      return { status: HttpStatus.OK, body: success(services.traceability.getProjectTrace(user, traceabilityMatch[1])) };
     }
 
-    if (request.method === "GET" && request.path === "/ai/providers") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(services.aiGovernance.listProviders()) };
-    }
-
-    if (request.method === "POST" && request.path === "/ai/providers") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const provider = services.aiGovernance.createProvider(user, {
-        name: String(request.body?.name ?? ""),
-        adapter: String(request.body?.adapter ?? "mock") as never,
-        baseUrl: String(request.body?.baseUrl ?? ""),
-        models: Array.isArray(request.body?.models) ? request.body.models.map(String) : []
-      });
-      return { status: HttpStatus.CREATED, body: success(provider) };
-    }
-
-    if (request.method === "GET" && request.path === "/ai/api-keys") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(services.aiGovernance.listApiKeys()) };
-    }
-
-    if (request.method === "POST" && request.path === "/ai/api-keys") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const key = services.aiGovernance.createApiKey(user, {
-        providerId: String(request.body?.providerId ?? ""),
-        name: String(request.body?.name ?? ""),
-        secret: String(request.body?.secret ?? ""),
-        usageMode: String(request.body?.usageMode ?? "production") as never,
-        quotaTokens: Number(request.body?.quotaTokens ?? 0),
-        fallbackPriority: Number(request.body?.fallbackPriority ?? 0)
-      });
-      return { status: HttpStatus.CREATED, body: success(key) };
-    }
-
-    if (request.method === "POST" && request.path === "/ai/routes") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const route = services.aiGovernance.configureRoute(user, {
-        scenario: String(request.body?.scenario ?? "prd_generation") as never,
-        primaryProviderId: String(request.body?.primaryProviderId ?? ""),
-        primaryModel: String(request.body?.primaryModel ?? ""),
-        fallbackProviderId: request.body?.fallbackProviderId ? String(request.body.fallbackProviderId) : undefined,
-        fallbackModel: request.body?.fallbackModel ? String(request.body.fallbackModel) : undefined
-      });
-      return { status: HttpStatus.OK, body: success(route) };
-    }
-
-    if (request.method === "POST" && request.path === "/ai/quotas") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const quota = services.aiGovernance.configureQuota(user, {
-        scope: String(request.body?.scope ?? "organization") as never,
-        dailyLimit: Number(request.body?.dailyLimit ?? 0),
-        monthlyLimit: Number(request.body?.monthlyLimit ?? 0),
-        warningThreshold: Number(request.body?.warningThreshold ?? 0),
-        hardStop: Boolean(request.body?.hardStop ?? true),
-        usedToday: Number(request.body?.usedToday ?? 0)
-      });
-      return { status: HttpStatus.OK, body: success(quota) };
-    }
-
-    if (request.method === "POST" && request.path === "/ai/provider-test-call") {
-      const result = handleLegacyAiProviderTestCall({
-        request,
-        resolveUser: () => services.auth.resolveCurrentUser(request.headers ?? {}),
-        legacyTest: (user, input) => services.aiGovernance.testProviderCall(user, input)
-      });
-      return {
-        status: result?.status ?? HttpStatus.NOT_FOUND,
-        body: result?.body ?? failure("NOT_FOUND", "route not found")
-      };
-    }
-
-    if (request.method === "POST" && request.path === "/guardrails/rules") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const rule = services.guardrails.createRule(user, {
-        name: String(request.body?.name ?? ""),
-        type: String(request.body?.type ?? "keyword") as never,
-        pattern: String(request.body?.pattern ?? ""),
-        severity: String(request.body?.severity ?? "warning") as never,
-        action: String(request.body?.action ?? "warn") as never,
-        scope: String(request.body?.scope ?? "organization") as never
-      });
-      return { status: HttpStatus.CREATED, body: success(rule) };
-    }
-
-    if (request.method === "POST" && request.path === "/guardrails/test") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      const result = services.guardrails.testPrompt(user, {
-        prompt: String(request.body?.prompt ?? ""),
-        scenario: String(request.body?.scenario ?? "prd_generation")
-      });
-      return { status: HttpStatus.OK, body: success(result) };
-    }
-
-    if (request.method === "GET" && request.path === "/guardrails/events") {
-      const user = services.auth.resolveCurrentUser(request.headers ?? {});
-      services.auth.requireRole(user, ["admin"]);
-      return { status: HttpStatus.OK, body: success(services.guardrails.listEvents()) };
-    }
+    const aiResponse = handleInMemoryAiGovernanceRoute(request, services);
+    if (aiResponse) return aiResponse;
 
     return {
       status: HttpStatus.NOT_FOUND,
@@ -3743,19 +3391,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       })
     )
   );
-  const aiGovernanceRoutes: Array<{ method: "GET" | "POST"; path: PlatformRequest["path"] }> = [
-    { method: "GET", path: "/ai/providers" },
-    { method: "POST", path: "/ai/providers" },
-    { method: "GET", path: "/ai/api-keys" },
-    { method: "POST", path: "/ai/api-keys" },
-    { method: "POST", path: "/ai/routes" },
-    { method: "POST", path: "/ai/quotas" },
-    { method: "POST", path: "/ai/provider-test-call" },
-    { method: "POST", path: "/guardrails/rules" },
-    { method: "POST", path: "/guardrails/test" },
-    { method: "GET", path: "/guardrails/events" }
-  ];
-  for (const { method, path } of aiGovernanceRoutes) {
+  for (const { method, path } of aiGovernanceHttpRoutes) {
     const verb = method === "GET" ? "get" : "post";
     routes[verb](path, (request, response) =>
       sendPlatformResponseAsync(

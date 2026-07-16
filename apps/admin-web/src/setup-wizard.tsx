@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { Select } from "@evcp/ui";
 import { createAdminPlatformClient } from "@/shared/platform-client";
 
 interface BusinessForm {
@@ -122,7 +123,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
               <div className="first-run-subgrid">
                 <label>
                   Timezone
-                  <select
+                  <Select
                     value={business.timezone}
                     onChange={(event) => setBiz("timezone", event.target.value)}
                   >
@@ -131,11 +132,11 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                         {tz}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label>
                   Language
-                  <select
+                  <Select
                     value={business.locale}
                     onChange={(event) => setBiz("locale", event.target.value)}
                   >
@@ -144,7 +145,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                         {locale.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </div>
               <div className="first-run-subgrid">

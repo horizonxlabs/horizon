@@ -1,5 +1,6 @@
 import type {
   AiApiKeyDto,
+  AiExecutionEvidenceDto,
   AiProviderDto,
   AiQuotaDto,
   AiScenarioRouteDto,
@@ -8,7 +9,8 @@ import type {
   CreateGuardrailRuleInput,
   GuardrailEventDto,
   GuardrailRuleDto,
-  PlatformApiClient
+  PlatformApiClient,
+  ProviderModelCatalogDto
 } from "@evcp/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -20,9 +22,19 @@ import {
 type AiGovernanceSnapshot = {
   providers: AiProviderDto[];
   apiKeys: AiApiKeyDto[];
+  routes: AiScenarioRouteDto[];
+  quotas: AiQuotaDto[];
   guardrailEvents: GuardrailEventDto[];
+  executions: AiExecutionEvidenceDto[];
 };
-const emptySnapshot: AiGovernanceSnapshot = { providers: [], apiKeys: [], guardrailEvents: [] };
+const emptySnapshot: AiGovernanceSnapshot = {
+  providers: [],
+  apiKeys: [],
+  routes: [],
+  quotas: [],
+  guardrailEvents: [],
+  executions: []
+};
 
 export function useAiGovernance(client: PlatformApiClient | undefined) {
   const [availability, setAvailability] = useState<AiGovernanceAvailability>("loading");
@@ -65,13 +77,16 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setAvailability("loading");
     setMessage("Loading AI governance data.");
     try {
-      const [providers, apiKeys, guardrailEvents] = await Promise.all([
+      const [providers, apiKeys, routes, quotas, guardrailEvents, executions] = await Promise.all([
         client.listAiProviders(),
         client.listAiApiKeys(),
-        client.listGuardrailEvents()
+        client.listAiScenarioRoutes(),
+        client.listAiQuotas(),
+        client.listGuardrailEvents(),
+        client.listAiUsage()
       ]);
       if (generationRef.current !== requestGeneration || activeClientRef.current !== client) return;
-      setSnapshot({ providers, apiKeys, guardrailEvents });
+      setSnapshot({ providers, apiKeys, routes, quotas, guardrailEvents, executions });
       setAvailability("ready");
       setMessage("Loaded AI governance data from Platform API.");
     } catch (error) {
@@ -103,6 +118,68 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     setMessage(`Provider saved: ${provider.name}`);
     return provider;
   };
+  const updateProvider = async (
+    providerId: string,
+    input: { name: string; baseUrl: string; models: string[] }
+  ): Promise<AiProviderDto> => {
+    const readyClient = requireReadyClient();
+    const provider = await readyClient.updateAiProvider(providerId, input);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.map((item) => (item.id === provider.id ? provider : item))
+    }));
+    setMessage(`Provider updated: ${provider.name}`);
+    return provider;
+  };
+  const setProviderStatus = async (
+    providerId: string,
+    status: AiProviderDto["status"]
+  ): Promise<AiProviderDto> => {
+    const readyClient = requireReadyClient();
+    const provider = await readyClient.setAiProviderStatus(providerId, status);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.map((item) => (item.id === provider.id ? provider : item))
+    }));
+    setMessage(`Provider ${provider.status}: ${provider.name}`);
+    return provider;
+  };
+  const removeProvider = async (providerId: string): Promise<void> => {
+    const readyClient = requireReadyClient();
+    await readyClient.deleteAiProvider(providerId);
+    setSnapshot((current) => ({
+      ...current,
+      providers: current.providers.filter((item) => item.id !== providerId),
+      apiKeys: current.apiKeys.filter((item) => item.providerId !== providerId),
+      routes: current.routes.filter(
+        (route) =>
+          route.primary.providerId !== providerId && route.fallback?.providerId !== providerId
+      )
+    }));
+    setMessage("Provider deleted.");
+  };
+  const setCredentialStatus = async (
+    keyId: string,
+    status: AiApiKeyDto["status"]
+  ): Promise<AiApiKeyDto> => {
+    const readyClient = requireReadyClient();
+    const key = await readyClient.setAiApiKeyStatus(keyId, status);
+    setSnapshot((current) => ({
+      ...current,
+      apiKeys: current.apiKeys.map((item) => (item.id === key.id ? key : item))
+    }));
+    setMessage(`Credential ${key.status}: ${key.name}`);
+    return key;
+  };
+  const removeCredential = async (keyId: string): Promise<void> => {
+    const readyClient = requireReadyClient();
+    await readyClient.deleteAiApiKey(keyId);
+    setSnapshot((current) => ({
+      ...current,
+      apiKeys: current.apiKeys.filter((item) => item.id !== keyId)
+    }));
+    setMessage("Credential deleted.");
+  };
   const saveApiKey = async (
     input: Omit<CreateAiApiKeyInput, "secret">,
     secret: string
@@ -122,12 +199,20 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
   ): Promise<AiScenarioRouteDto> => {
     const readyClient = requireReadyClient();
     const route = await readyClient.configureAiRoute(input);
+    setSnapshot((current) => ({
+      ...current,
+      routes: [route, ...current.routes.filter((item) => item.scenario !== route.scenario)]
+    }));
     setMessage(`Route configured for ${route.scenario}.`);
     return route;
   };
   const configureQuota = async (input: AiQuotaDto): Promise<AiQuotaDto> => {
     const readyClient = requireReadyClient();
     const quota = await readyClient.configureAiQuota(input);
+    setSnapshot((current) => ({
+      ...current,
+      quotas: [quota, ...current.quotas.filter((item) => item.scope !== quota.scope)]
+    }));
     setMessage(`Quota configured for ${quota.scope}.`);
     return quota;
   };
@@ -145,16 +230,29 @@ export function useAiGovernance(client: PlatformApiClient | undefined) {
     const readyClient = requireReadyClient();
     return readyClient.testAiProvider(input);
   };
+  const loadModelCatalog = useCallback(
+    async (baseUrl: string): Promise<ProviderModelCatalogDto> => {
+      if (!client) throw new Error("AI governance API is unavailable");
+      return client.listProviderModelCatalog(baseUrl);
+    },
+    [client]
+  );
   return {
     availability: visibleAvailability,
     message: visibleMessage,
     ...visibleSnapshot,
     reload,
     createProvider,
+    updateProvider,
+    setProviderStatus,
+    removeProvider,
+    setCredentialStatus,
+    removeCredential,
     saveApiKey,
     configureRoute,
     configureQuota,
     createGuardrailRule,
-    testProvider
+    testProvider,
+    loadModelCatalog
   };
 }

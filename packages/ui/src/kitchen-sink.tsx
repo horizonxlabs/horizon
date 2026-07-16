@@ -1,7 +1,8 @@
 import { Button } from "./primitives/button";
 import { Card, SectionCard } from "./primitives/card";
 import { Badge, StatusPill } from "./primitives/badge";
-import { Field, Input, Select } from "./primitives/input";
+import { Field, Input } from "./primitives/input";
+import { Select } from "./primitives/select";
 import { Table, THead, TRow, TCell } from "./primitives/table";
 import { MetricCard } from "./primitives/metric-card";
 import { PageHeader } from "./primitives/page-header";

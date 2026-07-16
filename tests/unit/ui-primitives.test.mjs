@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "../../packages/ui/src/primitives/button.tsx";
 import { Card, SectionCard } from "../../packages/ui/src/primitives/card.tsx";
 import { Badge, StatusPill, ToneBadge } from "../../packages/ui/src/primitives/badge.tsx";
-import { Field, Input, Select } from "../../packages/ui/src/primitives/input.tsx";
+import { Field, Input } from "../../packages/ui/src/primitives/input.tsx";
+import { Select } from "../../packages/ui/src/primitives/select.tsx";
 import { Table, THead, TRow, TCell } from "../../packages/ui/src/primitives/table.tsx";
 import { MetricCard } from "../../packages/ui/src/primitives/metric-card.tsx";
 import { PageHeader } from "../../packages/ui/src/primitives/page-header.tsx";
@@ -87,12 +88,15 @@ test("Field renders label bound to control", () => {
   assert.match(html, /for="email"/);
 });
 
-test("Select renders a bordered control and forwards props", () => {
+test("Select renders a bordered listbox trigger and forwards props", () => {
   const html = renderToStaticMarkup(
-    h(Select, { name: "role" }, h("option", { value: "admin" }, "ผู้ดูแลระบบ"))
+    h(Select, { name: "role", value: "admin" }, h("option", { value: "admin" }, "ผู้ดูแลระบบ"))
   );
+  // Custom listbox trigger is a button with the shared control border token.
   assert.match(html, /border-border/);
   assert.match(html, /name="role"/);
+  assert.match(html, /aria-haspopup="listbox"/);
+  // Closed listbox shows the selected option's label on the trigger.
   assert.match(html, /ผู้ดูแลระบบ/);
 });
 

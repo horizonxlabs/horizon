@@ -46,7 +46,7 @@ async function resolvePlan(client: AiGovernancePersistenceClient, actor: Platfor
 async function resolveProvider(client: AiGovernancePersistenceClient, providerId: string, model: string, secretStore: AiSecretStore): Promise<ResolvedAiProvider> {
   const provider = await client.aiProvider.findUnique({ where: { id: providerId } });
   if (!provider || provider.status !== "active") throw new Error(`AI provider ${providerId} is not active`);
-  if (provider.adapter !== "openai" && provider.adapter !== "anthropic") throw new Error(`AI provider adapter ${provider.adapter} is not supported by the live executor`);
+  if (provider.adapter !== "openai" && provider.adapter !== "openrouter" && provider.adapter !== "lm_studio" && provider.adapter !== "anthropic") throw new Error(`AI provider adapter ${provider.adapter} is not supported by the live executor`);
   if (!provider.models.includes(model)) throw new Error(`AI provider ${providerId} does not support model ${model}`);
   const key = (await client.aiApiKey.findMany()).find((candidate) => candidate.providerId === providerId && candidate.status === "active");
   if (!key) throw new Error(`No active key configured for AI provider ${providerId}`);

@@ -34,3 +34,10 @@ test("governance hook ignores stale loads after a client identity change", () =>
   assert.match(source, /generationRef\.current !== requestGeneration \|\| activeClientRef\.current !== client/);
   assert.match(source, /const visibleSnapshot = isSnapshotCurrent \? snapshot : emptySnapshot/);
 });
+
+test("hook snapshot includes routes and quotas", () => {
+  assert.match(source, /routes:\s*AiScenarioRouteDto\[\]/);
+  assert.match(source, /quotas:\s*AiQuotaDto\[\]/);
+  assert.match(source, /client\.listAiScenarioRoutes\(\)/);
+  assert.match(source, /client\.listAiQuotas\(\)/);
+});
