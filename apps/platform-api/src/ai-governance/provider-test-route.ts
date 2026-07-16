@@ -41,10 +41,21 @@ export async function handleAiProviderTestCall(input: {
     return { status: 201, body: success(input.legacyTest(actor, request)) };
   }
   if (actor.role !== "admin") throw new Error(`Role ${actor.role} cannot test AI providers`);
-  const execution = await input.executor.execute(actor, {
-    scenario: request.scenario, projectId: "", prompt: request.prompt?.trim() || `Validate ${request.scenario} provider route before Creator use`,
-    requestId: `admin_provider_test_${crypto.randomUUID()}`, ...(request.requestedTokens ? { requestedTokens: request.requestedTokens } : {})
-  });
+  let execution: Awaited<ReturnType<GovernedAiExecutor["execute"]>>;
+  try {
+    execution = await input.executor.execute(actor, {
+      scenario: request.scenario, projectId: "", prompt: request.prompt?.trim() || `Validate ${request.scenario} provider route before Creator use`,
+      requestId: `admin_provider_test_${crypto.randomUUID()}`, ...(request.requestedTokens ? { requestedTokens: request.requestedTokens } : {})
+    });
+  } catch (error) {
+    // The executor throws before returning a graded execution when it cannot even resolve the
+    // route — most often the stored provider key's secret is missing from the secret store
+    // (e.g. the dev, in-memory OpenBao was reset). Surface it as a 422 with the reason so the
+    // console shows a meaningful message instead of an opaque 500 INTERNAL_ERROR.
+    throw new ValidationError(
+      `Provider test failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
   if (execution.status === "failed" || execution.status === "blocked") {
     // A failed/blocked governed test is an expected outcome (provider unreachable, bad key,
     // guardrail block) — surface it as a validation error (422) carrying the reason so the
