@@ -7,6 +7,7 @@ export const aiGovernanceHttpRoutes: Array<{ method: "GET" | "POST"; path: Platf
   { method: "GET", path: "/ai/providers" },
   { method: "POST", path: "/ai/providers" },
   { method: "POST", path: "/ai/providers/status" },
+  { method: "POST", path: "/ai/providers/update" },
   { method: "POST", path: "/ai/providers/delete" },
   { method: "GET", path: "/ai/api-keys" },
   { method: "POST", path: "/ai/api-keys" },

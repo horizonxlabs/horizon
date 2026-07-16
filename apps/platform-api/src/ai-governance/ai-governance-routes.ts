@@ -129,6 +129,24 @@ export async function handleAiGovernanceRoute(
     if (
       aiGovernancePersistence &&
       request.method === "POST" &&
+      request.path === "/ai/providers/update"
+    ) {
+      const user = await resolvePersistenceUser(services, request.headers ?? {});
+      const provider = await aiGovernancePersistence.updateProvider(
+        user,
+        String(request.body?.providerId ?? ""),
+        {
+          name: String(request.body?.name ?? ""),
+          baseUrl: String(request.body?.baseUrl ?? ""),
+          models: Array.isArray(request.body?.models) ? request.body.models.map(String) : []
+        }
+      );
+      return { status: HttpStatus.OK, body: success(provider) };
+    }
+
+    if (
+      aiGovernancePersistence &&
+      request.method === "POST" &&
       request.path === "/ai/providers/delete"
     ) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});

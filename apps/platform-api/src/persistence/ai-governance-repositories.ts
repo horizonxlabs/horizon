@@ -194,6 +194,21 @@ export class AiGovernanceRepositoryBackedService {
     return mapProvider(record);
   }
 
+  async updateProvider(actor: PlatformUser, providerId: string, input: { name: string; baseUrl: string; models: string[] }): Promise<AiProvider> {
+    requireAdmin(actor);
+    if (!input.name.trim()) throw new ValidationError("AI provider name is required");
+    if (!input.baseUrl.trim()) throw new ValidationError("AI provider baseUrl is required");
+    if (!input.models.length) throw new ValidationError("At least one AI provider model is required");
+    const existing = await this.client.aiProvider.findUnique({ where: { id: providerId } });
+    if (!existing) throw new ValidationError(`Unknown AI provider: ${providerId}`);
+    const record = await this.client.aiProvider.upsert({
+      where: { id: providerId },
+      update: { name: input.name, baseUrl: input.baseUrl, models: [...input.models] },
+      create: { ...existing, name: input.name, baseUrl: input.baseUrl, models: [...input.models] }
+    });
+    return mapProvider(record);
+  }
+
   async listApiKeys(actor: PlatformUser): Promise<AiApiKey[]> {
     requireAdmin(actor);
     const records = await this.client.aiApiKey.findMany({ orderBy: { createdAt: "asc" } });

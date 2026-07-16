@@ -16,7 +16,7 @@ export function isNativeAuthRoute(request: PlatformRequest): boolean {
 }
 
 export function isPersistenceAiGovernanceRoute(request: PlatformRequest): boolean {
-  return request.path === "/ai/providers" || request.path === "/ai/providers/status" || request.path === "/ai/providers/delete" || request.path === "/ai/api-keys" || request.path === "/ai/api-keys/status" || request.path === "/ai/api-keys/delete" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/ai/provider-catalog" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
+  return request.path === "/ai/providers" || request.path === "/ai/providers/status" || request.path === "/ai/providers/update" || request.path === "/ai/providers/delete" || request.path === "/ai/api-keys" || request.path === "/ai/api-keys/status" || request.path === "/ai/api-keys/delete" || request.path === "/ai/routes" || request.path === "/ai/quotas" || request.path === "/ai/provider-test-call" || request.path === "/ai/provider-catalog" || request.path === "/guardrails/rules" || request.path === "/guardrails/test" || request.path === "/guardrails/events";
 }
 
 export function isPersistencePrdRoute(request: PlatformRequest): boolean {

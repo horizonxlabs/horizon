@@ -95,6 +95,42 @@ test("setAiProviderStatus POSTs providerId and status to /ai/providers/status", 
   assert.equal(provider.status, "disabled");
 });
 
+test("updateAiProvider POSTs providerId, name, baseUrl, models to /ai/providers/update", async () => {
+  const observed = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    legacyUserEmail: "admin@company.com",
+    fetcher: async (url, init) => {
+      observed.push({
+        url: String(url),
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined
+      });
+      return new Response(
+        JSON.stringify(
+          success({ id: "prov_1", name: "Renamed", baseUrl: "https://gateway.example/v2", models: ["gpt-4.1"], status: "active" })
+        ),
+        { status: 200 }
+      );
+    }
+  });
+
+  const provider = await client.updateAiProvider("prov_1", {
+    name: "Renamed",
+    baseUrl: "https://gateway.example/v2",
+    models: ["gpt-4.1"]
+  });
+
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].url.endsWith("/ai/providers/update"), `got ${observed[0].url}`);
+  assert.equal(observed[0].method, "POST");
+  assert.equal(observed[0].body.providerId, "prov_1");
+  assert.equal(observed[0].body.name, "Renamed");
+  assert.equal(observed[0].body.baseUrl, "https://gateway.example/v2");
+  assert.deepEqual(observed[0].body.models, ["gpt-4.1"]);
+  assert.equal(provider.name, "Renamed");
+});
+
 test("deleteAiProvider POSTs providerId to /ai/providers/delete", async () => {
   const observed = [];
   const client = createPlatformApiClient({

@@ -39,6 +39,43 @@ test("setProviderStatus rejects a non-admin actor", async () => {
   await assert.rejects(() => service.setProviderStatus(creator, "aip_primary", "disabled"));
 });
 
+test("updateProvider changes name/baseUrl/models and preserves status", async () => {
+  const client = seedClient();
+  const service = new AiGovernanceRepositoryBackedService(client);
+  await service.setProviderStatus(admin, "aip_primary", "disabled");
+  const updated = await service.updateProvider(admin, "aip_primary", {
+    name: "Primary Renamed",
+    baseUrl: "https://gateway.example.test/v2",
+    models: ["gpt-test-2", "gpt-test-3"]
+  });
+  assert.equal(updated.name, "Primary Renamed");
+  assert.equal(updated.baseUrl, "https://gateway.example.test/v2");
+  assert.deepEqual(updated.models, ["gpt-test-2", "gpt-test-3"]);
+  assert.equal(updated.status, "disabled");
+
+  const [reloaded] = await service.listProviders(admin);
+  assert.equal(reloaded.name, "Primary Renamed");
+  assert.equal(reloaded.baseUrl, "https://gateway.example.test/v2");
+  assert.deepEqual(reloaded.models, ["gpt-test-2", "gpt-test-3"]);
+  assert.equal(reloaded.status, "disabled");
+});
+
+test("updateProvider rejects a non-admin actor", async () => {
+  const client = seedClient();
+  const service = new AiGovernanceRepositoryBackedService(client);
+  await assert.rejects(() =>
+    service.updateProvider(creator, "aip_primary", { name: "X", baseUrl: "https://x.example.test", models: ["m"] })
+  );
+});
+
+test("updateProvider rejects an unknown providerId", async () => {
+  const client = seedClient();
+  const service = new AiGovernanceRepositoryBackedService(client);
+  await assert.rejects(() =>
+    service.updateProvider(admin, "aip_missing", { name: "X", baseUrl: "https://x.example.test", models: ["m"] })
+  );
+});
+
 test("setApiKeyStatus flips a key to disabled", async () => {
   const client = seedClient();
   const service = new AiGovernanceRepositoryBackedService(client);

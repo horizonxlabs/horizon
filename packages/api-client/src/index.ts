@@ -67,7 +67,7 @@ export type PlatformUserDto = {
   role: string;
   permissions?: string[];
 };
-export type { KeycloakUserDto, CreateKeycloakUserInput, KeycloakUserListMeta, KeycloakUserListPage, PlatformSessionSummary } from "./keycloak-user-types";
+export type * from "./keycloak-user-types";
 export { createKeycloakUserClient, startKeycloakLogin, startKeycloakLogout } from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
@@ -915,6 +915,10 @@ export class PlatformApiClient {
 
   setAiProviderStatus(providerId: string, status: AiProviderDto["status"]): Promise<AiProviderDto> {
     return this.postJson<AiProviderDto>("/ai/providers/status", { providerId, status });
+  }
+
+  updateAiProvider(providerId: string, input: { name: string; baseUrl: string; models: string[] }): Promise<AiProviderDto> {
+    return this.postJson<AiProviderDto>("/ai/providers/update", { providerId, ...input });
   }
 
   deleteAiProvider(providerId: string): Promise<{ id: string }> {
