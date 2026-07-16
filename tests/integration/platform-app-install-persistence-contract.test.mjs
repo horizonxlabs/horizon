@@ -8,6 +8,9 @@ import {
 } from "../../apps/platform-api/src/persistence/publish-store-repositories.ts";
 
 const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
+// The PlatformRequest.path union (with the store install/uninstall template-literal
+// route types) was extracted from app-factory.ts into platform-http-types.ts.
+const platformHttpTypes = readFileSync("apps/platform-api/src/platform-http-types.ts", "utf8");
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
 function readAllSourceFiles(dir) {
   return readdirSync(dir)
@@ -154,8 +157,8 @@ test("App Store install persistence contract is wired through schema API client 
   assert.match(schema, /model AppInstallation/);
   assert.match(schema, /appInstallations\s+AppInstallation\[\]/);
   assert.match(migration, /CREATE TABLE "app_installations"/);
-  assert.match(appFactory, /`\/store\/apps\/\$\{string\}\/install`/);
-  assert.match(appFactory, /`\/store\/apps\/\$\{string\}\/uninstall`/);
+  assert.match(platformHttpTypes, /`\/store\/apps\/\$\{string\}\/install`/);
+  assert.match(platformHttpTypes, /`\/store\/apps\/\$\{string\}\/uninstall`/);
   assert.match(appFactory, /installStoreApp/);
   assert.match(appFactory, /uninstallStoreApp/);
   assert.match(apiClient, /installStoreApp\(appSlug: string\)/);
