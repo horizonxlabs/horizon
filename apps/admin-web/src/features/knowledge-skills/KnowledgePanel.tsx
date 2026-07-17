@@ -1,4 +1,4 @@
-import { Badge, Button, Drawer, Field, Input, SectionCard, Select, Table, TCell, THead, TRow } from "@evcp/ui";
+import { Badge, Button, Drawer, Field, Input, MarkdownEditor, SectionCard, Select, Table, TCell, THead, TRow } from "@evcp/ui";
 import { useState } from "react";
 import type { KnowledgeSkillsController } from "./use-knowledge-skills";
 import {
@@ -27,7 +27,7 @@ export function KnowledgePanel({ controller }: { controller: KnowledgeSkillsCont
 
   const [contentHash, setContentHash] = useState("");
   const [changelog, setChangelog] = useState("");
-  const [excerpts, setExcerpts] = useState("");
+  const [content, setContent] = useState("");
 
   function resetCreate() {
     setTitle("");
@@ -54,15 +54,17 @@ export function KnowledgePanel({ controller }: { controller: KnowledgeSkillsCont
 
   async function submitVersion() {
     if (!versionFor) return;
+    // Split the Markdown content into blank-line-separated blocks; each becomes a retrievable chunk.
+    const excerpts = content.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
     await controller.addKnowledgeVersion(versionFor.id, {
       contentHash,
       changelog,
-      chunkCount: excerpts ? excerpts.split("\n").filter(Boolean).length : 0,
-      excerpts: excerpts ? excerpts.split("\n").map((line) => line.trim()).filter(Boolean) : undefined
+      chunkCount: excerpts.length,
+      excerpts: excerpts.length > 0 ? excerpts : undefined
     });
     setContentHash("");
     setChangelog("");
-    setExcerpts("");
+    setContent("");
     setVersionFor(undefined);
   }
 
@@ -227,12 +229,12 @@ export function KnowledgePanel({ controller }: { controller: KnowledgeSkillsCont
           <Field label="Changelog">
             <Input value={changelog} onChange={(event) => setChangelog(event.target.value)} placeholder="Initial import" />
           </Field>
-          <Field label="Excerpts" hint="One per line — injected into agent context on retrieval.">
-            <textarea
-              className="min-h-24 w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-body outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
-              value={excerpts}
-              onChange={(event) => setExcerpts(event.target.value)}
-              placeholder={"Leave requests require manager approval.\nMax 20 days per year."}
+          <Field label="Content (Markdown)" hint="Write in Markdown. Blank-line-separated blocks become retrievable chunks injected into agent context.">
+            <MarkdownEditor
+              value={content}
+              onChange={setContent}
+              rows={9}
+              placeholder={"# Leave policy\n\nLeave requests require **manager approval**.\n\n- Max 20 days per year\n- Submit 3 days ahead"}
             />
           </Field>
         </div>

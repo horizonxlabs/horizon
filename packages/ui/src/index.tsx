@@ -7,6 +7,8 @@ export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
 export { Drawer } from "./primitives/drawer";
 export { Input, Field } from "./primitives/input";
+export { Markdown } from "./primitives/markdown";
+export { MarkdownEditor } from "./primitives/markdown-editor";
 export { Select, type SelectProps } from "./primitives/select";
 export { Table, THead, TRow, TCell } from "./primitives/table";
 export { MetricCard } from "./primitives/metric-card";

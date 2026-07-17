@@ -1,4 +1,4 @@
-import { Badge, Button, Drawer, Field, Input, SectionCard, Select, Table, TCell, THead, TRow } from "@evcp/ui";
+import { Badge, Button, Drawer, Field, Input, MarkdownEditor, SectionCard, Select, Table, TCell, THead, TRow } from "@evcp/ui";
 import { useState } from "react";
 import type { KnowledgeSkillsController } from "./use-knowledge-skills";
 import {
@@ -213,12 +213,12 @@ export function SkillsPanel({ controller }: { controller: KnowledgeSkillsControl
         }
       >
         <div className="flex flex-col gap-4">
-          <Field label="Instruction" hint="The workflow/prompt the agent follows.">
-            <textarea
-              className="min-h-32 w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-body outline-none focus:border-primary focus:ring-2 focus:ring-primary-soft"
+          <Field label="Instruction (Markdown)" hint="The workflow/prompt the agent follows. Write in Markdown; use the Preview tab to view it.">
+            <MarkdownEditor
               value={instruction}
-              onChange={(event) => setInstruction(event.target.value)}
-              placeholder="Generate an approval workflow with submit, approve, reject and escalate steps."
+              onChange={setInstruction}
+              rows={10}
+              placeholder={"# Create Approval Workflow\n\n1. Add a **submit** action\n2. Route to the manager for **approve/reject**\n3. Escalate after 48h\n\nUse the org's `ApprovalCard` component."}
             />
           </Field>
           <Field label="Allowed tools" hint="Comma-separated, optional.">
