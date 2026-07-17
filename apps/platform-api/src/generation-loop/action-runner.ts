@@ -80,6 +80,8 @@ export interface ActionRunner {
     template: GoldenTemplate;
     action: RunnableAction;
     commitSha?: string;
+    // For shell actions: called with each chunk of merged stdout/stderr as it streams.
+    onShellOutput?: (chunk: string) => void;
   }): Promise<ActionResult>;
   runMigrationBatch(input: {
     containerId: string;
@@ -281,11 +283,20 @@ export function createActionRunner(deps: {
       }
 
       if (action.type === "shell") {
-        const result = await deps.docker.execInContainer(input.containerId, [
-          "sh",
-          "-c",
-          action.command
-        ]);
+        const cmd = ["sh", "-c", action.command];
+        // Stream the output live when the engine + caller support it; otherwise run buffered.
+        if (input.onShellOutput && deps.docker.execInContainerStream) {
+          let output = "";
+          const { exitCode } = await deps.docker.execInContainerStream(input.containerId, cmd, (chunk) => {
+            output += chunk;
+            input.onShellOutput?.(chunk);
+          });
+          if (exitCode !== 0) {
+            return { ok: false, error: `shell command exited ${exitCode}`, stdout: output, stderr: "", exitCode };
+          }
+          return { ok: true, stdout: output };
+        }
+        const result = await deps.docker.execInContainer(input.containerId, cmd);
         if (result.exitCode !== 0) {
           return {
             ok: false,

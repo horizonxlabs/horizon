@@ -137,6 +137,13 @@ export interface DockerEngine {
     containerId: string,
     cmd: string[]
   ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  // Like execInContainer but streams merged stdout/stderr via onChunk as it arrives (docker
+  // exec attach). Optional — callers fall back to the buffered execInContainer when absent.
+  execInContainerStream?(
+    containerId: string,
+    cmd: string[],
+    onChunk: (text: string) => void
+  ): Promise<{ exitCode: number }>;
   commitContainer(containerId: string, imageTag: string): Promise<{ imageId: string }>;
   // Build a REAL production image from the container's /workspace build context. Used by publish so
   // deployed tiers run `next start`, not `next dev`. `extraFiles` are injected into the build-context

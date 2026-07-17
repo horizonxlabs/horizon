@@ -73,7 +73,8 @@ export function createDockerSocketEngine(
     request?: DockerRequestFn;
   } = {}
 ): DockerEngine {
-  const request = opts.request ?? nodeSocketRequest(opts.socketPath ?? "/var/run/docker.sock");
+  const socketPath = opts.socketPath ?? "/var/run/docker.sock";
+  const request = opts.request ?? nodeSocketRequest(socketPath);
 
   const expect = async (op: string, result: DockerRequestResult, okStatuses: number[]) => {
     if (!okStatuses.includes(result.status)) {
@@ -213,6 +214,44 @@ export function createDockerSocketEngine(
     },
     async execInContainer(containerId, cmd) {
       return runExec(containerId, cmd);
+    },
+    async execInContainerStream(containerId, cmd, onChunk) {
+      const create = await request({
+        method: "POST",
+        path: `/containers/${containerId}/exec`,
+        body: { Cmd: cmd, AttachStdout: true, AttachStderr: true, Tty: true }
+      });
+      await expect("exec-create", create, [201]);
+      const { Id: execId } = await create.json();
+      // Stream the exec output directly off the socket (the buffered `request` helper would
+      // wait for the whole command). Tty:true merges stdout/stderr into a plain text stream.
+      await new Promise<void>((resolve, reject) => {
+        const payload = JSON.stringify({ Detach: false, Tty: true });
+        const req = nodeHttp.request(
+          {
+            socketPath,
+            method: "POST",
+            path: `/exec/${execId}/start`,
+            headers: {
+              "content-type": "application/json",
+              "content-length": Buffer.byteLength(payload)
+            }
+          },
+          (res) => {
+            res.setEncoding("utf8");
+            res.on("data", (chunk) => onChunk(String(chunk)));
+            res.on("end", resolve);
+            res.on("error", reject);
+          }
+        );
+        req.on("error", reject);
+        req.write(payload);
+        req.end();
+      });
+      const inspect = await request({ method: "GET", path: `/exec/${execId}/json` });
+      await expect("exec-inspect", inspect, [200]);
+      const { ExitCode } = await inspect.json();
+      return { exitCode: Number(ExitCode ?? 0) };
     },
     async commitContainer(containerId, imageTag) {
       const [repo, tag] = imageTag.includes(":") ? imageTag.split(":") : [imageTag, "latest"];

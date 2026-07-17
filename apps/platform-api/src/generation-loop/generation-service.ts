@@ -12,11 +12,7 @@ import type { AiScenario, PlatformUser } from "../platform-services";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { ChatStreamEvent } from "./generation-types";
 import { resolveGovernedCompletion, type StreamChunk } from "./governed-completion";
-
-// Wrap a plain token stream (the non-governed path) as tagged chunks so both sources share one loop.
-async function* asTokenChunks(source: AsyncIterable<string>): AsyncIterable<StreamChunk> {
-  for await (const text of source) yield { kind: "token", text };
-}
+import { asTokenChunks, runShellStreaming } from "./generation-stream-helpers";
 import {
   buildActionPreview,
   clipActionText,
@@ -247,12 +243,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 }
                 let result: ActionResult;
                 try {
-                  result = await deps.actionRunner.runAction({
-                    containerId,
-                    projectId: input.projectId,
-                    template: deps.template,
-                    action: runnable
-                  });
+                  result = runnable.type === "shell"
+                    ? yield* runShellStreaming(deps.actionRunner, deps.template, containerId, input.projectId, runnable, open.id)
+                    : await deps.actionRunner.runAction({ containerId, projectId: input.projectId, template: deps.template, action: runnable });
                 } catch (error) {
                   result = {
                     ok: false,
