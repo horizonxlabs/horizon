@@ -12,6 +12,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
 import { VibeReasoning } from "./VibeReasoning";
+import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -208,7 +209,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     />
                   )}
                   <div className="vibe-message-text">
-                    {message.text || (isVibing && !message.reasoning ? "▋" : "")}
+                    {message.text ? (
+                      <VibeMarkdown text={message.text} />
+                    ) : isVibing && !message.reasoning ? (
+                      "▋"
+                    ) : (
+                      ""
+                    )}
                   </div>
                   {message.actions.length > 0 && (
                     <div className="vibe-message-actions">
