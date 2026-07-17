@@ -69,6 +69,21 @@ export function createKeycloakSessionIssuer(input: {
     if (input.platformSessions && input.corePersistenceClient) {
       const user = await input.corePersistenceClient.platformUser.findUnique({ where: { email: claims.email } });
       if (!user) throw new Error("keycloak_user_projection_missing");
+      // Reconcile the in-memory identity id to the persisted platform_users id. The projection
+      // upserts by email, so a seeded account (e.g. admin@horizon.ai) keeps its native id, while
+      // provisionKeycloakIdentity above minted a divergent usr_sso_* id. Without this, the
+      // synchronous admin-ops routes (which resolve users by email via MockAuthService) record the
+      // usr_sso_* id, which does not exist in platform_users and violates the knowledge/skill owner
+      // foreign keys. registerUser makes both stores agree on the persisted id.
+      const identity = (input.authSso as unknown as { identity: { registerUser(user: PlatformUser): PlatformUser } }).identity;
+      identity.registerUser({
+        id: user.id,
+        email: claims.email.trim().toLowerCase(),
+        name: claims.name.trim() || claims.email,
+        role,
+        status: "active",
+        permissions: getMockPermissions(role)
+      });
       const pair = await input.platformSessions.issue({
         id: user.id,
         email: claims.email,
