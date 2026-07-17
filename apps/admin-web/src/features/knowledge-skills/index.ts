@@ -1,1 +1,2 @@
-export { knowledgeSkillKpis, knowledgeSourceRows, skillAssignmentRows, skillLibraryRows } from "./evidence";
+export { KnowledgeSkillsConsole } from "./KnowledgeSkillsConsole";
+export { useKnowledgeSkills, type KnowledgeSkillsController } from "./use-knowledge-skills";

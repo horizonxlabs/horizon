@@ -359,20 +359,22 @@ test("Sprint 11 workspace prompt returns governed knowledge and skill metadata",
   assert.deepEqual(prompt.body.data.task.knowledgeVersionIds, [knowledgeVersion.body.data.id]);
 });
 
-test("Sprint 11 Admin UI exposes Knowledge and Skill Governance dashboard", () => {
+test("Sprint 11 Admin UI wires Knowledge and Skill governance to the live API", () => {
   const adminSource = readAllSourceFiles("apps/admin-web/src");
 
+  // The console must render the real, API-backed feature and hit the governance endpoints —
+  // not the former static demo rows.
   for (const text of [
-    "knowledgeSourceRows",
-    "skillLibraryRows",
-    "skillAssignmentRows",
-    "Knowledge active",
-    "Pending approvals",
-    "Retrieval pass",
-    "Active skills",
-    "HR Leave Policy Handbook",
-    "Frontend Developer Leave Skill"
+    "KnowledgeSkillsConsole",
+    "useKnowledgeSkills",
+    "/admin/knowledge/sources",
+    "/admin/knowledge/retrieval-logs",
+    "/admin/skills",
+    "/admin/skills/assignments"
   ]) {
     assert.match(adminSource, new RegExp(text));
+  }
+  for (const removed of ["knowledgeSourceRows", "HR Leave Policy Handbook", "Frontend Developer Leave Skill"]) {
+    assert.doesNotMatch(adminSource, new RegExp(removed));
   }
 });

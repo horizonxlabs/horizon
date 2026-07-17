@@ -12,6 +12,7 @@ export const navigation: Record<Surface, NavItem[]> = {
     { label: "Services", route: "/admin/services", icon: "services" },
     { label: "AI Providers", route: "/admin/ai-providers", icon: "ai" },
     { label: "Guardrails", route: "/admin/guardrails", icon: "shield" },
+    { label: "Knowledge & Skills", route: "/admin/knowledge", icon: "prd" },
     { label: "Audit Logs", route: "/admin/audit-logs", icon: "logs" },
     { label: "Users", route: "/admin/users", icon: "users" }
   ],

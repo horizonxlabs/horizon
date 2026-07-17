@@ -6,6 +6,7 @@ import { AdminRoutes } from "@/routes/AdminRoutes";
 import { AiProvidersConsole, useAiGovernance } from "@/features/ai-governance";
 import { GuardrailsConsole } from "@/features/guardrails";
 import { AuditEvidenceSection } from "@/features/audit-monitoring";
+import { KnowledgeSkillsConsole } from "@/features/knowledge-skills";
 import { useProductionObservability } from "@/features/platform-operations";
 import { UsersConsole } from "@/features/user-management";
 import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession, startAdminKeycloakLogout } from "@/shared/platform-client";
@@ -15,6 +16,7 @@ function pageFromPath(pathname: string) {
   if (pathname.includes("/ai-providers")) return "ai-providers";
   if (pathname.includes("/guardrails")) return "guardrails";
   if (pathname.includes("/audit-logs")) return "audit-logs";
+  if (pathname.includes("/knowledge")) return "knowledge";
   if (pathname.includes("/users")) return "users";
   return "dashboard";
 }
@@ -41,10 +43,11 @@ export function AdminConsole() {
 
   const content = page === "audit-logs" && client ? <AuditEvidenceSection client={client} />
     : page === "users" && client ? <UsersConsole client={client} />
+    : page === "knowledge" && client ? <KnowledgeSkillsConsole client={client} />
     : page === "ai-providers" ? <AiProvidersConsole ai={ai} />
     : page === "guardrails" ? <GuardrailsConsole ai={ai} />
     : <OperationsDashboard client={client} ai={ai} page={page} />;
-  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" ? null : (
+  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" ? null : (
       <PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />
     )}{content}</AppShell></AdminRoutes>;
 }
