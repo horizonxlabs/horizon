@@ -30,7 +30,7 @@ export function MarkdownEditor({
       aria-selected={mode === target}
       onClick={() => setMode(target)}
       className={cn(
-        "-mb-px border-b-2 px-3 py-1.5 text-sm font-medium outline-none",
+        "-mb-px rounded-none border-b-2 bg-transparent px-3 py-1.5 text-sm font-medium outline-none",
         mode === target ? "border-primary text-primary" : "border-transparent text-muted hover:text-body"
       )}
     >

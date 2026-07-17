@@ -68,7 +68,7 @@ export function Drawer({
             type="button"
             ref={closeRef}
             aria-label="Close panel"
-            className="rounded-control px-2 py-1 text-lg leading-none text-muted hover:bg-surface-muted"
+            className="rounded-control bg-transparent px-2 py-1 text-lg leading-none text-muted hover:bg-surface-muted"
             onClick={onClose}
           >
             ×
