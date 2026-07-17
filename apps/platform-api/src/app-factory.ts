@@ -35,7 +35,10 @@ import { PrismaDurableAiJobStore } from "./persistence/ai-job-repository";
 import { handleDurableAiJob, registerDurableAiJobHttpRoutes } from "./ai-governance/durable-job-route";
 import { UnavailableAiSecretStore, VaultKvV2AiSecretStore, type AiSecretStore } from "./ai-governance/secret-store";
 import { PrismaProjectFileRepository } from "./persistence/project-file-repository";
-import { createMinioProjectFileUploadUrlIssuer, type ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
+import type { ProjectFileUploadUrlIssuer } from "./workspace-orchestrator/minio-object-storage";
+import { resolveProjectFileUploadUrlIssuer } from "./project-file-upload-issuer";
+import { hydrateKnowledgeSkills, type KnowledgeSkillWriter } from "./persistence/knowledge-skill-repositories";
+import { handleKnowledgeSkillWithPersistence, isKnowledgeSkillRoute } from "./knowledge-skill-routes";
 import { handlePersistentProjectFilesRoute, isPersistenceProjectFileRoute } from "./persistence/persistent-project-files-route";
 import { handleAiGovernanceRoute, handleInMemoryAiGovernanceRoute } from "./ai-governance/ai-governance-routes";
 import { aiGovernanceHttpRoutes } from "./ai-governance/ai-governance-route-manifest";
@@ -80,6 +83,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   durableAiJobPayloadCipher?: AiJobPayloadCipher;
   projectFilePersistence?: PrismaProjectFileRepository;
   projectFileUploadUrlIssuer?: ProjectFileUploadUrlIssuer;
+  knowledgeSkillWriter?: KnowledgeSkillWriter;
   platformSessions?: PlatformSessionService;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -133,17 +137,7 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const { service: workspacePersistence } = await createPrismaWorkspacePersistence(env.DATABASE_URL);
   const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL);
   const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
-  const projectFileUploadUrlIssuer =
-    env.EVCP_S3_PUBLIC_URL && env.MINIO_ROOT_USER && env.MINIO_ROOT_PASSWORD
-      ? createMinioProjectFileUploadUrlIssuer({
-          endPoint: env.EVCP_S3_HOST ?? "minio",
-          port: Number(env.EVCP_S3_PORT ?? 9000),
-          useSSL: env.EVCP_S3_SSL === "true",
-          accessKey: env.MINIO_ROOT_USER,
-          secretKey: env.MINIO_ROOT_PASSWORD,
-          publicBaseUrl: env.EVCP_S3_PUBLIC_URL
-        })
-      : undefined;
+  const projectFileUploadUrlIssuer = resolveProjectFileUploadUrlIssuer(env);
   return {
     ...services,
     corePersistence: service,
@@ -162,7 +156,8 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
     durableAiJobs: new PrismaDurableAiJobStore(aiClient as never),
     durableAiJobPayloadCipher,
     projectFilePersistence: new PrismaProjectFileRepository(client as never),
-    projectFileUploadUrlIssuer
+    projectFileUploadUrlIssuer,
+    knowledgeSkillWriter: await hydrateKnowledgeSkills(services, env.DATABASE_URL)
   };
 }
 
@@ -409,9 +404,11 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
   const usePersistentProjectFiles = Boolean(corePersistence && isPersistenceProjectFileRoute(request.path));
   const useDurableAiJobs = Boolean(services.durableAiJobs && request.path.match(/^\/projects\/[^/]+\/ai-jobs(?:\/[^/]+)?$/));
   const useSimulatedAuth = Boolean(corePersistenceClient && request.method === "POST" && request.path === "/admin/auth/simulate-login");
-  if (!useCorePersistence && !useAiGovernancePersistence && !useBusinessSettingsPersistence && !usePrdPersistence && !useWorkspacePersistence && !usePublishStorePersistence && !useGeneratedRuntimePersistence && !useNativeAuth && !usePersistentProjectFiles && !useDurableAiJobs && !useSimulatedAuth) return executePlatformApiRequest(services, request);
+  const useKnowledgeSkill = Boolean(services.knowledgeSkillWriter && isKnowledgeSkillRoute(request));
+  if (!useCorePersistence && !useAiGovernancePersistence && !useBusinessSettingsPersistence && !usePrdPersistence && !useWorkspacePersistence && !usePublishStorePersistence && !useGeneratedRuntimePersistence && !useNativeAuth && !usePersistentProjectFiles && !useDurableAiJobs && !useSimulatedAuth && !useKnowledgeSkill) return executePlatformApiRequest(services, request);
 
   try {
+    if (useKnowledgeSkill && services.knowledgeSkillWriter) return await handleKnowledgeSkillWithPersistence((r) => executePlatformApiRequest(services, r), request, services, services.knowledgeSkillWriter);
     const persistentProjectFileResponse = await handlePersistentProjectFilesRoute({
       method: request.method,
       path: request.path,
@@ -2468,9 +2465,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   );
 
   routes.get("/admin/knowledge/sources", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: "/admin/knowledge/sources",
         headers: request.headers
@@ -2478,9 +2475,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/knowledge/sources", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: "/admin/knowledge/sources",
         headers: request.headers,
@@ -2489,9 +2486,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/knowledge/sources/:sourceId/versions", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/admin/knowledge/sources/${String(request.params?.sourceId ?? "")}/versions`,
         headers: request.headers,
@@ -2500,9 +2497,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/knowledge/versions/:versionId/approve", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/admin/knowledge/versions/${String(request.params?.versionId ?? "")}/approve`,
         headers: request.headers,
@@ -2511,9 +2508,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/knowledge/retrieve", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: "/admin/knowledge/retrieve",
         headers: request.headers,
@@ -2522,9 +2519,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.get("/admin/knowledge/retrieval-logs", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: "/admin/knowledge/retrieval-logs",
         headers: request.headers
@@ -2532,9 +2529,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.get("/admin/skills", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: "/admin/skills",
         headers: request.headers
@@ -2542,9 +2539,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: "/admin/skills",
         headers: request.headers,
@@ -2553,9 +2550,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills/:skillId/versions", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/admin/skills/${String(request.params?.skillId ?? "")}/versions`,
         headers: request.headers,
@@ -2564,9 +2561,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills/versions/:versionId/approve", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/admin/skills/versions/${String(request.params?.versionId ?? "")}/approve`,
         headers: request.headers,
@@ -2575,9 +2572,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills/:skillId/disable", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/admin/skills/${String(request.params?.skillId ?? "")}/disable`,
         headers: request.headers,
@@ -2586,9 +2583,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills/assignments", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: "/admin/skills/assignments",
         headers: request.headers,
@@ -2597,9 +2594,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/admin/skills/resolve", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: "/admin/skills/resolve",
         headers: request.headers,

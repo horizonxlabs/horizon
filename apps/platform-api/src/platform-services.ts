@@ -11,6 +11,7 @@ import {
   maskSecret,
   providerErrorMessage
 } from "./ai-governance/ai-gateway-adapter";
+import { PROJECT_FILE_ALLOWED_MIME_TYPES, PROJECT_FILE_BUCKET, PROJECT_FILE_MAX_SIZE_BYTES } from "./project-file-constants";
 import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 import { schemaNameFor } from "./workspace-orchestrator/postgres-provisioner";
@@ -3658,6 +3659,10 @@ export class KnowledgeGovernanceService {
     private readonly projects: ProjectService
   ) {}
 
+  // Replace in-memory state with a persisted snapshot (used to rehydrate Prisma-backed state on boot).
+  hydrate(state: { sources: KnowledgeSource[]; versions: KnowledgeVersion[]; approvals: KnowledgeApproval[]; retrievalLogs: KnowledgeRetrievalLog[] }): void { this.sources.splice(0, this.sources.length, ...state.sources); this.versions.splice(0, this.versions.length, ...state.versions); this.approvals.splice(0, this.approvals.length, ...state.approvals); this.retrievalLogs.splice(0, this.retrievalLogs.length, ...state.retrievalLogs); }
+  snapshot(): { sources: KnowledgeSource[]; versions: KnowledgeVersion[]; approvals: KnowledgeApproval[]; retrievalLogs: KnowledgeRetrievalLog[] } { return { sources: [...this.sources], versions: [...this.versions], approvals: [...this.approvals], retrievalLogs: [...this.retrievalLogs] }; }
+
   createSource(
     actor: PlatformUser,
     input: {
@@ -4076,23 +4081,6 @@ export class KnowledgeGovernanceService {
   }
 }
 
-const PROJECT_FILE_BUCKET = "project-file-uploads";
-const PROJECT_FILE_MAX_SIZE_BYTES = 25 * 1024 * 1024;
-const PROJECT_FILE_ALLOWED_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-  "text/csv",
-  "application/json",
-  "application/yaml",
-  "text/yaml",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-]);
-
 export class ProjectFileService {
   private readonly files: ProjectFileUpload[] = [];
 
@@ -4373,6 +4361,10 @@ export class SkillGovernanceService {
     private readonly audit: AuditService,
     private readonly projects: ProjectService
   ) {}
+
+  // Replace in-memory state with a persisted snapshot (used to rehydrate Prisma-backed state on boot).
+  hydrate(state: { skills: SkillDefinition[]; versions: SkillVersion[]; approvals: SkillApproval[]; assignments: SkillAssignment[] }): void { this.skills.splice(0, this.skills.length, ...state.skills); this.versions.splice(0, this.versions.length, ...state.versions); this.approvals.splice(0, this.approvals.length, ...state.approvals); this.assignments.splice(0, this.assignments.length, ...state.assignments); }
+  snapshot(): { skills: SkillDefinition[]; versions: SkillVersion[]; approvals: SkillApproval[]; assignments: SkillAssignment[] } { return { skills: [...this.skills], versions: [...this.versions], approvals: [...this.approvals], assignments: [...this.assignments] }; }
 
   createSkill(
     actor: PlatformUser,
