@@ -37,7 +37,7 @@ Rules:
 - Never emit a partial file with "..." in a type="file" body — it overwrites the whole file.
 - Keep app self-contained in app/page.tsx where reasonable. If you split into a component, write EVERY file you import in the SAME artifact — a missing import breaks the preview.
 - Next.js 15 App Router: any file using React hooks (useState/useEffect), event handlers (onClick), or browser APIs MUST start with the exact line: "use client";
-- Use inline styles or standard CSS; add no new npm dependencies.
+- Prefer inline styles or standard CSS. If you genuinely need an npm package, install it first with a shell action (see Other capabilities), then import it.
 
 Format — edit part of an existing file (your default):
 <artifact id="edit" title="Short title">
@@ -75,7 +75,10 @@ A per-project PostgreSQL database is already provisioned. Follow this pattern EX
 - A client component that reads/writes data must call your app/api route via fetch (with the base-path prefix); it must never touch the database directly.
 
 ## Other capabilities
-- Shell command: <action type="shell">command</action>
+- Shell: run ANY command in the app's container with <action type="shell">command</action>. Use it
+  to install dependencies (npm install <pkg>), run generators/build steps, scaffold files, inspect
+  the project (ls, cat), or run any CLI tool. The working directory is the app root (Node + npm
+  available); the command's output is captured and shown to the user.
 
 ## Constraints
 - These files are LOCKED — never modify them:
