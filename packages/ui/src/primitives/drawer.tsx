@@ -7,7 +7,8 @@ export function Drawer({
   title,
   description,
   footer,
-  children
+  children,
+  size = "md"
 }: {
   open: boolean;
   onClose: () => void;
@@ -15,7 +16,10 @@ export function Drawer({
   description?: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
+  /** Panel width. Defaults to "md" (the historical width); "lg"/"xl" give content like editors room. */
+  size?: "md" | "lg" | "xl";
 }) {
+  const widthClass = size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-md";
   const titleId = `drawer-title-${useId().replace(/:/g, "")}`;
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -49,7 +53,8 @@ export function Drawer({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-card"
+          "relative flex h-full w-full flex-col border-l border-border bg-surface shadow-card",
+          widthClass
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">

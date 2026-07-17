@@ -208,6 +208,7 @@ export function KnowledgePanel({ controller }: { controller: KnowledgeSkillsCont
 
       <Drawer
         open={Boolean(versionFor)}
+        size="lg"
         onClose={() => setVersionFor(undefined)}
         title={versionFor ? `New version · ${versionFor.title}` : "New version"}
         description="Submit indexed content for approval. Approve it below to make it retrievable."

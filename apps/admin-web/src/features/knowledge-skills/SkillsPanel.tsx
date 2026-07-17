@@ -198,6 +198,7 @@ export function SkillsPanel({ controller }: { controller: KnowledgeSkillsControl
 
       <Drawer
         open={Boolean(versionFor)}
+        size="lg"
         onClose={() => setVersionFor(undefined)}
         title={versionFor ? `New version · ${versionFor.name}` : "New version"}
         description="Submit the instruction for approval. Approve it below to activate it."
