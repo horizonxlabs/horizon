@@ -1,12 +1,12 @@
-export type ActionType = "file" | "edit" | "shell" | "migration";
+export type ActionType = "file" | "edit" | "shell" | "migration" | "skill";
 
 export type ParsedEvent =
   | { type: "text"; content: string }
-  | { type: "action_start"; actionId: string; actionType: ActionType; filePath?: string }
+  | { type: "action_start"; actionId: string; actionType: ActionType; filePath?: string; name?: string }
   | { type: "action_chunk"; actionId: string; content: string }
   | { type: "action_end"; actionId: string };
 
-const ACTION_TYPES: ActionType[] = ["file", "edit", "shell", "migration"];
+const ACTION_TYPES: ActionType[] = ["file", "edit", "shell", "migration", "skill"];
 
 interface ParserState {
   buffer: string;
@@ -92,6 +92,7 @@ export function createMessageParser() {
           throw new Error(`unknown action type '${actionType}' in tag: ${tag}`);
         }
         const filePath = extractAttr(tag, "filePath");
+        const name = extractAttr(tag, "name");
         state.actionCounter += 1;
         const actionId = `act-${state.actionCounter}`;
         state.currentAction = { actionId, actionType };
@@ -99,7 +100,8 @@ export function createMessageParser() {
           type: "action_start",
           actionId,
           actionType,
-          ...(filePath ? { filePath } : {})
+          ...(filePath ? { filePath } : {}),
+          ...(name ? { name } : {})
         });
         state.buffer = state.buffer.slice(tagEnd + 1);
         continue;

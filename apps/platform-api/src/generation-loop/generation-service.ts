@@ -12,7 +12,7 @@ import type { AiScenario, PlatformUser } from "../platform-services";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { ChatStreamEvent } from "./generation-types";
 import { resolveGovernedCompletion, type StreamChunk } from "./governed-completion";
-import { asTokenChunks, runShellStreaming } from "./generation-stream-helpers";
+import { asTokenChunks, buildSkillLoadFeedback, runShellStreaming, type GovernedContext } from "./generation-stream-helpers";
 import {
   buildActionPreview,
   clipActionText,
@@ -37,6 +37,8 @@ export interface GenerationServiceDeps {
     prompt: string;
     requestId: string;
   }) => AsyncIterable<StreamChunk>;
+  /** Governed skills (names + descriptions, instructions on demand) and knowledge excerpts for the prompt. */
+  resolveGovernedContext?: (input: { actor: PlatformUser; projectId: string; scenario: AiScenario }) => Promise<GovernedContext>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
   errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
@@ -63,6 +65,7 @@ interface OpenAction {
   id: string;
   type: ActionType;
   filePath?: string;
+  name?: string;
   content: string;
 }
 
@@ -123,6 +126,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         let assistantText = "";
         let turnFailed = false;
         let prompt = input.prompt;
+        const governed = input.actor && deps.resolveGovernedContext ? await deps.resolveGovernedContext({ actor: input.actor, projectId: input.projectId, scenario: "frontend_coding" }).catch(() => undefined) : undefined;
 
         roundLoop: for (let round = 0; round < MAX_ROUNDS; round += 1) {
           const parser = createMessageParser();
@@ -134,7 +138,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           const promptInput = {
             template: deps.template,
             contextFiles,
-            rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null
+            rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
+            availableSkills: governed?.availableSkills,
+            knowledgeExcerpts: governed?.knowledgeExcerpts
           };
           const systemPrompt =
             agentMode === "plan"
@@ -148,16 +154,8 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               content: message.content
             }));
 
-          const chatInput = {
-            apiKey,
-            systemPrompt,
-            messages: [...priorMessages, { role: "user" as const, content: prompt }]
-          };
-          const governedPrompt = [
-            systemPrompt,
-            "\nConversation:",
-            ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)
-          ].join("\n");
+          const chatInput = { apiKey, systemPrompt, messages: [...priorMessages, { role: "user" as const, content: prompt }] };
+          const governedPrompt = [systemPrompt, "\nConversation:", ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)].join("\n");
           const tokens = deps.governedCompletion
             ? resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
             : asTokenChunks(deps.llmClient.streamChat(chatInput));
@@ -190,6 +188,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                   id: event.actionId,
                   type: event.actionType,
                   filePath: event.filePath,
+                  name: event.name,
                   content: ""
                 });
                 yield {
@@ -211,6 +210,14 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 if (!open) continue;
                 actionIds.push(open.id);
 
+                if (open.type === "skill") {
+                  // Load the skill's full instructions on demand and feed them into the next round.
+                  const instruction = governed?.skillInstructions[open.name ?? ""];
+                  yield { type: "action_result", actionId: open.id, actionType: "skill", label: `Loaded skill: ${open.name ?? ""}`, ok: Boolean(instruction) };
+                  prompt = buildSkillLoadFeedback(open.name ?? "", instruction);
+                  roundFailed = true;
+                  continue;
+                }
                 const editParsed = open.type === "edit" ? parseEditBody(open.content) : null;
                 const runnable: RunnableAction =
                   open.type === "file"

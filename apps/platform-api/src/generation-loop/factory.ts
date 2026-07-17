@@ -46,6 +46,7 @@ export async function createDefaultGenerationService(opts: {
   chatHistory?: ChatHistoryStore;
   governedAiExecutor?: Pick<GovernedAiExecutor, "execute">;
   onGovernedExecution?: (evidence: AiExecutionEvidence) => void | Promise<void>;
+  resolveGovernedContext?: import("./generation-service").GenerationServiceDeps["resolveGovernedContext"];
 }) {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
@@ -86,6 +87,7 @@ export async function createDefaultGenerationService(opts: {
 
   return createGenerationService({
     llmClient,
+    ...(opts.resolveGovernedContext ? { resolveGovernedContext: opts.resolveGovernedContext } : {}),
     ...(opts.governedAiExecutor
       ? {
           governedCompletion: ({ actor, projectId, scenario, prompt, requestId }) =>

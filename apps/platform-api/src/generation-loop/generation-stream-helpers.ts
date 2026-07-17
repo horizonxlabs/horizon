@@ -8,6 +8,23 @@ export async function* asTokenChunks(source: AsyncIterable<string>): AsyncIterab
   for await (const text of source) yield { kind: "token", text };
 }
 
+// Governed skill/knowledge context injected into the generation prompt. Skills use opencode-style
+// progressive disclosure: only names+descriptions go into the system prompt; a skill's full
+// instructions arrive on demand when the model emits <action type="skill" name="...">.
+export interface GovernedContext {
+  availableSkills: Array<{ name: string; description: string }>;
+  skillInstructions: Record<string, string>;
+  knowledgeExcerpts: string[];
+}
+
+// The next-round prompt fed back to the model after it requests a skill — the loaded instructions
+// (opencode's <skill_content> envelope) or a graceful note when the named skill is unavailable.
+export function buildSkillLoadFeedback(name: string, instruction: string | undefined): string {
+  return instruction
+    ? `<skill_content name="${name}">\n# Skill: ${name}\n\n${instruction.trim()}\n</skill_content>\n\nApply this skill now and continue building exactly what the user asked for.`
+    : `The skill "${name}" is not available. Continue with the guidance you already have.`;
+}
+
 // Runs a shell action while streaming its output to the caller as action_chunk events (bridging the
 // runner's onShellOutput callback into the generator via a queue), then returns the result.
 export async function* runShellStreaming(

@@ -4,6 +4,8 @@ export function buildSystemPrompt(input: {
   template: GoldenTemplate;
   contextFiles: Array<{ path: string; content: string }>;
   rollingSummary: string | null;
+  availableSkills?: Array<{ name: string; description: string }>;
+  knowledgeExcerpts?: string[];
 }): string {
   const lockedList = input.template.lockedFiles.map((path) => `- ${path}`).join("\n") || "- (none)";
   const contextBlock = input.contextFiles
@@ -12,6 +14,20 @@ export function buildSystemPrompt(input: {
 
   const summarySection = input.rollingSummary
     ? `\n## Conversation summary so far\n${input.rollingSummary}\n`
+    : "";
+
+  // Progressive disclosure of governed skills (opencode pattern): the model sees only names +
+  // descriptions here and loads a skill's full instructions on demand via <action type="skill">.
+  const skillsSection = (input.availableSkills?.length ?? 0) > 0
+    ? `\n## Available skills\nWhen the user's request matches a skill's description, FIRST load it by emitting a single artifact containing only <action type="skill" name="THE_EXACT_NAME"></action> — its full instructions will be provided back to you, and you then build using them. Only load a skill when it genuinely fits the task.\n<available_skills>\n${input.availableSkills!
+        .map((s) => `  <skill><name>${s.name}</name><description>${s.description}</description></skill>`)
+        .join("\n")}\n</available_skills>\n`
+    : "";
+
+  const knowledgeSection = (input.knowledgeExcerpts?.length ?? 0) > 0
+    ? `\n## Organizational knowledge (governed and permission-filtered — treat as authoritative)\n${input.knowledgeExcerpts!
+        .map((excerpt, index) => `${index + 1}. ${excerpt}`)
+        .join("\n")}\n`
     : "";
 
   return `You are a precise coding agent building a "${input.template.name}" (Next.js 15 App Router + TypeScript) app that runs live in a container. The homepage shown in the preview is **app/page.tsx**. You make changes the way a senior engineer does: the smallest edit that satisfies the request, touching nothing else.
@@ -84,7 +100,7 @@ A per-project PostgreSQL database is already provisioned. Follow this pattern EX
 - These files are LOCKED — never modify them:
 ${lockedList}
 - Never ask for or reference secret values; only secret names may appear.
-${summarySection}
+${summarySection}${skillsSection}${knowledgeSection}
 ## Current project files (the app's LIVE current state — edit these in place, keep existing features)
 ${contextBlock || "(the app currently uses the default template; write app/page.tsx to replace the homepage)"}
   `;

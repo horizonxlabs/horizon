@@ -11,6 +11,7 @@ import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
+import { createGovernedContextResolver } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
 import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
@@ -2326,6 +2327,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   const generationService = await createDefaultGenerationService({
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
+    resolveGovernedContext: createGovernedContextResolver(services),
     ...(services.governedAiExecutor ? { governedAiExecutor: services.governedAiExecutor } : {}),
     onGovernedExecution: async (evidence) => {
       const audit = {
@@ -2334,10 +2336,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         resourceType: "ai_execution",
         resourceId: evidence.id,
         metadata: {
-          projectId: evidence.projectId,
-          scenario: evidence.scenario,
-          providerId: evidence.providerId,
-          model: evidence.model,
+          projectId: evidence.projectId, scenario: evidence.scenario,
+          providerId: evidence.providerId, model: evidence.model,
           status: evidence.status,
           fallbackUsed: evidence.fallbackUsed,
           tokensUsed: evidence.tokensUsed,
