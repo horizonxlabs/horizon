@@ -23,19 +23,28 @@ export function Drawer({
   const titleId = `drawer-title-${useId().replace(/:/g, "")}`;
   const closeRef = useRef<HTMLButtonElement>(null);
 
+  // Focus the close control and lock body scroll only when the drawer opens. Keeping this off the
+  // `onClose` dependency is essential: callers pass an inline `onClose` that is a new function every
+  // render, so including it would re-run this effect on every keystroke and steal focus back from
+  // whatever field the user is typing in (an unclosable/untypeable drawer).
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     closeRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  // Escape-to-close is registered separately so it can track the latest `onClose` without refocusing.
+  useEffect(() => {
+    if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;
