@@ -49,13 +49,15 @@ export function submitKnowledgeVersion(
   );
 }
 
+// approveVersion (both knowledge and skill) returns the governance decision envelope
+// `{ version, approval, auditEventId }`, not the bare version.
 export function approveKnowledgeVersion(
   client: PlatformApiClient,
   versionId: string,
   decision: GovernanceApprovalDecision,
   note?: string
-): Promise<KnowledgeVersion> {
-  return post<KnowledgeVersion>(
+): Promise<{ version: KnowledgeVersion }> {
+  return post<{ version: KnowledgeVersion }>(
     client,
     `/admin/knowledge/versions/${encodeURIComponent(versionId)}/approve`,
     { decision, note }
@@ -87,8 +89,8 @@ export function approveSkillVersion(
   versionId: string,
   decision: GovernanceApprovalDecision,
   note?: string
-): Promise<SkillVersion> {
-  return post<SkillVersion>(
+): Promise<{ version: SkillVersion }> {
+  return post<{ version: SkillVersion }>(
     client,
     `/admin/skills/versions/${encodeURIComponent(versionId)}/approve`,
     { decision, note }

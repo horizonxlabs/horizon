@@ -3892,7 +3892,7 @@ export class KnowledgeGovernanceService {
       version.isActive = true;
       version.approvedByUserId = actor.id;
       version.approvedAt = decidedAt;
-      source.status = "active";
+      source.status = "active"; source.indexStatus = "indexed"; // approved version's excerpts are the index; retrieve() needs indexStatus==="indexed"
       source.updatedAt = decidedAt;
     } else {
       version.approvalStatus = "rejected";

@@ -102,7 +102,7 @@ export function useKnowledgeSkills(client: PlatformApiClient) {
   const approveKnowledge = useCallback(
     (versionId: string, decision: "approved" | "rejected", note?: string) =>
       guard(async () => {
-        const version = await approveKnowledgeVersion(client, versionId, decision, note);
+        const { version } = await approveKnowledgeVersion(client, versionId, decision, note);
         setPendingKnowledge((current) => current.map((item) => (item.id === version.id ? version : item)));
         await reload();
       }),
@@ -130,7 +130,7 @@ export function useKnowledgeSkills(client: PlatformApiClient) {
   const approveSkill = useCallback(
     (versionId: string, decision: "approved" | "rejected", note?: string) =>
       guard(async () => {
-        const version = await approveSkillVersion(client, versionId, decision, note);
+        const { version } = await approveSkillVersion(client, versionId, decision, note);
         setPendingSkillVersions((current) =>
           current.map((item) => (item.id === version.id ? version : item))
         );
