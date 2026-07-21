@@ -12,7 +12,7 @@ import type { AiScenario, PlatformUser } from "../platform-services";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { ChatStreamEvent } from "./generation-types";
 import { resolveGovernedCompletion, type StreamChunk } from "./governed-completion";
-import { asTokenChunks, buildSkillLoadFeedback, runShellStreaming, type GovernedContext } from "./generation-stream-helpers";
+import { asTokenChunks, buildErrorFeedback, buildSkillLoadFeedback, runShellStreaming, validateBuild, type GovernedContext } from "./generation-stream-helpers";
 import {
   buildActionPreview,
   clipActionText,
@@ -25,11 +25,7 @@ export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 
 export interface GenerationServiceDeps {
   llmClient: LlmCompletionClient;
-  /**
-   * The private-server path supplies this adapter so workspace chat uses the same
-   * governed route, guardrails, quota, retry and evidence store as every other AI action.
-   * Keeping the LLM client as the explicit fallback preserves isolated memory tests only.
-   */
+  // Private-server path: governed route/guardrails/quota/evidence. LLM client is the memory-test fallback.
   governedCompletion?: (input: {
     actor: PlatformUser;
     projectId: string;
@@ -69,14 +65,11 @@ interface OpenAction {
   content: string;
 }
 
-// Number of LLM round-trips attempted for a single user turn: the initial attempt
-// plus up to 2 retries, mirroring createErrorFeedbackTracker's default maxRounds=2.
+// LLM round-trips per user turn (initial + up to 2 retries), also used for build self-heal.
 const MAX_ROUNDS = 3;
 
 export function createGenerationService(deps: GenerationServiceDeps) {
-  // Globally-unique per message. A previous in-memory counter (msg-1, msg-2, …) reset to 0 on every
-  // process restart and was shared across projects, so persisted ids collided — the chatMessage
-  // insert then failed with a unique-constraint error, aborting the turn and dropping history.
+  // Globally-unique per message (a shared in-memory counter reset on restart and collided).
   const nextMessageId = () => `msg-${randomUUID()}`;
   const turnLock = createProjectTurnLock();
 
@@ -114,9 +107,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const apiKey = deps.getApiKey(input.projectId);
         const baseCommit =
           agentMode === "build" ? await deps.workspaceGuard.prepare(input.projectId) : null;
-        // Read the CURRENT files from the container so the AI edits live code (preserving
-        // existing features) instead of rewriting from the static template. Falls back to
-        // the template when the reader is absent or the container has no source yet.
+        // Edit the container's CURRENT files (preserve features) instead of the static template.
         const liveFiles = deps.readContextFiles
           ? await deps.readContextFiles(containerId).catch(() => [])
           : [];
@@ -125,6 +116,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const deferredMigrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
         let assistantText = "";
         let turnFailed = false;
+        let buildValidated = false;
         let prompt = input.prompt;
         const governed = input.actor && deps.resolveGovernedContext ? await deps.resolveGovernedContext({ actor: input.actor, projectId: input.projectId, scenario: "frontend_coding" }).catch(() => undefined) : undefined;
 
@@ -132,6 +124,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           const parser = createMessageParser();
           const openActions = new Map<string, OpenAction>();
           let roundFailed = false;
+          let roundHadFileAction = false;
 
           const contextFiles =
             liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
@@ -209,6 +202,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 const open = openActions.get(event.actionId);
                 if (!open) continue;
                 actionIds.push(open.id);
+                if (open.type === "file" || open.type === "edit") roundHadFileAction = true;
 
                 if (open.type === "skill") {
                   // Load the skill's full instructions on demand and feed them into the next round.
@@ -311,6 +305,15 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             }
           }
 
+          // Build-error self-heal: after a clean round that changed files, validate the build and
+          // feed any errors back so the model fixes them next round (instead of a straight rollback).
+          if (!turnFailed && !roundFailed && agentMode === "build" && roundHadFileAction) {
+            const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
+            if (buildError && round < MAX_ROUNDS - 1) { prompt = buildErrorFeedback(buildError); roundFailed = true; }
+            else if (buildError) { turnFailed = true; yield { type: "error", message: `Build still failing after fixes: ${buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300)}` }; }
+            else buildValidated = true;
+          }
+
           if (turnFailed || !roundFailed) {
             break roundLoop;
           }
@@ -332,7 +335,8 @@ export function createGenerationService(deps: GenerationServiceDeps) {
 
         if (!turnFailed && agentMode === "build") {
           try {
-            await deps.workspaceGuard.validate(input.projectId);
+            // Final gate: validate unless a self-heal round already confirmed the build.
+            if (!buildValidated) await deps.workspaceGuard.validate(input.projectId);
             const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
             if (deferredMigrations.length > 0) {
               const migrationResult = await deps.actionRunner.runMigrationBatch({

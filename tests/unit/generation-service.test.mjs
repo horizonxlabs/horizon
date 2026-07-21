@@ -133,7 +133,10 @@ test("validation failure restores the starting revision and creates no commit or
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "break it" }));
 
-  assert.deepEqual(lifecycle, ["prepare", "validate", "restore:known-good"]);
+  // Build-error self-heal: the failed build is validated in the round loop AND re-checked by the
+  // finalization gate before commit, so validate runs twice; the atomicity guarantee is unchanged —
+  // it still ends in a restore to the known-good revision with no commit.
+  assert.deepEqual(lifecycle, ["prepare", "validate", "validate", "restore:known-good"]);
   assert.equal(commitAttempts, 0);
   assert.equal(
     events.some((event) => event.type === "commit"),

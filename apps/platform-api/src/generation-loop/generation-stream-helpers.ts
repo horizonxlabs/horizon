@@ -8,6 +8,29 @@ export async function* asTokenChunks(source: AsyncIterable<string>): AsyncIterab
   for await (const text of source) yield { kind: "token", text };
 }
 
+// Run the workspace build validation, returning the error message (compilation failure) or null when
+// it passes — so the generation loop can feed the errors back for a self-heal round instead of
+// throwing straight to a rollback.
+export async function validateBuild(
+  guard: { validate(projectId: string): Promise<void> },
+  projectId: string
+): Promise<string | null> {
+  try {
+    await guard.validate(projectId);
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
+// The next-round prompt fed back after a failed build (opencode-style: surface the diagnostics and
+// ask for a minimal fix). ANSI colour codes from the build output are stripped and it is clipped.
+export function buildErrorFeedback(buildError: string): string {
+  // eslint-disable-next-line no-control-regex
+  const clean = buildError.replace(/\[[0-9;]*m/g, "").trim().slice(0, 4000);
+  return `The build FAILED. Fix ONLY the syntax/type errors below using <action type="edit"> edits (SEARCH/REPLACE) that touch just the broken lines — change nothing else, add no features. Common causes: a multi-line string in double quotes (use backticks), a missing closing ) or }, a stray ;.\n<build_errors>\n${clean}\n</build_errors>`;
+}
+
 // Governed skill/knowledge context injected into the generation prompt. Skills use opencode-style
 // progressive disclosure: only names+descriptions go into the system prompt; a skill's full
 // instructions arrive on demand when the model emits <action type="skill" name="...">.
