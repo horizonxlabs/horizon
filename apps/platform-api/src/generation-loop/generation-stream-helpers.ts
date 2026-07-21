@@ -38,6 +38,7 @@ export interface GovernedContext {
   availableSkills: Array<{ name: string; description: string }>;
   skillInstructions: Record<string, string>;
   knowledgeExcerpts: string[];
+  productSpec?: string;
 }
 
 // The next-round prompt fed back to the model after it requests a skill — the loaded instructions
