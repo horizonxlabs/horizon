@@ -128,8 +128,16 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
       for (const snapshot of await store.list()) {
-        records.set(snapshot.record.projectId, snapshot.record);
-        if (snapshot.llmGatewayKeyId) llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
+        // A persisted "running" record is stale after a stack restart (the container stopped without
+        // going through the idle transition). Reconcile with the real container so preview access can
+        // wake it — otherwise resolvePreviewTarget trusts the stale state and proxies to a dead
+        // container, returning 503 forever.
+        const live = snapshot.record.state !== "running" || !snapshot.record.containerId
+          ? true
+          : (await deps.docker.inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`).catch(() => null))?.running ?? false;
+        const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
+        records.set(record.projectId, record);
+        if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
       }
     },
     async cleanupOrphanContainers(): Promise<string[]> {
@@ -152,20 +160,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return deps.secrets.listNames(projectId);
     },
 
-    /**
-     * Per-project scoped-role connection string (postgresql://<role>:<pw>@host/db?schema=<app_schema>)
-     * for internal server-side use only — never surfaced to the Creator. Postgres enforces schema
-     * isolation via this role. Undefined until the workspace has been provisioned.
-     */
+    // Per-project scoped-role DATABASE_URL for internal server use only (Postgres schema-isolated); undefined until provisioned.
     async getProjectDatabaseUrl(projectId: string): Promise<string | undefined> {
       return (await deps.secrets.resolveEnv(projectId)).DATABASE_URL;
     },
 
-    /**
-     * The project's fully-resolved secret environment (DATABASE_URL, S3_*, LLM_GATEWAY_KEY, …)
-     * for internal server-side use only — never surfaced to the Creator. Used by the container
-     * publish stack to start production/staging containers with the same secrets as dev.
-     */
+    // Fully-resolved secret env (DATABASE_URL, S3_*, LLM_GATEWAY_KEY, …) for internal server use only.
     async resolveEnv(projectId: string): Promise<Record<string, string>> {
       return deps.secrets.resolveEnv(projectId);
     },
