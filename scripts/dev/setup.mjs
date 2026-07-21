@@ -7,8 +7,27 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+// Read a host port from .env so readiness checks + the printed URLs match the actual mapping
+// (the ports are configurable — e.g. moved into the 98xx range to dodge local collisions).
+function envPort(key, fallback) {
+  try {
+    const line = readFileSync(resolve(root, ".env"), "utf8")
+      .split("\n")
+      .find((entry) => entry.startsWith(`${key}=`));
+    const value = line?.slice(key.length + 1).trim();
+    return value && /^\d+$/.test(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+const appPort = envPort("EVCP_HTTP_PORT", "8080");
+const apiPort = envPort("EVCP_API_PORT", "3100");
+const keycloakPort = envPort("EVCP_KEYCLOAK_HOST_PORT", "8081");
+const minioConsolePort = envPort("EVCP_S3_CONSOLE_HOST_PORT", "9001");
 
 function dockerInspect(name, format) {
   const r = spawnSync("docker", ["inspect", `--format=${format}`, name]);
@@ -63,14 +82,14 @@ if (bsExit !== "0") {
 // ── 4. Wait for platform-api (installs deps + migrates + seeds in-container) ──
 await waitFor(
   "platform-api (installs deps, migrates & seeds on first run)",
-  () => httpOk("http://localhost:3100/health") || httpOk("http://localhost:3100"),
+  () => httpOk(`http://localhost:${apiPort}/health`) || httpOk(`http://localhost:${apiPort}`),
   300_000
 );
 
 // ── Done ──────────────────────────────────────────────────────────────────────
 console.log("\n✓ Dev stack up — everything runs in containers with hot reload.");
-console.log("  App (via Caddy): http://localhost:8080  (/admin · /creator · /store · /api)");
-console.log("  API:             http://localhost:3100");
-console.log("  Keycloak:        http://localhost:8081/auth  (admin / see KEYCLOAK_ADMIN_PASSWORD)");
-console.log("  MinIO console:   http://localhost:9001");
+console.log(`  App (via Caddy): http://localhost:${appPort}  (/admin · /creator · /store · /api)`);
+console.log(`  API:             http://localhost:${apiPort}`);
+console.log(`  Keycloak:        http://localhost:${keycloakPort}/auth  (admin / see KEYCLOAK_ADMIN_PASSWORD)`);
+console.log(`  MinIO console:   http://localhost:${minioConsolePort}`);
 console.log("\n  Stop: docker compose -f docker/docker-compose.yml down");
