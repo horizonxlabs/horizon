@@ -1,14 +1,13 @@
-ui = true
-
-api_addr = "http://openbao:8200"
+# Persistent OpenBao for the dev stack: file storage on a volume so AI provider secrets survive a
+# stack recreate (the previous `server -dev` kept everything in memory and lost them on every restart).
+storage "file" {
+  path = "/openbao/data"
+}
 
 listener "tcp" {
   address     = "0.0.0.0:8200"
-  tls_disable = 1
+  tls_disable = "true"
 }
 
-# The service is private to the Compose network. Terminate TLS at the private
-# ingress if operators choose to expose the UI; do not publish port 8200 by default.
-storage "file" {
-  path = "/openbao/file"
-}
+disable_mlock = true
+ui            = false
