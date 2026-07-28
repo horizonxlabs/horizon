@@ -29,6 +29,19 @@ test("declares litellm service on internal network without published LLM admin p
   assert.ok(litellm.volumes.some((volume) => volume.includes("litellm-config.yaml")));
 });
 
+test("development compose initializes the litellm database before healthy startup", () => {
+  const init = compose.services["litellm-db-init"];
+  assert.ok(init, "development compose must create the litellm database on fresh volumes");
+  assert.equal(init.depends_on.postgres.condition, "service_healthy");
+  assert.match(init.image, /^postgres:/);
+  assert.match(init.command.join(" "), /CREATE DATABASE litellm/);
+
+  const litellm = compose.services.litellm;
+  assert.equal(litellm.depends_on["litellm-db-init"].condition, "service_completed_successfully");
+  assert.ok(litellm.healthcheck, "development litellm must expose a readiness healthcheck");
+  assert.equal(compose.services["platform-api"].depends_on.litellm.condition, "service_healthy");
+});
+
 test("platform-api can reach docker socket and litellm", () => {
   const api = compose.services["platform-api"];
   assert.ok(api.volumes.some((volume) => volume.includes("/var/run/docker.sock")));
