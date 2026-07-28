@@ -7,6 +7,7 @@ export function buildSystemPrompt(input: {
   availableSkills?: Array<{ name: string; description: string }>;
   knowledgeExcerpts?: string[];
   productSpec?: string;
+  approvedPlan?: string;
 }): string {
   const lockedList = input.template.lockedFiles.map((path) => `- ${path}`).join("\n") || "- (none)";
   const contextBlock = input.contextFiles
@@ -33,6 +34,13 @@ export function buildSystemPrompt(input: {
 
   const productSpecSection = input.productSpec
     ? `\n## Product spec (the approved PRD — build toward it)\n${input.productSpec}\n`
+    : "";
+
+  const approvedPlanText = input.approvedPlan && input.approvedPlan.length > 8000
+    ? `${input.approvedPlan.slice(0, 8000)}\n… (plan truncated)`
+    : input.approvedPlan;
+  const approvedPlanSection = approvedPlanText
+    ? `\n## Approved plan (the user approved this plan — implement exactly it, nothing more)\n${approvedPlanText}\n`
     : "";
 
   return `You are a precise coding agent building a "${input.template.name}" (Next.js 15 App Router + TypeScript) app that runs live in a container. The homepage shown in the preview is **app/page.tsx**. You make changes the way a senior engineer does: the smallest edit that satisfies the request, touching nothing else.
@@ -105,7 +113,7 @@ A per-project PostgreSQL database is already provisioned. Follow this pattern EX
 - These files are LOCKED — never modify them:
 ${lockedList}
 - Never ask for or reference secret values; only secret names may appear.
-${summarySection}${skillsSection}${knowledgeSection}${productSpecSection}
+${summarySection}${skillsSection}${knowledgeSection}${productSpecSection}${approvedPlanSection}
 ## Current project files (the app's LIVE current state — edit these in place, keep existing features)
 ${contextBlock || "(the app currently uses the default template; write app/page.tsx to replace the homepage)"}
   `;
