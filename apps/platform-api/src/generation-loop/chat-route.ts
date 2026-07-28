@@ -86,10 +86,12 @@ export function createChatSseHandler(deps: {
     let prompt = "";
     let attachmentIds: string[] = [];
     let agentMode = resolveWorkspaceAgentMode(undefined);
+    let approvedPlan: string | undefined;
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
+      approvedPlan = parsed?.approvedPlan ? String(parsed.approvedPlan) : undefined;
       agentMode = resolveWorkspaceAgentMode(parsed);
       attachmentIds = Array.isArray(parsed?.attachmentIds)
         ? parsed.attachmentIds.map(String).filter(Boolean)
@@ -144,7 +146,8 @@ export function createChatSseHandler(deps: {
         projectId,
         prompt,
         agentMode,
-        actor: auth.actor
+        actor: auth.actor,
+        approvedPlan
       })) {
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }

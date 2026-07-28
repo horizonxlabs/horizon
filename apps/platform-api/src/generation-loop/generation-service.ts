@@ -86,6 +86,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       prompt: string;
       agentMode?: WorkspaceAgentMode;
       actor?: PlatformUser;
+      approvedPlan?: string;
     }): AsyncIterable<ChatStreamEvent> {
       const releaseTurn = await turnLock.acquire(input.projectId);
       try {
@@ -134,12 +135,11 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
             availableSkills: governed?.availableSkills,
             knowledgeExcerpts: governed?.knowledgeExcerpts,
-            productSpec: governed?.productSpec
+            productSpec: governed?.productSpec,
+            approvedPlan: input.approvedPlan
           };
           const systemPrompt =
-            agentMode === "plan"
-              ? buildPlanSystemPrompt(promptInput)
-              : buildSystemPrompt(promptInput);
+            agentMode === "plan" ? buildPlanSystemPrompt(promptInput) : buildSystemPrompt(promptInput);
 
           const priorMessages = (await deps.chatHistory.listMessages(input.projectId))
             .filter((message) => message.role !== "system")
