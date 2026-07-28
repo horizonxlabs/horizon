@@ -137,6 +137,18 @@ Creator confirms it via `POST .../prd/baseline` → Phase A grounds later turns 
   `core_flows` body contains the plan text; `confirmBaseline` promotes it; then
   `renderBaselineSpec` (Phase A) returns the evolved spec including the plan.
 
+## Implementation note (domain finding — resolved)
+
+During implementation we found `confirmBaseline` is **one-time**: once a project has a
+baseline, `isBaseline` stays on the frozen original v1.0 and no version can be
+promoted to baseline. `createVersionFromChange`, however, advances
+`document.currentVersionId`. So the evolving spec is the **current version**, not
+the baseline. To make an approved plan actually ground later generation, **Phase A
+was adjusted to ground on the current version** (via `renderSpecVersion(getCurrent())`,
+gated by the presence of a confirmed baseline) instead of the frozen baseline. The
+Creator's plan approval is the human gate; the original baseline is preserved as a
+historical anchor. No separate "confirm this version as baseline" step is needed.
+
 ## Acceptance criteria
 
 - Approving a plan records a new **non-baseline** PRD version whose `core_flows`
