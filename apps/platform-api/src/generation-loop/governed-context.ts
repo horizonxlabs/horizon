@@ -1,6 +1,6 @@
 import type { AiScenario, PlatformApiServices, PlatformUser } from "../platform-services";
 import type { GovernedContext } from "./generation-stream-helpers";
-import { renderBaselineSpec } from "../prd/baseline-spec";
+import { renderSpecVersion } from "../prd/baseline-spec";
 
 // Turns a project's governed skill assignment + knowledge scope into the generation prompt context.
 // Reuses the same in-memory governance services as the admin console (hydrated from Postgres at
@@ -44,7 +44,12 @@ export function createGovernedContextResolver(services: Pick<PlatformApiServices
 
     let productSpec: string | undefined;
     try {
-      productSpec = renderBaselineSpec(services.prds.listVersions(input.actor, input.projectId)) ?? undefined;
+      // Ground on the evolving CURRENT version (which tracks approved changes/plans), but only once a
+      // baseline has been confirmed — before that there is no agreed spec to build toward.
+      const versions = services.prds.listVersions(input.actor, input.projectId);
+      if (versions.some((version) => version.isBaseline)) {
+        productSpec = renderSpecVersion(services.prds.getCurrent(input.actor, input.projectId)) ?? undefined;
+      }
     } catch {
       // No PRD baseline in scope — generation proceeds without a spec.
     }

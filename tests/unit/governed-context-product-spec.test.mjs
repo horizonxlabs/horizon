@@ -12,7 +12,7 @@ const baselineVersion = {
 const services = (over = {}) => ({
   skills: { resolve() { throw new Error("no skill"); } },
   knowledge: { retrieve() { return { sources: [] }; } },
-  prds: { listVersions: () => [baselineVersion] },
+  prds: { listVersions: () => [baselineVersion], getCurrent: () => baselineVersion },
   ...over
 });
 
