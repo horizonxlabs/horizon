@@ -54,6 +54,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     promptDraft,
     setPromptDraft,
     handleVibeChat,
+    approveAndImplement,
     vibePreviewKey,
     projectFiles,
     selectedAttachmentIds,
@@ -231,6 +232,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     <div className="vibe-commit-chip">
                       ⑂ committed {message.commitSha.slice(0, 8)}
                     </div>
+                  )}
+                  {message.isPlan && message.text && !isVibing && (
+                    <button
+                      type="button"
+                      className="vibe-live-control vibe-live-control-primary"
+                      onClick={() => approveAndImplement(message.sourcePrompt ?? "", message.text)}
+                    >
+                      Approve &amp; implement
+                    </button>
                   )}
                 </div>
               )
