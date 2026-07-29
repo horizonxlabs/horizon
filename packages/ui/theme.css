@@ -12,6 +12,7 @@
   --ref-slate-200: #e2e8f0;
   --ref-slate-100-soft: #eef2f7;
   --ref-slate-500: #64748b;
+  --ref-slate-600: #475569;
   --ref-slate-900: #0f172a;
   --ref-white: #ffffff;
   --ref-success-bg: #dcfce7;
@@ -44,7 +45,7 @@
   --evcp-color-border: var(--ref-slate-200);
   --evcp-color-border-soft: var(--ref-slate-100-soft);
   --evcp-color-text: var(--ref-slate-900);
-  --evcp-color-muted: var(--ref-slate-500);
+  --evcp-color-muted: var(--ref-slate-600);
   --evcp-color-primary: var(--ref-blue-600);
   --evcp-color-primary-strong: var(--ref-blue-700);
   --evcp-color-primary-soft: var(--ref-blue-100);
