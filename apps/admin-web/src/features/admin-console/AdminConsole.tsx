@@ -2,6 +2,7 @@ import { navigation } from "@evcp/config";
 import { AppShell, DataTable, DecisionPanel, MetricCard, PageHeader, SectionCard, ServiceStrip, useBrowserPath, usePageHeadingFocus } from "@evcp/ui";
 import { BrainCircuit, KeyRound, LockKeyhole, Route, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { AdminRoutes } from "@/routes/AdminRoutes";
 import { AiProvidersConsole, useAiGovernance } from "@/features/ai-governance";
 import { GuardrailsConsole } from "@/features/guardrails";
@@ -10,12 +11,11 @@ import { AuthSettingsPage } from "@/features/auth-sso";
 import { DomainReadinessPage } from "@/features/domain-management";
 import { KnowledgeSkillsConsole } from "@/features/knowledge-skills";
 import { useProductionObservability } from "@/features/platform-operations";
-import { PublishGovernancePage } from "@/features/publish-governance";
 import { UsersConsole } from "@/features/user-management";
 import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession, startAdminKeycloakLogout } from "@/shared/platform-client";
 import { adminPageFromPath } from "./admin-routes";
 
-export function AdminConsole() {
+export function AdminConsole({ publishingPage }: { publishingPage: ReactNode }) {
   const [setupStatus, setSetupStatus] = useState<"loading" | "incomplete" | "complete">("loading");
   const [sessionActive, setSessionActive] = useState(() => consumeAdminSessionHandoff() || hasValidAdminSession());
   const client = useMemo(() => (sessionActive ? createAdminPlatformClient(() => { clearAdminSession(); setSessionActive(false); }) : undefined), [sessionActive]);
@@ -44,7 +44,7 @@ export function AdminConsole() {
     : page === "guardrails" ? <GuardrailsConsole ai={ai} />
     : page === "auth" ? <AuthSettingsPage />
     : page === "domains" ? <DomainReadinessPage />
-    : page === "publishing" ? <PublishGovernancePage />
+    : page === "publishing" ? publishingPage
     : page === "not-found" ? <DecisionPanel tone="warning" badge="Not found" title="Admin page not found" lines={["Choose a destination from the administration navigation."]} />
     : <OperationsDashboard client={client} ai={ai} page={page === "services" ? "services" : "dashboard"} />;
   return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} currentPath={pathname} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" || page === "auth" || page === "domains" || page === "publishing" || page === "not-found" ? null : (
