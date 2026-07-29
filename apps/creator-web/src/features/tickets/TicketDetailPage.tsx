@@ -1,9 +1,10 @@
 import { DecisionPanel, navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
 import { ArrowLeft, FilePenLine, MessageSquare, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorShell } from "@/features/projects";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
+import { createTicketPrdChangeAction } from "./ticket-actions";
 import { useCreatorTicketInbox } from "./use-creator-ticket-inbox";
 
 export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
@@ -13,6 +14,19 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
   const ticket = inbox.items.find((item) => item.id === ticketId);
   const [actionMessage, setActionMessage] = useState("");
   const [isConverting, setIsConverting] = useState(false);
+  const conversion = useMemo(
+    () =>
+      ticket
+        ? createTicketPrdChangeAction({
+            projectId,
+            ticket,
+            client: createCreatorPlatformClient(),
+            refreshInbox: inbox.refresh,
+            refreshPrdState: app.refreshPrdState
+          })
+        : undefined,
+    [app.refreshPrdState, inbox.refresh, projectId, ticket]
+  );
 
   useEffect(() => {
     setActionMessage("");
@@ -20,33 +34,12 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
   }, [ticketId]);
 
   async function convertToPrdChange() {
-    if (!ticket || isConverting || !ticket.actions.includes("convert_to_prd_change")) return;
+    if (!conversion || isConverting || conversion.isPending()) return;
     setIsConverting(true);
     setActionMessage("Creating PRD change through Platform API.");
-    try {
-      await createCreatorPlatformClient().convertTicketToPrdChange(projectId, {
-        ticketId: ticket.id,
-        title: `Address ${ticket.ticketNumber}: ${ticket.title}`,
-        proposedRequirement: ticket.description || ticket.title,
-        affectedSections: ["functional_requirements"],
-        acceptanceCriteria: [
-          `Resolve ${ticket.ticketNumber} and preserve existing access behavior.`
-        ],
-        riskLevel: ticket.priority === "high" ? "high" : "medium"
-      });
-      setActionMessage("PRD change created through Platform API.");
-      try {
-        await Promise.all([inbox.refresh(), app.refreshPrdState(projectId)]);
-      } catch {
-        setActionMessage("PRD change created through Platform API. Refreshing governed state failed.");
-      }
-    } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? `PRD change creation failed: ${error.message}`
-          : "PRD change creation failed. No local success record was created."
-      );
-    } finally {
+    const message = await conversion.run();
+    if (message) setActionMessage(message);
+    if (!conversion.isPending()) {
       setIsConverting(false);
     }
   }
@@ -161,7 +154,7 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
               <button
                 type="button"
                 className="ghost-button"
-                onClick={() => void inbox.refresh()}
+                onClick={() => void inbox.refresh().catch(() => undefined)}
                 disabled={inbox.status === "loading"}
               >
                 <RotateCcw size={14} /> Refresh

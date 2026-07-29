@@ -22,7 +22,7 @@ export function TicketsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => void inbox.refresh()}
+                  onClick={() => void inbox.refresh().catch(() => undefined)}
                   disabled={inbox.status === "loading"}
                 >
                   <RotateCcw size={14} /> Refresh

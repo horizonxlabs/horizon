@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
+import { refreshCreatorTicketInbox } from "./ticket-actions";
 
 export type CreatorTicketInboxItem = {
   id: string;
@@ -41,9 +42,7 @@ export function useCreatorTicketInbox(projectId: string) {
     setStatus("loading");
     setItems([]);
     try {
-      const result = await createCreatorPlatformClient().request<CreatorTicketInboxItem[]>(
-        `/creator/projects/${encodeURIComponent(projectId)}/tickets`
-      );
+      const result = await refreshCreatorTicketInbox(projectId, createCreatorPlatformClient());
       if (activeRequest !== requestId.current) return;
       setItems(result);
       setStatus("ready");
@@ -52,16 +51,20 @@ export function useCreatorTicketInbox(projectId: string) {
           ? "Ticket inbox loaded from Platform API."
           : "No tickets have been submitted for this project."
       );
-    } catch {
+    } catch (error) {
       if (activeRequest !== requestId.current) return;
       setItems([]);
       setStatus("error");
       setMessage("Ticket inbox is unavailable. No local ticket records are shown.");
+      throw error;
     }
   }, [projectId]);
 
   useEffect(() => {
-    void refresh();
+    void refresh().catch(() => undefined);
+    return () => {
+      requestId.current += 1;
+    };
   }, [refresh]);
 
   return { status, items, message, refresh };
