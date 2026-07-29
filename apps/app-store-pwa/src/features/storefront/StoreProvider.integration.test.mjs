@@ -18,12 +18,13 @@ globalThis.window = {
   dispatchEvent() {}
 };
 globalThis.document = { querySelector: () => null };
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.React = (await import("react")).default;
 
-const { renderToStaticMarkup } = await import("react-dom/server");
+const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
-const { StoreProvider } = await import("./StoreProvider.tsx");
-const { StoreCollectionPage, navigateToStoreApp } = await import("./pages/StoreCollectionPage.tsx");
+const { StoreProvider, useStorefront } = await import("./StoreProvider.tsx");
+const { StoreCollectionPage } = await import("./pages/StoreCollectionPage.tsx");
 const { StoreShell } = await import("./StoreShell.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
 
@@ -47,36 +48,77 @@ const ready = {
 };
 const initial = { status: "loading", source: "Platform API", myApps: [], availableApps: [] };
 
-function renderCollection(store, page) {
-  return renderToStaticMarkup(React.createElement(
-    StoreProvider,
-    { store },
-    React.createElement(StoreCollectionPage, { page })
-  ));
+function RefreshProbe() {
+  const { bootstrap, refreshHome } = useStorefront();
+  return React.createElement(
+    "button",
+    { type: "button", onClick: () => void refreshHome() },
+    `Refresh Store ${bootstrap.userName ?? "loading"}`
+  );
 }
 
-test("Provider wiring sends explicit API collections and device storage into real collection pages", async () => {
-  const device = createStoreDeviceState(window.localStorage);
-  device.toggleFavorite(availableApp.slug);
-  const store = createStorefrontStateStore({ initialBootstrap: initial, loadHome: async () => ready, device });
-  await store.refresh();
+function tree(store, page = "my-apps") {
+  return React.createElement(
+    StoreProvider,
+    { store },
+    React.createElement(
+      StoreShell,
+      { route: { page } },
+      React.createElement(StoreCollectionPage, { page }),
+      React.createElement(RefreshProbe)
+    )
+  );
+}
 
-  const myApps = renderCollection(store, "my-apps");
-  const available = renderCollection(store, "available");
-  const favorites = renderCollection(store, "favorites");
+function button(root, label) {
+  const match = root.findAllByType("button").find((item) => item.children.join("").includes(label));
+  assert.ok(match, `Expected ${label} button`);
+  return match;
+}
 
-  assert.match(myApps, /My API App/);
-  assert.doesNotMatch(myApps, /Available API App/);
-  assert.match(available, /Available API App/);
-  assert.doesNotMatch(available, /My API App/);
-  assert.match(favorites, /Available API App/);
-  assert.match(favorites, /This device/);
+async function resolve(next, value) {
+  await act(async () => {
+    next.resolve(value);
+    await Promise.resolve();
+  });
+}
+
+test("mounted Provider loads API collections, updates device favorites/recent, and uses the real card handler", async () => {
+  memory.clear();
+  const load = deferred();
+  const store = createStorefrontStateStore({
+    initialBootstrap: initial,
+    loadHome: () => load.promise,
+    device: createStoreDeviceState(window.localStorage)
+  });
+  let renderer;
+  await act(async () => { renderer = create(tree(store)); });
+  assert.match(JSON.stringify(renderer.toJSON()), /Loading Horizon Store/);
+
+  await resolve(load, ready);
+  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Available API App/);
+
+  const favorite = renderer.root.findAllByProps({ "aria-label": "Add My API App to favorites on this device" })[0];
+  await act(async () => { favorite.props.onClick(); });
+  await act(async () => { renderer.update(tree(store, "favorites")); });
+  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
+  assert.match(JSON.stringify(renderer.toJSON()), /This device/);
+
+  const card = renderer.root.findByProps({ className: "store-collection-main" });
+  await act(async () => { card.props.onClick(); });
+  assert.equal(window.location.pathname, "/store/apps/active-uninstalled");
+  await act(async () => { renderer.update(tree(store, "recent")); });
+  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
+  await act(async () => { renderer.unmount(); });
 });
 
-test("Provider-owned refresh sequencing, logout retry, and card navigation retain real Store behavior", async () => {
-  const first = deferred();
-  const second = deferred();
-  let loads = [first, second];
+test("mounted Provider suppresses stale refresh and preserves ready UI across real logout retry controls", async () => {
+  memory.clear();
+  const initialLoad = deferred();
+  const firstRefresh = deferred();
+  const secondRefresh = deferred();
+  const loads = [initialLoad, firstRefresh, secondRefresh];
   let logoutAttempts = 0;
   let signedOut = false;
   const store = createStorefrontStateStore({
@@ -89,28 +131,22 @@ test("Provider-owned refresh sequencing, logout retry, and card navigation retai
     device: createStoreDeviceState(window.localStorage),
     onLogoutSuccess: () => { signedOut = true; }
   });
+  let renderer;
+  await act(async () => { renderer = create(tree(store)); });
+  await resolve(initialLoad, ready);
 
-  const stale = store.refresh();
-  const latest = store.refresh();
-  second.resolve(ready);
-  await latest;
-  first.resolve({ ...ready, userName: "Stale user" });
-  await stale;
-  assert.equal(store.getSnapshot().bootstrap.userName, "End User");
+  const refresh = button(renderer.root, "Refresh Store End User");
+  await act(async () => { refresh.props.onClick(); refresh.props.onClick(); });
+  await resolve(secondRefresh, ready);
+  await resolve(firstRefresh, { ...ready, userName: "Stale user" });
+  assert.match(JSON.stringify(renderer.toJSON()), /Refresh Store End User/);
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Stale user/);
 
-  await store.logout();
-  assert.equal(store.getSnapshot().bootstrap.status, "ready");
-  assert.equal(store.getSnapshot().logoutError, "network unavailable");
-  const retry = renderToStaticMarkup(React.createElement(
-    StoreProvider,
-    { store },
-    React.createElement(StoreShell, { route: { page: "my-apps" } }, React.createElement("div"))
-  ));
-  assert.match(retry, /Retry sign out/);
+  await act(async () => { button(renderer.root, "Logout").props.onClick(); await Promise.resolve(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /Sign-out not completed/);
+  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
 
-  await store.logout();
+  await act(async () => { button(renderer.root, "Retry sign out").props.onClick(); await Promise.resolve(); });
   assert.equal(signedOut, true);
-
-  navigateToStoreApp("catalog app");
-  assert.equal(window.location.pathname, "/store/apps/catalog%20app");
+  await act(async () => { renderer.unmount(); });
 });

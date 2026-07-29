@@ -11,6 +11,6 @@ test("StoreProvider integration covers API, device, lifecycle, logout, and card 
   const output = `${result.stdout}\n${result.stderr}`;
 
   assert.equal(result.status, 0, output);
-  assert.match(output, /Provider wiring sends explicit API collections/);
-  assert.match(output, /Provider-owned refresh sequencing, logout retry, and card navigation/);
+  assert.match(output, /mounted Provider loads API collections/);
+  assert.match(output, /mounted Provider suppresses stale refresh and preserves ready UI/);
 });

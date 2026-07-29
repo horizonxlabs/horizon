@@ -29,7 +29,7 @@ const PAGE_COPY: Record<StoreCollectionPageName, { title: string; eyebrow: strin
   recent: {
     title: "Recently viewed",
     eyebrow: "Device-local history",
-    empty: "Open an application from its detail page to build this device's recent history."
+    empty: "View an application's details to build this device's recent history."
   }
 };
 
@@ -43,7 +43,7 @@ export function appsForCollection(
 }
 
 export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
-  const { device, toggleFavorite } = useStorefront();
+  const { device, recordRecent, toggleFavorite } = useStorefront();
   if (!apps.length) return null;
   return (
     <div className="store-app-list">
@@ -54,7 +54,10 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
             <button
               type="button"
               className="store-collection-main"
-              onClick={() => navigateToStoreApp(app.slug)}
+              onClick={() => {
+                recordRecent(app.slug);
+                navigateToStoreApp(app.slug);
+              }}
             >
               <span className="store-app-icon" aria-hidden="true">{app.name.slice(0, 1)}</span>
               <span>
