@@ -1,4 +1,17 @@
 import { PlatformSessionStore, type PlatformSessionStorage } from "./platform-session-store";
+import type {
+  ConvertTicketToPrdChangeInput,
+  PrdChangeRequestDto,
+  StoreTicketInput,
+  StoreTicketResponse
+} from "./store-ticket-types";
+export type {
+  ConvertTicketToPrdChangeInput,
+  PrdChangeRequestDto,
+  StoreTicketInput,
+  StoreTicketResponse,
+  StoreTicketTimelineEntryDto
+} from "./store-ticket-types";
 
 export type ApiSuccess<T> = {
   ok: true;
@@ -240,38 +253,6 @@ export type StoreAccessRequestResponse = {
   reason: string;
   department?: string;
   createdAt: string;
-};
-
-export type StoreTicketInput = {
-  type: "bug" | "feedback" | "feature_request";
-  priority: "low" | "medium" | "high";
-  title: string;
-  description: string;
-  deviceInfo: string;
-  screenshotUrl?: string;
-};
-
-export type StoreTicketTimelineEntryDto = {
-  id: string;
-  ticketId?: string;
-  status: string;
-  label: string;
-  actorId?: string;
-  occurredAt?: string;
-};
-
-export type StoreTicketResponse = {
-  id: string;
-  ticketNumber: string;
-  appSlug: string;
-  appName?: string;
-  type?: string;
-  priority?: string;
-  title?: string;
-  description?: string;
-  deviceInfo?: string;
-  status: string;
-  timeline: StoreTicketTimelineEntryDto[];
 };
 
 export type WorkspaceTaskStepDto = {
@@ -717,6 +698,20 @@ export class PlatformApiClient {
 
   getStoreTicket(ticketId: string): Promise<StoreTicketResponse> {
     return this.request<StoreTicketResponse>(`/store/tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  convertTicketToPrdChange(
+    projectId: string,
+    input: ConvertTicketToPrdChangeInput
+  ): Promise<PrdChangeRequestDto> {
+    return this.request<PrdChangeRequestDto>(
+      `/creator/projects/${encodeURIComponent(projectId)}/prd/changes/from-ticket`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
   getWorkspace(projectId: string): Promise<WorkspaceSnapshotResponse> {

@@ -70,6 +70,7 @@ const { UsersPage } = await import(`${base}/features/users`);
 const { PublishPage } = await import(`${base}/features/publish`);
 const { DeploymentsPage } = await import(`${base}/features/deployments`);
 const { TicketsPage } = await import(`${base}/features/tickets`);
+const { TicketDetailPage } = await import(`${base}/features/tickets`);
 const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
@@ -82,6 +83,7 @@ const PAGES = {
   PublishPage,
   DeploymentsPage,
   TicketsPage,
+  TicketDetailPage,
   DefaultPage
 };
 
@@ -125,7 +127,8 @@ const ROUTE_CASES = [
   ["users", "/creator/projects/project-1/users", /App users roles/],
   ["publish", "/creator/projects/project-1/publish", /Publish app/],
   ["deployments", "/creator/projects/project-1/deployments", /Project deployments/],
-  ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/]
+  ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/],
+  ["ticket detail", "/creator/projects/project-1/tickets/ticket-1", /Ticket detail/]
 ];
 
 for (const [page, pathname, expected] of ROUTE_CASES) {

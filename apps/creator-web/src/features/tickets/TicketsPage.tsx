@@ -1,5 +1,5 @@
-import { DecisionPanel, SectionCard, ToneBadge } from "@evcp/ui";
-import { MessageSquare } from "lucide-react";
+import { DecisionPanel, navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
+import { MessageSquare, RotateCcw } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { useCreatorTicketInbox } from "./use-creator-ticket-inbox";
@@ -14,12 +14,35 @@ export function TicketsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
           <SectionCard
             eyebrow="Creator Ticket Inbox"
             title="Feedback routed from App Store"
-            action={<ToneBadge tone={inbox.status === "error" ? "danger" : "warning"}>{inbox.status === "ready" ? `${inbox.items.length} tickets` : inbox.status}</ToneBadge>}
+            action={
+              <div className="creator-ticket-actions">
+                <ToneBadge tone={inbox.status === "error" ? "danger" : "warning"}>
+                  {inbox.status === "ready" ? `${inbox.items.length} tickets` : inbox.status}
+                </ToneBadge>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void inbox.refresh()}
+                  disabled={inbox.status === "loading"}
+                >
+                  <RotateCcw size={14} /> Refresh
+                </button>
+              </div>
+            }
           >
             <p>{inbox.message}</p>
             <div className="creator-ticket-list">
               {inbox.items.map((ticket) => (
-                <article key={ticket.id}>
+                <button
+                  type="button"
+                  key={ticket.id}
+                  className="creator-ticket-row"
+                  onClick={() =>
+                    navigateBrowserPath(
+                      `/creator/projects/${encodeURIComponent(app.selectedProject.id)}/tickets/${encodeURIComponent(ticket.id)}`
+                    )
+                  }
+                >
                   <div className="creator-ticket-icon">
                     <MessageSquare size={20} />
                   </div>
@@ -32,7 +55,7 @@ export function TicketsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                     </span>
                   </div>
                   <ToneBadge tone="warning">{ticket.status}</ToneBadge>
-                </article>
+                </button>
               ))}
             </div>
           </SectionCard>

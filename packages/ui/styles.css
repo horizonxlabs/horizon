@@ -1104,6 +1104,52 @@ th {
   padding: var(--evcp-space-3);
 }
 
+.creator-ticket-list .creator-ticket-row {
+  align-items: center;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  color: inherit;
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: auto 1fr auto;
+  padding: var(--evcp-space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.creator-ticket-list .creator-ticket-row:hover:not(:disabled) {
+  border-color: var(--evcp-color-primary-strong);
+}
+
+.creator-ticket-list .creator-ticket-row > div:nth-child(2),
+.creator-ticket-detail-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.creator-ticket-actions,
+.creator-ticket-detail-heading,
+.creator-ticket-detail dl {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+}
+
+.creator-ticket-detail dl {
+  color: var(--evcp-color-muted);
+}
+
+.creator-ticket-detail dt {
+  font-size: 12px;
+}
+
+.creator-ticket-detail dd {
+  margin: 0;
+}
+
 .ticket-timeline svg {
   color: var(--evcp-color-primary-strong);
 }
