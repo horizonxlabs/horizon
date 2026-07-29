@@ -215,3 +215,11 @@ test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input
   assert.doesNotMatch(html, /class="vibe-live-send"/);
   assert.doesNotMatch(html, /class="vibe-live-input"/);
 });
+
+test("WorkspaceCodePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "code", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});
