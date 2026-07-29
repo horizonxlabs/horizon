@@ -148,8 +148,8 @@ test("CreatorRoutes keeps the first-project state inside the shared Creator shel
   );
   // Light tone is applied to the shared shell (utilities replaced the legacy app-shell-light class).
   assert.match(html, /<aside[^>]*bg-surface text-body/);
-  assert.match(html, /วันนี้อยากสร้างอะไร/);
-  assert.match(html, /สร้างด้วย AI/);
+  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
+  assert.match(html, /สร้าง Project ใหม่/);
 });
 
 for (const [name, Page] of Object.entries(PAGES)) {
@@ -159,7 +159,7 @@ for (const [name, Page] of Object.entries(PAGES)) {
   });
 }
 
-test("ProjectsPage renders the B1 AI studio inside the shared Creator shell", () => {
+test("ProjectsPage renders the create-first landing inside the shared Creator shell", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
   assert.match(html, /class="[^"]*hz-projects-studio/);
@@ -171,10 +171,23 @@ test("ProjectsPage renders the B1 AI studio inside the shared Creator shell", ()
   assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
   assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
   assert.match(html, /<aside[^>]*id="app-shell-sidebar-[^"]+"/);
-  assert.match(html, /วันนี้อยากสร้างอะไร/);
-  assert.match(html, /สร้างด้วย AI/);
+  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
+  assert.match(html, /สร้าง Project ใหม่/);
   assert.match(html, /โปรเจกต์ล่าสุด/);
   assert.match(html, /aria-label="ค้นหาโปรเจกต์"/);
   assert.match(html, /aria-label="รายการโปรเจกต์"/);
   assert.doesNotMatch(html, /Updated \d|อัปเดตเมื่อ/);
+});
+
+test("ProjectsPage is create-first: shows the create CTA and no free-text prompt box", () => {
+  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
+  assert.match(html, /สร้าง Project ใหม่/);
+  assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
+});
+
+test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
+  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
+  assert.match(html, /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/);
+  assert.match(html, /สร้าง Project ใหม่/);
+  assert.doesNotMatch(html, /hz-prompt-cta/);
 });

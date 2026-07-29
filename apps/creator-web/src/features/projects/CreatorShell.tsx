@@ -1,7 +1,7 @@
-import { AppShell, DecisionPanel, PageHeader, Select } from "@evcp/ui";
-import { WandSparkles } from "lucide-react";
+import { AppShell, PageHeader } from "@evcp/ui";
 import type { ReactNode } from "react";
 import { HorizonLogo } from "@/shared/HorizonLogo";
+import { CreateProjectWizard } from "./CreateProjectWizard";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function CreatorShell({
@@ -56,112 +56,14 @@ export function CreatorShell({
         />
       )}
       {isCreateProjectDialogOpen ? (
-        <div className="creator-dialog-backdrop" role="presentation">
-          <form
-            className="creator-project-dialog"
-            onSubmit={handleCreateProjectSubmit}
-            aria-label="Create project wizard"
-          >
-            <header>
-              <div>
-                <span className="eyebrow">Create Project Wizard</span>
-                <h2>สร้าง Project ใหม่</h2>
-                <p>ระบบจะสร้าง project, เรียก governed AI route และสร้าง PRD draft แรกให้ทันที</p>
-              </div>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setIsCreateProjectDialogOpen(false)}
-                disabled={isCreatingProject}
-              >
-                Close
-              </button>
-            </header>
-            <div className="creator-project-form">
-              <label>
-                Project name
-                <input
-                  required
-                  value={createProjectForm.name}
-                  onChange={(event) => handleCreateProjectField("name", event.target.value)}
-                />
-              </label>
-              <label>
-                App type
-                <input
-                  value={createProjectForm.appType}
-                  onChange={(event) => handleCreateProjectField("appType", event.target.value)}
-                />
-              </label>
-              <label>
-                Target department
-                <input
-                  value={createProjectForm.targetDepartment}
-                  onChange={(event) =>
-                    handleCreateProjectField("targetDepartment", event.target.value)
-                  }
-                />
-              </label>
-              <label className="creator-project-form-wide">
-                Business problem
-                <textarea
-                  required
-                  value={createProjectForm.businessProblem}
-                  onChange={(event) =>
-                    handleCreateProjectField("businessProblem", event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                Intended users
-                <input
-                  value={createProjectForm.intendedUsers}
-                  onChange={(event) =>
-                    handleCreateProjectField("intendedUsers", event.target.value)
-                  }
-                />
-              </label>
-              <label>
-                Data sensitivity
-                <Select
-                  value={createProjectForm.dataSensitivity}
-                  onChange={(event) =>
-                    handleCreateProjectField("dataSensitivity", event.target.value)
-                  }
-                >
-                  <option value="internal">Internal</option>
-                  <option value="confidential">Confidential</option>
-                  <option value="restricted">Restricted</option>
-                  <option value="public">Public</option>
-                </Select>
-              </label>
-            </div>
-            <DecisionPanel
-              tone={createProjectMessage.includes("failed") ? "danger" : "info"}
-              badge={isCreatingProject ? "Creating" : "Ready"}
-              title={createProjectMessage}
-              lines={[
-                "POST /projects",
-                "POST /projects/{projectId}/prd/generate",
-                "Refresh project list and select the new project"
-              ]}
-            />
-            <footer>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setIsCreateProjectDialogOpen(false)}
-                disabled={isCreatingProject}
-              >
-                Cancel
-              </button>
-              <button type="submit" disabled={isCreatingProject}>
-                <WandSparkles size={16} />
-                {isCreatingProject ? "Creating Project" : "Create Project + Generate PRD"}
-              </button>
-            </footer>
-          </form>
-        </div>
+        <CreateProjectWizard
+          form={createProjectForm}
+          onField={handleCreateProjectField}
+          onSubmit={handleCreateProjectSubmit}
+          onClose={() => setIsCreateProjectDialogOpen(false)}
+          message={createProjectMessage}
+          isCreating={isCreatingProject}
+        />
       ) : null}
       {content}
     </AppShell>
