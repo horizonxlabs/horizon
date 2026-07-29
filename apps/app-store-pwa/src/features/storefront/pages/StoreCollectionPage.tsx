@@ -1,7 +1,7 @@
 import type { AppStoreItem } from "@evcp/types";
 import { navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
 import { Heart, MonitorSmartphone } from "lucide-react";
-import { filterStoreApps } from "../catalog";
+import { selectStoreCollection } from "../catalog";
 import { useStorefront } from "../StoreProvider";
 
 export type StoreCollectionPageName = "my-apps" | "available" | "favorites" | "recent";
@@ -31,21 +31,11 @@ const PAGE_COPY: Record<StoreCollectionPageName, { title: string; eyebrow: strin
 
 export function appsForCollection(
   page: StoreCollectionPageName,
-  allApps: AppStoreItem[],
+  apps: { myApps: AppStoreItem[]; availableApps: AppStoreItem[]; allApps: AppStoreItem[] },
   favorites: string[],
   recent: string[]
 ): AppStoreItem[] {
-  if (page === "my-apps") return filterStoreApps(allApps, "", { collection: "my-apps" });
-  if (page === "available") return filterStoreApps(allApps, "", { collection: "available" });
-  if (page === "favorites") {
-    const favoriteSlugs = new Set(favorites);
-    return filterStoreApps(allApps, "", { collection: "all" }).filter((app) => favoriteSlugs.has(app.slug));
-  }
-  const bySlug = new Map(allApps.map((app) => [app.slug, app]));
-  return recent.flatMap((slug) => {
-    const app = bySlug.get(slug);
-    return app ? [app] : [];
-  });
+  return selectStoreCollection(page, apps, page === "recent" ? recent : favorites);
 }
 
 export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
@@ -89,9 +79,14 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
 }
 
 export function StoreCollectionPage({ page }: { page: StoreCollectionPageName }) {
-  const { allApps, device } = useStorefront();
+  const { allApps, bootstrap, device } = useStorefront();
   const copy = PAGE_COPY[page];
-  const apps = appsForCollection(page, allApps, device.favorites, device.recent);
+  const apps = appsForCollection(
+    page,
+    { myApps: bootstrap.myApps, availableApps: bootstrap.availableApps, allApps },
+    device.favorites,
+    device.recent
+  );
 
   return (
     <section className="store-page">

@@ -7,7 +7,7 @@ import { StorefrontSummary } from "./StorefrontSummary";
 import { useStorefront } from "./StoreProvider";
 
 export function StoreShell({ route, children }: { route: StoreRoute; children: ReactNode }) {
-  const { bootstrap, logout } = useStorefront();
+  const { bootstrap, logout, logoutError } = useStorefront();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   function handleSignIn() {
@@ -38,6 +38,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
         isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
         onLogout={() => void logout()}
+        logoutError={logoutError}
       />
       {children}
     </main>

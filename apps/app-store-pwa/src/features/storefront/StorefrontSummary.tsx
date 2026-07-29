@@ -1,6 +1,6 @@
 import { navigation } from "@evcp/config";
 import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
-import { Bell, Search, ShieldCheck, Store, WifiOff } from "lucide-react";
+import { Bell, ShieldCheck, Store, WifiOff } from "lucide-react";
 
 type StorefrontSummaryProps = {
   userName?: string;
@@ -11,6 +11,7 @@ type StorefrontSummaryProps = {
   isSigningIn: boolean;
   onSignIn: () => void;
   onLogout: () => void;
+  logoutError?: string;
 };
 
 function activeRoute(currentPath: string, route: string): boolean {
@@ -26,7 +27,8 @@ export function StorefrontSummary({
   currentPath,
   isSigningIn,
   onSignIn,
-  onLogout
+  onLogout,
+  logoutError
 }: StorefrontSummaryProps) {
   return (
     <>
@@ -66,10 +68,14 @@ export function StorefrontSummary({
             </a>
           );
         })}
-        <button type="button" onClick={() => navigateBrowserPath("/store/search")}>
-          <Search size={15} /> Search
-        </button>
       </nav>
+
+      {logoutError ? (
+        <section className="store-action-error" role="alert">
+          <strong>Sign-out not completed.</strong> {logoutError}
+          <button type="button" className="secondary-button" onClick={onLogout}>Retry sign out</button>
+        </section>
+      ) : null}
 
       <section className="store-status-strip" aria-label="Store summary">
         <div><Store size={17} /><span>My Apps</span><strong>{myAppsCount}</strong></div>

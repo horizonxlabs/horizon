@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { filterStoreApps } = await import("../../apps/app-store-pwa/src/features/storefront/catalog.ts");
+const { filterStoreApps, selectStoreCollection } = await import("../../apps/app-store-pwa/src/features/storefront/catalog.ts");
 
 const apps = [
   { slug: "leave-management", name: "Leave Management", description: "Employee leave approvals", owner: "People Team", myRole: "Manager", accessStatus: "active", installStatus: "installed" },
@@ -28,4 +28,16 @@ test("catalog filters collections, access, and installation without mutating inp
 test("catalog search trims, case-folds, and preserves the stable input order", () => {
   assert.deepEqual(filterStoreApps(apps, "  A  ", { collection: "all" }).map((app) => app.slug), ["leave-management", "asset-register", "vendor-portal"]);
   assert.deepEqual(filterStoreApps(apps, "", { collection: "all", accessStatus: "unknown" }).map((app) => app.slug), []);
+});
+
+test("My Apps and Available preserve the explicit Platform API collections", () => {
+  const activeButUninstalled = { ...apps[0], slug: "active-uninstalled", installStatus: "not_installed" };
+  const collections = {
+    myApps: [apps[1]],
+    availableApps: [activeButUninstalled],
+    allApps: [apps[1], activeButUninstalled]
+  };
+
+  assert.deepEqual(selectStoreCollection("my-apps", collections, []).map((app) => app.slug), ["asset-register"]);
+  assert.deepEqual(selectStoreCollection("available", collections, []).map((app) => app.slug), ["active-uninstalled"]);
 });

@@ -4,9 +4,11 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { beginStoreKeycloakLogout, clearStoreSessionBridge, initialStoreBootstrap, loadStoreBootstrap, type StoreBootstrapState } from "./bootstrap";
 import { createStoreDeviceState, type StoreDeviceSnapshot, type StoreDeviceStorage } from "./device-state";
 import { createStorePlatformClient } from "./platform-client";
+import { createStorefrontAsyncController } from "./store-async";
 
 export type StorefrontContextValue = {
   bootstrap: StoreBootstrapState;
+  logoutError?: string;
   allApps: AppStoreItem[];
   device: StoreDeviceSnapshot;
   refreshHome(): Promise<void>;
@@ -39,34 +41,34 @@ function mergeApps(bootstrap: StoreBootstrapState): AppStoreItem[] {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const repository = useRef(createStoreDeviceState(deviceStorage()));
-  const mounted = useRef(true);
-  const refreshSequence = useRef(0);
   const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);
   const [device, setDevice] = useState(() => repository.current.read());
+  const [logoutError, setLogoutError] = useState<string>();
+  const controller = useRef<ReturnType<typeof createStorefrontAsyncController<StoreBootstrapState>>>(undefined);
 
-  const refreshHome = useCallback(async () => {
-    if (!mounted.current) return;
-    const sequence = ++refreshSequence.current;
-    setBootstrap((current) => ({ ...current, status: "loading", error: undefined }));
-    try {
-      const next = await loadStoreBootstrap();
-      if (mounted.current && sequence === refreshSequence.current) setBootstrap(next);
-    } catch (error) {
-      if (!mounted.current || sequence !== refreshSequence.current) return;
-      setBootstrap({
-        ...initialStoreBootstrap,
-        status: "error",
-        error: error instanceof Error ? error.message : "Unable to load your Store account."
-      });
-    }
-  }, []);
+  if (!controller.current) {
+    controller.current = createStorefrontAsyncController({
+      loadHome: loadStoreBootstrap,
+      logout: () => createStorePlatformClient().request("/auth/logout", { method: "POST" }),
+      onRefreshStart: () => setBootstrap((current) => ({ ...current, status: "loading", error: undefined })),
+      onRefreshSuccess: setBootstrap,
+      onRefreshFailure: (error) => setBootstrap({ ...initialStoreBootstrap, status: "error", error: error.message }),
+      onLogoutStart: () => setLogoutError(undefined),
+      onLogoutFailure: (error) => setLogoutError(error.message),
+      onLogoutSuccess: () => {
+        setBootstrap(clearStoreSessionBridge());
+        beginStoreKeycloakLogout();
+      }
+    });
+  }
+
+  const refreshHome = useCallback(() => controller.current!.refresh(), []);
 
   useEffect(() => {
-    mounted.current = true;
+    controller.current!.mount();
     void refreshHome();
     return () => {
-      mounted.current = false;
-      refreshSequence.current += 1;
+      controller.current!.unmount();
     };
   }, [refreshHome]);
 
@@ -75,27 +77,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setDevice(repository.current.read());
   }, []);
 
-  const logout = useCallback(async () => {
-    const sequence = ++refreshSequence.current;
-    try {
-      await createStorePlatformClient().request("/auth/logout", { method: "POST" });
-    } catch (error) {
-      if (mounted.current && sequence === refreshSequence.current) {
-        setBootstrap({
-          ...initialStoreBootstrap,
-          status: "error",
-          error: error instanceof Error ? error.message : "Unable to sign out securely."
-        });
-      }
-      return;
-    }
-    if (!mounted.current || sequence !== refreshSequence.current) return;
-    setBootstrap(clearStoreSessionBridge());
-    beginStoreKeycloakLogout();
-  }, []);
+  const logout = useCallback(() => controller.current!.logout(), []);
 
   const value = useMemo<StorefrontContextValue>(() => ({
     bootstrap,
+    logoutError,
     allApps: mergeApps(bootstrap),
     device,
     refreshHome,
@@ -105,7 +91,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     rememberAccessReceipt: (receipt) => updateDevice(() => repository.current.rememberAccessReceipt(receipt)),
     clearDevicePreferences: () => updateDevice(() => repository.current.clear()),
     logout
-  }), [bootstrap, device, logout, refreshHome, updateDevice]);
+  }), [bootstrap, device, logout, logoutError, refreshHome, updateDevice]);
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>;
 }
