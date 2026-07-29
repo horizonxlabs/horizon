@@ -12,6 +12,7 @@
   --ref-slate-200: #e2e8f0;
   --ref-slate-100-soft: #eef2f7;
   --ref-slate-500: #64748b;
+  --ref-slate-600: #475569;
   --ref-slate-900: #0f172a;
   --ref-white: #ffffff;
   --ref-success-bg: #dcfce7;
@@ -44,7 +45,7 @@
   --evcp-color-border: var(--ref-slate-200);
   --evcp-color-border-soft: var(--ref-slate-100-soft);
   --evcp-color-text: var(--ref-slate-900);
-  --evcp-color-muted: var(--ref-slate-500);
+  --evcp-color-muted: var(--ref-slate-600);
   --evcp-color-primary: var(--ref-blue-600);
   --evcp-color-primary-strong: var(--ref-blue-700);
   --evcp-color-primary-soft: var(--ref-blue-100);
@@ -72,10 +73,14 @@
   --evcp-space-5: 20px;
   --evcp-space-6: 24px;
   --evcp-space-7: 28px;
-  --evcp-radius-control: 8px;
-  --evcp-radius-card: 8px;
+  --evcp-radius-control: 10px;
+  --evcp-radius-card: 14px;
   --evcp-radius-pill: 999px;
-  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.05);
+  /* Elevation scale — soft, enterprise-appropriate, but with real presence (the old 0.05
+     single shadow was invisible, so every surface read as flat). */
+  --evcp-shadow-button: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --evcp-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --evcp-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
 
 /* Reserved for future dark theme — intentionally empty for now (light-only ships). */

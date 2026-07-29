@@ -35,7 +35,9 @@
   --radius-control: var(--evcp-radius-control);
   --radius-card: var(--evcp-radius-card);
   --radius-pill: var(--evcp-radius-pill);
+  --shadow-button: var(--evcp-shadow-button);
   --shadow-card: var(--evcp-shadow-card);
+  --shadow-pop: var(--evcp-shadow-pop);
   --font-sans: var(--evcp-font-sans);
 }
 
@@ -5738,7 +5740,8 @@ button:disabled {
 .hz-card {
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 14px;
+  border-radius: var(--evcp-radius-card);
+  box-shadow: var(--evcp-shadow-button);
   cursor: pointer;
   display: grid;
   gap: 0;
