@@ -88,16 +88,18 @@ test("Field renders label bound to control", () => {
   assert.match(html, /for="email"/);
 });
 
-test("Select renders a bordered listbox trigger and forwards props", () => {
+test("Select renders a Radix combobox trigger and forwards props", () => {
   const html = renderToStaticMarkup(
     h(Select, { name: "role", value: "admin" }, h("option", { value: "admin" }, "ผู้ดูแลระบบ"))
   );
-  // Custom listbox trigger is a button with the shared control border token.
+  // Radix-backed trigger keeps the shared control border token + control role.
   assert.match(html, /border-border/);
+  assert.match(html, /role="combobox"/);
+  // Radix submits the value through a hidden native <select name>.
   assert.match(html, /name="role"/);
-  assert.match(html, /aria-haspopup="listbox"/);
-  // Closed listbox shows the selected option's label on the trigger.
-  assert.match(html, /ผู้ดูแลระบบ/);
+  assert.match(html, /<select/);
+  // (The selected label is rendered client-side by RadixSelect.Value, so it does
+  // not appear in static SSR markup — behaviour is covered by the visual check.)
 });
 
 test("Table renders dense rows with hairline dividers", () => {
