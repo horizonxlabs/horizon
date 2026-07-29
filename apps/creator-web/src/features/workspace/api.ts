@@ -30,18 +30,30 @@ export async function ensureVibeWorkspace(projectId: string): Promise<void> {
   );
 }
 
+// Builds the chat request body. Kept pure (no browser globals) so the approved-plan wiring is unit
+// tested directly; approvedPlan is included only when a Creator approved a plan (else omitted).
+export function vibeChatBody(
+  prompt: string,
+  attachmentIds: string[],
+  agentMode: WorkspaceAgentMode,
+  approvedPlan?: string
+): Record<string, unknown> {
+  return { prompt, attachmentIds, agentMode, ...(approvedPlan ? { approvedPlan } : {}) };
+}
+
 export async function streamVibeChat(
   projectId: string,
   prompt: string,
   attachmentIds: string[],
   agentMode: WorkspaceAgentMode,
-  onEvent: (type: string, data: unknown) => void
+  onEvent: (type: string, data: unknown) => void,
+  approvedPlan?: string
 ): Promise<void> {
   const base = apiBaseUrl() ?? "/api";
   const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat`, {
     method: "POST",
     headers: vibeAuthHeaders(),
-    body: JSON.stringify({ prompt, attachmentIds, agentMode })
+    body: JSON.stringify(vibeChatBody(prompt, attachmentIds, agentMode, approvedPlan))
   });
   if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`);
   const reader = response.body.getReader();

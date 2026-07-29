@@ -94,6 +94,15 @@ export async function resolveSetupRequest(
     // for interactive sign-in. Re-provision the existing admin (which may own projects and
     // other records) instead of failing, so login can be restored without data loss.
     const existingUser = await corePersistenceClient.platformUser.findUnique({ where: { email } });
+    const existingUserIsAdmin = existingUser?.roles?.some(
+      (entry) => entry.role.key === "admin"
+    );
+    if (existingUser && !existingUserIsAdmin) {
+      return {
+        status: HttpStatus.CONFLICT,
+        body: failure("email_exists", "That email already exists")
+      };
+    }
     const id =
       existingUser?.id ?? `usr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const bootstrapAdmin = {

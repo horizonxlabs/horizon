@@ -31,6 +31,7 @@ const REQUIRED_ENV = [
   "EVCP_WORKSPACE_SECRET_KEY",
   "EVCP_AI_JOB_ENCRYPTION_KEY",
   "LITELLM_MASTER_KEY",
+  "LITELLM_DATABASE_URL",
   "BACKUP_BUCKET",
   "BACKUP_RETENTION_DAYS"
 ];
@@ -150,7 +151,7 @@ export function maskSecret(value) {
 export function isSensitiveEnvKey(key) {
   const normalizedKey = String(key ?? "").toLowerCase();
   return (
-    normalizedKey === "database_url" ||
+    normalizedKey.endsWith("database_url") ||
     SECRET_ENV_KEY_PARTS.some((part) => normalizedKey.includes(part))
   );
 }
@@ -168,11 +169,26 @@ function check(name, passed, observed, action = "-") {
 }
 
 function isExampleSecret(value) {
-  return /example|change-before-use|changeme|change-me/i.test(value);
+  return /example|change-before-use|changeme|change-me/i.test(value) || /^0+$/.test(value);
 }
 
 function hasStrongEnoughSecret(value) {
   return typeof value === "string" && value.length >= 24;
+}
+
+function databaseUrlMatches(value, { user, password, database }) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "postgresql:" &&
+      decodeURIComponent(url.username) === user &&
+      decodeURIComponent(url.password) === password &&
+      url.hostname === "postgres" &&
+      url.pathname === `/${database}`
+    );
+  } catch {
+    return false;
+  }
 }
 
 function runVersion(command, args) {
@@ -213,6 +229,40 @@ export function evaluateInstallContract({
       CORE_PERSISTENCE_MODES.includes(String(env.EVCP_CORE_PERSISTENCE ?? "").toLowerCase()),
       env.EVCP_CORE_PERSISTENCE ?? "missing",
       "Set EVCP_CORE_PERSISTENCE to legacy, memory or prisma"
+    )
+  );
+
+  const postgresCredentials = {
+    user: env.POSTGRES_USER || "evcp",
+    password: env.POSTGRES_PASSWORD || "",
+    database: env.POSTGRES_DB || "evcp"
+  };
+  checks.push(
+    check(
+      "credentials:database-url",
+      databaseUrlMatches(env.DATABASE_URL, postgresCredentials),
+      "checked",
+      "Keep DATABASE_URL credentials aligned with POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB"
+    )
+  );
+  checks.push(
+    check(
+      "credentials:litellm-database-url",
+      databaseUrlMatches(env.LITELLM_DATABASE_URL, {
+        ...postgresCredentials,
+        database: "litellm"
+      }),
+      "checked",
+      "Keep LITELLM_DATABASE_URL credentials aligned with PostgreSQL and database litellm"
+    )
+  );
+  checks.push(
+    check(
+      "credentials:object-storage",
+      env.STORAGE_ACCESS_KEY === env.MINIO_ROOT_USER &&
+        env.STORAGE_SECRET_KEY === env.MINIO_ROOT_PASSWORD,
+      "checked",
+      "Keep STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY aligned with the MinIO credentials"
     )
   );
 

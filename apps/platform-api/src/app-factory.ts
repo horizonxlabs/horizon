@@ -10,6 +10,7 @@ import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
+import { createPlanVersionRecorder } from "./prd/plan-version";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
@@ -2369,11 +2370,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   const chatSseHandler = createChatSseHandler({
     generationService,
     resolveAuth: async (req) => {
-      try {
-        return await resolveWorkspaceAuth(services, (req as { headers?: HeaderBag }).headers ?? {});
-      } catch {
-        return null;
-      }
+      try { return await resolveWorkspaceAuth(services, (req as { headers?: HeaderBag }).headers ?? {}); }
+      catch { return null; }
     },
     resolveAttachmentContext: async (req, projectId, attachmentIds) => {
       const user = await resolvePersistenceUser(services, (req as { headers?: HeaderBag }).headers ?? {});
@@ -2396,7 +2394,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         versionIds: retrieval.matchedVersionIds,
         excerpts: retrieval.sources.flatMap((source) => source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`))
       };
-    }
+    },
+    recordPrdVersionFromPlan: createPlanVersionRecorder(services.prds)
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);

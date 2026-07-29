@@ -86,6 +86,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       prompt: string;
       agentMode?: WorkspaceAgentMode;
       actor?: PlatformUser;
+      approvedPlan?: string;
     }): AsyncIterable<ChatStreamEvent> {
       const releaseTurn = await turnLock.acquire(input.projectId);
       try {
@@ -133,12 +134,12 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             contextFiles,
             rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
             availableSkills: governed?.availableSkills,
-            knowledgeExcerpts: governed?.knowledgeExcerpts
+            knowledgeExcerpts: governed?.knowledgeExcerpts,
+            productSpec: governed?.productSpec,
+            approvedPlan: input.approvedPlan
           };
           const systemPrompt =
-            agentMode === "plan"
-              ? buildPlanSystemPrompt(promptInput)
-              : buildSystemPrompt(promptInput);
+            agentMode === "plan" ? buildPlanSystemPrompt(promptInput) : buildSystemPrompt(promptInput);
 
           const priorMessages = (await deps.chatHistory.listMessages(input.projectId))
             .filter((message) => message.role !== "system")
@@ -305,8 +306,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             }
           }
 
-          // Build-error self-heal: after a clean round that changed files, validate the build and
-          // feed any errors back so the model fixes them next round (instead of a straight rollback).
+          // Build-error self-heal: validate a clean file-changing round; feed errors back to fix (opencode-style).
           if (!turnFailed && !roundFailed && agentMode === "build" && roundHadFileAction) {
             const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
             if (buildError && round < MAX_ROUNDS - 1) { prompt = buildErrorFeedback(buildError); roundFailed = true; }

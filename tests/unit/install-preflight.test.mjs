@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { evaluateInstallContract, maskSecret, parseComposeServices, redactEnv } from "../../scripts/install/preflight.mjs";
+import {
+  evaluateInstallContract,
+  maskSecret,
+  parseComposeServices,
+  redactEnv
+} from "../../scripts/install/preflight.mjs";
 
 const validEnv = {
   EVCP_ORG_NAME: "Example Enterprise",
@@ -11,7 +16,8 @@ const validEnv = {
   EVCP_ADMIN_PORT: "4100",
   EVCP_CREATOR_PORT: "4101",
   EVCP_STORE_PORT: "4102",
-  DATABASE_URL: "postgresql://evcp:example-postgres-password-change-before-use@postgres:5432/evcp?schema=public",
+  DATABASE_URL:
+    "postgresql://evcp:example-postgres-password-change-before-use@postgres:5432/evcp?schema=public",
   EVCP_CORE_PERSISTENCE: "prisma",
   POSTGRES_PASSWORD: "example-postgres-password-change-before-use",
   SESSION_SECRET: "example-session-secret-change-before-use-32chars",
@@ -30,6 +36,8 @@ const validEnv = {
   EVCP_WORKSPACE_SECRET_KEY: "example-workspace-encryption-key-change-before-use",
   EVCP_AI_JOB_ENCRYPTION_KEY: "example-ai-job-encryption-key-change-before-use",
   LITELLM_MASTER_KEY: "example-litellm-master-key-change-before-use",
+  LITELLM_DATABASE_URL:
+    "postgresql://evcp:example-postgres-password-change-before-use@postgres:5432/litellm",
   BACKUP_BUCKET: "evcp-backups",
   BACKUP_RETENTION_DAYS: "30"
 };
@@ -67,14 +75,65 @@ test("install preflight passes example contract when example secrets are explici
   const report = evaluateInstallContract({ env: validEnv, composeText, allowExampleSecrets: true });
   assert.equal(report.passed, true);
   assert.equal(report.serviceCount, 9);
-  assert.ok(report.checks.some((item) => item.name === "env:EVCP_CORE_PERSISTENCE" && item.passed === true));
-  assert.ok(report.checks.some((item) => item.name === "env:EVCP_CORE_PERSISTENCE:mode" && item.passed === true));
+  assert.ok(
+    report.checks.some((item) => item.name === "env:EVCP_CORE_PERSISTENCE" && item.passed === true)
+  );
+  assert.ok(
+    report.checks.some(
+      (item) => item.name === "env:EVCP_CORE_PERSISTENCE:mode" && item.passed === true
+    )
+  );
 });
 
 test("install preflight blocks example secrets for real install mode", () => {
-  const report = evaluateInstallContract({ env: validEnv, composeText, allowExampleSecrets: false });
+  const report = evaluateInstallContract({
+    env: validEnv,
+    composeText,
+    allowExampleSecrets: false
+  });
   assert.equal(report.passed, false);
-  assert.ok(report.checks.some((item) => item.name === "secret:EVCP_AI_JOB_ENCRYPTION_KEY" && item.passed === false));
+  assert.ok(
+    report.checks.some(
+      (item) => item.name === "secret:EVCP_AI_JOB_ENCRYPTION_KEY" && item.passed === false
+    )
+  );
+});
+
+test("install preflight rejects an all-zero workspace encryption key", () => {
+  const env = {
+    ...validEnv,
+    EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64)
+  };
+  const report = evaluateInstallContract({ env, composeText, allowExampleSecrets: false });
+
+  assert.ok(
+    report.checks.some(
+      (item) => item.name === "secret:EVCP_WORKSPACE_SECRET_KEY" && item.passed === false
+    )
+  );
+});
+
+test("install preflight rejects database and object-storage credentials that drift apart", () => {
+  const env = {
+    ...validEnv,
+    POSTGRES_PASSWORD: "real-postgres-password-123456789",
+    DATABASE_URL: "postgresql://evcp:different-password@postgres:5432/evcp?schema=public",
+    LITELLM_DATABASE_URL: "postgresql://evcp:another-password@postgres:5432/litellm",
+    MINIO_ROOT_PASSWORD: "real-minio-password-123456789",
+    STORAGE_SECRET_KEY: "different-minio-password-123456789"
+  };
+  const report = evaluateInstallContract({ env, composeText, allowExampleSecrets: true });
+
+  for (const name of [
+    "credentials:database-url",
+    "credentials:litellm-database-url",
+    "credentials:object-storage"
+  ]) {
+    assert.ok(
+      report.checks.some((item) => item.name === name && item.passed === false),
+      name
+    );
+  }
 });
 
 test("install preflight redacts secret values", () => {
@@ -93,6 +152,7 @@ test("install preflight redacts provider, token, and encryption credentials", ()
     EVCP_AI_JOB_ENCRYPTION_KEY: "ai-job-encryption-key-value",
     VAULT_TOKEN: "openbao-token-value",
     VAULT_TOKEN_FILE: "/run/secrets/openbao-token",
+    LITELLM_DATABASE_URL: "postgresql://evcp:database-password@postgres:5432/litellm",
     EVCP_PUBLIC_DOMAIN: "pilot.example.test"
   };
 

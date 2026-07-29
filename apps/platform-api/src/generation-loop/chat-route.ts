@@ -37,6 +37,11 @@ export function createChatSseHandler(deps: {
   ) =>
     | { versionIds: string[]; excerpts: string[] }
     | Promise<{ versionIds: string[]; excerpts: string[] }>;
+  recordPrdVersionFromPlan?: (
+    actor: NonNullable<WorkspaceAuthContext["actor"]>,
+    projectId: string,
+    planText: string
+  ) => Promise<{ id: string; version: string; changeSummary: string }>;
 }) {
   return async function handleChatRequest(
     req: IncomingMessage,
@@ -86,10 +91,12 @@ export function createChatSseHandler(deps: {
     let prompt = "";
     let attachmentIds: string[] = [];
     let agentMode = resolveWorkspaceAgentMode(undefined);
+    let approvedPlan: string | undefined;
     try {
       const rawBody = await readBody(req);
       const parsed = rawBody ? JSON.parse(rawBody) : {};
       prompt = String(parsed?.prompt ?? "");
+      approvedPlan = parsed?.approvedPlan ? String(parsed.approvedPlan) : undefined;
       agentMode = resolveWorkspaceAgentMode(parsed);
       attachmentIds = Array.isArray(parsed?.attachmentIds)
         ? parsed.attachmentIds.map(String).filter(Boolean)
@@ -144,9 +151,18 @@ export function createChatSseHandler(deps: {
         projectId,
         prompt,
         agentMode,
-        actor: auth.actor
+        actor: auth.actor,
+        approvedPlan
       })) {
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      }
+      if (approvedPlan && agentMode === "build" && deps.recordPrdVersionFromPlan && auth.actor) {
+        try {
+          const created = await deps.recordPrdVersionFromPlan(auth.actor, projectId, approvedPlan);
+          res.write(`event: prd_version\ndata: ${JSON.stringify({ type: "prd_version", ...created })}\n\n`);
+        } catch {
+          // Recording the spec change is best-effort — never disturb the generation stream.
+        }
       }
     } catch (error) {
       if (!res.headersSent) {

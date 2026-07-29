@@ -62,40 +62,42 @@ flowchart LR
 
 The whole stack runs in containers from a single Compose file — Postgres, Redis, MinIO,
 Keycloak, LiteLLM, OpenBao (dev-mode secret store), the Platform API, all three frontends,
-and the Caddy reverse proxy. First create your local environment file and set real secrets
-(the file is gitignored, so it is never present on a fresh clone; `preflight` rejects the
-`.env.example` placeholders):
+and the Caddy reverse proxy. Start everything with one command:
 
 ```bash
-cp .env.example .env        # then replace every example secret (min 24 chars each)
+pnpm dev:setup
 ```
 
-Then start everything with one command:
+On a fresh clone, this creates a local `.env` with generated development secrets, validates
+the required tools and configuration, starts Compose, applies Prisma migrations, seeds the
+database, bootstraps Keycloak, and waits for the API and browser surfaces. Image downloads
+and the first dependency install can take several minutes. No extra commands are needed.
+Once it is up:
 
-```bash
-pnpm dev:setup              # docker compose up -d, waits for readiness, prints URLs
-# equivalently:
-docker compose --env-file .env -f docker/docker-compose.yml up -d
-```
+| Surface       | URL                           |
+| ------------- | ----------------------------- |
+| Admin Console | http://localhost:9800/admin   |
+| Creator App   | http://localhost:9800/creator |
+| App Store PWA | http://localhost:9800/store   |
+| Platform API  | http://localhost:9801         |
+| Keycloak      | http://localhost:9805/auth    |
+| MinIO console | http://localhost:9807         |
 
-On the first run this takes ~90s: the Platform API container installs dependencies, applies
-Prisma migrations, generates the client, and seeds the database, while Keycloak imports its
-realm and bootstraps its clients. No extra commands are needed. Once it is up:
-
-| Surface | URL |
-| --- | --- |
-| App (via Caddy) | http://localhost:8080 — `/admin` · `/creator` · `/store` · `/api` |
-| Platform API | http://localhost:3100 |
-| Keycloak | http://localhost:8081/auth |
-| MinIO console | http://localhost:9001 |
-
-Open http://localhost:8080/admin — a fresh database lands on the first-run setup wizard to
+Open http://localhost:9800/admin — a fresh database lands on the first-run setup wizard to
 create the organization and first administrator. Source is bind-mounted, so edits hot-reload
 in the running containers. Stop the stack with:
 
 ```bash
-docker compose -f docker/docker-compose.yml down       # add -v to also wipe data volumes
+docker compose --env-file .env -f docker/docker-compose.yml down
 ```
+
+The generated `.env` is gitignored. If an existing `.env` still contains placeholders copied
+from `.env.example`, `pnpm dev:setup` replaces only those placeholder secrets and aligns the
+PostgreSQL, LiteLLM, and MinIO credentials; real secrets and custom settings are preserved.
+Generated local credentials also receive a project-scoped Compose data namespace, so volumes
+from an older credential set cannot break a new setup; legacy data volumes are retained.
+To intentionally reset all local data and credentials, run the `down` command with `-v`,
+remove `.env`, and run `pnpm dev:setup` again.
 
 `pnpm install` is still needed on the host to run the quality gate (`pnpm check`), lint,
 typecheck, and tests locally.
