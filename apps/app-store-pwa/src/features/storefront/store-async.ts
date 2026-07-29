@@ -14,7 +14,7 @@ export type StoreRefreshOptions = {
 };
 
 export type StoreRefreshResult =
-  | { ok: true }
+  | { ok: true; applied: boolean }
   | { ok: false; error: Error };
 
 function asError(error: unknown, fallback: string): Error {
@@ -26,20 +26,23 @@ export function createStorefrontAsyncController<T>(controller: StorefrontAsyncCo
   let sequence = 0;
 
   async function refresh(refreshOptions: StoreRefreshOptions = {}): Promise<StoreRefreshResult> {
-    if (!mounted) return { ok: true };
+    if (!mounted) return { ok: true, applied: false };
     const request = ++sequence;
     controller.onRefreshStart(refreshOptions);
     try {
       const next = await controller.loadHome();
-      if (mounted && request === sequence) controller.onRefreshSuccess(next);
-      return { ok: true };
+      if (mounted && request === sequence) {
+        controller.onRefreshSuccess(next);
+        return { ok: true, applied: true };
+      }
+      return { ok: true, applied: false };
     } catch (error) {
       if (mounted && request === sequence) {
         const failure = asError(error, "Unable to load your Store account.");
         controller.onRefreshFailure(failure, refreshOptions);
         return { ok: false, error: failure };
       }
-      return { ok: true };
+      return { ok: true, applied: false };
     }
   }
 

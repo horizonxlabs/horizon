@@ -23,6 +23,7 @@ globalThis.React = (await import("react")).default;
 
 const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
+const { InstallationEvidenceProbe } = await import("./StoreAppDetailPage.integration.fixtures.mjs");
 const { StoreProvider, useStorefront } = await import("./StoreProvider.tsx");
 const { StoreCollectionPage } = await import("./pages/StoreCollectionPage.tsx");
 const { StoreShell } = await import("./StoreShell.tsx");
@@ -30,8 +31,12 @@ const { createStorefrontStateStore } = await import("./store-state.ts");
 
 function deferred() {
   let resolve;
-  const promise = new Promise((nextResolve) => { resolve = nextResolve; });
-  return { promise, resolve };
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
 }
 
 const myApp = {
@@ -148,5 +153,89 @@ test("mounted Provider suppresses stale refresh and preserves ready UI across re
 
   await act(async () => { button(renderer.root, "Retry sign out").props.onClick(); await Promise.resolve(); });
   assert.equal(signedOut, true);
+  await act(async () => { renderer.unmount(); });
+});
+
+test("mounted Provider reconciles installation evidence only for the newest applied refresh", async () => {
+  memory.clear();
+  const staleSuccess = deferred();
+  const newestSuccess = deferred();
+  const staleFailure = deferred();
+  const newestFailure = deferred();
+  const alphaHome = {
+    ...ready,
+    myApps: [],
+    availableApps: [{ ...availableApp, id: "alpha", slug: "alpha", name: "Alpha" }]
+  };
+  let load = 0;
+  const store = createStorefrontStateStore({
+    initialBootstrap: initial,
+    loadHome: () => {
+      load += 1;
+      if (load === 1) return Promise.resolve(alphaHome);
+      if (load === 2 || load === 5) return Promise.reject(new Error("retain confirmed evidence"));
+      if (load === 3) return staleSuccess.promise;
+      if (load === 4) return newestSuccess.promise;
+      if (load === 6) return staleFailure.promise;
+      if (load === 7) return newestFailure.promise;
+      throw new Error(`Unexpected Store load ${load}`);
+    },
+    device: createStoreDeviceState(window.localStorage)
+  });
+  const pendingInstall = deferred();
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(
+      StoreProvider,
+      { store, client: {} },
+      React.createElement(InstallationEvidenceProbe, { pendingInstall })
+    ));
+    await Promise.resolve();
+  });
+
+  await act(async () => { await button(renderer.root, "Remove alpha").props.onClick(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
+
+  let staleRequest;
+  let newestRequest;
+  await act(async () => {
+    staleRequest = button(renderer.root, "Refresh evidence").props.onClick();
+    newestRequest = button(renderer.root, "Refresh evidence").props.onClick();
+  });
+  let staleResult;
+  await act(async () => {
+    staleSuccess.resolve(alphaHome);
+    staleResult = await staleRequest;
+  });
+  assert.deepEqual(staleResult, { ok: true, applied: false });
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
+  let newestResult;
+  await act(async () => {
+    newestSuccess.resolve(alphaHome);
+    newestResult = await newestRequest;
+  });
+  assert.deepEqual(newestResult, { ok: true, applied: true });
+  assert.match(JSON.stringify(renderer.toJSON()), /none\|none\|idle/);
+
+  await act(async () => { await button(renderer.root, "Remove alpha").props.onClick(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
+  await act(async () => {
+    staleRequest = button(renderer.root, "Refresh evidence").props.onClick();
+    newestRequest = button(renderer.root, "Refresh evidence").props.onClick();
+  });
+  await act(async () => {
+    staleFailure.reject(new Error("superseded failure"));
+    staleResult = await staleRequest;
+  });
+  assert.deepEqual(staleResult, { ok: true, applied: false });
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
+  await act(async () => {
+    newestFailure.reject(new Error("active failure"));
+    newestResult = await newestRequest;
+  });
+  assert.equal(newestResult.ok, false);
+  assert.equal(newestResult.error.message, "active failure");
+  assert.equal(store.getSnapshot().bootstrap.status, "error");
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
   await act(async () => { renderer.unmount(); });
 });

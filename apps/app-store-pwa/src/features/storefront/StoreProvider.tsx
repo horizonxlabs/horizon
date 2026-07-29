@@ -167,7 +167,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
   }, [reconcileInstallationEvidenceForSlugs]);
   const refreshHome = useCallback(async (options?: StoreRefreshOptions) => {
     const result = await stateStore.refresh(options);
-    if (result.ok) {
+    if (result.ok && result.applied) {
       reconcileInstallationEvidenceForSlugs(
         mergeApps(stateStore.getSnapshot().bootstrap).map((app) => app.slug)
       );

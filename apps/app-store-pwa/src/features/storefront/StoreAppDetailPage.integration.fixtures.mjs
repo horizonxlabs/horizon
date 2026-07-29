@@ -12,8 +12,8 @@ export function InstallationEvidenceProbe({ pendingInstall }) {
     null,
     React.createElement("button", {
       type: "button",
-      onClick: () => void runAppAction(
-        "alpha",
+      onClick: () => runAppAction(
+        " Alpha ",
         "uninstall",
         async () => ({ id: "alpha-install", appSlug: "alpha", status: "disabled", installedAt: "2026-07-29" }),
         "Alpha removed."
@@ -21,7 +21,7 @@ export function InstallationEvidenceProbe({ pendingInstall }) {
     }, "Remove alpha"),
     React.createElement("button", {
       type: "button",
-      onClick: () => void runAppAction(
+      onClick: () => runAppAction(
         "beta",
         "install",
         async () => ({ id: "beta-install", appSlug: "beta", status: "active", installedAt: "2026-07-29" }),
@@ -30,7 +30,7 @@ export function InstallationEvidenceProbe({ pendingInstall }) {
     }, "Install beta"),
     React.createElement("button", {
       type: "button",
-      onClick: () => void runAppAction(
+      onClick: () => runAppAction(
         "gamma",
         "install",
         () => pendingInstall.promise,
@@ -39,7 +39,7 @@ export function InstallationEvidenceProbe({ pendingInstall }) {
     }, "Install gamma"),
     React.createElement("button", {
       type: "button",
-      onClick: () => void refreshHome()
+      onClick: () => refreshHome()
     }, "Refresh evidence"),
     React.createElement(
       "output",
