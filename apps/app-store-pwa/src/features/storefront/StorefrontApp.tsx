@@ -2,6 +2,7 @@ import type { StoreRoute } from "@/routes/store-route";
 import { StoreProvider } from "./StoreProvider";
 import { StoreShell } from "./StoreShell";
 import { StoreCollectionPage } from "./pages/StoreCollectionPage";
+import { StoreAppDetailPage } from "./pages/StoreAppDetailPage";
 import { StoreNotFoundPage } from "./pages/StoreNotFoundPage";
 import { StoreSearchPage } from "./pages/StoreSearchPage";
 
@@ -12,7 +13,7 @@ function StorePage({ route }: { route: StoreRoute }) {
   if (route.page === "search") return <StoreSearchPage />;
   if (route.page === "not-found") return <StoreNotFoundPage />;
   if (route.page === "app-detail") {
-    return <StoreNotFoundPage title="App Detail" detail="Open, Install, Request Access, and Submit Ticket require the Platform API app-detail page." />;
+    return <StoreAppDetailPage appSlug={route.appSlug} />;
   }
   if (route.page === "tickets" || route.page === "ticket-detail") {
     return <StoreNotFoundPage title="Ticket Status" detail="No ticket yet. Ticket history is not available on this page yet." />;

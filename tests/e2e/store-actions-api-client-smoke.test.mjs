@@ -119,6 +119,9 @@ test("App Store API client actions request access submit ticket and read status"
   assert.equal(detail.accessStatus, "active");
   assert.ok(detail.actions.includes("submit_ticket"));
 
+  assert.equal(typeof client.installStoreApp, "function");
+  assert.equal(typeof client.uninstallStoreApp, "function");
+
   const access = await client.requestStoreAccess(appSlug, {
     requestedRoleKey: "manager",
     reason: "Need approval access",
