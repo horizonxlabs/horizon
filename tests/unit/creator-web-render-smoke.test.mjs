@@ -223,3 +223,11 @@ test("WorkspaceCodePanel renders on primitives without throwing", () => {
   );
   assert.equal(typeof html, "string");
 });
+
+test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "database", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});
