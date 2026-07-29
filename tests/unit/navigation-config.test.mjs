@@ -45,6 +45,17 @@ test("creator navigation matches the real app creation lifecycle", () => {
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
 });
 
+test("admin navigation includes readiness pages", () => {
+  const configSource = readFileSync("packages/config/src/index.ts", "utf8");
+
+  assert.match(configSource, /label: "Auth & SSO"/);
+  assert.match(configSource, /route: "\/admin\/auth"/);
+  assert.match(configSource, /label: "Domains"/);
+  assert.match(configSource, /route: "\/admin\/domains"/);
+  assert.match(configSource, /label: "Publishing"/);
+  assert.match(configSource, /route: "\/admin\/publishing"/);
+});
+
 test("creator project cards open the editing workspace and lifecycle pages exist", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
