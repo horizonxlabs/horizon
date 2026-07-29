@@ -5740,7 +5740,8 @@ button:disabled {
 .hz-card {
   background: var(--evcp-color-surface, #fff);
   border: 1px solid var(--evcp-color-border, #e2e8f0);
-  border-radius: 14px;
+  border-radius: var(--evcp-radius-card);
+  box-shadow: var(--evcp-shadow-button);
   cursor: pointer;
   display: grid;
   gap: 0;
