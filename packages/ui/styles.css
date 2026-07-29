@@ -35,7 +35,9 @@
   --radius-control: var(--evcp-radius-control);
   --radius-card: var(--evcp-radius-card);
   --radius-pill: var(--evcp-radius-pill);
+  --shadow-button: var(--evcp-shadow-button);
   --shadow-card: var(--evcp-shadow-card);
+  --shadow-pop: var(--evcp-shadow-pop);
   --font-sans: var(--evcp-font-sans);
 }
 

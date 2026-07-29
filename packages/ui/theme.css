@@ -72,10 +72,14 @@
   --evcp-space-5: 20px;
   --evcp-space-6: 24px;
   --evcp-space-7: 28px;
-  --evcp-radius-control: 8px;
-  --evcp-radius-card: 8px;
+  --evcp-radius-control: 10px;
+  --evcp-radius-card: 14px;
   --evcp-radius-pill: 999px;
-  --evcp-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.05);
+  /* Elevation scale — soft, enterprise-appropriate, but with real presence (the old 0.05
+     single shadow was invisible, so every surface read as flat). */
+  --evcp-shadow-button: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --evcp-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --evcp-shadow-pop: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
 
 /* Reserved for future dark theme — intentionally empty for now (light-only ships). */
