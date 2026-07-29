@@ -984,6 +984,120 @@ th {
   gap: 6px;
 }
 
+.store-device-history-page .store-page-heading p,
+.store-ticket-detail .store-page-heading p,
+.store-profile-page .store-page-heading p {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  margin: 5px 0 0;
+}
+
+.store-history-list {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.store-history-card {
+  align-items: start;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  color: var(--evcp-color-text);
+  display: flex;
+  gap: var(--evcp-space-3);
+  justify-content: space-between;
+  padding: var(--evcp-space-3);
+  text-align: left;
+}
+
+.store-history-card > div,
+.store-history-card > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.store-history-card span,
+.store-history-card small,
+.store-ticket-timeline span {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+}
+
+.store-history-link {
+  cursor: pointer;
+  width: 100%;
+}
+
+.store-history-link:hover {
+  border-color: var(--evcp-color-primary);
+}
+
+.store-history-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+.store-history-unavailable {
+  background: var(--evcp-color-surface-muted);
+}
+
+.store-ticket-timeline {
+  display: grid;
+  gap: var(--evcp-space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-ticket-timeline li {
+  border-left: 3px solid var(--evcp-color-primary);
+  display: grid;
+  gap: 3px;
+  padding-left: var(--evcp-space-3);
+}
+
+.store-profile-counts {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: var(--evcp-space-4) 0;
+}
+
+.store-profile-counts div {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  padding: var(--evcp-space-3);
+}
+
+.store-profile-counts dt {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+}
+
+.store-profile-counts dd {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 3px 0 0;
+}
+
+.store-clear-confirm {
+  background: var(--evcp-color-warning-bg);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+  margin-top: var(--evcp-space-3);
+  padding: var(--evcp-space-3);
+}
+
+.store-clear-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .store-status-strip {
   display: grid;
   gap: var(--evcp-space-2);

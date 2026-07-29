@@ -10,7 +10,7 @@ export type StoreDeviceRepository = {
   recordRecent(appSlug: string): void;
   rememberTicket(ticketId: string): void;
   rememberAccessReceipt(receipt: StoreAccessRequestResponse): void;
-  clear(): void;
+  clear(): boolean;
 };
 
 export type StorefrontState = {
@@ -30,7 +30,7 @@ export type StorefrontStateStore = {
   recordRecent(appSlug: string): void;
   rememberTicket(ticketId: string): void;
   rememberAccessReceipt(receipt: StoreAccessRequestResponse): void;
-  clearDevicePreferences(): void;
+  clearDevicePreferences(): boolean;
 };
 
 export function createStorefrontStateStore({
@@ -109,8 +109,9 @@ export function createStorefrontStateStore({
       syncDevice();
     },
     clearDevicePreferences() {
-      device.clear();
+      const clearedFromStorage = device.clear();
       syncDevice();
+      return clearedFromStorage;
     }
   };
 }

@@ -17,7 +17,7 @@ export type StorefrontContextValue = {
   recordRecent(appSlug: string): void;
   rememberTicket(ticketId: string): void;
   rememberAccessReceipt(receipt: StoreAccessRequestResponse): void;
-  clearDevicePreferences(): void;
+  clearDevicePreferences(): boolean;
   logout(): Promise<void>;
   api: StorePlatformClient;
   actionStates: Record<string, StoreAppActionState>;
@@ -31,7 +31,7 @@ export type StorefrontContextValue = {
 };
 
 export type StorePlatformClient = Pick<ReturnType<typeof createStorePlatformClient>,
-  "getStoreAppDetail" | "installStoreApp" | "uninstallStoreApp" | "requestStoreAccess" | "submitStoreTicket">;
+  "getStoreAppDetail" | "installStoreApp" | "uninstallStoreApp" | "requestStoreAccess" | "submitStoreTicket" | "getStoreTicket">;
 export type StoreAppAction = "install" | "uninstall" | "request-access" | "submit-ticket";
 export type StoreAppActionState = { pending: boolean; success?: string; error?: string };
 
@@ -88,6 +88,9 @@ function createLazyStorePlatformClient(): StorePlatformClient {
     },
     submitStoreTicket(...args) {
       return createStorePlatformClient().submitStoreTicket(...args);
+    },
+    getStoreTicket(...args) {
+      return createStorePlatformClient().getStoreTicket(...args);
     }
   };
 }

@@ -135,12 +135,13 @@ export function createStoreDeviceState(storage: StoreDeviceStorage) {
         accessReceipts: [receipt, ...memory.accessReceipts.filter((item) => item.id !== receipt.id)]
       });
     },
-    clear(): void {
+    clear(): boolean {
       memory = emptySnapshot();
       try {
         storage.removeItem(STORE_DEVICE_STATE_KEY);
+        return true;
       } catch {
-        // Device storage may be unavailable in privacy-restricted browsers.
+        return false;
       }
     }
   };

@@ -34,7 +34,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
         email={bootstrap.email}
         source={bootstrap.source}
         myAppsCount={bootstrap.myApps.length}
-        currentPath={route.page === "my-apps" ? "/store/" : route.page === "not-found" ? "" : `/store/${route.page}`}
+        currentPath={route.page === "my-apps" ? "/store/" : route.page === "ticket-detail" ? "/store/tickets" : route.page === "not-found" ? "" : `/store/${route.page}`}
         isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
         onLogout={() => void logout()}
