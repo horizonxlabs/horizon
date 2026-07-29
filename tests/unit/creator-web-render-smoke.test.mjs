@@ -191,3 +191,8 @@ test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
   assert.match(html, /สร้าง Project ใหม่/);
   assert.doesNotMatch(html, /hz-prompt-cta/);
 });
+
+test("PrdPage Confirm Baseline uses the @evcp/ui Button primitive (classed, not a raw button)", () => {
+  const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
+  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Confirm Baseline<\/button>/);
+});

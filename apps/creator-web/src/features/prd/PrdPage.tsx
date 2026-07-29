@@ -1,4 +1,4 @@
-import { DataTable, DecisionPanel, SectionCard, WorkflowRail } from "@evcp/ui";
+import { Button, DataTable, DecisionPanel, SectionCard, WorkflowRail } from "@evcp/ui";
 import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -24,7 +24,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
             <SectionCard
               eyebrow="PRD Viewer"
               title="Structured PRD Sections"
-              action={<button type="button" disabled={!currentPrdVersion || currentPrdVersion.status === "baseline"} onClick={() => { void handleConfirmPrdBaseline(); }}>Confirm Baseline</button>}
+              action={<Button variant="primary" type="button" disabled={!currentPrdVersion || currentPrdVersion.status === "baseline"} onClick={() => { void handleConfirmPrdBaseline(); }}>Confirm Baseline</Button>}
             >
               <p>{prdMessage}</p>
               <div className="creator-prd-sections">
