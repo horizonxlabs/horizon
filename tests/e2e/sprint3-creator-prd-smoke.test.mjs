@@ -144,7 +144,7 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
   for (const text of [
     "Horizon AI Builder",
     "ค้นหาโปรเจกต์",
-    "สร้างด้วย AI",
+    "สร้าง Project ใหม่",
     "Create Project Wizard",
     "PRD Viewer",
     "Structured PRD Sections",
@@ -154,6 +154,8 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
+
+  assert.doesNotMatch(creatorSource, /สร้างด้วย AI/);
 
   for (const component of [
     "WorkflowRail",
