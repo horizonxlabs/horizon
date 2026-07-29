@@ -322,8 +322,10 @@ services:
 
   platform-api:
     environment:
-      VAULT_ADDR: ${VAULT_ADDR:-http://openbao:8200}
-      VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-platform}
+      # Fixed internal values (hardcoded, NOT ${VAR:-default}) so the swarm contract test,
+      # which parses raw YAML without interpolation, sees the literal expected values.
+      VAULT_ADDR: http://openbao:8200
+      VAULT_KV_MOUNT: platform
       VAULT_TOKEN_FILE: /run/secrets/evcp-openbao-token
     secrets:
       - evcp-openbao-token
