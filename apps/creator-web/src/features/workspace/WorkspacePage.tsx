@@ -8,6 +8,7 @@ import {
   Send
 } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
+import { Button, Tabs } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
@@ -127,30 +128,22 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </span>
         </div>
         <div className="vibe-live-header-right">
-          <div className="vibe-live-tabs" role="tablist" aria-label="Workspace view">
-            {WORKSPACE_TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setVibeTab(tab)}
-                className={`vibe-live-tab ${vibeTab === tab ? "is-active" : ""}`.trim()}
-                role="tab"
-                aria-selected={vibeTab === tab}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            items={WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
+            active={vibeTab}
+            onSelect={setVibeTab}
+            aria-label="Workspace view"
+          />
           <div className="vibe-live-divider" />
-          <button
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => setVibePreviewKey((key) => key + 1)}
             title="Refresh preview"
             aria-label="Refresh preview"
-            className="vibe-live-icon-btn"
           >
             <RotateCw size={15} />
-          </button>
+          </Button>
           <a
             href={previewSrc}
             target="_blank"
@@ -164,15 +157,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             <span>Preview</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
-          <button
+          <Button
+            variant="primary"
             type="button"
             title="Publish to staging or production"
-            className="vibe-live-control vibe-live-control-primary"
             disabled={workspaceMode === "plan"}
             onClick={() => setShowPublish(true)}
           >
             Publish
-          </button>
+          </Button>
         </div>
       </header>
       <div className="vibe-live-body">

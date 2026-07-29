@@ -196,3 +196,13 @@ test("PrdPage Confirm Baseline uses the @evcp/ui Button primitive (classed, not 
   const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
   assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Confirm Baseline<\/button>/);
 });
+
+test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-tab /);
+  assert.doesNotMatch(html, /class="[^"]*vibe-live-icon-btn/);
+  assert.match(html, /Publish<\/button>/);
+});
