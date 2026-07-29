@@ -7,6 +7,8 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
     handleInviteUser,
+    handleAccessRequestDecision,
+    decidingAccessRequestId,
     isInvitingUser,
     visibleAppMembers,
     visibleAccessRequests,
@@ -49,9 +51,28 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   { key: "role", label: "Requested Role" },
                   { key: "reason", label: "Reason" },
                   { key: "submitted", label: "Submitted" },
-                  { key: "status", label: "Status", tone: () => "warning" }
+                  {
+                    key: "status",
+                    label: "Status",
+                    tone: (value) =>
+                      value === "approved" ? "success" : value === "rejected" ? "danger" : "warning"
+                  },
+                  { key: "actions", label: "Actions" }
                 ]}
-                rows={visibleAccessRequests}
+                rows={visibleAccessRequests.map((request) => {
+                  const isPending = request.status === "pending";
+                  const isDeciding = decidingAccessRequestId === request.id;
+                  return {
+                    ...request,
+                    actions: (
+                      <div className="actions">
+                        <button type="button" disabled={!isPending || isDeciding} onClick={() => handleAccessRequestDecision(request.id, "approved")}>Approve</button>
+                        <button type="button" disabled={!isPending || isDeciding} onClick={() => handleAccessRequestDecision(request.id, "rejected")}>Reject</button>
+                      </div>
+                    )
+                  };
+                })}
+                rowKey={(request) => request.id}
               />
             </SectionCard>
             <SectionCard eyebrow="App Roles" title="Role Permission Matrix">

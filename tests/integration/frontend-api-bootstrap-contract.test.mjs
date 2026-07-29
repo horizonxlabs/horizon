@@ -389,7 +389,7 @@ test("Creator app users and publish actions are API-client backed", () => {
   for (const handler of [
     "loadCreatorPublishState",
     "handleInviteUser",
-    "handleApproveAccessRequest",
+    "handleAccessRequestDecision",
     "handlePublishProject"
   ]) {
     assert.match(creatorSource, new RegExp(handler));

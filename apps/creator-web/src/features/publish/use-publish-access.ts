@@ -22,7 +22,7 @@ export function usePublishAccess({
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [publishMessage, setPublishMessage] = useState("Loading publish state from Platform API.");
   const [isInvitingUser, setIsInvitingUser] = useState(false);
-  const [isApprovingAccess, setIsApprovingAccess] = useState(false);
+  const [decidingAccessRequestId, setDecidingAccessRequestId] = useState<string>();
   const [isPublishingProject, setIsPublishingProject] = useState(false);
 
   const visibleAppMembers =
@@ -106,33 +106,24 @@ export function usePublishAccess({
     }
   }
 
-  async function handleApproveAccessRequest() {
-    const pendingRequest = appAccessSnapshot?.accessRequests.find(
-      (request) => request.status === "pending"
-    );
-    if (!pendingRequest) {
-      setPublishMessage("No pending access request is available from Platform API.");
-      return;
-    }
-    setIsApprovingAccess(true);
+  async function handleAccessRequestDecision(requestId: string, decision: "approved" | "rejected") {
+    setDecidingAccessRequestId(requestId);
     try {
       const client = createCreatorPlatformClient();
       await client.decideAppAccessRequest(selectedProject.id, {
-        requestId: pendingRequest.id,
-        decision: "approved"
+        requestId,
+        decision
       });
       await refreshCreatorPublishState(selectedProject.id);
-      setPublishMessage(
-        "Access request approved through Platform API and membership state refreshed."
-      );
+      setPublishMessage(`Access request ${decision} through Platform API.`);
     } catch (error) {
       setPublishMessage(
         error instanceof Error
-          ? `Access request approval failed. Existing request state was preserved. ${error.message}`
-          : "Access request approval failed. Existing request state was preserved."
+          ? `Access decision failed: ${error.message}`
+          : "Access decision failed."
       );
     } finally {
-      setIsApprovingAccess(false);
+      setDecidingAccessRequestId(undefined);
     }
   }
 
@@ -170,8 +161,7 @@ export function usePublishAccess({
     setPublishMessage,
     isInvitingUser,
     setIsInvitingUser,
-    isApprovingAccess,
-    setIsApprovingAccess,
+    decidingAccessRequestId,
     isPublishingProject,
     setIsPublishingProject,
     visibleAppMembers,
@@ -184,7 +174,7 @@ export function usePublishAccess({
     resetPublishAccess,
     refreshCreatorPublishState,
     handleInviteUser,
-    handleApproveAccessRequest,
+    handleAccessRequestDecision,
     handlePublishProject
   };
 }

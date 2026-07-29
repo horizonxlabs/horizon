@@ -2,6 +2,9 @@ import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+// This fixture intentionally exercises mock identities; production defaults deny them.
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 const { createPlatformApiServices } = await import(
   "../../apps/platform-api/src/platform-services.ts"
@@ -131,6 +134,18 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
   });
   assert.equal(request.status, 201);
 
+  const secondRequest = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${projectId}/app/access-requests`,
+    headers: creatorHeaders,
+    body: {
+      requesterEmail: "auditor@company.com",
+      requestedRoleKey: "employee",
+      reason: "Review leave history"
+    }
+  });
+  assert.equal(secondRequest.status, 201);
+
   const decision = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${projectId}/app/access-requests/decision`,
@@ -139,6 +154,30 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
   });
   assert.equal(decision.status, 200);
   assert.equal(decision.body.data.status, "approved");
+
+  const rejection = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${projectId}/app/access-requests/decision`,
+    headers: creatorHeaders,
+    body: { requestId: secondRequest.body.data.id, decision: "rejected" }
+  });
+  assert.equal(rejection.status, 200);
+  assert.equal(rejection.body.data.id, secondRequest.body.data.id);
+  assert.equal(rejection.body.data.status, "rejected");
+
+  const updatedSnapshot = executePlatformApiRequest(services, {
+    method: "GET",
+    path: `/projects/${projectId}/app/users`,
+    headers: creatorHeaders
+  });
+  const approvedRequest = updatedSnapshot.body.data.accessRequests.find(
+    (accessRequest) => accessRequest.id === request.body.data.id
+  );
+  const rejectedRequest = updatedSnapshot.body.data.accessRequests.find(
+    (accessRequest) => accessRequest.id === secondRequest.body.data.id
+  );
+  assert.equal(approvedRequest.status, "approved");
+  assert.equal(rejectedRequest.status, "rejected");
 
   const review = executePlatformApiRequest(services, {
     method: "GET",
