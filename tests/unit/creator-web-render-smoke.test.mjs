@@ -184,3 +184,10 @@ test("ProjectsPage is create-first: shows the create CTA and no free-text prompt
   assert.match(html, /สร้าง Project ใหม่/);
   assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
 });
+
+test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
+  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
+  assert.match(html, /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/);
+  assert.match(html, /สร้าง Project ใหม่/);
+  assert.doesNotMatch(html, /hz-prompt-cta/);
+});
