@@ -23,11 +23,18 @@ export const navigation: Record<Surface, NavItem[]> = {
     { label: "Projects", route: "/creator/", icon: "projects" },
     { label: "PRD Review", route: "/creator/projects/leave-management/prd", icon: "prd" },
     { label: "Creator Workspace", route: "/creator/projects/leave-management", icon: "workspace" },
+    { label: "Database", route: "/creator/projects/leave-management/database", icon: "grid" },
+    { label: "Versions", route: "/creator/projects/leave-management/versions", icon: "logs" },
     { label: "Users & Roles", route: "/creator/projects/leave-management/users", icon: "users" },
     {
       label: "Publish & Registry",
       route: "/creator/projects/leave-management/publish",
       icon: "publish"
+    },
+    {
+      label: "Deployments",
+      route: "/creator/projects/leave-management/deployments",
+      icon: "services"
     },
     {
       label: "Tickets & Changes",

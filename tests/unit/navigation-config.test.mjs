@@ -25,8 +25,11 @@ test("creator navigation matches the real app creation lifecycle", () => {
     "Projects",
     "PRD Review",
     "Creator Workspace",
+    "Database",
+    "Versions",
     "Users & Roles",
     "Publish & Registry",
+    "Deployments",
     "Tickets & Changes"
   ];
 
@@ -40,8 +43,11 @@ test("creator navigation matches the real app creation lifecycle", () => {
   assert.match(configSource, /route: "\/creator\/"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/prd"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/database"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/versions"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/users"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/publish"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/deployments"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
 });
 

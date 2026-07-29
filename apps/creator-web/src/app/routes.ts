@@ -1,19 +1,68 @@
 import { navigation } from "@evcp/config";
 import type { CreatorProjectView } from "@/shared/types";
 
-export type CreatorPage = "projects" | "workspace" | "prd" | "users" | "publish" | "tickets";
+export type CreatorPage =
+  | "projects"
+  | "workspace"
+  | "prd"
+  | "database"
+  | "versions"
+  | "users"
+  | "publish"
+  | "deployments"
+  | "tickets"
+  | "ticket-detail"
+  | "not-found";
 
-export function creatorPageFromPath(pathname: string): CreatorPage {
-  if (pathname.endsWith("/prd")) return "prd";
-  if (pathname.endsWith("/users")) return "users";
-  if (pathname.endsWith("/publish")) return "publish";
-  if (pathname.endsWith("/tickets")) return "tickets";
-  if (pathname.includes("/creator/projects/")) return "workspace";
-  return "projects";
+export type CreatorRoute = {
+  page: CreatorPage;
+  projectId?: string;
+  ticketId?: string;
+};
+
+export type CreatorSelectablePage = Exclude<CreatorPage, "ticket-detail" | "not-found">;
+
+export function creatorRouteFromPath(pathname: string): CreatorRoute {
+  const segments = pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+  if (segments.length === 1 && segments[0] === "creator") return { page: "projects" };
+  if (segments[0] !== "creator" || segments[1] !== "projects" || !segments[2])
+    return { page: "not-found" };
+  const projectId = decodeURIComponent(segments[2]);
+  if (segments.length === 3) return { page: "workspace", projectId };
+  const suffix = segments[3];
+  if (suffix === "tickets" && segments[4])
+    return { page: "ticket-detail", projectId, ticketId: decodeURIComponent(segments[4]) };
+  const pageBySuffix = {
+    prd: "prd",
+    database: "database",
+    versions: "versions",
+    users: "users",
+    publish: "publish",
+    deployments: "deployments",
+    tickets: "tickets"
+  } as const;
+  return pageBySuffix[suffix as keyof typeof pageBySuffix]
+    ? { page: pageBySuffix[suffix as keyof typeof pageBySuffix], projectId }
+    : { page: "not-found", projectId };
+}
+
+export function creatorPathForPage(projectId: string, page: CreatorSelectablePage): string {
+  if (page === "projects") return "/creator/";
+  const base = `/creator/projects/${encodeURIComponent(projectId)}`;
+  const suffix: Partial<Record<CreatorSelectablePage, string>> = {
+    prd: "prd",
+    database: "database",
+    versions: "versions",
+    users: "users",
+    publish: "publish",
+    deployments: "deployments",
+    tickets: "tickets"
+  };
+  return page === "workspace" ? base : `${base}/${suffix[page]}`;
 }
 
 export function projectRouteSegmentFromPath(pathname: string): string | undefined {
-  return pathname.match(/\/creator\/projects\/([^/]+)/)?.[1];
+  return creatorRouteFromPath(pathname).projectId;
 }
 
 export function slugifyProjectName(name: string): string {
@@ -30,7 +79,7 @@ export function slugifyProjectName(name: string): string {
 const EXCLUDED_CREATOR_NAV_LABELS = new Set(["Creator Workspace"]);
 
 export function createCreatorNavigation(project: CreatorProjectView) {
-  const projectBaseRoute = `/creator/projects/${project.id}`;
+  const projectBaseRoute = `/creator/projects/${encodeURIComponent(project.id)}`;
   return navigation.creator
     .filter((item) => !EXCLUDED_CREATOR_NAV_LABELS.has(item.label))
     .map((item) => {
@@ -38,10 +87,7 @@ export function createCreatorNavigation(project: CreatorProjectView) {
       if (!isProjectScoped) return item;
       return {
         ...item,
-        label: `${item.label} (Soon)`,
-        route: item.route.replace("/creator/projects/leave-management", projectBaseRoute),
-        disabled: true,
-        disabledReason: "เร็วๆ นี้"
+        route: item.route.replace("/creator/projects/leave-management", projectBaseRoute)
       };
     });
 }
@@ -66,6 +112,17 @@ export const creatorPageCopy: Record<
     title: "PRD Review: Leave Management",
     description: "ตรวจ PRD sections, version history และ confirm baseline ก่อน generate app"
   },
+  database: {
+    eyebrow: "Project Data",
+    title: "Database",
+    description: "ตรวจ schema, tables และ records จากฐานข้อมูลของ project ที่เลือก"
+  },
+  versions: {
+    eyebrow: "Frontend History",
+    title: "Frontend Versions",
+    description:
+      "ตรวจ checkpoint history และ restore เฉพาะ frontend โดยไม่เปลี่ยน backend หรือข้อมูล"
+  },
   users: {
     eyebrow: "Access Management",
     title: "Users & Roles",
@@ -76,9 +133,24 @@ export const creatorPageCopy: Record<
     title: "Publish & Registry",
     description: "ตรวจ manifest, readiness checklist และลงทะเบียนแอปก่อนเปิดให้ end user ใช้งาน"
   },
+  deployments: {
+    eyebrow: "Deployment History",
+    title: "Deployments",
+    description: "ตรวจ environment, commit, health และเวลาของ deployment ที่ Platform API ส่งกลับ"
+  },
   tickets: {
     eyebrow: "Feedback Loop",
     title: "Tickets & Changes",
     description: "รับ bug/feedback จาก Horizon Store แล้วแปลงเป็น PRD change หรือ AI prompt"
+  },
+  "ticket-detail": {
+    eyebrow: "Feedback Detail",
+    title: "Ticket Detail",
+    description: "ตรวจรายละเอียด ticket และ action ที่ Platform API รองรับ"
+  },
+  "not-found": {
+    eyebrow: "Creator",
+    title: "Page not found",
+    description: "เลือก destination จาก Creator navigation"
   }
 };
