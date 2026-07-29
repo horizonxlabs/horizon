@@ -6,6 +6,10 @@ import { useStorefront } from "../StoreProvider";
 
 export type StoreCollectionPageName = "my-apps" | "available" | "favorites" | "recent";
 
+export function navigateToStoreApp(appSlug: string): void {
+  navigateBrowserPath(`/store/apps/${encodeURIComponent(appSlug)}`);
+}
+
 const PAGE_COPY: Record<StoreCollectionPageName, { title: string; eyebrow: string; empty: string }> = {
   "my-apps": {
     title: "My Apps",
@@ -50,7 +54,7 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
             <button
               type="button"
               className="store-collection-main"
-              onClick={() => navigateBrowserPath(`/store/apps/${encodeURIComponent(app.slug)}`)}
+              onClick={() => navigateToStoreApp(app.slug)}
             >
               <span className="store-app-icon" aria-hidden="true">{app.name.slice(0, 1)}</span>
               <span>

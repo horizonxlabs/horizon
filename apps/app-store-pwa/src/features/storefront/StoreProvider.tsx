@@ -1,10 +1,10 @@
 import type { StoreAccessRequestResponse } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { beginStoreKeycloakLogout, clearStoreSessionBridge, initialStoreBootstrap, loadStoreBootstrap, type StoreBootstrapState } from "./bootstrap";
 import { createStoreDeviceState, type StoreDeviceSnapshot, type StoreDeviceStorage } from "./device-state";
 import { createStorePlatformClient } from "./platform-client";
-import { createStorefrontAsyncController } from "./store-async";
+import { createStorefrontStateStore, type StorefrontStateStore } from "./store-state";
 
 export type StorefrontContextValue = {
   bootstrap: StoreBootstrapState;
@@ -39,59 +39,46 @@ function mergeApps(bootstrap: StoreBootstrapState): AppStoreItem[] {
   });
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const repository = useRef(createStoreDeviceState(deviceStorage()));
-  const [bootstrap, setBootstrap] = useState(initialStoreBootstrap);
-  const [device, setDevice] = useState(() => repository.current.read());
-  const [logoutError, setLogoutError] = useState<string>();
-  const controller = useRef<ReturnType<typeof createStorefrontAsyncController<StoreBootstrapState>>>(undefined);
+function createDefaultStore(): StorefrontStateStore {
+  return createStorefrontStateStore({
+    initialBootstrap: initialStoreBootstrap,
+    loadHome: loadStoreBootstrap,
+    logout: () => createStorePlatformClient().request("/auth/logout", { method: "POST" }),
+    device: createStoreDeviceState(deviceStorage()),
+    onLogoutSuccess: () => {
+      const bootstrap = clearStoreSessionBridge();
+      beginStoreKeycloakLogout();
+      return bootstrap;
+    }
+  });
+}
 
-  if (!controller.current) {
-    controller.current = createStorefrontAsyncController({
-      loadHome: loadStoreBootstrap,
-      logout: () => createStorePlatformClient().request("/auth/logout", { method: "POST" }),
-      onRefreshStart: () => setBootstrap((current) => ({ ...current, status: "loading", error: undefined })),
-      onRefreshSuccess: setBootstrap,
-      onRefreshFailure: (error) => setBootstrap({ ...initialStoreBootstrap, status: "error", error: error.message }),
-      onLogoutStart: () => setLogoutError(undefined),
-      onLogoutFailure: (error) => setLogoutError(error.message),
-      onLogoutSuccess: () => {
-        setBootstrap(clearStoreSessionBridge());
-        beginStoreKeycloakLogout();
-      }
-    });
-  }
-
-  const refreshHome = useCallback(() => controller.current!.refresh(), []);
+export function StoreProvider({ children, store }: { children: ReactNode; store?: StorefrontStateStore }) {
+  const defaultStore = useRef<StorefrontStateStore | undefined>(undefined);
+  if (!defaultStore.current) defaultStore.current = createDefaultStore();
+  const stateStore = store ?? defaultStore.current;
+  const state = useSyncExternalStore(stateStore.subscribe, stateStore.getSnapshot, stateStore.getSnapshot);
 
   useEffect(() => {
-    controller.current!.mount();
-    void refreshHome();
-    return () => {
-      controller.current!.unmount();
-    };
-  }, [refreshHome]);
+    stateStore.mount();
+    return stateStore.unmount;
+  }, [stateStore]);
 
-  const updateDevice = useCallback((update: () => void) => {
-    update();
-    setDevice(repository.current.read());
-  }, []);
-
-  const logout = useCallback(() => controller.current!.logout(), []);
-
+  const refreshHome = useCallback(() => stateStore.refresh(), [stateStore]);
+  const logout = useCallback(() => stateStore.logout(), [stateStore]);
   const value = useMemo<StorefrontContextValue>(() => ({
-    bootstrap,
-    logoutError,
-    allApps: mergeApps(bootstrap),
-    device,
+    bootstrap: state.bootstrap,
+    logoutError: state.logoutError,
+    allApps: mergeApps(state.bootstrap),
+    device: state.device,
     refreshHome,
-    toggleFavorite: (appSlug) => updateDevice(() => repository.current.toggleFavorite(appSlug)),
-    recordRecent: (appSlug) => updateDevice(() => repository.current.recordRecent(appSlug)),
-    rememberTicket: (ticketId) => updateDevice(() => repository.current.rememberTicket(ticketId)),
-    rememberAccessReceipt: (receipt) => updateDevice(() => repository.current.rememberAccessReceipt(receipt)),
-    clearDevicePreferences: () => updateDevice(() => repository.current.clear()),
+    toggleFavorite: stateStore.toggleFavorite,
+    recordRecent: stateStore.recordRecent,
+    rememberTicket: stateStore.rememberTicket,
+    rememberAccessReceipt: stateStore.rememberAccessReceipt,
+    clearDevicePreferences: stateStore.clearDevicePreferences,
     logout
-  }), [bootstrap, device, logout, logoutError, refreshHome, updateDevice]);
+  }), [logout, refreshHome, state, stateStore]);
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>;
 }

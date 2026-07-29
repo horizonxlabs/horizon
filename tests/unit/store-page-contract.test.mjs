@@ -45,6 +45,6 @@ test("Store provider separates Platform API bootstrap from versioned device stat
   const source = readFileSync("apps/app-store-pwa/src/features/storefront/StoreProvider.tsx", "utf8");
   assert.match(source, /loadStoreBootstrap/);
   assert.match(source, /createStoreDeviceState/);
-  assert.match(source, /createStorefrontAsyncController/);
+  assert.match(source, /createStorefrontStateStore/);
   assert.match(source, /logoutError/);
 });
