@@ -1,4 +1,4 @@
-import type { StoreAccessRequestResponse } from "@evcp/api-client";
+import type { StoreAccessRequestResponse, StoreAppInstallationResponse } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { beginStoreKeycloakLogout, clearStoreSessionBridge, initialStoreBootstrap, loadStoreBootstrap, type StoreBootstrapState } from "./bootstrap";
@@ -33,7 +33,22 @@ export type StorefrontContextValue = {
 export type StorePlatformClient = Pick<ReturnType<typeof createStorePlatformClient>,
   "getStoreAppDetail" | "installStoreApp" | "uninstallStoreApp" | "requestStoreAccess" | "submitStoreTicket" | "getStoreTicket">;
 export type StoreAppAction = "install" | "uninstall" | "request-access" | "submit-ticket";
-export type StoreAppActionState = { pending: boolean; success?: string; error?: string };
+export type StoreAppActionState = {
+  pending: boolean;
+  success?: string;
+  error?: string;
+  installationStatus?: StoreAppInstallationResponse["status"];
+};
+
+function confirmedInstallationStatus(
+  action: StoreAppAction,
+  result: unknown
+): StoreAppInstallationResponse["status"] | undefined {
+  if (action !== "install" && action !== "uninstall") return undefined;
+  if (!result || typeof result !== "object") return undefined;
+  const status = (result as { status?: unknown }).status;
+  return status === "active" || status === "disabled" ? status : undefined;
+}
 
 export function storeAppActionKey(appSlug: string, action: StoreAppAction): string {
   return `${action}:${encodeURIComponent(appSlug.trim().toLocaleLowerCase())}`;
@@ -137,10 +152,16 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
       try {
         const result = await mutation();
         onConfirmed?.(result);
-        update({ pending: false, success: successMessage });
+        const installationStatus = confirmedInstallationStatus(action, result);
+        const confirmedState: StoreAppActionState = {
+          pending: false,
+          success: successMessage,
+          ...(installationStatus ? { installationStatus } : {})
+        };
+        update(confirmedState);
         const refresh = await refreshHome({ preserveReadyOnFailure: true });
         if (!refresh.ok) update({
-          pending: false,
+          ...confirmedState,
           success: `${successMessage} Store home refresh failed: ${refresh.error.message}`
         });
         return result;

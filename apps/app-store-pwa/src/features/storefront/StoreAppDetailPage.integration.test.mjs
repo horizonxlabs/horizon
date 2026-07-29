@@ -112,6 +112,44 @@ test("detail deduplicates an action while allowing a different action", async ()
   await act(async () => { renderer.unmount(); });
 });
 
+test("install journey advances from validation through persisted completion", async () => {
+  const install = deferred();
+  const client = {
+    getStoreAppDetail: async () => detail("journey", ["install"]),
+    installStoreApp: () => install.promise
+  };
+  let renderer;
+  await act(async () => { renderer = mount(createStore(), client, "journey"); await Promise.resolve(); });
+  const journey = () => renderer.root.findByProps({ "aria-label": "App install journey" });
+  const statuses = () => journey().findAllByType("li").map((step) => step.props.className);
+  assert.deepEqual(statuses(), [
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-pending",
+    "store-install-step status-pending"
+  ]);
+
+  await act(async () => { button(renderer.root, "Install").props.onClick(); });
+  assert.deepEqual(statuses(), [
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-current",
+    "store-install-step status-pending"
+  ]);
+
+  await act(async () => {
+    install.resolve({ id: "install", appSlug: "journey", status: "active", installedAt: "2026-07-29" });
+    await Promise.resolve();
+  });
+  assert.deepEqual(statuses(), [
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-complete"
+  ]);
+  await act(async () => { renderer.unmount(); });
+});
+
 test("detail preserves a confirmed action when home refresh fails", async () => {
   const loads = [async () => home, async () => { throw new Error("refresh offline"); }];
   const client = { getStoreAppDetail: async () => detail(), installStoreApp: async () => ({ id: "install", appSlug: "first", status: "active", installedAt: "2026-07-29" }) };

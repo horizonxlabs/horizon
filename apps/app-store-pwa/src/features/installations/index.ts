@@ -28,13 +28,13 @@ export const appInstallJourneySteps = [
 
 export function installJourneyStatus(
   stepId: (typeof appInstallJourneySteps)[number]["id"],
-  app: AppStoreItem,
-  installResult: StoreAppInstallationResponse | undefined,
+  app: Pick<AppStoreItem, "accessStatus" | "installStatus">,
+  installationStatus: StoreAppInstallationResponse["status"] | undefined,
   isInstallingApp: boolean
 ): InstallJourneyStepStatus {
   const hasAccess = app.accessStatus === "active";
-  const isInstalled = app.installStatus === "installed" || installResult?.status === "active";
-  const isRemoved = installResult?.status === "disabled";
+  const isInstalled = app.installStatus === "installed" || installationStatus === "active";
+  const isRemoved = installationStatus === "disabled";
 
   if (stepId === "access_check") return hasAccess ? "complete" : "blocked";
   if (!hasAccess) return "pending";

@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StorefrontAppDetailResponse } from "@evcp/api-client";
 import { SectionCard, ToneBadge } from "@evcp/ui";
+import { appInstallJourneySteps, installJourneyStatus } from "@/features/installations";
 import { storeAppActionKey, type StoreAppAction } from "../StoreProvider";
 import { useStorefront } from "../StoreProvider";
 
@@ -58,6 +59,16 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const supports = (action: StorefrontAppDetailResponse["actions"][number]) => app.actions.includes(action);
   const actionState = (action: StoreAppAction) => actionStates[storeAppActionKey(app.slug, action)];
   const pending = (action: StoreAppAction) => actionState(action)?.pending ?? false;
+  const installActionState = actionState("install");
+  const installJourneyRows = appInstallJourneySteps.map((step) => ({
+    ...step,
+    status: installJourneyStatus(
+      step.id,
+      app,
+      installActionState?.installationStatus,
+      installActionState?.pending ?? false
+    )
+  }));
   const feedback = (action: StoreAppAction) => {
     const state = actionState(action);
     return state?.error ? <p role="alert" className="store-action-error">{state.error}</p>
@@ -111,7 +122,33 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
         <p>Owned by {app.ownerName} · {app.department} · {app.accessMode}</p>
         {supports("open") ? <button type="button" onClick={() => { recordRecent(app.slug); window.location.assign(app.route || `/apps/${app.slug}`); }}>Open app</button> : null}
       </SectionCard>
-      {supports("install") ? <SectionCard eyebrow="Installation" title="Install on this account"><button type="button" disabled={pending("install")} onClick={() => handleAction("install", () => api.installStoreApp(app.slug), "Install confirmed.")}>{pending("install") ? "Installing…" : "Install"}</button>{feedback("install")}</SectionCard> : null}
+      {supports("install") ? (
+        <SectionCard eyebrow="Installation" title="Install on this account">
+          <button
+            type="button"
+            disabled={pending("install")}
+            onClick={() => handleAction(
+              "install",
+              () => api.installStoreApp(app.slug),
+              "Install confirmed."
+            )}
+          >
+            {pending("install") ? "Installing…" : "Install"}
+          </button>
+          {feedback("install")}
+          <ol aria-label="App install journey" className="store-install-stepper">
+            {installJourneyRows.map((step, index) => (
+              <li key={step.id} className={`store-install-step status-${step.status}`}>
+                <span>{index + 1}</span>
+                <div><strong>{step.label}</strong><small>{step.detail}</small></div>
+                <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : "neutral"}>
+                  {step.status}
+                </ToneBadge>
+              </li>
+            ))}
+          </ol>
+        </SectionCard>
+      ) : null}
       {supports("uninstall") ? <SectionCard eyebrow="Installation" title="Remove this installation"><button type="button" disabled={pending("uninstall")} onClick={() => handleAction("uninstall", () => api.uninstallStoreApp(app.slug), "Removal confirmed.")}>{pending("uninstall") ? "Removing…" : "Remove"}</button>{feedback("uninstall")}</SectionCard> : null}
       {supports("request_access") ? <SectionCard eyebrow="Access" title="Request access"><form data-store-action="request-access" onSubmit={submitAccess}><label>Requested role<input name="requestedRoleKey" value={requestedRoleKey} onChange={(event) => setRequestedRoleKey(event.target.value)} /></label><label>Reason<input name="accessReason" value={accessReason} onChange={(event) => setAccessReason(event.target.value)} /></label><label>Department (optional)<input name="accessDepartment" value={accessDepartment} onChange={(event) => setAccessDepartment(event.target.value)} /></label><button type="submit" disabled={pending("request-access")}>{pending("request-access") ? "Requesting…" : "Request access"}</button></form>{feedback("request-access")}</SectionCard> : null}
       {supports("submit_ticket") ? <SectionCard eyebrow="Support" title="Submit a ticket"><form data-store-action="submit-ticket" onSubmit={submitTicket}><label>Type<select name="ticketType" value={ticketType} onChange={(event) => setTicketType(event.target.value as TicketType)}><option value="bug">Bug</option><option value="feedback">Feedback</option><option value="feature_request">Feature request</option></select></label><label>Priority<select name="ticketPriority" value={ticketPriority} onChange={(event) => setTicketPriority(event.target.value as TicketPriority)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><label>Title<input name="ticketTitle" value={ticketTitle} onChange={(event) => setTicketTitle(event.target.value)} /></label><label>Description<input name="ticketDescription" value={ticketDescription} onChange={(event) => setTicketDescription(event.target.value)} /></label><label>Device information<input name="ticketDevice" value={ticketDevice} onChange={(event) => setTicketDevice(event.target.value)} /></label><button type="submit" disabled={pending("submit-ticket")}>{pending("submit-ticket") ? "Submitting…" : "Submit ticket"}</button></form>{feedback("submit-ticket")}</SectionCard> : null}
