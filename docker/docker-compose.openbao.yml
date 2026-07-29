@@ -5,7 +5,9 @@ services:
     cap_add:
       - IPC_LOCK
     volumes:
-      - openbao-data:/openbao/file
+      # Mount the named volume at the path config.hcl actually stores to (/openbao/data),
+      # otherwise OpenBao writes to the ephemeral container layer and loses secrets on recreate.
+      - openbao-data:/openbao/data
     configs:
       - source: openbao-config
         target: /openbao/config/config.hcl
@@ -38,7 +40,9 @@ secrets:
 volumes:
   openbao-data:
 
-networks:
-  evcp-internal:
-    external: true
-    name: evcp_evcp-internal
+# NOTE: no top-level `networks:` here. This overlay is only ever deployed together with
+# docker-compose.release.yml (`docker stack deploy -c release -c openbao evcp`), which
+# defines `evcp-internal` as an attachable overlay. Redeclaring it here as `external`
+# clobbers that definition in the merge and makes `docker stack deploy` fail with
+# "network ... is declared as external, but could not be found". The openbao service's
+# `networks: [evcp-internal]` reference resolves against the release file's definition.
