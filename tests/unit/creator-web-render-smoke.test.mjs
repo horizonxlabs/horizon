@@ -134,11 +134,25 @@ const ROUTE_CASES = [
 for (const [page, pathname, expected] of ROUTE_CASES) {
   test(`CreatorRoutes maps ${page} to its capability screen`, () => {
     window.location.pathname = pathname;
-    const html = renderWithHook((app) =>
-      React.createElement(CreatorRoutes, {
-        app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } }
-      })
-    );
+    const html = renderWithHook((app) => {
+      const selectedProject = {
+        ...app.selectedProject,
+        id: "project-1",
+        name: "Project One"
+      };
+      return React.createElement(CreatorRoutes, {
+        app: {
+          ...app,
+          selectedProject,
+          bootstrap: {
+            ...app.bootstrap,
+            status: "ready",
+            selectedProject,
+            projects: [selectedProject]
+          }
+        }
+      });
+    });
     assert.match(html, expected);
   });
 }
@@ -146,12 +160,40 @@ for (const [page, pathname, expected] of ROUTE_CASES) {
 test("CreatorRoutes fail-closes the default dashboard route without demo records", () => {
   const html = renderWithHook((app) =>
     React.createElement(CreatorRoutes, {
-      app: { ...app, creatorPage: "unexpected", bootstrap: { ...app.bootstrap, status: "ready" } }
+      app: {
+        ...app,
+        creatorPage: "unexpected",
+        creatorRoute: { page: "not-found" },
+        requestedProjectUnavailable: false,
+        bootstrap: { ...app.bootstrap, status: "ready" }
+      }
     })
   );
   assert.match(html, /This route has no dashboard fallback/);
   assert.doesNotMatch(html, /Database and frontend versions/);
   assert.doesNotMatch(html, /TKT-0001/);
+});
+
+test("CreatorRoutes renders project unavailable instead of another project's route data", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(CreatorRoutes, {
+      app: {
+        ...app,
+        creatorPage: "versions",
+        creatorRoute: { page: "versions", projectId: "missing-project" },
+        bootstrap: {
+          ...app.bootstrap,
+          status: "ready",
+          projects: [{ ...app.selectedProject, id: "project-1", name: "First Project" }],
+          selectedProject: { ...app.selectedProject, id: "project-1", name: "First Project" }
+        },
+        selectedProject: { ...app.selectedProject, id: "project-1", name: "First Project" }
+      }
+    })
+  );
+  assert.match(html, /Project unavailable/);
+  assert.match(html, /Return to Projects/);
+  assert.doesNotMatch(html, /Versions: First Project/);
 });
 
 test("CreatorRoutes keeps the first-project state inside the shared Creator shell", () => {
@@ -200,4 +242,18 @@ test("ProjectsPage is create-first: shows the create CTA and no free-text prompt
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
   assert.match(html, /สร้าง Project ใหม่/);
   assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
+});
+
+test("UsersPage visibly presents access decision feedback with alert semantics", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(UsersPage, {
+      app: {
+        ...app,
+        bootstrap: { ...app.bootstrap, status: "ready" },
+        publishMessage: "Access decision failed: approval offline"
+      }
+    })
+  );
+  assert.match(html, /role="alert"/);
+  assert.match(html, /Access decision failed: approval offline/);
 });

@@ -4,15 +4,19 @@ import {
   type PublishResultResponse,
   type PublishReviewResponse
 } from "@evcp/api-client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
 import { loadCreatorPublishState } from "./api";
 
 export function usePublishAccess({
-  selectedProject
+  selectedProject,
+  clientFactory = createCreatorPlatformClient,
+  loadPublishState = loadCreatorPublishState
 }: {
   selectedProject: CreatorProjectView;
+  clientFactory?: typeof createCreatorPlatformClient;
+  loadPublishState?: typeof loadCreatorPublishState;
 }) {
   const [appAccessSnapshot, setAppAccessSnapshot] = useState<AppAccessSnapshotResponse | undefined>(
     undefined
@@ -22,7 +26,10 @@ export function usePublishAccess({
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [publishMessage, setPublishMessage] = useState("Loading publish state from Platform API.");
   const [isInvitingUser, setIsInvitingUser] = useState(false);
-  const [decidingAccessRequestId, setDecidingAccessRequestId] = useState<string>();
+  const [decidingAccessRequestIds, setDecidingAccessRequestIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const accessDecisionRequests = useRef(new Map<string, Promise<void>>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
 
   const visibleAppMembers =
@@ -76,7 +83,7 @@ export function usePublishAccess({
   }
 
   async function refreshCreatorPublishState(projectId: string) {
-    const publishState = await loadCreatorPublishState(projectId);
+    const publishState = await loadPublishState(projectId);
     setAppAccessSnapshot(publishState.access);
     setPublishReview(publishState.review);
     setRegistryEntries(publishState.registry);
@@ -86,7 +93,7 @@ export function usePublishAccess({
   async function handleInviteUser() {
     setIsInvitingUser(true);
     try {
-      const client = createCreatorPlatformClient();
+      const client = clientFactory();
       await client.createAppInvitation(selectedProject.id, {
         email: "finance.manager@company.com",
         roleKey: "manager",
@@ -107,30 +114,58 @@ export function usePublishAccess({
   }
 
   async function handleAccessRequestDecision(requestId: string, decision: "approved" | "rejected") {
-    setDecidingAccessRequestId(requestId);
-    try {
-      const client = createCreatorPlatformClient();
-      await client.decideAppAccessRequest(selectedProject.id, {
-        requestId,
-        decision
+    const existing = accessDecisionRequests.current.get(requestId);
+    if (existing) return existing;
+
+    const request = (async () => {
+      setDecidingAccessRequestIds((current) => {
+        const next = new Set(current);
+        next.add(requestId);
+        return next;
       });
-      await refreshCreatorPublishState(selectedProject.id);
-      setPublishMessage(`Access request ${decision} through Platform API.`);
-    } catch (error) {
-      setPublishMessage(
-        error instanceof Error
-          ? `Access decision failed: ${error.message}`
-          : "Access decision failed."
-      );
-    } finally {
-      setDecidingAccessRequestId(undefined);
-    }
+      try {
+        try {
+          const client = clientFactory();
+          await client.decideAppAccessRequest(selectedProject.id, {
+            requestId,
+            decision
+          });
+        } catch (error) {
+          setPublishMessage(
+            error instanceof Error
+              ? `Access decision failed: ${error.message}`
+              : "Access decision failed."
+          );
+          return;
+        }
+
+        try {
+          await refreshCreatorPublishState(selectedProject.id);
+          setPublishMessage(`Access request ${decision} through Platform API.`);
+        } catch (error) {
+          const detail = error instanceof Error ? `: ${error.message}` : ".";
+          setPublishMessage(
+            `Access request ${decision} through Platform API. Governed state refresh failed${detail}`
+          );
+        }
+      } finally {
+        setDecidingAccessRequestIds((current) => {
+          const next = new Set(current);
+          next.delete(requestId);
+          return next;
+        });
+        accessDecisionRequests.current.delete(requestId);
+      }
+    })();
+
+    accessDecisionRequests.current.set(requestId, request);
+    return request;
   }
 
   async function handlePublishProject() {
     setIsPublishingProject(true);
     try {
-      const client = createCreatorPlatformClient();
+      const client = clientFactory();
       const result = await client.publishProject(selectedProject.id);
       setPublishResult(result);
       setRegistryEntries(await client.listAppStoreRegistry());
@@ -161,7 +196,7 @@ export function usePublishAccess({
     setPublishMessage,
     isInvitingUser,
     setIsInvitingUser,
-    decidingAccessRequestId,
+    decidingAccessRequestIds,
     isPublishingProject,
     setIsPublishingProject,
     visibleAppMembers,

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+const originalWindow = globalThis.window;
+const originalDocument = globalThis.document;
+const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+const originalReact = globalThis.React;
 const memory = new Map();
 globalThis.window = {
   location: { pathname: "/store/", hash: "", href: "http://localhost/store/" },
@@ -10,8 +14,12 @@ globalThis.window = {
     removeItem: (key) => memory.delete(key)
   },
   history: {
-    pushState(_state, _title, path) { window.location.pathname = path; },
-    replaceState(_state, _title, path) { window.location.pathname = path; }
+    pushState(_state, _title, path) {
+      window.location.pathname = path;
+    },
+    replaceState(_state, _title, path) {
+      window.location.pathname = path;
+    }
   },
   addEventListener() {},
   removeEventListener() {},
@@ -40,16 +48,32 @@ function deferred() {
 }
 
 const myApp = {
-  id: "my", slug: "active-uninstalled", name: "My API App", description: "From myApps", owner: "People",
-  accessStatus: "active", installStatus: "not_installed", health: "healthy"
+  id: "my",
+  slug: "active-uninstalled",
+  name: "My API App",
+  description: "From myApps",
+  owner: "People",
+  accessStatus: "active",
+  installStatus: "not_installed",
+  health: "healthy"
 };
 const availableApp = {
-  id: "available", slug: "catalog-app", name: "Available API App", description: "From availableApps", owner: "IT",
-  accessStatus: "active", installStatus: "installed", health: "healthy"
+  id: "available",
+  slug: "catalog-app",
+  name: "Available API App",
+  description: "From availableApps",
+  owner: "IT",
+  accessStatus: "active",
+  installStatus: "installed",
+  health: "healthy"
 };
 const ready = {
-  status: "ready", userName: "End User", email: "user@example.com", source: "Platform API",
-  myApps: [myApp], availableApps: [availableApp]
+  status: "ready",
+  userName: "End User",
+  email: "user@example.com",
+  source: "Platform API",
+  myApps: [myApp],
+  availableApps: [availableApp]
 };
 const initial = { status: "loading", source: "Platform API", myApps: [], availableApps: [] };
 
@@ -88,7 +112,7 @@ async function resolve(next, value) {
   });
 }
 
-test("mounted Provider loads API collections, updates device favorites/recent, and uses the real card handler", async () => {
+test("mounted Provider loads API collections, updates favorites, and keeps detail navigation out of recent", async () => {
   memory.clear();
   const load = deferred();
   const store = createStorefrontStateStore({
@@ -97,25 +121,40 @@ test("mounted Provider loads API collections, updates device favorites/recent, a
     device: createStoreDeviceState(window.localStorage)
   });
   let renderer;
-  await act(async () => { renderer = create(tree(store)); });
+  await act(async () => {
+    renderer = create(tree(store));
+  });
   assert.match(JSON.stringify(renderer.toJSON()), /Loading Horizon Store/);
 
   await resolve(load, ready);
   assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
   assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Available API App/);
 
-  const favorite = renderer.root.findAllByProps({ "aria-label": "Add My API App to favorites on this device" })[0];
-  await act(async () => { favorite.props.onClick(); });
-  await act(async () => { renderer.update(tree(store, "favorites")); });
+  const favorite = renderer.root.findAllByProps({
+    "aria-label": "Add My API App to favorites on this device"
+  })[0];
+  await act(async () => {
+    favorite.props.onClick();
+  });
+  await act(async () => {
+    renderer.update(tree(store, "favorites"));
+  });
   assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
   assert.match(JSON.stringify(renderer.toJSON()), /This device/);
 
   const card = renderer.root.findByProps({ className: "store-collection-main" });
-  await act(async () => { card.props.onClick(); });
+  await act(async () => {
+    card.props.onClick();
+  });
   assert.equal(window.location.pathname, "/store/apps/active-uninstalled");
-  await act(async () => { renderer.update(tree(store, "recent")); });
-  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
-  await act(async () => { renderer.unmount(); });
+  await act(async () => {
+    renderer.update(tree(store, "recent"));
+  });
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /My API App/);
+  assert.match(JSON.stringify(renderer.toJSON()), /Open an application from its detail page/);
+  await act(async () => {
+    renderer.unmount();
+  });
 });
 
 test("mounted Provider suppresses stale refresh and preserves ready UI across real logout retry controls", async () => {
@@ -134,26 +173,41 @@ test("mounted Provider suppresses stale refresh and preserves ready UI across re
       if (logoutAttempts === 1) throw new Error("network unavailable");
     },
     device: createStoreDeviceState(window.localStorage),
-    onLogoutSuccess: () => { signedOut = true; }
+    onLogoutSuccess: () => {
+      signedOut = true;
+    }
   });
   let renderer;
-  await act(async () => { renderer = create(tree(store)); });
+  await act(async () => {
+    renderer = create(tree(store));
+  });
   await resolve(initialLoad, ready);
 
   const refresh = button(renderer.root, "Refresh Store End User");
-  await act(async () => { refresh.props.onClick(); refresh.props.onClick(); });
+  await act(async () => {
+    refresh.props.onClick();
+    refresh.props.onClick();
+  });
   await resolve(secondRefresh, ready);
   await resolve(firstRefresh, { ...ready, userName: "Stale user" });
   assert.match(JSON.stringify(renderer.toJSON()), /Refresh Store End User/);
   assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Stale user/);
 
-  await act(async () => { button(renderer.root, "Logout").props.onClick(); await Promise.resolve(); });
+  await act(async () => {
+    button(renderer.root, "Logout").props.onClick();
+    await Promise.resolve();
+  });
   assert.match(JSON.stringify(renderer.toJSON()), /Sign-out not completed/);
   assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
 
-  await act(async () => { button(renderer.root, "Retry sign out").props.onClick(); await Promise.resolve(); });
+  await act(async () => {
+    button(renderer.root, "Retry sign out").props.onClick();
+    await Promise.resolve();
+  });
   assert.equal(signedOut, true);
-  await act(async () => { renderer.unmount(); });
+  await act(async () => {
+    renderer.unmount();
+  });
 });
 
 test("mounted Provider reconciles installation evidence only for the newest applied refresh", async () => {
@@ -185,15 +239,19 @@ test("mounted Provider reconciles installation evidence only for the newest appl
   const pendingInstall = deferred();
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(
-      StoreProvider,
-      { store, client: {} },
-      React.createElement(InstallationEvidenceProbe, { pendingInstall })
-    ));
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store, client: {} },
+        React.createElement(InstallationEvidenceProbe, { pendingInstall })
+      )
+    );
     await Promise.resolve();
   });
 
-  await act(async () => { await button(renderer.root, "Remove alpha").props.onClick(); });
+  await act(async () => {
+    await button(renderer.root, "Remove alpha").props.onClick();
+  });
   assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
 
   let staleRequest;
@@ -217,7 +275,9 @@ test("mounted Provider reconciles installation evidence only for the newest appl
   assert.deepEqual(newestResult, { ok: true, applied: true });
   assert.match(JSON.stringify(renderer.toJSON()), /none\|none\|idle/);
 
-  await act(async () => { await button(renderer.root, "Remove alpha").props.onClick(); });
+  await act(async () => {
+    await button(renderer.root, "Remove alpha").props.onClick();
+  });
   assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
   await act(async () => {
     staleRequest = button(renderer.root, "Refresh evidence").props.onClick();
@@ -237,5 +297,18 @@ test("mounted Provider reconciles installation evidence only for the newest appl
   assert.equal(newestResult.error.message, "active failure");
   assert.equal(store.getSnapshot().bootstrap.status, "error");
   assert.match(JSON.stringify(renderer.toJSON()), /disabled\|none\|idle/);
-  await act(async () => { renderer.unmount(); });
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test.after(() => {
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
+  if (originalActEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+  else globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
+  if (originalReact === undefined) delete globalThis.React;
+  else globalThis.React = originalReact;
 });

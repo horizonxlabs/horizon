@@ -8,9 +8,15 @@ import { TicketDetailPage, TicketsPage } from "@/features/tickets";
 import { UsersPage } from "@/features/users";
 import { VersionsPage } from "@/features/versions";
 import { WorkspacePage } from "@/features/workspace";
+import { navigateBrowserPath } from "@evcp/ui";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }) {
+  const routeProjectUnavailable =
+    app.bootstrap.status === "ready" &&
+    app.creatorPage !== "not-found" &&
+    Boolean(app.creatorRoute.projectId) &&
+    !app.bootstrap.projects.some((project) => project.id === app.creatorRoute.projectId);
   if (app.bootstrap.status === "loading") {
     return (
       <main className="creator-page">
@@ -31,6 +37,19 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
   }
   if (app.bootstrap.status === "empty") {
     return <ProjectsPage app={app} />;
+  }
+  if (app.requestedProjectUnavailable || routeProjectUnavailable) {
+    return (
+      <main className="creator-page">
+        <h1>Project unavailable</h1>
+        <p role="alert">
+          The requested project is not available in the current Platform API project list.
+        </p>
+        <button type="button" onClick={() => navigateBrowserPath("/creator/")}>
+          Return to Projects
+        </button>
+      </main>
+    );
   }
   if (app.creatorPage === "projects") return <ProjectsPage app={app} />;
   if (app.creatorPage === "workspace") return <WorkspacePage app={app} />;

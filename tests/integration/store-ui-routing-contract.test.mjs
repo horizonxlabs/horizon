@@ -8,9 +8,16 @@ const provider = source("apps/app-store-pwa/src/features/storefront/StoreProvide
 const shell = source("apps/app-store-pwa/src/features/storefront/StoreShell.tsx");
 const composition = source("apps/app-store-pwa/src/features/storefront/StorefrontApp.tsx");
 const detail = source("apps/app-store-pwa/src/features/storefront/pages/StoreAppDetailPage.tsx");
-const collection = source("apps/app-store-pwa/src/features/storefront/pages/StoreCollectionPage.tsx");
+const detailStates = source(
+  "apps/app-store-pwa/src/features/storefront/pages/StoreAppDetailStates.tsx"
+);
+const collection = source(
+  "apps/app-store-pwa/src/features/storefront/pages/StoreCollectionPage.tsx"
+);
 const tickets = source("apps/app-store-pwa/src/features/storefront/pages/StoreTicketsPage.tsx");
-const ticketDetail = source("apps/app-store-pwa/src/features/storefront/pages/StoreTicketDetailPage.tsx");
+const ticketDetail = source(
+  "apps/app-store-pwa/src/features/storefront/pages/StoreTicketDetailPage.tsx"
+);
 const journey = source("apps/app-store-pwa/src/features/installations/index.ts");
 const routes = source("apps/app-store-pwa/src/routes/StoreRoutes.tsx");
 const routeResolver = source("apps/app-store-pwa/src/routes/store-route.ts");
@@ -23,10 +30,16 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
     "uninstallStoreApp",
     "submitStoreTicket",
     "getStoreTicket"
-  ]) assert.match(apiClient, new RegExp(`${method}\\(`));
+  ])
+    assert.match(apiClient, new RegExp(`${method}\\(`));
   assert.match(provider, /runAppAction<T>/);
   assert.match(provider, /refreshHome\(\{ preserveReadyOnFailure: true \}\)/);
-  for (const method of ["requestStoreAccess", "installStoreApp", "uninstallStoreApp", "submitStoreTicket"]) {
+  for (const method of [
+    "requestStoreAccess",
+    "installStoreApp",
+    "uninstallStoreApp",
+    "submitStoreTicket"
+  ]) {
     assert.match(detail, new RegExp(`api\\.${method}\\(app\\.slug`));
   }
   assert.match(detail, /runAppAction\(app\.slug/);
@@ -38,8 +51,8 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
 });
 
 test("App Store PWA derives a visible install journey from API and scoped action state", () => {
-  assert.match(detail, /appInstallJourneySteps/);
-  assert.match(detail, /installJourneyStatus/);
+  assert.match(detailStates, /appInstallJourneySteps/);
+  assert.match(detailStates, /installJourneyStatus/);
   assert.match(detail, /aria-label="App install journey"/);
   for (const label of ["Access Check", "Manifest Validation", "Install Record", "My Apps Ready"]) {
     assert.match(journey, new RegExp(label));
@@ -47,7 +60,7 @@ test("App Store PWA derives a visible install journey from API and scoped action
   assert.match(detail, /store-install-stepper/);
   assert.match(detail, /store-install-step status-/);
   assert.match(detail, /installActionState\?\.installationStatus/);
-  assert.match(detail, /installActionState\?\.pending/);
+  assert.match(detailStates, /installActionState\?\.pending/);
   assert.match(journey, /installationStatus === "active"/);
   assert.match(source("docs/operations/real-mvp-persistence.md"), /App Install Journey/);
 });
@@ -57,12 +70,12 @@ test("App Store guards unauthenticated and empty states before install-detail de
   assert.ok(authGuard >= 0);
   assert.ok(shell.indexOf("return (", authGuard) > authGuard);
   assert.match(shell, /title="Sign-in required"/);
-  assert.match(collection, /apps\.length \? <StoreAppList/);
+  assert.match(collection, /apps\.length\s*\?[^]*<StoreAppList apps=\{apps\}/);
   assert.match(collection, /No \$\{copy\.title\.toLocaleLowerCase\(\)\} yet/);
   const loadingGuard = detail.indexOf('detail.status === "loading"');
   const errorGuard = detail.indexOf('detail.status === "error"');
   const appDetail = detail.indexOf("const { app } = detail");
-  const journeyDerivation = detail.indexOf("const installJourneyRows = appInstallJourneySteps.map");
+  const journeyDerivation = detail.indexOf("deriveStoreAppDetailJourney({");
   assert.ok(loadingGuard >= 0);
   assert.ok(errorGuard > loadingGuard);
   assert.ok(appDetail > errorGuard);
@@ -95,5 +108,6 @@ test("published app routing and Store detail Open compose into the generated run
     "Approval queue",
     "approveRequest",
     "Last submitted request"
-  ]) assert.match(generatedApp, new RegExp(text));
+  ])
+    assert.match(generatedApp, new RegExp(text));
 });

@@ -39,12 +39,13 @@ export function creatorRouteFromPath(pathname: string): CreatorRoute {
   if (projectId === undefined) return { page: "not-found" };
   if (segments.length === 3) return { page: "workspace", projectId };
   const suffix = segments[3];
-  if (suffix === "tickets" && segments[4]) {
+  if (suffix === "tickets" && segments.length === 5 && segments[4]) {
     const ticketId = decodeRouteSegment(segments[4]);
     return ticketId === undefined
       ? { page: "not-found", projectId }
       : { page: "ticket-detail", projectId, ticketId };
   }
+  if (segments.length !== 4) return { page: "not-found", projectId };
   const pageBySuffix = {
     prd: "prd",
     database: "database",

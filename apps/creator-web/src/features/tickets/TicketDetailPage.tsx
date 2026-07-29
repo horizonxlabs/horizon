@@ -1,10 +1,14 @@
 import { DecisionPanel, navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
 import { ArrowLeft, MessageSquare, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorShell } from "@/features/projects";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
-import { createTicketPrdChangeAction } from "./ticket-actions";
+import {
+  createTicketPrdChangeAction,
+  getTicketPrdChangeActionState,
+  subscribeTicketPrdChangeAction
+} from "./ticket-actions";
 import { TicketDetailConversionButton } from "./TicketDetailConversionButton";
 import { useCreatorTicketInbox } from "./use-creator-ticket-inbox";
 
@@ -13,8 +17,19 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
   const ticketId = app.creatorRoute.ticketId;
   const inbox = useCreatorTicketInbox(projectId);
   const ticket = inbox.items.find((item) => item.id === ticketId);
-  const [actionMessage, setActionMessage] = useState("");
-  const [isConverting, setIsConverting] = useState(false);
+  const subscribeToConversion = useCallback(
+    (listener: () => void) => subscribeTicketPrdChangeAction(projectId, ticketId ?? "", listener),
+    [projectId, ticketId]
+  );
+  const getConversionState = useCallback(
+    () => getTicketPrdChangeActionState(projectId, ticketId ?? ""),
+    [projectId, ticketId]
+  );
+  const conversionState = useSyncExternalStore(
+    subscribeToConversion,
+    getConversionState,
+    getConversionState
+  );
   const conversion = useMemo(
     () =>
       ticket
@@ -28,11 +43,6 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
         : undefined,
     [app.refreshPrdState, inbox.refresh, projectId, ticket]
   );
-
-  useEffect(() => {
-    setActionMessage("");
-    setIsConverting(false);
-  }, [ticketId]);
 
   return (
     <CreatorShell
@@ -99,22 +109,38 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
             ) : null}
           </SectionCard>
           <SectionCard eyebrow="Governed action" title="Create an auditable PRD change">
-            {actionMessage ? <p role={actionMessage.includes("failed") ? "alert" : "status"}>{actionMessage}</p> : null}
+            {conversionState.message ? (
+              <p role={conversionState.message.includes("failed") ? "alert" : "status"}>
+                {conversionState.message}
+              </p>
+            ) : null}
             <TicketDetailConversionButton
               conversion={conversion}
-              isConverting={isConverting}
-              disabled={!ticket || isConverting || !ticket.actions.includes("convert_to_prd_change")}
-              onMessage={setActionMessage}
-              onPendingChange={setIsConverting}
+              isConverting={conversionState.pending}
+              disabled={
+                !ticket ||
+                conversionState.pending ||
+                !ticket.actions.includes("convert_to_prd_change")
+              }
+              onMessage={() => undefined}
+              onPendingChange={() => undefined}
             />
-            <p>Creates a governed PRD change from this ticket, then refreshes the inbox and PRD state.</p>
+            <p>
+              Creates a governed PRD change from this ticket, then refreshes the inbox and PRD
+              state.
+            </p>
           </SectionCard>
-          <SectionCard eyebrow="Unavailable actions" title="Ticket operations awaiting Platform API support">
+          <SectionCard
+            eyebrow="Unavailable actions"
+            title="Ticket operations awaiting Platform API support"
+          >
             <DecisionPanel
               tone="info"
               badge="Unavailable"
               title="Platform API support required"
-              lines={["Reply, Resolve, and Convert to AI Prompt are disabled until Platform API support is available."]}
+              lines={[
+                "Reply, Resolve, and Convert to AI Prompt are disabled until Platform API support is available."
+              ]}
             />
             <div className="creator-ticket-actions">
               <button

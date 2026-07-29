@@ -10,7 +10,10 @@ export function navigateToStoreApp(appSlug: string): void {
   navigateBrowserPath(`/store/apps/${encodeURIComponent(appSlug)}`);
 }
 
-const PAGE_COPY: Record<StoreCollectionPageName, { title: string; eyebrow: string; empty: string }> = {
+const PAGE_COPY: Record<
+  StoreCollectionPageName,
+  { title: string; eyebrow: string; empty: string }
+> = {
   "my-apps": {
     title: "My Apps",
     eyebrow: "Platform API access",
@@ -27,9 +30,9 @@ const PAGE_COPY: Record<StoreCollectionPageName, { title: string; eyebrow: strin
     empty: "Save an app as a favorite on this device to find it here."
   },
   recent: {
-    title: "Recently viewed",
+    title: "Recently opened",
     eyebrow: "Device-local history",
-    empty: "View an application's details to build this device's recent history."
+    empty: "Open an application from its detail page to build this device's recent history."
   }
 };
 
@@ -43,7 +46,7 @@ export function appsForCollection(
 }
 
 export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
-  const { device, recordRecent, toggleFavorite } = useStorefront();
+  const { device, toggleFavorite } = useStorefront();
   if (!apps.length) return null;
   return (
     <div className="store-app-list">
@@ -54,12 +57,11 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
             <button
               type="button"
               className="store-collection-main"
-              onClick={() => {
-                recordRecent(app.slug);
-                navigateToStoreApp(app.slug);
-              }}
+              onClick={() => navigateToStoreApp(app.slug)}
             >
-              <span className="store-app-icon" aria-hidden="true">{app.name.slice(0, 1)}</span>
+              <span className="store-app-icon" aria-hidden="true">
+                {app.name.slice(0, 1)}
+              </span>
               <span>
                 <strong>{app.name}</strong>
                 <small>{app.description}</small>
@@ -103,10 +105,14 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
           <h1>{copy.title}</h1>
         </div>
         {page === "favorites" || page === "recent" ? (
-          <span className="store-device-label"><MonitorSmartphone size={15} /> This device</span>
+          <span className="store-device-label">
+            <MonitorSmartphone size={15} /> This device
+          </span>
         ) : null}
       </div>
-      {apps.length ? <StoreAppList apps={apps} /> : (
+      {apps.length ? (
+        <StoreAppList apps={apps} />
+      ) : (
         <SectionCard eyebrow={copy.eyebrow} title={`No ${copy.title.toLocaleLowerCase()} yet`}>
           <p>{copy.empty}</p>
         </SectionCard>

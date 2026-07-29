@@ -1,8 +1,28 @@
 import type { StoreAccessRequestResponse, StoreAppInstallationResponse } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { beginStoreKeycloakLogout, clearStoreSessionBridge, initialStoreBootstrap, loadStoreBootstrap, type StoreBootstrapState } from "./bootstrap";
-import { createStoreDeviceState, type StoreDeviceSnapshot, type StoreDeviceStorage } from "./device-state";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore
+} from "react";
+import {
+  beginStoreKeycloakLogout,
+  clearStoreSessionBridge,
+  initialStoreBootstrap,
+  loadStoreBootstrap,
+  type StoreBootstrapState
+} from "./bootstrap";
+import {
+  createStoreDeviceState,
+  type StoreDeviceSnapshot,
+  type StoreDeviceStorage
+} from "./device-state";
 import { createStorePlatformClient } from "./platform-client";
 import { createStorefrontStateStore, type StorefrontStateStore } from "./store-state";
 import type { StoreRefreshOptions, StoreRefreshResult } from "./store-async";
@@ -10,6 +30,7 @@ import type { StoreRefreshOptions, StoreRefreshResult } from "./store-async";
 export type StorefrontContextValue = {
   bootstrap: StoreBootstrapState;
   logoutError?: string;
+  homeRevision: number;
   allApps: AppStoreItem[];
   device: StoreDeviceSnapshot;
   refreshHome(options?: StoreRefreshOptions): Promise<StoreRefreshResult>;
@@ -31,8 +52,15 @@ export type StorefrontContextValue = {
   ): Promise<T>;
 };
 
-export type StorePlatformClient = Pick<ReturnType<typeof createStorePlatformClient>,
-  "getStoreAppDetail" | "installStoreApp" | "uninstallStoreApp" | "requestStoreAccess" | "submitStoreTicket" | "getStoreTicket">;
+export type StorePlatformClient = Pick<
+  ReturnType<typeof createStorePlatformClient>,
+  | "getStoreAppDetail"
+  | "installStoreApp"
+  | "uninstallStoreApp"
+  | "requestStoreAccess"
+  | "submitStoreTicket"
+  | "getStoreTicket"
+>;
 export type StoreAppAction = "install" | "uninstall" | "request-access" | "submit-ticket";
 export type StoreAppActionState = {
   pending: boolean;
@@ -121,18 +149,31 @@ function createLazyStorePlatformClient(): StorePlatformClient {
   };
 }
 
-export function StoreProvider({ children, store, client }: { children: ReactNode; store?: StorefrontStateStore; client?: StorePlatformClient }) {
+export function StoreProvider({
+  children,
+  store,
+  client
+}: {
+  children: ReactNode;
+  store?: StorefrontStateStore;
+  client?: StorePlatformClient;
+}) {
   const defaultStore = useRef<StorefrontStateStore | undefined>(undefined);
   const defaultClient = useRef<StorePlatformClient | undefined>(undefined);
   const mounted = useRef(true);
   const inflightActions = useRef(new Map<string, Promise<unknown>>());
   const actionSequence = useRef(0);
   const [actionStates, setActionStates] = useState<Record<string, StoreAppActionState>>({});
+  const [homeRevision, setHomeRevision] = useState(0);
   if (!defaultStore.current) defaultStore.current = createDefaultStore();
   if (!client && !defaultClient.current) defaultClient.current = createLazyStorePlatformClient();
   const stateStore = store ?? defaultStore.current;
   const api = client ?? defaultClient.current!;
-  const state = useSyncExternalStore(stateStore.subscribe, stateStore.getSnapshot, stateStore.getSnapshot);
+  const state = useSyncExternalStore(
+    stateStore.subscribe,
+    stateStore.getSnapshot,
+    stateStore.getSnapshot
+  );
 
   useEffect(() => {
     mounted.current = true;
@@ -162,81 +203,107 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
       return changed ? next : states;
     });
   }, []);
-  const reconcileInstallationEvidenceForSlug = useCallback((appSlug: string) => {
-    reconcileInstallationEvidenceForSlugs([appSlug]);
-  }, [reconcileInstallationEvidenceForSlugs]);
-  const refreshHome = useCallback(async (options?: StoreRefreshOptions) => {
-    const result = await stateStore.refresh(options);
-    if (result.ok && result.applied) {
-      reconcileInstallationEvidenceForSlugs(
-        mergeApps(stateStore.getSnapshot().bootstrap).map((app) => app.slug)
-      );
-    }
-    return result;
-  }, [reconcileInstallationEvidenceForSlugs, stateStore]);
-  const logout = useCallback(() => stateStore.logout(), [stateStore]);
-  const runAppAction = useCallback(<T,>(
-    appSlug: string,
-    action: StoreAppAction,
-    mutation: () => Promise<T>,
-    successMessage: string,
-    onConfirmed?: (result: T) => void
-  ): Promise<T> => {
-    const key = storeAppActionKey(appSlug, action);
-    const existing = inflightActions.current.get(key) as Promise<T> | undefined;
-    if (existing) return existing;
-    const sequence = ++actionSequence.current;
-    const update = (next: StoreAppActionState) => {
-      if (mounted.current) setActionStates((states) => ({ ...states, [key]: next }));
-    };
-    let request: Promise<T>;
-    request = (async () => {
-      update({ pending: true, sequence });
-      try {
-        const result = await mutation();
-        onConfirmed?.(result);
-        const installationStatus = confirmedInstallationStatus(action, result);
-        const confirmedState: StoreAppActionState = {
-          pending: false,
-          sequence,
-          success: successMessage,
-          ...(installationStatus ? { installationStatus } : {})
-        };
-        update(confirmedState);
-        const refresh = await refreshHome({ preserveReadyOnFailure: true });
-        if (!refresh.ok) update({
-          ...confirmedState,
-          success: `${successMessage} Store home refresh failed: ${refresh.error.message}`
-        });
-        return result;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "The action could not be completed.";
-        update({ pending: false, sequence, error: message });
-        throw error;
-      } finally {
-        inflightActions.current.delete(key);
+  const reconcileInstallationEvidenceForSlug = useCallback(
+    (appSlug: string) => {
+      reconcileInstallationEvidenceForSlugs([appSlug]);
+    },
+    [reconcileInstallationEvidenceForSlugs]
+  );
+  const refreshHome = useCallback(
+    async (options?: StoreRefreshOptions) => {
+      const result = await stateStore.refresh(options);
+      if (result.ok && result.applied) {
+        reconcileInstallationEvidenceForSlugs(
+          mergeApps(stateStore.getSnapshot().bootstrap).map((app) => app.slug)
+        );
+        setHomeRevision((current) => current + 1);
       }
-    })();
-    inflightActions.current.set(key, request);
-    return request;
-  }, [refreshHome]);
-  const value = useMemo<StorefrontContextValue>(() => ({
-    bootstrap: state.bootstrap,
-    logoutError: state.logoutError,
-    allApps: mergeApps(state.bootstrap),
-    device: state.device,
-    refreshHome,
-    toggleFavorite: stateStore.toggleFavorite,
-    recordRecent: stateStore.recordRecent,
-    rememberTicket: stateStore.rememberTicket,
-    rememberAccessReceipt: stateStore.rememberAccessReceipt,
-    clearDevicePreferences: stateStore.clearDevicePreferences,
-    logout,
-    api,
-    actionStates,
-    reconcileInstallationEvidenceForSlug,
-    runAppAction
-  }), [actionStates, api, logout, reconcileInstallationEvidenceForSlug, refreshHome, runAppAction, state, stateStore]);
+      return result;
+    },
+    [reconcileInstallationEvidenceForSlugs, stateStore]
+  );
+  const logout = useCallback(() => stateStore.logout(), [stateStore]);
+  const runAppAction = useCallback(
+    <T,>(
+      appSlug: string,
+      action: StoreAppAction,
+      mutation: () => Promise<T>,
+      successMessage: string,
+      onConfirmed?: (result: T) => void
+    ): Promise<T> => {
+      const key = storeAppActionKey(appSlug, action);
+      const existing = inflightActions.current.get(key) as Promise<T> | undefined;
+      if (existing) return existing;
+      const sequence = ++actionSequence.current;
+      const update = (next: StoreAppActionState) => {
+        if (mounted.current) setActionStates((states) => ({ ...states, [key]: next }));
+      };
+      let request: Promise<T>;
+      request = (async () => {
+        update({ pending: true, sequence });
+        try {
+          const result = await mutation();
+          onConfirmed?.(result);
+          const installationStatus = confirmedInstallationStatus(action, result);
+          const confirmedState: StoreAppActionState = {
+            pending: false,
+            sequence,
+            success: successMessage,
+            ...(installationStatus ? { installationStatus } : {})
+          };
+          update(confirmedState);
+          const refresh = await refreshHome({ preserveReadyOnFailure: true });
+          if (!refresh.ok)
+            update({
+              ...confirmedState,
+              success: `${successMessage} Store home refresh failed: ${refresh.error.message}`
+            });
+          return result;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "The action could not be completed.";
+          update({ pending: false, sequence, error: message });
+          throw error;
+        } finally {
+          inflightActions.current.delete(key);
+        }
+      })();
+      inflightActions.current.set(key, request);
+      return request;
+    },
+    [refreshHome]
+  );
+  const value = useMemo<StorefrontContextValue>(
+    () => ({
+      bootstrap: state.bootstrap,
+      logoutError: state.logoutError,
+      homeRevision,
+      allApps: mergeApps(state.bootstrap),
+      device: state.device,
+      refreshHome,
+      toggleFavorite: stateStore.toggleFavorite,
+      recordRecent: stateStore.recordRecent,
+      rememberTicket: stateStore.rememberTicket,
+      rememberAccessReceipt: stateStore.rememberAccessReceipt,
+      clearDevicePreferences: stateStore.clearDevicePreferences,
+      logout,
+      api,
+      actionStates,
+      reconcileInstallationEvidenceForSlug,
+      runAppAction
+    }),
+    [
+      actionStates,
+      api,
+      homeRevision,
+      logout,
+      reconcileInstallationEvidenceForSlug,
+      refreshHome,
+      runAppAction,
+      state,
+      stateStore
+    ]
+  );
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>;
 }

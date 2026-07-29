@@ -58,6 +58,21 @@ test("creatorRouteFromPath fail-closes malformed encoded route parameters", () =
   });
 });
 
+test("creatorRouteFromPath rejects extra path segments on every project route shape", () => {
+  for (const pathname of [
+    "/creator/projects/proj_1/extra",
+    "/creator/projects/proj_1/prd/extra",
+    "/creator/projects/proj_1/database/extra",
+    "/creator/projects/proj_1/versions/extra",
+    "/creator/projects/proj_1/users/extra",
+    "/creator/projects/proj_1/publish/extra",
+    "/creator/projects/proj_1/deployments/extra",
+    "/creator/projects/proj_1/tickets/extra/more"
+  ]) {
+    assert.equal(creatorRouteFromPath(pathname).page, "not-found", `${pathname} must fail closed`);
+  }
+});
+
 test("projectRouteSegmentFromPath: extracts the project segment", () => {
   assert.equal(
     projectRouteSegmentFromPath("/creator/projects/leave-management/prd"),

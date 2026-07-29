@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FrontendCheckpointTimelineDto, FrontendRestoreResultDto } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
@@ -87,25 +87,68 @@ export async function restoreFrontendVersion(
   }
 }
 
-export function useFrontendVersions(projectId: string) {
-  const [state, setState] = useState<FrontendVersionsState>(initialFrontendVersionsState);
+export function useFrontendVersions(projectId: string, client?: FrontendVersionsClient) {
+  const [scopedState, setScopedState] = useState(() => ({
+    projectId,
+    state: initialFrontendVersionsState
+  }));
+  const mounted = useRef(false);
+  const requestGeneration = useRef(0);
+  const activeProjectId = useRef(projectId);
+  activeProjectId.current = projectId;
+  const state =
+    scopedState.projectId === projectId ? scopedState.state : initialFrontendVersionsState;
 
   const refresh = useCallback(async () => {
-    setState(initialFrontendVersionsState);
-    setState(await loadFrontendVersions(projectId, createCreatorPlatformClient()));
-  }, [projectId]);
+    const generation = ++requestGeneration.current;
+    setScopedState({ projectId, state: initialFrontendVersionsState });
+    const nextState = await loadFrontendVersions(
+      projectId,
+      client ?? createCreatorPlatformClient()
+    );
+    if (
+      mounted.current &&
+      generation === requestGeneration.current &&
+      activeProjectId.current === projectId
+    ) {
+      setScopedState({ projectId, state: nextState });
+    }
+  }, [client, projectId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestGeneration.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   async function restoreCheckpoint(checkpointId: string) {
-    setState((current) => ({
-      ...current,
-      restoringCheckpointId: checkpointId,
-      message: "Restoring the selected frontend checkpoint."
+    const generation = ++requestGeneration.current;
+    setScopedState((current) => ({
+      projectId,
+      state: {
+        ...(current.projectId === projectId ? current.state : initialFrontendVersionsState),
+        restoringCheckpointId: checkpointId,
+        message: "Restoring the selected frontend checkpoint."
+      }
     }));
-    setState(await restoreFrontendVersion(projectId, checkpointId, createCreatorPlatformClient()));
+    const nextState = await restoreFrontendVersion(
+      projectId,
+      checkpointId,
+      client ?? createCreatorPlatformClient()
+    );
+    if (
+      mounted.current &&
+      generation === requestGeneration.current &&
+      activeProjectId.current === projectId
+    ) {
+      setScopedState({ projectId, state: nextState });
+    }
   }
 
   return { ...state, refresh, restoreCheckpoint };

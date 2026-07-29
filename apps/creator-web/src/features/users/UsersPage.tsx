@@ -8,8 +8,9 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
     selectedProject,
     handleInviteUser,
     handleAccessRequestDecision,
-    decidingAccessRequestId,
+    decidingAccessRequestIds,
     isInvitingUser,
+    publishMessage,
     visibleAppMembers,
     visibleAccessRequests,
     visibleAppRoles
@@ -20,6 +21,12 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       content={
         <section className="sprint6-shell" aria-label="App users roles">
           <div className="sprint6-main-panel">
+            <p
+              role={/failed|blocked|unavailable/i.test(publishMessage) ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {publishMessage}
+            </p>
             <SectionCard
               eyebrow="App Users"
               title={`App Users: ${selectedProject.name}`}
@@ -61,13 +68,25 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                 ]}
                 rows={visibleAccessRequests.map((request) => {
                   const isPending = request.status === "pending";
-                  const isDeciding = decidingAccessRequestId === request.id;
+                  const isDeciding = decidingAccessRequestIds.has(request.id);
                   return {
                     ...request,
                     actions: (
                       <div className="actions">
-                        <button type="button" disabled={!isPending || isDeciding} onClick={() => handleAccessRequestDecision(request.id, "approved")}>Approve</button>
-                        <button type="button" disabled={!isPending || isDeciding} onClick={() => handleAccessRequestDecision(request.id, "rejected")}>Reject</button>
+                        <button
+                          type="button"
+                          disabled={!isPending || isDeciding}
+                          onClick={() => handleAccessRequestDecision(request.id, "approved")}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!isPending || isDeciding}
+                          onClick={() => handleAccessRequestDecision(request.id, "rejected")}
+                        >
+                          Reject
+                        </button>
                       </div>
                     )
                   };

@@ -2,7 +2,11 @@ import { type PrdVersionDto } from "@evcp/api-client";
 import { navigateBrowserPath, useBrowserPath, usePageHeadingFocus } from "@evcp/ui";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
+import {
+  initialCreateProjectForm,
+  initialCreatorBootstrap,
+  unselectedProject
+} from "@/app/creator-defaults";
 import {
   creatorApiFailureState,
   beginCreatorKeycloakLogout,
@@ -46,6 +50,11 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   usePageHeadingFocus(pathname);
   const creatorRoute = creatorRouteFromPath(pathname);
   const creatorPage = creatorRoute.page;
+  const requestedProjectUnavailable =
+    bootstrap.status === "ready" &&
+    creatorPage !== "not-found" &&
+    Boolean(creatorRoute.projectId) &&
+    !bootstrap.projects.some((project) => project.id === creatorRoute.projectId);
 
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
   const publishAccess = usePublishAccess({ selectedProject });
@@ -117,6 +126,15 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     loadCreatorBootstrap(projectRouteSegmentFromPath(pathname))
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
+        if (!nextBootstrap.selectedProject.id) {
+          vibeWorkspace.setWorkspaceSnapshot(undefined);
+          vibeWorkspace.setWorkspaceMessage(
+            creatorRoute.projectId
+              ? "The requested project is unavailable from Platform API."
+              : "Select or create a project to load workspace state."
+          );
+          return;
+        }
         try {
           await refreshPrdState(nextBootstrap.selectedProject.id);
         } catch {
@@ -160,7 +178,14 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     const match = creatorRoute.projectId
       ? bootstrap.projects.find((project) => project.id === creatorRoute.projectId)
       : undefined;
-    if (!match || match.id === selectedProject.id) return;
+    if (!match) {
+      if (creatorRoute.projectId && selectedProject.id) {
+        setBootstrap((current) => ({ ...current, selectedProject: unselectedProject }));
+        resetProjectRuntimeState();
+      }
+      return;
+    }
+    if (match.id === selectedProject.id) return;
     const targetPage: CreatorSelectablePage =
       creatorPage === "ticket-detail"
         ? "tickets"
@@ -355,6 +380,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleConfirmPrdBaseline,
     creatorPage,
     creatorRoute,
+    requestedProjectUnavailable,
     pathname,
     pageCopy,
     refreshPrdState,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceDeploymentDto } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
@@ -43,13 +43,37 @@ export async function loadDeployments(
   }
 }
 
-export function useDeployments(projectId: string) {
-  const [state, setState] = useState<DeploymentsState>(initialDeploymentsState);
+export function useDeployments(projectId: string, client?: DeploymentsClient) {
+  const [scopedState, setScopedState] = useState(() => ({
+    projectId,
+    state: initialDeploymentsState
+  }));
+  const mounted = useRef(false);
+  const requestGeneration = useRef(0);
+  const activeProjectId = useRef(projectId);
+  activeProjectId.current = projectId;
+  const state = scopedState.projectId === projectId ? scopedState.state : initialDeploymentsState;
 
   const refresh = useCallback(async () => {
-    setState(initialDeploymentsState);
-    setState(await loadDeployments(projectId, createCreatorPlatformClient()));
-  }, [projectId]);
+    const generation = ++requestGeneration.current;
+    setScopedState({ projectId, state: initialDeploymentsState });
+    const nextState = await loadDeployments(projectId, client ?? createCreatorPlatformClient());
+    if (
+      mounted.current &&
+      generation === requestGeneration.current &&
+      activeProjectId.current === projectId
+    ) {
+      setScopedState({ projectId, state: nextState });
+    }
+  }, [client, projectId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestGeneration.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     void refresh();
