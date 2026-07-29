@@ -22,16 +22,29 @@ export type CreatorRoute = {
 
 export type CreatorSelectablePage = Exclude<CreatorPage, "ticket-detail" | "not-found">;
 
+function decodeRouteSegment(segment: string): string | undefined {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
+}
+
 export function creatorRouteFromPath(pathname: string): CreatorRoute {
   const segments = pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   if (segments.length === 1 && segments[0] === "creator") return { page: "projects" };
   if (segments[0] !== "creator" || segments[1] !== "projects" || !segments[2])
     return { page: "not-found" };
-  const projectId = decodeURIComponent(segments[2]);
+  const projectId = decodeRouteSegment(segments[2]);
+  if (projectId === undefined) return { page: "not-found" };
   if (segments.length === 3) return { page: "workspace", projectId };
   const suffix = segments[3];
-  if (suffix === "tickets" && segments[4])
-    return { page: "ticket-detail", projectId, ticketId: decodeURIComponent(segments[4]) };
+  if (suffix === "tickets" && segments[4]) {
+    const ticketId = decodeRouteSegment(segments[4]);
+    return ticketId === undefined
+      ? { page: "not-found", projectId }
+      : { page: "ticket-detail", projectId, ticketId };
+  }
   const pageBySuffix = {
     prd: "prd",
     database: "database",

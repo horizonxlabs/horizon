@@ -2,37 +2,58 @@ import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceDeploymentDto } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
-export function useDeployments(projectId: string) {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [message, setMessage] = useState("Loading deployments from Platform API.");
-  const [deployments, setDeployments] = useState<WorkspaceDeploymentDto[]>([]);
+type DeploymentsState = {
+  status: "loading" | "ready" | "error";
+  message: string;
+  deployments: WorkspaceDeploymentDto[];
+};
 
-  const refresh = useCallback(async () => {
-    setStatus("loading");
-    setMessage("Loading deployments from Platform API.");
-    try {
-      const nextDeployments = await createCreatorPlatformClient().listDeployments(projectId);
-      setDeployments(nextDeployments);
-      setStatus("ready");
-      setMessage(
-        nextDeployments.length
-          ? `${nextDeployments.length} deployments loaded from Platform API.`
-          : "Platform API returned no deployments for this project."
-      );
-    } catch (error) {
-      setDeployments([]);
-      setStatus("error");
-      setMessage(
+type DeploymentsClient = {
+  listDeployments(projectId: string): Promise<WorkspaceDeploymentDto[]>;
+};
+
+export const initialDeploymentsState: DeploymentsState = {
+  status: "loading",
+  message: "Loading deployments from Platform API.",
+  deployments: []
+};
+
+export async function loadDeployments(
+  projectId: string,
+  client: DeploymentsClient
+): Promise<DeploymentsState> {
+  try {
+    const deployments = await client.listDeployments(projectId);
+    return {
+      status: "ready",
+      message: deployments.length
+        ? `${deployments.length} deployments loaded from Platform API.`
+        : "Platform API returned no deployments for this project.",
+      deployments
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message:
         error instanceof Error
           ? `Unable to load deployments: ${error.message}`
-          : "Unable to load deployments from Platform API."
-      );
-    }
+          : "Unable to load deployments from Platform API.",
+      deployments: []
+    };
+  }
+}
+
+export function useDeployments(projectId: string) {
+  const [state, setState] = useState<DeploymentsState>(initialDeploymentsState);
+
+  const refresh = useCallback(async () => {
+    setState(initialDeploymentsState);
+    setState(await loadDeployments(projectId, createCreatorPlatformClient()));
   }, [projectId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  return { status, message, deployments, refresh };
+  return { ...state, refresh };
 }

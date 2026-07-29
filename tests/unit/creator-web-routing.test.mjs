@@ -48,6 +48,16 @@ test("creatorRouteFromPath resolves projects, workspace, and unknown paths", () 
   });
 });
 
+test("creatorRouteFromPath fail-closes malformed encoded route parameters", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/%E0%A4%A/versions"), {
+    page: "not-found"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/tickets/%E0%A4%A"), {
+    page: "not-found",
+    projectId: "proj_1"
+  });
+});
+
 test("projectRouteSegmentFromPath: extracts the project segment", () => {
   assert.equal(
     projectRouteSegmentFromPath("/creator/projects/leave-management/prd"),
@@ -118,7 +128,10 @@ test("creator navigation enables every lifecycle entry for the selected project"
 test("creator navigation encodes the selected project ID", () => {
   const nav = createCreatorNavigation({ id: "project/one" });
   assert.ok(nav.some((item) => item.route === "/creator/projects/project%2Fone/database"));
-  assert.equal(nav.some((item) => item.route.includes("project/one")), false);
+  assert.equal(
+    nav.some((item) => item.route.includes("project/one")),
+    false
+  );
 });
 
 test("createCreatorNavigation: omits the redundant Creator Workspace entry", () => {
