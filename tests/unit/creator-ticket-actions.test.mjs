@@ -7,6 +7,9 @@ const {
   createTicketPrdChangeAction,
   refreshCreatorTicketInbox
 } = await import("../../apps/creator-web/src/features/tickets/ticket-actions.ts");
+const {
+  TicketDetailConversionButton
+} = await import("../../apps/creator-web/src/features/tickets/TicketDetailConversionButton.tsx");
 
 const ticket = {
   id: "ticket_1",
@@ -109,6 +112,87 @@ test("ticket detail conversion reports POST failure without refreshes", async ()
   assert.equal(refreshCalls, 0);
 });
 
+test("TicketDetailPage conversion button wires click behavior to the governed action", async () => {
+  let resolvePost;
+  let postCalls = 0;
+  let inboxRefreshCalls = 0;
+  let prdRefreshCalls = 0;
+  const messages = [];
+  const pending = [];
+  const conversion = createTicketPrdChangeAction({
+    projectId: "proj_1",
+    ticket,
+    client: {
+      convertTicketToPrdChange: async () => {
+        postCalls += 1;
+        await new Promise((resolve) => {
+          resolvePost = resolve;
+        });
+      }
+    },
+    refreshInbox: async () => {
+      inboxRefreshCalls += 1;
+      throw new Error("inbox refresh unavailable");
+    },
+    refreshPrdState: async () => {
+      prdRefreshCalls += 1;
+    }
+  });
+  const button = TicketDetailConversionButton({
+    conversion,
+    isConverting: false,
+    disabled: false,
+    onMessage: (message) => messages.push(message),
+    onPendingChange: (value) => pending.push(value)
+  });
+
+  const firstClick = button.props.onClick();
+  const secondClick = button.props.onClick();
+  assert.equal(postCalls, 1);
+  resolvePost();
+  await Promise.all([firstClick, secondClick]);
+  assert.deepEqual(pending, [true, false]);
+  assert.deepEqual(messages, [
+    "Creating PRD change through Platform API.",
+    "PRD change created through Platform API. Refreshing governed state failed."
+  ]);
+  assert.equal(inboxRefreshCalls, 1);
+  assert.equal(prdRefreshCalls, 1);
+});
+
+test("TicketDetailPage conversion button leaves refreshes untouched after POST failure", async () => {
+  let refreshCalls = 0;
+  const messages = [];
+  const button = TicketDetailConversionButton({
+    conversion: createTicketPrdChangeAction({
+      projectId: "proj_1",
+      ticket,
+      client: {
+        convertTicketToPrdChange: async () => {
+          throw new Error("conversion rejected");
+        }
+      },
+      refreshInbox: async () => {
+        refreshCalls += 1;
+      },
+      refreshPrdState: async () => {
+        refreshCalls += 1;
+      }
+    }),
+    isConverting: false,
+    disabled: false,
+    onMessage: (message) => messages.push(message),
+    onPendingChange() {}
+  });
+
+  await button.props.onClick();
+  assert.equal(refreshCalls, 0);
+  assert.deepEqual(messages, [
+    "Creating PRD change through Platform API.",
+    "PRD change creation failed: conversion rejected"
+  ]);
+});
+
 test("ticket detail exposes API-backed conversion and disabled unsupported actions", () => {
   const page = readFileSync(
     "apps/creator-web/src/features/tickets/TicketDetailPage.tsx",
@@ -118,7 +202,11 @@ test("ticket detail exposes API-backed conversion and disabled unsupported actio
     "apps/creator-web/src/features/tickets/ticket-actions.ts",
     "utf8"
   );
-  assert.match(page, /Convert to PRD Change/);
+  const button = readFileSync(
+    "apps/creator-web/src/features/tickets/TicketDetailConversionButton.tsx",
+    "utf8"
+  );
+  assert.match(button, /Convert to PRD Change/);
   assert.match(page, /Platform API support required/);
   assert.match(actions, /convertTicketToPrdChange/);
   assert.match(page, /items\.find\(\(item\) => item\.id === ticketId\)/);

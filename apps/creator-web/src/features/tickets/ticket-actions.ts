@@ -40,13 +40,18 @@ function conversionInput(ticket: CreatorTicketInboxItem): ConvertTicketToPrdChan
   };
 }
 
+export type TicketPrdChangeAction = {
+  isPending: () => boolean;
+  run: () => Promise<string | undefined>;
+};
+
 export function createTicketPrdChangeAction({
   projectId,
   ticket,
   client,
   refreshInbox,
   refreshPrdState
-}: TicketPrdChangeActionOptions) {
+}: TicketPrdChangeActionOptions): TicketPrdChangeAction {
   let pending = false;
 
   return {

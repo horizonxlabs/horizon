@@ -1,10 +1,11 @@
 import { DecisionPanel, navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
-import { ArrowLeft, FilePenLine, MessageSquare, RotateCcw } from "lucide-react";
+import { ArrowLeft, MessageSquare, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorShell } from "@/features/projects";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { createTicketPrdChangeAction } from "./ticket-actions";
+import { TicketDetailConversionButton } from "./TicketDetailConversionButton";
 import { useCreatorTicketInbox } from "./use-creator-ticket-inbox";
 
 export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
@@ -32,17 +33,6 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
     setActionMessage("");
     setIsConverting(false);
   }, [ticketId]);
-
-  async function convertToPrdChange() {
-    if (!conversion || isConverting || conversion.isPending()) return;
-    setIsConverting(true);
-    setActionMessage("Creating PRD change through Platform API.");
-    const message = await conversion.run();
-    if (message) setActionMessage(message);
-    if (!conversion.isPending()) {
-      setIsConverting(false);
-    }
-  }
 
   return (
     <CreatorShell
@@ -110,13 +100,13 @@ export function TicketDetailPage({ app }: { app: ReturnType<typeof useCreatorApp
           </SectionCard>
           <SectionCard eyebrow="Governed action" title="Create an auditable PRD change">
             {actionMessage ? <p role={actionMessage.includes("failed") ? "alert" : "status"}>{actionMessage}</p> : null}
-            <button
-              type="button"
-              onClick={() => void convertToPrdChange()}
+            <TicketDetailConversionButton
+              conversion={conversion}
+              isConverting={isConverting}
               disabled={!ticket || isConverting || !ticket.actions.includes("convert_to_prd_change")}
-            >
-              <FilePenLine size={16} /> {isConverting ? "Creating PRD Change…" : "Convert to PRD Change"}
-            </button>
+              onMessage={setActionMessage}
+              onPendingChange={setIsConverting}
+            />
             <p>Creates a governed PRD change from this ticket, then refreshes the inbox and PRD state.</p>
           </SectionCard>
           <SectionCard eyebrow="Unavailable actions" title="Ticket operations awaiting Platform API support">
