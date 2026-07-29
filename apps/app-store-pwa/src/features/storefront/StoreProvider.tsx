@@ -5,13 +5,14 @@ import { beginStoreKeycloakLogout, clearStoreSessionBridge, initialStoreBootstra
 import { createStoreDeviceState, type StoreDeviceSnapshot, type StoreDeviceStorage } from "./device-state";
 import { createStorePlatformClient } from "./platform-client";
 import { createStorefrontStateStore, type StorefrontStateStore } from "./store-state";
+import type { StoreRefreshOptions, StoreRefreshResult } from "./store-async";
 
 export type StorefrontContextValue = {
   bootstrap: StoreBootstrapState;
   logoutError?: string;
   allApps: AppStoreItem[];
   device: StoreDeviceSnapshot;
-  refreshHome(): Promise<void>;
+  refreshHome(options?: StoreRefreshOptions): Promise<StoreRefreshResult>;
   toggleFavorite(appSlug: string): void;
   recordRecent(appSlug: string): void;
   rememberTicket(ticketId: string): void;
@@ -71,6 +72,26 @@ function createDefaultStore(): StorefrontStateStore {
   });
 }
 
+function createLazyStorePlatformClient(): StorePlatformClient {
+  return {
+    getStoreAppDetail(...args) {
+      return createStorePlatformClient().getStoreAppDetail(...args);
+    },
+    installStoreApp(...args) {
+      return createStorePlatformClient().installStoreApp(...args);
+    },
+    uninstallStoreApp(...args) {
+      return createStorePlatformClient().uninstallStoreApp(...args);
+    },
+    requestStoreAccess(...args) {
+      return createStorePlatformClient().requestStoreAccess(...args);
+    },
+    submitStoreTicket(...args) {
+      return createStorePlatformClient().submitStoreTicket(...args);
+    }
+  };
+}
+
 export function StoreProvider({ children, store, client }: { children: ReactNode; store?: StorefrontStateStore; client?: StorePlatformClient }) {
   const defaultStore = useRef<StorefrontStateStore | undefined>(undefined);
   const defaultClient = useRef<StorePlatformClient | undefined>(undefined);
@@ -78,7 +99,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
   const inflightActions = useRef(new Map<string, Promise<unknown>>());
   const [actionStates, setActionStates] = useState<Record<string, StoreAppActionState>>({});
   if (!defaultStore.current) defaultStore.current = createDefaultStore();
-  if (!client && !defaultClient.current) defaultClient.current = createStorePlatformClient();
+  if (!client && !defaultClient.current) defaultClient.current = createLazyStorePlatformClient();
   const stateStore = store ?? defaultStore.current;
   const api = client ?? defaultClient.current!;
   const state = useSyncExternalStore(stateStore.subscribe, stateStore.getSnapshot, stateStore.getSnapshot);
@@ -92,7 +113,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
     };
   }, [stateStore]);
 
-  const refreshHome = useCallback(() => stateStore.refresh(), [stateStore]);
+  const refreshHome = useCallback((options?: StoreRefreshOptions) => stateStore.refresh(options), [stateStore]);
   const logout = useCallback(() => stateStore.logout(), [stateStore]);
   const runAppAction = useCallback(<T,>(
     appSlug: string,
@@ -114,11 +135,10 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
         const result = await mutation();
         onConfirmed?.(result);
         update({ pending: false, success: successMessage });
-        await refreshHome();
-        const refreshError = stateStore.getSnapshot().bootstrap.error;
-        if (refreshError) update({
+        const refresh = await refreshHome({ preserveReadyOnFailure: true });
+        if (!refresh.ok) update({
           pending: false,
-          success: `${successMessage} Store home refresh failed: ${refreshError}`
+          success: `${successMessage} Store home refresh failed: ${refresh.error.message}`
         });
         return result;
       } catch (error) {
@@ -131,7 +151,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
     })();
     inflightActions.current.set(key, request);
     return request;
-  }, [refreshHome, stateStore]);
+  }, [refreshHome]);
   const value = useMemo<StorefrontContextValue>(() => ({
     bootstrap: state.bootstrap,
     logoutError: state.logoutError,

@@ -7,7 +7,7 @@ import { StorefrontSummary } from "./StorefrontSummary";
 import { useStorefront } from "./StoreProvider";
 
 export function StoreShell({ route, children }: { route: StoreRoute; children: ReactNode }) {
-  const { bootstrap, logout, logoutError, actionStates } = useStorefront();
+  const { bootstrap, logout, logoutError } = useStorefront();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   function handleSignIn() {
@@ -23,8 +23,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
     return <main className="store-shell"><SectionCard eyebrow="App Store" title="Loading your apps"><h1>Loading Horizon Store</h1><p>Loading current access and installed applications from Platform API.</p></SectionCard></main>;
   }
 
-  const hasConfirmedAction = Object.values(actionStates).some((action) => action.success);
-  if (bootstrap.status === "error" && !hasConfirmedAction) {
+  if (bootstrap.status === "error") {
     return <main className="store-shell"><SectionCard eyebrow="Secure session" title="Sign-in required"><h1>Sign-in required</h1><p>{bootstrap.error}</p><button type="button" onClick={handleSignIn} disabled={isSigningIn}>{isSigningIn ? "Opening sign-in…" : "Sign in with Keycloak"}</button></SectionCard></main>;
   }
 

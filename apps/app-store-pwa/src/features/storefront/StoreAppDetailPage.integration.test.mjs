@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const memory = new Map();
+const originalWindow = globalThis.window;
+const originalDocument = globalThis.document;
+const originalReact = globalThis.React;
 globalThis.window = {
   location: { pathname: "/store/apps/first", hash: "", href: "http://localhost/store/apps/first", assign(path) { this.pathname = path; } },
   localStorage: {
@@ -18,8 +21,9 @@ globalThis.React = (await import("react")).default;
 
 const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
-const { StoreProvider } = await import("./StoreProvider.tsx");
+const { StoreProvider, useStorefront } = await import("./StoreProvider.tsx");
 const { StoreAppDetailPage } = await import("./pages/StoreAppDetailPage.tsx");
+const { StoreShell } = await import("./StoreShell.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
 
 function deferred() {
@@ -41,6 +45,26 @@ function createStore(loadHome = async () => home) {
 
 function mount(store, client, slug = "first") {
   return create(React.createElement(StoreProvider, { store, client }, React.createElement(StoreAppDetailPage, { appSlug: slug })));
+}
+
+function IndependentRefresh() {
+  const { refreshHome } = useStorefront();
+  return React.createElement("button", { type: "button", onClick: () => void refreshHome() }, "Refresh independently");
+}
+
+function mountWithShell(store, client, slug = "first") {
+  return create(
+    React.createElement(
+      StoreProvider,
+      { store, client },
+      React.createElement(
+        StoreShell,
+        { route: { page: "app-detail", appSlug: slug } },
+        React.createElement(StoreAppDetailPage, { appSlug: slug }),
+        React.createElement(IndependentRefresh)
+      )
+    )
+  );
 }
 
 function button(root, label) {
@@ -98,6 +122,29 @@ test("detail preserves a confirmed action when home refresh fails", async () => 
   await act(async () => { renderer.unmount(); });
 });
 
+test("only the mutation refresh may preserve detail after failure; a later auth refresh requires sign-in", async () => {
+  const loads = [
+    async () => home,
+    async () => { throw new Error("refresh offline"); },
+    async () => { throw new Error("Your session has ended."); },
+    async () => home
+  ];
+  const store = createStore(() => loads.shift()());
+  const client = {
+    getStoreAppDetail: async () => detail(),
+    installStoreApp: async () => ({ id: "install", appSlug: "first", status: "active", installedAt: "2026-07-29" })
+  };
+  let renderer;
+  await act(async () => { renderer = mountWithShell(store, client); await Promise.resolve(); });
+  await act(async () => { button(renderer.root, "Install").props.onClick(); await Promise.resolve(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /Install confirmed.*refresh failed/i);
+  await act(async () => { button(renderer.root, "Refresh independently").props.onClick(); await Promise.resolve(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /Sign-in required/);
+  await act(async () => { await store.refresh(); await Promise.resolve(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /first App/);
+  await act(async () => { renderer.unmount(); });
+});
+
 test("detail renders an action error after its API call fails", async () => {
   const client = {
     getStoreAppDetail: async () => detail(),
@@ -139,4 +186,13 @@ test("Open records recency before assigning the generated runtime route", async 
   assert.equal(window.location.pathname, "/apps/first");
   assert.deepEqual(createStoreDeviceState(window.localStorage).read().recent, ["first"]);
   await act(async () => { renderer.unmount(); });
+});
+
+test.after(() => {
+  if (originalWindow === undefined) delete globalThis.window;
+  else globalThis.window = originalWindow;
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
+  if (originalReact === undefined) delete globalThis.React;
+  else globalThis.React = originalReact;
 });

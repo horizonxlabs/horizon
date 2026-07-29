@@ -2,6 +2,7 @@ import type { StoreAccessRequestResponse } from "@evcp/api-client";
 import type { StoreBootstrapState } from "./bootstrap";
 import type { StoreDeviceSnapshot } from "./device-state";
 import { createStorefrontAsyncController } from "./store-async";
+import type { StoreRefreshOptions, StoreRefreshResult } from "./store-async";
 
 export type StoreDeviceRepository = {
   read(): StoreDeviceSnapshot;
@@ -23,7 +24,7 @@ export type StorefrontStateStore = {
   subscribe(listener: () => void): () => void;
   mount(): void;
   unmount(): void;
-  refresh(): Promise<void>;
+  refresh(options?: StoreRefreshOptions): Promise<StoreRefreshResult>;
   logout(): Promise<void>;
   toggleFavorite(appSlug: string): void;
   recordRecent(appSlug: string): void;
@@ -55,15 +56,21 @@ export function createStorefrontStateStore({
   const controller = createStorefrontAsyncController({
     loadHome,
     logout,
-    onRefreshStart: () => publish({
-      ...state,
-      bootstrap: { ...state.bootstrap, status: "loading", error: undefined }
-    }),
+    onRefreshStart: (options) => {
+      if (options.preserveReadyOnFailure && state.bootstrap.status === "ready") return;
+      publish({
+        ...state,
+        bootstrap: { ...state.bootstrap, status: "loading", error: undefined }
+      });
+    },
     onRefreshSuccess: (bootstrap) => publish({ ...state, bootstrap }),
-    onRefreshFailure: (error) => publish({
-      ...state,
-      bootstrap: { ...initialBootstrap, status: "error", error: error.message }
-    }),
+    onRefreshFailure: (error, options) => {
+      if (options.preserveReadyOnFailure && state.bootstrap.status === "ready") return;
+      publish({
+        ...state,
+        bootstrap: { ...initialBootstrap, status: "error", error: error.message }
+      });
+    },
     onLogoutStart: () => publish({ ...state, logoutError: undefined }),
     onLogoutFailure: (error) => publish({ ...state, logoutError: error.message }),
     onLogoutSuccess: () => {
