@@ -45,6 +45,10 @@ export const navigation: Record<Surface, NavItem[]> = {
   store: [
     { label: "My Apps", route: "/store/", icon: "apps" },
     { label: "Available Apps", route: "/store/available", icon: "grid" },
+    { label: "Search", route: "/store/search", icon: "apps" },
+    { label: "Favorites", route: "/store/favorites", icon: "apps" },
+    { label: "Recent", route: "/store/recent", icon: "logs" },
+    { label: "Access Requests", route: "/store/access-requests", icon: "shield" },
     { label: "Tickets", route: "/store/tickets", icon: "tickets" },
     { label: "Profile", route: "/store/profile", icon: "profile" }
   ]

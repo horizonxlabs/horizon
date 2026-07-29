@@ -6,13 +6,20 @@ const root = new URL("../../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
 
 test("app-store bootstrap delegates root composition and URL mapping", async () => {
-  const [main, routes] = await Promise.all([
+  const [main, routes, storefront] = await Promise.all([
     source("apps/app-store-pwa/src/main.tsx"),
-    source("apps/app-store-pwa/src/routes/StoreRoutes.tsx")
+    source("apps/app-store-pwa/src/routes/StoreRoutes.tsx"),
+    source("apps/app-store-pwa/src/features/storefront/StorefrontApp.tsx")
   ]);
 
   assert.match(main, /@\/app\/StoreApp/);
   assert.match(routes, /@\/features\/generated-leave-management/);
+  assert.match(routes, /useBrowserPath/);
+  assert.match(routes, /usePageHeadingFocus/);
+  assert.match(routes, /storeRouteFromPath/);
+  assert.match(routes, /<StorefrontApp route={route} \/>/);
+  assert.match(storefront, /<StoreProvider>/);
+  assert.match(storefront, /<StoreShell route={route}>/);
   assert.doesNotMatch(main, /function GeneratedLeaveManagementApp/);
 });
 

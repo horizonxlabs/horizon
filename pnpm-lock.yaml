@@ -112,6 +112,9 @@ importers:
       '@evcp/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@evcp/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@evcp/types':
         specifier: workspace:*
         version: link:../../packages/types
