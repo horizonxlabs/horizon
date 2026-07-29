@@ -1,4 +1,4 @@
-import { ArrowRight, Search, Sparkles, WandSparkles } from "lucide-react";
+import { Plus, Search, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { CreatorShell } from "./CreatorShell";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -20,23 +20,9 @@ function initials(text: string): string {
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-const PROMPT_SUGGESTIONS = [
-  "ระบบขออนุมัติลางานหลายระดับ",
-  "ระบบจัดซื้อจัดจ้างพร้อม workflow อนุมัติ",
-  "แดชบอร์ดติดตาม KPI ทีมขาย",
-  "ระบบจองห้องประชุมและทรัพยากร"
-];
-
 export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
-  const { bootstrap, selectedProject, handleSelectProject, handleCreateFromPrompt } = app;
-  const [prompt, setPrompt] = useState("");
+  const { bootstrap, selectedProject, handleSelectProject, setIsCreateProjectDialogOpen } = app;
   const [query, setQuery] = useState("");
-
-  function startFromPrompt() {
-    const trimmed = prompt.trim();
-    if (!trimmed) return;
-    void handleCreateFromPrompt(trimmed);
-  }
 
   const normalized = query.trim().toLowerCase();
   const projects = bootstrap.projects.filter((project: CreatorProjectView) =>
@@ -55,45 +41,18 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
               <Sparkles size={14} aria-hidden="true" />
               Horizon AI Builder
             </span>
-            <h1 className="hz-hero-title">วันนี้อยากสร้างอะไร?</h1>
+            <h1 className="hz-hero-title">เริ่มสร้างแอปภายในองค์กร</h1>
             <p className="hz-hero-sub">
-              อธิบาย workflow ผู้ใช้งาน และผลลัพธ์ที่ต้องการ แล้วให้ Horizon ช่วยสร้างแอปภายในองค์กร
+              สร้าง project ใหม่ — ระบุรายละเอียดแอป แล้วระบบจะสร้าง PRD draft ให้ก่อน เพื่อยืนยัน spec ก่อนเริ่มพัฒนา
             </p>
-
-            <form
-              className="hz-prompt"
-              onSubmit={(event) => {
-                event.preventDefault();
-                startFromPrompt();
-              }}
+            <button
+              type="button"
+              className="hz-prompt-cta"
+              onClick={() => setIsCreateProjectDialogOpen(true)}
             >
-              <WandSparkles className="hz-prompt-icon" size={18} aria-hidden="true" />
-              <textarea
-                className="hz-prompt-input"
-                placeholder="เช่น ระบบขออนุมัติลางานสำหรับพนักงาน มีอนุมัติหลายระดับ และแดชบอร์ดสรุป…"
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                rows={2}
-                aria-label="อธิบายแอปที่ต้องการสร้าง"
-              />
-              <button type="submit" className="hz-prompt-cta">
-                <span>สร้างด้วย AI</span>
-                <ArrowRight size={16} aria-hidden="true" />
-              </button>
-            </form>
-
-            <div className="hz-chips" aria-label="คำแนะนำสำหรับเริ่มต้นสร้างแอป">
-              {PROMPT_SUGGESTIONS.map((suggestion) => (
-                <button
-                  type="button"
-                  key={suggestion}
-                  className="hz-chip"
-                  onClick={() => setPrompt(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+              <Plus size={16} aria-hidden="true" />
+              <span>สร้าง Project ใหม่</span>
+            </button>
           </section>
 
           <section className="hz-projects" aria-label="รายการโปรเจกต์">
@@ -118,7 +77,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
               <div className="hz-empty">
                 {normalized
                   ? `ไม่พบโปรเจกต์ที่ตรงกับ “${query.trim()}” ลองใช้คำค้นอื่น`
-                  : "ยังไม่มีโปรเจกต์ เริ่มสร้างโปรเจกต์แรกจาก prompt ด้านบนได้เลย"}
+                  : "ยังไม่มีโปรเจกต์ กด “สร้าง Project ใหม่” ด้านบนเพื่อเริ่ม"}
               </div>
             ) : (
               <div className="hz-grid" aria-label="รายการโปรเจกต์">
