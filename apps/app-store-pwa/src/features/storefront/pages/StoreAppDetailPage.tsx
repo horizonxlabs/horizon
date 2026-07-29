@@ -19,7 +19,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
-  const { api, actionStates, recordRecent, rememberAccessReceipt, rememberTicket, runAppAction } = useStorefront();
+  const { allApps, api, actionStates, recordRecent, rememberAccessReceipt, rememberTicket, runAppAction } = useStorefront();
   const sequence = useRef(0);
   const [detail, setDetail] = useState<DetailState>({ status: "loading" });
   const [requestedRoleKey, setRequestedRoleKey] = useState("");
@@ -60,15 +60,32 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const actionState = (action: StoreAppAction) => actionStates[storeAppActionKey(app.slug, action)];
   const pending = (action: StoreAppAction) => actionState(action)?.pending ?? false;
   const installActionState = actionState("install");
+  const uninstallActionState = actionState("uninstall");
+  const installIsLatest = (installActionState?.sequence ?? -1) >= (uninstallActionState?.sequence ?? -1);
+  const currentHomeApp = allApps.find((candidate) => candidate.slug === app.slug);
+  const journeyApp = {
+    accessStatus: currentHomeApp?.accessStatus ?? app.accessStatus,
+    installStatus: currentHomeApp?.installStatus ?? app.installStatus
+  };
+  const visibleInstallStatus = !installIsLatest && uninstallActionState?.installationStatus === "disabled"
+    ? "not_installed"
+    : journeyApp.installStatus;
   const installJourneyRows = appInstallJourneySteps.map((step) => ({
     ...step,
     status: installJourneyStatus(
       step.id,
-      app,
-      installActionState?.installationStatus,
-      installActionState?.pending ?? false
+      journeyApp,
+      installIsLatest ? installActionState?.installationStatus : undefined,
+      installIsLatest && (installActionState?.pending ?? false),
+      installIsLatest ? undefined : uninstallActionState?.installationStatus,
+      !installIsLatest && (uninstallActionState?.pending ?? false)
     )
   }));
+  const showInstallJourney = supports("install")
+    || supports("uninstall")
+    || supports("request_access")
+    || journeyApp.installStatus === "installed"
+    || journeyApp.accessStatus !== "active";
   const feedback = (action: StoreAppAction) => {
     const state = actionState(action);
     return state?.error ? <p role="alert" className="store-action-error">{state.error}</p>
@@ -118,10 +135,25 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
         <ToneBadge tone={app.accessStatus === "active" ? "success" : "warning"}>{app.accessStatus}</ToneBadge>
       </div>
       <SectionCard eyebrow="Application" title="Current access">
-        <p>{app.myRole ? `Role: ${app.myRole}` : "No assigned role"} · {app.installStatus === "installed" ? "Installed" : "Not installed"}</p>
+        <p>{app.myRole ? `Role: ${app.myRole}` : "No assigned role"} · {visibleInstallStatus === "installed" ? "Installed" : "Not installed"}</p>
         <p>Owned by {app.ownerName} · {app.department} · {app.accessMode}</p>
         {supports("open") ? <button type="button" onClick={() => { recordRecent(app.slug); window.location.assign(app.route || `/apps/${app.slug}`); }}>Open app</button> : null}
       </SectionCard>
+      {showInstallJourney ? (
+        <SectionCard eyebrow="Installation" title="App install journey">
+          <ol aria-label="App install journey" className="store-install-stepper">
+            {installJourneyRows.map((step, index) => (
+              <li key={step.id} className={`store-install-step status-${step.status}`}>
+                <span>{index + 1}</span>
+                <div><strong>{step.label}</strong><small>{step.detail}</small></div>
+                <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : "neutral"}>
+                  {step.status}
+                </ToneBadge>
+              </li>
+            ))}
+          </ol>
+        </SectionCard>
+      ) : null}
       {supports("install") ? (
         <SectionCard eyebrow="Installation" title="Install on this account">
           <button
@@ -136,17 +168,6 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
             {pending("install") ? "Installing…" : "Install"}
           </button>
           {feedback("install")}
-          <ol aria-label="App install journey" className="store-install-stepper">
-            {installJourneyRows.map((step, index) => (
-              <li key={step.id} className={`store-install-step status-${step.status}`}>
-                <span>{index + 1}</span>
-                <div><strong>{step.label}</strong><small>{step.detail}</small></div>
-                <ToneBadge tone={step.status === "complete" ? "success" : step.status === "blocked" ? "danger" : "neutral"}>
-                  {step.status}
-                </ToneBadge>
-              </li>
-            ))}
-          </ol>
         </SectionCard>
       ) : null}
       {supports("uninstall") ? <SectionCard eyebrow="Installation" title="Remove this installation"><button type="button" disabled={pending("uninstall")} onClick={() => handleAction("uninstall", () => api.uninstallStoreApp(app.slug), "Removal confirmed.")}>{pending("uninstall") ? "Removing…" : "Remove"}</button>{feedback("uninstall")}</SectionCard> : null}

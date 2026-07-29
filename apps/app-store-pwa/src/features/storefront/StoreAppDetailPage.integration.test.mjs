@@ -73,6 +73,13 @@ function button(root, label) {
   return item;
 }
 
+function journeyStatuses(root) {
+  return root
+    .findByProps({ "aria-label": "App install journey" })
+    .findAllByType("li")
+    .map((step) => step.props.className);
+}
+
 test("detail ignores a stale app response after the route changes", async () => {
   const first = deferred();
   const second = deferred();
@@ -114,15 +121,31 @@ test("detail deduplicates an action while allowing a different action", async ()
 
 test("install journey advances from validation through persisted completion", async () => {
   const install = deferred();
+  const installedHome = {
+    ...home,
+    myApps: [{
+      id: "journey",
+      slug: "journey",
+      name: "journey App",
+      description: "A supported app",
+      owner: "IT",
+      route: "/apps/journey",
+      accessStatus: "active",
+      installStatus: "installed",
+      health: "healthy"
+    }]
+  };
+  const homes = [home, installedHome];
   const client = {
     getStoreAppDetail: async () => detail("journey", ["install"]),
     installStoreApp: () => install.promise
   };
   let renderer;
-  await act(async () => { renderer = mount(createStore(), client, "journey"); await Promise.resolve(); });
-  const journey = () => renderer.root.findByProps({ "aria-label": "App install journey" });
-  const statuses = () => journey().findAllByType("li").map((step) => step.props.className);
-  assert.deepEqual(statuses(), [
+  await act(async () => {
+    renderer = mount(createStore(async () => homes.shift() ?? installedHome), client, "journey");
+    await Promise.resolve();
+  });
+  assert.deepEqual(journeyStatuses(renderer.root), [
     "store-install-step status-complete",
     "store-install-step status-current",
     "store-install-step status-pending",
@@ -130,7 +153,7 @@ test("install journey advances from validation through persisted completion", as
   ]);
 
   await act(async () => { button(renderer.root, "Install").props.onClick(); });
-  assert.deepEqual(statuses(), [
+  assert.deepEqual(journeyStatuses(renderer.root), [
     "store-install-step status-complete",
     "store-install-step status-current",
     "store-install-step status-current",
@@ -141,12 +164,76 @@ test("install journey advances from validation through persisted completion", as
     install.resolve({ id: "install", appSlug: "journey", status: "active", installedAt: "2026-07-29" });
     await Promise.resolve();
   });
-  assert.deepEqual(statuses(), [
+  assert.deepEqual(journeyStatuses(renderer.root), [
     "store-install-step status-complete",
     "store-install-step status-complete",
     "store-install-step status-complete",
     "store-install-step status-complete"
   ]);
+  await act(async () => { renderer.unmount(); });
+});
+
+test("access-blocked apps expose a blocked install journey without an install button", async () => {
+  const blocked = {
+    ...detail("blocked", ["request_access"]),
+    accessStatus: "available",
+    installStatus: "not_installed"
+  };
+  let renderer;
+  await act(async () => {
+    renderer = mount(createStore(), { getStoreAppDetail: async () => blocked }, "blocked");
+    await Promise.resolve();
+  });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-blocked",
+    "store-install-step status-pending",
+    "store-install-step status-pending",
+    "store-install-step status-pending"
+  ]);
+  assert.equal(renderer.root.findAllByType("button").some((item) => item.children.join("") === "Install"), false);
+  await act(async () => { renderer.unmount(); });
+});
+
+test("installed apps keep the journey visible and uninstall overrides stale installed evidence", async () => {
+  const uninstall = deferred();
+  const installed = {
+    ...detail("installed", ["open", "uninstall"]),
+    installStatus: "installed"
+  };
+  const client = {
+    getStoreAppDetail: async () => installed,
+    uninstallStoreApp: () => uninstall.promise
+  };
+  let renderer;
+  await act(async () => {
+    renderer = mount(createStore(), client, "installed");
+    await Promise.resolve();
+  });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-complete"
+  ]);
+  const remove = button(renderer.root, "Remove");
+  await act(async () => { remove.props.onClick(); });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-pending"
+  ]);
+  await act(async () => {
+    uninstall.resolve({ id: "installation", appSlug: "installed", status: "disabled", installedAt: "2026-07-29", disabledAt: "2026-07-29" });
+    await Promise.resolve();
+  });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-current",
+    "store-install-step status-pending"
+  ]);
+  assert.match(JSON.stringify(renderer.toJSON()), /Not installed/);
   await act(async () => { renderer.unmount(); });
 });
 
@@ -157,6 +244,12 @@ test("detail preserves a confirmed action when home refresh fails", async () => 
   await act(async () => { renderer = mount(createStore(() => loads.shift()()), client); await Promise.resolve(); });
   await act(async () => { button(renderer.root, "Install").props.onClick(); await Promise.resolve(); });
   assert.match(JSON.stringify(renderer.toJSON()), /Install confirmed.*refresh failed/i);
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-complete",
+    "store-install-step status-current"
+  ]);
   await act(async () => { renderer.unmount(); });
 });
 

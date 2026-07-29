@@ -35,6 +35,7 @@ export type StorePlatformClient = Pick<ReturnType<typeof createStorePlatformClie
 export type StoreAppAction = "install" | "uninstall" | "request-access" | "submit-ticket";
 export type StoreAppActionState = {
   pending: boolean;
+  sequence: number;
   success?: string;
   error?: string;
   installationStatus?: StoreAppInstallationResponse["status"];
@@ -115,6 +116,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
   const defaultClient = useRef<StorePlatformClient | undefined>(undefined);
   const mounted = useRef(true);
   const inflightActions = useRef(new Map<string, Promise<unknown>>());
+  const actionSequence = useRef(0);
   const [actionStates, setActionStates] = useState<Record<string, StoreAppActionState>>({});
   if (!defaultStore.current) defaultStore.current = createDefaultStore();
   if (!client && !defaultClient.current) defaultClient.current = createLazyStorePlatformClient();
@@ -143,18 +145,20 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
     const key = storeAppActionKey(appSlug, action);
     const existing = inflightActions.current.get(key) as Promise<T> | undefined;
     if (existing) return existing;
+    const sequence = ++actionSequence.current;
     const update = (next: StoreAppActionState) => {
       if (mounted.current) setActionStates((states) => ({ ...states, [key]: next }));
     };
     let request: Promise<T>;
     request = (async () => {
-      update({ pending: true });
+      update({ pending: true, sequence });
       try {
         const result = await mutation();
         onConfirmed?.(result);
         const installationStatus = confirmedInstallationStatus(action, result);
         const confirmedState: StoreAppActionState = {
           pending: false,
+          sequence,
           success: successMessage,
           ...(installationStatus ? { installationStatus } : {})
         };
@@ -167,7 +171,7 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : "The action could not be completed.";
-        update({ pending: false, error: message });
+        update({ pending: false, sequence, error: message });
         throw error;
       } finally {
         inflightActions.current.delete(key);
