@@ -42,6 +42,7 @@ export function AppShell({
   logo,
   tagline = "Enterprise AI Workspace",
   tone = "dark",
+  currentPath = typeof window === "undefined" ? "" : window.location.pathname,
   children
 }: {
   title: string;
@@ -52,9 +53,9 @@ export function AppShell({
   logo?: ReactNode;
   tagline?: string;
   tone?: "dark" | "light";
+  currentPath?: string;
   children: ReactNode;
 }) {
-  const currentPath = typeof window === "undefined" ? "" : window.location.pathname;
   const activeNavItem = resolveActiveNavItem(navItems, currentPath) ?? navItems[0];
   const activeRoute = activeNavItem ? normalizeRoute(activeNavItem.route) : "";
   const brandMark = createInitials(title);

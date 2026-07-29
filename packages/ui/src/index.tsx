@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 import { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps } from "./primitives/badge";
 
 export { AppShell } from "./app-shell";
+export {
+  navigateBrowserPath,
+  useBrowserPath,
+  usePageHeadingFocus
+} from "./browser-navigation";
 export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
 export { Drawer } from "./primitives/drawer";
