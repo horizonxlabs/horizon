@@ -1,5 +1,6 @@
-name: evcp-private-server
-
+# No top-level `name:` — `docker stack config`/`docker stack deploy` reject it
+# ("(root) Additional property name is not allowed"); the stack name is supplied
+# on the CLI: `docker stack deploy ... evcp`.
 services:
   postgres:
     image: postgres:16-alpine
