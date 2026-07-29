@@ -8,7 +8,7 @@ import {
   Send
 } from "lucide-react";
 import type { WorkspaceAgentMode } from "@evcp/api-client";
-import { Button, Tabs } from "@evcp/ui";
+import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { VibeActionRow } from "./VibeActionRow";
@@ -227,13 +227,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (
-                    <button
+                    <Button
+                      variant="primary"
                       type="button"
-                      className="vibe-live-control vibe-live-control-primary"
                       onClick={() => approveAndImplement(message.sourcePrompt ?? "", message.text)}
                     >
                       Approve &amp; implement
-                    </button>
+                    </Button>
                   )}
                 </div>
               )
@@ -241,14 +241,14 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </div>
           <div className="vibe-live-suggestions">
             {SUGGESTIONS[workspaceMode].map((suggestion) => (
-              <button
+              <Button
                 key={suggestion}
+                variant="secondary"
                 type="button"
-                className="vibe-live-suggestion"
                 onClick={() => setPromptDraft(suggestion)}
               >
                 {suggestion}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="vibe-live-files">
@@ -264,17 +264,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     file.scanStatus === "clean" &&
                     file.indexStatus === "indexed";
                   return (
-                    <button
+                    <Button
                       key={file.id}
+                      variant={selected ? "primary" : "secondary"}
                       type="button"
-                      className={`vibe-live-file-chip ${selected ? "is-selected" : ""}`.trim()}
                       onClick={() => toggleProjectFileAttachment(file.id)}
                       disabled={!ready}
                       title={ready ? "Attach to next prompt" : "File is not ready yet"}
                     >
                       <span>{file.fileName}</span>
                       <small>{ready ? "ready" : file.indexStatus}</small>
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -282,7 +282,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </div>
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
-              <textarea
+              <Textarea
                 aria-label={workspaceMode === "plan" ? "Ask AI to plan" : "Ask AI to build"}
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
@@ -296,7 +296,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"
                 }
                 rows={1}
-                className="vibe-live-input"
               />
               <div className="vibe-composer-footer">
                 <label className="vibe-composer-attach" title="แนบไฟล์">
@@ -315,28 +314,28 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 <div className="vibe-composer-right">
                   <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
                     {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
-                      <button
+                      <Button
                         key={value}
+                        variant={workspaceMode === value ? "primary" : "secondary"}
                         type="button"
-                        className={`vibe-mode-option ${workspaceMode === value ? "is-active" : ""}`.trim()}
                         onClick={() => setWorkspaceMode(value)}
                         aria-pressed={workspaceMode === value}
                         title={description}
                       >
                         <Icon size={13} />
                         <span>{label}</span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
-                  <button
+                  <Button
+                    variant="primary"
                     type="button"
                     onClick={() => void handleVibeChat()}
                     disabled={isVibing || !promptDraft.trim()}
                     aria-label="Send prompt"
-                    className="vibe-live-send"
                   >
                     <Send size={16} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -356,12 +355,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 ? "Authorizing preview…"
                 : "Preview authorization failed."}
               {previewAuthorizationState === "error" ? (
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
                   onClick={() => setPreviewAuthorizationAttempt((attempt) => attempt + 1)}
                 >
                   Retry preview
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : vibeTab === "database" ? (

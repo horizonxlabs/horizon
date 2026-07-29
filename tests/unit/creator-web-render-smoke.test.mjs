@@ -206,3 +206,12 @@ test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
   assert.doesNotMatch(html, /class="[^"]*vibe-live-icon-btn/);
   assert.match(html, /Publish<\/button>/);
 });
+
+test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input)", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-send"/);
+  assert.doesNotMatch(html, /class="vibe-live-input"/);
+});
