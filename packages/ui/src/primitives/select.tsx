@@ -1,21 +1,13 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import * as RadixSelect from "@radix-ui/react-select";
+import type { ReactNode } from "react";
 import { cn } from "../cn";
-import { nextEnabledIndex, parseSelectOptions, selectedLabel } from "./select-helpers";
+import { parseSelectOptions } from "./select-helpers";
 
-// Drop-in replacement for the former native `<select>` primitive: a fully
-// custom, accessible listbox built from React + Tailwind tokens only (no icon
-// or headless-ui dependency — @evcp/ui stays React-only). The public API mirrors
-// the props the old native control accepted so every call site keeps compiling.
-//
-// `onChange` is shaped `{ target: { value } }` so existing handlers that read
-// `event.target.value` keep working unchanged.
-//
-// Limitation: native form validation is intentionally NOT replicated — `required`
-// maps to `aria-required` on the trigger for AT, but there is no hidden native
-// `<select>` and no browser-enforced "please select an item" on submit. The
-// drawers that host these selects already surface server-side validation errors,
-// so this is an accepted, documented gap.
+// @evcp/ui Select, backed by @radix-ui/react-select for robust accessibility
+// (keyboard nav, typeahead, focus, positioning, screen-reader, form submission).
+// The public API mirrors the former native <select> so every call site keeps
+// compiling: children are <option> elements, and onChange is shaped
+// { target: { value } } so handlers reading event.target.value keep working.
 export type SelectProps = {
   value?: string;
   onChange?: (event: { target: { value: string } }) => void;
@@ -60,163 +52,45 @@ export function Select({
   name,
   "aria-label": ariaLabel
 }: SelectProps) {
-  const items = useMemo(() => parseSelectOptions(children), [children]);
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  const baseId = useId().replace(/:/g, "");
-  const listboxId = `select-listbox-${baseId}`;
-  const optionId = (index: number) => `${listboxId}-option-${index}`;
-
-  const selectedIndex = items.findIndex((item) => item.value === value);
-  const label = selectedLabel(items, value);
-
-  // Outside-click + focus restoration, registered only while open and cleaned up
-  // on close/unmount. Inlined (no external `close` ref) to keep effect deps tidy.
-  useEffect(() => {
-    if (!open) return undefined;
-    function onDocumentMouseDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    }
-    document.addEventListener("mousedown", onDocumentMouseDown);
-    return () => document.removeEventListener("mousedown", onDocumentMouseDown);
-  }, [open]);
-
-  function closeMenu(restoreFocus = true) {
-    setOpen(false);
-    if (restoreFocus) triggerRef.current?.focus();
-  }
-
-  function openMenu() {
-    if (disabled) return;
-    const start =
-      selectedIndex >= 0 && !items[selectedIndex]?.disabled
-        ? selectedIndex
-        : nextEnabledIndex(items, -1, 1);
-    setActiveIndex(start);
-    setOpen(true);
-  }
-
-  function commit(index: number) {
-    const item = items[index];
-    if (!item || item.disabled) return;
-    onChange?.({ target: { value: item.value } });
-    closeMenu();
-  }
-
-  function onTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (disabled) return;
-    if (!open) {
-      if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        openMenu();
-      }
-      return;
-    }
-    switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        setActiveIndex((current) => nextEnabledIndex(items, current, 1));
-        break;
-      case "ArrowUp":
-        event.preventDefault();
-        setActiveIndex((current) => nextEnabledIndex(items, current, -1));
-        break;
-      case "Home":
-        event.preventDefault();
-        setActiveIndex(nextEnabledIndex(items, -1, 1));
-        break;
-      case "End":
-        event.preventDefault();
-        setActiveIndex(nextEnabledIndex(items, 0, -1));
-        break;
-      case "Enter":
-      case " ":
-        event.preventDefault();
-        commit(activeIndex);
-        break;
-      case "Escape":
-        event.preventDefault();
-        closeMenu();
-        break;
-      case "Tab":
-        closeMenu(false);
-        break;
-      default:
-        break;
-    }
-  }
-
+  const items = parseSelectOptions(children);
   return (
-    <div ref={rootRef} className={cn("relative w-full", className)}>
-      <button
-        ref={triggerRef}
-        type="button"
-        id={id}
-        name={name}
-        disabled={disabled}
-        role="combobox"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
-        aria-label={ariaLabel}
-        aria-required={required || undefined}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={onTriggerKeyDown}
-        className={triggerClasses}
-      >
-        <span className={cn("truncate", label == null && "text-muted")}>
-          {label ?? "Select…"}
-        </span>
-        <ChevronDown />
-      </button>
-      {open ? (
-        <ul
-          id={listboxId}
-          role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-auto rounded-control border border-border bg-surface py-1 shadow-card"
+    <RadixSelect.Root
+      value={value}
+      onValueChange={(next) => onChange?.({ target: { value: next } })}
+      disabled={disabled}
+      required={required}
+      name={name}
+    >
+      <RadixSelect.Trigger id={id} aria-label={ariaLabel} className={cn(triggerClasses, className)}>
+        <RadixSelect.Value placeholder="Select…" />
+        <RadixSelect.Icon asChild>
+          <ChevronDown />
+        </RadixSelect.Icon>
+      </RadixSelect.Trigger>
+      <RadixSelect.Portal>
+        <RadixSelect.Content
+          position="popper"
+          sideOffset={4}
+          className="z-50 max-h-60 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-control border border-border bg-surface py-1 shadow-card"
         >
-          {items.map((item, index) => {
-            const isSelected = item.value === value;
-            const isActive = index === activeIndex;
-            return (
-              <li
+          <RadixSelect.Viewport>
+            {items.map((item, index) => (
+              <RadixSelect.Item
                 key={`${item.value}-${index}`}
-                id={optionId(index)}
-                role="option"
-                aria-selected={isSelected}
-                aria-disabled={item.disabled || undefined}
-                onMouseEnter={() => {
-                  if (!item.disabled) setActiveIndex(index);
-                }}
-                onMouseDown={(event) => event.preventDefault()}
-                // preventDefault stops the enclosing <label> (when a caller wraps this
-                // Select in one) from re-firing a synthetic click on its associated
-                // control — the trigger button — which would immediately re-open the
-                // menu we just closed. Without it, selecting an option never sticks.
-                onClick={(event) => {
-                  event.preventDefault();
-                  commit(index);
-                }}
+                value={item.value}
+                disabled={item.disabled}
                 className={cn(
-                  "flex cursor-pointer items-center px-3 py-2 text-sm text-body",
-                  isActive && "bg-surface-muted",
-                  isSelected && "text-primary",
-                  item.disabled && "opacity-50 pointer-events-none"
+                  "flex cursor-pointer select-none items-center px-3 py-2 text-sm text-body outline-none",
+                  "data-[highlighted]:bg-surface-muted data-[state=checked]:text-primary",
+                  "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
                 )}
               >
-                {item.label}
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-    </div>
+                <RadixSelect.ItemText>{item.label}</RadixSelect.ItemText>
+              </RadixSelect.Item>
+            ))}
+          </RadixSelect.Viewport>
+        </RadixSelect.Content>
+      </RadixSelect.Portal>
+    </RadixSelect.Root>
   );
 }
