@@ -21,6 +21,7 @@ globalThis.React = (await import("react")).default;
 
 const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
+const { InstallationEvidenceProbe } = await import("./StoreAppDetailPage.integration.fixtures.mjs");
 const { StoreProvider, useStorefront } = await import("./StoreProvider.tsx");
 const { StoreAppDetailPage } = await import("./pages/StoreAppDetailPage.tsx");
 const { StoreShell } = await import("./StoreShell.tsx");
@@ -197,12 +198,13 @@ test("access-blocked apps expose a blocked install journey without an install bu
 test("installed apps keep the journey visible and uninstall overrides stale installed evidence", async () => {
   const uninstall = deferred();
   const installed = {
-    ...detail("installed", ["open", "uninstall"]),
+    ...detail("installed", ["open", "install", "uninstall"]),
     installStatus: "installed"
   };
   const client = {
     getStoreAppDetail: async () => installed,
-    uninstallStoreApp: () => uninstall.promise
+    uninstallStoreApp: () => uninstall.promise,
+    installStoreApp: async () => { throw new Error("reinstall unavailable"); }
   };
   let renderer;
   await act(async () => {
@@ -234,14 +236,22 @@ test("installed apps keep the journey visible and uninstall overrides stale inst
     "store-install-step status-pending"
   ]);
   assert.match(JSON.stringify(renderer.toJSON()), /Not installed/);
+  await act(async () => { button(renderer.root, "Install").props.onClick(); await Promise.resolve(); });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-current",
+    "store-install-step status-pending"
+  ]);
   await act(async () => { renderer.unmount(); });
 });
 
 test("detail preserves a confirmed action when home refresh fails", async () => {
   const loads = [async () => home, async () => { throw new Error("refresh offline"); }];
   const client = { getStoreAppDetail: async () => detail(), installStoreApp: async () => ({ id: "install", appSlug: "first", status: "active", installedAt: "2026-07-29" }) };
+  const store = createStore(() => loads.shift()());
   let renderer;
-  await act(async () => { renderer = mount(createStore(() => loads.shift()()), client); await Promise.resolve(); });
+  await act(async () => { renderer = mount(store, client); await Promise.resolve(); });
   await act(async () => { button(renderer.root, "Install").props.onClick(); await Promise.resolve(); });
   assert.match(JSON.stringify(renderer.toJSON()), /Install confirmed.*refresh failed/i);
   assert.deepEqual(journeyStatuses(renderer.root), [
@@ -250,6 +260,60 @@ test("detail preserves a confirmed action when home refresh fails", async () => 
     "store-install-step status-complete",
     "store-install-step status-current"
   ]);
+  await act(async () => {
+    renderer.update(React.createElement(StoreProvider, { store, client }, React.createElement("div", null, "Away")));
+  });
+  await act(async () => {
+    renderer.update(React.createElement(StoreProvider, { store, client }, React.createElement(StoreAppDetailPage, { appSlug: "first" })));
+    await Promise.resolve();
+  });
+  assert.deepEqual(journeyStatuses(renderer.root), [
+    "store-install-step status-complete",
+    "store-install-step status-current",
+    "store-install-step status-pending",
+    "store-install-step status-pending"
+  ]);
+  assert.match(JSON.stringify(renderer.toJSON()), /Install confirmed.*refresh failed/i);
+  await act(async () => { renderer.unmount(); });
+});
+
+test("successful home reconciliation is slug-scoped and preserves in-flight evidence", async () => {
+  const pendingInstall = deferred();
+  let load = 0;
+  const refreshedHome = {
+    ...home,
+    availableApps: [{
+      id: "alpha",
+      slug: "alpha",
+      name: "Alpha",
+      description: "Alpha app",
+      owner: "IT",
+      accessStatus: "active",
+      installStatus: "not_installed",
+      health: "healthy"
+    }]
+  };
+  const store = createStore(async () => {
+    load += 1;
+    if (load === 1) return home;
+    if (load === 2 || load === 3) throw new Error("refresh offline");
+    return refreshedHome;
+  });
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(
+      StoreProvider,
+      { store, client: {} },
+      React.createElement(InstallationEvidenceProbe, { pendingInstall })
+    ));
+    await Promise.resolve();
+  });
+  await act(async () => { button(renderer.root, "Remove alpha").props.onClick(); await Promise.resolve(); });
+  await act(async () => { button(renderer.root, "Install beta").props.onClick(); await Promise.resolve(); });
+  await act(async () => { button(renderer.root, "Install gamma").props.onClick(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /disabled\|active\|pending/);
+  await act(async () => { button(renderer.root, "Refresh evidence").props.onClick(); await Promise.resolve(); });
+  assert.match(JSON.stringify(renderer.toJSON()), /none\|active\|pending/);
   await act(async () => { renderer.unmount(); });
 });
 

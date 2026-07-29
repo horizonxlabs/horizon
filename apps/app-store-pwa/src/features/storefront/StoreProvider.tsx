@@ -21,6 +21,7 @@ export type StorefrontContextValue = {
   logout(): Promise<void>;
   api: StorePlatformClient;
   actionStates: Record<string, StoreAppActionState>;
+  reconcileInstallationEvidenceForSlug(appSlug: string): void;
   runAppAction<T>(
     appSlug: string,
     action: StoreAppAction,
@@ -72,6 +73,15 @@ function mergeApps(bootstrap: StoreBootstrapState): AppStoreItem[] {
     seen.add(app.slug);
     return true;
   });
+}
+
+function clearCompletedInstallationEvidence(
+  state: StoreAppActionState | undefined
+): StoreAppActionState | undefined {
+  if (!state || state.pending || !state.installationStatus) return state;
+  const feedback = { ...state };
+  delete feedback.installationStatus;
+  return feedback;
 }
 
 function createDefaultStore(): StorefrontStateStore {
@@ -133,7 +143,37 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
     };
   }, [stateStore]);
 
-  const refreshHome = useCallback((options?: StoreRefreshOptions) => stateStore.refresh(options), [stateStore]);
+  const reconcileInstallationEvidenceForSlugs = useCallback((appSlugs: Iterable<string>) => {
+    if (!mounted.current) return;
+    const keys = [...appSlugs].flatMap((appSlug) => [
+      storeAppActionKey(appSlug, "install"),
+      storeAppActionKey(appSlug, "uninstall")
+    ]);
+    setActionStates((states) => {
+      let changed = false;
+      const next = { ...states };
+      for (const key of keys) {
+        const reconciled = clearCompletedInstallationEvidence(states[key]);
+        if (reconciled !== states[key]) {
+          next[key] = reconciled!;
+          changed = true;
+        }
+      }
+      return changed ? next : states;
+    });
+  }, []);
+  const reconcileInstallationEvidenceForSlug = useCallback((appSlug: string) => {
+    reconcileInstallationEvidenceForSlugs([appSlug]);
+  }, [reconcileInstallationEvidenceForSlugs]);
+  const refreshHome = useCallback(async (options?: StoreRefreshOptions) => {
+    const result = await stateStore.refresh(options);
+    if (result.ok) {
+      reconcileInstallationEvidenceForSlugs(
+        mergeApps(stateStore.getSnapshot().bootstrap).map((app) => app.slug)
+      );
+    }
+    return result;
+  }, [reconcileInstallationEvidenceForSlugs, stateStore]);
   const logout = useCallback(() => stateStore.logout(), [stateStore]);
   const runAppAction = useCallback(<T,>(
     appSlug: string,
@@ -194,8 +234,9 @@ export function StoreProvider({ children, store, client }: { children: ReactNode
     logout,
     api,
     actionStates,
+    reconcileInstallationEvidenceForSlug,
     runAppAction
-  }), [actionStates, api, logout, refreshHome, runAppAction, state, stateStore]);
+  }), [actionStates, api, logout, reconcileInstallationEvidenceForSlug, refreshHome, runAppAction, state, stateStore]);
 
   return <StorefrontContext.Provider value={value}>{children}</StorefrontContext.Provider>;
 }

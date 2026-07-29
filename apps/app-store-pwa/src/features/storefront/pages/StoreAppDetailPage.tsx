@@ -19,7 +19,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
-  const { allApps, api, actionStates, recordRecent, rememberAccessReceipt, rememberTicket, runAppAction } = useStorefront();
+  const { allApps, api, actionStates, reconcileInstallationEvidenceForSlug, recordRecent, rememberAccessReceipt, rememberTicket, runAppAction } = useStorefront();
   const sequence = useRef(0);
   const [detail, setDetail] = useState<DetailState>({ status: "loading" });
   const [requestedRoleKey, setRequestedRoleKey] = useState("");
@@ -37,11 +37,14 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
     setDetail({ status: "loading" });
     try {
       const app = await api.getStoreAppDetail(appSlug);
-      if (request === sequence.current) setDetail({ status: "ready", app });
+      if (request === sequence.current) {
+        reconcileInstallationEvidenceForSlug(app.slug);
+        setDetail({ status: "ready", app });
+      }
     } catch (error) {
       if (request === sequence.current) setDetail({ status: "error", error: errorMessage(error, "Unable to load this app.") });
     }
-  }, [api, appSlug]);
+  }, [api, appSlug, reconcileInstallationEvidenceForSlug]);
 
   useEffect(() => {
     void loadDetail();
@@ -61,13 +64,19 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const pending = (action: StoreAppAction) => actionState(action)?.pending ?? false;
   const installActionState = actionState("install");
   const uninstallActionState = actionState("uninstall");
-  const installIsLatest = (installActionState?.sequence ?? -1) >= (uninstallActionState?.sequence ?? -1);
+  const installEvidence = installActionState?.pending || installActionState?.installationStatus
+    ? installActionState
+    : undefined;
+  const uninstallEvidence = uninstallActionState?.pending || uninstallActionState?.installationStatus
+    ? uninstallActionState
+    : undefined;
+  const installIsLatest = (installEvidence?.sequence ?? -1) >= (uninstallEvidence?.sequence ?? -1);
   const currentHomeApp = allApps.find((candidate) => candidate.slug === app.slug);
   const journeyApp = {
     accessStatus: currentHomeApp?.accessStatus ?? app.accessStatus,
     installStatus: currentHomeApp?.installStatus ?? app.installStatus
   };
-  const visibleInstallStatus = !installIsLatest && uninstallActionState?.installationStatus === "disabled"
+  const visibleInstallStatus = !installIsLatest && uninstallEvidence?.installationStatus === "disabled"
     ? "not_installed"
     : journeyApp.installStatus;
   const installJourneyRows = appInstallJourneySteps.map((step) => ({
@@ -75,10 +84,10 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
     status: installJourneyStatus(
       step.id,
       journeyApp,
-      installIsLatest ? installActionState?.installationStatus : undefined,
-      installIsLatest && (installActionState?.pending ?? false),
-      installIsLatest ? undefined : uninstallActionState?.installationStatus,
-      !installIsLatest && (uninstallActionState?.pending ?? false)
+      installIsLatest ? installEvidence?.installationStatus : undefined,
+      installIsLatest && (installEvidence?.pending ?? false),
+      installIsLatest ? undefined : uninstallEvidence?.installationStatus,
+      !installIsLatest && (uninstallEvidence?.pending ?? false)
     )
   }));
   const showInstallJourney = supports("install")
