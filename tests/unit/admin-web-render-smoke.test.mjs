@@ -147,7 +147,8 @@ test("ProviderDrawer renders its open state without throwing", () => {
     globalThis.React = React;
     const stubAi = { createProvider() {} };
     const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
-    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
+    // Content is portaled by Radix Dialog, so nothing renders under SSR; we only assert the render itself does not throw.
+    void renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
@@ -183,7 +184,8 @@ test("ProviderDrawer still renders its open state with the picker wired", () => 
     globalThis.React = React;
     const stubAi = { createProvider() {}, loadModelCatalog: async () => ({ models: [] }) };
     const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
-    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
+    // Content is portaled by Radix Dialog, so nothing renders under SSR; we only assert the render itself does not throw.
+    void renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi }));
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
@@ -204,7 +206,8 @@ test("ProviderDrawer renders edit mode with the editProvider prop", () => {
     };
     const stubAi = { updateProvider() {}, loadModelCatalog: async () => ({ models: [] }) };
     const { ProviderDrawer } = await import("./apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx");
-    const html = renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi, editProvider }));
+    // Content is portaled by Radix Dialog, so nothing renders under SSR; we only assert the render itself does not throw.
+    void renderToStaticMarkup(React.createElement(ProviderDrawer, { open: true, onClose() {}, ai: stubAi, editProvider }));
   `;
   assert.doesNotThrow(() =>
     execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
