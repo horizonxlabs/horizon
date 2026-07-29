@@ -10,6 +10,7 @@ import {
   Search
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
+import { Button } from "@evcp/ui";
 import { useEffect, useMemo, useState } from "react";
 import { ensureVibeWorkspace } from "./api";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
@@ -203,9 +204,9 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
         <FileCode2 size={28} aria-hidden="true" />
         <strong>Couldn't load workspace files</strong>
         <span>{errorText}</span>
-        <button type="button" onClick={() => setReloadKey((key) => key + 1)}>
+        <Button variant="secondary" type="button" onClick={() => setReloadKey((key) => key + 1)}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -235,15 +236,15 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
               aria-label="Search files in workspace"
             />
           </div>
-          <button
+          <Button
+            variant="ghost"
             type="button"
-            className="hz-code-icon-btn"
             title="Reload"
             aria-label="Reload files"
             onClick={() => setReloadKey((key) => key + 1)}
           >
             <RefreshCw size={15} aria-hidden="true" />
-          </button>
+          </Button>
         </div>
         <div className="hz-code-count">
           <FolderTree size={14} aria-hidden="true" />

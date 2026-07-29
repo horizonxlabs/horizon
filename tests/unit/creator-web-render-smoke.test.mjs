@@ -196,3 +196,38 @@ test("PrdPage Confirm Baseline uses the @evcp/ui Button primitive (classed, not 
   const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
   assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Confirm Baseline<\/button>/);
 });
+
+test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-tab /);
+  assert.doesNotMatch(html, /class="[^"]*vibe-live-icon-btn/);
+  assert.match(html, /Publish<\/button>/);
+});
+
+test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input)", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-send"/);
+  assert.doesNotMatch(html, /class="vibe-live-input"/);
+});
+
+test("WorkspaceCodePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "code", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});
+
+test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "database", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});
