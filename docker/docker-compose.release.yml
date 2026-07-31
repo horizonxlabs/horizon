@@ -1,10 +1,9 @@
-name: evcp-private-server
-
+# No top-level `name:` — `docker stack config`/`docker stack deploy` reject it
+# ("(root) Additional property name is not allowed"); the stack name is supplied
+# on the CLI: `docker stack deploy ... evcp`.
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: evcp-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
@@ -18,11 +17,14 @@ services:
       retries: 20
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   redis:
     image: redis:7-alpine
-    container_name: evcp-redis
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,11 +32,14 @@ services:
       retries: 20
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: evcp-minio
-    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
@@ -48,20 +53,28 @@ services:
       retries: 20
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
-    container_name: evcp-keycloak
-    restart: unless-stopped
-    command: start --import-realm --http-enabled=true --http-port=8080
+    command: start --import-realm --http-enabled=true --http-port=8080 --proxy-headers=xforwarded
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD required}
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /auth
-      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL is required}
-    volumes:
-      - ../apps/platform-api/keycloak/evcp-realm.json:/opt/keycloak/data/import/evcp-realm.json:ro
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL:?KEYCLOAK_PUBLIC_URL required}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-evcp}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    configs:
+      - source: keycloak-realm
+        target: /opt/keycloak/data/import/evcp-realm.json
     networks:
       - evcp-internal
     healthcheck:
@@ -73,13 +86,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
+
+  keycloak-db-init:
+    image: postgres:16-alpine
+    command:
+      - sh
+      - -lc
+      - 'until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''keycloak''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE keycloak'''
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    networks:
+      - evcp-internal
+    deploy:
+      mode: replicated-job
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints: ["node.role == manager"]
+
   keycloak-bootstrap:
     image: quay.io/keycloak/keycloak:26.2
-    container_name: evcp-keycloak-bootstrap
-    restart: "no"
-    depends_on:
-      keycloak:
-        condition: service_healthy
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
@@ -94,18 +127,20 @@ services:
       EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:?EVCP_CREATOR_WEB_URL is required}
       EVCP_STORE_WEB_URL: ${EVCP_STORE_WEB_URL:?EVCP_STORE_WEB_URL is required}
     entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
-    volumes:
-      - ../apps/platform-api/keycloak/bootstrap-clients.sh:/opt/keycloak/bootstrap/bootstrap-clients.sh:ro
+    configs:
+      - source: keycloak-bootstrap-script
+        target: /opt/keycloak/bootstrap/bootstrap-clients.sh
     networks:
       - evcp-internal
+    deploy:
+      mode: replicated-job
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints: ["node.role == manager"]
 
   litellm-db-init:
     image: postgres:16-alpine
-    container_name: evcp-litellm-db-init
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
@@ -114,25 +149,27 @@ services:
       [
         "sh",
         "-lc",
-        'psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
+        'until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
       ]
     networks:
       - evcp-internal
+    deploy:
+      mode: replicated-job
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints: ["node.role == manager"]
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
-    container_name: evcp-litellm
-    restart: unless-stopped
-    depends_on:
-      litellm-db-init:
-        condition: service_completed_successfully
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
       DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
       LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required, for example postgresql://evcp:password@postgres:5432/litellm}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
-    volumes:
-      - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    configs:
+      - source: litellm-config
+        target: /etc/litellm/litellm-config.yaml
     healthcheck:
       test:
         [
@@ -144,118 +181,123 @@ services:
       retries: 30
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   workspace-next-image:
-    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION is required}
-    container_name: evcp-workspace-next-image
-    restart: "no"
-    command: ["sh", "-lc", "echo workspace-next image available"]
-    networks:
-      - evcp-internal
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION required}
+    command: ["true"]
+    networks: [evcp-internal]
+    deploy:
+      mode: replicated-job
+      restart_policy:
+        condition: none
+      placement:
+        constraints: ["node.role == manager"]
 
   platform-api:
     image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-platform-api:${EVCP_VERSION:?EVCP_VERSION is required}
-    container_name: evcp-platform-api
-    restart: unless-stopped
-    env_file:
-      - path: ../.env
-        required: false
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       EVCP_LITELLM_BASE_URL: http://litellm:4000
-      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
-      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY:?EVCP_WORKSPACE_SECRET_KEY is required}
-      EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION is required}
+      EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY required}
+      EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY:?EVCP_WORKSPACE_SECRET_KEY required}
+      EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION required}
       EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
-      EVCP_WORKSPACE_NETWORK: evcp-private-server_evcp-internal
+      EVCP_WORKSPACE_NETWORK: evcp_evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"
       EVCP_PG_HOST: postgres
       EVCP_PG_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
       EVCP_S3_HOST: minio
       EVCP_S3_PORT: "9000"
       EVCP_S3_SSL: "false"
-      EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:?EVCP_S3_PUBLIC_URL is required}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:?EVCP_S3_PUBLIC_URL required}
+      EVCP_AI_JOB_ENCRYPTION_KEY: ${EVCP_AI_JOB_ENCRYPTION_KEY:-}
+      EVCP_AI_COMPLETION_TIMEOUT_MS: ${EVCP_AI_COMPLETION_TIMEOUT_MS:-300000}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD required}
       EVCP_ALLOW_SIMULATE_LOGIN: "0"
-      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:?KEYCLOAK_ISSUER_URL is required}
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:?KEYCLOAK_ISSUER_URL required}
       KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM is required}
-      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID is required}
-      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET:?KEYCLOAK_PLATFORM_CLIENT_SECRET is required}
-      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID is required}
-      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
-      EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
-    depends_on:
-      workspace-next-image:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      litellm:
-        condition: service_healthy
-      keycloak:
-        condition: service_healthy
-      keycloak-bootstrap:
-        condition: service_completed_successfully
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM required}
+      KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID required}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET:?KEYCLOAK_PLATFORM_CLIENT_SECRET required}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID required}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET required}
+      EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL required}
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   admin-web:
-    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-admin-web:${EVCP_VERSION:?EVCP_VERSION is required}
-    container_name: evcp-admin-web
-    restart: unless-stopped
-    depends_on:
-      - platform-api
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-admin-web:${EVCP_VERSION:?EVCP_VERSION required}
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   creator-web:
-    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-creator-web:${EVCP_VERSION:?EVCP_VERSION is required}
-    container_name: evcp-creator-web
-    restart: unless-stopped
-    depends_on:
-      - platform-api
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}/evcp-creator-web:${EVCP_VERSION:?EVCP_VERSION required}
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   app-store-pwa:
-    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-app-store-pwa:${EVCP_VERSION:?EVCP_VERSION is required}
-    container_name: evcp-app-store-pwa
-    restart: unless-stopped
-    depends_on:
-      - platform-api
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}/evcp-app-store-pwa:${EVCP_VERSION:?EVCP_VERSION required}
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   caddy:
     image: caddy:2.8-alpine
-    container_name: evcp-caddy
-    restart: unless-stopped
-    env_file:
-      - path: ../.env
-        required: false
     ports:
       - "${EVCP_HTTP_PORT:-8080}:80"
       - "${EVCP_HTTPS_PORT:-8443}:443"
+    configs:
+      - source: caddyfile-release
+        target: /etc/caddy/Caddyfile
     volumes:
-      - ./Caddyfile.release:/etc/caddy/Caddyfile:ro
       - evcp_caddy_data:/data
       - evcp_caddy_config:/config
-    depends_on:
-      - platform-api
-      - admin-web
-      - creator-web
-      - app-store-pwa
     networks:
       - evcp-internal
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
+
+configs:
+  litellm-config:
+    file: ./litellm-config.yaml
+  caddyfile-release:
+    file: ./Caddyfile.release
+  keycloak-realm:
+    file: ../apps/platform-api/keycloak/evcp-realm.json
+  keycloak-bootstrap-script:
+    file: ../apps/platform-api/keycloak/bootstrap-clients.sh
 
 volumes:
   evcp_postgres_data:
@@ -265,4 +307,5 @@ volumes:
 
 networks:
   evcp-internal:
-    driver: bridge
+    driver: overlay
+    attachable: true

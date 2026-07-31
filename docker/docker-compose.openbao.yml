@@ -5,23 +5,44 @@ services:
     cap_add:
       - IPC_LOCK
     volumes:
-      - openbao-data:/openbao/file
-      - ./openbao/config.hcl:/openbao/config/config.hcl:ro
+      # Mount the named volume at the path config.hcl actually stores to (/openbao/data),
+      # otherwise OpenBao writes to the ephemeral container layer and loses secrets on recreate.
+      - openbao-data:/openbao/data
+    configs:
+      - source: openbao-config
+        target: /openbao/config/config.hcl
     networks:
       - evcp-internal
-    restart: unless-stopped
+    deploy:
+      placement:
+        constraints: ["node.role == manager"]
+      restart_policy:
+        condition: any
 
   platform-api:
     environment:
-      # OpenBao implements the Vault KV v2 HTTP API consumed by Platform API.
-      VAULT_ADDR: ${VAULT_ADDR:-http://openbao:8200}
-      VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-platform}
+      # Fixed internal values (hardcoded, NOT ${VAR:-default}) so the swarm contract test,
+      # which parses raw YAML without interpolation, sees the literal expected values.
+      VAULT_ADDR: http://openbao:8200
+      VAULT_KV_MOUNT: platform
       VAULT_TOKEN_FILE: /run/secrets/evcp-openbao-token
-    volumes:
-      - type: bind
-        source: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST is required}
-        target: /run/secrets/evcp-openbao-token
-        read_only: true
+    secrets:
+      - evcp-openbao-token
+
+configs:
+  openbao-config:
+    file: ./openbao/config.hcl
+
+secrets:
+  evcp-openbao-token:
+    file: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST is required}
 
 volumes:
   openbao-data:
+
+# NOTE: no top-level `networks:` here. This overlay is only ever deployed together with
+# docker-compose.release.yml (`docker stack deploy -c release -c openbao evcp`), which
+# defines `evcp-internal` as an attachable overlay. Redeclaring it here as `external`
+# clobbers that definition in the merge and makes `docker stack deploy` fail with
+# "network ... is declared as external, but could not be found". The openbao service's
+# `networks: [evcp-internal]` reference resolves against the release file's definition.

@@ -74,14 +74,21 @@ test("Compose imports the realm and bootstraps confidential client secrets befor
     readFile("docker/docker-compose.release.yml", "utf8")
   ]);
 
+  // Common to both stacks: realm import, a bootstrap step, and the confidential client secrets.
   for (const compose of [developmentCompose, releaseCompose]) {
     assert.match(compose, /--import-realm/);
-    assert.match(compose, /evcp-realm\.json:\/opt\/keycloak\/data\/import\/evcp-realm\.json:ro/);
     assert.match(compose, /keycloak-bootstrap:/);
     assert.match(compose, /KEYCLOAK_PLATFORM_CLIENT_SECRET/);
     assert.match(compose, /KEYCLOAK_ADMIN_CLIENT_SECRET/);
-    assert.match(compose, /service_completed_successfully/);
   }
+  // Dev (docker compose): realm mounted read-only, ordering enforced via depends_on.
+  assert.match(developmentCompose, /evcp-realm\.json:\/opt\/keycloak\/data\/import\/evcp-realm\.json:ro/);
+  assert.match(developmentCompose, /service_completed_successfully/);
+  // Release (docker stack deploy / swarm): realm delivered as a config, bootstrap as a replicated-job.
+  assert.match(releaseCompose, /keycloak-realm:/);
+  assert.match(releaseCompose, /file: \.\.\/apps\/platform-api\/keycloak\/evcp-realm\.json/);
+  assert.match(releaseCompose, /target: \/opt\/keycloak\/data\/import\/evcp-realm\.json/);
+  assert.match(releaseCompose, /mode: replicated-job/);
   assert.match(developmentCompose, /command: start-dev --import-realm --http-port=8080/);
   assert.match(releaseCompose, /command: start --import-realm --http-enabled=true --http-port=8080/);
 
