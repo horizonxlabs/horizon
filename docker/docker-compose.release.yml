@@ -108,7 +108,7 @@ services:
     command:
       - sh
       - -lc
-      - 'export PGPASSWORD="$$(cat /run/secrets/evcp_postgres_password)"; until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''keycloak''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE keycloak'''
+      - 'export PGPASSWORD=$$(cat /run/secrets/evcp_postgres_password); until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''keycloak''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE keycloak'''
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-evcp}
       POSTGRES_DB: ${POSTGRES_DB:-evcp}
@@ -172,7 +172,7 @@ services:
       [
         "sh",
         "-lc",
-        'export PGPASSWORD="$$(cat /run/secrets/evcp_postgres_password)"; until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
+        'export PGPASSWORD=$$(cat /run/secrets/evcp_postgres_password); until pg_isready -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"; do sleep 2; done; psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
       ]
     networks:
       - evcp-internal
