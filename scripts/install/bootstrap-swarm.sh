@@ -25,6 +25,9 @@ DOCKER_DIR="${REPO_ROOT}/docker"
 STACK_NAME="evcp"
 STACK_ENV_DIR="${EVCP_STACK_ENV_DIR:-/opt/evcp}"
 STACK_ENV_PATH="${STACK_ENV_DIR}/stack.env"
+# The OpenBao workload token is bind-mounted (not a Docker secret) because it is minted after
+# OpenBao is running; bootstrap writes a placeholder here before deploy and the real token after.
+TOKEN_FILE_HOST="${OPENBAO_TOKEN_FILE_HOST:-${STACK_ENV_DIR}/openbao-token}"
 
 # Exact 11 Docker secret names from the plan's Global Constraints list. Keep in sync
 # with the `secrets:` block in docker/docker-compose.release.yml and
@@ -227,6 +230,14 @@ EOF
 
 deploy_stack() {
   require_docker
+  # The OpenBao token bind mount needs its source file to exist before deploy. Seed a
+  # placeholder (real token is written after OpenBao init); never clobber an existing token.
+  if [ ! -f "$TOKEN_FILE_HOST" ]; then
+    mkdir -p "$(dirname "$TOKEN_FILE_HOST")"
+    printf 'pending-openbao-init' > "$TOKEN_FILE_HOST"
+    chmod 600 "$TOKEN_FILE_HOST"
+  fi
+  export OPENBAO_TOKEN_FILE_HOST="$TOKEN_FILE_HOST"
   args="-c ${DOCKER_DIR}/docker-compose.release.yml -c ${DOCKER_DIR}/docker-compose.openbao.yml --with-registry-auth ${STACK_NAME}"
   # docker stack deploy has no --env-file flag; it interpolates ${VAR} references in
   # the compose files from the real process environment, so export stack.env first.
@@ -277,11 +288,11 @@ cmd_openbao() {
   require_docker
   cid=$(wait_for_openbao_container) || { echo "ERROR: openbao service task never became ready." >&2; exit 1; }
 
-  status=$(docker exec "$cid" bao status -format=json 2>/dev/null || echo "")
+  status=$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 "$cid" bao status -format=json 2>/dev/null || echo "")
   initialized=$(printf '%s' "$status" | extract_json_scalar initialized)
 
   if [ "$initialized" != "true" ]; then
-    init_json=$(docker exec "$cid" bao operator init -key-shares=1 -key-threshold=1 -format=json)
+    init_json=$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 "$cid" bao operator init -key-shares=1 -key-threshold=1 -format=json)
     # unseal_keys_b64 is an array — the key is on the line after the field name.
     unseal_key=$(printf '%s' "$init_json" | grep -A1 '"unseal_keys_b64"' | tail -1 | sed 's/[^"]*"\([^"]*\)".*/\1/')
     root_token=$(printf '%s' "$init_json" | extract_json_string root_token)
@@ -300,21 +311,27 @@ cmd_openbao() {
   fi
 
   if [ -n "$unseal_key" ]; then
-    docker exec "$cid" bao operator unseal "$unseal_key" >/dev/null 2>&1 || true
+    docker exec -e BAO_ADDR=http://127.0.0.1:8200 "$cid" bao operator unseal "$unseal_key" >/dev/null 2>&1 || true
   fi
 
   if [ -n "$root_token" ]; then
-    docker exec -e BAO_TOKEN="$root_token" "$cid" bao secrets enable -path=platform kv-v2 >/dev/null 2>&1 || true
-    docker exec -i -e BAO_TOKEN="$root_token" "$cid" bao policy write evcp-workload - >/dev/null 2>&1 <<'POLICY'
+    docker exec -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="$root_token" "$cid" bao secrets enable -path=platform kv-v2 >/dev/null 2>&1 || true
+    docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="$root_token" "$cid" bao policy write evcp-workload - >/dev/null 2>&1 <<'POLICY'
 path "platform/data/ai-provider-keys/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 POLICY
 
-    if ! docker secret inspect evcp_openbao_token >/dev/null 2>&1; then
-      workload_token=$(docker exec -e BAO_TOKEN="$root_token" "$cid" bao token create -policy=evcp-workload -orphan -period=8760h -field=token)
-      printf '%s' "$workload_token" | docker secret create evcp_openbao_token -
-      log "created secret: evcp_openbao_token"
+    # Mint the workload token (only if the bind-mounted file still holds the placeholder) and
+    # write it to the manager file platform-api bind-mounts, then force platform-api to re-read.
+    if [ ! -f "$TOKEN_FILE_HOST" ] || grep -q 'pending-openbao-init' "$TOKEN_FILE_HOST" 2>/dev/null; then
+      workload_token=$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="$root_token" "$cid" bao token create -policy=evcp-workload -orphan -period=8760h -field=token)
+      mkdir -p "$(dirname "$TOKEN_FILE_HOST")"
+      printf '%s' "$workload_token" > "$TOKEN_FILE_HOST"
+      chmod 600 "$TOKEN_FILE_HOST"
+      log "wrote OpenBao workload token to ${TOKEN_FILE_HOST}"
+      docker service update --force "${STACK_NAME}_platform-api" >/dev/null 2>&1 \
+        && log "restarted platform-api to load the OpenBao token" || true
     fi
   fi
 }
@@ -343,7 +360,7 @@ cmd_unseal() {
   docker service rm "$helper" >/dev/null 2>&1 || true
 
   [ -n "$unseal_key" ] || { echo "ERROR: could not read evcp_openbao_unseal." >&2; exit 1; }
-  docker exec "$cid" bao operator unseal "$unseal_key"
+  docker exec -e BAO_ADDR=http://127.0.0.1:8200 "$cid" bao operator unseal "$unseal_key"
   echo "OpenBao unsealed."
 }
 

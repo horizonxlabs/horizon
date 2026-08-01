@@ -68,12 +68,15 @@ test("openbao overlay is swarm-ready and wires VAULT_* + token secret into platf
   const env = openbao.services["platform-api"].environment;
   assert.equal(env.VAULT_ADDR, "http://openbao:8200");
   assert.equal(env.VAULT_KV_MOUNT, "platform");
-  assert.equal(env.VAULT_TOKEN_FILE, "/run/secrets/evcp_openbao_token");
-  assert.ok(openbao.secrets?.["evcp_openbao_token"]?.external, "evcp_openbao_token external secret not declared");
-  assert.ok(
-    openbao.services["platform-api"].secrets?.includes("evcp_openbao_token"),
-    "platform-api must mount the evcp_openbao_token secret"
+  // The OpenBao workload token is minted post-deploy, so it is a bind-mounted manager file
+  // (bootstrap writes it), NOT an immutable Docker secret.
+  assert.equal(env.VAULT_TOKEN_FILE, "/run/evcp/openbao-token");
+  assert.ok(!openbao.secrets?.["evcp_openbao_token"], "openbao token must not be a Docker secret");
+  const tokenMount = (openbao.services["platform-api"].volumes ?? []).find(
+    (v) => v.target === "/run/evcp/openbao-token"
   );
+  assert.ok(tokenMount, "platform-api must bind-mount the OpenBao token file");
+  assert.equal(tokenMount.type, "bind");
 });
 
 const RELEASE_SECRET_NAMES = [

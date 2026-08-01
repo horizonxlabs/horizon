@@ -1,7 +1,12 @@
 services:
   openbao:
     image: openbao/openbao:2.3.1
-    command: server -config=/openbao/config/config.hcl
+    # Run `bao` directly (overriding the image entrypoint) so the server runs as root and can
+    # write the root-owned /openbao/data volume — the image's default entrypoint drops to the
+    # non-root `openbao` user, which cannot create /openbao/data/core (matches the dev stack,
+    # which also overrides the entrypoint). OpenBao is internal-only (no published ports).
+    entrypoint: ["bao"]
+    command: ["server", "-config=/openbao/config/config.hcl"]
     cap_add:
       - IPC_LOCK
     volumes:
@@ -25,17 +30,21 @@ services:
       # which parses raw YAML without interpolation, sees the literal expected values.
       VAULT_ADDR: http://openbao:8200
       VAULT_KV_MOUNT: platform
-      VAULT_TOKEN_FILE: /run/secrets/evcp_openbao_token
-    secrets:
-      - evcp_openbao_token
+      VAULT_TOKEN_FILE: /run/evcp/openbao-token
+    # The OpenBao workload token is minted AFTER OpenBao is running (post-deploy), so it cannot
+    # be a pre-declared immutable Docker secret. It is delivered as a bind-mounted manager file
+    # that bootstrap-swarm.sh writes (placeholder before deploy, real token after init) and then
+    # `docker service update --force`s platform-api to re-read. platform-api is manager-pinned,
+    # so the node-local bind mount is always present.
+    volumes:
+      - type: bind
+        source: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST required (bootstrap-swarm.sh sets it)}
+        target: /run/evcp/openbao-token
+        read_only: true
 
 configs:
   openbao-config:
     file: ./openbao/config.hcl
-
-secrets:
-  evcp_openbao_token:
-    external: true
 
 volumes:
   openbao-data:
