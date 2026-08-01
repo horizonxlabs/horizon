@@ -127,21 +127,31 @@ services:
     image: quay.io/keycloak/keycloak:26.2
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      # Secrets delivered as files; the secrets-entrypoint shim exports <VAR> from <VAR>_FILE
+      # before exec-ing bootstrap-clients.sh (which reads KC_BOOTSTRAP_ADMIN_PASSWORD and the
+      # KEYCLOAK_*_CLIENT_SECRET vars).
+      KC_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/evcp_keycloak_admin_password
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM is required}
       KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID is required}
-      KEYCLOAK_PLATFORM_CLIENT_SECRET: ${KEYCLOAK_PLATFORM_CLIENT_SECRET:?KEYCLOAK_PLATFORM_CLIENT_SECRET is required}
+      KEYCLOAK_PLATFORM_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_platform_client_secret
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID is required}
-      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET is required}
+      KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_admin_client_secret
       KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
       EVCP_ADMIN_WEB_URL: ${EVCP_ADMIN_WEB_URL:?EVCP_ADMIN_WEB_URL is required}
       EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:?EVCP_CREATOR_WEB_URL is required}
       EVCP_STORE_WEB_URL: ${EVCP_STORE_WEB_URL:?EVCP_STORE_WEB_URL is required}
-    entrypoint: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
+    entrypoint: ["/bin/sh", "/etc/evcp/secrets-entrypoint.sh"]
+    command: ["/bin/sh", "/opt/keycloak/bootstrap/bootstrap-clients.sh"]
+    secrets:
+      - evcp_keycloak_admin_password
+      - evcp_keycloak_platform_client_secret
+      - evcp_keycloak_admin_client_secret
     configs:
       - source: keycloak-bootstrap-script
         target: /opt/keycloak/bootstrap/bootstrap-clients.sh
+      - source: secrets-entrypoint
+        target: /etc/evcp/secrets-entrypoint.sh
     networks:
       - evcp-internal
     deploy:

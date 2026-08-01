@@ -96,6 +96,35 @@ test("release declares an external Docker secret for every sensitive value in th
   }
 });
 
+// Every service in the release stack — including init jobs like keycloak-bootstrap — must
+// deliver these sensitive values as *_FILE (Docker secrets), never as a plaintext env key.
+const PLAINTEXT_SECRET_KEYS = [
+  "POSTGRES_PASSWORD",
+  "MINIO_ROOT_USER",
+  "MINIO_ROOT_PASSWORD",
+  "LITELLM_MASTER_KEY",
+  "EVCP_LITELLM_MASTER_KEY",
+  "LITELLM_DATABASE_URL",
+  "DATABASE_URL",
+  "EVCP_WORKSPACE_SECRET_KEY",
+  "EVCP_AI_JOB_ENCRYPTION_KEY",
+  "KEYCLOAK_ADMIN_PASSWORD",
+  "KC_BOOTSTRAP_ADMIN_PASSWORD",
+  "KC_DB_PASSWORD",
+  "KEYCLOAK_PLATFORM_CLIENT_SECRET",
+  "KEYCLOAK_ADMIN_CLIENT_SECRET",
+  "SESSION_SECRET"
+];
+
+test("no release service carries any sensitive value as a plaintext env key", () => {
+  for (const [name, svc] of Object.entries(release.services)) {
+    const env = svc.environment ?? {};
+    for (const key of PLAINTEXT_SECRET_KEYS) {
+      assert.ok(!(key in env), `service ${name} still carries plaintext secret ${key} (use ${key}_FILE)`);
+    }
+  }
+});
+
 test("postgres, minio, keycloak, and litellm consume their secrets via *_FILE, never plaintext", () => {
   const postgres = release.services.postgres.environment;
   assert.equal(postgres.POSTGRES_PASSWORD_FILE, "/run/secrets/evcp_postgres_password");
