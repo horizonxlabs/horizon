@@ -94,8 +94,22 @@ For an allowlist of var names, if `env[`${NAME}_FILE`]` is set and `env[NAME]` i
 - Re-running the script is safe (no secret rotation, no duplicate init); `... unseal` re-unseals after reboot.
 - Only one application file changes (`file-backed-secrets.ts` + its call in `main.ts`).
 
+## Known IP-first limitations (→ B2)
+
+- **File storage (MinIO/S3) is not reachable IP-first.** The main Caddy site only
+  proxies `/api`, `/auth`, and the web apps; MinIO is served on the separate
+  `storage.<domain>` vhost. IP-first therefore gets you to the **Admin Console to
+  finish setup** (admin account, AI providers), but presigned S3 upload/download
+  (used for actual app building) needs a domain. Adding the domain via B2 wires up
+  `storage.<domain>` + TLS and makes storage work.
+- **OpenBao partial-init recovery:** the OpenBao subroutine is idempotent for the
+  normal path, but if `bao operator init` succeeds and a *later* step fails, a
+  re-run sees `initialized=true` and cannot read the (write-only) `evcp_openbao_root`
+  secret back to finish. Recovery: re-run `bootstrap-swarm.sh openbao` with
+  `BAO_TOKEN=<root token from your secure store>` in the environment.
+
 ## Out of scope (→ B2 / later)
 
-- In-UI "go live" domain + Let's Encrypt TLS + reconfiguring Keycloak/Caddy/platform-api for the domain.
+- In-UI "go live" domain + Let's Encrypt TLS + reconfiguring Keycloak/Caddy/platform-api for the domain (this also makes MinIO/S3 reachable).
 - OpenBao **auto-unseal** via GCP Cloud KMS (unseal stays a re-runnable subcommand until then).
 - Multi-node swarm; secret rotation workflows.

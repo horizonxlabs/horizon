@@ -312,6 +312,12 @@ services:
 
   caddy:
     image: caddy:2.8-alpine
+    # Caddyfile.release reads `{$EVCP_CADDY_ADDRESS}` from the CONTAINER environment (not a
+    # compose interpolation), so it must be passed in here. IP-first bootstrap sets it to `:80`
+    # (serve HTTP on all hosts, no TLS); a domain deploy sets it to the hostname (auto-HTTPS).
+    environment:
+      EVCP_CADDY_ADDRESS: ${EVCP_CADDY_ADDRESS:-localhost}
+      EVCP_STORAGE_CADDY_ADDRESS: ${EVCP_STORAGE_CADDY_ADDRESS:-storage.localhost}
     ports:
       - "${EVCP_HTTP_PORT:-8080}:80"
       - "${EVCP_HTTPS_PORT:-8443}:443"

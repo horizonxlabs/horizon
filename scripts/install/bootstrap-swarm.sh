@@ -307,7 +307,14 @@ cmd_openbao() {
     echo "OpenBao or recover root access — they are not printed again." >&2
   else
     unseal_key=""
-    root_token=""
+    # Already initialized: the root token lives only in the write-only evcp_openbao_root secret,
+    # so it cannot be read back. If a prior run failed AFTER init (token file still a placeholder),
+    # the operator re-runs with BAO_TOKEN=<root token from the secure store> to finish provisioning.
+    root_token="${BAO_TOKEN:-}"
+    if [ -z "$root_token" ] && grep -q 'pending-openbao-init' "$TOKEN_FILE_HOST" 2>/dev/null; then
+      echo "WARNING: OpenBao is initialized but the workload token was never provisioned." >&2
+      echo "Re-run with BAO_TOKEN=<root token from your secure store> to finish." >&2
+    fi
   fi
 
   if [ -n "$unseal_key" ]; then

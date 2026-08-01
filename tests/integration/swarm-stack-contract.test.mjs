@@ -221,4 +221,9 @@ test("Caddyfile.release keeps its site address env-driven for the IP-first :80 d
     /\{\$EVCP_CADDY_ADDRESS:localhost\}/,
     "Caddy site address must stay {$EVCP_CADDY_ADDRESS:localhost} so bootstrap-swarm.sh can default EVCP_CADDY_ADDRESS to :80 (IP-first HTTP) via stack.env with no compose change"
   );
+  // The Caddyfile reads $EVCP_CADDY_ADDRESS from the CONTAINER env, so the caddy service MUST
+  // pass it through — otherwise it silently defaults to `localhost` and IP-first serving breaks.
+  const caddyEnv = release.services.caddy.environment ?? {};
+  assert.ok("EVCP_CADDY_ADDRESS" in caddyEnv, "caddy service must pass EVCP_CADDY_ADDRESS into the container env");
+  assert.ok("EVCP_STORAGE_CADDY_ADDRESS" in caddyEnv, "caddy service must pass EVCP_STORAGE_CADDY_ADDRESS");
 });
