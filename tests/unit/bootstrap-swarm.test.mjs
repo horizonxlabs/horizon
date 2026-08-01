@@ -1,0 +1,210 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+// Exact 11 Docker secret names from the plan's Global Constraints list. Kept in sync
+// with SECRET_NAMES in scripts/install/bootstrap-swarm.sh and RELEASE_SECRET_NAMES in
+// tests/integration/swarm-stack-contract.test.mjs.
+const EXPECTED_SECRET_NAMES = [
+  "evcp_postgres_password",
+  "evcp_minio_root_user",
+  "evcp_minio_root_password",
+  "evcp_litellm_master_key",
+  "evcp_litellm_database_url",
+  "evcp_workspace_secret_key",
+  "evcp_ai_job_encryption_key",
+  "evcp_keycloak_admin_password",
+  "evcp_keycloak_platform_client_secret",
+  "evcp_keycloak_admin_client_secret",
+  "evcp_session_secret"
+];
+
+const SCRIPT_PATH = resolve("scripts/install/bootstrap-swarm.sh");
+
+// A stand-in `docker` binary so tests never depend on a real docker daemon.
+// Mode is selected via EVCP_TEST_DOCKER_MODE:
+//   "unreachable" - `docker version`/`info` fail, exercising the --dry-run guard
+//   "ok"          - `docker version`/`info` succeed; `secret inspect <name>` succeeds
+//                    only for names listed (space-separated) in EVCP_TEST_EXISTING_SECRETS
+const DOCKER_MOCK = `#!/bin/sh
+mode="\${EVCP_TEST_DOCKER_MODE:-ok}"
+if [ "$1" = "version" ]; then
+  [ "$mode" = "ok" ] && echo "27.0.0" || exit 1
+  exit 0
+fi
+if [ "$1" = "info" ]; then
+  [ "$mode" = "ok" ] || exit 1
+  echo "active"
+  exit 0
+fi
+if [ "$1" = "secret" ] && [ "$2" = "inspect" ]; then
+  [ "$mode" = "ok" ] || exit 1
+  name="$3"
+  case " \${EVCP_TEST_EXISTING_SECRETS} " in
+    *" $name "*) exit 0 ;;
+    *) exit 1 ;;
+  esac
+fi
+echo "unhandled docker mock invocation: $*" >&2
+exit 1
+`;
+
+function withDockerMock(fn) {
+  const dir = mkdtempSync(join(tmpdir(), "bootstrap-swarm-docker-mock-"));
+  const dockerPath = join(dir, "docker");
+  writeFileSync(dockerPath, DOCKER_MOCK);
+  chmodSync(dockerPath, 0o755);
+  try {
+    return fn(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function runDryRun({ env = {}, mockDir = null } = {}) {
+  const path = mockDir ? `${mockDir}:${process.env.PATH}` : process.env.PATH;
+  const result = spawnSync("sh", [SCRIPT_PATH, "--dry-run"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: path,
+      EVCP_ADVERTISE_ADDR: "10.20.30.40",
+      EVCP_IMAGE_REPOSITORY: "ghcr.io/example/evcp",
+      EVCP_VERSION: "1.2.3",
+      ...env
+    }
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return JSON.parse(result.stdout);
+}
+
+test("sh -n accepts the script (POSIX syntax check)", () => {
+  const result = spawnSync("sh", ["-n", SCRIPT_PATH], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("--dry-run plans exactly the 11 Global Constraints secret names, and works with no reachable docker", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "unreachable" }, mockDir })
+  );
+
+  assert.equal(plan.mode, "dry-run");
+  assert.equal(plan.secrets.length, 11);
+  assert.deepEqual(
+    plan.secrets.map((s) => s.name).sort(),
+    [...EXPECTED_SECRET_NAMES].sort()
+  );
+  // Guarded: with docker unreachable, every secret is conservatively planned as "create".
+  for (const secret of plan.secrets) assert.equal(secret.action, "create");
+});
+
+test("--dry-run works even when docker cannot be found on PATH at all", () => {
+  const result = spawnSync("sh", [SCRIPT_PATH, "--dry-run"], {
+    encoding: "utf8",
+    env: {
+      PATH: "/usr/bin:/bin",
+      EVCP_ADVERTISE_ADDR: "10.20.30.40",
+      EVCP_IMAGE_REPOSITORY: "ghcr.io/example/evcp"
+    }
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const plan = JSON.parse(result.stdout);
+  assert.equal(plan.secrets.length, 11);
+});
+
+test("generated secrets carry at least 32 bytes of entropy (openssl rand -hex 32 = 64 hex chars)", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "unreachable" }, mockDir })
+  );
+  const entropySecrets = plan.secrets.filter((s) => s.name !== "evcp_minio_root_user");
+  assert.ok(entropySecrets.length > 0);
+  for (const secret of entropySecrets) {
+    assert.equal(secret.action, "create");
+    assert.ok(
+      secret.bytes >= 32,
+      `${secret.name} has only ${secret.bytes} bytes of entropy, expected >= 32`
+    );
+  }
+});
+
+test("--dry-run plans an IP-first stack.env: EVCP_CADDY_ADDRESS=:80, http:// public URLs, and no secret value", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "unreachable" }, mockDir })
+  );
+  const stackEnv = plan.stackEnv;
+
+  assert.match(stackEnv, /EVCP_CADDY_ADDRESS=:80/);
+  assert.match(stackEnv, /EVCP_PUBLIC_API_URL=http:\/\/10\.20\.30\.40:80\/api/);
+  assert.match(stackEnv, /EVCP_ADMIN_WEB_URL=http:\/\/10\.20\.30\.40:80/);
+  assert.match(stackEnv, /EVCP_CREATOR_WEB_URL=http:\/\/10\.20\.30\.40:80/);
+  assert.match(stackEnv, /EVCP_STORE_WEB_URL=http:\/\/10\.20\.30\.40:80/);
+  assert.match(stackEnv, /KEYCLOAK_PUBLIC_URL=http:\/\/10\.20\.30\.40:80\/auth/);
+
+  // No secret name or the words password/secret/key should appear as a *value* in
+  // stack.env — it is strictly non-secret, IP-first config.
+  assert.doesNotMatch(stackEnv, /PASSWORD=/i);
+  assert.doesNotMatch(stackEnv, /SECRET=/i);
+  for (const name of EXPECTED_SECRET_NAMES) assert.ok(!stackEnv.includes(name));
+});
+
+test("--dry-run creates nothing: the whole plan (not just stack.env) never contains a secret value", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "ok" }, mockDir })
+  );
+  const raw = JSON.stringify(plan);
+  // Secret entries only ever report name/action/bytes - never a "value" field.
+  for (const secret of plan.secrets) assert.equal(secret.value, undefined);
+  assert.doesNotMatch(raw, /postgresql:\/\/evcp:[0-9a-f]{2,}/);
+});
+
+test("--dry-run is idempotent: pre-existing secrets are reported as exists, skip; missing ones as create", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({
+      env: {
+        EVCP_TEST_DOCKER_MODE: "ok",
+        EVCP_TEST_EXISTING_SECRETS: "evcp_postgres_password evcp_litellm_database_url"
+      },
+      mockDir
+    })
+  );
+
+  const byName = Object.fromEntries(plan.secrets.map((s) => [s.name, s]));
+  assert.equal(byName.evcp_postgres_password.action, "exists, skip");
+  assert.equal(byName.evcp_litellm_database_url.action, "exists, skip");
+  assert.equal(byName.evcp_minio_root_user.action, "create");
+  assert.equal(byName.evcp_session_secret.action, "create");
+
+  // Re-running the identical plan again reports the exact same idempotent result.
+  const secondPlan = withDockerMock((mockDir) =>
+    runDryRun({
+      env: {
+        EVCP_TEST_DOCKER_MODE: "ok",
+        EVCP_TEST_EXISTING_SECRETS: "evcp_postgres_password evcp_litellm_database_url"
+      },
+      mockDir
+    })
+  );
+  const secondByName = Object.fromEntries(secondPlan.secrets.map((s) => [s.name, s]));
+  assert.equal(secondByName.evcp_postgres_password.action, "exists, skip");
+  assert.equal(secondByName.evcp_litellm_database_url.action, "exists, skip");
+});
+
+test("--dry-run fails fast when EVCP_IMAGE_REPOSITORY is not set", () => {
+  const result = withDockerMock((mockDir) =>
+    spawnSync("sh", [SCRIPT_PATH, "--dry-run"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${mockDir}:${process.env.PATH}`,
+        EVCP_TEST_DOCKER_MODE: "unreachable",
+        EVCP_ADVERTISE_ADDR: "10.20.30.40",
+        EVCP_IMAGE_REPOSITORY: ""
+      }
+    })
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /EVCP_IMAGE_REPOSITORY/);
+});

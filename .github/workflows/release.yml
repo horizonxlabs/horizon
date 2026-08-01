@@ -205,7 +205,6 @@ jobs:
           EVCP_CREATOR_WEB_URL: https://creator.example.com
           EVCP_STORE_WEB_URL: https://store.example.com
           EVCP_S3_PUBLIC_URL: https://storage.example.com
-          OPENBAO_TOKEN_FILE_HOST: /dev/null
         run: |
           set -euo pipefail
           rendered="$(docker stack config -c docker/docker-compose.release.yml -c docker/docker-compose.openbao.yml)"
