@@ -68,6 +68,125 @@ test("openbao overlay is swarm-ready and wires VAULT_* + token secret into platf
   const env = openbao.services["platform-api"].environment;
   assert.equal(env.VAULT_ADDR, "http://openbao:8200");
   assert.equal(env.VAULT_KV_MOUNT, "platform");
-  assert.equal(env.VAULT_TOKEN_FILE, "/run/secrets/evcp-openbao-token");
-  assert.ok(openbao.secrets?.["evcp-openbao-token"], "openbao token secret not declared");
+  assert.equal(env.VAULT_TOKEN_FILE, "/run/secrets/evcp_openbao_token");
+  assert.ok(openbao.secrets?.["evcp_openbao_token"]?.external, "evcp_openbao_token external secret not declared");
+  assert.ok(
+    openbao.services["platform-api"].secrets?.includes("evcp_openbao_token"),
+    "platform-api must mount the evcp_openbao_token secret"
+  );
+});
+
+const RELEASE_SECRET_NAMES = [
+  "evcp_postgres_password",
+  "evcp_minio_root_user",
+  "evcp_minio_root_password",
+  "evcp_litellm_master_key",
+  "evcp_litellm_database_url",
+  "evcp_workspace_secret_key",
+  "evcp_ai_job_encryption_key",
+  "evcp_keycloak_admin_password",
+  "evcp_keycloak_platform_client_secret",
+  "evcp_keycloak_admin_client_secret",
+  "evcp_session_secret"
+];
+
+test("release declares an external Docker secret for every sensitive value in the Global Constraints list", () => {
+  for (const name of RELEASE_SECRET_NAMES) {
+    assert.ok(release.secrets?.[name]?.external, `release secrets: block missing external ${name}`);
+  }
+});
+
+test("postgres, minio, keycloak, and litellm consume their secrets via *_FILE, never plaintext", () => {
+  const postgres = release.services.postgres.environment;
+  assert.equal(postgres.POSTGRES_PASSWORD_FILE, "/run/secrets/evcp_postgres_password");
+  assert.ok(!("POSTGRES_PASSWORD" in postgres), "postgres still carries a plaintext POSTGRES_PASSWORD");
+
+  const minio = release.services.minio.environment;
+  assert.equal(minio.MINIO_ROOT_USER_FILE, "/run/secrets/evcp_minio_root_user");
+  assert.equal(minio.MINIO_ROOT_PASSWORD_FILE, "/run/secrets/evcp_minio_root_password");
+  assert.ok(!("MINIO_ROOT_USER" in minio) && !("MINIO_ROOT_PASSWORD" in minio), "minio still carries plaintext root creds");
+
+  const kc = release.services.keycloak.environment;
+  assert.equal(kc.KC_DB_PASSWORD_FILE, "/run/secrets/evcp_postgres_password");
+  assert.equal(kc.KC_BOOTSTRAP_ADMIN_PASSWORD_FILE, "/run/secrets/evcp_keycloak_admin_password");
+  assert.ok(
+    !("KC_DB_PASSWORD" in kc) && !("KC_BOOTSTRAP_ADMIN_PASSWORD" in kc),
+    "keycloak still carries a plaintext password"
+  );
+
+  const litellm = release.services.litellm.environment;
+  assert.equal(litellm.LITELLM_MASTER_KEY_FILE, "/run/secrets/evcp_litellm_master_key");
+  assert.equal(litellm.DATABASE_URL_FILE, "/run/secrets/evcp_litellm_database_url");
+  assert.equal(litellm.LITELLM_DATABASE_URL_FILE, "/run/secrets/evcp_litellm_database_url");
+  assert.ok(
+    !("LITELLM_MASTER_KEY" in litellm) && !("DATABASE_URL" in litellm) && !("LITELLM_DATABASE_URL" in litellm),
+    "litellm still carries a plaintext secret"
+  );
+});
+
+test("platform-api consumes every secret it needs via *_FILE, never plaintext", () => {
+  const api = release.services["platform-api"].environment;
+  const fileBacked = {
+    POSTGRES_PASSWORD_FILE: "evcp_postgres_password",
+    MINIO_ROOT_USER_FILE: "evcp_minio_root_user",
+    MINIO_ROOT_PASSWORD_FILE: "evcp_minio_root_password",
+    EVCP_LITELLM_MASTER_KEY_FILE: "evcp_litellm_master_key",
+    EVCP_WORKSPACE_SECRET_KEY_FILE: "evcp_workspace_secret_key",
+    EVCP_AI_JOB_ENCRYPTION_KEY_FILE: "evcp_ai_job_encryption_key",
+    KEYCLOAK_PLATFORM_CLIENT_SECRET_FILE: "evcp_keycloak_platform_client_secret",
+    KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: "evcp_keycloak_admin_client_secret",
+    SESSION_SECRET_FILE: "evcp_session_secret"
+  };
+  for (const [envVar, secretName] of Object.entries(fileBacked)) {
+    assert.equal(api[envVar], `/run/secrets/${secretName}`, `platform-api.${envVar}`);
+    assert.ok(release.services["platform-api"].secrets?.includes(secretName), `platform-api missing secret mount ${secretName}`);
+  }
+  for (const plaintext of [
+    "POSTGRES_PASSWORD",
+    "MINIO_ROOT_USER",
+    "MINIO_ROOT_PASSWORD",
+    "EVCP_LITELLM_MASTER_KEY",
+    "EVCP_WORKSPACE_SECRET_KEY",
+    "EVCP_AI_JOB_ENCRYPTION_KEY",
+    "KEYCLOAK_PLATFORM_CLIENT_SECRET",
+    "KEYCLOAK_ADMIN_CLIENT_SECRET",
+    "SESSION_SECRET"
+  ]) {
+    assert.ok(!(plaintext in api), `platform-api still carries plaintext ${plaintext}`);
+  }
+});
+
+test("keycloak-db-init and litellm-db-init read PGPASSWORD from the mounted postgres secret, not plaintext env", () => {
+  for (const name of ["keycloak-db-init", "litellm-db-init"]) {
+    const svc = release.services[name];
+    assert.ok(!("PGPASSWORD" in (svc.environment ?? {})), `${name} still carries a plaintext PGPASSWORD env var`);
+    assert.ok(svc.secrets?.includes("evcp_postgres_password"), `${name} missing evcp_postgres_password secret mount`);
+    const cmd = Array.isArray(svc.command) ? svc.command.join(" ") : String(svc.command);
+    assert.match(
+      cmd,
+      /PGPASSWORD=.*\/run\/secrets\/evcp_postgres_password/,
+      `${name} must export PGPASSWORD from the mounted secret file`
+    );
+  }
+});
+
+test("keycloak and litellm exec through the secrets-entrypoint shim so their *_FILE env reaches non-native config", () => {
+  for (const name of ["keycloak", "litellm"]) {
+    const svc = release.services[name];
+    assert.deepEqual(svc.entrypoint, ["/bin/sh", "/etc/evcp/secrets-entrypoint.sh"], `${name} must exec via the shim`);
+    assert.ok(
+      svc.configs?.some((c) => c.source === "secrets-entrypoint" && c.target === "/etc/evcp/secrets-entrypoint.sh"),
+      `${name} must mount the secrets-entrypoint config`
+    );
+  }
+  assert.ok(release.configs?.["secrets-entrypoint"], "top-level secrets-entrypoint config not declared");
+});
+
+test("Caddyfile.release keeps its site address env-driven for the IP-first :80 default", () => {
+  const caddyfile = readFileSync(new URL("../../docker/Caddyfile.release", import.meta.url), "utf8");
+  assert.match(
+    caddyfile,
+    /\{\$EVCP_CADDY_ADDRESS:localhost\}/,
+    "Caddy site address must stay {$EVCP_CADDY_ADDRESS:localhost} so bootstrap-swarm.sh can default EVCP_CADDY_ADDRESS to :80 (IP-first HTTP) via stack.env with no compose change"
+  );
 });

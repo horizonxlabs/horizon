@@ -25,17 +25,17 @@ services:
       # which parses raw YAML without interpolation, sees the literal expected values.
       VAULT_ADDR: http://openbao:8200
       VAULT_KV_MOUNT: platform
-      VAULT_TOKEN_FILE: /run/secrets/evcp-openbao-token
+      VAULT_TOKEN_FILE: /run/secrets/evcp_openbao_token
     secrets:
-      - evcp-openbao-token
+      - evcp_openbao_token
 
 configs:
   openbao-config:
     file: ./openbao/config.hcl
 
 secrets:
-  evcp-openbao-token:
-    file: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST is required}
+  evcp_openbao_token:
+    external: true
 
 volumes:
   openbao-data:
