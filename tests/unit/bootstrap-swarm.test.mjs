@@ -86,6 +86,32 @@ test("sh -n accepts the script (POSIX syntax check)", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+// Regression: OpenBao's `-format=json` emits Go-indented `"key": "value"` (key + value on
+// one line). The extraction must read the VALUE, not the key, or the root token is lost.
+const BAO_INIT_JSON = [
+  "{",
+  '  "unseal_keys_b64": [',
+  '    "abcDEF123unsealkey=="',
+  "  ],",
+  '  "unseal_threshold": 1,',
+  '  "root_token": "s.RootTokenValue123",',
+  '  "initialized": true',
+  "}"
+].join("\n");
+
+function extract(hook, field, stdin) {
+  return spawnSync("sh", [SCRIPT_PATH, hook, field], { input: stdin, encoding: "utf8" }).stdout.trim();
+}
+
+test("extracts the root_token VALUE from realistic same-line bao init JSON", () => {
+  assert.equal(extract("__json-string", "root_token", BAO_INIT_JSON), "s.RootTokenValue123");
+});
+
+test("extracts the initialized scalar (true/false) from bao status JSON", () => {
+  assert.equal(extract("__json-scalar", "initialized", '{\n  "initialized": true,\n  "sealed": false\n}'), "true");
+  assert.equal(extract("__json-scalar", "initialized", '{"initialized": false, "sealed": true}'), "false");
+});
+
 test("--dry-run plans exactly the 11 Global Constraints secret names, and works with no reachable docker", () => {
   const plan = withDockerMock((mockDir) =>
     runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "unreachable" }, mockDir })

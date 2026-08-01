@@ -258,6 +258,17 @@ wait_for_openbao_container() {
   return 1
 }
 
+# Extract a JSON string value: `"field": "value"` (Go's json.MarshalIndent puts the key and
+# value on the same line, with a space after the colon). Reads JSON on stdin.
+extract_json_string() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -1
+}
+
+# Extract a JSON scalar/bareword value: `"field": true` / a number. Reads JSON on stdin.
+extract_json_scalar() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\\([A-Za-z0-9._-]*\\).*/\\1/p" | head -1
+}
+
 cmd_openbao() {
   if [ "$DRY_RUN" = "1" ]; then
     echo "ERROR: openbao bootstrap requires a live swarm and cannot run in --dry-run." >&2
@@ -267,12 +278,13 @@ cmd_openbao() {
   cid=$(wait_for_openbao_container) || { echo "ERROR: openbao service task never became ready." >&2; exit 1; }
 
   status=$(docker exec "$cid" bao status -format=json 2>/dev/null || echo "")
-  initialized=$(printf '%s' "$status" | grep -o '"initialized":[a-z]*' | cut -d: -f2)
+  initialized=$(printf '%s' "$status" | extract_json_scalar initialized)
 
   if [ "$initialized" != "true" ]; then
     init_json=$(docker exec "$cid" bao operator init -key-shares=1 -key-threshold=1 -format=json)
+    # unseal_keys_b64 is an array — the key is on the line after the field name.
     unseal_key=$(printf '%s' "$init_json" | grep -A1 '"unseal_keys_b64"' | tail -1 | sed 's/[^"]*"\([^"]*\)".*/\1/')
-    root_token=$(printf '%s' "$init_json" | grep '"root_token"' | sed 's/[^"]*"\([^"]*\)".*/\1/' | tail -1)
+    root_token=$(printf '%s' "$init_json" | extract_json_string root_token)
 
     docker secret inspect evcp_openbao_unseal >/dev/null 2>&1 \
       || printf '%s' "$unseal_key" | docker secret create evcp_openbao_unseal -
@@ -432,6 +444,13 @@ cmd_update() {
 # ---------------------------------------------------------------------------
 
 main() {
+  # Hidden test hooks: extract a field from JSON piped on stdin (used by unit tests to
+  # verify the same-line `"key": "value"` parsing that OpenBao's -format=json emits).
+  case "${1:-}" in
+    __json-string) extract_json_string "$2"; return ;;
+    __json-scalar) extract_json_scalar "$2"; return ;;
+  esac
+
   command="bootstrap"
   extra=""
   for arg in "$@"; do
