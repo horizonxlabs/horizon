@@ -32,7 +32,7 @@ TOKEN_FILE_HOST="${OPENBAO_TOKEN_FILE_HOST:-${STACK_ENV_DIR}/openbao-token}"
 # Exact 11 Docker secret names from the plan's Global Constraints list. Keep in sync
 # with the `secrets:` block in docker/docker-compose.release.yml and
 # RELEASE_SECRET_NAMES in tests/integration/swarm-stack-contract.test.mjs.
-SECRET_NAMES="evcp_postgres_password evcp_minio_root_user evcp_minio_root_password evcp_litellm_master_key evcp_litellm_database_url evcp_workspace_secret_key evcp_ai_job_encryption_key evcp_keycloak_admin_password evcp_keycloak_platform_client_secret evcp_keycloak_admin_client_secret evcp_session_secret"
+SECRET_NAMES="evcp_postgres_password evcp_database_url evcp_litellm_database_url evcp_minio_root_user evcp_minio_root_password evcp_litellm_master_key evcp_workspace_secret_key evcp_ai_job_encryption_key evcp_keycloak_admin_password evcp_keycloak_platform_client_secret evcp_keycloak_admin_client_secret evcp_session_secret"
 
 DRY_RUN=0
 DOCKER_PRESENT=0
@@ -146,15 +146,21 @@ generate_secret_value() {
     evcp_minio_root_user)
       printf 'evcpminio%s' "$(gen_hex32 | cut -c1-8)"
       ;;
-    evcp_litellm_database_url)
+    evcp_database_url | evcp_litellm_database_url)
+      # Both DB URLs embed the postgres password, which a Docker secret never reveals again, so
+      # they can only be derived in the same run the password is freshly generated.
       if [ "$PG_PASSWORD_FRESH" != "1" ]; then
-        echo "ERROR: evcp_litellm_database_url is missing but evcp_postgres_password already exists." >&2
-        echo "       A Docker secret's value can never be read back, so this pair can only be" >&2
-        echo "       generated together. Remove both secrets (docker secret rm evcp_postgres_password" >&2
-        echo "       evcp_litellm_database_url) and re-run bootstrap-swarm.sh to regenerate them." >&2
+        echo "ERROR: ${name} is missing but evcp_postgres_password already exists." >&2
+        echo "       A Docker secret's value can never be read back, so these are derived only when" >&2
+        echo "       the password is freshly created. Remove docker secret evcp_postgres_password" >&2
+        echo "       evcp_database_url evcp_litellm_database_url and re-run bootstrap-swarm.sh." >&2
         exit 1
       fi
-      printf 'postgresql://evcp:%s@postgres:5432/litellm' "$PG_PASSWORD_VALUE"
+      if [ "$name" = "evcp_database_url" ]; then
+        printf 'postgresql://evcp:%s@postgres:5432/evcp?schema=public' "$PG_PASSWORD_VALUE"
+      else
+        printf 'postgresql://evcp:%s@postgres:5432/litellm' "$PG_PASSWORD_VALUE"
+      fi
       ;;
     *)
       gen_hex32

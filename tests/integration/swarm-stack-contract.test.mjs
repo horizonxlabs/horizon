@@ -80,6 +80,7 @@ test("openbao overlay is swarm-ready and wires VAULT_* + token secret into platf
 });
 
 const RELEASE_SECRET_NAMES = [
+  "evcp_database_url",
   "evcp_postgres_password",
   "evcp_minio_root_user",
   "evcp_minio_root_password",
@@ -159,6 +160,7 @@ test("postgres, minio, keycloak, and litellm consume their secrets via *_FILE, n
 test("platform-api consumes every secret it needs via *_FILE, never plaintext", () => {
   const api = release.services["platform-api"].environment;
   const fileBacked = {
+    DATABASE_URL_FILE: "evcp_database_url",
     POSTGRES_PASSWORD_FILE: "evcp_postgres_password",
     MINIO_ROOT_USER_FILE: "evcp_minio_root_user",
     MINIO_ROOT_PASSWORD_FILE: "evcp_minio_root_password",

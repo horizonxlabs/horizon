@@ -229,9 +229,22 @@ services:
 
   platform-api:
     image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-platform-api:${EVCP_VERSION:?EVCP_VERSION is required}
+    # The image CMD runs `prisma migrate deploy` (which reads DATABASE_URL) BEFORE the Node app
+    # and its in-app secret loader run, so the shim must export DATABASE_URL (and the other
+    # *_FILE secrets) from the mounted files first, then exec the image CMD.
+    entrypoint: ["/bin/sh", "/etc/evcp/secrets-entrypoint.sh"]
+    # Overriding entrypoint drops the image CMD, so the shim would exec nothing — restate the
+    # image's start command explicitly as args for the shim's `exec "$@"`.
+    command:
+      - sh
+      - -lc
+      - pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && pnpm --filter @evcp/platform-api start
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
+      # DATABASE_URL carries the password, so it is delivered as a Docker secret (built by
+      # bootstrap-swarm.sh from the postgres password) and exported by the shim above.
+      DATABASE_URL_FILE: /run/secrets/evcp_database_url
       EVCP_LITELLM_BASE_URL: http://litellm:4000
       EVCP_LITELLM_MASTER_KEY_FILE: /run/secrets/evcp_litellm_master_key
       EVCP_WORKSPACE_SECRET_KEY_FILE: /run/secrets/evcp_workspace_secret_key
@@ -263,6 +276,7 @@ services:
       SESSION_SECRET_FILE: /run/secrets/evcp_session_secret
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL required}
     secrets:
+      - evcp_database_url
       - evcp_postgres_password
       - evcp_minio_root_user
       - evcp_minio_root_password
@@ -272,6 +286,9 @@ services:
       - evcp_keycloak_platform_client_secret
       - evcp_keycloak_admin_client_secret
       - evcp_session_secret
+    configs:
+      - source: secrets-entrypoint
+        target: /etc/evcp/secrets-entrypoint.sh
     networks:
       - evcp-internal
     deploy:
@@ -348,6 +365,8 @@ configs:
     file: ./secrets-entrypoint.sh
 
 secrets:
+  evcp_database_url:
+    external: true
   evcp_postgres_password:
     external: true
   evcp_minio_root_user:

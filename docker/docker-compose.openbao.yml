@@ -38,7 +38,9 @@ services:
     # so the node-local bind mount is always present.
     volumes:
       - type: bind
-        source: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST required (bootstrap-swarm.sh sets it)}
+        # Keep the :? message plain — parentheses/extra punctuation in a ${VAR:?msg} default
+        # break Docker Compose interpolation and leak the message text into the mount source.
+        source: ${OPENBAO_TOKEN_FILE_HOST:?OPENBAO_TOKEN_FILE_HOST required}
         target: /run/evcp/openbao-token
         read_only: true
 
