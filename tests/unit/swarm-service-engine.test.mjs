@@ -31,9 +31,11 @@ test("updateServiceImage reads version+spec then POSTs the modified spec at ?ver
   await engine.updateServiceImage("evcp_admin-web", "repo/evcp-admin-web:v2");
   const post = calls.find((c) => c.method === "POST");
   assert.match(post.path, /\/services\/evcp_admin-web\/update\?version=42/);
-  const spec = JSON.parse(post.body);
-  assert.equal(spec.TaskTemplate.ContainerSpec.Image, "repo/evcp-admin-web:v2");
-  assert.equal(spec.TaskTemplate.ForceUpdate, 1);
+  // body MUST be the raw object (nodeSocketRequest JSON-encodes it) — a string here would
+  // double-encode against the real transport and the daemon would reject it.
+  assert.equal(typeof post.body, "object");
+  assert.equal(post.body.TaskTemplate.ContainerSpec.Image, "repo/evcp-admin-web:v2");
+  assert.equal(post.body.TaskTemplate.ForceUpdate, 1);
 });
 
 test("updateServiceImage throws on a Docker error status", async () => {

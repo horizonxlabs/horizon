@@ -71,9 +71,9 @@ test("updateServiceImage reads version+spec then POSTs the modified spec at ?ver
   await engine.updateServiceImage("evcp_admin-web", "repo/evcp-admin-web:v2");
   const post = calls.find((c) => c.method === "POST");
   assert.match(post.path, /\/services\/evcp_admin-web\/update\?version=42/);
-  const spec = JSON.parse(post.body);
-  assert.equal(spec.TaskTemplate.ContainerSpec.Image, "repo/evcp-admin-web:v2");
-  assert.equal(spec.TaskTemplate.ForceUpdate, 1);
+  assert.equal(typeof post.body, "object");
+  assert.equal(post.body.TaskTemplate.ContainerSpec.Image, "repo/evcp-admin-web:v2");
+  assert.equal(post.body.TaskTemplate.ForceUpdate, 1);
 });
 
 test("updateServiceImage throws on a Docker error status", async () => {
@@ -129,7 +129,7 @@ export function createSwarmServiceEngine(
       const upd = await request({
         method: "POST",
         path: `/services/${name}/update?version=${version}`,
-        body: JSON.stringify(spec),
+        body: spec,
         contentType: "application/json"
       });
       if (upd.status >= 400) throw new Error(`docker service update ${serviceName} failed: ${upd.status}`);

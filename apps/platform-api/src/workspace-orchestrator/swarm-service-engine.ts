@@ -37,9 +37,11 @@ export function createSwarmServiceEngine(
       spec.TaskTemplate.ContainerSpec.Image = image;
       spec.TaskTemplate.ForceUpdate = (spec.TaskTemplate.ForceUpdate ?? 0) + 1;
       const upd = await request({
+        // Pass the raw object — nodeSocketRequest JSON-encodes non-Buffer bodies itself, so
+        // JSON.stringify here would double-encode and the daemon would reject the ServiceSpec.
         method: "POST",
         path: `/services/${name}/update?version=${version}`,
-        body: JSON.stringify(spec),
+        body: spec,
         contentType: "application/json"
       });
       if (upd.status >= 400) throw new Error(`docker service update ${serviceName} failed: ${upd.status}`);
