@@ -284,6 +284,11 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_admin_client_secret
       SESSION_SECRET_FILE: /run/secrets/evcp_session_secret
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL required}
+      # Allowed OIDC returnTo origins for the three frontends — without these the app falls back
+      # to dev defaults (localhost:4100/4101/4102) and every real login fails "invalid_return_to".
+      EVCP_ADMIN_WEB_URL: ${EVCP_ADMIN_WEB_URL:?EVCP_ADMIN_WEB_URL required}
+      EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:?EVCP_CREATOR_WEB_URL required}
+      EVCP_STORE_WEB_URL: ${EVCP_STORE_WEB_URL:?EVCP_STORE_WEB_URL required}
     secrets:
       - evcp_database_url
       - evcp_postgres_password
