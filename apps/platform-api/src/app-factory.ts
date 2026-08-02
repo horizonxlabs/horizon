@@ -10,6 +10,7 @@ import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
+import { createPlanVersionRecorder } from "./prd/plan-version";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
@@ -46,6 +47,15 @@ import { aiGovernanceHttpRoutes } from "./ai-governance/ai-governance-route-mani
 import { handlePersistedWorkspacePrompt } from "./ai-governance/persisted-workspace-prompt-route";
 import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSettingsPersistence, MemoryBusinessSettingsPersistenceClient, type BusinessSettingsRepositoryBackedService } from "./persistence/business-settings-repositories";
 import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
+import { registerSystemRoutes, resolveSystemRequest } from "./system/system-routes";
+import { createSystemUpdateService } from "./system/system-update-service";
+import { registerDomainRoutes, resolveDomainRequest } from "./system/domain-routes";
+import { createDomainService } from "./system/domain-service";
+import { createSwarmServiceEngine } from "./workspace-orchestrator/swarm-service-engine";
+import { readKeycloakConfig } from "./keycloak/config";
+import { KeycloakAdminClient } from "./keycloak/admin-client";
+import * as fs from "node:fs";
+import { renderPreviewUnavailableHtml } from "./workspace-orchestrator/preview-unavailable-page";
 import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrdPersistenceClient, type PrdRepositoryBackedService } from "./persistence/prd-repositories";
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
 import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
@@ -190,83 +200,7 @@ export function wantsPreviewJson(headers: HeaderBag): boolean {
   return accept.includes("application/json") && !accept.includes("text/html");
 }
 
-export function renderPreviewUnavailableHtml(input: { status: number; title?: string; message?: string }): string {
-  const title = input.title ?? "Starting workspace preview";
-  const message = input.message ?? "The workspace container is still starting. This preview will refresh automatically.";
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="refresh" content="3" />
-    <title>${title}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      body {
-        align-items: center;
-        background:
-          radial-gradient(720px 420px at 50% 0%, rgba(37, 99, 235, 0.12), transparent 64%),
-          #f8fafc;
-        color: #0f172a;
-        display: flex;
-        justify-content: center;
-        margin: 0;
-        min-height: 100vh;
-      }
-      main {
-        align-items: center;
-        background: rgba(255, 255, 255, 0.86);
-        border: 1px solid #e2e8f0;
-        border-radius: 18px;
-        box-shadow: 0 22px 70px rgba(15, 23, 42, 0.12);
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        max-width: 420px;
-        padding: 32px;
-        text-align: center;
-      }
-      .spinner {
-        border: 3px solid #dbeafe;
-        border-top-color: #2563eb;
-        border-radius: 999px;
-        height: 34px;
-        width: 34px;
-        animation: spin 0.9s linear infinite;
-      }
-      h1 {
-        font-size: 20px;
-        line-height: 1.25;
-        margin: 0;
-      }
-      p {
-        color: #64748b;
-        font-size: 14px;
-        line-height: 1.5;
-        margin: 0;
-      }
-      small {
-        color: #94a3b8;
-        font-size: 12px;
-      }
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    </style>
-  </head>
-  <body>
-    <main role="status" aria-live="polite">
-      <div class="spinner" aria-hidden="true"></div>
-      <h1>${title}</h1>
-      <p>${message}</p>
-      <small>Status ${input.status}. Retrying in a moment.</small>
-    </main>
-  </body>
-</html>`;
-}
+export { renderPreviewUnavailableHtml };
 
 const resolvePersistenceAuth = resolvePersistedAuth;
 
@@ -2146,6 +2080,37 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   registerSetupRoutes(routes, (response, platformRequest) => sendPlatformResponseAsync(response, executePlatformApiRequestAsync(services, platformRequest)));
+  const systemUpdateService = createSystemUpdateService({ engine: createSwarmServiceEngine() });
+  registerSystemRoutes(routes, (response, platformRequest) =>
+    sendPlatformResponseAsync(
+      response,
+      resolveSystemRequest(platformRequest, {
+        systemUpdateService,
+        auth: services.auth,
+        resolveActor: () => resolvePersistenceUser(services, platformRequest.headers ?? {})
+      })
+    )
+  );
+  const domainService = createDomainService({
+    engine: createSwarmServiceEngine(),
+    // Falls back to a memory-backed singleton (mirrors createRuntimePlatformApiServices' memory
+    // mode) so /admin/system/domain works even when core persistence isn't wired up.
+    settings: services.businessSettingsPersistence ?? createBusinessSettingsRepositoryBackedService(),
+    keycloak: process.env.KEYCLOAK_ISSUER_URL
+      ? new KeycloakAdminClient({ config: readKeycloakConfig(process.env) })
+      : undefined,
+    writeDomainEnv: (path, content) => fs.writeFileSync(path, content, { mode: 0o600 })
+  });
+  registerDomainRoutes(routes, (response, platformRequest) =>
+    sendPlatformResponseAsync(
+      response,
+      resolveDomainRequest(platformRequest, {
+        domainService,
+        auth: services.auth,
+        resolveActor: () => resolvePersistenceUser(services, platformRequest.headers ?? {})
+      })
+    )
+  );
   routes.post("/auth/login", (request, response) =>
     sendPlatformResponseAsync(
       response,
@@ -2369,11 +2334,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   const chatSseHandler = createChatSseHandler({
     generationService,
     resolveAuth: async (req) => {
-      try {
-        return await resolveWorkspaceAuth(services, (req as { headers?: HeaderBag }).headers ?? {});
-      } catch {
-        return null;
-      }
+      try { return await resolveWorkspaceAuth(services, (req as { headers?: HeaderBag }).headers ?? {}); }
+      catch { return null; }
     },
     resolveAttachmentContext: async (req, projectId, attachmentIds) => {
       const user = await resolvePersistenceUser(services, (req as { headers?: HeaderBag }).headers ?? {});
@@ -2396,7 +2358,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         versionIds: retrieval.matchedVersionIds,
         excerpts: retrieval.sources.flatMap((source) => source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`))
       };
-    }
+    },
+    recordPrdVersionFromPlan: createPlanVersionRecorder(services.prds)
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);

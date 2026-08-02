@@ -188,20 +188,32 @@ jobs:
           EVCP_VERSION: ${{ steps.release.outputs.version }}
           POSTGRES_PASSWORD: dummy-postgres-password
           KEYCLOAK_ADMIN_PASSWORD: dummy-keycloak-password
+          KEYCLOAK_PUBLIC_URL: auth.example.com
+          KEYCLOAK_ISSUER_URL: https://auth.example.com/realms/evcp
+          KEYCLOAK_REALM: evcp
+          KEYCLOAK_PLATFORM_CLIENT_ID: dummy-platform-client
+          KEYCLOAK_PLATFORM_CLIENT_SECRET: dummy-platform-secret
+          KEYCLOAK_ADMIN_CLIENT_ID: dummy-admin-client
+          KEYCLOAK_ADMIN_CLIENT_SECRET: dummy-admin-secret
           LITELLM_MASTER_KEY: dummy-litellm-master-key
           LITELLM_DATABASE_URL: postgresql://evcp:dummy-postgres-password@postgres:5432/litellm
           EVCP_WORKSPACE_SECRET_KEY: 0000000000000000000000000000000000000000000000000000000000000000
           MINIO_ROOT_USER: dummy-minio-user
           MINIO_ROOT_PASSWORD: dummy-minio-password
+          EVCP_PUBLIC_API_URL: https://api.example.com
+          EVCP_ADMIN_WEB_URL: https://admin.example.com
+          EVCP_CREATOR_WEB_URL: https://creator.example.com
+          EVCP_STORE_WEB_URL: https://store.example.com
+          EVCP_S3_PUBLIC_URL: https://storage.example.com
         run: |
           set -euo pipefail
-          rendered="$(docker compose -f docker/docker-compose.release.yml config)"
+          rendered="$(docker stack config -c docker/docker-compose.release.yml -c docker/docker-compose.openbao.yml)"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-platform-api:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-admin-web:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-creator-web:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-app-store-pwa:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-workspace-next:${EVCP_VERSION}" <<<"${rendered}"
-          docker compose -f docker/docker-compose.release.yml config --services | grep -q '^workspace-next-image$'
+          grep -q "workspace-next-image:" <<<"${rendered}"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

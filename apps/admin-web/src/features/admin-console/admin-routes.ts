@@ -7,6 +7,8 @@ export type AdminPage =
   | "audit-logs"
   | "users"
   | "auth"
+  | "system"
+  | "domain"
   | "domains"
   | "publishing"
   | "not-found";
@@ -20,6 +22,8 @@ const ADMIN_PATHS: Record<string, AdminPage> = {
   "/admin/audit-logs": "audit-logs",
   "/admin/users": "users",
   "/admin/auth": "auth",
+  "/admin/system": "system",
+  "/admin/domain": "domain",
   "/admin/domains": "domains",
   "/admin/publishing": "publishing"
 };

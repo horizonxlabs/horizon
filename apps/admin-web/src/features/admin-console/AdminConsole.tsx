@@ -10,7 +10,7 @@ import { AuditEvidenceSection } from "@/features/audit-monitoring";
 import { AuthSettingsPage } from "@/features/auth-sso";
 import { DomainReadinessPage } from "@/features/domain-management";
 import { KnowledgeSkillsConsole } from "@/features/knowledge-skills";
-import { useProductionObservability } from "@/features/platform-operations";
+import { DomainPanel, SystemUpdatePanel, useProductionObservability } from "@/features/platform-operations";
 import { UsersConsole } from "@/features/user-management";
 import { clearAdminSession, consumeAdminSessionHandoff, createAdminPlatformClient, hasValidAdminSession, startAdminKeycloakLogout } from "@/shared/platform-client";
 import { adminPageFromPath } from "./admin-routes";
@@ -40,6 +40,8 @@ export function AdminConsole({ publishingPage }: { publishingPage: ReactNode }) 
   const content = page === "audit-logs" && client ? <AuditEvidenceSection client={client} />
     : page === "users" && client ? <UsersConsole client={client} />
     : page === "knowledge" && client ? <KnowledgeSkillsConsole client={client} />
+    : page === "system" && client ? <SystemUpdatePanel client={client} />
+    : page === "domain" && client ? <DomainPanel client={client} />
     : page === "ai-providers" ? <AiProvidersConsole ai={ai} />
     : page === "guardrails" ? <GuardrailsConsole ai={ai} />
     : page === "auth" ? <AuthSettingsPage />
@@ -47,7 +49,7 @@ export function AdminConsole({ publishingPage }: { publishingPage: ReactNode }) 
     : page === "publishing" ? publishingPage
     : page === "not-found" ? <DecisionPanel tone="warning" badge="Not found" title="Admin page not found" lines={["Choose a destination from the administration navigation."]} />
     : <OperationsDashboard client={client} ai={ai} page={page === "services" ? "services" : "dashboard"} />;
-  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} currentPath={pathname} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" || page === "auth" || page === "domains" || page === "publishing" || page === "not-found" ? null : (
+  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} currentPath={pathname} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" || page === "system" || page === "domain" || page === "auth" || page === "domains" || page === "publishing" || page === "not-found" ? null : (
       <PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />
     )}{content}</AppShell></AdminRoutes>;
 }

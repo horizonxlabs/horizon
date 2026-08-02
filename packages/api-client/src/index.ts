@@ -12,6 +12,7 @@ export type {
   StoreTicketResponse,
   StoreTicketTimelineEntryDto
 } from "./store-ticket-types";
+import { PlatformApiError } from "./platform-api-error";
 
 export type ApiSuccess<T> = {
   ok: true;
@@ -79,6 +80,10 @@ import type {
   SetupInitializeInput,
   SetupStatusDto
 } from "./setup-types";
+export type * from "./system-types";
+import type { SystemUpdateResponseDto, SystemVersionDto } from "./system-types";
+export type * from "./domain-types";
+import type { DomainStatusDto, SetDomainResponseDto } from "./domain-types";
 export type * from "./installer-types";
 import type {
   InstallerPreflightInput,
@@ -576,19 +581,7 @@ export type PlatformApiClientOptions = {
 export * from "./platform-session-store";
 export * from "./platform-session-client";
 
-export class PlatformApiError extends Error {
-  readonly code: string;
-  readonly traceId?: string;
-  readonly status?: number;
-
-  constructor(input: { code: string; message: string; traceId?: string; status?: number }) {
-    super(input.message);
-    this.name = "PlatformApiError";
-    this.code = input.code;
-    this.traceId = input.traceId;
-    this.status = input.status;
-  }
-}
+export { PlatformApiError } from "./platform-api-error";
 
 export class PlatformApiClient {
   private readonly baseUrl: string;
@@ -897,6 +890,22 @@ export class PlatformApiClient {
 
   createUser(input: CreatePlatformUserInput): Promise<PlatformUserSummary> {
     return this.postJson<PlatformUserSummary>("/admin/users", input);
+  }
+
+  getSystemVersion(): Promise<SystemVersionDto> {
+    return this.request<SystemVersionDto>("/admin/system/version");
+  }
+
+  updateSystemVersion(version: string): Promise<SystemUpdateResponseDto> {
+    return this.postJson<SystemUpdateResponseDto>("/admin/system/update", { version });
+  }
+
+  getDomainStatus(): Promise<DomainStatusDto> {
+    return this.request<DomainStatusDto>("/admin/system/domain");
+  }
+
+  setDomain(domain: string): Promise<SetDomainResponseDto> {
+    return this.postJson<SetDomainResponseDto>("/admin/system/domain", { domain });
   }
 
   listAiProviders(): Promise<AiProviderDto[]> {

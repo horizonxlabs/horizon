@@ -29,6 +29,19 @@ test("declares litellm service on internal network without published LLM admin p
   assert.ok(litellm.volumes.some((volume) => volume.includes("litellm-config.yaml")));
 });
 
+test("development compose initializes the litellm database before healthy startup", () => {
+  const init = compose.services["litellm-db-init"];
+  assert.ok(init, "development compose must create the litellm database on fresh volumes");
+  assert.equal(init.depends_on.postgres.condition, "service_healthy");
+  assert.match(init.image, /^postgres:/);
+  assert.match(init.command.join(" "), /CREATE DATABASE litellm/);
+
+  const litellm = compose.services.litellm;
+  assert.equal(litellm.depends_on["litellm-db-init"].condition, "service_completed_successfully");
+  assert.ok(litellm.healthcheck, "development litellm must expose a readiness healthcheck");
+  assert.equal(compose.services["platform-api"].depends_on.litellm.condition, "service_healthy");
+});
+
 test("platform-api can reach docker socket and litellm", () => {
   const api = compose.services["platform-api"];
   assert.ok(api.volumes.some((volume) => volume.includes("/var/run/docker.sock")));
@@ -71,12 +84,16 @@ test("release compose pulls workspace image and disables dev auth bridge", () =>
   assert.ok(imageService, "release compose must include a workspace image pull/cache service");
   assert.match(
     imageService.image,
-    /\/evcp-workspace-next:\$\{EVCP_VERSION:\?EVCP_VERSION is required\}/
+    /\/evcp-workspace-next:\$\{EVCP_VERSION:\?EVCP_VERSION required\}/
   );
-  assert.deepEqual(imageService.command, ["sh", "-lc", "echo workspace-next image available"]);
+  assert.deepEqual(imageService.command, ["true"]);
+  assert.equal(
+    imageService.deploy?.mode,
+    "replicated-job",
+    "workspace image pull must run as a one-shot swarm job (no depends_on to gate ordering)"
+  );
 
   const api = releaseCompose.services["platform-api"];
-  assert.equal(api.depends_on["workspace-next-image"].condition, "service_completed_successfully");
   const joined = environmentEntries(api).join("\n");
   assert.match(joined, /EVCP_WORKSPACE_IMAGE=.*evcp-workspace-next/);
   assert.match(joined, /EVCP_ALLOW_SIMULATE_LOGIN=0/);
@@ -112,27 +129,27 @@ test("release ingress is the only published network boundary and supports domain
 test("release compose initializes the litellm database before litellm starts", () => {
   const init = releaseCompose.services["litellm-db-init"];
   assert.ok(init, "release compose must create the litellm database on fresh volumes");
-  assert.equal(init.depends_on.postgres.condition, "service_healthy");
+  // Swarm carries no depends_on, so ordering is enforced by the job waiting on Postgres itself
+  // (retried via deploy.restart_policy) rather than a compose-level condition.
+  assert.match(
+    init.command.join(" "),
+    /until pg_isready/,
+    "litellm-db-init must wait for postgres itself since depends_on is unavailable in swarm"
+  );
+  assert.equal(init.deploy?.mode, "replicated-job");
+  assert.equal(init.deploy?.restart_policy?.condition, "on-failure");
   assert.match(init.image, /^postgres:/);
   assert.match(init.command.join(" "), /CREATE DATABASE litellm/);
 
   const litellm = releaseCompose.services.litellm;
-  assert.equal(litellm.depends_on["litellm-db-init"].condition, "service_completed_successfully");
   assert.ok(litellm.healthcheck, "release litellm must expose a readiness healthcheck");
   const joined = environmentEntries(litellm).join("\n");
-  assert.match(joined, /DATABASE_URL=\$\{LITELLM_DATABASE_URL:\?/);
-  assert.match(joined, /LITELLM_DATABASE_URL=\$\{LITELLM_DATABASE_URL:\?/);
+  assert.match(joined, /DATABASE_URL_FILE=\/run\/secrets\/evcp_litellm_database_url/);
+  assert.match(joined, /LITELLM_DATABASE_URL_FILE=\/run\/secrets\/evcp_litellm_database_url/);
   assert.doesNotMatch(
     joined,
     /POSTGRES_PASSWORD.*@postgres:5432\/litellm/,
     "release compose must not synthesize a database URL from a raw password"
-  );
-
-  const api = releaseCompose.services["platform-api"];
-  assert.equal(
-    api.depends_on.litellm.condition,
-    "service_healthy",
-    "platform-api must not generate workspace LLM keys until litellm is ready"
   );
 });
 

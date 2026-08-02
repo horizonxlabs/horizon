@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchChatHistory } from "./chat-history";
 import { vibeActionVerb } from "./vibe-actions";
 import { ensureVibeWorkspace, streamVibeChat } from "./api";
-import { applyVibeEvent, type VibeMessage } from "./vibe-stream";
+import { applyVibeEvent, buildApproveTurn, type VibeMessage } from "./vibe-stream";
 
 type VibeChatOptions = {
   selectedProjectId: string;
@@ -43,6 +43,7 @@ export function useVibeChat({
     prompt?: string;
     projectId?: string;
     mode?: WorkspaceAgentMode;
+    approvedPlan?: string;
   }) {
     const projectId = overrides?.projectId ?? selectedProjectId;
     const prompt = (overrides?.prompt ?? promptDraft).trim();
@@ -58,7 +59,7 @@ export function useVibeChat({
         text: attachmentIds.length ? `${prompt}\nAttached files: ${attachmentIds.length}` : prompt,
         actions: []
       },
-      { id: assistantId, role: "assistant", text: "", actions: [] }
+      { id: assistantId, role: "assistant", text: "", actions: [], isPlan: mode === "plan", sourcePrompt: prompt }
     ]);
     setPromptDraft("");
     setIsVibing(true);
@@ -88,7 +89,7 @@ export function useVibeChat({
           );
           if (mode === "build") setVibePreviewKey((key) => key + 1);
         }
-      });
+      }, overrides?.approvedPlan);
     } catch (error) {
       patchAssistant((message) => ({
         ...message,
@@ -100,6 +101,10 @@ export function useVibeChat({
     }
   }
 
+  function approveAndImplement(sourcePrompt: string, planText: string) {
+    void handleVibeChat(buildApproveTurn(sourcePrompt, planText));
+  }
+
   return {
     vibeMessages,
     setVibeMessages,
@@ -109,6 +114,7 @@ export function useVibeChat({
     setIsVibing,
     vibePreviewKey,
     setVibePreviewKey,
-    handleVibeChat
+    handleVibeChat,
+    approveAndImplement
   };
 }

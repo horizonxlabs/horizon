@@ -186,7 +186,7 @@ services:
       minio:
         condition: service_healthy
       litellm:
-        condition: service_started
+        condition: service_healthy
       openbao:
         condition: service_healthy
       keycloak:
@@ -249,18 +249,49 @@ services:
     networks:
       - evcp-internal
 
+  litellm-db-init:
+    image: postgres:16-alpine
+    container_name: evcp-litellm-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evcp}
+      POSTGRES_DB: ${POSTGRES_DB:-evcp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command:
+      [
+        "sh",
+        "-lc",
+        'psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tc "SELECT 1 FROM pg_database WHERE datname = ''litellm''" | grep -q 1 || psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -c ''CREATE DATABASE litellm'''
+      ]
+    networks:
+      - evcp-internal
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: evcp-litellm
     restart: unless-stopped
     depends_on:
-      - postgres
+      litellm-db-init:
+        condition: service_completed_successfully
     environment:
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-      LITELLM_DATABASE_URL: postgresql://${POSTGRES_USER:-evcp}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+      DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required}
+      LITELLM_DATABASE_URL: ${LITELLM_DATABASE_URL:?LITELLM_DATABASE_URL is required}
     command: ["--config", "/etc/litellm/litellm-config.yaml"]
     volumes:
       - ./litellm-config.yaml:/etc/litellm/litellm-config.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import socket; s=socket.create_connection((''127.0.0.1'', 4000), 3); s.close()"'
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks:
       - evcp-internal
 

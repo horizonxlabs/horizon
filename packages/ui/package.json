@@ -11,11 +11,14 @@
   },
   "dependencies": {
     "@evcp/types": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-select": "^2.1.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "react": "^19.0.0",
     "react-data-grid": "7.0.0-beta.61",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "@radix-ui/react-roving-focus": "^1.1.4"
   },
   "devDependencies": {
     "tailwindcss": "^4.3.2"

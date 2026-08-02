@@ -1,5 +1,6 @@
-import { Plus, Search, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { Button, Input } from "@evcp/ui";
 import { CreatorShell } from "./CreatorShell";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import type { CreatorProjectView } from "@/shared/types";
@@ -45,14 +46,10 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
             <p className="hz-hero-sub">
               สร้าง project ใหม่ — ระบุรายละเอียดแอป แล้วระบบจะสร้าง PRD draft ให้ก่อน เพื่อยืนยัน spec ก่อนเริ่มพัฒนา
             </p>
-            <button
-              type="button"
-              className="hz-prompt-cta"
-              onClick={() => setIsCreateProjectDialogOpen(true)}
-            >
+            <Button variant="primary" onClick={() => setIsCreateProjectDialogOpen(true)}>
               <Plus size={16} aria-hidden="true" />
               <span>สร้าง Project ใหม่</span>
-            </button>
+            </Button>
           </section>
 
           <section className="hz-projects" aria-label="รายการโปรเจกต์">
@@ -61,15 +58,12 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                 โปรเจกต์ล่าสุด <span className="hz-count">{projects.length}</span>
               </h2>
               <div className="hz-projects-tools">
-                <div className="hz-search">
-                  <Search size={16} aria-hidden="true" />
-                  <input
-                    placeholder="ค้นหาโปรเจกต์…"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    aria-label="ค้นหาโปรเจกต์"
-                  />
-                </div>
+                <Input
+                  placeholder="ค้นหาโปรเจกต์…"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  aria-label="ค้นหาโปรเจกต์"
+                />
               </div>
             </div>
 

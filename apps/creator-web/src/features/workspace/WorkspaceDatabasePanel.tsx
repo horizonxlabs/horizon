@@ -1,4 +1,5 @@
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Button } from "@evcp/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DataGrid,
@@ -186,31 +187,27 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
           {!editable ? <span className="hz-db-flag">read-only (no primary key)</span> : null}
           <div className="hz-db-actions">
             {editable ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setAdding((value) => !value)}
-              >
+              <Button variant="ghost" type="button" onClick={() => setAdding((value) => !value)}>
                 <Plus size={14} /> New row
-              </button>
+              </Button>
             ) : null}
             {editable ? (
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="ghost-button"
                 onClick={() => void deleteSelected()}
                 disabled={selected.size === 0}
               >
                 <Trash2 size={14} /> Delete ({selected.size})
-              </button>
+              </Button>
             ) : null}
-            <button
+            <Button
+              variant="ghost"
               type="button"
-              className="ghost-button"
               onClick={() => activeTable && void loadTable(activeTable)}
             >
               <RotateCcw size={14} /> Refresh
-            </button>
+            </Button>
           </div>
         </div>
         {adding ? (
@@ -231,19 +228,19 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
               </label>
             ))}
             <div className="hz-db-addrow-actions">
-              <button
+              <Button
+                variant="ghost"
                 type="button"
-                className="ghost-button"
                 onClick={() => {
                   setAdding(false);
                   setNewRow({});
                 }}
               >
                 Cancel
-              </button>
-              <button type="button" onClick={() => void handleAddRow()}>
+              </Button>
+              <Button variant="primary" type="button" onClick={() => void handleAddRow()}>
                 Add row
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}

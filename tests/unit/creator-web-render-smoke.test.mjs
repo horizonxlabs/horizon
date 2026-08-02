@@ -257,3 +257,50 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
   assert.match(html, /role="alert"/);
   assert.match(html, /Access decision failed: approval offline/);
 });
+
+test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
+  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
+  assert.match(html, /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/);
+  assert.match(html, /สร้าง Project ใหม่/);
+  assert.doesNotMatch(html, /hz-prompt-cta/);
+});
+
+test("PrdPage Confirm Baseline uses the @evcp/ui Button primitive (classed, not a raw button)", () => {
+  const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
+  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Confirm Baseline<\/button>/);
+});
+
+test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-tab /);
+  assert.doesNotMatch(html, /class="[^"]*vibe-live-icon-btn/);
+  assert.match(html, /Publish<\/button>/);
+});
+
+test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input)", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.doesNotMatch(html, /class="vibe-live-send"/);
+  assert.doesNotMatch(html, /class="vibe-live-input"/);
+});
+
+test("WorkspaceCodePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "code", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});
+
+test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "database", bootstrap: { ...app.bootstrap, status: "ready" } } })
+  );
+  assert.equal(typeof html, "string");
+});

@@ -9,7 +9,21 @@ export type VibeMessage = {
   // block — never mixed into `text` or parsed as actions.
   reasoning?: string;
   commitSha?: string;
+  // Set on a plan-mode assistant message so the UI can offer "Approve & implement"; sourcePrompt is
+  // the original request that produced the plan, re-sent (in build mode) when the Creator approves.
+  isPlan?: boolean;
+  sourcePrompt?: string;
 };
+
+// The build turn produced when a Creator approves a plan-mode plan: re-send the original request in
+// build mode, carrying the approved plan text so the AI implements exactly it.
+export function buildApproveTurn(sourcePrompt: string, planText: string): {
+  prompt: string;
+  mode: "build";
+  approvedPlan: string;
+} {
+  return { prompt: sourcePrompt, mode: "build", approvedPlan: planText };
+}
 
 // Applies one SSE frame (token | action_start | action_chunk | action_result | commit | error) to an
 // assistant message. Pure state transition, extracted from the inline handling that used
