@@ -57,6 +57,8 @@ import type {
 } from "./setup-types";
 export type * from "./system-types";
 import type { SystemUpdateResponseDto, SystemVersionDto } from "./system-types";
+export type * from "./domain-types";
+import type { DomainStatusDto, SetDomainResponseDto } from "./domain-types";
 export type * from "./installer-types";
 import type {
   InstallerPreflightInput,
@@ -895,6 +897,14 @@ export class PlatformApiClient {
 
   updateSystemVersion(version: string): Promise<SystemUpdateResponseDto> {
     return this.postJson<SystemUpdateResponseDto>("/admin/system/update", { version });
+  }
+
+  getDomainStatus(): Promise<DomainStatusDto> {
+    return this.request<DomainStatusDto>("/admin/system/domain");
+  }
+
+  setDomain(domain: string): Promise<SetDomainResponseDto> {
+    return this.postJson<SetDomainResponseDto>("/admin/system/domain", { domain });
   }
 
   listAiProviders(): Promise<AiProviderDto[]> {
