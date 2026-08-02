@@ -22,6 +22,17 @@ function resolveActiveNavItem(navItems: NavItem[], currentPath: string): NavItem
     .sort((a, b) => normalizeRoute(b.route).length - normalizeRoute(a.route).length)[0];
 }
 
+export function isPlainLeftClick(event: {
+  button: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  defaultPrevented: boolean;
+}): boolean {
+  return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !event.defaultPrevented;
+}
+
 function createInitials(label: string): string {
   const words = label.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "EV";
@@ -42,6 +53,7 @@ export function AppShell({
   logo,
   tagline = "Enterprise AI Workspace",
   tone = "dark",
+  onNavigate,
   children
 }: {
   title: string;
@@ -52,6 +64,7 @@ export function AppShell({
   logo?: ReactNode;
   tagline?: string;
   tone?: "dark" | "light";
+  onNavigate?: (route: string) => void;
   children: ReactNode;
 }) {
   const currentPath = typeof window === "undefined" ? "" : window.location.pathname;
@@ -295,6 +308,12 @@ export function AppShell({
                 key={item.route}
                 aria-current={isActive ? "page" : undefined}
                 title={item.label}
+                onClick={(event) => {
+                  if (onNavigate && isPlainLeftClick(event)) {
+                    event.preventDefault();
+                    onNavigate(item.route);
+                  }
+                }}
               >
                 {content}
               </a>
