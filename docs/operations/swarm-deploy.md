@@ -30,6 +30,21 @@ sudo EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z \
 
 Preview without touching anything: `./install.sh --dry-run --yes`.
 
+### Updating to a new version — from the Admin Console
+
+Once a new release tag's images are in the registry, an admin can roll the whole
+app tier from **Admin Console → System**: it shows the current version and each
+app service's tag, takes a target tag, and updates the 5 `evcp-*` app services
+(`platform-api`, `admin-web`, `creator-web`, `app-store-pwa`, `workspace-next`) to
+that tag via the Docker Engine API — updating `platform-api` last (it restarts, and
+the page polls through the restart until every service reports the new tag). DB
+migrations run automatically as the new `platform-api` boots (`prisma migrate
+deploy`). Infra services (postgres/keycloak/…) are pinned and left untouched.
+
+This is an **image-tag bump**. A release that changes the compose structure (new
+services or env) still needs `./install.sh` / `bootstrap-swarm.sh update <version>`
+re-run on the host after checking out the new tag.
+
 ### Advanced / reference — `bootstrap-swarm.sh` directly
 
 `install.sh` just collects inputs and hands off. You can also run the bootstrap

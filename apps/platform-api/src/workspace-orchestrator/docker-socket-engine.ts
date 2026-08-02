@@ -34,7 +34,7 @@ export function buildCreateContainerBody(spec: DevContainerSpec): Record<string,
   };
 }
 
-function nodeSocketRequest(socketPath: string): DockerRequestFn {
+export function nodeSocketRequest(socketPath: string): DockerRequestFn {
   return ({ method, path, body, contentType }) =>
     new Promise((resolve, reject) => {
       const isBuffer = Buffer.isBuffer(body);

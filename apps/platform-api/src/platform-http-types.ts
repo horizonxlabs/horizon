@@ -27,6 +27,8 @@ export interface PlatformRequest {
     | "/setup/status"
     | "/setup/initialize"
     | "/admin/business-settings"
+    | "/admin/system/version"
+    | "/admin/system/update"
     | "/admin/backup/policies"
     | "/admin/backup/runs"
     | "/admin/backup/pitr"

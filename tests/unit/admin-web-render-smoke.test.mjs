@@ -233,3 +233,45 @@ test("use-ai-governance hook loads AI usage logs and AiProvidersConsole renders 
   assert.match(console, /"usage"/);
   assert.match(console, /Usage logs/);
 });
+
+test("SystemUpdatePanel renders the current version and app service tags with a stub client", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubClient = {
+      getSystemVersion: async () => ({
+        currentVersion: "v1.3.0",
+        imageRepository: "registry.example.com/evcp",
+        appServices: [{ name: "evcp_platform-api", image: "registry.example.com/evcp/evcp-platform-api:v1.3.0", tag: "v1.3.0" }]
+      }),
+      updateSystemVersion: async () => ({ accepted: true, targetVersion: "v1.3.0" })
+    };
+    const { SystemUpdatePanel } = await import("./apps/admin-web/src/features/platform-operations/SystemUpdatePanel.tsx");
+    const html = renderToStaticMarkup(React.createElement(SystemUpdatePanel, { client: stubClient }));
+    if (!html.includes("Platform version")) throw new Error("SystemUpdatePanel did not render its title");
+    if (!html.includes("Target tag")) throw new Error("SystemUpdatePanel did not render the target-tag field");
+    if (!html.includes("Update")) throw new Error("SystemUpdatePanel did not render the Update control");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
+test("use-system-update polls getSystemVersion and retries through errors, and AdminConsole wires the System page", async () => {
+  const hook = await readFile("apps/admin-web/src/features/platform-operations/use-system-update.ts", "utf8");
+  const consoleSource = await readFile("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
+  const nav = await readFile("packages/config/src/index.ts", "utf8");
+  assert.match(hook, /client\.getSystemVersion\(\)/);
+  assert.match(hook, /client\.updateSystemVersion\(/);
+  assert.match(hook, /"idle"/);
+  assert.match(hook, /"updating"/);
+  assert.match(hook, /"done"/);
+  assert.match(hook, /"error"/);
+  assert.match(consoleSource, /SystemUpdatePanel/);
+  assert.match(consoleSource, /"\/system"/);
+  assert.match(nav, /"\/admin\/system"/);
+});
