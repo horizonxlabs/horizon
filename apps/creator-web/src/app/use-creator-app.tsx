@@ -390,6 +390,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleSelectProject,
     handleCreateFromPrompt,
     handleCreateProjectSubmit,
+    // Client-side sidebar nav: AppShell calls with a route; navigateBrowserPath pushes history so useBrowserPath re-derives the page.
+    onNavigate: navigateBrowserPath,
     creatorSessionControls,
     creatorPageActions,
     ...vibeWorkspace,
