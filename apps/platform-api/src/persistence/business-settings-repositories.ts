@@ -14,6 +14,8 @@ export interface BusinessSettingsRecord {
   website?: string | null;
   logoUrl?: string | null;
   industry?: string | null;
+  /** Real go-live domain (B2), e.g. "app.example.com" — set via POST /admin/system/domain. */
+  domain?: string | null;
   setupCompletedAt?: DateValue | null;
   createdAt: DateValue;
   updatedAt: DateValue;
@@ -27,6 +29,7 @@ export interface BusinessSettingsInput {
   website?: string | null;
   logoUrl?: string | null;
   industry?: string | null;
+  domain?: string | null;
 }
 
 export interface SetupStatus {
@@ -76,6 +79,34 @@ export class BusinessSettingsRepositoryBackedService {
   async completeSetup(business: BusinessSettingsInput): Promise<BusinessSettingsRecord> {
     if (!business.businessName.trim()) throw new ValidationError("Business name is required");
     return this.upsertSingleton(business, new Date());
+  }
+
+  /**
+   * Sets only the go-live domain (B2), leaving every other business-settings field untouched.
+   * Admin gating happens in the caller (domain-routes.ts), mirroring system-update-service —
+   * this repository layer stays a thin persistence wrapper.
+   */
+  async setDomain(domain: string): Promise<BusinessSettingsRecord> {
+    const now = new Date();
+    const existing = await this.getBusinessSettings();
+    return this.client.businessSettings.upsert({
+      where: { id: BUSINESS_SETTINGS_SINGLETON_ID },
+      update: { domain, updatedAt: now },
+      create: {
+        id: BUSINESS_SETTINGS_SINGLETON_ID,
+        businessName: existing?.businessName ?? "",
+        timezone: existing?.timezone ?? "Asia/Bangkok",
+        locale: existing?.locale ?? "th",
+        contactEmail: existing?.contactEmail ?? null,
+        website: existing?.website ?? null,
+        logoUrl: existing?.logoUrl ?? null,
+        industry: existing?.industry ?? null,
+        domain,
+        setupCompletedAt: existing?.setupCompletedAt ?? null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now
+      }
+    });
   }
 
   private async upsertSingleton(

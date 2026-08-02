@@ -90,7 +90,10 @@ test("Compose imports the realm and bootstraps confidential client secrets befor
   assert.match(releaseCompose, /target: \/opt\/keycloak\/data\/import\/evcp-realm\.json/);
   assert.match(releaseCompose, /mode: replicated-job/);
   assert.match(developmentCompose, /command: start-dev --import-realm --http-port=8080/);
-  assert.match(releaseCompose, /command: start --import-realm --http-enabled=true --http-port=8080/);
+  assert.match(
+    releaseCompose,
+    /command: \/opt\/keycloak\/bin\/kc\.sh start --import-realm --http-enabled=true --http-port=8080/
+  );
 
   const developmentSharedNodeService = developmentCompose.slice(0, developmentCompose.indexOf("services:"));
   const developmentPlatformApi = developmentCompose.slice(

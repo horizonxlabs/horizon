@@ -38,6 +38,8 @@
     "install:preflight:example": "node scripts/install/preflight.mjs --env .env.example --compose docker/docker-compose.yml --allow-example-secrets",
     "install:plan": "node scripts/install/installer.mjs --env .env --compose docker/docker-compose.yml --dry-run",
     "install:real": "node scripts/install/installer.mjs --env .env --compose docker/docker-compose.yml --execute",
+    "bootstrap:swarm": "sh scripts/install/bootstrap-swarm.sh",
+    "bootstrap:swarm:dry-run": "sh scripts/install/bootstrap-swarm.sh --dry-run",
     "install:real:example": "node scripts/install/installer.mjs --env .env.example --compose docker/docker-compose.yml --allow-example-secrets",
     "verify:install": "pnpm install:preflight:example && node --test tests/unit/install-preflight.test.mjs && node --test tests/integration/install-contract.test.mjs && node --test tests/e2e/install-preflight-cli.test.mjs",
     "verify:installer": "pnpm install:real:example && node --test tests/unit/install-installer.test.mjs && node --test tests/integration/install-installer-contract.test.mjs && node --test tests/e2e/install-installer-cli.test.mjs",

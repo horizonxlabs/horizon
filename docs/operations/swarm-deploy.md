@@ -4,6 +4,83 @@ The production release stack deploys to a **single-node Docker Swarm** via
 `docker stack deploy` (not `docker compose up`). This runbook covers the manual
 deploy; the automated release-triggered deploy is Part 2 (SSH-based).
 
+## One-command install (recommended)
+
+Clone the repo on a fresh VM and run one script — it inits the swarm, auto-generates
+every secret as a Docker secret, writes an IP-first (no domain/TLS) `stack.env`,
+deploys the stack, and initializes + unseals OpenBao (minting the workload token),
+with **no secret input**:
+
+```bash
+git clone <repo> /opt/evcp && cd /opt/evcp
+sudo ./install.sh
+# prompts for: image repository (default ghcr.io/<org>), version (default latest tag),
+# and — if the images are private — a GHCR login. Then: "EVCP is starting at
+# http://<server-ip>:80" — open it to finish setup in the Admin Console.
+```
+
+`install.sh` is a thin front door over `scripts/install/bootstrap-swarm.sh`; it never
+prompts for, prints, or stores a secret. Non-interactive (automation): supply the
+inputs and pass `--yes`:
+
+```bash
+sudo EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z \
+     EVCP_GHCR_USER=... EVCP_GHCR_TOKEN=... ./install.sh --yes
+```
+
+Preview without touching anything: `./install.sh --dry-run --yes`.
+
+### Going live with a domain + TLS — from the Admin Console
+
+The bootstrap brings the platform up IP-first (`http://<ip>`, no TLS). To move to a
+real `https://<domain>`, in **Admin Console → Domain**: type the domain and click
+**Go live**. platform-api then, via the Docker Engine API, switches Caddy's site to
+the domain (Caddy requests a Let's Encrypt cert on 80/443), sets Keycloak's
+`KC_HOSTNAME` and platform-api's public URLs to `https://<domain>`, reconciles the
+Keycloak OIDC client redirect URIs, and rolls platform-api last. The domain is
+persisted to `domain.env` on the host so it survives future `docker stack deploy` /
+`install.sh update` (the bootstrap sources `domain.env` after `stack.env`).
+
+**Precondition (the UI warns about it):** point `A`/`AAAA` DNS for `<domain>` **and**
+`storage.<domain>` at this server, and make 80/443 reachable, *before* clicking Go
+live — otherwise Caddy's ACME challenge fails and the console keeps polling until DNS
+is correct.
+
+### Updating to a new version — from the Admin Console
+
+Once a new release tag's images are in the registry, an admin can roll the whole
+app tier from **Admin Console → System**: it shows the current version and each
+app service's tag, takes a target tag, and updates the 5 `evcp-*` app services
+(`platform-api`, `admin-web`, `creator-web`, `app-store-pwa`, `workspace-next`) to
+that tag via the Docker Engine API — updating `platform-api` last (it restarts, and
+the page polls through the restart until every service reports the new tag). DB
+migrations run automatically as the new `platform-api` boots (`prisma migrate
+deploy`). Infra services (postgres/keycloak/…) are pinned and left untouched.
+
+This is an **image-tag bump**. A release that changes the compose structure (new
+services or env) still needs `./install.sh` / `bootstrap-swarm.sh update <version>`
+re-run on the host after checking out the new tag.
+
+### Advanced / reference — `bootstrap-swarm.sh` directly
+
+`install.sh` just collects inputs and hands off. You can also run the bootstrap
+script directly (this is what `install.sh` execs):
+
+```bash
+export EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z
+sudo -E sh scripts/install/bootstrap-swarm.sh
+```
+
+Subcommands: `... unseal` (re-unseal OpenBao after a reboot — see the note at the
+bottom), `... update <version>` (redeploy a new `EVCP_VERSION`, no secret regen).
+
+**Save the recovery secrets.** On first run the script prints a one-time warning:
+move the `evcp_openbao_unseal` and `evcp_openbao_root` Docker secrets to your
+organization's secure store — they are the only way to unseal OpenBao or recover
+root access.
+
+The rest of this document is the equivalent manual flow and reference.
+
 ## Prerequisites (one-time, on the manager node / GCE VM)
 
 - **Docker Engine ≥ 25.0** (required for `deploy.mode: replicated-job`).
