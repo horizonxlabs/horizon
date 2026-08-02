@@ -1,3 +1,4 @@
+import { hydrateFileBackedSecrets } from "./config/file-backed-secrets";
 import { createPlatformApiApp, createRuntimePlatformApiServices, resolveCorePersistenceMode } from "./app-factory";
 import { readKeycloakConfig } from "./keycloak/config";
 import { KeycloakOidcService } from "./keycloak/oidc-service";
@@ -8,6 +9,8 @@ import { createKeycloakSessionIssuer } from "./keycloak/platform-session-issuer"
 import { PlatformSessionService } from "./auth/platform-session-service";
 import { isPlatformSessionDatabase, MemoryPlatformSessionRepository, PrismaPlatformSessionRepository } from "./persistence/platform-session-repository";
 import { DurableAiJobWorker } from "./ai-governance/durable-job-worker";
+
+hydrateFileBackedSecrets();
 
 const port = Number(process.env.PORT ?? 3100);
 const host = process.env.HOST ?? "127.0.0.1";

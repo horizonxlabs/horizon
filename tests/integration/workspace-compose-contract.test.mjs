@@ -144,8 +144,8 @@ test("release compose initializes the litellm database before litellm starts", (
   const litellm = releaseCompose.services.litellm;
   assert.ok(litellm.healthcheck, "release litellm must expose a readiness healthcheck");
   const joined = environmentEntries(litellm).join("\n");
-  assert.match(joined, /DATABASE_URL=\$\{LITELLM_DATABASE_URL:\?/);
-  assert.match(joined, /LITELLM_DATABASE_URL=\$\{LITELLM_DATABASE_URL:\?/);
+  assert.match(joined, /DATABASE_URL_FILE=\/run\/secrets\/evcp_litellm_database_url/);
+  assert.match(joined, /LITELLM_DATABASE_URL_FILE=\/run\/secrets\/evcp_litellm_database_url/);
   assert.doesNotMatch(
     joined,
     /POSTGRES_PASSWORD.*@postgres:5432\/litellm/,
