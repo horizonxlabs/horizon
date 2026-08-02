@@ -1,0 +1,1 @@
+export { DomainReadinessPage } from "./DomainReadinessPage";

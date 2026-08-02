@@ -894,6 +894,234 @@ th {
   padding: var(--evcp-space-2);
 }
 
+.store-search-filters {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.store-search-filters label {
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: var(--evcp-space-1);
+}
+
+.store-search-filters select {
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  color: var(--evcp-color-body);
+  min-height: 42px;
+  padding: 0 var(--evcp-space-3);
+}
+
+.store-navigation {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+}
+
+.store-navigation a,
+.store-navigation button {
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: 999px;
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  padding: 7px 10px;
+  text-decoration: none;
+}
+
+.store-navigation a[aria-current="page"] {
+  background: var(--evcp-color-primary-soft);
+  border-color: var(--evcp-color-primary);
+  color: var(--evcp-color-primary-strong);
+  font-weight: 700;
+}
+
+.store-page {
+  display: grid;
+  gap: var(--evcp-space-4);
+}
+
+.store-page-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.store-page-heading h1,
+.store-brand {
+  font-size: 24px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.store-app-list {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.store-collection-card {
+  align-items: stretch;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: flex;
+  gap: var(--evcp-space-3);
+  padding: var(--evcp-space-3);
+}
+
+.store-collection-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: grid;
+  flex: 1;
+  gap: var(--evcp-space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0;
+  text-align: left;
+}
+
+.store-collection-main > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.store-collection-main small,
+.store-collection-main em {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.store-device-label {
+  align-items: center;
+  color: var(--evcp-color-muted);
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.store-device-history-page .store-page-heading p,
+.store-ticket-detail .store-page-heading p,
+.store-profile-page .store-page-heading p {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  margin: 5px 0 0;
+}
+
+.store-history-list {
+  display: grid;
+  gap: var(--evcp-space-3);
+}
+
+.store-history-card {
+  align-items: start;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  color: var(--evcp-color-text);
+  display: flex;
+  gap: var(--evcp-space-3);
+  justify-content: space-between;
+  padding: var(--evcp-space-3);
+  text-align: left;
+}
+
+.store-history-card > div,
+.store-history-card > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.store-history-card span,
+.store-history-card small,
+.store-ticket-timeline span {
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+}
+
+.store-history-link {
+  cursor: pointer;
+  width: 100%;
+}
+
+.store-history-link:hover {
+  border-color: var(--evcp-color-primary);
+}
+
+.store-history-meta {
+  justify-items: end;
+  text-align: right;
+}
+
+.store-history-unavailable {
+  background: var(--evcp-color-surface-muted);
+}
+
+.store-ticket-timeline {
+  display: grid;
+  gap: var(--evcp-space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-ticket-timeline li {
+  border-left: 3px solid var(--evcp-color-primary);
+  display: grid;
+  gap: 3px;
+  padding-left: var(--evcp-space-3);
+}
+
+.store-profile-counts {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: var(--evcp-space-4) 0;
+}
+
+.store-profile-counts div {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  padding: var(--evcp-space-3);
+}
+
+.store-profile-counts dt {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+}
+
+.store-profile-counts dd {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 3px 0 0;
+}
+
+.store-clear-confirm {
+  background: var(--evcp-color-warning-bg);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+  margin-top: var(--evcp-space-3);
+  padding: var(--evcp-space-3);
+}
+
+.store-clear-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .store-status-strip {
   display: grid;
   gap: var(--evcp-space-2);
@@ -1104,6 +1332,52 @@ th {
   gap: var(--evcp-space-3);
   grid-template-columns: auto 1fr auto;
   padding: var(--evcp-space-3);
+}
+
+.creator-ticket-list .creator-ticket-row {
+  align-items: center;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-card);
+  color: inherit;
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: auto 1fr auto;
+  padding: var(--evcp-space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.creator-ticket-list .creator-ticket-row:hover:not(:disabled) {
+  border-color: var(--evcp-color-primary-strong);
+}
+
+.creator-ticket-list .creator-ticket-row > div:nth-child(2),
+.creator-ticket-detail-heading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.creator-ticket-actions,
+.creator-ticket-detail-heading,
+.creator-ticket-detail dl {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+}
+
+.creator-ticket-detail dl {
+  color: var(--evcp-color-muted);
+}
+
+.creator-ticket-detail dt {
+  font-size: 12px;
+}
+
+.creator-ticket-detail dd {
+  margin: 0;
 }
 
 .ticket-timeline svg {
@@ -5103,6 +5377,10 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .store-search-filters {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     display: block;
     min-width: 0;

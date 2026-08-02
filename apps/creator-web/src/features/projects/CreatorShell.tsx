@@ -27,7 +27,8 @@ export function CreatorShell({
     handleCreateProjectField,
     createProjectMessage,
     isEnteringWorkspace,
-    onNavigate
+    onNavigate,
+    pathname
   } = app;
   return (
     <AppShell
@@ -37,6 +38,7 @@ export function CreatorShell({
       userName={bootstrap.userName}
       session={creatorSessionControls}
       tone="light"
+      currentPath={pathname}
       onNavigate={onNavigate}
     >
       {isEnteringWorkspace ? (

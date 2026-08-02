@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import path from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   MemoryPublishStorePersistenceClient,
@@ -12,30 +11,14 @@ const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
 // route types) was extracted from app-factory.ts into platform-http-types.ts.
 const platformHttpTypes = readFileSync("apps/platform-api/src/platform-http-types.ts", "utf8");
 const apiClient = readFileSync("packages/api-client/src/index.ts", "utf8");
-function readAllSourceFiles(dir) {
-  return readdirSync(dir)
-    .flatMap((entry) => {
-      const fullPath = path.join(dir, entry);
-      return statSync(fullPath).isDirectory()
-        ? readAllSourceFiles(fullPath)
-        : /\.(tsx?|jsx?)$/.test(entry)
-          ? [readFileSync(fullPath, "utf8")]
-          : [];
-    })
-    .join("\n");
-}
-
-// Store's entrypoint is intentionally only a mount point. Verify its composed
-// public surface and feature behavior instead.
-const storeAppComposition = [
-  "apps/app-store-pwa/src/app/StoreApp.tsx",
-  "apps/app-store-pwa/src/routes/StoreRoutes.tsx"
-]
-  .map((file) => readFileSync(file, "utf8"))
-  .join("\n");
-const storePublicFeatureSource = readAllSourceFiles("apps/app-store-pwa/src/features");
-const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
-const storeSource = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
+const storeDetailSource = readFileSync(
+  "apps/app-store-pwa/src/features/storefront/pages/StoreAppDetailPage.tsx",
+  "utf8"
+);
+const storeProviderSource = readFileSync(
+  "apps/app-store-pwa/src/features/storefront/StoreProvider.tsx",
+  "utf8"
+);
 const schema = readFileSync("apps/platform-api/prisma/schema.prisma", "utf8");
 const persistenceDoc = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 const migrationPath =
@@ -163,7 +146,10 @@ test("App Store install persistence contract is wired through schema API client 
   assert.match(appFactory, /uninstallStoreApp/);
   assert.match(apiClient, /installStoreApp\(appSlug: string\)/);
   assert.match(apiClient, /uninstallStoreApp\(appSlug: string\)/);
-  assert.match(storeSource, /handleInstallApp/);
-  assert.match(storeSource, /handleUninstallApp/);
+  assert.match(storeDetailSource, /api\.installStoreApp\(app\.slug\)/);
+  assert.match(storeDetailSource, /api\.uninstallStoreApp\(app\.slug\)/);
+  assert.match(storeDetailSource, /runAppAction\(app\.slug/);
+  assert.match(storeProviderSource, /runAppAction<T>/);
+  assert.match(storeProviderSource, /confirmedInstallationStatus\(action, result\)/);
   assert.match(persistenceDoc, /App Installation Route-Level Coverage/);
 });

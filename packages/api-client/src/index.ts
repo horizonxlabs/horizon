@@ -1,4 +1,17 @@
 import { PlatformSessionStore, type PlatformSessionStorage } from "./platform-session-store";
+import type {
+  ConvertTicketToPrdChangeInput,
+  PrdChangeRequestDto,
+  StoreTicketInput,
+  StoreTicketResponse
+} from "./store-ticket-types";
+export type {
+  ConvertTicketToPrdChangeInput,
+  PrdChangeRequestDto,
+  StoreTicketInput,
+  StoreTicketResponse,
+  StoreTicketTimelineEntryDto
+} from "./store-ticket-types";
 import { PlatformApiError } from "./platform-api-error";
 
 export type ApiSuccess<T> = {
@@ -22,10 +35,17 @@ export function success<T>(data: T, meta?: Record<string, unknown>): ApiSuccess<
   return { ok: true, data, meta };
 }
 
-export function failure(code: string, message: string, traceId?: string): ApiFailure { return { ok: false, error: { code, message, traceId } }; }
+export function failure(code: string, message: string, traceId?: string): ApiFailure {
+  return { ok: false, error: { code, message, traceId } };
+}
 export { getDatabaseView, getWorkspaceFiles } from "./workspace-resources";
 export type * from "./workspace-resources";
-import type { WorkspaceDeploymentDto, WorkspacePublishResponse, PublishRequestDto, DeploymentRecordDto } from "./deployment-types";
+import type {
+  WorkspaceDeploymentDto,
+  WorkspacePublishResponse,
+  PublishRequestDto,
+  DeploymentRecordDto
+} from "./deployment-types";
 export type * from "./deployment-types";
 import type {
   AiUsageLogDto,
@@ -48,6 +68,11 @@ import type {
   GuardrailEventDto
 } from "./ai-governance-types";
 export type * from "./ai-governance-types";
+import type {
+  FrontendCheckpointTimelineDto,
+  FrontendRestoreResultDto
+} from "./frontend-checkpoint-types";
+export type * from "./frontend-checkpoint-types";
 export type * from "./setup-types";
 import type {
   BusinessSettingsDto,
@@ -74,7 +99,11 @@ export type PlatformUserDto = {
   permissions?: string[];
 };
 export type * from "./keycloak-user-types";
-export { createKeycloakUserClient, startKeycloakLogin, startKeycloakLogout } from "./keycloak-client";
+export {
+  createKeycloakUserClient,
+  startKeycloakLogin,
+  startKeycloakLogout
+} from "./keycloak-client";
 export type CreatePlatformUserInput = {
   email: string;
   name: string;
@@ -229,38 +258,6 @@ export type StoreAccessRequestResponse = {
   reason: string;
   department?: string;
   createdAt: string;
-};
-
-export type StoreTicketInput = {
-  type: "bug" | "feedback" | "feature_request";
-  priority: "low" | "medium" | "high";
-  title: string;
-  description: string;
-  deviceInfo: string;
-  screenshotUrl?: string;
-};
-
-export type StoreTicketTimelineEntryDto = {
-  id: string;
-  ticketId?: string;
-  status: string;
-  label: string;
-  actorId?: string;
-  occurredAt?: string;
-};
-
-export type StoreTicketResponse = {
-  id: string;
-  ticketNumber: string;
-  appSlug: string;
-  appName?: string;
-  type?: string;
-  priority?: string;
-  title?: string;
-  description?: string;
-  deviceInfo?: string;
-  status: string;
-  timeline: StoreTicketTimelineEntryDto[];
 };
 
 export type WorkspaceTaskStepDto = {
@@ -626,11 +623,27 @@ export class PlatformApiClient {
   }
 
   confirmPrdBaseline(projectId: string, input: ConfirmPrdBaselineInput): Promise<PrdVersionDto> {
-    return this.request<PrdVersionDto>(`/projects/${encodeURIComponent(projectId)}/prd/baseline`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<PrdVersionDto>(
+      `/projects/${encodeURIComponent(projectId)}/prd/baseline`,
+      input
+    );
+  }
+
+  getFrontendCheckpoints(projectId: string) {
+    return this.request<FrontendCheckpointTimelineDto>(
+      `/projects/${encodeURIComponent(projectId)}/frontend/checkpoints`
+    );
+  }
+
+  restoreFrontendCheckpoint(projectId: string, checkpointId: string) {
+    return this.request<FrontendRestoreResultDto>(
+      `/projects/${encodeURIComponent(projectId)}/frontend/restore`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ checkpointId })
+      }
+    );
   }
 
   listStoreApps(): Promise<StorefrontHomeResponse> {
@@ -645,13 +658,9 @@ export class PlatformApiClient {
     appSlug: string,
     input: StoreAccessRequestInput
   ): Promise<StoreAccessRequestResponse> {
-    return this.request<StoreAccessRequestResponse>(
+    return this.postJson<StoreAccessRequestResponse>(
       `/store/apps/${encodeURIComponent(appSlug)}/access-requests`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input)
-      }
+      input
     );
   }
 
@@ -674,15 +683,28 @@ export class PlatformApiClient {
   }
 
   submitStoreTicket(appSlug: string, input: StoreTicketInput): Promise<StoreTicketResponse> {
-    return this.request<StoreTicketResponse>(`/store/apps/${encodeURIComponent(appSlug)}/tickets`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<StoreTicketResponse>(
+      `/store/apps/${encodeURIComponent(appSlug)}/tickets`,
+      input
+    );
   }
 
   getStoreTicket(ticketId: string): Promise<StoreTicketResponse> {
     return this.request<StoreTicketResponse>(`/store/tickets/${encodeURIComponent(ticketId)}`);
+  }
+
+  convertTicketToPrdChange(
+    projectId: string,
+    input: ConvertTicketToPrdChangeInput
+  ): Promise<PrdChangeRequestDto> {
+    return this.request<PrdChangeRequestDto>(
+      `/creator/projects/${encodeURIComponent(projectId)}/prd/changes/from-ticket`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input)
+      }
+    );
   }
 
   getWorkspace(projectId: string): Promise<WorkspaceSnapshotResponse> {
@@ -699,15 +721,19 @@ export class PlatformApiClient {
   }
 
   getDurableAiJob(projectId: string, jobId: string): Promise<DurableAiJobDto> {
-    return this.request<DurableAiJobDto>(`/projects/${encodeURIComponent(projectId)}/ai-jobs/${encodeURIComponent(jobId)}`);
+    return this.request<DurableAiJobDto>(
+      `/projects/${encodeURIComponent(projectId)}/ai-jobs/${encodeURIComponent(jobId)}`
+    );
   }
 
-  enqueueDurableAiJob(projectId: string, input: CreateDurableAiJobInput): Promise<Pick<DurableAiJobDto, "id" | "requestId" | "status">> {
-    return this.request<Pick<DurableAiJobDto, "id" | "requestId" | "status">>(`/projects/${encodeURIComponent(projectId)}/ai-jobs`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+  enqueueDurableAiJob(
+    projectId: string,
+    input: CreateDurableAiJobInput
+  ): Promise<Pick<DurableAiJobDto, "id" | "requestId" | "status">> {
+    return this.postJson<Pick<DurableAiJobDto, "id" | "requestId" | "status">>(
+      `/projects/${encodeURIComponent(projectId)}/ai-jobs`,
+      input
+    );
   }
 
   listProjectFiles(projectId: string): Promise<ProjectFileUploadDto[]> {
@@ -749,13 +775,9 @@ export class PlatformApiClient {
     projectId: string,
     input: WorkspacePromptInput
   ): Promise<WorkspacePromptResultDto> {
-    return this.request<WorkspacePromptResultDto>(
+    return this.postJson<WorkspacePromptResultDto>(
       `/projects/${encodeURIComponent(projectId)}/workspace/prompts`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input)
-      }
+      input
     );
   }
 
@@ -775,13 +797,9 @@ export class PlatformApiClient {
   }
 
   createAppInvitation(projectId: string, input: AppInvitationInput): Promise<AppInvitationDto> {
-    return this.request<AppInvitationDto>(
+    return this.postJson<AppInvitationDto>(
       `/projects/${encodeURIComponent(projectId)}/app/invitations`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input)
-      }
+      input
     );
   }
 
@@ -789,13 +807,9 @@ export class PlatformApiClient {
     projectId: string,
     input: AppAccessDecisionInput
   ): Promise<AppAccessRequestDto> {
-    return this.request<AppAccessRequestDto>(
+    return this.postJson<AppAccessRequestDto>(
       `/projects/${encodeURIComponent(projectId)}/app/access-requests/decision`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(input)
-      }
+      input
     );
   }
 
@@ -805,17 +819,16 @@ export class PlatformApiClient {
     );
   }
 
-  // Container publish (Staging → Production). The 2-arg overload is the current contract; the
-  // no-environment overload is retained for the legacy app-store publish caller (returns its shape).
   publishProject(projectId: string): Promise<PublishResultResponse>;
-  publishProject(projectId: string, environment: "staging" | "production"): Promise<WorkspacePublishResponse>;
+  publishProject(
+    projectId: string,
+    environment: "staging" | "production"
+  ): Promise<WorkspacePublishResponse>;
   publishProject(
     projectId: string,
     environment?: "staging" | "production"
   ): Promise<PublishResultResponse | WorkspacePublishResponse> {
     const path = `/projects/${encodeURIComponent(projectId)}/publish`;
-    // Container publish (staging/production) is a raw-shape route; app-store publish (no env) uses
-    // the standard enveloped API.
     return environment
       ? this.rawRequest<WorkspacePublishResponse>(path, {
           method: "POST",
@@ -844,19 +857,11 @@ export class PlatformApiClient {
   }
 
   runInstallerPreflight(input: InstallerPreflightInput): Promise<InstallerReportDto> {
-    return this.request<InstallerReportDto>("/admin/installer/preflight", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<InstallerReportDto>("/admin/installer/preflight", input);
   }
 
   saveInstallerSetup(input: InstallerSetupInput): Promise<InstallerSetupResponse> {
-    return this.request<InstallerSetupResponse>("/admin/installer/setup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<InstallerSetupResponse>("/admin/installer/setup", input);
   }
 
   listInstallerReports(): Promise<InstallerReportDto[]> {
@@ -868,11 +873,7 @@ export class PlatformApiClient {
   }
 
   initializeSetup(input: SetupInitializeInput): Promise<{ setupCompleted: true }> {
-    return this.request<{ setupCompleted: true }>("/setup/initialize", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<{ setupCompleted: true }>("/setup/initialize", input);
   }
 
   getBusinessSettings(): Promise<BusinessSettingsDto> {
@@ -919,7 +920,10 @@ export class PlatformApiClient {
     return this.postJson<AiProviderDto>("/ai/providers/status", { providerId, status });
   }
 
-  updateAiProvider(providerId: string, input: { name: string; baseUrl: string; models: string[] }): Promise<AiProviderDto> {
+  updateAiProvider(
+    providerId: string,
+    input: { name: string; baseUrl: string; models: string[] }
+  ): Promise<AiProviderDto> {
     return this.postJson<AiProviderDto>("/ai/providers/update", { providerId, ...input });
   }
 
@@ -964,11 +968,7 @@ export class PlatformApiClient {
   }
 
   createGuardrailRule(input: CreateGuardrailRuleInput): Promise<GuardrailRuleDto> {
-    return this.request<GuardrailRuleDto>("/guardrails/rules", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<GuardrailRuleDto>("/guardrails/rules", input);
   }
 
   listGuardrailEvents(): Promise<GuardrailEventDto[]> {
@@ -980,11 +980,7 @@ export class PlatformApiClient {
   }
 
   testAiProvider(input: AiProviderTestCallInput): Promise<AiProviderTestCallResponse> {
-    return this.request<AiProviderTestCallResponse>("/ai/provider-test-call", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input)
-    });
+    return this.postJson<AiProviderTestCallResponse>("/ai/provider-test-call", input);
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -999,7 +995,10 @@ export class PlatformApiClient {
     });
   }
 
-  async requestWithMeta<T>(path: string, init: RequestInit = {}): Promise<{ data: T; meta?: Record<string, unknown> }> {
+  async requestWithMeta<T>(
+    path: string,
+    init: RequestInit = {}
+  ): Promise<{ data: T; meta?: Record<string, unknown> }> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,
       headers: this.headers(init.headers)
@@ -1019,11 +1018,7 @@ export class PlatformApiClient {
     return { data: envelope.data, meta: envelope.meta };
   }
 
-  // The workspace container-publish routes (publish/promote/deployments) live on a separate raw
-  // Express surface that returns bare shapes ({ deployment }, { deployments }, { error: "<code>" })
-  // rather than the { ok, data, error } envelope `request` expects. Parse those directly — routing
-  // them through `request` throws "Cannot read properties of undefined (reading 'code')" on EVERY
-  // response, success included, because there is no `envelope.ok`/`envelope.error`.
+  // Deployment endpoints use bare response shapes instead of the standard API envelope.
   private async rawRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.fetcher(`${this.baseUrl}${path}`, {
       ...init,

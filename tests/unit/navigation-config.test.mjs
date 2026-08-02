@@ -25,8 +25,11 @@ test("creator navigation matches the real app creation lifecycle", () => {
     "Projects",
     "PRD Review",
     "Creator Workspace",
+    "Database",
+    "Versions",
     "Users & Roles",
     "Publish & Registry",
+    "Deployments",
     "Tickets & Changes"
   ];
 
@@ -40,9 +43,40 @@ test("creator navigation matches the real app creation lifecycle", () => {
   assert.match(configSource, /route: "\/creator\/"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/prd"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/database"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/versions"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/users"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/publish"/);
+  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/deployments"/);
   assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
+});
+
+test("admin navigation includes readiness pages", () => {
+  const configSource = readFileSync("packages/config/src/index.ts", "utf8");
+
+  assert.match(configSource, /label: "Auth & SSO"/);
+  assert.match(configSource, /route: "\/admin\/auth"/);
+  assert.match(configSource, /label: "Domains"/);
+  assert.match(configSource, /route: "\/admin\/domains"/);
+  assert.match(configSource, /label: "Publishing"/);
+  assert.match(configSource, /route: "\/admin\/publishing"/);
+});
+
+test("Store navigation includes implemented collections and planned account pages", () => {
+  const configSource = readFileSync("packages/config/src/index.ts", "utf8");
+  for (const [label, route] of [
+    ["My Apps", "/store/"],
+    ["Available Apps", "/store/available"],
+    ["Search", "/store/search"],
+    ["Favorites", "/store/favorites"],
+    ["Recent", "/store/recent"],
+    ["Access Requests", "/store/access-requests"],
+    ["Tickets", "/store/tickets"],
+    ["Profile", "/store/profile"]
+  ]) {
+    assert.match(configSource, new RegExp(`label: "${label}"`));
+    assert.match(configSource, new RegExp(`route: "${route.replaceAll("/", "\\/")}"`));
+  }
 });
 
 test("creator project cards open the editing workspace and lifecycle pages exist", () => {

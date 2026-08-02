@@ -2,26 +2,75 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const {
-  creatorPageFromPath,
+  creatorRouteFromPath,
   projectRouteSegmentFromPath,
   slugifyProjectName,
   createCreatorNavigation
 } = await import("../../apps/creator-web/src/app/routes.ts");
 
-test("creatorPageFromPath: recognizes each known suffix", () => {
-  assert.equal(creatorPageFromPath("/creator/projects/leave-management/prd"), "prd");
-  assert.equal(creatorPageFromPath("/creator/projects/leave-management/users"), "users");
-  assert.equal(creatorPageFromPath("/creator/projects/leave-management/publish"), "publish");
-  assert.equal(creatorPageFromPath("/creator/projects/leave-management/tickets"), "tickets");
+test("creatorRouteFromPath resolves project lifecycle pages", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/database"), {
+    page: "database",
+    projectId: "proj_1"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/versions"), {
+    page: "versions",
+    projectId: "proj_1"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/deployments"), {
+    page: "deployments",
+    projectId: "proj_1"
+  });
 });
 
-test("creatorPageFromPath: falls back to workspace for a bare project path", () => {
-  assert.equal(creatorPageFromPath("/creator/projects/leave-management"), "workspace");
+test("creatorRouteFromPath resolves existing pages and ticket detail", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj%201/prd"), {
+    page: "prd",
+    projectId: "proj 1"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj%201/tickets/ticket%2F1"), {
+    page: "ticket-detail",
+    projectId: "proj 1",
+    ticketId: "ticket/1"
+  });
 });
 
-test("creatorPageFromPath: falls back to projects for unrelated paths", () => {
-  assert.equal(creatorPageFromPath("/creator"), "projects");
-  assert.equal(creatorPageFromPath("/"), "projects");
+test("creatorRouteFromPath resolves projects, workspace, and unknown paths", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/"), { page: "projects" });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1"), {
+    page: "workspace",
+    projectId: "proj_1"
+  });
+  assert.deepEqual(creatorRouteFromPath("/unrelated"), { page: "not-found" });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/unknown"), {
+    page: "not-found",
+    projectId: "proj_1"
+  });
+});
+
+test("creatorRouteFromPath fail-closes malformed encoded route parameters", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/%E0%A4%A/versions"), {
+    page: "not-found"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/tickets/%E0%A4%A"), {
+    page: "not-found",
+    projectId: "proj_1"
+  });
+});
+
+test("creatorRouteFromPath rejects extra path segments on every project route shape", () => {
+  for (const pathname of [
+    "/creator/projects/proj_1/extra",
+    "/creator/projects/proj_1/prd/extra",
+    "/creator/projects/proj_1/database/extra",
+    "/creator/projects/proj_1/versions/extra",
+    "/creator/projects/proj_1/users/extra",
+    "/creator/projects/proj_1/publish/extra",
+    "/creator/projects/proj_1/deployments/extra",
+    "/creator/projects/proj_1/tickets/extra/more"
+  ]) {
+    assert.equal(creatorRouteFromPath(pathname).page, "not-found", `${pathname} must fail closed`);
+  }
 });
 
 test("projectRouteSegmentFromPath: extracts the project segment", () => {
@@ -75,12 +124,29 @@ test("createCreatorNavigation: leaves non-leave-management routes untouched", ()
   }
 });
 
-test("createCreatorNavigation: keeps Projects as the only interactive, unlabelled entry", () => {
-  const project = { id: "proj_expense_approval" };
+test("creator navigation enables every lifecycle entry for the selected project", () => {
+  const project = { id: "proj_1" };
   const nav = createCreatorNavigation(project);
-  const projectsItem = nav.find((item) => item.label === "Projects");
-  assert.ok(projectsItem, "Projects should be present in the sidebar");
-  assert.equal(projectsItem.disabled, undefined, "Projects should stay interactive");
+  assert.equal(
+    nav.some((item) => item.disabled),
+    false
+  );
+  assert.equal(
+    nav.some((item) => item.label.includes("(Soon)")),
+    false
+  );
+  assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/database"));
+  assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/versions"));
+  assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/deployments"));
+});
+
+test("creator navigation encodes the selected project ID", () => {
+  const nav = createCreatorNavigation({ id: "project/one" });
+  assert.ok(nav.some((item) => item.route === "/creator/projects/project%2Fone/database"));
+  assert.equal(
+    nav.some((item) => item.route.includes("project/one")),
+    false
+  );
 });
 
 test("createCreatorNavigation: omits the redundant Creator Workspace entry", () => {
@@ -91,22 +157,4 @@ test("createCreatorNavigation: omits the redundant Creator Workspace entry", () 
     false,
     "Creator Workspace is reachable from a project card and should not appear in the sidebar"
   );
-});
-
-test("createCreatorNavigation: marks every non-Projects entry as a disabled (Soon) item", () => {
-  const project = { id: "proj_expense_approval" };
-  const nav = createCreatorNavigation(project);
-  for (const item of nav) {
-    if (item.label === "Projects") continue;
-    assert.match(item.label, / \(Soon\)$/, `${item.label} should be suffixed with (Soon)`);
-    assert.equal(item.disabled, true, `${item.label} should be disabled`);
-    assert.ok(item.disabledReason, `${item.label} should explain why it is disabled`);
-  }
-  const soonLabels = nav.filter((i) => i.label !== "Projects").map((i) => i.label);
-  assert.deepEqual(soonLabels, [
-    "PRD Review (Soon)",
-    "Users & Roles (Soon)",
-    "Publish & Registry (Soon)",
-    "Tickets & Changes (Soon)"
-  ]);
 });
