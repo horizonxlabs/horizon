@@ -9,6 +9,7 @@ export interface StackService {
 export interface SwarmServiceEngine {
   listStackServices(stack: string): Promise<StackService[]>;
   updateServiceImage(serviceName: string, image: string): Promise<void>;
+  updateServiceEnv(serviceName: string, envPatch: Record<string, string>): Promise<void>;
 }
 
 export function createSwarmServiceEngine(
@@ -35,6 +36,32 @@ export function createSwarmServiceEngine(
       const version = svc.Version?.Index;
       const spec = svc.Spec;
       spec.TaskTemplate.ContainerSpec.Image = image;
+      spec.TaskTemplate.ForceUpdate = (spec.TaskTemplate.ForceUpdate ?? 0) + 1;
+      const upd = await request({
+        // Pass the raw object — nodeSocketRequest JSON-encodes non-Buffer bodies itself, so
+        // JSON.stringify here would double-encode and the daemon would reject the ServiceSpec.
+        method: "POST",
+        path: `/services/${name}/update?version=${version}`,
+        body: spec,
+        contentType: "application/json"
+      });
+      if (upd.status >= 400) throw new Error(`docker service update ${serviceName} failed: ${upd.status}`);
+    },
+    async updateServiceEnv(serviceName, envPatch) {
+      const name = encodeURIComponent(serviceName);
+      const res = await request({ method: "GET", path: `/services/${name}` });
+      if (res.status >= 400) throw new Error(`docker service inspect ${serviceName} failed: ${res.status}`);
+      const svc = (await res.json()) as Record<string, any>;
+      const version = svc.Version?.Index;
+      const spec = svc.Spec;
+      const cs = spec.TaskTemplate.ContainerSpec;
+      const env: string[] = Array.isArray(cs.Env) ? [...cs.Env] : [];
+      for (const [k, v] of Object.entries(envPatch)) {
+        const i = env.findIndex((e) => e.startsWith(`${k}=`));
+        if (i >= 0) env[i] = `${k}=${v}`;
+        else env.push(`${k}=${v}`);
+      }
+      cs.Env = env;
       spec.TaskTemplate.ForceUpdate = (spec.TaskTemplate.ForceUpdate ?? 0) + 1;
       const upd = await request({
         // Pass the raw object — nodeSocketRequest JSON-encodes non-Buffer bodies itself, so
