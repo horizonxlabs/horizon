@@ -95,6 +95,8 @@ export function createDomainService(deps: {
           );
           const client = found.data?.[0];
           if (client?.id) {
+            // Partial ClientRepresentation: Keycloak leaves unspecified fields untouched on a
+            // client update, and redirectUris is intentionally REPLACED to drop the IP-based callback.
             await deps.keycloak.put(`/clients/${client.id}`, {
               redirectUris: [`${publicUrls.EVCP_PUBLIC_API_URL}/auth/keycloak/callback`],
               webOrigins: [base]
@@ -117,7 +119,9 @@ export function createDomainService(deps: {
         EVCP_STORAGE_CADDY_ADDRESS: storageHost
       });
       await deps.engine.updateServiceEnv("evcp_keycloak", { KC_HOSTNAME: publicUrls.KEYCLOAK_PUBLIC_URL });
-      void deps.engine.updateServiceEnv("evcp_platform-api", publicUrls).catch(() => {});
+      void deps.engine
+        .updateServiceEnv("evcp_platform-api", publicUrls)
+        .catch((error) => console.warn("[domain-service] platform-api self-roll failed:", error));
 
       return { accepted: true, domain };
     }

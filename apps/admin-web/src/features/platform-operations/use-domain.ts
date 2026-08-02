@@ -1,6 +1,6 @@
 import type { DomainStatusDto, PlatformApiClient } from "@evcp/api-client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DOMAIN_POLL_INTERVAL_MS, isDomainAtTarget, type DomainGoLiveStatus } from "./lib/domain";
+import { DOMAIN_POLL_INTERVAL_MS, type DomainGoLiveStatus } from "./lib/domain";
 
 /** Best-effort reachability probe: an opaque no-cors fetch tells us nothing about the response
  * body or status, but a resolved promise means DNS resolved and TLS handshook — a rejected one
@@ -51,29 +51,29 @@ export function useDomain(client: PlatformApiClient | undefined) {
     let cancelled = false;
 
     const tick = async () => {
+      // Primary completion signal: the new domain answers over HTTPS (a cross-origin `no-cors`
+      // probe). We do NOT gate "live" on getDomainStatus() — once caddy switches its site to the
+      // domain, this console (still loaded at the old http://<ip> origin) can no longer reach the
+      // same-origin API, so getDomainStatus() would fail on every tick and the panel would spin
+      // forever even on a successful go-live.
+      if (await siteAnswers(targetDomain)) {
+        if (!cancelled) {
+          setPollNote(undefined);
+          setGoLiveStatus("live");
+        }
+        return;
+      }
+      // Best-effort status refresh while the old origin still answers (before the switchover).
       try {
         const result = await client.getDomainStatus();
-        if (cancelled) return;
-        setStatus(result);
-        if (isDomainAtTarget(result, targetDomain)) {
-          setPollNote(`Waiting for https://${targetDomain} to answer…`);
-          if (await siteAnswers(targetDomain)) {
-            if (!cancelled) {
-              setPollNote(undefined);
-              setGoLiveStatus("live");
-            }
-            return;
-          }
-        } else {
-          setPollNote(undefined);
-        }
+        if (!cancelled) setStatus(result);
       } catch {
-        if (cancelled) return;
-        // caddy and platform-api restart as part of the roll-out — expected mid-flight network
-        // failures are not an error state, just a reason to keep polling.
-        setPollNote("Waiting for platform-api to come back online…");
+        // Expected once caddy/platform-api switch to the domain — not an error state.
       }
-      if (!cancelled) pollTimer.current = setTimeout(() => void tick(), DOMAIN_POLL_INTERVAL_MS);
+      if (!cancelled) {
+        setPollNote(`Waiting for https://${targetDomain} to answer — check DNS + TLS, then open it directly.`);
+        pollTimer.current = setTimeout(() => void tick(), DOMAIN_POLL_INTERVAL_MS);
+      }
     };
 
     void tick();
