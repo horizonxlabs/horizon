@@ -275,3 +275,47 @@ test("use-system-update polls getSystemVersion and retries through errors, and A
   assert.match(consoleSource, /"\/system"/);
   assert.match(nav, /"\/admin\/system"/);
 });
+
+test("DomainPanel renders the current domain, a domain input, and a Go live control with a stub client", () => {
+  const probe = `
+    import React from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    globalThis.React = React;
+    const stubClient = {
+      getDomainStatus: async () => ({ domain: "app.example.com", publicBaseUrl: "https://app.example.com/api", caddyAddress: "app.example.com" }),
+      setDomain: async () => ({ accepted: true, domain: "app.example.com" })
+    };
+    const { DomainPanel } = await import("./apps/admin-web/src/features/platform-operations/DomainPanel.tsx");
+    const html = renderToStaticMarkup(React.createElement(DomainPanel, { client: stubClient }));
+    if (!html.includes("Public domain")) throw new Error("DomainPanel did not render its title");
+    if (!html.includes("Domain")) throw new Error("DomainPanel did not render the domain field");
+    if (!html.includes("Go live")) throw new Error("DomainPanel did not render the Go live control");
+  `;
+  assert.doesNotThrow(() =>
+    execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", probe], {
+      env: { ...process.env, TSX_TSCONFIG_PATH: "apps/admin-web/tsconfig.json" },
+      stdio: "pipe"
+    })
+  );
+});
+
+test("DomainPanel warns to point DNS at this server before go-live", async () => {
+  const panel = await readFile("apps/admin-web/src/features/platform-operations/DomainPanel.tsx", "utf8");
+  assert.match(panel, /DNS/);
+  assert.match(panel, /storage\.\{trimmed\}/);
+});
+
+test("use-domain polls getDomainStatus and retries through errors, and AdminConsole wires the Domain page", async () => {
+  const hook = await readFile("apps/admin-web/src/features/platform-operations/use-domain.ts", "utf8");
+  const consoleSource = await readFile("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
+  const nav = await readFile("packages/config/src/index.ts", "utf8");
+  assert.match(hook, /client\.getDomainStatus\(\)/);
+  assert.match(hook, /client\.setDomain\(/);
+  assert.match(hook, /"idle"/);
+  assert.match(hook, /"applying"/);
+  assert.match(hook, /"live"/);
+  assert.match(hook, /"error"/);
+  assert.match(consoleSource, /DomainPanel/);
+  assert.match(consoleSource, /"\/domain"/);
+  assert.match(nav, /"\/admin\/domain"/);
+});

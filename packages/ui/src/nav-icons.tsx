@@ -110,6 +110,12 @@ const GLYPHS: Record<string, () => ReactNode> = {
       <circle cx="12" cy="12" r="3" />
       <path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5l2.6-1.5M17.2 9l2.6-1.5" />
     </>
+  ),
+  domain: () => (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+    </>
   )
 };
 
