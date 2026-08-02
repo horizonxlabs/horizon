@@ -21,10 +21,6 @@ type SystemRouteRegistry = {
   post: (path: string, handler: (req: SystemHttpRequest, res: SystemHttpResponse) => void) => void;
 };
 
-export function isSystemRoute(request: PlatformRequest): boolean {
-  return request.path === "/admin/system/version" || request.path === "/admin/system/update";
-}
-
 /**
  * Resolves the admin system-version + system-update routes. Unlike `resolveSetupRequest`, these
  * routes are dispatched directly by `registerSystemRoutes` (not folded into the shared
