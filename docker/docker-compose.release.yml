@@ -245,6 +245,9 @@ services:
       # DATABASE_URL carries the password, so it is delivered as a Docker secret (built by
       # bootstrap-swarm.sh from the postgres password) and exported by the shim above.
       DATABASE_URL_FILE: /run/secrets/evcp_database_url
+      # Without this the app defaults to "legacy" (mock-first) persistence: real Postgres-backed
+      # services (incl. first-time setup / business settings) never wire up and /setup/* 404s.
+      EVCP_CORE_PERSISTENCE: ${EVCP_CORE_PERSISTENCE:-prisma}
       EVCP_LITELLM_BASE_URL: http://litellm:4000
       EVCP_LITELLM_MASTER_KEY_FILE: /run/secrets/evcp_litellm_master_key
       EVCP_WORKSPACE_SECRET_KEY_FILE: /run/secrets/evcp_workspace_secret_key

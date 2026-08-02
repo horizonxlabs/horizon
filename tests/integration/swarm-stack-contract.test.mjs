@@ -48,6 +48,13 @@ test("platform-api targets the swarm overlay network name and keeps the docker s
   assert.ok(release.services["platform-api"].volumes.some((v) => String(v).includes("/var/run/docker.sock")));
 });
 
+test("platform-api runs real Postgres persistence, not the legacy mock default", () => {
+  // Without EVCP_CORE_PERSISTENCE the app defaults to "legacy" (mock-first): setup/business
+  // settings never wire up and /setup/* 404s, so the platform can't even be initialized.
+  const value = String(release.services["platform-api"].environment.EVCP_CORE_PERSISTENCE ?? "");
+  assert.ok(/prisma/.test(value), `platform-api must default EVCP_CORE_PERSISTENCE to prisma (got "${value}")`);
+});
+
 test("keycloak persists in postgres, sits behind a proxy, and has a db-init job", () => {
   const kc = release.services.keycloak;
   assert.equal(kc.environment.KC_DB, "postgres");
