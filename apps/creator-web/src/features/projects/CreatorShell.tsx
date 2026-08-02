@@ -26,7 +26,8 @@ export function CreatorShell({
     createProjectForm,
     handleCreateProjectField,
     createProjectMessage,
-    isEnteringWorkspace
+    isEnteringWorkspace,
+    onNavigate
   } = app;
   return (
     <AppShell
@@ -36,6 +37,7 @@ export function CreatorShell({
       userName={bootstrap.userName}
       session={creatorSessionControls}
       tone="light"
+      onNavigate={onNavigate}
     >
       {isEnteringWorkspace ? (
         <div className="hz-loading-backdrop" role="status" aria-live="polite">

@@ -57,7 +57,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         author: selectedProject.owner
       }))
     : [];
-  const creatorPage = creatorPageFromPath(window.location.pathname);
+  const [path, setPath] = useState(() => window.location.pathname);
+  const creatorPage = creatorPageFromPath(path);
   const pageCopy = creatorPageCopy[creatorPage];
   const [, forceRerender] = useReducer((tick: number) => tick + 1, 0);
 
@@ -139,6 +140,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   // (derived from the URL) and the selected project would otherwise go stale until a manual reload.
   useEffect(() => {
     function onPopState() {
+      setPath(window.location.pathname);
       const segment = projectRouteSegmentFromPath(window.location.pathname);
       const match = segment
         ? bootstrap.projects.find((project) => project.id === segment)
@@ -156,6 +158,13 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     return () => window.removeEventListener("popstate", onPopState);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrap.projects]);
+
+  // Client-side sidebar navigation (AppShell's onNavigate): pushes history without a full reload,
+  // then updates the reactive path so creatorPage re-derives.
+  function onNavigate(route: string) {
+    if (route !== window.location.pathname) window.history.pushState(null, "", route);
+    setPath(route);
+  }
 
   async function handleSignInBridge() {
     setIsSigningIn(true);
@@ -209,6 +218,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       };
       // Browser back/forward already updated the URL — only push when we initiated the navigation.
       window.history.pushState({}, "", routeByPage[targetPage]);
+      setPath(routeByPage[targetPage]);
     }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
@@ -303,6 +313,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       );
       setIsCreateProjectDialogOpen(false);
       window.history.pushState({}, "", `/creator/projects/${project.id}/prd`);
+      setPath(`/creator/projects/${project.id}/prd`);
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
@@ -350,6 +361,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleSelectProject,
     handleCreateFromPrompt,
     handleCreateProjectSubmit,
+    onNavigate,
     creatorSessionControls,
     creatorPageActions,
     ...vibeWorkspace,
