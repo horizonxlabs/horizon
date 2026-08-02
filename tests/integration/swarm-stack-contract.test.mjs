@@ -48,6 +48,16 @@ test("platform-api targets the swarm overlay network name and keeps the docker s
   assert.ok(release.services["platform-api"].volumes.some((v) => String(v).includes("/var/run/docker.sock")));
 });
 
+test("KEYCLOAK_INTERNAL_ISSUER_URL default has no nested ${...} (breaks Docker interpolation)", () => {
+  // A nested ${KEYCLOAK_REALM} inside the :- default makes Docker close the outer ${} at the
+  // first '}' and append the second literally -> ".../realms/evcp}", which breaks kcadm login
+  // and platform-api's admin service token. Keep the default flat.
+  for (const svc of ["platform-api", "keycloak-bootstrap"]) {
+    const val = String(release.services[svc].environment.KEYCLOAK_INTERNAL_ISSUER_URL ?? "");
+    assert.doesNotMatch(val, /\$\{[^}]*\$\{/, `${svc} KEYCLOAK_INTERNAL_ISSUER_URL has a nested \${...}: ${val}`);
+  }
+});
+
 test("platform-api runs real Postgres persistence, not the legacy mock default", () => {
   // Without EVCP_CORE_PERSISTENCE the app defaults to "legacy" (mock-first): setup/business
   // settings never wire up and /setup/* 404s, so the platform can't even be initialized.

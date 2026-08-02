@@ -136,7 +136,10 @@ services:
       KEYCLOAK_PLATFORM_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_platform_client_secret
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?KEYCLOAK_ADMIN_CLIENT_ID is required}
       KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_admin_client_secret
-      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
+      # NOTE: no nested ${KEYCLOAK_REALM} in this default — Docker interpolation closes the outer
+      # ${...} at the first '}' and appends the second as a literal, producing ".../realms/evcp}".
+      # bootstrap-swarm.sh (and .env) set KEYCLOAK_INTERNAL_ISSUER_URL explicitly for non-evcp realms.
+      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/evcp}
       EVCP_PUBLIC_API_URL: ${EVCP_PUBLIC_API_URL:?EVCP_PUBLIC_API_URL is required}
       EVCP_ADMIN_WEB_URL: ${EVCP_ADMIN_WEB_URL:?EVCP_ADMIN_WEB_URL is required}
       EVCP_CREATOR_WEB_URL: ${EVCP_CREATOR_WEB_URL:?EVCP_CREATOR_WEB_URL is required}
@@ -270,7 +273,10 @@ services:
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/evcp_minio_root_password
       EVCP_ALLOW_SIMULATE_LOGIN: "0"
       KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:?KEYCLOAK_ISSUER_URL required}
-      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/${KEYCLOAK_REALM}}
+      # NOTE: no nested ${KEYCLOAK_REALM} in this default — Docker interpolation closes the outer
+      # ${...} at the first '}' and appends the second as a literal, producing ".../realms/evcp}".
+      # bootstrap-swarm.sh (and .env) set KEYCLOAK_INTERNAL_ISSUER_URL explicitly for non-evcp realms.
+      KEYCLOAK_INTERNAL_ISSUER_URL: ${KEYCLOAK_INTERNAL_ISSUER_URL:-http://keycloak:8080/auth/realms/evcp}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:?KEYCLOAK_REALM required}
       KEYCLOAK_PLATFORM_CLIENT_ID: ${KEYCLOAK_PLATFORM_CLIENT_ID:?KEYCLOAK_PLATFORM_CLIENT_ID required}
       KEYCLOAK_PLATFORM_CLIENT_SECRET_FILE: /run/secrets/evcp_keycloak_platform_client_secret
