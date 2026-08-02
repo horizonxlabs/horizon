@@ -1,7 +1,12 @@
 import { type PrdVersionDto } from "@evcp/api-client";
+import { navigateBrowserPath, useBrowserPath, usePageHeadingFocus } from "@evcp/ui";
 import { RotateCcw } from "lucide-react";
-import { useEffect, useReducer, useState, type FormEvent } from "react";
-import { initialCreateProjectForm, initialCreatorBootstrap } from "@/app/creator-defaults";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  initialCreateProjectForm,
+  initialCreatorBootstrap,
+  unselectedProject
+} from "@/app/creator-defaults";
 import {
   creatorApiFailureState,
   beginCreatorKeycloakLogout,
@@ -12,10 +17,12 @@ import {
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
 import {
   createCreatorNavigation,
+  creatorPathForPage,
   creatorPageCopy,
-  creatorPageFromPath,
+  creatorRouteFromPath,
   projectRouteSegmentFromPath,
-  type CreatorPage
+  type CreatorPage,
+  type CreatorSelectablePage
 } from "@/app/routes";
 import { clearLoginSession } from "@/shared/session";
 import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types";
@@ -39,16 +46,26 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
 
   const selectedProject = bootstrap.selectedProject;
   const creatorNavItems = createCreatorNavigation(selectedProject);
+  const pathname = useBrowserPath();
+  usePageHeadingFocus(pathname);
+  const creatorRoute = creatorRouteFromPath(pathname);
+  const creatorPage = creatorRoute.page;
+  const requestedProjectUnavailable =
+    bootstrap.status === "ready" &&
+    creatorPage !== "not-found" &&
+    Boolean(creatorRoute.projectId) &&
+    !bootstrap.projects.some((project) => project.id === creatorRoute.projectId);
 
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
   const publishAccess = usePublishAccess({ selectedProject });
 
-  const visiblePrdSections = currentPrdVersion?.sections?.map((section) => ({
-    key: section.key,
-    title: section.title,
-    body: section.body,
-    order: String(section.order)
-  })) ?? [];
+  const visiblePrdSections =
+    currentPrdVersion?.sections?.map((section) => ({
+      key: section.key,
+      title: section.title,
+      body: section.body,
+      order: String(section.order)
+    })) ?? [];
   const visibleVersionRows = prdVersionList.length
     ? prdVersionList.map((version) => ({
         version: version.version,
@@ -57,15 +74,17 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         author: selectedProject.owner
       }))
     : [];
-  const creatorPage = creatorPageFromPath(window.location.pathname);
   const pageCopy = creatorPageCopy[creatorPage];
-  const [, forceRerender] = useReducer((tick: number) => tick + 1, 0);
 
   async function refreshPrdState(projectId: string) {
     const prdState = await loadPrdState(projectId);
     setCurrentPrdVersion(prdState.current);
     setPrdVersionList(prdState.versions);
-    setPrdMessage(prdState.current ? "PRD loaded from Platform API." : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline.");
+    setPrdMessage(
+      prdState.current
+        ? "PRD loaded from Platform API."
+        : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline."
+    );
   }
 
   async function handleConfirmPrdBaseline() {
@@ -74,12 +93,21 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       return;
     }
     try {
-      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, { versionId: currentPrdVersion.id });
+      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, {
+        versionId: currentPrdVersion.id
+      });
       setCurrentPrdVersion(baseline);
-      setPrdVersionList((current) => [baseline, ...current.filter((version) => version.id !== baseline.id)]);
+      setPrdVersionList((current) => [
+        baseline,
+        ...current.filter((version) => version.id !== baseline.id)
+      ]);
       setPrdMessage(`Baseline v${baseline.version} confirmed through Platform API.`);
     } catch (error) {
-      setPrdMessage(error instanceof Error ? `Baseline confirmation failed: ${error.message}` : "Baseline confirmation failed. No local state was changed.");
+      setPrdMessage(
+        error instanceof Error
+          ? `Baseline confirmation failed: ${error.message}`
+          : "Baseline confirmation failed. No local state was changed."
+      );
     }
   }
 
@@ -95,9 +123,18 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     // (the card-click path does this via handleSelectProject; a fresh page load does not).
     const onWorkspace = creatorPage === "workspace";
     if (onWorkspace) setIsEnteringWorkspace(true);
-    loadCreatorBootstrap(projectRouteSegmentFromPath(window.location.pathname))
+    loadCreatorBootstrap(projectRouteSegmentFromPath(pathname))
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
+        if (!nextBootstrap.selectedProject.id) {
+          vibeWorkspace.setWorkspaceSnapshot(undefined);
+          vibeWorkspace.setWorkspaceMessage(
+            creatorRoute.projectId
+              ? "The requested project is unavailable from Platform API."
+              : "Select or create a project to load workspace state."
+          );
+          return;
+        }
         try {
           await refreshPrdState(nextBootstrap.selectedProject.id);
         } catch {
@@ -123,7 +160,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       .catch((error) => {
         setBootstrap(
           creatorApiFailureState(
-            error instanceof Error ? error.message : "Unable to load Creator projects from Platform API."
+            error instanceof Error
+              ? error.message
+              : "Unable to load Creator projects from Platform API."
           )
         );
         vibeWorkspace.setWorkspaceSnapshot(undefined);
@@ -135,27 +174,27 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Browser back/forward changes window.location without any React state change, so the page
-  // (derived from the URL) and the selected project would otherwise go stale until a manual reload.
   useEffect(() => {
-    function onPopState() {
-      const segment = projectRouteSegmentFromPath(window.location.pathname);
-      const match = segment
-        ? bootstrap.projects.find((project) => project.id === segment)
-        : undefined;
-      if (match) {
-        void handleSelectProject(match, creatorPageFromPath(window.location.pathname), {
-          push: false
-        });
-      } else {
-        // Back to the projects list (or an unknown project): just re-render so the page re-derives.
-        forceRerender();
+    const match = creatorRoute.projectId
+      ? bootstrap.projects.find((project) => project.id === creatorRoute.projectId)
+      : undefined;
+    if (!match) {
+      if (creatorRoute.projectId && selectedProject.id) {
+        setBootstrap((current) => ({ ...current, selectedProject: unselectedProject }));
+        resetProjectRuntimeState();
       }
+      return;
     }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    if (match.id === selectedProject.id) return;
+    const targetPage: CreatorSelectablePage =
+      creatorPage === "ticket-detail"
+        ? "tickets"
+        : creatorPage === "not-found"
+          ? "workspace"
+          : creatorPage;
+    void handleSelectProject(match, targetPage, { push: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bootstrap.projects]);
+  }, [pathname, bootstrap.projects, selectedProject.id]);
 
   async function handleSignInBridge() {
     setIsSigningIn(true);
@@ -171,7 +210,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   async function handleLogoutBridge() {
-    await createCreatorPlatformClient().request("/auth/logout", { method: "POST" }).catch(() => undefined);
+    await createCreatorPlatformClient()
+      .request("/auth/logout", { method: "POST" })
+      .catch(() => undefined);
     clearCreatorSessionBridge();
     setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
@@ -195,24 +236,20 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     options: { push?: boolean } = {}
   ) {
     const { push = true } = options;
+    const selectableTargetPage: CreatorSelectablePage =
+      targetPage === "ticket-detail"
+        ? "tickets"
+        : targetPage === "not-found"
+          ? "workspace"
+          : targetPage;
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
     if (push) {
-      const routeBase = `/creator/projects/${project.id}`;
-      const routeByPage: Record<CreatorPage, string> = {
-        projects: "/creator/",
-        workspace: routeBase,
-        prd: `${routeBase}/prd`,
-        users: `${routeBase}/users`,
-        publish: `${routeBase}/publish`,
-        tickets: `${routeBase}/tickets`
-      };
-      // Browser back/forward already updated the URL — only push when we initiated the navigation.
-      window.history.pushState({}, "", routeByPage[targetPage]);
+      navigateBrowserPath(creatorPathForPage(project.id, selectableTargetPage));
     }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
-    const enteringWorkspace = targetPage === "workspace";
+    const enteringWorkspace = selectableTargetPage === "workspace";
     if (enteringWorkspace) setIsEnteringWorkspace(true);
     try {
       try {
@@ -302,7 +339,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         `สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`
       );
       setIsCreateProjectDialogOpen(false);
-      window.history.pushState({}, "", `/creator/projects/${project.id}/prd`);
+      navigateBrowserPath(creatorPathForPage(project.id, "prd"));
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
@@ -342,6 +379,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     prdMessage,
     handleConfirmPrdBaseline,
     creatorPage,
+    creatorRoute,
+    requestedProjectUnavailable,
+    pathname,
     pageCopy,
     refreshPrdState,
     handleSignInBridge,

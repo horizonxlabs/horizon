@@ -18,6 +18,14 @@ export function creatorApiFailureState(message: string): CreatorBootstrapState {
   };
 }
 
+export function selectCreatorProjectForRequest(
+  projects: CreatorBootstrapState["projects"],
+  selectedProjectKey?: string
+): CreatorBootstrapState["selectedProject"] {
+  if (!selectedProjectKey) return projects[0] ?? unselectedProject;
+  return projects.find((project) => project.id === selectedProjectKey) ?? unselectedProject;
+}
+
 export async function loadCreatorBootstrap(
   selectedProjectKey?: string
 ): Promise<CreatorBootstrapState> {
@@ -26,10 +34,7 @@ export async function loadCreatorBootstrap(
   const currentUser = await client.getCurrentUser();
   const projects = await client.listProjects();
   const projectViews = projects.map((project) => projectToView(project, currentUser));
-  const selectedProject =
-    projectViews.find((project) => project.id === selectedProjectKey) ??
-    projectViews[0] ??
-    unselectedProject;
+  const selectedProject = selectCreatorProjectForRequest(projectViews, selectedProjectKey);
   return {
     status: projectViews.length ? "ready" : "empty",
     userName: currentUser.user.name,
@@ -71,6 +76,14 @@ export function consumeCreatorSessionHandoff(): void {
   const refreshToken = handoff.get("evcp_refresh_token");
   const refreshExpiresAt = handoff.get("evcp_refresh_expires_at");
   if (!token || !expiresAt) return;
-  createPlatformSessionStore(window.localStorage).saveSession({ token, expiresAt, ...(refreshToken && refreshExpiresAt ? { refreshToken, refreshExpiresAt } : {}) });
-  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  createPlatformSessionStore(window.localStorage).saveSession({
+    token,
+    expiresAt,
+    ...(refreshToken && refreshExpiresAt ? { refreshToken, refreshExpiresAt } : {})
+  });
+  window.history.replaceState(
+    {},
+    document.title,
+    `${window.location.pathname}${window.location.search}`
+  );
 }

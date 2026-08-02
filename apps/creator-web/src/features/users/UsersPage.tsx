@@ -7,7 +7,10 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
     handleInviteUser,
+    handleAccessRequestDecision,
+    decidingAccessRequestIds,
     isInvitingUser,
+    publishMessage,
     visibleAppMembers,
     visibleAccessRequests,
     visibleAppRoles
@@ -18,6 +21,12 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       content={
         <section className="sprint6-shell" aria-label="App users roles">
           <div className="sprint6-main-panel">
+            <p
+              role={/failed|blocked|unavailable/i.test(publishMessage) ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {publishMessage}
+            </p>
             <SectionCard
               eyebrow="App Users"
               title={`App Users: ${selectedProject.name}`}
@@ -49,9 +58,40 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   { key: "role", label: "Requested Role" },
                   { key: "reason", label: "Reason" },
                   { key: "submitted", label: "Submitted" },
-                  { key: "status", label: "Status", tone: () => "warning" }
+                  {
+                    key: "status",
+                    label: "Status",
+                    tone: (value) =>
+                      value === "approved" ? "success" : value === "rejected" ? "danger" : "warning"
+                  },
+                  { key: "actions", label: "Actions" }
                 ]}
-                rows={visibleAccessRequests}
+                rows={visibleAccessRequests.map((request) => {
+                  const isPending = request.status === "pending";
+                  const isDeciding = decidingAccessRequestIds.has(request.id);
+                  return {
+                    ...request,
+                    actions: (
+                      <div className="actions">
+                        <button
+                          type="button"
+                          disabled={!isPending || isDeciding}
+                          onClick={() => handleAccessRequestDecision(request.id, "approved")}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!isPending || isDeciding}
+                          onClick={() => handleAccessRequestDecision(request.id, "rejected")}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )
+                  };
+                })}
+                rowKey={(request) => request.id}
               />
             </SectionCard>
             <SectionCard eyebrow="App Roles" title="Role Permission Matrix">

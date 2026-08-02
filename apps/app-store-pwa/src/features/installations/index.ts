@@ -28,20 +28,38 @@ export const appInstallJourneySteps = [
 
 export function installJourneyStatus(
   stepId: (typeof appInstallJourneySteps)[number]["id"],
-  app: AppStoreItem,
-  installResult: StoreAppInstallationResponse | undefined,
-  isInstallingApp: boolean
+  app: Pick<AppStoreItem, "accessStatus" | "installStatus">,
+  installationStatus: StoreAppInstallationResponse["status"] | undefined,
+  isInstallingApp: boolean,
+  uninstallationStatus?: StoreAppInstallationResponse["status"],
+  isUninstallingApp = false
 ): InstallJourneyStepStatus {
   const hasAccess = app.accessStatus === "active";
-  const isInstalled = app.installStatus === "installed" || installResult?.status === "active";
-  const isRemoved = installResult?.status === "disabled";
+  const isInstalled = app.installStatus === "installed";
+  const installRecordConfirmed = installationStatus === "active";
+  const isRemoved = uninstallationStatus === "disabled";
 
   if (stepId === "access_check") return hasAccess ? "complete" : "blocked";
   if (!hasAccess) return "pending";
-  if (isInstalled) return "complete";
-  if (isRemoved) return stepId === "install_record" ? "current" : "pending";
+  if (isUninstallingApp)
+    return stepId === "manifest_validation"
+      ? "complete"
+      : stepId === "install_record"
+        ? "current"
+        : "pending";
+  if (isRemoved)
+    return stepId === "manifest_validation" || stepId === "install_record"
+      ? "current"
+      : "pending";
   if (isInstallingApp)
     return stepId === "manifest_validation" || stepId === "install_record" ? "current" : "pending";
+  if (isInstalled) return "complete";
+  if (installRecordConfirmed)
+    return stepId === "manifest_validation" || stepId === "install_record"
+      ? "complete"
+      : stepId === "my_apps_ready"
+        ? "current"
+        : "pending";
   if (stepId === "manifest_validation") return "current";
   return "pending";
 }

@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 import { Badge, StatusPill, ToneBadge, type Tone, type BadgeProps } from "./primitives/badge";
 
 export { AppShell } from "./app-shell";
+export {
+  navigateBrowserPath,
+  useBrowserPath,
+  usePageHeadingFocus
+} from "./browser-navigation";
 export { Button, type ButtonProps } from "./primitives/button";
 export { Card, SectionCard } from "./primitives/card";
 export { Drawer } from "./primitives/drawer";
@@ -188,14 +193,8 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
   );
 }
 
-export function AppCard({ app }: { app: AppStoreItem }) {
+export function AppCard({ app, detailRoute = `/store/apps/${app.slug}` }: { app: AppStoreItem; detailRoute?: string }) {
   const canOpen = app.accessStatus === "active";
-  const action = canOpen
-    ? "Open App"
-    : app.accessStatus === "pending"
-      ? "View Status"
-      : "Request Access";
-  const route = app.route ?? `/apps/${app.slug}`;
 
   return (
     <article className={`store-app-card ${canOpen ? "" : "store-app-card-muted"}`.trim()}>
@@ -214,19 +213,9 @@ export function AppCard({ app }: { app: AppStoreItem }) {
       </div>
       <div className="store-app-card-actions">
         <StatusPill status={app.health} />
-        {canOpen ? (
-          <a className="button-link" href={route}>
-            {action}
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={app.accessStatus === "pending"}
-          >
-            {action}
-          </button>
-        )}
+        <a className="button-link" href={detailRoute}>
+          View Details
+        </a>
       </div>
     </article>
   );

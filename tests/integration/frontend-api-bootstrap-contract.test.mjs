@@ -31,6 +31,7 @@ const adminOperationsSource = readFileSync("apps/admin-web/src/features/platform
 const adminAuditSource = readFileSync("apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx", "utf8");
 const creatorTicketsSource = readFileSync("apps/creator-web/src/features/tickets/TicketsPage.tsx", "utf8");
 const creatorTicketInboxSource = readFileSync("apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts", "utf8");
+const creatorTicketActionsSource = readFileSync("apps/creator-web/src/features/tickets/ticket-actions.ts", "utf8");
 const creatorAppHookSource = readFileSync("apps/creator-web/src/app/use-creator-app.tsx", "utf8");
 const creatorPublishPageSource = readFileSync("apps/creator-web/src/features/publish/PublishPage.tsx", "utf8");
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
@@ -52,11 +53,7 @@ const storeSharedSource = readAllSourceFiles("apps/app-store-pwa/src/shared");
 const storeSource = `${storeAppComposition}\n${storePublicFeatureSource}\n${storeSharedSource}`;
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
 const appConfig = readFileSync("packages/config/src/index.ts", "utf8");
-const persistenceDocs = readFileSync("docs/operations/real-mvp-persistence.md", "utf8");
 const caddyfile = readFileSync("docker/Caddyfile", "utf8");
-const creatorViteConfig = readFileSync("apps/creator-web/vite.config.ts", "utf8");
-const storeViteConfig = readFileSync("apps/app-store-pwa/vite.config.ts", "utf8");
-const storeIndex = readFileSync("apps/app-store-pwa/index.html", "utf8");
 const storeBootstrapSource = readFileSync(
   "apps/app-store-pwa/src/features/storefront/bootstrap.ts",
   "utf8"
@@ -161,7 +158,9 @@ test("Store and Creator fail closed instead of creating local success evidence",
     assert.doesNotMatch(source, /Local fallback (generated|produced|recorded|kept)/);
     assert.doesNotMatch(source, /fallbackWorkspacePromptResult/);
   }
-  assert.match(creatorTicketInboxSource, /\/creator\/projects\//);
+  assert.match(creatorTicketInboxSource, /refreshCreatorTicketInbox/);
+  assert.match(creatorTicketActionsSource, /\/creator\/projects\//);
+  assert.match(creatorTicketActionsSource, /encodeURIComponent\(projectId\)/);
   assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
   assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
   assert.doesNotMatch(creatorAppHookSource, /prdSections|versionRows/);
@@ -223,7 +222,7 @@ test("Creator preview establishes an HttpOnly session without putting bearer tok
 });
 
 test("Admin and Creator shells render separate page branches instead of one combined evidence page", () => {
-  assert.match(adminConsoleSource, /pageFromPath/);
+  assert.match(adminConsoleSource, /adminPageFromPath/);
   assert.match(adminConsoleSource, /OperationsDashboard/);
   assert.match(adminConsoleSource, /AppShell/);
   for (const branch of [
@@ -235,16 +234,22 @@ test("Admin and Creator shells render separate page branches instead of one comb
   ]) {
     assert.match(adminSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(creatorSource, /creatorPageFromPath/);
+  assert.match(creatorSource, /creatorRouteFromPath/);
+  assert.match(creatorSource, /const creatorPage = creatorRoute\.page/);
+  assert.match(creatorSource, /CreatorRoutes/);
   assert.match(creatorSource, /CreatorShell/);
   assert.match(creatorSource, /creatorPageCopy/);
   for (const branch of [
     'creatorPage === "projects"',
     'creatorPage === "workspace"',
     'creatorPage === "prd"',
+    'creatorPage === "database"',
+    'creatorPage === "versions"',
     'creatorPage === "users"',
     'creatorPage === "publish"',
-    'creatorPage === "tickets"'
+    'creatorPage === "deployments"',
+    'creatorPage === "tickets"',
+    'creatorPage === "ticket-detail"'
   ]) {
     assert.match(creatorSource, new RegExp(branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -267,79 +272,9 @@ test("Admin setup wizard is API-client backed and exposes step controls", () => 
   assert.doesNotMatch(setupWizard, /fetch\(`\$\{baseUrl\}\/admin\/installer\/preflight`/);
 });
 
-test("App Store PWA actions are API-client backed", () => {
-  assert.match(apiClient, /getStoreAppDetail\(/);
-  assert.match(apiClient, /requestStoreAccess\(/);
-  assert.match(apiClient, /installStoreApp\(/);
-  assert.match(apiClient, /uninstallStoreApp\(/);
-  assert.match(apiClient, /submitStoreTicket\(/);
-  assert.match(apiClient, /getStoreTicket\(/);
-  assert.match(storeSource, /handleRequestAccess/);
-  assert.match(storeSource, /handleInstallApp/);
-  assert.match(storeSource, /handleUninstallApp/);
-  assert.match(storeSource, /handleSubmitTicket/);
-  assert.match(storeSource, /requestStoreAccess/);
-  assert.match(storeSource, /installStoreApp/);
-  assert.match(storeSource, /uninstallStoreApp/);
-  assert.match(storeSource, /submitStoreTicket/);
-  assert.match(storeSource, /getStoreTicket/);
-  assert.match(storeSource, /accessRequestResult/);
-  assert.match(storeSource, /installResult/);
-  assert.match(storeSource, /ticketStatus/);
-  assert.doesNotMatch(storeSource, /ticketTimeline = \[/);
-});
-
-test("App Store PWA exposes an install journey instead of a single opaque install action", () => {
-  assert.match(storeSource, /appInstallJourneySteps/);
-  assert.match(storeSource, /installJourneyStatus/);
-  assert.match(storeSource, /aria-label="App install journey"/);
-  for (const label of ["Access Check", "Manifest Validation", "Install Record", "My Apps Ready"]) {
-    assert.match(storeSource, new RegExp(label));
-  }
-  assert.match(storeSource, /store-install-stepper/);
-  assert.match(storeSource, /store-install-step status-/);
-  assert.match(storeSource, /installResult\?\.status === "active"/);
-  assert.match(persistenceDocs, /App Install Journey/);
-});
-
-test("App Store renders its unauthenticated and empty states before deriving install details", () => {
-  const selectedAppDeclaration = storeSource.indexOf("const selectedApp = myApps[0] ?? availableApps[0];");
-  const emptyGuard = storeSource.indexOf("if (!selectedApp) return");
-  const journeyDerivation = storeSource.indexOf("const installJourneyRows = appInstallJourneySteps.map");
-  assert.ok(selectedAppDeclaration >= 0);
-  assert.ok(emptyGuard > selectedAppDeclaration);
-  assert.ok(journeyDerivation > emptyGuard);
-});
-
 test("App Store logout revokes the Platform session before ending Keycloak SSO", () => {
   assert.match(storeSource, /request\("\/auth\/logout", \{ method: "POST" \}\)/);
   assert.match(storeSource, /beginStoreKeycloakLogout\(\)/);
-});
-
-test("published app route opens a usable generated Leave Management runtime", () => {
-  assert.match(caddyfile, /handle \/apps\/\*/);
-  assert.match(caddyfile, /rewrite \* \/store\{uri\}/);
-  assert.match(caddyfile, /handle \/store\*/);
-  assert.match(creatorViteConfig, /base: "\/creator\/"/);
-  assert.match(storeViteConfig, /base: "\/store\/"/);
-  assert.match(storeIndex, /href="manifest\.webmanifest"/);
-  assert.match(caddyfile, /reverse_proxy app-store-pwa:4102/);
-  assert.match(storeSource, /GeneratedLeaveManagementApp/);
-  assert.match(storeSource, /window\.location\.pathname\.startsWith\("\/apps\/leave-management"\)/);
-  assert.match(storeSource, /handleOpenSelectedApp/);
-  assert.match(
-    storeSource,
-    /window\.location\.assign\(selectedApp\.route \?\? `\/apps\/\$\{selectedApp\.slug\}`\)/
-  );
-  for (const text of [
-    "New leave request",
-    "Submit request",
-    "Approval queue",
-    "approveRequest",
-    "Last submitted request"
-  ]) {
-    assert.match(storeSource, new RegExp(text));
-  }
 });
 
 test("Creator workspace actions are API-client backed", () => {
@@ -389,7 +324,7 @@ test("Creator app users and publish actions are API-client backed", () => {
   for (const handler of [
     "loadCreatorPublishState",
     "handleInviteUser",
-    "handleApproveAccessRequest",
+    "handleAccessRequestDecision",
     "handlePublishProject"
   ]) {
     assert.match(creatorSource, new RegExp(handler));

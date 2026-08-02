@@ -273,6 +273,8 @@ test("Sprint 8 UI exposes fail-closed ticket changes and API-backed operational 
   for (const text of [
     "Tickets & Changes",
     "Creator Ticket Inbox",
+    "Convert to PRD Change",
+    "Platform API support required",
     "PRD Change Requests",
     "No local PRD change records",
     "Convert a ticket through the governed API"

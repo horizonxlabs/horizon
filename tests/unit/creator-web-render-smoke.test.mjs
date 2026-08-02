@@ -64,18 +64,26 @@ const { CreatorRoutes } = await import(`${base}/routes/CreatorRoutes.tsx`);
 const { ProjectsPage } = await import(`${base}/features/projects`);
 const { WorkspacePage } = await import(`${base}/features/workspace`);
 const { PrdPage } = await import(`${base}/features/prd`);
+const { DatabasePage } = await import(`${base}/features/database`);
+const { VersionsPage } = await import(`${base}/features/versions`);
 const { UsersPage } = await import(`${base}/features/users`);
 const { PublishPage } = await import(`${base}/features/publish`);
+const { DeploymentsPage } = await import(`${base}/features/deployments`);
 const { TicketsPage } = await import(`${base}/features/tickets`);
+const { TicketDetailPage } = await import(`${base}/features/tickets`);
 const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
   ProjectsPage,
   WorkspacePage,
   PrdPage,
+  DatabasePage,
+  VersionsPage,
   UsersPage,
   PublishPage,
+  DeploymentsPage,
   TicketsPage,
+  TicketDetailPage,
   DefaultPage
 };
 
@@ -114,17 +122,37 @@ const ROUTE_CASES = [
   ["projects", "/creator", /รายการโปรเจกต์/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
   ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
+  ["database", "/creator/projects/project-1/database", /Project database/],
+  ["versions", "/creator/projects/project-1/versions", /Frontend versions/],
   ["users", "/creator/projects/project-1/users", /App users roles/],
   ["publish", "/creator/projects/project-1/publish", /Publish app/],
-  ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/]
+  ["deployments", "/creator/projects/project-1/deployments", /Project deployments/],
+  ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/],
+  ["ticket detail", "/creator/projects/project-1/tickets/ticket-1", /Ticket detail/]
 ];
 
 for (const [page, pathname, expected] of ROUTE_CASES) {
   test(`CreatorRoutes maps ${page} to its capability screen`, () => {
     window.location.pathname = pathname;
-    const html = renderWithHook((app) =>
-      React.createElement(CreatorRoutes, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
-    );
+    const html = renderWithHook((app) => {
+      const selectedProject = {
+        ...app.selectedProject,
+        id: "project-1",
+        name: "Project One"
+      };
+      return React.createElement(CreatorRoutes, {
+        app: {
+          ...app,
+          selectedProject,
+          bootstrap: {
+            ...app.bootstrap,
+            status: "ready",
+            selectedProject,
+            projects: [selectedProject]
+          }
+        }
+      });
+    });
     assert.match(html, expected);
   });
 }
@@ -132,12 +160,40 @@ for (const [page, pathname, expected] of ROUTE_CASES) {
 test("CreatorRoutes fail-closes the default dashboard route without demo records", () => {
   const html = renderWithHook((app) =>
     React.createElement(CreatorRoutes, {
-      app: { ...app, creatorPage: "unexpected", bootstrap: { ...app.bootstrap, status: "ready" } }
+      app: {
+        ...app,
+        creatorPage: "unexpected",
+        creatorRoute: { page: "not-found" },
+        requestedProjectUnavailable: false,
+        bootstrap: { ...app.bootstrap, status: "ready" }
+      }
     })
   );
   assert.match(html, /This route has no dashboard fallback/);
   assert.doesNotMatch(html, /Database and frontend versions/);
   assert.doesNotMatch(html, /TKT-0001/);
+});
+
+test("CreatorRoutes renders project unavailable instead of another project's route data", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(CreatorRoutes, {
+      app: {
+        ...app,
+        creatorPage: "versions",
+        creatorRoute: { page: "versions", projectId: "missing-project" },
+        bootstrap: {
+          ...app.bootstrap,
+          status: "ready",
+          projects: [{ ...app.selectedProject, id: "project-1", name: "First Project" }],
+          selectedProject: { ...app.selectedProject, id: "project-1", name: "First Project" }
+        },
+        selectedProject: { ...app.selectedProject, id: "project-1", name: "First Project" }
+      }
+    })
+  );
+  assert.match(html, /Project unavailable/);
+  assert.match(html, /Return to Projects/);
+  assert.doesNotMatch(html, /Versions: First Project/);
 });
 
 test("CreatorRoutes keeps the first-project state inside the shared Creator shell", () => {
@@ -166,7 +222,10 @@ test("ProjectsPage renders the create-first landing inside the shared Creator sh
   // Shared AppShell chrome, restyled onto token utilities but structurally unchanged:
   // light tone, mobile open/close controls (by aria), backdrop, and the sidebar aside id.
   assert.match(html, /<aside[^>]*bg-surface text-body/);
-  assert.match(html, /aria-expanded="false" aria-controls="app-shell-sidebar-[^"]+" aria-label="Open navigation"/);
+  assert.match(
+    html,
+    /aria-expanded="false" aria-controls="app-shell-sidebar-[^"]+" aria-label="Open navigation"/
+  );
   assert.match(html, /aria-controls="app-shell-sidebar-[^"]+"/);
   assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
   assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
@@ -183,6 +242,20 @@ test("ProjectsPage is create-first: shows the create CTA and no free-text prompt
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
   assert.match(html, /สร้าง Project ใหม่/);
   assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
+});
+
+test("UsersPage visibly presents access decision feedback with alert semantics", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(UsersPage, {
+      app: {
+        ...app,
+        bootstrap: { ...app.bootstrap, status: "ready" },
+        publishMessage: "Access decision failed: approval offline"
+      }
+    })
+  );
+  assert.match(html, /role="alert"/);
+  assert.match(html, /Access decision failed: approval offline/);
 });
 
 test("ProjectsPage CTA and search use @evcp/ui primitives", () => {

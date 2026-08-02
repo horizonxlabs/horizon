@@ -264,6 +264,7 @@ test("SystemUpdatePanel renders the current version and app service tags with a 
 test("use-system-update polls getSystemVersion and retries through errors, and AdminConsole wires the System page", async () => {
   const hook = await readFile("apps/admin-web/src/features/platform-operations/use-system-update.ts", "utf8");
   const consoleSource = await readFile("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
+  const routeSource = await readFile("apps/admin-web/src/features/admin-console/admin-routes.ts", "utf8");
   const nav = await readFile("packages/config/src/index.ts", "utf8");
   assert.match(hook, /client\.getSystemVersion\(\)/);
   assert.match(hook, /client\.updateSystemVersion\(/);
@@ -272,7 +273,7 @@ test("use-system-update polls getSystemVersion and retries through errors, and A
   assert.match(hook, /"done"/);
   assert.match(hook, /"error"/);
   assert.match(consoleSource, /SystemUpdatePanel/);
-  assert.match(consoleSource, /"\/system"/);
+  assert.match(routeSource, /"\/admin\/system": "system"/);
   assert.match(nav, /"\/admin\/system"/);
 });
 
@@ -308,6 +309,7 @@ test("DomainPanel warns to point DNS at this server before go-live", async () =>
 test("use-domain polls getDomainStatus and retries through errors, and AdminConsole wires the Domain page", async () => {
   const hook = await readFile("apps/admin-web/src/features/platform-operations/use-domain.ts", "utf8");
   const consoleSource = await readFile("apps/admin-web/src/features/admin-console/AdminConsole.tsx", "utf8");
+  const routeSource = await readFile("apps/admin-web/src/features/admin-console/admin-routes.ts", "utf8");
   const nav = await readFile("packages/config/src/index.ts", "utf8");
   assert.match(hook, /client\.getDomainStatus\(\)/);
   assert.match(hook, /client\.setDomain\(/);
@@ -316,6 +318,6 @@ test("use-domain polls getDomainStatus and retries through errors, and AdminCons
   assert.match(hook, /"live"/);
   assert.match(hook, /"error"/);
   assert.match(consoleSource, /DomainPanel/);
-  assert.match(consoleSource, /"\/domain"/);
+  assert.match(routeSource, /"\/admin\/domain": "domain"/);
   assert.match(nav, /"\/admin\/domain"/);
 });

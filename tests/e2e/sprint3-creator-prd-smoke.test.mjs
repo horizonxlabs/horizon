@@ -155,6 +155,8 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
     assert.match(creatorSource, new RegExp(text));
   }
 
+  assert.doesNotMatch(creatorSource, /สร้างด้วย AI/);
+
   for (const component of [
     "WorkflowRail",
     "SectionCard",

@@ -45,3 +45,35 @@ test("AppShell gates mobile hiding and manages drawer keyboard focus", () => {
   assert.match(source, /closeControlRef\.current\?\.focus\(\)/);
   assert.match(source, /mobileTriggerRef\.current\?\.focus\(\)/);
 });
+
+test("AppShell marks the active navigation link as the current page", () => {
+  assert.match(source, /aria-current=\{isActive \? "page" : undefined\}/);
+});
+
+test("AppShell resolves the active navigation item from currentPath", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      AppShell,
+      {
+        ...shellProps,
+        currentPath: "/creator/projects",
+        navItems: [
+          { label: "Home", route: "/creator", icon: "workspace" },
+          { label: "Projects", route: "/creator/projects", icon: "workspace" }
+        ]
+      },
+      "Content"
+    )
+  );
+
+  assert.match(html, /href="\/creator\/projects"[^>]*aria-current="page"/);
+});
+
+test("usePageHeadingFocus focuses the main page heading after navigation", async () => {
+  const source = await readFile(
+    new URL("../../packages/ui/src/browser-navigation.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /document\.querySelector<HTMLElement>\("main h1"\)/);
+  assert.match(source, /heading\.focus\(\)/);
+});
