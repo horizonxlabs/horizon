@@ -244,7 +244,15 @@ services:
       - pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @evcp/platform-api seed && pnpm --filter @evcp/platform-api start
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # Bind-mounts the host stack.env/domain.env directory so platform-api can durably persist a
+      # UI-set domain (domain.env, written to the host so bootstrap-swarm.sh sources it on every
+      # future deploy — see docs/superpowers/plans/2026-08-02-in-ui-domain.md).
+      - type: bind
+        source: ${EVCP_STACK_ENV_DIR:-/opt/evcp}
+        target: /etc/evcp/host
     environment:
+      # Where the host's stack.env/domain.env directory is bind-mounted (see volumes above).
+      EVCP_STACK_ENV_DIR: /etc/evcp/host
       # DATABASE_URL carries the password, so it is delivered as a Docker secret (built by
       # bootstrap-swarm.sh from the postgres password) and exported by the shim above.
       DATABASE_URL_FILE: /run/secrets/evcp_database_url

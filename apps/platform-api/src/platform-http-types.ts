@@ -29,6 +29,7 @@ export interface PlatformRequest {
     | "/admin/business-settings"
     | "/admin/system/version"
     | "/admin/system/update"
+    | "/admin/system/domain"
     | "/admin/backup/policies"
     | "/admin/backup/runs"
     | "/admin/backup/pitr"

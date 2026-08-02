@@ -250,6 +250,11 @@ deploy_stack() {
   set -a
   # shellcheck disable=SC1090
   . "$STACK_ENV_PATH"
+  # Durability: a UI-set domain (see docs/superpowers/plans/2026-08-02-in-ui-domain.md)
+  # is persisted to domain.env alongside stack.env and re-sourced here on every deploy,
+  # so redeploys/restarts don't fall back to the IP-first stack.env values.
+  # shellcheck disable=SC1090
+  [ -f "${STACK_ENV_DIR}/domain.env" ] && . "${STACK_ENV_DIR}/domain.env"
   set +a
   # shellcheck disable=SC2086
   docker stack deploy $args

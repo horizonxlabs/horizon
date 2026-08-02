@@ -43,3 +43,21 @@ test("updateServiceImage throws on a Docker error status", async () => {
   const engine = createSwarmServiceEngine({ request });
   await assert.rejects(() => engine.updateServiceImage("evcp_admin-web", "x"));
 });
+
+test("updateServiceEnv merges the patch into the Env array (replace + append) and posts the raw object", async () => {
+  const { request, calls } = stub((method) => {
+    if (method === "GET") return { json: { Version: { Index: 7 }, Spec: { Name: "evcp_caddy", TaskTemplate: { ContainerSpec: { Image: "caddy", Env: ["EVCP_CADDY_ADDRESS=:80", "OTHER=x"] } } } } };
+    return { json: {} };
+  });
+  const engine = createSwarmServiceEngine({ request });
+  await engine.updateServiceEnv("evcp_caddy", { EVCP_CADDY_ADDRESS: "app.example.com", NEW: "1" });
+  const post = calls.find((c) => c.method === "POST");
+  assert.match(post.path, /\/services\/evcp_caddy\/update\?version=7/);
+  assert.equal(typeof post.body, "object");
+  const env = post.body.TaskTemplate.ContainerSpec.Env;
+  assert.ok(env.includes("EVCP_CADDY_ADDRESS=app.example.com"));   // replaced
+  assert.ok(env.includes("OTHER=x"));                               // preserved
+  assert.ok(env.includes("NEW=1"));                                 // appended
+  assert.ok(!env.includes("EVCP_CADDY_ADDRESS=:80"));               // old removed
+  assert.equal(post.body.TaskTemplate.ForceUpdate, 1);
+});

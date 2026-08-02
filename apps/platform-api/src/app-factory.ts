@@ -49,7 +49,12 @@ import { createBusinessSettingsRepositoryBackedService, createPrismaBusinessSett
 import { isPersistenceBusinessSettingsRoute, registerSetupRoutes, resolveSetupRequest } from "./setup-routes";
 import { registerSystemRoutes, resolveSystemRequest } from "./system/system-routes";
 import { createSystemUpdateService } from "./system/system-update-service";
+import { registerDomainRoutes, resolveDomainRequest } from "./system/domain-routes";
+import { createDomainService } from "./system/domain-service";
 import { createSwarmServiceEngine } from "./workspace-orchestrator/swarm-service-engine";
+import { readKeycloakConfig } from "./keycloak/config";
+import { KeycloakAdminClient } from "./keycloak/admin-client";
+import * as fs from "node:fs";
 import { renderPreviewUnavailableHtml } from "./workspace-orchestrator/preview-unavailable-page";
 import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrdPersistenceClient, type PrdRepositoryBackedService } from "./persistence/prd-repositories";
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
@@ -2081,6 +2086,26 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       response,
       resolveSystemRequest(platformRequest, {
         systemUpdateService,
+        auth: services.auth,
+        resolveActor: () => resolvePersistenceUser(services, platformRequest.headers ?? {})
+      })
+    )
+  );
+  const domainService = createDomainService({
+    engine: createSwarmServiceEngine(),
+    // Falls back to a memory-backed singleton (mirrors createRuntimePlatformApiServices' memory
+    // mode) so /admin/system/domain works even when core persistence isn't wired up.
+    settings: services.businessSettingsPersistence ?? createBusinessSettingsRepositoryBackedService(),
+    keycloak: process.env.KEYCLOAK_ISSUER_URL
+      ? new KeycloakAdminClient({ config: readKeycloakConfig(process.env) })
+      : undefined,
+    writeDomainEnv: (path, content) => fs.writeFileSync(path, content, { mode: 0o600 })
+  });
+  registerDomainRoutes(routes, (response, platformRequest) =>
+    sendPlatformResponseAsync(
+      response,
+      resolveDomainRequest(platformRequest, {
+        domainService,
         auth: services.auth,
         resolveActor: () => resolvePersistenceUser(services, platformRequest.headers ?? {})
       })

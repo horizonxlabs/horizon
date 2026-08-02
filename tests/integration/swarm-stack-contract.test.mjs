@@ -48,6 +48,20 @@ test("platform-api targets the swarm overlay network name and keeps the docker s
   assert.ok(release.services["platform-api"].volumes.some((v) => String(v).includes("/var/run/docker.sock")));
 });
 
+test("platform-api bind-mounts the host stack.env/domain.env dir and sets EVCP_STACK_ENV_DIR", () => {
+  // Durability plumbing (docs/superpowers/plans/2026-08-02-in-ui-domain.md): a UI-set domain is
+  // written to domain.env on the host so bootstrap-swarm.sh re-sources it on every redeploy.
+  // platform-api must be able to write that file, so it bind-mounts the same host dir.
+  const svc = release.services["platform-api"];
+  assert.equal(svc.environment.EVCP_STACK_ENV_DIR, "/etc/evcp/host");
+  const hostConfigMount = (svc.volumes ?? []).find((v) => v && v.target === "/etc/evcp/host");
+  assert.ok(hostConfigMount, "platform-api must bind-mount the host stack.env/domain.env directory");
+  assert.equal(hostConfigMount.type, "bind");
+  assert.equal(hostConfigMount.source, "${EVCP_STACK_ENV_DIR:-/opt/evcp}");
+  // The docker.sock bind mount (a plain "src:target" string) must survive alongside it.
+  assert.ok(svc.volumes.some((v) => String(v).includes("/var/run/docker.sock")));
+});
+
 test("KEYCLOAK_INTERNAL_ISSUER_URL default has no nested ${...} (breaks Docker interpolation)", () => {
   // A nested ${KEYCLOAK_REALM} inside the :- default makes Docker close the outer ${} at the
   // first '}' and append the second literally -> ".../realms/evcp}", which breaks kcadm login
