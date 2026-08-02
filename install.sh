@@ -9,17 +9,21 @@ BOOTSTRAP="$REPO_ROOT/scripts/install/bootstrap-swarm.sh"
 
 ASSUME_YES="${EVCP_INSTALL_ASSUME_YES:-0}"
 DRY_RUN=0
-for arg in "$@"; do
-  case "$arg" in
+# Accept both `--version v1` and `--version=v1` (same for --image-repository).
+while [ $# -gt 0 ]; do
+  case "$1" in
     --yes|-y) ASSUME_YES=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    --version=*) EVCP_VERSION="${arg#*=}" ;;
-    --image-repository=*) EVCP_IMAGE_REPOSITORY="${arg#*=}" ;;
+    --version) EVCP_VERSION="${2:?--version needs a value}"; shift ;;
+    --version=*) EVCP_VERSION="${1#*=}" ;;
+    --image-repository) EVCP_IMAGE_REPOSITORY="${2:?--image-repository needs a value}"; shift ;;
+    --image-repository=*) EVCP_IMAGE_REPOSITORY="${1#*=}" ;;
     -h|--help)
       echo "Usage: sudo ./install.sh [--yes] [--dry-run] [--version vX.Y.Z] [--image-repository ghcr.io/org]"
       exit 0 ;;
-    *) echo "unknown argument: $arg" >&2; exit 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
+  shift
 done
 
 [ -f "$BOOTSTRAP" ] || { echo "ERROR: run from the repo root (scripts/install/bootstrap-swarm.sh not found)." >&2; exit 1; }

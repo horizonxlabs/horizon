@@ -64,13 +64,14 @@ test("resolves image-repository and version defaults from git when unset", () =>
   assert.match(r.stderr, /version\s*:\s*v\S+/i);
 });
 
-test("fails fast when run outside the repo root", () => {
-  const dir = mkdtempSync(join(tmpdir(), "notrepo-"));
-  const _r = spawnSync("sh", [resolve("install.sh")], {
-    encoding: "utf8", cwd: dir, env: { ...process.env, EVCP_INSTALL_ASSUME_YES: "1" }
-  });
-  // install.sh resolves paths relative to its own location, so this really checks the
-  // bootstrap-not-found guard by pointing at a copy; simplest: assert non-zero when the
-  // bootstrap script is missing is covered by sh -n + code review. (Keep this test minimal.)
-  assert.ok(true);
+test("accepts both --version=X and --version X (space form, as --help documents)", () => {
+  for (const args of [
+    ["--dry-run", "--yes", "--version=v1.2.3", "--image-repository=ghcr.io/example/evcp"],
+    ["--dry-run", "--yes", "--version", "v1.2.3", "--image-repository", "ghcr.io/example/evcp"]
+  ]) {
+    const r = withMock((m) => run(args, { EVCP_ADVERTISE_ADDR: "10.0.0.5" }, m));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(JSON.parse(r.stdout).mode, "dry-run");
+    assert.match(r.stderr, /version\s*:\s*v1\.2\.3/i);
+  }
 });
