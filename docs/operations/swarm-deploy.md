@@ -30,6 +30,22 @@ sudo EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z \
 
 Preview without touching anything: `./install.sh --dry-run --yes`.
 
+### Going live with a domain + TLS — from the Admin Console
+
+The bootstrap brings the platform up IP-first (`http://<ip>`, no TLS). To move to a
+real `https://<domain>`, in **Admin Console → Domain**: type the domain and click
+**Go live**. platform-api then, via the Docker Engine API, switches Caddy's site to
+the domain (Caddy requests a Let's Encrypt cert on 80/443), sets Keycloak's
+`KC_HOSTNAME` and platform-api's public URLs to `https://<domain>`, reconciles the
+Keycloak OIDC client redirect URIs, and rolls platform-api last. The domain is
+persisted to `domain.env` on the host so it survives future `docker stack deploy` /
+`install.sh update` (the bootstrap sources `domain.env` after `stack.env`).
+
+**Precondition (the UI warns about it):** point `A`/`AAAA` DNS for `<domain>` **and**
+`storage.<domain>` at this server, and make 80/443 reachable, *before* clicking Go
+live — otherwise Caddy's ACME challenge fails and the console keeps polling until DNS
+is correct.
+
 ### Updating to a new version — from the Admin Console
 
 Once a new release tag's images are in the registry, an admin can roll the whole
