@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -85,6 +85,31 @@ function runDryRun({ env = {}, mockDir = null } = {}) {
 test("sh -n accepts the script (POSIX syntax check)", () => {
   const result = spawnSync("sh", ["-n", SCRIPT_PATH], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
+});
+
+// Durability plumbing (docs/superpowers/plans/2026-08-02-in-ui-domain.md): a UI-set domain is
+// persisted to domain.env on the host. deploy_stack must source it, after stack.env, so it wins
+// on every redeploy — otherwise a redeploy would revert to the IP-first stack.env values.
+// deploy_stack shells out to `docker stack deploy`, which the tests intentionally never invoke
+// against a real daemon, so this is asserted by inspecting the script source directly.
+test("deploy_stack sources domain.env (if present) after stack.env, inside the exported set -a block", () => {
+  const script = readFileSync(SCRIPT_PATH, "utf8");
+  const deployStackBody = script.slice(script.indexOf("deploy_stack() {"), script.indexOf("\n}", script.indexOf("deploy_stack() {")));
+
+  assert.match(
+    deployStackBody,
+    /\[ -f "\$\{STACK_ENV_DIR\}\/domain\.env" \] && \. "\$\{STACK_ENV_DIR\}\/domain\.env"/,
+    "deploy_stack must optionally source ${STACK_ENV_DIR}/domain.env"
+  );
+
+  const stackEnvIdx = deployStackBody.indexOf('. "$STACK_ENV_PATH"');
+  const domainEnvIdx = deployStackBody.indexOf("domain.env");
+  assert.ok(stackEnvIdx >= 0, "deploy_stack must source $STACK_ENV_PATH");
+  assert.ok(domainEnvIdx > stackEnvIdx, "domain.env must be sourced after stack.env, so it takes precedence");
+
+  const setDashA = deployStackBody.indexOf("set -a");
+  const setPlusA = deployStackBody.indexOf("set +a");
+  assert.ok(setDashA >= 0 && setPlusA > domainEnvIdx, "domain.env must be sourced inside the `set -a` ... `set +a` export block");
 });
 
 // Regression: OpenBao's `-format=json` emits Go-indented `"key": "value"` (key + value on
