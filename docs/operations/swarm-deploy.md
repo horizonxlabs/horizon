@@ -4,25 +4,44 @@ The production release stack deploys to a **single-node Docker Swarm** via
 `docker stack deploy` (not `docker compose up`). This runbook covers the manual
 deploy; the automated release-triggered deploy is Part 2 (SSH-based).
 
-## One-command bootstrap (recommended)
+## One-command install (recommended)
 
-`scripts/install/bootstrap-swarm.sh` does the whole first-boot with **no secret
-input**: it inits the swarm, auto-generates every secret as a Docker secret,
-writes an IP-first (no domain/TLS) `stack.env`, deploys the stack, and
-initializes + unseals OpenBao (minting the workload token). On a fresh VM:
+Clone the repo on a fresh VM and run one script — it inits the swarm, auto-generates
+every secret as a Docker secret, writes an IP-first (no domain/TLS) `stack.env`,
+deploys the stack, and initializes + unseals OpenBao (minting the workload token),
+with **no secret input**:
 
 ```bash
-cd /opt/evcp            # repo / release bundle checked out here
-export EVCP_IMAGE_REPOSITORY=ghcr.io/your-org/evcp   # required
-export EVCP_VERSION=vX.Y.Z                            # the release tag
-export EVCP_GHCR_USER=... EVCP_GHCR_TOKEN=...         # optional, to pull private images
-sudo -E sh scripts/install/bootstrap-swarm.sh
-# → "EVCP is starting at http://<server-ip>:80" — open it to finish setup in the Admin Console
+git clone <repo> /opt/evcp && cd /opt/evcp
+sudo ./install.sh
+# prompts for: image repository (default ghcr.io/<org>), version (default latest tag),
+# and — if the images are private — a GHCR login. Then: "EVCP is starting at
+# http://<server-ip>:80" — open it to finish setup in the Admin Console.
 ```
 
-Preview what it would do without touching anything: append `--dry-run`.
-Other subcommands: `... unseal` (re-unseal OpenBao after a reboot — see the note
-at the bottom), `... update` (redeploy a new `EVCP_VERSION`, no secret regen).
+`install.sh` is a thin front door over `scripts/install/bootstrap-swarm.sh`; it never
+prompts for, prints, or stores a secret. Non-interactive (automation): supply the
+inputs and pass `--yes`:
+
+```bash
+sudo EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z \
+     EVCP_GHCR_USER=... EVCP_GHCR_TOKEN=... ./install.sh --yes
+```
+
+Preview without touching anything: `./install.sh --dry-run --yes`.
+
+### Advanced / reference — `bootstrap-swarm.sh` directly
+
+`install.sh` just collects inputs and hands off. You can also run the bootstrap
+script directly (this is what `install.sh` execs):
+
+```bash
+export EVCP_IMAGE_REPOSITORY=ghcr.io/your-org EVCP_VERSION=vX.Y.Z
+sudo -E sh scripts/install/bootstrap-swarm.sh
+```
+
+Subcommands: `... unseal` (re-unseal OpenBao after a reboot — see the note at the
+bottom), `... update <version>` (redeploy a new `EVCP_VERSION`, no secret regen).
 
 **Save the recovery secrets.** On first run the script prints a one-time warning:
 move the `evcp_openbao_unseal` and `evcp_openbao_root` Docker secrets to your
