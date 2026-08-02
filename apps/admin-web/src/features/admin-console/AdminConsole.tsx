@@ -28,7 +28,17 @@ export function AdminConsole() {
   const [sessionActive, setSessionActive] = useState(() => consumeAdminSessionHandoff() || hasValidAdminSession());
   const client = useMemo(() => (sessionActive ? createAdminPlatformClient(() => { clearAdminSession(); setSessionActive(false); }) : undefined), [sessionActive]);
   const ai = useAiGovernance(client);
-  const page = pageFromPath(window.location.pathname);
+  const [path, setPath] = useState(() => (typeof window === "undefined" ? "/admin" : window.location.pathname));
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const navigate = (route: string) => {
+    if (typeof window !== "undefined" && route !== window.location.pathname) window.history.pushState(null, "", route);
+    setPath(route);
+  };
+  const page = pageFromPath(path);
 
   useEffect(() => {
     createAdminPlatformClient().getSetupStatus()
@@ -51,7 +61,7 @@ export function AdminConsole() {
     : page === "ai-providers" ? <AiProvidersConsole ai={ai} />
     : page === "guardrails" ? <GuardrailsConsole ai={ai} />
     : <OperationsDashboard client={client} ai={ai} page={page} />;
-  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" || page === "system" || page === "domain" ? null : (
+  return <AdminRoutes setupStatus={setupStatus} sessionActive={sessionActive} onSetupComplete={() => setSetupStatus("complete")} onLoggedIn={() => setSessionActive(true)}><AppShell title="Horizon Admin" navItems={navigation.admin} userName="Platform Admin" environmentLabel="Online Private Server" onNavigate={navigate} session={<button type="button" className="secondary-button" onClick={() => { void client?.request("/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => { clearAdminSession(); setSessionActive(false); window.location.assign(startAdminKeycloakLogout()); }); }}><LockKeyhole size={16} />Logout</button>}>{page === "ai-providers" || page === "guardrails" || page === "users" || page === "knowledge" || page === "system" || page === "domain" ? null : (
       <PageHeader eyebrow="Administration" title="Platform control center" description="Private server operations, governance and evidence." />
     )}{content}</AppShell></AdminRoutes>;
 }
