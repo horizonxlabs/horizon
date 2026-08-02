@@ -20,7 +20,7 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
-    "@prisma/client": "^6.19.3",
+    "@prisma/client": "^7.9.1",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.5",
     "minio": "^8.0.7",
