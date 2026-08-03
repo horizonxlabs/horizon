@@ -1,14 +1,28 @@
 #!/bin/sh
 set -eu
 
-kcadm=/opt/keycloak/bin/kcadm.sh
+kcadm="${KCADM:-/opt/keycloak/bin/kcadm.sh}"
 keycloak_server=${KEYCLOAK_INTERNAL_ISSUER_URL%/realms/$KEYCLOAK_REALM}
 
-"$kcadm" config credentials \
+# Swarm has no depends_on ordering, and keycloak takes minutes to become ready
+# (config augmentation + realm import). Retry `config credentials` until keycloak
+# is reachable instead of fail-fasting on "Failed to send request" — otherwise
+# this job races startup and never configures the clients.
+attempt=0
+max_attempts=${KEYCLOAK_BOOTSTRAP_MAX_ATTEMPTS:-60}
+until "$kcadm" config credentials \
   --server "$keycloak_server" \
   --realm master \
   --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
-  --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
+  --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "keycloak not reachable at $keycloak_server after $attempt attempts; giving up" >&2
+    exit 1
+  fi
+  echo "keycloak not ready at $keycloak_server (attempt $attempt/$max_attempts); retrying in 5s" >&2
+  sleep 5
+done
 
 set_client_secret() {
   client_id=$1
