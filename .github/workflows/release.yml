@@ -186,6 +186,9 @@ jobs:
         env:
           EVCP_IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
           EVCP_VERSION: ${{ steps.release.outputs.version }}
+          # docker-compose.openbao.yml binds ${OPENBAO_TOKEN_FILE_HOST:?...} as a required
+          # var; supply a dummy path so `docker stack config` can render for this grep-only check.
+          OPENBAO_TOKEN_FILE_HOST: /run/evcp/openbao-token
           POSTGRES_PASSWORD: dummy-postgres-password
           KEYCLOAK_ADMIN_PASSWORD: dummy-keycloak-password
           KEYCLOAK_PUBLIC_URL: auth.example.com
