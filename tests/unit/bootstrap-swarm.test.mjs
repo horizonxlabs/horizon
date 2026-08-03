@@ -189,17 +189,31 @@ test("--dry-run plans an IP-first stack.env: EVCP_CADDY_ADDRESS=:80, http:// pub
   const stackEnv = plan.stackEnv;
 
   assert.match(stackEnv, /EVCP_CADDY_ADDRESS=:80/);
-  assert.match(stackEnv, /EVCP_PUBLIC_API_URL=http:\/\/10\.20\.30\.40:80\/api/);
-  assert.match(stackEnv, /EVCP_ADMIN_WEB_URL=http:\/\/10\.20\.30\.40:80/);
-  assert.match(stackEnv, /EVCP_CREATOR_WEB_URL=http:\/\/10\.20\.30\.40:80/);
-  assert.match(stackEnv, /EVCP_STORE_WEB_URL=http:\/\/10\.20\.30\.40:80/);
-  assert.match(stackEnv, /KEYCLOAK_PUBLIC_URL=http:\/\/10\.20\.30\.40:80\/auth/);
+  // Public URLs must OMIT the default :80 — a stale :80 breaks OIDC because the
+  // browser origin and Keycloak `iss` claim both drop it (exact-match checks).
+  assert.match(stackEnv, /EVCP_PUBLIC_API_URL=http:\/\/10\.20\.30\.40\/api$/m);
+  assert.match(stackEnv, /EVCP_ADMIN_WEB_URL=http:\/\/10\.20\.30\.40$/m);
+  assert.match(stackEnv, /EVCP_CREATOR_WEB_URL=http:\/\/10\.20\.30\.40$/m);
+  assert.match(stackEnv, /EVCP_STORE_WEB_URL=http:\/\/10\.20\.30\.40$/m);
+  assert.match(stackEnv, /KEYCLOAK_PUBLIC_URL=http:\/\/10\.20\.30\.40\/auth$/m);
+  assert.match(stackEnv, /KEYCLOAK_ISSUER_URL=http:\/\/10\.20\.30\.40\/auth\/realms\/evcp$/m);
+  assert.doesNotMatch(stackEnv, /10\.20\.30\.40:80/);
 
   // No secret name or the words password/secret/key should appear as a *value* in
   // stack.env — it is strictly non-secret, IP-first config.
   assert.doesNotMatch(stackEnv, /PASSWORD=/i);
   assert.doesNotMatch(stackEnv, /SECRET=/i);
   for (const name of EXPECTED_SECRET_NAMES) assert.ok(!stackEnv.includes(name));
+});
+
+test("--dry-run keeps a non-default HTTP port in the public URLs (e.g. local :18080)", () => {
+  const plan = withDockerMock((mockDir) =>
+    runDryRun({ env: { EVCP_TEST_DOCKER_MODE: "unreachable", EVCP_HTTP_PORT: "18080" }, mockDir })
+  );
+  const stackEnv = plan.stackEnv;
+  assert.match(stackEnv, /EVCP_ADMIN_WEB_URL=http:\/\/10\.20\.30\.40:18080$/m);
+  assert.match(stackEnv, /EVCP_PUBLIC_API_URL=http:\/\/10\.20\.30\.40:18080\/api$/m);
+  assert.match(stackEnv, /KEYCLOAK_ISSUER_URL=http:\/\/10\.20\.30\.40:18080\/auth\/realms\/evcp$/m);
 });
 
 test("--dry-run creates nothing: the whole plan (not just stack.env) never contains a secret value", () => {
