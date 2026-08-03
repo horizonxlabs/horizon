@@ -208,7 +208,15 @@ plan_and_create_secrets() {
 build_stack_env() {
   advertise_addr="$1"
   http_port="${EVCP_HTTP_PORT:-80}"
-  base_url="http://${advertise_addr}:${http_port}"
+  # Omit the port for the default HTTP port so the public base URL matches the
+  # browser origin and the Keycloak-stamped `iss` claim, which both drop `:80`.
+  # A stale `:80` here breaks OIDC: platform-api's exact-match `returnTo` origin
+  # check and jose `iss` verification would never match `http://<host>` requests.
+  if [ "$http_port" = "80" ]; then
+    base_url="http://${advertise_addr}"
+  else
+    base_url="http://${advertise_addr}:${http_port}"
+  fi
   image_repo="${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required, e.g. ghcr.io/your-org/evcp}"
   evcp_version="${EVCP_VERSION:-latest}"
   keycloak_realm="${KEYCLOAK_REALM:-evcp}"
