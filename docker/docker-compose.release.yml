@@ -253,6 +253,10 @@ services:
     environment:
       # Where the host's stack.env/domain.env directory is bind-mounted (see volumes above).
       EVCP_STACK_ENV_DIR: /etc/evcp/host
+      # The in-UI version updater needs the same release coordinates used to resolve this
+      # service's image so it can report current state and construct the next image refs.
+      EVCP_VERSION: ${EVCP_VERSION:?EVCP_VERSION required}
+      EVCP_IMAGE_REPOSITORY: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}
       # DATABASE_URL carries the password, so it is delivered as a Docker secret (built by
       # bootstrap-swarm.sh from the postgres password) and exported by the shim above.
       DATABASE_URL_FILE: /run/secrets/evcp_database_url
