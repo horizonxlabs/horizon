@@ -12,7 +12,18 @@ const TAG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export class InvalidVersionTag extends Error {}
 
-export function createSystemUpdateService(deps: { engine: SwarmServiceEngine; env?: NodeJS.ProcessEnv }) {
+function imageTag(image: string): string {
+  const imageWithoutDigest = image.split("@", 1)[0] ?? "";
+  const tagSeparator = imageWithoutDigest.lastIndexOf(":");
+  return tagSeparator > imageWithoutDigest.lastIndexOf("/")
+    ? imageWithoutDigest.slice(tagSeparator + 1)
+    : "";
+}
+
+export function createSystemUpdateService(deps: {
+  engine: SwarmServiceEngine;
+  env?: NodeJS.ProcessEnv;
+}) {
   const env = deps.env ?? process.env;
   const stack = "evcp";
   return {
@@ -20,8 +31,12 @@ export function createSystemUpdateService(deps: { engine: SwarmServiceEngine; en
       const services = await deps.engine.listStackServices(stack);
       const appServices = services
         .filter((s) => s.name in APP_SERVICES)
-        .map((s) => ({ name: s.name, image: s.image, tag: s.image.split(":").pop() ?? "" }));
-      return { currentVersion: env.EVCP_VERSION ?? "", imageRepository: env.EVCP_IMAGE_REPOSITORY ?? "", appServices };
+        .map((s) => ({ name: s.name, image: s.image, tag: imageTag(s.image) }));
+      const currentVersion =
+        appServices.find((service) => service.name === "evcp_platform-api")?.tag ??
+        env.EVCP_VERSION ??
+        "";
+      return { currentVersion, imageRepository: env.EVCP_IMAGE_REPOSITORY ?? "", appServices };
     },
     async updateToVersion(targetTag: string) {
       if (!TAG_RE.test(targetTag)) throw new InvalidVersionTag("invalid version tag");
@@ -33,7 +48,9 @@ export function createSystemUpdateService(deps: { engine: SwarmServiceEngine; en
         await deps.engine.updateServiceImage(svc, ref(svc));
       }
       // Self last, fire-and-forget: this restarts platform-api, so do not await; the UI polls.
-      void deps.engine.updateServiceImage("evcp_platform-api", ref("evcp_platform-api")).catch(() => {});
+      void deps.engine
+        .updateServiceImage("evcp_platform-api", ref("evcp_platform-api"))
+        .catch(() => {});
       return { accepted: true, targetVersion: targetTag };
     }
   };
