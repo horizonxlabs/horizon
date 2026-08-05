@@ -278,6 +278,9 @@ services:
       EVCP_S3_HOST: minio
       EVCP_S3_PORT: "9000"
       EVCP_S3_SSL: "false"
+      # Swarm task container names are dynamic (evcp_minio.1.<task-id>). The Docker adapter
+      # resolves the stable service label to the currently running task before executing `mc`.
+      EVCP_MINIO_CONTAINER_NAME: evcp_minio
       EVCP_S3_PUBLIC_URL: ${EVCP_S3_PUBLIC_URL:?EVCP_S3_PUBLIC_URL required}
       EVCP_AI_JOB_ENCRYPTION_KEY_FILE: /run/secrets/evcp_ai_job_encryption_key
       EVCP_AI_COMPLETION_TIMEOUT_MS: ${EVCP_AI_COMPLETION_TIMEOUT_MS:-300000}

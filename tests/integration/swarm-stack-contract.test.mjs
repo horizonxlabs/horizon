@@ -80,6 +80,11 @@ test("platform-api targets the swarm overlay network name and keeps the docker s
   );
 });
 
+test("platform-api resolves MinIO through the Swarm service label", () => {
+  const env = release.services["platform-api"].environment;
+  assert.equal(env.EVCP_MINIO_CONTAINER_NAME, "evcp_minio");
+});
+
 test("platform-api receives release version and image repository metadata for in-UI updates", () => {
   const env = release.services["platform-api"].environment;
   assert.equal(env.EVCP_VERSION, "${EVCP_VERSION:?EVCP_VERSION required}");

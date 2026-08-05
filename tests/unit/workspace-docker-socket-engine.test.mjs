@@ -143,6 +143,55 @@ test("inspectContainer returns image and management labels needed to restore dep
   });
 });
 
+test("inspectContainer resolves a running Swarm task by service label when no exact container name exists", async () => {
+  const calls = [];
+  const engine = createDockerSocketEngine({
+    request: async ({ path }) => {
+      calls.push(path);
+      if (path === "/containers/evcp_minio/json") {
+        return { status: 404, json: async () => ({ message: "No such container" }) };
+      }
+      if (path.startsWith("/containers/json?all=true&filters=")) {
+        return {
+          status: 200,
+          json: async () => [{
+            Id: "minio-task-123",
+            State: "running",
+            Labels: { "com.docker.swarm.service.name": "evcp_minio" }
+          }]
+        };
+      }
+      if (path === "/containers/minio-task-123/json") {
+        return {
+          status: 200,
+          json: async () => ({
+            Id: "minio-task-123",
+            State: { Running: true },
+            Config: {
+              Image: "minio/minio:release",
+              Labels: { "com.docker.swarm.service.name": "evcp_minio" },
+              Env: []
+            }
+          })
+        };
+      }
+      return { status: 500, json: async () => ({ message: `unexpected path: ${path}` }) };
+    }
+  });
+
+  assert.deepEqual(await engine.inspectContainer("evcp_minio"), {
+    containerId: "minio-task-123",
+    running: true,
+    image: "minio/minio:release",
+    labels: { "com.docker.swarm.service.name": "evcp_minio" },
+    env: []
+  });
+  assert.equal(calls[0], "/containers/evcp_minio/json");
+  const filters = JSON.parse(decodeURIComponent(calls[1].split("filters=")[1]));
+  assert.deepEqual(filters, { label: ["com.docker.swarm.service.name=evcp_minio"] });
+  assert.equal(calls[2], "/containers/minio-task-123/json");
+});
+
 test("listManagedContainers uses the managed label filter and normalizes Docker names", async () => {
   const calls = [];
   const engine = createDockerSocketEngine({

@@ -183,8 +183,30 @@ export function createDockerSocketEngine(
       await expect("remove", result, [204]);
     },
     async inspectContainer(name) {
-      const result = await request({ method: "GET", path: `/containers/${name}/json` });
-      if (result.status === 404) return null;
+      let result = await request({ method: "GET", path: `/containers/${name}/json` });
+      if (result.status === 404) {
+        const filters = encodeURIComponent(
+          JSON.stringify({
+            label: [`com.docker.swarm.service.name=${name}`]
+          })
+        );
+        const tasks = await request({
+          method: "GET",
+          path: `/containers/json?all=true&filters=${filters}`
+        });
+        await expect("inspect-swarm-service", tasks, [200]);
+        const candidates = await tasks.json();
+        const runningTask = (Array.isArray(candidates) ? candidates : []).find(
+          (container: any) =>
+            String(container.State) === "running" &&
+            container?.Labels?.["com.docker.swarm.service.name"] === name
+        );
+        if (!runningTask?.Id) return null;
+        result = await request({
+          method: "GET",
+          path: `/containers/${encodeURIComponent(String(runningTask.Id))}/json`
+        });
+      }
       await expect("inspect", result, [200]);
       const payload = await result.json();
       return {
