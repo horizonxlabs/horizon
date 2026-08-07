@@ -1,4 +1,4 @@
-import { Button, DataTable, DecisionPanel, SectionCard, WorkflowRail } from "@evcp/ui";
+import { Button, DataTable, DecisionPanel, Markdown, SectionCard, WorkflowRail } from "@evcp/ui";
 import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -59,7 +59,9 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     <span>{section.order}</span>
                     <div>
                       <h3>{section.title}</h3>
-                      <p>{section.body}</p>
+                      <div className="creator-prd-markdown">
+                        <Markdown text={section.body} />
+                      </div>
                     </div>
                   </article>
                 ))}

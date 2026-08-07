@@ -2249,6 +2249,17 @@ th {
   margin-top: 4px;
 }
 
+.creator-prd-markdown {
+  color: var(--evcp-color-muted);
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.creator-prd-markdown .vibe-md-h:first-child,
+.creator-prd-markdown .vibe-md-p:first-child {
+  margin-top: 0;
+}
+
 .creator-prd-meta {
   background: var(--evcp-color-surface-muted);
   border: 1px solid var(--evcp-color-border-soft);
@@ -3045,6 +3056,45 @@ th {
   font-family: ui-monospace, monospace;
   font-size: 12px;
   white-space: pre;
+}
+
+.vibe-md-table-wrap {
+  margin: 0 0 8px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.vibe-md-table {
+  border-collapse: collapse;
+  font-size: 0.92em;
+  width: 100%;
+}
+
+.vibe-md-table th,
+.vibe-md-table td {
+  border: 1px solid var(--evcp-color-border-soft);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.vibe-md-table th {
+  background: var(--evcp-color-surface-muted);
+  color: var(--evcp-color-text);
+  font-weight: 700;
+}
+
+.vibe-md-quote {
+  border-left: 3px solid var(--evcp-color-primary);
+  color: var(--evcp-color-muted);
+  margin: 0 0 8px;
+  padding: 4px 0 4px 12px;
+}
+
+.vibe-md-rule {
+  border: 0;
+  border-top: 1px solid var(--evcp-color-border-soft);
+  margin: 12px 0;
 }
 
 .vibe-message-actions,

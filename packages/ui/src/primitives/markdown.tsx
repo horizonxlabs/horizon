@@ -2,10 +2,23 @@ import { Fragment, type ReactNode } from "react";
 
 // Dependency-free markdown -> React. Builds real elements (no HTML injection, so it is XSS-safe) and
 // tolerates incomplete syntax — an unclosed fence or `**` renders as plain text until it closes.
-// Supports fenced code blocks, inline code, bold, italic, links, headings (#/##/###), and
-// bullet/ordered lists. Shared design-system primitive (styles live in packages/ui/styles.css).
+// Supports fenced code blocks, inline code, bold, italic, safe links, headings (#/##/###),
+// bullet/ordered lists, blockquotes, horizontal rules, and GFM-style tables. Shared design-system
+// primitive (styles live in packages/ui/styles.css).
 
 const INLINE = /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*]+?\*)|(\[[^\]]+?\]\([^)]+?\))/g;
+
+function safeLinkHref(value: string): string | undefined {
+  const href = value.trim();
+  if (
+    /^(https?:|mailto:)/i.test(href) ||
+    (href.startsWith("/") && !href.startsWith("//")) ||
+    href.startsWith("#")
+  ) {
+    return href;
+  }
+  return undefined;
+}
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -29,11 +42,14 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
     } else {
       const link = /\[([^\]]+?)\]\(([^)]+?)\)/.exec(token);
+      const href = link ? safeLinkHref(link[2]) : undefined;
       nodes.push(
-        link ? (
-          <a key={key} href={link[2]} target="_blank" rel="noreferrer noopener">
+        link && href ? (
+          <a key={key} href={href} target="_blank" rel="noreferrer noopener">
             {link[1]}
           </a>
+        ) : link ? (
+          link[1]
         ) : (
           token
         )
@@ -61,6 +77,37 @@ function paragraph(lines: string[], key: number): ReactNode {
 const isListLine = (line: string) => /^\s*([-*]|\d+\.)\s+/.test(line);
 const isHeading = (line: string) => /^(#{1,3})\s+/.test(line);
 const isFence = (line: string) => line.trimStart().startsWith("```");
+const isBlockquote = (line: string) => /^\s*>\s?/.test(line);
+const isHorizontalRule = (line: string) => /^\s{0,3}((\*\s*){3,}|(-\s*){3,}|(_\s*){3,})$/.test(line);
+const isTableSeparator = (line: string) =>
+  /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (const character of trimmed) {
+    if (escaped) {
+      cell += character;
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  if (escaped) cell += "\\";
+  cells.push(cell.trim());
+  return cells;
+}
+
+function isTableStart(lines: string[], index: number): boolean {
+  return index + 1 < lines.length && lines[index].includes("|") && isTableSeparator(lines[index + 1]);
+}
 
 export function Markdown({ text }: { text: string }): ReactNode {
   const lines = text.split("\n");
@@ -86,6 +133,41 @@ export function Markdown({ text }: { text: string }): ReactNode {
       continue;
     }
 
+    if (isTableStart(lines, i)) {
+      const headers = splitTableRow(line);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim() !== "") {
+        rows.push(splitTableRow(lines[i]));
+        i += 1;
+      }
+      blocks.push(
+        <div key={key++} className="vibe-md-table-wrap">
+          <table className="vibe-md-table">
+            <thead>
+              <tr>
+                {headers.map((header, index) => (
+                  <th key={index}>{renderInline(header, `th${key}-${index}`)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {headers.map((_, cellIndex) => (
+                    <td key={cellIndex}>
+                      {renderInline(row[cellIndex] ?? "", `td${key}-${rowIndex}-${cellIndex}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
     const heading = /^(#{1,3})\s+(.*)$/.exec(line);
     if (heading) {
       const level = heading[1].length;
@@ -94,6 +176,31 @@ export function Markdown({ text }: { text: string }): ReactNode {
           {renderInline(heading[2], `h${key}`)}
         </div>
       );
+      i += 1;
+      continue;
+    }
+
+    if (isBlockquote(line)) {
+      const quote: string[] = [];
+      while (i < lines.length && isBlockquote(lines[i])) {
+        quote.push(lines[i].replace(/^\s*>\s?/, ""));
+        i += 1;
+      }
+      blocks.push(
+        <blockquote key={key++} className="vibe-md-quote">
+          {quote.map((quoteLine, index) => (
+            <Fragment key={index}>
+              {renderInline(quoteLine, `quote${key}-${index}`)}
+              {index < quote.length - 1 ? <br /> : null}
+            </Fragment>
+          ))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    if (isHorizontalRule(line)) {
+      blocks.push(<hr key={key++} className="vibe-md-rule" />);
       i += 1;
       continue;
     }
@@ -131,7 +238,10 @@ export function Markdown({ text }: { text: string }): ReactNode {
       lines[i].trim() !== "" &&
       !isFence(lines[i]) &&
       !isHeading(lines[i]) &&
-      !isListLine(lines[i])
+      !isListLine(lines[i]) &&
+      !isBlockquote(lines[i]) &&
+      !isHorizontalRule(lines[i]) &&
+      !isTableStart(lines, i)
     ) {
       para.push(lines[i]);
       i += 1;

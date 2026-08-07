@@ -215,6 +215,38 @@ for (const [name, Page] of Object.entries(PAGES)) {
   });
 }
 
+test("PrdPage renders PRD section bodies as Markdown", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(PrdPage, {
+      app: {
+        ...app,
+        visiblePrdSections: [
+          {
+            key: "overview",
+            order: 1,
+            title: "Overview",
+            body: [
+              "## Workflow",
+              "",
+              "**Owners** review the queue.",
+              "",
+              "| Role | Action |",
+              "| --- | --- |",
+              "| Admin | Approve |"
+            ].join("\n")
+          }
+        ]
+      }
+    })
+  );
+
+  assert.match(html, /vibe-md-h2/);
+  assert.match(html, /<strong>Owners<\/strong>/);
+  assert.match(html, /vibe-md-table/);
+  assert.match(html, /<th>Role<\/th>/);
+  assert.match(html, /<td>Approve<\/td>/);
+});
+
 test("ProjectsPage renders the create-first landing inside the shared Creator shell", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
