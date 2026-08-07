@@ -391,6 +391,7 @@ configs:
   keycloak-bootstrap-script:
     file: ../apps/platform-api/keycloak/bootstrap-clients.sh
   secrets-entrypoint:
+    name: evcp_secrets-entrypoint-${EVCP_VERSION:?EVCP_VERSION required}
     file: ./secrets-entrypoint.sh
 
 secrets:

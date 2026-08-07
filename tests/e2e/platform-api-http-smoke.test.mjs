@@ -26,6 +26,18 @@ const { PlatformSessionService } = await import(
 const { MemoryPlatformSessionRepository } = await import(
   "../../apps/platform-api/src/persistence/platform-session-repository.ts"
 );
+const {
+  MemoryPrdPersistenceClient,
+  createPrdRepositoryBackedService
+} = await import("../../apps/platform-api/src/persistence/prd-repositories.ts");
+const {
+  MemoryWorkspacePersistenceClient,
+  createWorkspaceRepositoryBackedService
+} = await import("../../apps/platform-api/src/persistence/workspace-repositories.ts");
+const {
+  MemoryPublishStorePersistenceClient,
+  createPublishStoreRepositoryBackedService
+} = await import("../../apps/platform-api/src/persistence/publish-store-repositories.ts");
 
 test("platform API health and auth/me return shared success envelopes", async () => {
   const services = createPlatformApiServices();
@@ -227,6 +239,126 @@ test("platform HTTP AI governance routes verify persisted Platform sessions", as
     const invalidSessionEnvelope = await invalidSessionResponse.json();
     assert.equal(invalidSessionResponse.status, 401);
     assert.equal(invalidSessionEnvelope.error.code, "UNAUTHORIZED");
+  } finally {
+    await app.close();
+  }
+});
+
+test("creator publish HTTP routes resolve persisted sessions after API restart", async () => {
+  const email = "creator.restart@horizon.test";
+  const userId = "usr_creator_restart";
+  const projectId = "prj_creator_restart";
+  const coreClient = new MemoryCorePersistenceClient({
+    users: [
+      {
+        id: userId,
+        email,
+        name: "Restarted Creator",
+        status: "active",
+        roles: [
+          {
+            role: {
+              id: "role_creator",
+              key: "creator",
+              name: "Creator",
+              permissions: []
+            }
+          }
+        ]
+      }
+    ],
+    projects: [
+      {
+        id: projectId,
+        name: "Restart-safe Sales Pipeline",
+        status: "draft",
+        ownerUserId: userId,
+        appType: "Workflow App",
+        businessProblem: "Sales pipeline publishing must survive API restarts",
+        targetDepartment: "Sales",
+        intendedUsers: ["Sales Representative", "Manager"],
+        dataSensitivity: "internal",
+        createdAt: new Date("2026-08-07T00:00:00.000Z")
+      }
+    ]
+  });
+  const platformSessions = new PlatformSessionService(
+    new MemoryPlatformSessionRepository(),
+    "creator-publish-restart-session-secret"
+  );
+  const session = await platformSessions.issue({
+    id: userId,
+    email,
+    providerConfigId: "authprov_keycloak_default_001",
+    claims: { email, platformRoles: ["creator"] }
+  });
+  const services = {
+    ...createPlatformApiServices(),
+    corePersistence: createCoreRepositoryBackedService(coreClient),
+    prdPersistence: createPrdRepositoryBackedService(new MemoryPrdPersistenceClient()),
+    workspacePersistence: createWorkspaceRepositoryBackedService(
+      new MemoryWorkspacePersistenceClient()
+    ),
+    publishStorePersistence: createPublishStoreRepositoryBackedService(
+      new MemoryPublishStorePersistenceClient()
+    ),
+    platformSessions
+  };
+  const app = await createPlatformApiApp(services);
+  await app.listen(0, "127.0.0.1");
+  try {
+    const address = app.getHttpServer().address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const headers = {
+      authorization: `Bearer ${session.token}`,
+      "content-type": "application/json"
+    };
+    const request = (path, init = {}) =>
+      fetch(`http://127.0.0.1:${port}${path}`, { headers, ...init });
+
+    const access = await request(`/projects/${projectId}/app/users`);
+    assert.equal(access.status, 200);
+    assert.equal((await access.json()).ok, true);
+
+    const role = await request(`/projects/${projectId}/app/roles`, {
+      method: "POST",
+      body: JSON.stringify({ key: "manager", name: "Manager" })
+    });
+    assert.equal(role.status, 201);
+
+    const invitation = await request(`/projects/${projectId}/app/invitations`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: "sales.manager@horizon.test",
+        roleKey: "manager",
+        userType: "internal"
+      })
+    });
+    assert.equal(invitation.status, 201);
+
+    const accessRequest = await request(`/projects/${projectId}/app/access-requests`, {
+      method: "POST",
+      body: JSON.stringify({
+        requesterEmail: "sales.rep@horizon.test",
+        requestedRoleKey: "manager",
+        reason: "Manage qualified opportunities"
+      })
+    });
+    assert.equal(accessRequest.status, 201);
+    const accessRequestEnvelope = await accessRequest.json();
+
+    const decision = await request(`/projects/${projectId}/app/access-requests/decision`, {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: accessRequestEnvelope.data.id,
+        decision: "approved"
+      })
+    });
+    assert.equal(decision.status, 200);
+
+    const review = await request(`/projects/${projectId}/publish/review`);
+    assert.equal(review.status, 422);
+    assert.doesNotMatch(JSON.stringify(await review.json()), /Unknown mock user/);
   } finally {
     await app.close();
   }

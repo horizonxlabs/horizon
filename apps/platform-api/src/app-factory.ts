@@ -3055,9 +3055,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.get("/projects/:projectId/app/users", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/app/users`,
         headers: request.headers
@@ -3065,9 +3065,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/projects/:projectId/app/roles", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/app/roles`,
         headers: request.headers,
@@ -3076,9 +3076,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/projects/:projectId/app/invitations", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/app/invitations`,
         headers: request.headers,
@@ -3087,9 +3087,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/projects/:projectId/app/access-requests", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/app/access-requests`,
         headers: request.headers,
@@ -3098,9 +3098,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.post("/projects/:projectId/app/access-requests/decision", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "POST",
         path: `/projects/${String(request.params?.projectId ?? "")}/app/access-requests/decision`,
         headers: request.headers,
@@ -3109,9 +3109,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     )
   );
   routes.get("/projects/:projectId/publish/review", (request, response) =>
-    sendPlatformResponse(
+    sendPlatformResponseAsync(
       response,
-      executePlatformApiRequest(services, {
+      executePlatformApiRequestAsync(services, {
         method: "GET",
         path: `/projects/${String(request.params?.projectId ?? "")}/publish/review`,
         headers: request.headers

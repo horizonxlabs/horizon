@@ -338,6 +338,11 @@ test("keycloak and litellm exec through the secrets-entrypoint shim so their *_F
     release.configs?.["secrets-entrypoint"],
     "top-level secrets-entrypoint config not declared"
   );
+  assert.equal(
+    release.configs["secrets-entrypoint"].name,
+    "evcp_secrets-entrypoint-${EVCP_VERSION:?EVCP_VERSION required}",
+    "secrets-entrypoint must use a release-versioned Swarm config name so updated script bytes are deployed"
+  );
 });
 
 test("Caddyfile.release keeps its site address env-driven for the IP-first :80 default", () => {
