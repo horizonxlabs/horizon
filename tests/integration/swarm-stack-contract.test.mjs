@@ -154,6 +154,11 @@ test("release declares the config/secret files instead of bind mounting them", (
     "keycloak-bootstrap-script"
   ]) {
     assert.ok(release.configs?.[cfg], `missing config ${cfg}`);
+    assert.equal(
+      release.configs[cfg].name,
+      `evcp_${cfg}-${"${EVCP_VERSION:?EVCP_VERSION required}"}`,
+      `${cfg} must use a release-versioned Swarm config name because config bytes are immutable`
+    );
   }
 });
 

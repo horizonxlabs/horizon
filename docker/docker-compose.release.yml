@@ -383,12 +383,16 @@ services:
 
 configs:
   litellm-config:
+    name: evcp_litellm-config-${EVCP_VERSION:?EVCP_VERSION required}
     file: ./litellm-config.yaml
   caddyfile-release:
+    name: evcp_caddyfile-release-${EVCP_VERSION:?EVCP_VERSION required}
     file: ./Caddyfile.release
   keycloak-realm:
+    name: evcp_keycloak-realm-${EVCP_VERSION:?EVCP_VERSION required}
     file: ../apps/platform-api/keycloak/evcp-realm.json
   keycloak-bootstrap-script:
+    name: evcp_keycloak-bootstrap-script-${EVCP_VERSION:?EVCP_VERSION required}
     file: ../apps/platform-api/keycloak/bootstrap-clients.sh
   secrets-entrypoint:
     name: evcp_secrets-entrypoint-${EVCP_VERSION:?EVCP_VERSION required}
