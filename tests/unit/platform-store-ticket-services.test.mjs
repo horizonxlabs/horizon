@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 function createSprint7Fixture() {
   const services = createPlatformApiServices();
@@ -53,8 +54,20 @@ function createSprint7Fixture() {
   services.workspace.submitPrompt(creator, project.id, { prompt: "Add WFH leave type" });
   services.publish.publishApp(creator, project.id);
 
-  return { services, creator, endUser, project };
+  return { services, admin, creator, endUser, project };
 }
+
+test("storefront is available to every role allowed by the Store surface", () => {
+  const { services, admin, creator, project } = createSprint7Fixture();
+
+  for (const actor of [creator, admin]) {
+    const home = services.storefront.listApps(actor);
+    const detail = services.storefront.getAppDetail(actor, project.appId);
+
+    assert.equal(home.profile.email, actor.email);
+    assert.equal(detail.slug, project.appId);
+  }
+});
 
 test("storefront lists My Apps from registry and access policy", () => {
   const { services, endUser, project } = createSprint7Fixture();
@@ -98,7 +111,13 @@ test("request access creates pending request and returns existing pending reques
   assert.equal(first.status, "pending");
   assert.equal(second.status, "pending");
   assert.equal(second.id, first.id);
-  assert.ok(services.audit.list().some((event) => event.action === "store.access_request.created" && event.resourceId === first.id));
+  assert.ok(
+    services.audit
+      .list()
+      .some(
+        (event) => event.action === "store.access_request.created" && event.resourceId === first.id
+      )
+  );
 });
 
 test("ticket creation requires visible app and stores device info timeline", () => {
@@ -141,9 +160,14 @@ test("ticket status is scoped to submitter and creator inbox receives routed tic
   });
   const otherUser = { ...endUser, id: "usr_other", email: "other@company.com" };
 
-  assert.throws(() => services.tickets.getTicketStatus(otherUser, ticket.id), /cannot access ticket/);
+  assert.throws(
+    () => services.tickets.getTicketStatus(otherUser, ticket.id),
+    /cannot access ticket/
+  );
 
   const inbox = services.tickets.listCreatorInbox(creator, project.id);
-  assert.ok(inbox.some((item) => item.id === ticket.id && item.submittedByEmail === "user@company.com"));
+  assert.ok(
+    inbox.some((item) => item.id === ticket.id && item.submittedByEmail === "user@company.com")
+  );
   assert.ok(inbox[0].actions.includes("convert_to_prd_change"));
 });

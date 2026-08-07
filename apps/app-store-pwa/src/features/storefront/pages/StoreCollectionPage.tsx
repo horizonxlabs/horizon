@@ -96,6 +96,8 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
     device.favorites,
     device.recent
   );
+  const isEmptyCatalog = allApps.length === 0;
+  const canPublish = bootstrap.role === "creator" || bootstrap.role === "admin";
 
   return (
     <section className="store-page">
@@ -112,6 +114,25 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
       </div>
       {apps.length ? (
         <StoreAppList apps={apps} />
+      ) : page === "my-apps" && isEmptyCatalog ? (
+        <SectionCard eyebrow="App Store catalog" title="No apps published yet">
+          <p>
+            The Store is ready. Publish a project from Creator Workspace to make its governed app
+            available here.
+          </p>
+          {canPublish ? (
+            <button type="button" onClick={() => window.location.assign("/creator/")}>
+              Open Creator Workspace
+            </button>
+          ) : null}
+        </SectionCard>
+      ) : page === "my-apps" && bootstrap.availableApps.length ? (
+        <SectionCard eyebrow="Platform API catalog" title="No installed apps yet">
+          <p>Browse the catalog to request access or install an available app.</p>
+          <button type="button" onClick={() => navigateBrowserPath("/store/available")}>
+            Browse Available Apps
+          </button>
+        </SectionCard>
       ) : (
         <SectionCard eyebrow={copy.eyebrow} title={`No ${copy.title.toLocaleLowerCase()} yet`}>
           <p>{copy.empty}</p>

@@ -157,6 +157,62 @@ test("mounted Provider loads API collections, updates favorites, and keeps detai
   });
 });
 
+test("Store shell offers an in-place retry for service failures without mislabeling them as sign-in failures", async () => {
+  memory.clear();
+  let attempts = 0;
+  const store = createStorefrontStateStore({
+    initialBootstrap: initial,
+    loadHome: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Store API is temporarily unavailable");
+      return ready;
+    },
+    device: createStoreDeviceState(window.localStorage)
+  });
+  let renderer;
+  await act(async () => {
+    renderer = create(tree(store));
+    await Promise.resolve();
+  });
+
+  assert.match(JSON.stringify(renderer.toJSON()), /Store unavailable/);
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Sign-in required/);
+  await act(async () => {
+    button(renderer.root, "Retry Store").props.onClick();
+    await Promise.resolve();
+  });
+  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test("an empty creator catalog explains how to publish the first Store app", async () => {
+  memory.clear();
+  const creatorHome = {
+    ...ready,
+    role: "creator",
+    myApps: [],
+    availableApps: []
+  };
+  const store = createStorefrontStateStore({
+    initialBootstrap: creatorHome,
+    loadHome: async () => creatorHome,
+    device: createStoreDeviceState(window.localStorage)
+  });
+  let renderer;
+  await act(async () => {
+    renderer = create(tree(store));
+    await Promise.resolve();
+  });
+
+  assert.match(JSON.stringify(renderer.toJSON()), /No apps published yet/);
+  assert.ok(button(renderer.root, "Open Creator Workspace"));
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
 test("mounted Provider suppresses stale refresh and preserves ready UI across real logout retry controls", async () => {
   memory.clear();
   const initialLoad = deferred();

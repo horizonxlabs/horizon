@@ -69,7 +69,8 @@ test("App Store guards unauthenticated and empty states before install-detail de
   const authGuard = shell.indexOf('if (bootstrap.status === "error")');
   assert.ok(authGuard >= 0);
   assert.ok(shell.indexOf("return (", authGuard) > authGuard);
-  assert.match(shell, /title="Sign-in required"/);
+  assert.match(shell, /authenticationError \? "Sign-in required" : "Store unavailable"/);
+  assert.match(shell, /Retry Store/);
   assert.match(collection, /apps\.length\s*\?[^]*<StoreAppList apps=\{apps\}/);
   assert.match(collection, /No \$\{copy\.title\.toLocaleLowerCase\(\)\} yet/);
   const loadingGuard = detail.indexOf('detail.status === "loading"');

@@ -1,15 +1,16 @@
 import { navigation } from "@evcp/config";
+import type { PlatformRole } from "@evcp/types";
 import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
-import { Bell, ShieldCheck, Store, WifiOff } from "lucide-react";
+import { PackageSearch, ShieldCheck, Store } from "lucide-react";
 
 type StorefrontSummaryProps = {
   userName?: string;
   email?: string;
+  role?: PlatformRole;
   source: "Platform API";
   myAppsCount: number;
+  catalogCount: number;
   currentPath: string;
-  isSigningIn: boolean;
-  onSignIn: () => void;
   onLogout: () => void;
   logoutError?: string;
 };
@@ -22,11 +23,11 @@ function activeRoute(currentPath: string, route: string): boolean {
 export function StorefrontSummary({
   userName,
   email,
+  role,
   source,
   myAppsCount,
+  catalogCount,
   currentPath,
-  isSigningIn,
-  onSignIn,
   onLogout,
   logoutError
 }: StorefrontSummaryProps) {
@@ -36,17 +37,16 @@ export function StorefrontSummary({
         <div>
           <span className="eyebrow">Private PWA</span>
           <p className="store-brand">Horizon Store</p>
-          <p>{userName ?? "Loading account…"}{email ? ` · ${email}` : ""}</p>
+          <p>
+            {userName ?? "Loading account…"}
+            {email ? ` · ${email}` : ""}
+          </p>
         </div>
         <div className="store-header-actions">
           <ToneBadge tone="success">{source}</ToneBadge>
-          <button type="button" className="secondary-button" onClick={onSignIn} disabled={isSigningIn}>
-            <ShieldCheck size={15} />
-            {isSigningIn ? "Signing in" : "Sign in with Keycloak"}
-          </button>
-          <button type="button" className="secondary-button" onClick={onLogout}>Logout</button>
-          <button type="button" className="store-icon-button" aria-label="Notifications">
-            <Bell size={18} />
+          {role ? <ToneBadge tone="neutral">{role.replace("_", " ")}</ToneBadge> : null}
+          <button type="button" className="secondary-button" onClick={onLogout}>
+            Logout
           </button>
         </div>
       </header>
@@ -73,14 +73,28 @@ export function StorefrontSummary({
       {logoutError ? (
         <section className="store-action-error" role="alert">
           <strong>Sign-out not completed.</strong> {logoutError}
-          <button type="button" className="secondary-button" onClick={onLogout}>Retry sign out</button>
+          <button type="button" className="secondary-button" onClick={onLogout}>
+            Retry sign out
+          </button>
         </section>
       ) : null}
 
       <section className="store-status-strip" aria-label="Store summary">
-        <div><Store size={17} /><span>My Apps</span><strong>{myAppsCount}</strong></div>
-        <div><ShieldCheck size={17} /><span>Access</span><strong>SSO</strong></div>
-        <div><WifiOff size={17} /><span>Offline</span><strong>Ready</strong></div>
+        <div>
+          <Store size={17} />
+          <span>My Apps</span>
+          <strong>{myAppsCount}</strong>
+        </div>
+        <div>
+          <PackageSearch size={17} />
+          <span>Catalog</span>
+          <strong>{catalogCount}</strong>
+        </div>
+        <div>
+          <ShieldCheck size={17} />
+          <span>Access</span>
+          <strong>SSO</strong>
+        </div>
       </section>
     </>
   );

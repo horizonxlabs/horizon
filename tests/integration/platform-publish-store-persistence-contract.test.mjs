@@ -122,7 +122,13 @@ test("Publish/store persistence service stores access defaults publish registry 
     runtimeDeployment
   });
   assert.equal(await service.canAccessPublishedProject(endUserActor, project.id), true);
-  assert.equal(await service.canAccessPublishedProject({ ...endUserActor, id: "outsider", email: "outsider@company.com" }, project.id), false);
+  assert.equal(
+    await service.canAccessPublishedProject(
+      { ...endUserActor, id: "outsider", email: "outsider@company.com" },
+      project.id
+    ),
+    false
+  );
   const registry = await service.listRegistry(creatorActor);
   assert.equal(publish.publishRequest.status, "published");
   assert.equal(publish.deployment.status, "published");
@@ -160,6 +166,10 @@ test("Publish/store persistence service stores access defaults publish registry 
         app.installStatus === "not_installed"
     )
   );
+
+  const creatorStoreHome = await service.listStoreApps(creatorActor);
+  assert.equal(creatorStoreHome.profile.email, creatorActor.email);
+  assert.ok(creatorStoreHome.availableApps.some((app) => app.slug === project.appId));
 
   const access = await service.requestStoreAccess(endUserActor, {
     appSlug: project.appId,

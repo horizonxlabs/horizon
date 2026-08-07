@@ -148,7 +148,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           vibeWorkspace.setWorkspaceSnapshot(
             await loadWorkspaceState(nextBootstrap.selectedProject.id)
           );
-          await publishAccess.refreshCreatorPublishState(nextBootstrap.selectedProject.id);
           vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
         } catch {
           vibeWorkspace.setWorkspaceSnapshot(undefined);
@@ -156,6 +155,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
             "Signed in. Confirm PRD baseline before workspace generation."
           );
         }
+        await publishAccess.refreshCreatorPublishState(nextBootstrap.selectedProject.id).catch(() => undefined);
       })
       .catch((error) => {
         setBootstrap(
@@ -263,7 +263,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           await ensureVibeWorkspace(project.id);
         }
         vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
-        await publishAccess.refreshCreatorPublishState(project.id);
         vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
       } catch {
         vibeWorkspace.setWorkspaceSnapshot(undefined);
@@ -271,6 +270,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           "Project selected. Confirm PRD baseline before workspace generation."
         );
       }
+      await publishAccess.refreshCreatorPublishState(project.id).catch(() => undefined);
     } finally {
       if (enteringWorkspace) setIsEnteringWorkspace(false);
     }

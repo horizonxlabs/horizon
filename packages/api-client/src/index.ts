@@ -95,7 +95,7 @@ export type PlatformUserDto = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: "admin" | "creator" | "end_user";
   permissions?: string[];
 };
 export type * from "./keycloak-user-types";
@@ -217,6 +217,7 @@ export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
   ownerUserId: string;
   department: string;
   accessMode: string;
+  availableRoles?: string[];
   releaseNotes: string[];
   supportContact: string;
   actions: Array<

@@ -83,11 +83,19 @@ export function usePublishAccess({
   }
 
   async function refreshCreatorPublishState(projectId: string) {
-    const publishState = await loadPublishState(projectId);
-    setAppAccessSnapshot(publishState.access);
-    setPublishReview(publishState.review);
-    setRegistryEntries(publishState.registry);
-    setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
+    try {
+      const publishState = await loadPublishState(projectId);
+      setAppAccessSnapshot(publishState.access);
+      setPublishReview(publishState.review);
+      setRegistryEntries(publishState.registry);
+      setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
+    } catch (error) {
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setPublishMessage(
+        `Publish readiness unavailable.${detail || " Complete the PRD and frontend prerequisites, then retry."}`
+      );
+      throw error;
+    }
   }
 
   async function handleInviteUser() {

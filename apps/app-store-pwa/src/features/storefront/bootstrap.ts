@@ -5,12 +5,18 @@ import {
   type StorefrontHomeResponse
 } from "@evcp/api-client";
 import type { AppStoreItem } from "@evcp/types";
-import { createStorePlatformClient, startStoreKeycloakLogin, startStoreKeycloakLogout } from "./platform-client";
+import type { PlatformRole } from "@evcp/types";
+import {
+  createStorePlatformClient,
+  startStoreKeycloakLogin,
+  startStoreKeycloakLogout
+} from "./platform-client";
 
 export type StoreBootstrapState = {
   status: "loading" | "ready" | "error";
   userName?: string;
   email?: string;
+  role?: PlatformRole;
   myApps: AppStoreItem[];
   availableApps: AppStoreItem[];
   source: "Platform API";
@@ -53,6 +59,7 @@ export async function loadStoreBootstrap(): Promise<StoreBootstrapState> {
     status: "ready",
     userName: storeHome.profile.userName || currentUser.user.name,
     email: storeHome.profile.email || currentUser.user.email,
+    role: currentUser.user.role,
     myApps: storeHome.myApps.map(appCardToStoreItem),
     availableApps: storeHome.availableApps.map(appCardToStoreItem),
     source: "Platform API"
@@ -75,9 +82,15 @@ function consumeStoreSessionHandoff(): void {
   const refreshExpiresAt = handoff.get("evcp_refresh_expires_at");
   if (!token || !expiresAt) return;
   createPlatformSessionStore(window.localStorage).saveSession({
-    token, expiresAt, ...(refreshToken && refreshExpiresAt ? { refreshToken, refreshExpiresAt } : {})
+    token,
+    expiresAt,
+    ...(refreshToken && refreshExpiresAt ? { refreshToken, refreshExpiresAt } : {})
   });
-  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  window.history.replaceState(
+    {},
+    document.title,
+    `${window.location.pathname}${window.location.search}`
+  );
 }
 
 export function clearStoreSessionBridge(): StoreBootstrapState {

@@ -14,9 +14,9 @@ import {
   type StoreAppCapabilityRefreshState,
   type StoreAppDetailState
 } from "./StoreAppDetailStates";
+import { selectedStoreRole, StoreAccessRoleField } from "./StoreAccessRoleField";
 
-type TicketType = "bug" | "feedback" | "feature_request";
-type TicketPriority = "low" | "medium" | "high";
+type TicketType = "bug" | "feedback" | "feature_request"; type TicketPriority = "low" | "medium" | "high";
 
 export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const {
@@ -155,7 +155,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   }
   const submitAccess = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const role = requestedRoleKey.trim();
+    const role = selectedStoreRole(app.availableRoles, requestedRoleKey).trim();
     const reason = accessReason.trim();
     if (!role || !reason) {
       setValidationError("A requested role and reason are required.");
@@ -297,10 +297,10 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
           <form data-store-action="request-access" onSubmit={submitAccess}>
             <label>
               Requested role
-              <input
-                name="requestedRoleKey"
+              <StoreAccessRoleField
+                availableRoles={app.availableRoles}
                 value={requestedRoleKey}
-                onChange={(event) => setRequestedRoleKey(event.target.value)}
+                onChange={setRequestedRoleKey}
               />
             </label>
             <label>

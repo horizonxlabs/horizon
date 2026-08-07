@@ -213,7 +213,7 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
     "Device preferences",
     "Install",
     "Open",
-    "Offline"
+    "Catalog"
   ]) {
     assert.match(storeSource, new RegExp(text));
   }

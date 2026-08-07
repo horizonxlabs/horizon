@@ -273,7 +273,7 @@ export class PublishStoreRepositoryBackedService {
   }
 
   async listStoreApps(actor: PlatformUser): Promise<StorefrontHome> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const cards = await Promise.all((await this.listRegistry(actor)).map((entry) => this.toCard(actor, entry)));
     const notifications = await this.ensureNotifications(actor, cards);
     return {
@@ -288,23 +288,23 @@ export class PublishStoreRepositoryBackedService {
   }
 
   async getStoreAppDetail(actor: PlatformUser, appSlug: string): Promise<StorefrontAppDetail> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const entry = await this.requireRegistryEntry(appSlug);
     const card = await this.toCard(actor, entry);
     return {
       ...card,
       ownerUserId: entry.ownerUserId,
       ownerName: defaultUserName(entry.ownerUserId, entry.ownerUserId),
-      department: "HR Department",
-      accessMode: entry.accessMode,
-      releaseNotes: ["Published from persisted manifest", "WFH leave type and manager approval preview are available"],
-      supportContact: "Creator User",
+      department: "Horizon workspace",
+      accessMode: entry.accessMode, availableRoles: [...entry.roleKeys],
+      releaseNotes: [`Published as manifest v${entry.manifestVersion}`, "Managed through the Horizon publish and registry workflow"],
+      supportContact: "App owner",
       actions: storeActionsForCard(card),
     };
   }
 
   async installStoreApp(actor: PlatformUser, input: { appSlug: string }): Promise<StoreAppInstallation> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
     const member = await this.getMemberForEmail(entry.appId, actor.email);
     if (!member) throw new PermissionError(`App ${input.appSlug} requires active access before install`);
@@ -333,7 +333,7 @@ export class PublishStoreRepositoryBackedService {
   }
 
   async uninstallStoreApp(actor: PlatformUser, input: { appSlug: string }): Promise<StoreAppInstallation> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
     const existing = await this.client.appInstallation.findFirst({
       where: { appId: entry.appId, userId: actor.id },
@@ -350,7 +350,7 @@ export class PublishStoreRepositoryBackedService {
   }
 
   async requestStoreAccess(actor: PlatformUser, input: { appSlug: string; requestedRoleKey: string; reason: string; department?: string }): Promise<StoreAccessRequestResult> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const entry = await this.requireRegistryEntry(input.appSlug);
     const app = await this.ensureApp({
       id: entry.projectId,
@@ -401,7 +401,7 @@ export class PublishStoreRepositoryBackedService {
       screenshotUrl?: string;
     },
   ): Promise<SupportTicket> {
-    requireAnyRole(actor, ["end_user"]);
+    requireAnyRole(actor, ["end_user", "creator", "admin"]);
     const detail = await this.canSubmitTicket(actor, input.appSlug);
     if (!input.title.trim()) throw new ValidationError("Ticket title is required");
     if (!input.description.trim()) throw new ValidationError("Ticket description is required");
@@ -786,7 +786,7 @@ export class PublishStoreRepositoryBackedService {
       projectId: entry.projectId,
       slug: entry.slug,
       name: entry.name,
-      description: `Workflow App for HR Department`,
+      description: `${entry.name} is published and governed through Horizon.`,
       ownerName: defaultUserName(entry.ownerUserId, entry.ownerUserId),
       route: entry.route,
       accessStatus,
@@ -830,7 +830,6 @@ export class PublishStoreRepositoryBackedService {
     ).map(mapNotification);
   }
 }
-
 export class MemoryPublishStorePersistenceClient implements PublishStorePersistenceClient {
   readonly app: PublishStorePersistenceClient["app"];
   readonly appRole: PublishStorePersistenceClient["appRole"];

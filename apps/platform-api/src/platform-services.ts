@@ -21,7 +21,6 @@ export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
   permissions: string[];
 }
-
 export type AuthMode = "platform_session" | "mock_header";
 
 export interface AuthResolution {
@@ -987,7 +986,7 @@ export interface StorefrontHome {
 export interface StorefrontAppDetail extends StorefrontAppCard {
   ownerUserId: string;
   department: string;
-  accessMode: AppStoreRegistryEntry["accessMode"];
+  accessMode: AppStoreRegistryEntry["accessMode"]; availableRoles: string[];
   releaseNotes: string[];
   supportContact: string;
   actions: Array<
@@ -5647,7 +5646,7 @@ export class AppUserAccessService {
       department?: string;
     }
   ): StoreAccessRequestResult {
-    this.auth.requireRole(actor, ["end_user"]);
+    this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const app = this.ensureApp(project);
     this.ensureDefaults(project, app);
     this.requireRoleKey(app.id, input.requestedRoleKey);
@@ -6319,7 +6318,7 @@ export class StorefrontService {
   ) {}
 
   listApps(actor: PlatformUser): StorefrontHome {
-    this.auth.requireRole(actor, ["end_user"]);
+    this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const cards = this.publish.listRegistry(actor).map((entry) => this.toCard(actor, entry));
     const notifications = this.ensureNotifications(actor, cards);
 
@@ -6335,7 +6334,7 @@ export class StorefrontService {
   }
 
   getAppDetail(actor: PlatformUser, appSlug: string): StorefrontAppDetail {
-    this.auth.requireRole(actor, ["end_user"]);
+    this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const entry = this.requireRegistryEntry(actor, appSlug);
     const project = this.projects.getProjectById(entry.projectId);
     const card = this.toCard(actor, entry);
@@ -6348,11 +6347,12 @@ export class StorefrontService {
       ownerName: owner?.name ?? entry.ownerUserId,
       department: project.targetDepartment,
       accessMode: entry.accessMode,
+      availableRoles: [...entry.roleKeys],
       releaseNotes: [
-        "Published from Sprint 6 manifest",
-        "WFH leave type and manager approval preview are available"
+        `Published as manifest v${entry.manifestVersion}`,
+        "Managed through the Horizon publish and registry workflow"
       ],
-      supportContact: "Creator User",
+      supportContact: owner?.name ?? "App owner",
       actions: active
         ? ["open", "submit_ticket", "send_feedback"]
         : ["request_access", "view_status"]
@@ -6368,7 +6368,7 @@ export class StorefrontService {
       department?: string;
     }
   ): StoreAccessRequestResult {
-    this.auth.requireRole(actor, ["end_user"]);
+    this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const entry = this.requireRegistryEntry(actor, appSlug);
     const project = this.projects.getProjectById(entry.projectId);
     return this.appAccess.createStoreAccessRequest(actor, project, input);
@@ -6473,7 +6473,7 @@ export class TicketService {
       screenshotUrl?: string;
     }
   ): SupportTicket {
-    this.auth.requireRole(actor, ["end_user"]);
+    this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const detail = this.storefront.canSubmitTicket(actor, appSlug);
     if (!input.title.trim()) throw new ValidationError("Ticket title is required");
     if (!input.description.trim()) throw new ValidationError("Ticket description is required");

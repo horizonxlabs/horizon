@@ -39,7 +39,6 @@ const detail = (slug = "first", actions = ["open", "install", "uninstall", "requ
   id: slug, slug, name: `${slug} App`, description: "A supported app", ownerName: "IT", ownerUserId: "owner", department: "IT", accessMode: "role_based", releaseNotes: ["Ready"], supportContact: "help@example.com", actions,
   route: `/apps/${slug}`, accessStatus: "active", installStatus: "not_installed", health: "healthy", version: "1.0.0", lastUpdated: "2026-07-29", primaryAction: "open"
 });
-
 function createStore(loadHome = async () => home) {
   return createStorefrontStateStore({ initialBootstrap: home, loadHome, device: createStoreDeviceState(window.localStorage) });
 }

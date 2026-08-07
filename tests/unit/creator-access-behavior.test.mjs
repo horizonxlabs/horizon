@@ -180,6 +180,31 @@ test("access decision POST success remains confirmed when refresh fails", async 
   await act(async () => renderer.unmount());
 });
 
+test("publish readiness load failure replaces the indefinite loading message", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(AccessProbe, {
+        client: {},
+        loadPublishState: async () => {
+          throw new Error("Confirm a PRD baseline before publishing");
+        }
+      })
+    );
+  });
+
+  await act(async () => {
+    await assert.rejects(
+      () => latest.refreshCreatorPublishState(selectedProject.id),
+      /Confirm a PRD baseline/
+    );
+  });
+  assert.match(latest.publishMessage, /Publish readiness unavailable/i);
+  assert.match(latest.publishMessage, /Confirm a PRD baseline before publishing/);
+  assert.doesNotMatch(latest.publishMessage, /Loading publish state/);
+  await act(async () => renderer.unmount());
+});
+
 test.after(() => {
   if (originalActEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT;
   else globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
