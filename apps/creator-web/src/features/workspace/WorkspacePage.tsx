@@ -116,7 +116,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
         <div className="vibe-live-header-left">
-          <a className="vibe-live-back-link" href="/creator/projects">
+          <a className="vibe-live-back-link" href="/creator/">
             <ChevronLeft size={16} aria-hidden="true" />
             <span>Projects</span>
           </a>

@@ -81,7 +81,7 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.ok(snapshot.roles.some((role) => role.key === "employee"));
   assert.ok(
     snapshot.members.some(
-      (member) => member.email === "user@company.com" && member.roleKey === "employee"
+      (member) => member.userId === project.ownerUserId && member.roleKey === "hr_admin"
     )
   );
 
@@ -121,7 +121,7 @@ test("Publish/store persistence service stores access defaults publish registry 
     preview,
     runtimeDeployment
   });
-  assert.equal(await service.canAccessPublishedProject(endUserActor, project.id), true);
+  assert.equal(await service.canAccessPublishedProject(endUserActor, project.id), false);
   assert.equal(
     await service.canAccessPublishedProject(
       { ...endUserActor, id: "outsider", email: "outsider@company.com" },
@@ -160,10 +160,10 @@ test("Publish/store persistence service stores access defaults publish registry 
   const storeHome = await service.listStoreApps(endUserActor);
   assert.ok(
     storeHome.availableApps.some(
-      (app) =>
-        app.slug === project.appId &&
-        app.accessStatus === "active" &&
-        app.installStatus === "not_installed"
+        (app) =>
+          app.slug === project.appId &&
+          app.accessStatus === "available" &&
+          app.installStatus === "not_installed"
     )
   );
 
@@ -178,6 +178,11 @@ test("Publish/store persistence service stores access defaults publish registry 
     department: "HR"
   });
   assert.equal(access.status, "pending");
+  await service.decideAccessRequest(creatorActor, {
+    project,
+    requestId: access.id,
+    decision: "approved"
+  });
 
   const ticket = await service.createTicket(endUserActor, {
     appSlug: project.appId,

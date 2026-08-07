@@ -5,6 +5,7 @@ import { canAccessPublishedProject, storeActionsForCard } from "./published-app-
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
 import type { AppAccessRequestRecord, AppInstallationRecord, AppInvitationRecord, AppManifestRecord, AppMemberRecordData, AppRecord, AppRoleRecord, AppStoreRegistryEntryRecord, DeploymentRecordData, InAppNotificationRecord, PublishRequestRecordData, PublishStorePersistenceClient, SupportTicketRecord, SupportTicketTimelineEntryRecord, UserRecord } from "./publish-store-persistence-types";
 import { matchesAccessRequest, matchesApp, matchesAppScoped, matchesInstallation, matchesTicket, slugId, slugToId, sortByDate, toIsoString, updateById } from "./publish-store-record-utils";
+import { defaultUserName, defaultUserRecord } from "./publish-store-users";
 export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 
 export class PublishStoreRepositoryBackedService {
@@ -560,7 +561,6 @@ export class PublishStoreRepositoryBackedService {
     });
     if (members.length === 0) {
       await this.addMember(app, "creator@company.com", "hr_admin", "internal", "active", project.ownerUserId);
-      await this.addMember(app, "user@company.com", "employee", "internal", "active", "usr_end_user");
     }
 
     if ((await this.client.appInvitation.findMany({ where: { appId: app.id } })).length === 0) {
@@ -722,7 +722,9 @@ export class PublishStoreRepositoryBackedService {
     const role = await this.requireRoleKey(app.id, roleKey);
     const existing = (await this.membersForApp(app.id)).find((member) => member.email === email && member.roleKey === roleKey);
     if (existing) return existing;
-    const user = defaultUserRecord(userId, email);
+    const user = await this.client.platformUser.findUnique({ where: { id: userId } })
+      ?? await this.client.platformUser.findUnique({ where: { email } });
+    if (!user) throw new ValidationError(`Platform user must sign in before app access can be approved: ${email}`);
     await this.client.appMember.create({
       data: { appId: app.id, userId: user.id, roleId: role.id },
     });
@@ -831,6 +833,7 @@ export class PublishStoreRepositoryBackedService {
   }
 }
 export class MemoryPublishStorePersistenceClient implements PublishStorePersistenceClient {
+  readonly platformUser: PublishStorePersistenceClient["platformUser"];
   readonly app: PublishStorePersistenceClient["app"];
   readonly appRole: PublishStorePersistenceClient["appRole"];
   readonly appMember: PublishStorePersistenceClient["appMember"];
@@ -858,6 +861,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
   private readonly tickets: SupportTicketRecord[] = [];
   private readonly ticketTimeline: SupportTicketTimelineEntryRecord[] = [];
   private readonly notifications: InAppNotificationRecord[] = [];
+  private readonly users: UserRecord[] = [];
 
   constructor(
     seed: Partial<{
@@ -874,6 +878,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
       tickets: SupportTicketRecord[];
       ticketTimeline: SupportTicketTimelineEntryRecord[];
       notifications: InAppNotificationRecord[];
+      users: UserRecord[];
     }> = {},
   ) {
     this.apps = seed.apps ?? [];
@@ -889,6 +894,15 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
     this.tickets = seed.tickets ?? [];
     this.ticketTimeline = seed.ticketTimeline ?? [];
     this.notifications = seed.notifications ?? [];
+    this.users = seed.users ?? [defaultUserRecord("usr_creator"), defaultUserRecord("usr_end_user")];
+
+    this.platformUser = {
+      findUnique: async ({ where }) =>
+        this.users.find((user) =>
+          (where.id !== undefined && user.id === where.id)
+          || (where.email !== undefined && user.email === where.email)
+        ) ?? null,
+    };
 
     this.app = {
       findFirst: async ({ where }) => this.apps.find((app) => matchesApp(app, where)) ?? null,
@@ -922,7 +936,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
       create: async ({ data }) => {
         const member = {
           ...data,
-          user: defaultUserRecord(data.userId),
+          user: this.users.find((user) => user.id === data.userId) ?? defaultUserRecord(data.userId),
           role: this.roles.find((role) => role.id === data.roleId),
         };
         this.members.push(member);
@@ -1346,20 +1360,6 @@ function defaultRoleDescription(key: string): string {
   if (key === "manager") return "Approve team leave requests and view team queue.";
   if (key === "hr_admin") return "Administer leave policies and reporting.";
   return "Request and view own leave records.";
-}
-
-function defaultUserRecord(userId: string, email?: string): UserRecord {
-  if (userId === "usr_creator") return { id: userId, email: "creator@company.com", name: "Creator User" };
-  if (userId === "usr_end_user") return { id: userId, email: "user@company.com", name: "End User" };
-  const safeEmail = email ?? `${userId.replace(/^usr_/, "")}@company.com`;
-  return { id: userId, email: safeEmail, name: defaultUserName(userId, safeEmail) };
-}
-
-function defaultUserName(userId: string, fallback: string): string {
-  if (userId === "usr_creator") return "Creator User";
-  if (userId === "usr_end_user") return "End User";
-  if (fallback.includes("@")) return fallback.split("@")[0];
-  return fallback;
 }
 
 function normalizeAppStatus(value: string): ManagedApp["status"] {

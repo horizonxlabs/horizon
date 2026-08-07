@@ -116,7 +116,7 @@ async function streamOpenAiCompatible(
 ) {
   if (!provider.baseUrl) throw new Error(`AI provider ${provider.id} has no base URL`);
   const startedAt = performance.now();
-  const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+  const response = await fetcher(`${openAiCompatibleBaseUrl(provider)}/chat/completions`, {
     method: "POST",
     headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
     body: JSON.stringify({
@@ -154,7 +154,10 @@ async function streamOpenAiCompatible(
         const json = JSON.parse(data) as {
           choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>;
           usage?: { total_tokens?: unknown };
+          error?: unknown;
         };
+        const providerError = providerErrorMessage(json.error);
+        if (providerError) throw nonRetryableProviderError(providerError);
         const delta = json.choices?.[0]?.delta;
         const content = delta?.content;
         if (typeof content === "string" && content) {
@@ -168,7 +171,10 @@ async function streamOpenAiCompatible(
         if (onReasoning && typeof reasoning === "string" && reasoning) onReasoning(reasoning);
         const total = Number(json.usage?.total_tokens);
         if (Number.isFinite(total) && total > 0) usageTokens = total;
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && (error as Error & { retryable?: boolean }).retryable === false) {
+          throw error;
+        }
         // skip keep-alive comments / non-JSON frames
       }
     }
@@ -193,7 +199,7 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const response = await fetcher(`${provider.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      const response = await fetcher(`${openAiCompatibleBaseUrl(provider)}/chat/completions`, {
         method: "POST", headers: { authorization: `Bearer ${provider.secret}`, "content-type": "application/json" },
         body: JSON.stringify({ model: provider.model, messages: [{ role: "user", content: prompt }], temperature: 0.2 }),
         signal: AbortSignal.timeout(timeoutMs)
@@ -209,7 +215,10 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
         usage?: { total_tokens?: unknown };
         response_cost?: unknown;
         _hidden_params?: { response_cost?: unknown };
+        error?: unknown;
       };
+      const providerError = providerErrorMessage(body.error);
+      if (providerError) throw nonRetryableProviderError(providerError);
       const text = String(body.choices?.[0]?.message?.content ?? "").trim();
       if (!text) throw new Error("AI provider returned an empty completion");
       const tokensUsed = Number(body.usage?.total_tokens ?? Math.max(1, Math.ceil((prompt.length + text.length) / 4)));
@@ -230,6 +239,25 @@ async function invokeOpenAiCompatible(provider: ResolvedAiProvider, prompt: stri
     }
   }
   throw lastError;
+}
+
+function openAiCompatibleBaseUrl(provider: ResolvedAiProvider): string {
+  const baseUrl = provider.baseUrl?.trim().replace(/\/+$/, "") ?? "";
+  if (provider.adapter === "lm_studio" && !/\/v1$/i.test(baseUrl)) return `${baseUrl}/v1`;
+  return baseUrl;
+}
+
+function providerErrorMessage(error: unknown): string | undefined {
+  if (typeof error === "string" && error.trim()) return error.trim();
+  if (!error || typeof error !== "object") return undefined;
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" && message.trim() ? message.trim() : undefined;
+}
+
+function nonRetryableProviderError(message: string): Error & { retryable: boolean } {
+  const error = new Error(`AI provider error: ${message}`) as Error & { retryable: boolean };
+  error.retryable = false;
+  return error;
 }
 
 async function invokeAnthropic(provider: ResolvedAiProvider, prompt: string, fetcher: typeof fetch, timeoutMs: number) {

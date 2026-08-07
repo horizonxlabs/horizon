@@ -2,6 +2,9 @@ import {
   createPlatformSessionStore,
   startKeycloakLogin,
   startKeycloakLogout,
+  type CreateProjectInput,
+  type PlatformApiClient,
+  type PlatformProjectDto,
   type PrdVersionDto
 } from "@evcp/api-client";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
@@ -51,6 +54,27 @@ export async function loadPrdState(
   const versions = await client.listPrdVersions(projectId);
   const current = versions.length ? await client.getCurrentPrd(projectId) : undefined;
   return { current, versions };
+}
+
+export type CreateProjectWithInitialPrdResult = {
+  project: PlatformProjectDto;
+  draft?: PrdVersionDto;
+  prdError?: Error;
+};
+
+export async function createProjectWithInitialPrd(
+  client: Pick<PlatformApiClient, "createProject" | "generatePrdDraft">,
+  input: CreateProjectInput
+): Promise<CreateProjectWithInitialPrdResult> {
+  const project = await client.createProject(input);
+  try {
+    return { project, draft: await client.generatePrdDraft(project.id) };
+  } catch (error) {
+    return {
+      project,
+      prdError: error instanceof Error ? error : new Error(String(error))
+    };
+  }
 }
 
 export function signInCreatorSessionBridge(): void {

@@ -4,7 +4,15 @@ import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
-  const { visiblePrdSections, visibleVersionRows, prdMessage, currentPrdVersion, handleConfirmPrdBaseline } = app;
+  const {
+    visiblePrdSections,
+    visibleVersionRows,
+    prdMessage,
+    currentPrdVersion,
+    handleConfirmPrdBaseline,
+    handleGeneratePrdDraft,
+    isGeneratingPrdDraft
+  } = app;
   return (
     <CreatorShell
       app={app}
@@ -24,7 +32,25 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
             <SectionCard
               eyebrow="PRD Viewer"
               title="Structured PRD Sections"
-              action={<Button variant="primary" type="button" disabled={!currentPrdVersion || currentPrdVersion.status === "baseline"} onClick={() => { void handleConfirmPrdBaseline(); }}>Confirm Baseline</Button>}
+              action={currentPrdVersion ? (
+                <Button
+                  variant="primary"
+                  type="button"
+                  disabled={currentPrdVersion.status === "baseline"}
+                  onClick={() => { void handleConfirmPrdBaseline(); }}
+                >
+                  Confirm Baseline
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  type="button"
+                  disabled={isGeneratingPrdDraft}
+                  onClick={() => { void handleGeneratePrdDraft(); }}
+                >
+                  {isGeneratingPrdDraft ? "Generating PRD" : "Generate PRD Draft"}
+                </Button>
+              )}
             >
               <p>{prdMessage}</p>
               <div className="creator-prd-sections">

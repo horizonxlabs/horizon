@@ -70,6 +70,9 @@ export interface InAppNotificationRecord {
 }
 
 export interface PublishStorePersistenceClient {
+  platformUser: {
+    findUnique(args: { where: { id?: string; email?: string } }): Promise<UserRecord | null>;
+  };
   app: {
     findFirst(args: { where: { projectId?: string; slug?: string; id?: string }; include?: Record<string, unknown> }): Promise<AppRecord | null>;
     upsert(args: { where: { id: string }; update: Partial<AppRecord>; create: AppRecord; include?: Record<string, unknown> }): Promise<AppRecord>;

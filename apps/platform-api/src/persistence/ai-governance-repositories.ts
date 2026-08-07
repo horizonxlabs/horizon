@@ -91,12 +91,13 @@ export class AiGovernanceRepositoryBackedService {
     if (!input.baseUrl.trim()) throw new ValidationError("AI provider baseUrl is required");
     if (!input.models.length) throw new ValidationError("At least one AI provider model is required");
     const id = slugId("aip", input.name);
+    const baseUrl = normalizeProviderBaseUrl(input.adapter, input.baseUrl);
     const record = await this.client.aiProvider.upsert({
       where: { id },
       update: {
         name: input.name,
         adapter: input.adapter,
-        baseUrl: input.baseUrl,
+        baseUrl,
         models: [...input.models],
         status: "active"
       },
@@ -104,7 +105,7 @@ export class AiGovernanceRepositoryBackedService {
         id,
         name: input.name,
         adapter: input.adapter,
-        baseUrl: input.baseUrl,
+        baseUrl,
         models: [...input.models],
         status: "active",
         createdAt: new Date()
@@ -120,10 +121,11 @@ export class AiGovernanceRepositoryBackedService {
     if (!input.models.length) throw new ValidationError("At least one AI provider model is required");
     const existing = await this.client.aiProvider.findUnique({ where: { id: providerId } });
     if (!existing) throw new ValidationError(`Unknown AI provider: ${providerId}`);
+    const baseUrl = normalizeProviderBaseUrl(existing.adapter, input.baseUrl);
     const record = await this.client.aiProvider.upsert({
       where: { id: providerId },
-      update: { name: input.name, baseUrl: input.baseUrl, models: [...input.models] },
-      create: { ...existing, name: input.name, baseUrl: input.baseUrl, models: [...input.models] }
+      update: { name: input.name, baseUrl, models: [...input.models] },
+      create: { ...existing, name: input.name, baseUrl, models: [...input.models] }
     });
     return mapProvider(record);
   }
@@ -376,6 +378,12 @@ function matchesRule(rule: GuardrailRuleRecord, prompt: string): boolean {
 function slugId(prefix: string, value: string): string {
   const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return `${prefix}_${slug || "item"}`;
+}
+
+function normalizeProviderBaseUrl(adapter: string, value: string): string {
+  const baseUrl = value.trim().replace(/\/+$/, "");
+  if (adapter === "lm_studio" && !/\/v1$/i.test(baseUrl)) return `${baseUrl}/v1`;
+  return baseUrl;
 }
 
 function fingerprintSecret(secret: string): string {

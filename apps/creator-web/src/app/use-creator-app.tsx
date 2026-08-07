@@ -1,4 +1,3 @@
-import { type PrdVersionDto } from "@evcp/api-client";
 import { navigateBrowserPath, useBrowserPath, usePageHeadingFocus } from "@evcp/ui";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -10,8 +9,8 @@ import {
 import {
   creatorApiFailureState,
   beginCreatorKeycloakLogout,
+  createProjectWithInitialPrd,
   loadCreatorBootstrap,
-  loadPrdState,
   signInCreatorSessionBridge
 } from "@/app/creator-app-helpers";
 import { clearCreatorSessionBridge, createCreatorPlatformClient } from "@/shared/creator-client";
@@ -28,6 +27,7 @@ import { clearLoginSession } from "@/shared/session";
 import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types";
 import { usePublishAccess } from "@/features/publish";
 import { ensureVibeWorkspace, loadWorkspaceState, useVibeWorkspace } from "@/features/workspace";
+import { useCreatorPrd } from "@/app/use-creator-prd";
 
 export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
@@ -40,11 +40,23 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     "กรอกข้อมูลแอป แล้วระบบจะสร้าง project และ PRD draft ให้ทันที"
   );
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto | undefined>(undefined);
-  const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
-  const [prdMessage, setPrdMessage] = useState("Loading PRD state from Platform API.");
 
   const selectedProject = bootstrap.selectedProject;
+  const {
+    currentPrdVersion,
+    setCurrentPrdVersion,
+    prdVersionList,
+    setPrdVersionList,
+    prdMessage,
+    setPrdMessage,
+    isGeneratingPrdDraft,
+    visiblePrdSections,
+    visibleVersionRows,
+    refreshPrdState,
+    handleConfirmPrdBaseline,
+    handleGeneratePrdDraft,
+    resetPrdState
+  } = useCreatorPrd(selectedProject);
   const creatorNavItems = createCreatorNavigation(selectedProject);
   const pathname = useBrowserPath();
   usePageHeadingFocus(pathname);
@@ -59,63 +71,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const vibeWorkspace = useVibeWorkspace({ selectedProject });
   const publishAccess = usePublishAccess({ selectedProject });
 
-  const visiblePrdSections =
-    currentPrdVersion?.sections?.map((section) => ({
-      key: section.key,
-      title: section.title,
-      body: section.body,
-      order: String(section.order)
-    })) ?? [];
-  const visibleVersionRows = prdVersionList.length
-    ? prdVersionList.map((version) => ({
-        version: version.version,
-        status: version.status,
-        summary: version.changeSummary,
-        author: selectedProject.owner
-      }))
-    : [];
   const pageCopy = creatorPageCopy[creatorPage];
-
-  async function refreshPrdState(projectId: string) {
-    const prdState = await loadPrdState(projectId);
-    setCurrentPrdVersion(prdState.current);
-    setPrdVersionList(prdState.versions);
-    setPrdMessage(
-      prdState.current
-        ? "PRD loaded from Platform API."
-        : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline."
-    );
-  }
-
-  async function handleConfirmPrdBaseline() {
-    if (!selectedProject.id || !currentPrdVersion) {
-      setPrdMessage("No API-backed PRD draft is available to confirm.");
-      return;
-    }
-    try {
-      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, {
-        versionId: currentPrdVersion.id
-      });
-      setCurrentPrdVersion(baseline);
-      setPrdVersionList((current) => [
-        baseline,
-        ...current.filter((version) => version.id !== baseline.id)
-      ]);
-      setPrdMessage(`Baseline v${baseline.version} confirmed through Platform API.`);
-    } catch (error) {
-      setPrdMessage(
-        error instanceof Error
-          ? `Baseline confirmation failed: ${error.message}`
-          : "Baseline confirmation failed. No local state was changed."
-      );
-    }
-  }
 
   function resetProjectRuntimeState() {
     vibeWorkspace.resetWorkspace();
     publishAccess.resetPublishAccess();
-    setCurrentPrdVersion(undefined);
-    setPrdVersionList([]);
+    resetPrdState();
   }
 
   useEffect(() => {
@@ -313,7 +274,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     );
     try {
       const client = createCreatorPlatformClient();
-      const project = await client.createProject({
+      const { project, draft, prdError } = await createProjectWithInitialPrd(client, {
         name: createProjectForm.name.trim(),
         appType: createProjectForm.appType.trim() || "Workflow App",
         businessProblem: createProjectForm.businessProblem.trim(),
@@ -324,22 +285,32 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           .filter(Boolean),
         dataSensitivity: createProjectForm.dataSensitivity
       });
-      const draft = await client.generatePrdDraft(project.id);
       const nextBootstrap = await loadCreatorBootstrap(project.id);
       setBootstrap(nextBootstrap);
-      setCurrentPrdVersion(draft);
-      setPrdVersionList([draft]);
       vibeWorkspace.setWorkspaceSnapshot(undefined);
       vibeWorkspace.setWorkspaceResult(undefined);
       vibeWorkspace.setPreviewOverride(undefined);
       publishAccess.setPublishReview(undefined);
       publishAccess.setPublishResult(undefined);
       publishAccess.setRegistryEntries([]);
-      setCreateProjectMessage(
-        `สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`
-      );
       setIsCreateProjectDialogOpen(false);
       navigateBrowserPath(creatorPathForPage(project.id, "prd"));
+      if (draft) {
+        setCurrentPrdVersion(draft);
+        setPrdVersionList([draft]);
+        setPrdMessage(`PRD draft v${draft.version} generated through Platform API.`);
+        setCreateProjectMessage(
+          `สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`
+        );
+      } else {
+        const reason = prdError?.message ?? "Unknown provider error";
+        setCurrentPrdVersion(undefined);
+        setPrdVersionList([]);
+        setCreateProjectMessage(`สร้าง ${project.name} แล้ว แต่ PRD generation ล้มเหลว: ${reason}`);
+        setPrdMessage(
+          `Project created successfully, but PRD generation failed: ${reason}. Retry generation here.`
+        );
+      }
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
@@ -378,6 +349,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     visibleVersionRows,
     prdMessage,
     handleConfirmPrdBaseline,
+    handleGeneratePrdDraft,
+    isGeneratingPrdDraft,
     creatorPage,
     creatorRoute,
     requestedProjectUnavailable,

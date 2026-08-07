@@ -265,9 +265,9 @@ test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
   assert.doesNotMatch(html, /hz-prompt-cta/);
 });
 
-test("PrdPage Confirm Baseline uses the @evcp/ui Button primitive (classed, not a raw button)", () => {
+test("PrdPage offers API-backed PRD recovery with the @evcp/ui Button primitive", () => {
   const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
-  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Confirm Baseline<\/button>/);
+  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate PRD Draft<\/button>/);
 });
 
 test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
