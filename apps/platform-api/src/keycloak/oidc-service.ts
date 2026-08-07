@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { KeycloakConfig } from "./config";
 import type { PlatformAuthClaims, PlatformAuthSession } from "../platform-services";
@@ -40,7 +40,6 @@ const GROUP_ROLES = {
 
 /** Server-side authorization-code broker. Keycloak tokens never leave this service. */
 export class KeycloakOidcService {
-  private readonly transactions = new Map<string, OidcTransaction>();
   private readonly fetcher: typeof fetch;
   private readonly now: () => Date;
   private readonly random: (size: number) => Buffer;
@@ -57,10 +56,9 @@ export class KeycloakOidcService {
 
   start(app: PlatformApp, returnTo: string): { state: string; authorizationUrl: string } {
     const safeReturnTo = this.requireAllowedReturnTo(app, returnTo);
-    const state = this.token(32);
     const nonce = this.token(32);
     const verifier = this.token(48);
-    this.transactions.set(state, {
+    const state = this.encryptTransaction({
       app,
       returnTo: safeReturnTo,
       nonce,
@@ -104,10 +102,58 @@ export class KeycloakOidcService {
   }
 
   private consumeTransaction(state: string): OidcTransaction {
-    const transaction = this.transactions.get(state);
-    this.transactions.delete(state);
-    if (!transaction || transaction.expiresAt <= this.now().getTime()) throw new Error("invalid_oidc_state");
-    return transaction;
+    try {
+      const [version, nonceText, tagText, ciphertextText] = state.split(".");
+      if (version !== "v1" || !nonceText || !tagText || !ciphertextText) throw new Error("invalid");
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        this.stateEncryptionKey(),
+        Buffer.from(nonceText, "base64url")
+      );
+      decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+      const plaintext = Buffer.concat([
+        decipher.update(Buffer.from(ciphertextText, "base64url")),
+        decipher.final()
+      ]);
+      const transaction = JSON.parse(plaintext.toString("utf8")) as Partial<OidcTransaction>;
+      if (
+        (transaction.app !== "admin" && transaction.app !== "creator" && transaction.app !== "store") ||
+        typeof transaction.returnTo !== "string" ||
+        typeof transaction.nonce !== "string" ||
+        !transaction.nonce ||
+        typeof transaction.verifier !== "string" ||
+        !transaction.verifier ||
+        typeof transaction.expiresAt !== "number" ||
+        transaction.expiresAt <= this.now().getTime()
+      ) {
+        throw new Error("invalid");
+      }
+      return {
+        app: transaction.app,
+        returnTo: this.requireAllowedReturnTo(transaction.app, transaction.returnTo),
+        nonce: transaction.nonce,
+        verifier: transaction.verifier,
+        expiresAt: transaction.expiresAt
+      };
+    } catch {
+      throw new Error("invalid_oidc_state");
+    }
+  }
+
+  private encryptTransaction(transaction: OidcTransaction): string {
+    const nonce = this.random(12);
+    const cipher = createCipheriv("aes-256-gcm", this.stateEncryptionKey(), nonce);
+    const ciphertext = Buffer.concat([
+      cipher.update(Buffer.from(JSON.stringify(transaction), "utf8")),
+      cipher.final()
+    ]);
+    return `v1.${nonce.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${ciphertext.toString("base64url")}`;
+  }
+
+  private stateEncryptionKey(): Buffer {
+    return createHash("sha256")
+      .update(`evcp-keycloak-oidc-state:${this.deps.config.platformClientSecret}`)
+      .digest();
   }
 
   private async exchangeCode(code: string, verifier: string): Promise<{ id_token: string }> {

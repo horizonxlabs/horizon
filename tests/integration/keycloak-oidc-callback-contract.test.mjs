@@ -98,6 +98,18 @@ test("OIDC callback maps Keycloak groups and issues a platform session", async (
   assert.doesNotMatch(result.session.token, /server-only-client-secret/);
 });
 
+test("OIDC callback survives an API restart between authorization start and callback", async () => {
+  const firstProcess = createKeycloakOidcHarness({ groups: ["evcp-creators"] });
+  const { state } = firstProcess.service.start("creator", "https://creator.example.test/");
+
+  const restartedProcess = createKeycloakOidcHarness({ groups: ["evcp-creators"] });
+  const result = await restartedProcess.service.complete({ code: "valid-after-restart", state });
+
+  assert.equal(result.returnTo, "https://creator.example.test/");
+  assert.equal(result.session.claims.platformRoles[0], "creator");
+  assert.equal(restartedProcess.fetchCalls.length, 1);
+});
+
 test("Keycloak login replaces a stale local admin role with current end-user claims", () => {
   const services = createPlatformApiServices();
   services.authSso.issueKeycloakSession({
