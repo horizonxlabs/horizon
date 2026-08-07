@@ -300,7 +300,16 @@ test("creator publish HTTP routes resolve persisted sessions after API restart",
       new MemoryWorkspacePersistenceClient()
     ),
     publishStorePersistence: createPublishStoreRepositoryBackedService(
-      new MemoryPublishStorePersistenceClient()
+      new MemoryPublishStorePersistenceClient({
+        users: [
+          { id: userId, email, name: "Restarted Creator" },
+          {
+            id: "usr_sales_rep",
+            email: "sales.rep@horizon.test",
+            name: "Sales Representative"
+          }
+        ]
+      })
     ),
     platformSessions
   };

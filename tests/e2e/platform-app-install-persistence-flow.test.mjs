@@ -128,6 +128,27 @@ async function createPublishedProject(services) {
   return project.body.data;
 }
 
+async function grantEndUserAccess(services, project) {
+  const request = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/store/apps/${project.appId}/access-requests`,
+    headers: endUserHeaders,
+    body: {
+      requestedRoleKey: "employee",
+      reason: "Install the published app"
+    }
+  });
+  assert.equal(request.status, 201);
+
+  const decision = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${project.id}/app/access-requests/decision`,
+    headers: creatorHeaders,
+    body: { requestId: request.body.data.id, decision: "approved" }
+  });
+  assert.equal(decision.status, 200);
+}
+
 test("runtime memory persistence keeps App Store install lifecycle across service recreation", async () => {
   const coreClient = new MemoryCorePersistenceClient();
   const aiClient = new MemoryAiGovernancePersistenceClient();
@@ -158,6 +179,8 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
       (app) => app.slug === project.appId && app.installStatus === "not_installed"
     )
   );
+
+  await grantEndUserAccess(firstServices, project);
 
   const installed = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",

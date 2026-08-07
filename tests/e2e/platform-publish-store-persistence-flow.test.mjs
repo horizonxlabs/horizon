@@ -121,6 +121,27 @@ async function createProjectBaselineAndPreview(services) {
   return project.body.data;
 }
 
+async function grantEndUserAccess(services, project) {
+  const request = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/store/apps/${project.appId}/access-requests`,
+    headers: endUserHeaders,
+    body: {
+      requestedRoleKey: "employee",
+      reason: "Use the published app and submit support tickets"
+    }
+  });
+  assert.equal(request.status, 201);
+
+  const decision = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${project.id}/app/access-requests/decision`,
+    headers: creatorHeaders,
+    body: { requestId: request.body.data.id, decision: "approved" }
+  });
+  assert.equal(decision.status, 200);
+}
+
 test("runtime memory persistence keeps publish registry access and tickets across service recreation", async () => {
   const coreClient = new MemoryCorePersistenceClient();
   const aiClient = new MemoryAiGovernancePersistenceClient();
@@ -159,6 +180,8 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   });
   assert.equal(publish.status, 201);
   assert.equal(publish.body.data.registryEntry.slug, project.appId);
+
+  await grantEndUserAccess(firstServices, project);
 
   const access = await executePlatformApiRequestAsync(firstServices, {
     method: "POST",
