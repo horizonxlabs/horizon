@@ -6,6 +6,7 @@ coverage
 playwright-report
 .playwright-mcp
 test-results
+.worktrees
 .evcp
 .DS_Store
 .env
