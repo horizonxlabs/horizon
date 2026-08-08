@@ -93,19 +93,23 @@ function createSeededService() {
   );
 }
 
-test("App Store install lifecycle is separate from access membership", async () => {
+test("App Store access membership stays usable across the legacy install lifecycle", async () => {
   const service = createSeededService();
 
   const beforeInstall = await service.listStoreApps(endUserActor);
   assert.equal(
     beforeInstall.myApps.some((app) => app.slug === "leave-install"),
-    false
+    true
   );
   assert.equal(
-    beforeInstall.availableApps.some(
-      (app) => app.slug === "leave-install" && app.installStatus === "not_installed"
-    ),
-    true
+    beforeInstall.availableApps.some((app) => app.slug === "leave-install"),
+    false
+  );
+  assert.equal(beforeInstall.myApps[0].installStatus, "not_installed");
+  assert.equal(beforeInstall.myApps[0].primaryAction, "open");
+  assert.deepEqual(
+    (await service.getStoreAppDetail(endUserActor, "leave-install")).actions,
+    ["open", "submit_ticket", "send_feedback"]
   );
 
   const installed = await service.installStoreApp(endUserActor, { appSlug: "leave-install" });
@@ -122,17 +126,17 @@ test("App Store install lifecycle is separate from access membership", async () 
     ),
     true
   );
-  assert.equal(detail.actions.includes("uninstall"), true);
+  assert.deepEqual(detail.actions, ["open", "submit_ticket", "send_feedback"]);
   assert.equal(uninstalled.status, "disabled");
   assert.equal(
-    afterUninstall.myApps.some((app) => app.slug === "leave-install"),
-    false
-  );
-  assert.equal(
-    afterUninstall.availableApps.some(
-      (app) => app.slug === "leave-install" && app.accessStatus === "active"
+    afterUninstall.myApps.some(
+      (app) => app.slug === "leave-install" && app.installStatus === "disabled"
     ),
     true
+  );
+  assert.equal(
+    afterUninstall.availableApps.some((app) => app.slug === "leave-install"),
+    false
   );
 });
 

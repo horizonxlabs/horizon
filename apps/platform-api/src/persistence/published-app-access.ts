@@ -31,9 +31,6 @@ export async function canAccessPublishedProject(
 }
 
 export function storeActionsForCard(card: StorefrontAppCard): StorefrontAppDetail["actions"] {
-  if (card.installStatus === "installed") {
-    return ["open", "uninstall", "submit_ticket", "send_feedback"];
-  }
-  if (card.accessStatus === "active") return ["install", "submit_ticket", "send_feedback"];
+  if (card.accessStatus === "active") return ["open", "submit_ticket", "send_feedback"];
   return card.accessStatus === "pending" ? ["view_status"] : ["request_access"];
 }

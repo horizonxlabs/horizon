@@ -282,8 +282,8 @@ export class PublishStoreRepositoryBackedService {
         userName: actor.name,
         email: actor.email,
       },
-      myApps: cards.filter((card) => card.installStatus === "installed"),
-      availableApps: cards.filter((card) => card.installStatus !== "installed"),
+      myApps: cards.filter((card) => card.accessStatus === "active"),
+      availableApps: cards.filter((card) => card.accessStatus !== "active"),
       notifications,
     };
   }
@@ -799,7 +799,7 @@ export class PublishStoreRepositoryBackedService {
       health: "healthy",
       version: `manifest v${entry.manifestVersion}`,
       lastUpdated: entry.publishedAt,
-      primaryAction: installStatus === "installed" ? "open" : accessStatus === "active" ? "install" : accessStatus === "pending" ? "view_status" : "request_access",
+      primaryAction: accessStatus === "active" ? "open" : accessStatus === "pending" ? "view_status" : "request_access",
     };
   }
 
