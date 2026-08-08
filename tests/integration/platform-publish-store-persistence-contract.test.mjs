@@ -169,7 +169,14 @@ test("Publish/store persistence service stores access defaults publish registry 
 
   const creatorStoreHome = await service.listStoreApps(creatorActor);
   assert.equal(creatorStoreHome.profile.email, creatorActor.email);
-  assert.ok(creatorStoreHome.availableApps.some((app) => app.slug === project.appId));
+  assert.ok(
+    creatorStoreHome.myApps.some(
+      (app) =>
+        app.slug === project.appId &&
+        app.accessStatus === "active" &&
+        app.primaryAction === "open"
+    )
+  );
 
   const access = await service.requestStoreAccess(endUserActor, {
     appSlug: project.appId,
