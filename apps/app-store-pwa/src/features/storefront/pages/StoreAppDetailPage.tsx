@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SectionCard, ToneBadge } from "@evcp/ui";
+import { navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
 import { storeAppActionKey, type StoreAppAction } from "../StoreProvider";
 import { useStorefront } from "../StoreProvider";
 import {
@@ -8,7 +8,6 @@ import {
   StoreAppCapabilityRefreshStatus,
   StoreAppDetailErrorPage,
   StoreAppDetailLoadingPage,
-  deriveStoreAppDetailJourney,
   storeAppDetailErrorMessage,
   storeAppDetailSupportsAction,
   type StoreAppCapabilityRefreshState,
@@ -20,11 +19,9 @@ type TicketType = "bug" | "feedback" | "feature_request"; type TicketPriority = 
 
 export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const {
-    allApps,
     api,
     actionStates,
     homeRevision,
-    reconcileInstallationEvidenceForSlug,
     recordRecent,
     rememberAccessReceipt,
     rememberTicket,
@@ -50,7 +47,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const [validationError, setValidationError] = useState<string>();
 
   const loadDetail = useCallback(
-    async (options: { preserveReady?: boolean; reconcileEvidence?: boolean } = {}) => {
+    async (options: { preserveReady?: boolean } = {}) => {
       const request = ++sequence.current;
       if (options.preserveReady) {
         setCapabilityRefresh({ status: "refreshing" });
@@ -61,9 +58,6 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
       try {
         const app = await api.getStoreAppDetail(appSlug);
         if (request === sequence.current) {
-          if (options.reconcileEvidence !== false) {
-            reconcileInstallationEvidenceForSlug(app.slug);
-          }
           detailRevision.current = homeRevisionRef.current;
           setDetail({ status: "ready", app });
           setCapabilityRefresh({ status: "idle" });
@@ -78,7 +72,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
         }
       }
     },
-    [api, appSlug, reconcileInstallationEvidenceForSlug]
+    [api, appSlug]
   );
 
   useEffect(() => {
@@ -87,7 +81,6 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
       sequence.current += 1;
     };
   }, [loadDetail]);
-  const currentHomeApp = allApps.find((candidate) => candidate.slug === appSlug);
   useEffect(() => {
     const previousRevision = lastHomeRevision.current;
     lastHomeRevision.current = homeRevision;
@@ -95,7 +88,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
     if (!appliedRefreshCompleted || detail.status !== "ready") {
       return;
     }
-    void loadDetail({ preserveReady: true, reconcileEvidence: false });
+    void loadDetail({ preserveReady: true });
   }, [detail.status, homeRevision, loadDetail]);
   if (detail.status === "loading") {
     return <StoreAppDetailLoadingPage />;
@@ -106,40 +99,17 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const { app } = detail;
   const actionState = (action: StoreAppAction) => actionStates[storeAppActionKey(app.slug, action)];
   const pending = (action: StoreAppAction) => actionState(action)?.pending ?? false;
-  const installActionState = actionState("install");
-  const uninstallActionState = actionState("uninstall");
   const detailCapabilitiesCurrent = detailRevision.current === homeRevision;
-  const {
-    journeyApp,
-    capabilityAccessStatus,
-    visibleInstallStatus,
-    capabilityInstallStatus,
-    installJourneyRows
-  } = deriveStoreAppDetailJourney({
-    app,
-    currentHomeApp,
-    detailCapabilitiesCurrent,
-    installActionState,
-    uninstallActionState
-  });
   const supports = (action: Parameters<typeof storeAppDetailSupportsAction>[0]["action"]) =>
     storeAppDetailSupportsAction({
       action,
       actions: app.actions,
-      accessStatus: capabilityAccessStatus,
-      installStatus: capabilityInstallStatus,
+      accessStatus: app.accessStatus,
+      health: app.health,
+      route: app.route,
       accessRequestConfirmed: Boolean(actionState("request-access")?.success),
-      detailCapabilitiesCurrent,
-      installationStatusConfirmed: Boolean(
-        installActionState?.installationStatus || uninstallActionState?.installationStatus
-      )
+      detailCapabilitiesCurrent
     });
-  const showInstallJourney =
-    supports("install") ||
-    supports("uninstall") ||
-    supports("request_access") ||
-    journeyApp.installStatus === "installed" ||
-    journeyApp.accessStatus !== "active";
   const feedback = (action: StoreAppAction) => (
     <StoreAppActionFeedback state={actionState(action)} />
   );
@@ -213,7 +183,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
       <SectionCard eyebrow="Application" title="Current access">
         <p>
           {app.myRole ? `Role: ${app.myRole}` : "No assigned role"} ·{" "}
-          {visibleInstallStatus === "installed" ? "Installed" : "Not installed"}
+          {app.accessStatus === "active" ? "Access granted" : "Access not granted"}
         </p>
         <p>
           Owned by {app.ownerName} · {app.department} · {app.accessMode}
@@ -223,7 +193,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
             type="button"
             onClick={() => {
               recordRecent(app.slug);
-              window.location.assign(app.route || `/apps/${app.slug}`);
+              window.location.assign(app.route);
             }}
           >
             Open app
@@ -235,60 +205,14 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
         onRetry={() => void loadDetail({ preserveReady: true })}
       />
       <div className="store-action-feedback" aria-live="polite">
-        {feedback("install")}
-        {feedback("uninstall")}
         {feedback("request-access")}
         {feedback("submit-ticket")}
       </div>
-      {showInstallJourney ? (
-        <SectionCard eyebrow="Installation" title="App install journey">
-          <ol aria-label="App install journey" className="store-install-stepper">
-            {installJourneyRows.map((step, index) => (
-              <li key={step.id} className={`store-install-step status-${step.status}`}>
-                <span>{index + 1}</span>
-                <div>
-                  <strong>{step.label}</strong>
-                  <small>{step.detail}</small>
-                </div>
-                <ToneBadge
-                  tone={
-                    step.status === "complete"
-                      ? "success"
-                      : step.status === "blocked"
-                        ? "danger"
-                        : "neutral"
-                  }
-                >
-                  {step.status}
-                </ToneBadge>
-              </li>
-            ))}
-          </ol>
-        </SectionCard>
-      ) : null}
-      {supports("install") ? (
-        <SectionCard eyebrow="Installation" title="Install on this account">
-          <button
-            type="button"
-            disabled={pending("install")}
-            onClick={() =>
-              handleAction("install", () => api.installStoreApp(app.slug), "Install confirmed.")
-            }
-          >
-            {pending("install") ? "Installing…" : "Install"}
-          </button>
-        </SectionCard>
-      ) : null}
-      {supports("uninstall") ? (
-        <SectionCard eyebrow="Installation" title="Remove this installation">
-          <button
-            type="button"
-            disabled={pending("uninstall")}
-            onClick={() =>
-              handleAction("uninstall", () => api.uninstallStoreApp(app.slug), "Removal confirmed.")
-            }
-          >
-            {pending("uninstall") ? "Removing…" : "Remove"}
+      {supports("view_status") ? (
+        <SectionCard eyebrow="Access" title="Access request pending">
+          <p>Your request is waiting for a Creator or administrator to review it.</p>
+          <button type="button" onClick={() => navigateBrowserPath("/store/access-requests")}>
+            View status
           </button>
         </SectionCard>
       ) : null}

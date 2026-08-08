@@ -140,7 +140,7 @@ test("App Store access membership stays usable across the legacy install lifecyc
   );
 });
 
-test("App Store install persistence contract is wired through schema API client and UI", () => {
+test("legacy install persistence stays API-compatible without Store installation UI", () => {
   assert.match(schema, /model AppInstallation/);
   assert.match(schema, /appInstallations\s+AppInstallation\[\]/);
   assert.match(migration, /CREATE TABLE "app_installations"/);
@@ -150,8 +150,9 @@ test("App Store install persistence contract is wired through schema API client 
   assert.match(appFactory, /uninstallStoreApp/);
   assert.match(apiClient, /installStoreApp\(appSlug: string\)/);
   assert.match(apiClient, /uninstallStoreApp\(appSlug: string\)/);
-  assert.match(storeDetailSource, /api\.installStoreApp\(app\.slug\)/);
-  assert.match(storeDetailSource, /api\.uninstallStoreApp\(app\.slug\)/);
+  assert.doesNotMatch(storeDetailSource, /api\.installStoreApp\(app\.slug\)/);
+  assert.doesNotMatch(storeDetailSource, /api\.uninstallStoreApp\(app\.slug\)/);
+  assert.doesNotMatch(storeDetailSource, /App install journey/);
   assert.match(storeDetailSource, /runAppAction\(app\.slug/);
   assert.match(storeProviderSource, /runAppAction<T>/);
   assert.match(storeProviderSource, /confirmedInstallationStatus\(action, result\)/);

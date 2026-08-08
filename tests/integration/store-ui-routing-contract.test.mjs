@@ -18,7 +18,6 @@ const tickets = source("apps/app-store-pwa/src/features/storefront/pages/StoreTi
 const ticketDetail = source(
   "apps/app-store-pwa/src/features/storefront/pages/StoreTicketDetailPage.tsx"
 );
-const journey = source("apps/app-store-pwa/src/features/installations/index.ts");
 const routes = source("apps/app-store-pwa/src/routes/StoreRoutes.tsx");
 const routeResolver = source("apps/app-store-pwa/src/routes/store-route.ts");
 
@@ -26,8 +25,6 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
   for (const method of [
     "getStoreAppDetail",
     "requestStoreAccess",
-    "installStoreApp",
-    "uninstallStoreApp",
     "submitStoreTicket",
     "getStoreTicket"
   ])
@@ -36,8 +33,6 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
   assert.match(provider, /refreshHome\(\{ preserveReadyOnFailure: true \}\)/);
   for (const method of [
     "requestStoreAccess",
-    "installStoreApp",
-    "uninstallStoreApp",
     "submitStoreTicket"
   ]) {
     assert.match(detail, new RegExp(`api\\.${method}\\(app\\.slug`));
@@ -45,27 +40,23 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
   assert.match(detail, /runAppAction\(app\.slug/);
   assert.match(detail, /rememberAccessReceipt\(receipt\)/);
   assert.match(detail, /rememberTicket\(ticket\.id\)/);
+  assert.doesNotMatch(detail, /api\.(?:installStoreApp|uninstallStoreApp)\(app\.slug/);
   assert.match(tickets, /api\.getStoreTicket\(ticketId\)/);
   assert.match(ticketDetail, /api\.getStoreTicket\(ticketId\)/);
   assert.doesNotMatch(detail, /ticketTimeline = \[/);
 });
 
-test("App Store PWA derives a visible install journey from API and scoped action state", () => {
-  assert.match(detailStates, /appInstallJourneySteps/);
-  assert.match(detailStates, /installJourneyStatus/);
-  assert.match(detail, /aria-label="App install journey"/);
-  for (const label of ["Access Check", "Manifest Validation", "Install Record", "My Apps Ready"]) {
-    assert.match(journey, new RegExp(label));
-  }
-  assert.match(detail, /store-install-stepper/);
-  assert.match(detail, /store-install-step status-/);
-  assert.match(detail, /installActionState\?\.installationStatus/);
-  assert.match(detailStates, /installActionState\?\.pending/);
-  assert.match(journey, /installationStatus === "active"/);
-  assert.match(source("docs/operations/real-mvp-persistence.md"), /App Install Journey/);
+test("App Store PWA derives web app actions from access and fails Open closed", () => {
+  assert.doesNotMatch(detailStates, /appInstallJourneySteps|installJourneyStatus/);
+  assert.doesNotMatch(detail, /App install journey|Install on this account|Remove this installation/);
+  assert.match(detailStates, /action === "open"/);
+  assert.match(detailStates, /accessStatus === "active"/);
+  assert.match(detailStates, /health === "healthy"/);
+  assert.match(detailStates, /Boolean\(route\.trim\(\)\)/);
+  assert.match(detail, /View status/);
 });
 
-test("App Store guards unauthenticated and empty states before install-detail derivation", () => {
+test("App Store guards unauthenticated and empty states before access-action derivation", () => {
   const authGuard = shell.indexOf('if (bootstrap.status === "error")');
   assert.ok(authGuard >= 0);
   assert.ok(shell.indexOf("return (", authGuard) > authGuard);
@@ -76,11 +67,11 @@ test("App Store guards unauthenticated and empty states before install-detail de
   const loadingGuard = detail.indexOf('detail.status === "loading"');
   const errorGuard = detail.indexOf('detail.status === "error"');
   const appDetail = detail.indexOf("const { app } = detail");
-  const journeyDerivation = detail.indexOf("deriveStoreAppDetailJourney({");
+  const actionDerivation = detail.indexOf("const supports =");
   assert.ok(loadingGuard >= 0);
   assert.ok(errorGuard > loadingGuard);
   assert.ok(appDetail > errorGuard);
-  assert.ok(journeyDerivation > appDetail);
+  assert.ok(actionDerivation > appDetail);
 });
 
 test("published app routing and Store detail Open compose into the generated runtime", () => {
@@ -97,7 +88,7 @@ test("published app routing and Store detail Open compose into the generated run
   assert.match(routeResolver, /segments\[2\] === "apps"/);
   assert.match(composition, /<StoreAppDetailPage appSlug=\{route\.appSlug\} \/>/);
   const recordRecent = detail.indexOf("recordRecent(app.slug)");
-  const assignRuntime = detail.indexOf("window.location.assign(app.route || `/apps/${app.slug}`)");
+  const assignRuntime = detail.indexOf("window.location.assign(app.route)");
   assert.ok(recordRecent >= 0);
   assert.ok(assignRuntime > recordRecent);
   const generatedApp = source(

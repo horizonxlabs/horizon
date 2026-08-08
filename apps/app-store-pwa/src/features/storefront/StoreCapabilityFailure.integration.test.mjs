@@ -28,7 +28,7 @@ const { StoreProvider } = await import("./StoreProvider.tsx");
 const { StoreAppDetailPage } = await import("./pages/StoreAppDetailPage.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
 
-function homeApp(accessStatus, installStatus) {
+function homeApp(accessStatus) {
   return {
     id: "capability-app",
     slug: "capability-app",
@@ -36,18 +36,19 @@ function homeApp(accessStatus, installStatus) {
     description: "Capability workflow",
     owner: "Platform",
     accessStatus,
-    installStatus,
+    installStatus: "not_installed",
     health: "healthy",
     route: "/apps/capability-app"
   };
 }
 
-function detailApp(accessStatus, installStatus, actions) {
+function detailApp(accessStatus, actions) {
   return {
-    ...homeApp(accessStatus, installStatus),
+    ...homeApp(accessStatus),
     ownerName: "Platform",
     department: "IT",
     accessMode: "managed",
+    availableRoles: ["manager"],
     supportContact: "help@example.com",
     releaseNotes: [],
     actions
@@ -82,56 +83,41 @@ function button(root, label) {
   return root.findAllByType("button").find((node) => node.children.join("").includes(label));
 }
 
-function output(renderer) {
-  return JSON.stringify(renderer.toJSON());
-}
-
 async function flushAction() {
   for (let index = 0; index < 6; index += 1) await Promise.resolve();
 }
 
-test("confirmed install hides stale Install while keeping refresh failure visible", async () => {
+test("legacy install capability cannot replace Open for active web access", async () => {
   memory.clear();
-  const app = homeApp("active", "not_installed");
-  const client = {
-    getStoreAppDetail: async () =>
-      detailApp("active", "not_installed", ["install", "submit_ticket"]),
-    installStoreApp: async () => ({
-      id: "installation-1",
-      appSlug: app.slug,
-      status: "active",
-      installedAt: "2026-07-29"
-    })
-  };
+  const app = homeApp("active");
   let renderer;
   await act(async () => {
     renderer = create(
       React.createElement(
         StoreProvider,
-        { store: storeWithFailingActionRefresh(app), client },
+        {
+          store: storeWithFailingActionRefresh(app),
+          client: {
+            getStoreAppDetail: async () => detailApp("active", ["install", "uninstall"])
+          }
+        },
         React.createElement(StoreAppDetailPage, { appSlug: app.slug })
       )
     );
     await Promise.resolve();
   });
 
-  await act(async () => {
-    button(renderer.root, "Install").props.onClick();
-    await flushAction();
-  });
-
-  const view = output(renderer);
+  assert.ok(button(renderer.root, "Open app"));
   assert.equal(button(renderer.root, "Install"), undefined);
-  assert.match(view, /Install confirmed/);
-  assert.match(view, /Store home refresh failed: home refresh offline/);
+  assert.equal(button(renderer.root, "Remove"), undefined);
   await act(async () => renderer.unmount());
 });
 
 test("confirmed access request hides duplicate request while keeping refresh failure visible", async () => {
   memory.clear();
-  const app = homeApp("pending", "not_installed");
+  const app = homeApp("available");
   const client = {
-    getStoreAppDetail: async () => detailApp("pending", "not_installed", ["request_access"]),
+    getStoreAppDetail: async () => detailApp("available", ["request_access"]),
     requestStoreAccess: async () => ({
       id: "receipt-1",
       appSlug: app.slug,
@@ -155,9 +141,6 @@ test("confirmed access request hides duplicate request while keeping refresh fai
   });
   await act(async () => {
     renderer.root
-      .findByProps({ name: "requestedRoleKey" })
-      .props.onChange({ target: { value: "manager" } });
-    renderer.root
       .findByProps({ name: "accessReason" })
       .props.onChange({ target: { value: "Need approval" } });
   });
@@ -168,7 +151,7 @@ test("confirmed access request hides duplicate request while keeping refresh fai
     await flushAction();
   });
 
-  const view = output(renderer);
+  const view = JSON.stringify(renderer.toJSON());
   assert.equal(button(renderer.root, "Request access"), undefined);
   assert.match(view, /Access request confirmed/);
   assert.match(view, /Store home refresh failed: home refresh offline/);

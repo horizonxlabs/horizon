@@ -10,10 +10,7 @@ const memory = new Map();
 globalThis.window = {
   location: {
     pathname: "/store/apps/capability-app",
-    href: "http://localhost/store/apps/capability-app",
-    assign(path) {
-      this.pathname = String(path);
-    }
+    href: "http://localhost/store/apps/capability-app"
   },
   localStorage: {
     getItem: (key) => memory.get(key) ?? null,
@@ -52,7 +49,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function homeApp(accessStatus, installStatus) {
+function homeApp(accessStatus) {
   return {
     id: "capability-app",
     slug: "capability-app",
@@ -60,25 +57,19 @@ function homeApp(accessStatus, installStatus) {
     description: "Capability workflow",
     owner: "Platform",
     accessStatus,
-    installStatus,
+    installStatus: "not_installed",
     health: "healthy",
     route: "/apps/capability-app"
   };
 }
 
-function detail(accessStatus, installStatus, actions) {
+function detail(accessStatus, actions) {
   return {
-    id: "capability-app",
-    slug: "capability-app",
-    name: "Capability App",
-    description: "Capability workflow",
+    ...homeApp(accessStatus),
     ownerName: "Platform",
     department: "IT",
     accessMode: "managed",
-    accessStatus,
-    installStatus,
     myRole: accessStatus === "active" ? "member" : undefined,
-    route: "/apps/capability-app",
     supportContact: "help@example.com",
     releaseNotes: ["Initial release"],
     actions
@@ -118,151 +109,17 @@ function RefreshProbe() {
   return null;
 }
 
-test("install refreshes mutually exclusive detail capabilities to Open and Remove", async () => {
+test("an applied access approval refreshes View status to Open", async () => {
   memory.clear();
-  const before = homeApp("active", "not_installed");
-  const after = homeApp("active", "installed");
+  const before = homeApp("pending");
+  const after = homeApp("active");
   const details = [
-    detail("active", "not_installed", ["install", "submit_ticket"]),
-    detail("active", "installed", ["open", "uninstall", "submit_ticket"])
-  ];
-  let detailCalls = 0;
-  const client = {
-    getStoreAppDetail: async () => {
-      detailCalls += 1;
-      return details.shift() ?? details.at(-1);
-    },
-    installStoreApp: async () => ({
-      id: "installation",
-      appSlug: "capability-app",
-      status: "active",
-      installedAt: "2026-07-29"
-    })
-  };
-  let renderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(
-        StoreProvider,
-        { store: createStore(before, [before, after]), client },
-        React.createElement(
-          React.Fragment,
-          null,
-          React.createElement(StoreAppDetailPage, { appSlug: "capability-app" }),
-          React.createElement(RefreshProbe)
-        )
-      )
-    );
-    await Promise.resolve();
-  });
-  assert.ok(button(renderer.root, "Install"));
-
-  await act(async () => {
-    button(renderer.root, "Install").props.onClick();
-    await Promise.resolve();
-  });
-
-  assert.ok(detailCalls >= 2);
-  assert.ok(button(renderer.root, "Open app"));
-  assert.ok(button(renderer.root, "Remove"));
-  assert.equal(button(renderer.root, "Install"), undefined);
-  await act(async () => renderer.unmount());
-});
-
-test("confirmed install reloads detail capabilities even when home evidence is unchanged", async () => {
-  memory.clear();
-  const unchangedHome = homeApp("active", "not_installed");
-  const details = [
-    detail("active", "not_installed", ["install"]),
-    detail("active", "installed", ["open", "uninstall"])
-  ];
-  let detailCalls = 0;
-  const client = {
-    getStoreAppDetail: async () => {
-      detailCalls += 1;
-      return details.shift() ?? details.at(-1);
-    },
-    installStoreApp: async () => ({
-      id: "installation",
-      appSlug: "capability-app",
-      status: "active",
-      installedAt: "2026-07-29"
-    })
-  };
-  let renderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(
-        StoreProvider,
-        { store: createStore(unchangedHome, [unchangedHome, unchangedHome]), client },
-        React.createElement(StoreAppDetailPage, { appSlug: "capability-app" })
-      )
-    );
-    await Promise.resolve();
-  });
-  await act(async () => {
-    button(renderer.root, "Install").props.onClick();
-    await Promise.resolve();
-  });
-  assert.ok(detailCalls >= 2);
-  assert.ok(button(renderer.root, "Open app"));
-  assert.ok(button(renderer.root, "Remove"));
-  assert.equal(button(renderer.root, "Install"), undefined);
-  await act(async () => renderer.unmount());
-});
-
-test("uninstall refreshes mutually exclusive detail capabilities to Install only", async () => {
-  memory.clear();
-  const before = homeApp("active", "installed");
-  const after = homeApp("active", "not_installed");
-  const details = [
-    detail("active", "installed", ["open", "uninstall"]),
-    detail("active", "not_installed", ["install", "submit_ticket"])
-  ];
-  const client = {
-    getStoreAppDetail: async () => details.shift() ?? details.at(-1),
-    uninstallStoreApp: async () => ({
-      id: "installation",
-      appSlug: "capability-app",
-      status: "disabled",
-      installedAt: "2026-07-29",
-      uninstalledAt: "2026-07-29"
-    })
-  };
-  let renderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(
-        StoreProvider,
-        { store: createStore(before, [before, after]), client },
-        React.createElement(StoreAppDetailPage, { appSlug: "capability-app" })
-      )
-    );
-    await Promise.resolve();
-  });
-
-  await act(async () => {
-    button(renderer.root, "Remove").props.onClick();
-    await Promise.resolve();
-  });
-
-  assert.ok(button(renderer.root, "Install"));
-  assert.equal(button(renderer.root, "Open app"), undefined);
-  assert.equal(button(renderer.root, "Remove"), undefined);
-  await act(async () => renderer.unmount());
-});
-
-test("an applied access-status home refresh reloads API-backed detail actions", async () => {
-  memory.clear();
-  const before = homeApp("pending", "not_installed");
-  const after = homeApp("active", "installed");
-  const details = [
-    detail("pending", "not_installed", ["request_access"]),
-    detail("active", "installed", ["open", "uninstall"])
+    detail("pending", ["view_status"]),
+    detail("active", ["open", "submit_ticket"])
   ];
   const store = createStore(before, [before, after]);
   const client = {
-    getStoreAppDetail: async () => details.shift() ?? details.at(-1)
+    getStoreAppDetail: async () => details.shift() ?? detail("active", ["open"])
   };
   let renderer;
   await act(async () => {
@@ -280,7 +137,7 @@ test("an applied access-status home refresh reloads API-backed detail actions", 
     );
     await Promise.resolve();
   });
-  assert.match(output(renderer), /Request access/);
+  assert.ok(button(renderer.root, "View status"));
 
   await act(async () => {
     await refreshHome();
@@ -288,25 +145,23 @@ test("an applied access-status home refresh reloads API-backed detail actions", 
   });
 
   assert.ok(button(renderer.root, "Open app"));
-  assert.ok(button(renderer.root, "Remove"));
-  assert.doesNotMatch(output(renderer), /Request access/);
+  assert.equal(button(renderer.root, "View status"), undefined);
+  assert.equal(button(renderer.root, "Install"), undefined);
   await act(async () => renderer.unmount());
 });
 
-test("detail refresh hides all stale capabilities as soon as home status changes", async () => {
+test("detail refresh hides stale Open while access capabilities are unresolved", async () => {
   memory.clear();
-  const before = homeApp("active", "not_installed");
-  const after = homeApp("pending", "installed");
+  const before = homeApp("active");
+  const after = homeApp("pending");
   const capabilityRefresh = deferred();
   let detailCalls = 0;
   const client = {
     async getStoreAppDetail() {
       detailCalls += 1;
-      if (detailCalls === 1) {
-        return detail("active", "not_installed", ["install", "request_access", "submit_ticket"]);
-      }
+      if (detailCalls === 1) return detail("active", ["open", "submit_ticket"]);
       if (detailCalls === 2) return capabilityRefresh.promise;
-      return detail("active", "installed", ["open", "uninstall", "submit_ticket"]);
+      return detail("pending", ["view_status"]);
     }
   };
   let renderer;
@@ -325,8 +180,7 @@ test("detail refresh hides all stale capabilities as soon as home status changes
     );
     await Promise.resolve();
   });
-  assert.ok(button(renderer.root, "Install"));
-  assert.ok(button(renderer.root, "Request access"));
+  assert.ok(button(renderer.root, "Open app"));
   assert.ok(button(renderer.root, "Submit ticket"));
 
   await act(async () => {
@@ -334,29 +188,23 @@ test("detail refresh hides all stale capabilities as soon as home status changes
     await Promise.resolve();
   });
 
-  const staleActionsVisible = ["Install", "Request access", "Submit ticket"].filter((label) =>
-    Boolean(button(renderer.root, label))
-  );
-  const refreshingView = output(renderer);
-  assert.ok(detailCalls >= 2);
+  assert.equal(button(renderer.root, "Open app"), undefined);
+  assert.equal(button(renderer.root, "Submit ticket"), undefined);
+  assert.match(output(renderer), /Refreshing current app actions/);
   await act(async () => {
     capabilityRefresh.reject(new Error("capability refresh offline"));
     await Promise.resolve();
   });
-  const failedView = output(renderer);
-  const retry = button(renderer.root, "Retry current actions");
-  assert.ok(retry);
+  assert.match(output(renderer), /Current app actions unavailable/);
+  assert.match(output(renderer), /capability refresh offline/);
+
   await act(async () => {
-    retry.props.onClick();
+    button(renderer.root, "Retry current actions").props.onClick();
     await Promise.resolve();
   });
-  assert.ok(button(renderer.root, "Open app"));
-  assert.ok(button(renderer.root, "Remove"));
+  assert.ok(button(renderer.root, "View status"));
+  assert.equal(button(renderer.root, "Open app"), undefined);
   await act(async () => renderer.unmount());
-  assert.deepEqual(staleActionsVisible, []);
-  assert.match(refreshingView, /Refreshing current app actions/);
-  assert.match(failedView, /Current app actions unavailable/);
-  assert.match(failedView, /capability refresh offline/);
 });
 
 test("app detail loading and unavailable states keep an h1 and safe Apps return action", async () => {
@@ -368,7 +216,7 @@ test("app detail loading and unavailable states keep an h1 and safe Apps return 
     renderer = create(
       React.createElement(
         StoreProvider,
-        { store: createStore(homeApp("active", "not_installed"), []), client },
+        { store: createStore(homeApp("active"), []), client },
         React.createElement(StoreAppDetailPage, { appSlug: "capability-app" })
       )
     );
@@ -381,9 +229,9 @@ test("app detail loading and unavailable states keep an h1 and safe Apps return 
   });
   assert.equal(renderer.root.findByType("h1").children.join(""), "App details");
   assert.match(output(renderer), /detail offline/);
-  const returnButton = button(renderer.root, "Return to Apps");
-  assert.ok(returnButton);
-  await act(async () => returnButton.props.onClick());
+  await act(async () => {
+    button(renderer.root, "Return to Apps").props.onClick();
+  });
   assert.equal(window.location.pathname, "/store/");
   await act(async () => renderer.unmount());
 });

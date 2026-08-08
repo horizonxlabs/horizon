@@ -1,6 +1,5 @@
 import type { StorefrontAppDetailResponse } from "@evcp/api-client";
 import { navigateBrowserPath, SectionCard } from "@evcp/ui";
-import { appInstallJourneySteps, installJourneyStatus } from "@/features/installations";
 import type { StoreAppActionState } from "../StoreProvider";
 
 export type StoreAppDetailState =
@@ -19,100 +18,28 @@ export function storeAppDetailSupportsAction({
   action,
   actions,
   accessStatus,
-  installStatus,
+  health,
+  route,
   accessRequestConfirmed,
-  detailCapabilitiesCurrent,
-  installationStatusConfirmed
+  detailCapabilitiesCurrent
 }: {
   action: StorefrontAppDetailResponse["actions"][number];
   actions: StorefrontAppDetailResponse["actions"];
   accessStatus: StorefrontAppDetailResponse["accessStatus"];
-  installStatus: StorefrontAppDetailResponse["installStatus"];
+  health: StorefrontAppDetailResponse["health"];
+  route: StorefrontAppDetailResponse["route"];
   accessRequestConfirmed: boolean;
   detailCapabilitiesCurrent: boolean;
-  installationStatusConfirmed: boolean;
 }): boolean {
-  if (action === "request_access" && accessRequestConfirmed) {
-    return false;
+  if (!detailCapabilitiesCurrent || action === "install" || action === "uninstall") return false;
+  if (action === "open") {
+    return accessStatus === "active" && health === "healthy" && Boolean(route.trim());
   }
-  if (!detailCapabilitiesCurrent) {
-    return false;
-  }
-  if (!installationStatusConfirmed) {
-    return actions.includes(action);
-  }
-  if (action === "request_access" && accessStatus === "active") {
-    return false;
-  }
-  if (action === "install" && (accessStatus !== "active" || installStatus === "installed")) {
-    return false;
-  }
-  if ((action === "open" || action === "uninstall") && installStatus !== "installed") {
-    return false;
+  if (action === "view_status") return accessStatus === "pending";
+  if (action === "request_access") {
+    return accessStatus === "available" && !accessRequestConfirmed;
   }
   return actions.includes(action);
-}
-
-export function deriveStoreAppDetailJourney({
-  app,
-  currentHomeApp,
-  detailCapabilitiesCurrent,
-  installActionState,
-  uninstallActionState
-}: {
-  app: StorefrontAppDetailResponse;
-  currentHomeApp?: Pick<StorefrontAppDetailResponse, "accessStatus" | "installStatus">;
-  detailCapabilitiesCurrent: boolean;
-  installActionState?: StoreAppActionState;
-  uninstallActionState?: StoreAppActionState;
-}) {
-  const installEvidence =
-    installActionState?.pending || installActionState?.installationStatus
-      ? installActionState
-      : undefined;
-  const uninstallEvidence =
-    uninstallActionState?.pending || uninstallActionState?.installationStatus
-      ? uninstallActionState
-      : undefined;
-  const installIsLatest = (installEvidence?.sequence ?? -1) >= (uninstallEvidence?.sequence ?? -1);
-  const journeyApp = {
-    accessStatus: currentHomeApp?.accessStatus ?? app.accessStatus,
-    installStatus: currentHomeApp?.installStatus ?? app.installStatus
-  };
-  const visibleInstallStatus =
-    !installIsLatest && uninstallEvidence?.installationStatus === "disabled"
-      ? "not_installed"
-      : journeyApp.installStatus;
-  const capabilityAccessStatus = detailCapabilitiesCurrent
-    ? app.accessStatus
-    : journeyApp.accessStatus;
-  const currentDetailInstallStatus = detailCapabilitiesCurrent
-    ? app.installStatus
-    : journeyApp.installStatus;
-  const capabilityInstallStatus =
-    installIsLatest && installEvidence?.installationStatus === "active"
-      ? "installed"
-      : !installIsLatest && uninstallEvidence?.installationStatus === "disabled"
-        ? "not_installed"
-        : currentDetailInstallStatus;
-  const installJourneyRows = appInstallJourneySteps.map((step) => ({
-    ...step,
-    status: installJourneyStatus(
-      step.id,
-      journeyApp,
-      installIsLatest ? installEvidence?.installationStatus : undefined,
-      installIsLatest && (installEvidence?.pending ?? false),
-      installIsLatest ? undefined : uninstallEvidence?.installationStatus,
-      !installIsLatest && (uninstallEvidence?.pending ?? false)
-    )
-  }));
-  return {
-    journeyApp,
-    capabilityAccessStatus,
-    visibleInstallStatus,
-    capabilityInstallStatus,
-    installJourneyRows
-  };
 }
 
 export function StoreAppCapabilityRefreshStatus({
