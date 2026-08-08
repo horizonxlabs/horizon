@@ -16,12 +16,11 @@ test("catalog search matches name description owner and role", () => {
   assert.deepEqual(filterStoreApps(apps, "leave", { collection: "all" }).map((app) => app.slug), ["leave-management"]);
 });
 
-test("catalog filters collections, access, and installation without mutating inputs", () => {
+test("catalog filters collections and access without mutating inputs", () => {
   const original = apps.map((app) => app.slug);
   assert.deepEqual(filterStoreApps(apps, "", { collection: "my-apps" }).map((app) => app.slug), ["leave-management"]);
   assert.deepEqual(filterStoreApps(apps, "", { collection: "available" }).map((app) => app.slug), ["asset-register", "vendor-portal"]);
   assert.deepEqual(filterStoreApps(apps, "", { collection: "all", accessStatus: "pending" }).map((app) => app.slug), ["vendor-portal"]);
-  assert.deepEqual(filterStoreApps(apps, "", { collection: "all", installStatus: "not_installed" }).map((app) => app.slug), ["asset-register"]);
   assert.deepEqual(apps.map((app) => app.slug), original);
 });
 
@@ -30,7 +29,7 @@ test("catalog search trims, case-folds, and preserves the stable input order", (
   assert.deepEqual(filterStoreApps(apps, "", { collection: "all", accessStatus: "unknown" }).map((app) => app.slug), []);
 });
 
-test("My Apps and Available preserve the explicit Platform API collections", () => {
+test("My Apps and Available derive from access across merged API collections", () => {
   const activeButUninstalled = { ...apps[0], slug: "active-uninstalled", installStatus: "not_installed" };
   const collections = {
     myApps: [apps[1]],
@@ -38,6 +37,6 @@ test("My Apps and Available preserve the explicit Platform API collections", () 
     allApps: [apps[1], activeButUninstalled]
   };
 
-  assert.deepEqual(selectStoreCollection("my-apps", collections, []).map((app) => app.slug), ["asset-register"]);
-  assert.deepEqual(selectStoreCollection("available", collections, []).map((app) => app.slug), ["active-uninstalled"]);
+  assert.deepEqual(selectStoreCollection("my-apps", collections, []).map((app) => app.slug), ["active-uninstalled"]);
+  assert.deepEqual(selectStoreCollection("available", collections, []).map((app) => app.slug), ["asset-register"]);
 });
