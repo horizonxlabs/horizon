@@ -127,8 +127,11 @@ test("mounted Provider loads API collections, updates favorites, and keeps detai
   assert.match(JSON.stringify(renderer.toJSON()), /Loading Horizon Store/);
 
   await resolve(load, ready);
-  assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
-  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Available API App/);
+  const myAppsView = JSON.stringify(renderer.toJSON());
+  assert.match(myAppsView, /My API App/);
+  assert.match(myAppsView, /Available API App/);
+  assert.match(myAppsView, /Access granted/);
+  assert.doesNotMatch(myAppsView, /Access required/);
 
   const favorite = renderer.root.findAllByProps({
     "aria-label": "Add My API App to favorites on this device"

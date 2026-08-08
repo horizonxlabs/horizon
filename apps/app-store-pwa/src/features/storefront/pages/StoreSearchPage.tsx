@@ -12,13 +12,9 @@ export function StoreSearchPage() {
   const [accessStatus, setAccessStatus] = useState<StoreCatalogFilters["accessStatus"] | "all">(
     "all"
   );
-  const [installStatus, setInstallStatus] = useState<StoreCatalogFilters["installStatus"] | "all">(
-    "all"
-  );
   const apps = filterStoreApps(allApps, query, {
     collection,
-    ...(accessStatus === "all" ? {} : { accessStatus }),
-    ...(installStatus === "all" ? {} : { installStatus })
+    ...(accessStatus === "all" ? {} : { accessStatus })
   });
 
   return (
@@ -65,21 +61,6 @@ export function StoreSearchPage() {
             <option value="active">Active</option>
             <option value="available">Available</option>
             <option value="pending">Pending</option>
-          </select>
-        </label>
-        <label>
-          <span>Install status</span>
-          <select
-            name="installStatus"
-            value={installStatus}
-            onChange={(event) =>
-              setInstallStatus(event.target.value as StoreCatalogFilters["installStatus"] | "all")
-            }
-          >
-            <option value="all">All install statuses</option>
-            <option value="installed">Installed</option>
-            <option value="not_installed">Not installed</option>
-            <option value="disabled">Disabled</option>
           </select>
         </label>
       </div>

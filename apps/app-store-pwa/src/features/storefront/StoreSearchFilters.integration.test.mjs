@@ -57,8 +57,8 @@ const ready = {
   userName: "End User",
   email: "user@example.com",
   source: "Platform API",
-  myApps: [alpha, beta],
-  availableApps: [gamma]
+  myApps: [alpha],
+  availableApps: [beta, gamma]
 };
 
 function createStore() {
@@ -77,7 +77,7 @@ function select(renderer, name) {
   return renderer.root.findByProps({ name });
 }
 
-test("search exposes accessible controlled collection, access, and install filters", async () => {
+test("search exposes access filters without installation state", async () => {
   memory.clear();
   let renderer;
   await act(async () => {
@@ -90,7 +90,7 @@ test("search exposes accessible controlled collection, access, and install filte
     );
   });
 
-  for (const label of ["Collection", "Access status", "Install status"]) {
+  for (const label of ["Collection", "Access status"]) {
     const matchingLabel = renderer.root
       .findAllByType("label")
       .find((node) => node.findAllByType("span").some((span) => span.children.join("") === label));
@@ -98,7 +98,8 @@ test("search exposes accessible controlled collection, access, and install filte
   }
   assert.equal(select(renderer, "collection").props.value, "all");
   assert.equal(select(renderer, "accessStatus").props.value, "all");
-  assert.equal(select(renderer, "installStatus").props.value, "all");
+  assert.equal(renderer.root.findAllByProps({ name: "installStatus" }).length, 0);
+  assert.doesNotMatch(text(renderer), /Install status|Not installed/);
 
   await act(async () => {
     select(renderer, "collection").props.onChange({ target: { value: "available" } });
@@ -115,19 +116,33 @@ test("search exposes accessible controlled collection, access, and install filte
   assert.doesNotMatch(text(renderer), /Gamma App/);
 
   await act(async () => {
-    select(renderer, "accessStatus").props.onChange({ target: { value: "all" } });
-    select(renderer, "installStatus").props.onChange({ target: { value: "installed" } });
-  });
-  assert.match(text(renderer), /Alpha App/);
-  assert.doesNotMatch(text(renderer), /Beta App|Gamma App/);
-
-  await act(async () => {
     select(renderer, "collection").props.onChange({ target: { value: "available" } });
     select(renderer, "accessStatus").props.onChange({ target: { value: "pending" } });
-    select(renderer, "installStatus").props.onChange({ target: { value: "not_installed" } });
   });
   assert.match(text(renderer), /Gamma App/);
   assert.doesNotMatch(text(renderer), /Alpha App|Beta App/);
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+test("My Apps derives active access from the merged catalog", async () => {
+  memory.clear();
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: {} },
+        React.createElement(StoreCollectionPage, { page: "my-apps" })
+      )
+    );
+  });
+
+  assert.match(text(renderer), /Alpha App/);
+  assert.match(text(renderer), /Beta App/);
+  assert.doesNotMatch(text(renderer), /Gamma App/);
 
   await act(async () => {
     renderer.unmount();

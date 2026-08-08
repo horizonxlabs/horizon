@@ -65,7 +65,15 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
               <span>
                 <strong>{app.name}</strong>
                 <small>{app.description}</small>
-                <em>{app.myRole ? `Role: ${app.myRole}` : "Access required"}</em>
+                <em>
+                  {app.myRole
+                    ? `Role: ${app.myRole}`
+                    : app.accessStatus === "active"
+                      ? "Access granted"
+                      : app.accessStatus === "pending"
+                        ? "Request pending"
+                        : "Access required"}
+                </em>
               </span>
               <ToneBadge tone={app.accessStatus === "active" ? "success" : "warning"}>
                 {app.accessStatus === "active" ? "active" : app.accessStatus}
@@ -126,9 +134,9 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
             </button>
           ) : null}
         </SectionCard>
-      ) : page === "my-apps" && bootstrap.availableApps.length ? (
-        <SectionCard eyebrow="Platform API catalog" title="No installed apps yet">
-          <p>Browse the catalog to request access or install an available app.</p>
+      ) : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active") ? (
+        <SectionCard eyebrow="Platform API catalog" title="No apps with access yet">
+          <p>Browse the catalog and request access to an available app.</p>
           <button type="button" onClick={() => navigateBrowserPath("/store/available")}>
             Browse Available Apps
           </button>

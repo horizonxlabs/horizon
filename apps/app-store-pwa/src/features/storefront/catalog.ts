@@ -5,7 +5,6 @@ export type StoreCatalogCollection = "all" | "my-apps" | "available";
 export type StoreCatalogFilters = {
   collection: StoreCatalogCollection;
   accessStatus?: AppStoreItem["accessStatus"];
-  installStatus?: NonNullable<AppStoreItem["installStatus"]>;
 };
 
 export type StoreCollectionName = "my-apps" | "available" | "favorites" | "recent";
@@ -34,7 +33,6 @@ export function filterStoreApps(
   return apps.filter((app) => {
     if (!matchesCollection(app, filters.collection)) return false;
     if (filters.accessStatus && app.accessStatus !== filters.accessStatus) return false;
-    if (filters.installStatus && app.installStatus !== filters.installStatus) return false;
     if (!search) return true;
     return [app.name, app.description, app.owner, app.myRole]
       .some((value) => normalized(value).includes(search));
@@ -46,8 +44,12 @@ export function selectStoreCollection(
   apps: StoreApiCollections,
   deviceSlugs: string[]
 ): AppStoreItem[] {
-  if (collection === "my-apps") return apps.myApps;
-  if (collection === "available") return apps.availableApps;
+  if (collection === "my-apps") {
+    return apps.allApps.filter((app) => app.accessStatus === "active");
+  }
+  if (collection === "available") {
+    return apps.allApps.filter((app) => app.accessStatus !== "active");
+  }
   if (collection === "favorites") {
     const favorites = new Set(deviceSlugs);
     return apps.allApps.filter((app) => favorites.has(app.slug));

@@ -13,7 +13,7 @@ function isAuthenticationError(message: string | undefined): boolean {
 }
 
 export function StoreShell({ route, children }: { route: StoreRoute; children: ReactNode }) {
-  const { bootstrap, logout, logoutError, refreshHome } = useStorefront();
+  const { allApps, bootstrap, logout, logoutError, refreshHome } = useStorefront();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   function handleSignIn() {
@@ -30,7 +30,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
       <main className="store-shell">
         <SectionCard eyebrow="App Store" title="Loading your apps">
           <h1>Loading Horizon Store</h1>
-          <p>Loading current access and installed applications from Platform API.</p>
+          <p>Loading your current access and available applications from Platform API.</p>
         </SectionCard>
       </main>
     );
@@ -67,8 +67,8 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
         email={bootstrap.email}
         role={bootstrap.role}
         source={bootstrap.source}
-        myAppsCount={bootstrap.myApps.length}
-        catalogCount={bootstrap.myApps.length + bootstrap.availableApps.length}
+        myAppsCount={allApps.filter((app) => app.accessStatus === "active").length}
+        catalogCount={allApps.length}
         currentPath={
           route.page === "my-apps"
             ? "/store/"
