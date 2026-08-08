@@ -217,7 +217,7 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   });
   assert.equal(detail.status, 200);
   assert.equal(detail.body.data.installStatus, "installed");
-  assert.ok(detail.body.data.actions.includes("uninstall"));
+  assert.deepEqual(detail.body.data.actions, ["open", "submit_ticket", "send_feedback"]);
 
   const uninstalled = await executePlatformApiRequestAsync(recreatedServices, {
     method: "POST",
@@ -234,13 +234,18 @@ test("runtime memory persistence keeps App Store install lifecycle across servic
   });
   assert.equal(afterUninstall.status, 200);
   assert.equal(
-    afterUninstall.body.data.myApps.some((app) => app.slug === project.appId),
-    false
+    afterUninstall.body.data.myApps.some(
+      (app) =>
+        app.slug === project.appId &&
+        app.accessStatus === "active" &&
+        app.installStatus === "disabled" &&
+        app.primaryAction === "open"
+    ),
+    true
   );
-  assert.ok(
-    afterUninstall.body.data.availableApps.some(
-      (app) => app.slug === project.appId && app.accessStatus === "active"
-    )
+  assert.equal(
+    afterUninstall.body.data.availableApps.some((app) => app.slug === project.appId),
+    false
   );
 
   const audits = await executePlatformApiRequestAsync(recreatedServices, {

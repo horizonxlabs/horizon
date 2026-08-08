@@ -243,8 +243,11 @@ test("runtime memory persistence keeps publish registry access and tickets acros
   assert.ok(registry.body.data.some((entry) => entry.slug === project.appId));
   assert.equal(storeHome.status, 200);
   assert.ok(
-    storeHome.body.data.availableApps.some(
-      (app) => app.slug === project.appId && app.accessStatus === "active"
+    storeHome.body.data.myApps.some(
+      (app) =>
+        app.slug === project.appId &&
+        app.accessStatus === "active" &&
+        app.primaryAction === "open"
     )
   );
   assert.ok(
