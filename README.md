@@ -97,6 +97,7 @@ bootstrap job:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.yml up -d --force-recreate keycloak keycloak-bootstrap
+docker compose --env-file .env -f docker/docker-compose.yml wait keycloak-bootstrap
 pnpm verify:keycloak-theme-live
 ```
 
