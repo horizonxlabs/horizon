@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { createDockerCleanupController } from "../helpers/keycloak-theme-smoke-cleanup.mjs";
+
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const realmImport = resolve(repositoryRoot, "apps/platform-api/keycloak/evcp-realm.json");
 const uniqueSuffix = `${process.pid}-${randomUUID()}`;
@@ -19,6 +21,9 @@ function docker(args, { timeout = 600_000 } = {}) {
     timeout
   });
 }
+
+const cleanupController = createDockerCleanupController({ container, image, docker });
+cleanupController.registerSignalHandlers();
 
 function requireDockerSuccess(label, result) {
   assert.equal(result.status, 0, `${label} failed\n${result.stderr || result.stdout}`);
@@ -50,17 +55,11 @@ async function waitForRealm(baseUrl) {
 }
 
 test.after(() => {
-  docker(["container", "rm", "--force", container], { timeout: 30_000 });
-  docker(["image", "rm", "--force", image], { timeout: 60_000 });
-
-  const containerInspection = docker(["container", "inspect", container], {
-    timeout: 10_000
-  });
-  const imageInspection = docker(["image", "inspect", image], { timeout: 10_000 });
-
-  assert.notEqual(containerInspection.status, 0, `Container cleanup failed: ${container}`);
-  assert.notEqual(imageInspection.status, 0, `Image cleanup failed: ${image}`);
-  console.log(`Cleanup verified for ${container} and ${image}`);
+  try {
+    cleanupController.cleanup();
+  } finally {
+    cleanupController.unregisterSignalHandlers();
+  }
 });
 
 test("Horizon renders login and invalid-client pages through real Keycloak", async () => {
