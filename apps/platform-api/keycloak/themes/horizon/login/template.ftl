@@ -150,7 +150,8 @@
           <#if realm.internationalizationEnabled  && locale.supported?size gt 1>
           <div class="${properties.kcLoginMainHeaderUtilities!}">
             <div class="${properties.kcInputClass!}">
-              <select aria-label="${msg("languages")}">
+              <select
+                aria-label="${msg("languages")}"
                 id="login-select-toggle"
                 onchange="if (this.value) window.location.href=this.value"
               >

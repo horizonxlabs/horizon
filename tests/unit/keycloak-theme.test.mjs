@@ -19,6 +19,10 @@ test("Horizon is a self-contained English Keycloak v2 login theme", async () => 
   assert.match(template, /<#nested "header">/);
   assert.match(template, /<#nested "form">/);
   assert.match(template, /kcSanitize\(message\.summary\)/);
+  assert.match(
+    template,
+    /<select\s+aria-label="\$\{msg\("languages"\)\}"\s+id="login-select-toggle"\s+onchange="if \(this\.value\) window\.location\.href=this\.value"\s*>/
+  );
   assert.match(messages, /^loginTitle=Sign in to Horizon$/m);
 
   await Promise.all([
