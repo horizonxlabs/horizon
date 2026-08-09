@@ -13,6 +13,7 @@ const releaseCompose = parse(
 );
 
 const releaseImageServices = [
+  ["keycloak", "evcp-keycloak"],
   ["platform-api", "evcp-platform-api"],
   ["admin-web", "evcp-admin-web"],
   ["creator-web", "evcp-creator-web"],
@@ -42,15 +43,22 @@ test("release workflow builds and pushes every image referenced by release compo
   }
 });
 
-test("release workflow signs and manifests workspace runtime image", () => {
+test("release workflow signs and manifests versioned Keycloak and workspace runtime images", () => {
+  assert.equal(stepByName("Build and push keycloak").uses, "docker/build-push-action@v7");
+  assert.match(stepByName("Build and push keycloak").with.file, /keycloak\.Dockerfile/);
   assert.equal(stepByName("Build and push workspace-next").uses, "docker/build-push-action@v7");
   assert.match(stepByName("Build and push workspace-next").with.file, /workspace-next\.Dockerfile/);
 
   const signStep = stepByName("Sign image digests");
+  assert.match(signStep.run, /evcp-keycloak@\$\{KEYCLOAK_DIGEST\}/);
+  assert.equal(signStep.env.KEYCLOAK_DIGEST, "${{ steps.keycloak.outputs.digest }}");
   assert.match(signStep.run, /evcp-workspace-next@\$\{WORKSPACE_NEXT_DIGEST\}/);
   assert.equal(signStep.env.WORKSPACE_NEXT_DIGEST, "${{ steps.workspace_next.outputs.digest }}");
 
   const assetStep = stepByName("Create release assets");
+  assert.match(assetStep.run, /"keycloak"/);
+  assert.match(assetStep.run, /evcp-keycloak:\$\{VERSION\}/);
+  assert.match(assetStep.run, /"digest": "\$\{KEYCLOAK_DIGEST\}"/);
   assert.match(assetStep.run, /"workspace-next"/);
   assert.match(assetStep.run, /evcp-workspace-next:\$\{VERSION\}/);
   assert.match(assetStep.run, /"digest": "\$\{WORKSPACE_NEXT_DIGEST\}"/);

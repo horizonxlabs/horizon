@@ -137,6 +137,10 @@ test("platform-api runs real Postgres persistence, not the legacy mock default",
 
 test("keycloak persists in postgres, sits behind a proxy, and has a db-init job", () => {
   const kc = release.services.keycloak;
+  assert.equal(
+    kc.image,
+    "${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-keycloak:${EVCP_VERSION:?EVCP_VERSION required}"
+  );
   assert.equal(kc.environment.KC_DB, "postgres");
   assert.match(String(kc.environment.KC_DB_URL), /jdbc:postgresql:\/\/postgres:5432\/keycloak/);
   assert.match(

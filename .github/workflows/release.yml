@@ -95,6 +95,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Build and push keycloak
+        id: keycloak
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/keycloak.Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          tags: |
+            ${{ steps.release.outputs.image_repository }}/evcp-keycloak:${{ steps.release.outputs.version }}
+            ${{ steps.release.outputs.image_repository }}/evcp-keycloak:${{ github.sha }}
+
       - name: Build and push platform-api
         id: platform_api
         uses: docker/build-push-action@v7
@@ -211,6 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           rendered="$(docker stack config -c docker/docker-compose.release.yml -c docker/docker-compose.openbao.yml)"
+          grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-keycloak:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-platform-api:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-admin-web:${EVCP_VERSION}" <<<"${rendered}"
           grep -q "${EVCP_IMAGE_REPOSITORY}/evcp-creator-web:${EVCP_VERSION}" <<<"${rendered}"
@@ -224,6 +240,7 @@ jobs:
       - name: Sign image digests
         env:
           IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
+          KEYCLOAK_DIGEST: ${{ steps.keycloak.outputs.digest }}
           PLATFORM_API_DIGEST: ${{ steps.platform_api.outputs.digest }}
           ADMIN_WEB_DIGEST: ${{ steps.admin_web.outputs.digest }}
           CREATOR_WEB_DIGEST: ${{ steps.creator_web.outputs.digest }}
@@ -231,6 +248,7 @@ jobs:
           WORKSPACE_NEXT_DIGEST: ${{ steps.workspace_next.outputs.digest }}
         run: |
           set -euo pipefail
+          cosign sign --yes "${IMAGE_REPOSITORY}/evcp-keycloak@${KEYCLOAK_DIGEST}"
           cosign sign --yes "${IMAGE_REPOSITORY}/evcp-platform-api@${PLATFORM_API_DIGEST}"
           cosign sign --yes "${IMAGE_REPOSITORY}/evcp-admin-web@${ADMIN_WEB_DIGEST}"
           cosign sign --yes "${IMAGE_REPOSITORY}/evcp-creator-web@${CREATOR_WEB_DIGEST}"
@@ -241,6 +259,7 @@ jobs:
         env:
           IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
           VERSION: ${{ steps.release.outputs.version }}
+          KEYCLOAK_DIGEST: ${{ steps.keycloak.outputs.digest }}
           PLATFORM_API_DIGEST: ${{ steps.platform_api.outputs.digest }}
           ADMIN_WEB_DIGEST: ${{ steps.admin_web.outputs.digest }}
           CREATOR_WEB_DIGEST: ${{ steps.creator_web.outputs.digest }}
@@ -261,6 +280,10 @@ jobs:
             "sourceSha": "${GITHUB_SHA}",
             "imageRepository": "${IMAGE_REPOSITORY}",
             "images": {
+              "keycloak": {
+                "tag": "${IMAGE_REPOSITORY}/evcp-keycloak:${VERSION}",
+                "digest": "${KEYCLOAK_DIGEST}"
+              },
               "platform-api": {
                 "tag": "${IMAGE_REPOSITORY}/evcp-platform-api:${VERSION}",
                 "digest": "${PLATFORM_API_DIGEST}"

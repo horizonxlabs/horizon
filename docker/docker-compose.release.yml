@@ -65,7 +65,7 @@ services:
         condition: any
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.2
+    image: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY is required}/evcp-keycloak:${EVCP_VERSION:?EVCP_VERSION required}
     entrypoint: ["/bin/sh", "/etc/evcp/secrets-entrypoint.sh"]
     command: /opt/keycloak/bin/kc.sh start --import-realm --http-enabled=true --http-port=8080 --proxy-headers=xforwarded --hostname-strict=false
     environment:
