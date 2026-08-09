@@ -1,7 +1,7 @@
 # Horizon Keycloak Theme Design
 
 **Date:** 2026-08-09  
-**Status:** Proposed for user review  
+**Status:** Approved
 **Visual direction:** Brand Split  
 **Language:** English only
 
