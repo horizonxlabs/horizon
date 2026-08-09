@@ -60,6 +60,7 @@
     "verify:sprint13": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:sprint14": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "verify:real-mvp-install": "pnpm lint && pnpm typecheck && pnpm build && pnpm verify:install && pnpm verify:installer && pnpm test",
+    "verify:keycloak-theme-live": "node --test tests/live/keycloak-theme-smoke.test.mjs",
     "dev:setup": "node scripts/dev/setup.mjs"
   },
   "devDependencies": {
