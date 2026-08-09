@@ -187,9 +187,7 @@ body#keycloak-bg {
   font-weight: 700;
 }
 
-.horizon-auth-panel input:not([type="checkbox"]):not([type="radio"]),
-.horizon-auth-panel select,
-.horizon-auth-panel textarea {
+.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   width: 100%;
   min-height: 44px;
   border: 1px solid #cbd5e1;
@@ -233,9 +231,7 @@ body#keycloak-bg {
   font: inherit;
 }
 
-.horizon-auth-panel input:not([type="checkbox"]):not([type="radio"]),
-.horizon-auth-panel select,
-.horizon-auth-panel textarea {
+.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   padding: 10px 12px;
 }
 
@@ -249,29 +245,42 @@ body#keycloak-bg {
   opacity: 1;
 }
 
-.horizon-auth-panel input:hover,
-.horizon-auth-panel select:hover,
-.horizon-auth-panel textarea:hover,
+.horizon-auth-panel :where(input:hover, select:hover, textarea:hover),
 .horizon-auth-panel .pf-v5-c-form-control:hover,
 .horizon-auth-panel .pf-c-form-control:hover {
   border-color: #94a3b8;
 }
 
-.horizon-auth-panel input:focus,
-.horizon-auth-panel select:focus,
-.horizon-auth-panel textarea:focus,
+.horizon-auth-panel :where(input:focus, select:focus, textarea:focus),
 .horizon-auth-panel .pf-v5-c-form-control:focus-within,
 .horizon-auth-panel .pf-c-form-control:focus-within {
   border-color: var(--horizon-primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
 }
 
-.horizon-auth-panel input:-webkit-autofill,
-.horizon-auth-panel input:-webkit-autofill:hover,
-.horizon-auth-panel input:-webkit-autofill:focus {
+.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]):-webkit-autofill),
+.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]):-webkit-autofill:hover),
+.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]):-webkit-autofill:focus) {
   -webkit-text-fill-color: var(--horizon-text);
   -webkit-box-shadow: 0 0 0 1000px #ffffff inset, 0 0 0 3px rgba(37, 99, 235, 0.16);
   caret-color: var(--horizon-text);
+}
+
+.horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea):is(:hover, :focus, :focus-visible),
+.horizon-auth-panel .pf-c-form-control > :is(input, select, textarea):is(:hover, :focus, :focus-visible) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: 0;
+}
+
+.horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea):-webkit-autofill,
+.horizon-auth-panel .pf-c-form-control > :is(input, select, textarea):-webkit-autofill {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-box-shadow: none;
+  -webkit-text-fill-color: var(--horizon-text);
 }
 
 .horizon-auth-panel .pf-v5-c-input-group,

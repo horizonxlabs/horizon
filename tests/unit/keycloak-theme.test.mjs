@@ -26,6 +26,38 @@ function cssBlock(css, selector) {
   return rule.slice(rule.indexOf("{") + 1, -1);
 }
 
+function withoutWhere(selector) {
+  let result = selector;
+  let whereIndex = result.indexOf(":where(");
+
+  while (whereIndex !== -1) {
+    let depth = 1;
+    let endIndex = result.indexOf("(", whereIndex) + 1;
+    for (; endIndex < result.length; endIndex += 1) {
+      if (result[endIndex] === "(") depth += 1;
+      if (result[endIndex] === ")") depth -= 1;
+      if (depth === 0) break;
+    }
+    result = `${result.slice(0, whereIndex)}${result.slice(endIndex + 1)}`;
+    whereIndex = result.indexOf(":where(");
+  }
+
+  return result;
+}
+
+function selectorSpecificity(selector) {
+  const normalized = withoutWhere(selector).replaceAll(":is(", "(");
+  const idCount = (normalized.match(/#[\w-]+/g) ?? []).length;
+  const classCount = (normalized.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+  const elementCount = (
+    normalized
+      .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:{1,2}[\w-]+/g, " ")
+      .match(/\b[a-z][\w-]*\b/gi) ?? []
+  ).length;
+
+  return idCount * 100 + classCount * 10 + elementCount;
+}
+
 test("Horizon is a self-contained English Keycloak v2 login theme", async () => {
   const [properties, template, messages] = await Promise.all([
     readFile(`${root}/theme.properties`, "utf8"),
@@ -77,6 +109,29 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
     css,
     ".horizon-auth-panel .select-auth-box-parent"
   );
+  const standaloneControlSelector =
+    '.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea)';
+  const standaloneControlStyles = cssBlock(css, standaloneControlSelector);
+  const standaloneHoverStyles = cssBlock(
+    css,
+    ".horizon-auth-panel :where(input:hover, select:hover, textarea:hover),"
+  );
+  const standaloneFocusStyles = cssBlock(
+    css,
+    ".horizon-auth-panel :where(input:focus, select:focus, textarea:focus),"
+  );
+  const wrapperFocusStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .pf-v5-c-form-control:focus-within,"
+  );
+  const nestedInteractionStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea):is(:hover, :focus, :focus-visible),"
+  );
+  const nestedAutofillStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea):-webkit-autofill,"
+  );
 
   assert.match(desktopShell, /grid-template-columns:\s*1\.05fr 1fr/);
   assert.match(cssBlock(mobileStyles, ".horizon-brand-panel"), /display:\s*none/);
@@ -89,6 +144,24 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
   assert.match(nestedControlStyles, /border:\s*0/);
   assert.match(nestedControlStyles, /background:\s*transparent/);
   assert.match(nestedControlStyles, /box-shadow:\s*none/);
+  for (const state of ["", ":hover", ":focus", ":focus-visible"]) {
+    assert.ok(
+      selectorSpecificity(`.horizon-auth-panel .pf-v5-c-form-control > input${state}`) >
+        selectorSpecificity(`.horizon-auth-panel :where(input${state})`),
+      `wrapped controls must outrank standalone ${state || "normal"} styling`
+    );
+  }
+  assert.match(standaloneControlStyles, /border:\s*1px solid #cbd5e1/);
+  assert.match(standaloneHoverStyles, /border-color:\s*#94a3b8/);
+  assert.match(standaloneFocusStyles, /box-shadow:\s*0 0 0 3px/);
+  assert.match(wrapperFocusStyles, /box-shadow:\s*0 0 0 3px/);
+  assert.match(nestedInteractionStyles, /border:\s*0/);
+  assert.match(nestedInteractionStyles, /background:\s*transparent/);
+  assert.match(nestedInteractionStyles, /box-shadow:\s*none/);
+  assert.match(nestedInteractionStyles, /outline:\s*0/);
+  assert.match(nestedAutofillStyles, /border:\s*0/);
+  assert.match(nestedAutofillStyles, /background:\s*transparent/);
+  assert.match(nestedAutofillStyles, /-webkit-box-shadow:\s*none/);
 
   assert.match(primaryButtonStyles, /width:\s*100%/);
   assert.match(primaryButtonStyles, /background:\s*var\(--horizon-primary\)/);
