@@ -18,6 +18,7 @@ test("waits for keycloak: retries config credentials until it succeeds", () => {
   const dir = mkdtempSync(join(tmpdir(), "kc-bootstrap-"));
   try {
     const counter = join(dir, "cred-attempts");
+    const commandLog = join(dir, "commands");
     writeFileSync(counter, "0");
     // Fake kcadm: `config credentials` fails on the first two attempts, then succeeds.
     // All other subcommands return plausible values so the rest of the script proceeds.
@@ -25,6 +26,7 @@ test("waits for keycloak: retries config credentials until it succeeds", () => {
     writeFileSync(
       kcadm,
       `#!/bin/sh
+printf '%s\\n' "$*" >> "${commandLog}"
 if [ "$1" = "config" ] && [ "$2" = "credentials" ]; then
   n=$(cat "${counter}"); n=$((n + 1)); echo "$n" > "${counter}"
   [ "$n" -lt 3 ] && { echo "Failed to send request - keycloak: System error" >&2; exit 1; }
@@ -67,6 +69,10 @@ exit 0
     assert.equal(r.status, 0, `stderr:\n${r.stderr}`);
     // Proves it retried through the two failures instead of giving up.
     assert.equal(readFileSync(counter, "utf8").trim(), "3");
+    assert.match(
+      readFileSync(commandLog, "utf8"),
+      /update realms\/evcp -s loginTheme=horizon/
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

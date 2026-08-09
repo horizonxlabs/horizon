@@ -22,6 +22,9 @@ test("Keycloak realm permits authorization-code login only through the confident
   const realm = JSON.parse(realmSource);
   const config = readKeycloakConfig(requiredEnvironment);
 
+  assert.equal(realm.loginTheme, "horizon");
+  assert.equal(realm.internationalizationEnabled, false);
+  assert.match(bootstrap, /update "realms\/\$KEYCLOAK_REALM" -s loginTheme=horizon/);
   assert.deepEqual(
     realm.groups.map(({ name }) => name).sort(),
     ["evcp-admins", "evcp-creators", "evcp-users"]
@@ -83,6 +86,10 @@ test("Compose imports the realm and bootstraps confidential client secrets befor
   }
   // Dev (docker compose): realm mounted read-only, ordering enforced via depends_on.
   assert.match(developmentCompose, /evcp-realm\.json:\/opt\/keycloak\/data\/import\/evcp-realm\.json:ro/);
+  assert.match(
+    developmentCompose,
+    /keycloak\/themes\/horizon:\/opt\/keycloak\/themes\/horizon:ro/
+  );
   assert.match(developmentCompose, /service_completed_successfully/);
   // Release (docker stack deploy / swarm): realm delivered as a config, bootstrap as a replicated-job.
   assert.match(releaseCompose, /keycloak-realm:/);

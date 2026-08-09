@@ -24,6 +24,9 @@ until "$kcadm" config credentials \
   sleep 5
 done
 
+# Apply the Horizon login theme to existing realms without recreating realm data.
+"$kcadm" update "realms/$KEYCLOAK_REALM" -s loginTheme=horizon
+
 set_client_secret() {
   client_id=$1
   client_secret=$2

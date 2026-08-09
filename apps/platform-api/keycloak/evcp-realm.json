@@ -2,6 +2,8 @@
   "realm": "evcp",
   "enabled": true,
   "displayName": "Enterprise Vibe Coding Platform",
+  "loginTheme": "horizon",
+  "internationalizationEnabled": false,
   "registrationAllowed": false,
   "resetPasswordAllowed": true,
   "groups": [
