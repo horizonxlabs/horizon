@@ -91,6 +91,15 @@ in the running containers. Stop the stack with:
 docker compose --env-file .env -f docker/docker-compose.yml down
 ```
 
+Keycloak uses the Horizon login theme in local development. Theme files are bind-mounted from
+`apps/platform-api/keycloak/themes/horizon`; after changing them, recreate Keycloak and rerun its
+bootstrap job:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up -d --force-recreate keycloak keycloak-bootstrap
+pnpm verify:keycloak-theme-live
+```
+
 The generated `.env` is gitignored. If an existing `.env` still contains placeholders copied
 from `.env.example`, `pnpm dev:setup` replaces only those placeholder secrets and aligns the
 PostgreSQL, LiteLLM, and MinIO credentials; real secrets and custom settings are preserved.
