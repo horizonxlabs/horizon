@@ -4,6 +4,23 @@ import test from "node:test";
 
 const root = "apps/platform-api/keycloak/themes/horizon/login";
 
+function cssBlock(css, selector) {
+  const selectorIndex = css.indexOf(selector);
+  assert.notEqual(selectorIndex, -1, `Missing CSS selector: ${selector}`);
+
+  const openingBrace = css.indexOf("{", selectorIndex);
+  assert.notEqual(openingBrace, -1, `Missing opening brace for: ${selector}`);
+
+  let depth = 0;
+  for (let index = openingBrace; index < css.length; index += 1) {
+    if (css[index] === "{") depth += 1;
+    if (css[index] === "}") depth -= 1;
+    if (depth === 0) return css.slice(openingBrace + 1, index);
+  }
+
+  assert.fail(`Unbalanced CSS block for: ${selector}`);
+}
+
 test("Horizon is a self-contained English Keycloak v2 login theme", async () => {
   const [properties, template, messages] = await Promise.all([
     readFile(`${root}/theme.properties`, "utf8"),
@@ -35,12 +52,36 @@ test("Horizon is a self-contained English Keycloak v2 login theme", async () => 
 
 test("Horizon auth CSS implements Brand Split and accessible responsive states", async () => {
   const css = await readFile(`${root}/resources/css/horizon-login.css`, "utf8");
+  const desktopShell = cssBlock(css, ".horizon-auth-shell");
+  const mobileStyles = cssBlock(css, "@media (max-width: 767px)");
+  const reducedMotionStyles = cssBlock(css, "@media (prefers-reduced-motion: reduce)");
+  const formControlStyles = cssBlock(css, ".horizon-auth-panel .pf-v5-c-form-control,");
+  const nestedControlStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea),"
+  );
 
-  assert.match(css, /grid-template-columns:\s*1\.05fr 1fr/);
-  assert.match(css, /@media\s*\(max-width:\s*767px\)/);
-  assert.match(css, /\.horizon-brand-panel\s*\{[^}]*display:\s*none/s);
+  assert.match(desktopShell, /grid-template-columns:\s*1\.05fr 1fr/);
+  assert.match(cssBlock(mobileStyles, ".horizon-brand-panel"), /display:\s*none/);
   assert.match(css, /:focus-visible/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(css, /\.pf-m-danger/);
+  assert.match(reducedMotionStyles, /transition:\s*none !important/);
   assert.match(css, /@font-face/);
+
+  assert.match(formControlStyles, /--pf-v5-c-form-control--before--BorderTopWidth:\s*0/);
+  assert.match(formControlStyles, /--pf-v5-c-form-control--after--BorderBottomWidth:\s*0/);
+  assert.match(nestedControlStyles, /border:\s*0/);
+  assert.match(nestedControlStyles, /background:\s*transparent/);
+  assert.match(nestedControlStyles, /box-shadow:\s*none/);
+
+  for (const severity of ["danger", "warning", "success", "info"]) {
+    const alertStyles = cssBlock(
+      css,
+      `.horizon-auth-panel .pf-v5-c-alert.pf-m-${severity},`
+    );
+
+    assert.match(alertStyles, new RegExp(`--pf-v5-c-alert__title--Color:\\s*var\\(--horizon-${severity}\\)`));
+    assert.match(alertStyles, new RegExp(`--pf-v5-c-alert__icon--Color:\\s*var\\(--horizon-${severity}\\)`));
+  }
+
+  assert.doesNotMatch(css, /\.horizon-auth-panel\s+\.pf-m-(?:danger|warning|success|info)\s*\{/);
 });

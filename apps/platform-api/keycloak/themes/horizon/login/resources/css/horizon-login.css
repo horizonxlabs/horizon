@@ -189,15 +189,46 @@ body#keycloak-bg {
 
 .horizon-auth-panel input:not([type="checkbox"]):not([type="radio"]),
 .horizon-auth-panel select,
-.horizon-auth-panel textarea,
-.horizon-auth-panel .pf-v5-c-form-control,
-.horizon-auth-panel .pf-c-form-control {
+.horizon-auth-panel textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   color: var(--horizon-text);
   background: #ffffff;
+  box-shadow: none;
+  font: inherit;
+}
+
+.horizon-auth-panel .pf-v5-c-form-control,
+.horizon-auth-panel .pf-c-form-control {
+  --pf-v5-c-form-control--before--BorderTopWidth: 0;
+  --pf-v5-c-form-control--before--BorderRightWidth: 0;
+  --pf-v5-c-form-control--before--BorderBottomWidth: 0;
+  --pf-v5-c-form-control--before--BorderLeftWidth: 0;
+  --pf-v5-c-form-control--after--BorderBottomWidth: 0;
+  --pf-v5-c-form-control--BackgroundColor: #ffffff;
+  --pf-v5-c-form-control--Color: var(--horizon-text);
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: var(--horizon-text);
+  background: #ffffff;
+  box-shadow: none;
+  font: inherit;
+}
+
+.horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea),
+.horizon-auth-panel .pf-c-form-control > :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  color: var(--horizon-text);
+  background: transparent;
   box-shadow: none;
   font: inherit;
 }
@@ -220,13 +251,17 @@ body#keycloak-bg {
 
 .horizon-auth-panel input:hover,
 .horizon-auth-panel select:hover,
-.horizon-auth-panel textarea:hover {
+.horizon-auth-panel textarea:hover,
+.horizon-auth-panel .pf-v5-c-form-control:hover,
+.horizon-auth-panel .pf-c-form-control:hover {
   border-color: #94a3b8;
 }
 
 .horizon-auth-panel input:focus,
 .horizon-auth-panel select:focus,
-.horizon-auth-panel textarea:focus {
+.horizon-auth-panel textarea:focus,
+.horizon-auth-panel .pf-v5-c-form-control:focus-within,
+.horizon-auth-panel .pf-c-form-control:focus-within {
   border-color: var(--horizon-primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
 }
@@ -383,31 +418,71 @@ body#keycloak-bg {
 }
 
 .horizon-auth-panel .pf-v5-c-alert.pf-m-danger,
-.horizon-auth-panel .pf-c-alert.pf-m-danger,
-.horizon-auth-panel .pf-m-danger {
+.horizon-auth-panel .pf-c-alert.pf-m-danger {
+  --pf-v5-c-alert--BackgroundColor: var(--horizon-danger-surface);
+  --pf-v5-c-alert--BorderTopColor: var(--horizon-danger);
+  --pf-v5-c-alert__icon--Color: var(--horizon-danger);
+  --pf-v5-c-alert__title--Color: var(--horizon-danger);
   color: var(--horizon-danger);
   background: var(--horizon-danger-surface);
 }
 
 .horizon-auth-panel .pf-v5-c-alert.pf-m-warning,
-.horizon-auth-panel .pf-c-alert.pf-m-warning,
-.horizon-auth-panel .pf-m-warning {
+.horizon-auth-panel .pf-c-alert.pf-m-warning {
+  --pf-v5-c-alert--BackgroundColor: var(--horizon-warning-surface);
+  --pf-v5-c-alert--BorderTopColor: var(--horizon-warning);
+  --pf-v5-c-alert__icon--Color: var(--horizon-warning);
+  --pf-v5-c-alert__title--Color: var(--horizon-warning);
   color: var(--horizon-warning);
   background: var(--horizon-warning-surface);
 }
 
 .horizon-auth-panel .pf-v5-c-alert.pf-m-success,
-.horizon-auth-panel .pf-c-alert.pf-m-success,
-.horizon-auth-panel .pf-m-success {
+.horizon-auth-panel .pf-c-alert.pf-m-success {
+  --pf-v5-c-alert--BackgroundColor: var(--horizon-success-surface);
+  --pf-v5-c-alert--BorderTopColor: var(--horizon-success);
+  --pf-v5-c-alert__icon--Color: var(--horizon-success);
+  --pf-v5-c-alert__title--Color: var(--horizon-success);
   color: var(--horizon-success);
   background: var(--horizon-success-surface);
 }
 
 .horizon-auth-panel .pf-v5-c-alert.pf-m-info,
-.horizon-auth-panel .pf-c-alert.pf-m-info,
-.horizon-auth-panel .pf-m-info {
+.horizon-auth-panel .pf-c-alert.pf-m-info {
+  --pf-v5-c-alert--BackgroundColor: var(--horizon-info-surface);
+  --pf-v5-c-alert--BorderTopColor: var(--horizon-info);
+  --pf-v5-c-alert__icon--Color: var(--horizon-info);
+  --pf-v5-c-alert__title--Color: var(--horizon-info);
   color: var(--horizon-info);
   background: var(--horizon-info-surface);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__title,
+.horizon-auth-panel .pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__icon,
+.horizon-auth-panel .pf-c-alert.pf-m-danger .pf-c-alert__title,
+.horizon-auth-panel .pf-c-alert.pf-m-danger .pf-c-alert__icon {
+  color: var(--horizon-danger);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__title,
+.horizon-auth-panel .pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__icon,
+.horizon-auth-panel .pf-c-alert.pf-m-warning .pf-c-alert__title,
+.horizon-auth-panel .pf-c-alert.pf-m-warning .pf-c-alert__icon {
+  color: var(--horizon-warning);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-success .pf-v5-c-alert__title,
+.horizon-auth-panel .pf-v5-c-alert.pf-m-success .pf-v5-c-alert__icon,
+.horizon-auth-panel .pf-c-alert.pf-m-success .pf-c-alert__title,
+.horizon-auth-panel .pf-c-alert.pf-m-success .pf-c-alert__icon {
+  color: var(--horizon-success);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-info .pf-v5-c-alert__title,
+.horizon-auth-panel .pf-v5-c-alert.pf-m-info .pf-v5-c-alert__icon,
+.horizon-auth-panel .pf-c-alert.pf-m-info .pf-c-alert__title,
+.horizon-auth-panel .pf-c-alert.pf-m-info .pf-c-alert__icon {
+  color: var(--horizon-info);
 }
 
 .horizon-auth-panel #kc-social-providers,
