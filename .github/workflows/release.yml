@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version || github.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -65,16 +67,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.version || github.ref }}
           fetch-depth: 0
 
       - name: Validate release tag
+        id: source
         run: |
           set -euo pipefail
           case "${RELEASE_VERSION}" in
             v*.*.*) ;;
             *) echo "RELEASE_VERSION must look like v1.2.3, got ${RELEASE_VERSION}" >&2; exit 1 ;;
           esac
-          git rev-parse "${RELEASE_VERSION}^{commit}" >/dev/null
+          source_sha=$(git rev-parse "${RELEASE_VERSION}^{commit}")
+          echo "sha=${source_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Resolve image repository
         id: release
@@ -105,10 +110,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-keycloak:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-keycloak:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-keycloak:${{ steps.source.outputs.sha }}
 
       - name: Build and push platform-api
         id: platform_api
@@ -120,10 +125,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-platform-api:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-platform-api:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-platform-api:${{ steps.source.outputs.sha }}
 
       - name: Build and push admin-web
         id: admin_web
@@ -135,14 +140,14 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           build-args: |
             APP_PACKAGE=@evcp/admin-web
             APP_DIR=apps/admin-web
             STATIC_PREFIX=
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-admin-web:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-admin-web:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-admin-web:${{ steps.source.outputs.sha }}
 
       - name: Build and push creator-web
         id: creator_web
@@ -154,14 +159,14 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           build-args: |
             APP_PACKAGE=@evcp/creator-web
             APP_DIR=apps/creator-web
             STATIC_PREFIX=/creator
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-creator-web:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-creator-web:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-creator-web:${{ steps.source.outputs.sha }}
 
       - name: Build and push app-store-pwa
         id: app_store_pwa
@@ -173,14 +178,14 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           build-args: |
             APP_PACKAGE=@evcp/app-store-pwa
             APP_DIR=apps/app-store-pwa
             STATIC_PREFIX=/store
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-app-store-pwa:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-app-store-pwa:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-app-store-pwa:${{ steps.source.outputs.sha }}
 
       - name: Build and push workspace-next
         id: workspace_next
@@ -192,10 +197,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
           tags: |
             ${{ steps.release.outputs.image_repository }}/evcp-workspace-next:${{ steps.release.outputs.version }}
-            ${{ steps.release.outputs.image_repository }}/evcp-workspace-next:${{ github.sha }}
+            ${{ steps.release.outputs.image_repository }}/evcp-workspace-next:${{ steps.source.outputs.sha }}
 
       - name: Validate release compose image coordinates
         env:
@@ -259,6 +264,7 @@ jobs:
         env:
           IMAGE_REPOSITORY: ${{ steps.release.outputs.image_repository }}
           VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
           KEYCLOAK_DIGEST: ${{ steps.keycloak.outputs.digest }}
           PLATFORM_API_DIGEST: ${{ steps.platform_api.outputs.digest }}
           ADMIN_WEB_DIGEST: ${{ steps.admin_web.outputs.digest }}
@@ -277,7 +283,7 @@ jobs:
             "product": "Enterprise Vibe Coding Platform",
             "version": "${VERSION}",
             "sourceRepository": "${GITHUB_REPOSITORY}",
-            "sourceSha": "${GITHUB_SHA}",
+            "sourceSha": "${SOURCE_SHA}",
             "imageRepository": "${IMAGE_REPOSITORY}",
             "images": {
               "keycloak": {
@@ -321,7 +327,7 @@ jobs:
           This release publishes signed Docker image digests plus the release compose bundle.
 
           Image repository: \`${IMAGE_REPOSITORY}\`
-          Source SHA: \`${GITHUB_SHA}\`
+          Source SHA: \`${SOURCE_SHA}\`
 
           MVP registry visibility: set the published GHCR packages to public once from GitHub Packages settings so Droplets can pull without registry credentials.
 

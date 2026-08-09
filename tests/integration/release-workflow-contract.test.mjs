@@ -3,22 +3,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
-const releaseWorkflowText = readFileSync(
-  new URL("../../.github/workflows/release.yml", import.meta.url),
-  "utf8"
+const releaseWorkflow = parse(
+  readFileSync(new URL("../../.github/workflows/release.yml", import.meta.url), "utf8")
 );
-const releaseWorkflow = parse(releaseWorkflowText);
 const releaseCompose = parse(
   readFileSync(new URL("../../docker/docker-compose.release.yml", import.meta.url), "utf8")
 );
 
 const releaseImageServices = [
-  ["keycloak", "evcp-keycloak"],
-  ["platform-api", "evcp-platform-api"],
-  ["admin-web", "evcp-admin-web"],
-  ["creator-web", "evcp-creator-web"],
-  ["app-store-pwa", "evcp-app-store-pwa"],
-  ["workspace-next-image", "evcp-workspace-next"]
+  ["keycloak", "evcp-keycloak", "Build and push keycloak", "keycloak"],
+  ["platform-api", "evcp-platform-api", "Build and push platform-api", "platform_api"],
+  ["admin-web", "evcp-admin-web", "Build and push admin-web", "admin_web"],
+  ["creator-web", "evcp-creator-web", "Build and push creator-web", "creator_web"],
+  ["app-store-pwa", "evcp-app-store-pwa", "Build and push app-store-pwa", "app_store_pwa"],
+  ["workspace-next-image", "evcp-workspace-next", "Build and push workspace-next", "workspace_next"]
 ];
 
 function publishSteps() {
@@ -29,39 +27,85 @@ function stepByName(name) {
   return publishSteps().find((step) => step.name === name);
 }
 
-test("release workflow builds and pushes every image referenced by release compose", () => {
-  for (const [serviceName, imageName] of releaseImageServices) {
+test("release workflows check out the selected release ref before quality and publish", () => {
+  const expectedRef = "${{ inputs.version || github.ref }}";
+  const qualityCheckout = releaseWorkflow.jobs.quality.steps.find((step) => step.name === "Checkout");
+  const publishCheckout = stepByName("Checkout");
+
+  assert.equal(qualityCheckout.uses, "actions/checkout@v7");
+  assert.equal(qualityCheckout.with.ref, expectedRef);
+  assert.equal(publishCheckout.uses, "actions/checkout@v7");
+  assert.equal(publishCheckout.with.ref, expectedRef);
+  assert.equal(publishCheckout.with["fetch-depth"], 0);
+});
+
+test("release source SHA is resolved from the selected release tag", () => {
+  const sourceStep = stepByName("Validate release tag");
+
+  assert.equal(sourceStep.id, "source");
+  assert.match(sourceStep.run, /source_sha=\$\(git rev-parse "\$\{RELEASE_VERSION\}\^\{commit\}"\)/);
+  assert.match(sourceStep.run, /echo "sha=\$\{source_sha\}" >> "\$\{GITHUB_OUTPUT\}"/);
+});
+
+test("release workflow builds and pushes every image referenced by release compose from the resolved source", () => {
+  for (const [serviceName, imageName, buildStepName, buildStepId] of releaseImageServices) {
     const image = releaseCompose.services[serviceName].image;
+    const buildStep = stepByName(buildStepName);
+    const expectedTags = [
+      "${{ steps.release.outputs.image_repository }}/" + imageName + ":${{ steps.release.outputs.version }}",
+      "${{ steps.release.outputs.image_repository }}/" + imageName + ":${{ steps.source.outputs.sha }}"
+    ].join("\n");
+
     assert.match(image, new RegExp(`/${imageName}:`), `${serviceName} compose image mismatch`);
+    assert.equal(buildStep.id, buildStepId);
+    assert.equal(buildStep.uses, "docker/build-push-action@v7");
+    assert.equal(buildStep.with.push, true);
+    assert.equal(buildStep.with.tags.trim(), expectedTags);
     assert.match(
-      releaseWorkflowText,
-      new RegExp(`Build and push .*${imageName.replace("evcp-", "").replaceAll("-", ".*")}`),
-      `${imageName} build step missing`
+      buildStep.with.labels,
+      /org\.opencontainers\.image\.revision=\$\{\{ steps\.source\.outputs\.sha \}\}/
     );
-    assert.match(releaseWorkflowText, new RegExp(`/${imageName}:\\$\\{\\{ steps\\.release\\.outputs\\.version`));
-    assert.match(releaseWorkflowText, new RegExp(`/${imageName}:\\$\\{\\{ github\\.sha`));
   }
 });
 
-test("release workflow signs and manifests versioned Keycloak and workspace runtime images", () => {
-  assert.equal(stepByName("Build and push keycloak").uses, "docker/build-push-action@v7");
-  assert.match(stepByName("Build and push keycloak").with.file, /keycloak\.Dockerfile/);
-  assert.equal(stepByName("Build and push workspace-next").uses, "docker/build-push-action@v7");
-  assert.match(stepByName("Build and push workspace-next").with.file, /workspace-next\.Dockerfile/);
+test("Keycloak build is the pinned release image build", () => {
+  const keycloakStep = stepByName("Build and push keycloak");
 
+  assert.equal(keycloakStep.id, "keycloak");
+  assert.equal(keycloakStep.with.file, "docker/keycloak.Dockerfile");
+  assert.equal(keycloakStep.with.push, true);
+});
+
+test("release workflow signs and manifests image digests from their matching build steps", () => {
   const signStep = stepByName("Sign image digests");
-  assert.match(signStep.run, /evcp-keycloak@\$\{KEYCLOAK_DIGEST\}/);
-  assert.equal(signStep.env.KEYCLOAK_DIGEST, "${{ steps.keycloak.outputs.digest }}");
-  assert.match(signStep.run, /evcp-workspace-next@\$\{WORKSPACE_NEXT_DIGEST\}/);
-  assert.equal(signStep.env.WORKSPACE_NEXT_DIGEST, "${{ steps.workspace_next.outputs.digest }}");
-
   const assetStep = stepByName("Create release assets");
-  assert.match(assetStep.run, /"keycloak"/);
-  assert.match(assetStep.run, /evcp-keycloak:\$\{VERSION\}/);
-  assert.match(assetStep.run, /"digest": "\$\{KEYCLOAK_DIGEST\}"/);
-  assert.match(assetStep.run, /"workspace-next"/);
-  assert.match(assetStep.run, /evcp-workspace-next:\$\{VERSION\}/);
-  assert.match(assetStep.run, /"digest": "\$\{WORKSPACE_NEXT_DIGEST\}"/);
+
+  for (const [, imageName, , buildStepId] of releaseImageServices) {
+    const digestEnv = `${buildStepId.toUpperCase()}_DIGEST`;
+    const manifestImageName = imageName.replace("evcp-", "");
+
+    assert.equal(signStep.env[digestEnv], `\${{ steps.${buildStepId}.outputs.digest }}`);
+    assert.equal(assetStep.env[digestEnv], `\${{ steps.${buildStepId}.outputs.digest }}`);
+    assert.match(signStep.run, new RegExp(`${imageName}@\\$\\{${digestEnv}\\}`));
+    assert.match(
+      assetStep.run,
+      new RegExp(`"${manifestImageName}": \\{[\\s\\S]*?"digest": "\\$\\{${digestEnv}\\}"`)
+    );
+  }
+});
+
+test("release assets bind the resolved source SHA into the manifest and notes", () => {
+  const assetStep = stepByName("Create release assets");
+
+  assert.equal(assetStep.env.SOURCE_SHA, "${{ steps.source.outputs.sha }}");
+  assert.match(assetStep.run, /"sourceSha": "\$\{SOURCE_SHA\}"/);
+  assert.ok(assetStep.run.includes("Source SHA: \\`${SOURCE_SHA}\\`"));
+  assert.doesNotMatch(assetStep.run, /GITHUB_SHA/);
+});
+
+test("publish step IDs are unique", () => {
+  const ids = publishSteps().map((step) => step.id).filter(Boolean);
+  assert.equal(new Set(ids).size, ids.length);
 });
 
 test("release workflow validates rendered compose image coordinates", () => {
