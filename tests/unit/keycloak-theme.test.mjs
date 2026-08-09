@@ -4,7 +4,7 @@ import test from "node:test";
 
 const root = "apps/platform-api/keycloak/themes/horizon/login";
 
-function cssBlock(css, selector) {
+function cssRule(css, selector) {
   const selectorIndex = css.indexOf(selector);
   assert.notEqual(selectorIndex, -1, `Missing CSS selector: ${selector}`);
 
@@ -15,10 +15,15 @@ function cssBlock(css, selector) {
   for (let index = openingBrace; index < css.length; index += 1) {
     if (css[index] === "{") depth += 1;
     if (css[index] === "}") depth -= 1;
-    if (depth === 0) return css.slice(openingBrace + 1, index);
+    if (depth === 0) return css.slice(selectorIndex, index + 1);
   }
 
   assert.fail(`Unbalanced CSS block for: ${selector}`);
+}
+
+function cssBlock(css, selector) {
+  const rule = cssRule(css, selector);
+  return rule.slice(rule.indexOf("{") + 1, -1);
 }
 
 test("Horizon is a self-contained English Keycloak v2 login theme", async () => {
@@ -60,6 +65,18 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
     css,
     ".horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea),"
   );
+  const primaryButtonStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .pf-v5-c-button.pf-m-primary,"
+  );
+  const secondaryButtonRule = cssRule(
+    css,
+    ".horizon-auth-panel .pf-v5-c-button.pf-m-secondary,"
+  );
+  const authenticatorSelectionStyles = cssBlock(
+    css,
+    ".horizon-auth-panel .select-auth-box-parent"
+  );
 
   assert.match(desktopShell, /grid-template-columns:\s*1\.05fr 1fr/);
   assert.match(cssBlock(mobileStyles, ".horizon-brand-panel"), /display:\s*none/);
@@ -72,6 +89,19 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
   assert.match(nestedControlStyles, /border:\s*0/);
   assert.match(nestedControlStyles, /background:\s*transparent/);
   assert.match(nestedControlStyles, /box-shadow:\s*none/);
+
+  assert.match(primaryButtonStyles, /width:\s*100%/);
+  assert.match(primaryButtonStyles, /background:\s*var\(--horizon-primary\)/);
+  assert.doesNotMatch(
+    css,
+    /\.horizon-auth-panel\s+(?:input|button)\[type="submit"\](?::(?:hover|active))?/
+  );
+  assert.match(secondaryButtonRule, /#kc-decline/);
+  assert.match(secondaryButtonRule, /button\[name="cancel-aia"\]/);
+  assert.match(authenticatorSelectionStyles, /cursor:\s*pointer/);
+  assert.match(authenticatorSelectionStyles, /border-top:\s*1px solid var\(--horizon-border\)/);
+  assert.match(authenticatorSelectionStyles, /background:\s*transparent/);
+  assert.doesNotMatch(authenticatorSelectionStyles, /width:\s*100%/);
 
   for (const severity of ["danger", "warning", "success", "info"]) {
     const alertStyles = cssBlock(
