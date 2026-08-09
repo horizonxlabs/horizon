@@ -1,1 +1,507 @@
-body { margin: 0; }
+@font-face {
+  font-family: "LINE Seed Sans";
+  src: url("../fonts/LINESeedSansTH_W_Rg.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans";
+  src: url("../fonts/LINESeedSansTH_W_Bd.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --horizon-primary: #2563eb;
+  --horizon-primary-strong: #1d4ed8;
+  --horizon-page: #f1f5f9;
+  --horizon-surface: #ffffff;
+  --horizon-border: #e2e8f0;
+  --horizon-text: #0f172a;
+  --horizon-muted: #64748b;
+  --horizon-danger: #b42318;
+  --horizon-danger-surface: #fef3f2;
+  --horizon-warning: #9a6700;
+  --horizon-warning-surface: #fffaeb;
+  --horizon-success: #067647;
+  --horizon-success-surface: #ecfdf3;
+  --horizon-info: #175cd3;
+  --horizon-info-surface: #eff8ff;
+  font-family: "LINE Seed Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--horizon-text);
+  background: var(--horizon-page);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body#keycloak-bg {
+  display: grid;
+  min-height: 100vh;
+  margin: 0;
+  padding: 32px 24px;
+  place-items: center;
+  color: var(--horizon-text);
+  background:
+    radial-gradient(circle at 8% 8%, rgba(37, 99, 235, 0.11), transparent 30rem),
+    var(--horizon-page);
+  font-family: "LINE Seed Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.horizon-auth-shell {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  width: min(884px, calc(100vw - 48px));
+  min-height: 590px;
+  overflow: hidden;
+  border: 1px solid var(--horizon-border);
+  border-radius: 22px;
+  background: var(--horizon-surface);
+  box-shadow: 0 40px 90px rgba(15, 23, 42, 0.14);
+}
+
+.horizon-brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 44px 40px;
+  color: #ffffff;
+  border-radius: 21px 0 0 21px;
+  background:
+    radial-gradient(circle at 86% 10%, rgba(147, 197, 253, 0.35), transparent 16rem),
+    linear-gradient(155deg, #1d4ed8 0%, #1e3a8a 60%, #0f2167 100%);
+}
+
+.horizon-wordmark,
+.horizon-mobile-wordmark {
+  width: auto;
+  height: 32px;
+  object-fit: contain;
+}
+
+.horizon-wordmark {
+  align-self: flex-start;
+  filter: brightness(0) invert(1);
+}
+
+.horizon-brand-copy {
+  max-width: 320px;
+  margin: auto 0;
+}
+
+.horizon-brand-copy h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.horizon-brand-copy p,
+.horizon-platform-name {
+  margin: 18px 0 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 0.95rem;
+}
+
+.horizon-platform-name {
+  margin-top: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.horizon-auth-panel {
+  display: flex;
+  min-width: 0;
+  padding: 56px clamp(32px, 5vw, 64px) 40px;
+  background: var(--horizon-surface);
+}
+
+.horizon-auth-panel > * {
+  width: 100%;
+}
+
+.horizon-mobile-wordmark {
+  display: none;
+  margin: 0 0 32px;
+}
+
+.horizon-auth-panel .pf-v5-c-login__main,
+.horizon-auth-panel .pf-c-login__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.horizon-auth-panel .pf-v5-c-login__main-header,
+.horizon-auth-panel .pf-c-login__main-header {
+  margin-bottom: 28px;
+}
+
+.horizon-auth-panel #kc-page-title,
+.horizon-auth-panel .pf-v5-c-title,
+.horizon-auth-panel .pf-c-title {
+  margin: 0;
+  color: var(--horizon-text);
+  font-size: clamp(1.75rem, 3vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.horizon-auth-panel .pf-v5-c-login__main-header-utilities,
+.horizon-auth-panel .pf-c-login__main-header-utilities {
+  margin-top: 16px;
+}
+
+.horizon-auth-panel .pf-v5-c-form,
+.horizon-auth-panel .pf-c-form,
+.horizon-auth-panel form {
+  min-width: 0;
+}
+
+.horizon-auth-panel .pf-v5-c-form__group,
+.horizon-auth-panel .pf-c-form__group {
+  margin-bottom: 20px;
+}
+
+.horizon-auth-panel label,
+.horizon-auth-panel .pf-v5-c-form__label-text,
+.horizon-auth-panel .pf-c-form__label-text {
+  color: var(--horizon-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.horizon-auth-panel input:not([type="checkbox"]):not([type="radio"]),
+.horizon-auth-panel select,
+.horizon-auth-panel textarea,
+.horizon-auth-panel .pf-v5-c-form-control,
+.horizon-auth-panel .pf-c-form-control {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: var(--horizon-text);
+  background: #ffffff;
+  box-shadow: none;
+  font: inherit;
+}
+
+.horizon-auth-panel input:not([type="checkbox"]):not([type="radio"]),
+.horizon-auth-panel select,
+.horizon-auth-panel textarea {
+  padding: 10px 12px;
+}
+
+.horizon-auth-panel textarea {
+  min-height: 88px;
+}
+
+.horizon-auth-panel input::placeholder,
+.horizon-auth-panel textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.horizon-auth-panel input:hover,
+.horizon-auth-panel select:hover,
+.horizon-auth-panel textarea:hover {
+  border-color: #94a3b8;
+}
+
+.horizon-auth-panel input:focus,
+.horizon-auth-panel select:focus,
+.horizon-auth-panel textarea:focus {
+  border-color: var(--horizon-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.horizon-auth-panel input:-webkit-autofill,
+.horizon-auth-panel input:-webkit-autofill:hover,
+.horizon-auth-panel input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--horizon-text);
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset, 0 0 0 3px rgba(37, 99, 235, 0.16);
+  caret-color: var(--horizon-text);
+}
+
+.horizon-auth-panel .pf-v5-c-input-group,
+.horizon-auth-panel .pf-c-input-group {
+  align-items: stretch;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group input,
+.horizon-auth-panel .pf-c-input-group input {
+  min-width: 0;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group button,
+.horizon-auth-panel .pf-c-input-group button,
+.horizon-auth-panel .pf-v5-c-button.pf-m-control,
+.horizon-auth-panel .pf-c-button.pf-m-control {
+  min-width: 44px;
+  min-height: 44px;
+  border-color: #cbd5e1;
+  color: var(--horizon-muted);
+  background: #ffffff;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group button:hover,
+.horizon-auth-panel .pf-c-input-group button:hover,
+.horizon-auth-panel .pf-v5-c-button.pf-m-control:hover,
+.horizon-auth-panel .pf-c-button.pf-m-control:hover {
+  color: var(--horizon-primary-strong);
+  background: #eff6ff;
+}
+
+.horizon-auth-panel button,
+.horizon-auth-panel .pf-v5-c-button,
+.horizon-auth-panel .pf-c-button {
+  min-height: 44px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.horizon-auth-panel input[type="submit"],
+.horizon-auth-panel button[type="submit"],
+.horizon-auth-panel .pf-v5-c-button.pf-m-primary,
+.horizon-auth-panel .pf-c-button.pf-m-primary,
+.horizon-auth-panel #kc-login {
+  width: 100%;
+  border: 1px solid var(--horizon-primary);
+  color: #ffffff;
+  background: var(--horizon-primary);
+}
+
+.horizon-auth-panel input[type="submit"]:hover,
+.horizon-auth-panel button[type="submit"]:hover,
+.horizon-auth-panel .pf-v5-c-button.pf-m-primary:hover,
+.horizon-auth-panel .pf-c-button.pf-m-primary:hover,
+.horizon-auth-panel #kc-login:hover {
+  border-color: var(--horizon-primary-strong);
+  background: var(--horizon-primary-strong);
+  box-shadow: 0 8px 18px rgba(29, 78, 216, 0.22);
+}
+
+.horizon-auth-panel input[type="submit"]:active,
+.horizon-auth-panel button[type="submit"]:active,
+.horizon-auth-panel .pf-v5-c-button.pf-m-primary:active,
+.horizon-auth-panel .pf-c-button.pf-m-primary:active,
+.horizon-auth-panel #kc-login:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.horizon-auth-panel .pf-v5-c-button.pf-m-secondary,
+.horizon-auth-panel .pf-c-button.pf-m-secondary,
+.horizon-auth-panel .pf-v5-c-button.pf-m-link,
+.horizon-auth-panel .pf-c-button.pf-m-link,
+.horizon-auth-panel #try-another-way {
+  border: 1px solid #cbd5e1;
+  color: var(--horizon-primary-strong);
+  background: #ffffff;
+}
+
+.horizon-auth-panel .pf-v5-c-button.pf-m-secondary:hover,
+.horizon-auth-panel .pf-c-button.pf-m-secondary:hover,
+.horizon-auth-panel .pf-v5-c-button.pf-m-link:hover,
+.horizon-auth-panel .pf-c-button.pf-m-link:hover,
+.horizon-auth-panel #try-another-way:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.horizon-auth-panel a {
+  color: var(--horizon-primary-strong);
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.horizon-auth-panel a:hover {
+  color: #1e40af;
+}
+
+.horizon-auth-panel .pf-v5-c-form__helper-text,
+.horizon-auth-panel .pf-c-form__helper-text,
+.horizon-auth-panel .pf-v5-c-helper-text,
+.horizon-auth-panel .pf-c-helper-text,
+.horizon-auth-panel .subtitle,
+.horizon-auth-panel .kc-form-options {
+  color: var(--horizon-muted);
+  font-size: 0.875rem;
+}
+
+.horizon-auth-panel .pf-v5-c-form__helper-text.pf-m-error,
+.horizon-auth-panel .pf-c-form__helper-text.pf-m-error,
+.horizon-auth-panel .pf-v5-c-helper-text.pf-m-error,
+.horizon-auth-panel .pf-c-helper-text.pf-m-error {
+  color: var(--horizon-danger);
+}
+
+.horizon-auth-panel .pf-v5-c-form__label-required,
+.horizon-auth-panel .pf-c-form__label-required,
+.horizon-auth-panel .pf-v5-c-form__label-required::before,
+.horizon-auth-panel .pf-c-form__label-required::before {
+  color: var(--horizon-danger);
+}
+
+.horizon-auth-panel .pf-v5-c-alert,
+.horizon-auth-panel .pf-c-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.horizon-auth-panel .pf-v5-c-alert .kc-feedback-text,
+.horizon-auth-panel .pf-c-alert .kc-feedback-text,
+.horizon-auth-panel .kc-feedback-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-danger,
+.horizon-auth-panel .pf-c-alert.pf-m-danger,
+.horizon-auth-panel .pf-m-danger {
+  color: var(--horizon-danger);
+  background: var(--horizon-danger-surface);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-warning,
+.horizon-auth-panel .pf-c-alert.pf-m-warning,
+.horizon-auth-panel .pf-m-warning {
+  color: var(--horizon-warning);
+  background: var(--horizon-warning-surface);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-success,
+.horizon-auth-panel .pf-c-alert.pf-m-success,
+.horizon-auth-panel .pf-m-success {
+  color: var(--horizon-success);
+  background: var(--horizon-success-surface);
+}
+
+.horizon-auth-panel .pf-v5-c-alert.pf-m-info,
+.horizon-auth-panel .pf-c-alert.pf-m-info,
+.horizon-auth-panel .pf-m-info {
+  color: var(--horizon-info);
+  background: var(--horizon-info-surface);
+}
+
+.horizon-auth-panel #kc-social-providers,
+.horizon-auth-panel .kc-social-links,
+.horizon-auth-panel .pf-v5-c-login__main-footer-band,
+.horizon-auth-panel .pf-c-login__main-footer-band {
+  margin-top: 24px;
+}
+
+.horizon-auth-panel #kc-social-providers ul,
+.horizon-auth-panel .kc-social-links {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.horizon-auth-panel #kc-social-providers a,
+.horizon-auth-panel .kc-social-links a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: var(--horizon-text);
+  background: #ffffff;
+  text-decoration: none;
+}
+
+.horizon-auth-panel #kc-social-providers a:hover,
+.horizon-auth-panel .kc-social-links a:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.horizon-auth-panel #kc-info,
+.horizon-auth-panel .pf-v5-c-login__main-footer,
+.horizon-auth-panel .pf-c-login__main-footer {
+  margin-top: 24px;
+  color: var(--horizon-muted);
+  font-size: 0.875rem;
+}
+
+.horizon-auth-panel [aria-disabled="true"],
+.horizon-auth-panel button:disabled,
+.horizon-auth-panel input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+:where(.horizon-auth-panel input, .horizon-auth-panel select, .horizon-auth-panel textarea, .horizon-auth-panel button, .horizon-auth-panel a):focus-visible {
+  outline: 3px solid var(--horizon-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  body#keycloak-bg {
+    display: block;
+    padding: 16px;
+    background: var(--horizon-surface);
+  }
+
+  .horizon-auth-shell {
+    display: block;
+    width: min(100% - 32px, 424px);
+    min-height: 0;
+    margin: 0 auto;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .horizon-brand-panel {
+    display: none;
+  }
+
+  .horizon-auth-panel {
+    display: block;
+    padding: 24px 0 32px;
+  }
+
+  .horizon-mobile-wordmark {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

@@ -32,3 +32,15 @@ test("Horizon is a self-contained English Keycloak v2 login theme", async () => 
     access(`${root}/resources/fonts/LINESeedSansTH_W_Bd.woff2`)
   ]);
 });
+
+test("Horizon auth CSS implements Brand Split and accessible responsive states", async () => {
+  const css = await readFile(`${root}/resources/css/horizon-login.css`, "utf8");
+
+  assert.match(css, /grid-template-columns:\s*1\.05fr 1fr/);
+  assert.match(css, /@media\s*\(max-width:\s*767px\)/);
+  assert.match(css, /\.horizon-brand-panel\s*\{[^}]*display:\s*none/s);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /\.pf-m-danger/);
+  assert.match(css, /@font-face/);
+});
