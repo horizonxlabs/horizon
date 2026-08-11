@@ -5,6 +5,7 @@ import test from "node:test";
 const source = (file) => readFileSync(file, "utf8");
 const apiClient = source("packages/api-client/src/index.ts");
 const provider = source("apps/app-store-pwa/src/features/storefront/StoreProvider.tsx");
+const navigation = source("apps/app-store-pwa/src/features/storefront/store-navigation.ts");
 const shell = source("apps/app-store-pwa/src/features/storefront/StoreShell.tsx");
 const composition = source("apps/app-store-pwa/src/features/storefront/StorefrontApp.tsx");
 const detail = source("apps/app-store-pwa/src/features/storefront/pages/StoreAppDetailPage.tsx");
@@ -21,6 +22,44 @@ const ticketDetail = source(
 const routes = source("apps/app-store-pwa/src/routes/StoreRoutes.tsx");
 const routeResolver = source("apps/app-store-pwa/src/routes/store-route.ts");
 
+test("enterprise Store route and state composition retains one workspace shell", () => {
+  for (const route of [
+    "/store/",
+    "/store/available",
+    "/store/search",
+    "/store/favorites",
+    "/store/recent",
+    "/store/access-requests",
+    "/store/tickets",
+    "/store/profile"
+  ]) {
+    assert.match(navigation, new RegExp(route.replaceAll("/", "\\/")));
+  }
+
+  for (const page of [
+    "StoreCollectionPage",
+    "StoreSearchPage",
+    "StoreAccessRequestsPage",
+    "StoreTicketsPage",
+    "StoreTicketDetailPage",
+    "StoreProfilePage",
+    "StoreAppDetailPage",
+    "StoreNotFoundPage"
+  ]) {
+    assert.match(composition, new RegExp(page));
+  }
+
+  assert.match(shell, /store-workspace/);
+  assert.match(shell, /Loading Horizon Store/);
+  assert.match(shell, /Sign in with Keycloak/);
+  assert.match(shell, /Retry Store/);
+  assert.match(composition, /<StoreShell route=\{route\}>/);
+  assert.match(composition, /route\.page === "not-found"/);
+  assert.match(composition, /<StoreAppDetailPage appSlug=\{route\.appSlug\}/);
+  assert.match(composition, /<StoreTicketDetailPage ticketId=\{route\.ticketId\}/);
+  assert.doesNotMatch(`${navigation}${composition}${shell}`, /Install app|Uninstall app/);
+});
+
 test("App Store PWA actions are API-client backed through the scoped Provider coordinator", () => {
   for (const method of [
     "getStoreAppDetail",
@@ -31,10 +70,7 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
     assert.match(apiClient, new RegExp(`${method}\\(`));
   assert.match(provider, /runAppAction<T>/);
   assert.match(provider, /refreshHome\(\{ preserveReadyOnFailure: true \}\)/);
-  for (const method of [
-    "requestStoreAccess",
-    "submitStoreTicket"
-  ]) {
+  for (const method of ["requestStoreAccess", "submitStoreTicket"]) {
     assert.match(detail, new RegExp(`api\\.${method}\\(app\\.slug`));
   }
   assert.match(detail, /runAppAction\(app\.slug/);
@@ -48,7 +84,10 @@ test("App Store PWA actions are API-client backed through the scoped Provider co
 
 test("App Store PWA derives web app actions from access and fails Open closed", () => {
   assert.doesNotMatch(detailStates, /appInstallJourneySteps|installJourneyStatus/);
-  assert.doesNotMatch(detail, /App install journey|Install on this account|Remove this installation/);
+  assert.doesNotMatch(
+    detail,
+    /App install journey|Install on this account|Remove this installation/
+  );
   assert.match(detailStates, /action === "open"/);
   assert.match(detailStates, /accessStatus === "active"/);
   assert.match(detailStates, /health === "healthy"/);
