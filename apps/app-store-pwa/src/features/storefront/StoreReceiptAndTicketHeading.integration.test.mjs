@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -97,7 +107,7 @@ function button(root, label) {
   return root.findAllByType("button").find((node) => node.children.join("").includes(label));
 }
 
-test("access receipts distinguish device receipt status from current API access status", async () => {
+test("access receipt workspace distinguishes device receipt status from current API access status", async () => {
   memory.clear();
   let renderer;
   await act(async () => {
@@ -110,11 +120,33 @@ test("access receipts distinguish device receipt status from current API access 
     );
   });
   const view = output(renderer);
+  assert.match(view, /Requested role/);
+  assert.match(view, /Current access/);
   assert.match(view, /Device receipt status[^]*pending/);
-  assert.match(view, /Current access status[^]*active/);
+  assert.match(view, /Current access[^]*active/);
   assert.match(view, /removed-app/);
-  assert.match(view, /Current access status unavailable/);
-  assert.doesNotMatch(view, /Current access status[^]*pending[^]*removed-app/);
+  assert.match(view, /Current access unavailable/);
+  assert.doesNotMatch(view, /Current access[^]*pending[^]*removed-app/);
+  await act(async () => renderer.unmount());
+});
+
+test("profile workspace separates identity and device-local data", async () => {
+  memory.clear();
+  const { StoreProfilePage } = await import("./pages/StoreProfilePage.tsx");
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: {} },
+        React.createElement(StoreProfilePage)
+      )
+    );
+  });
+  const profileHtml = output(renderer);
+  assert.match(profileHtml, /Identity and SSO/);
+  assert.match(profileHtml, /Device-local data/);
+  assert.match(profileHtml, /Clear device preferences/);
   await act(async () => renderer.unmount());
 });
 
