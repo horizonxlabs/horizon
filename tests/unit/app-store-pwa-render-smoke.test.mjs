@@ -39,3 +39,14 @@ test("shared platform client remains generic while storefront owns Store configu
   assert.match(storefrontClient, /startKeycloakLogout/);
   assert.doesNotMatch(storefrontClient, /legacyUserEmail|user@company\.com/);
 });
+
+test("Store stylesheet defines enterprise frame and responsive navigation", async () => {
+  const css = await source("packages/ui/styles.css");
+  assert.match(css, /\.store-workspace\s*\{/);
+  assert.match(css, /grid-template-columns:\s*240px minmax\(0, 1fr\)/);
+  assert.match(css, /\.store-app-grid\s*\{/);
+  assert.match(css, /repeat\(auto-fill, minmax\(240px, 1fr\)\)/);
+  assert.match(css, /@media \(max-width:\s*1199px\)/);
+  assert.match(css, /@media \(max-width:\s*759px\)/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+});
