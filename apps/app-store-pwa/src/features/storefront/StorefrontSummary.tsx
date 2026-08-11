@@ -1,41 +1,79 @@
-import { navigation } from "@evcp/config";
+import { useCallback, type ReactNode, useState } from "react";
 import type { PlatformRole } from "@evcp/types";
-import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
 import { PackageSearch, ShieldCheck, Store } from "lucide-react";
+import type { StoreRoute } from "@/routes/store-route";
+import { StorePageHeader } from "./StorePageHeader";
+import { StoreSidebar } from "./StoreSidebar";
+import { StoreTopbar } from "./StoreTopbar";
+import { storeCurrentPath, storePageContext } from "./store-navigation";
 
 type StorefrontSummaryProps = {
+  route: StoreRoute;
   userName?: string;
   email?: string;
   role?: PlatformRole;
   source: "Platform API";
   myAppsCount: number;
   catalogCount: number;
-  currentPath: string;
+  requestCount: number;
+  ticketCount: number;
+  refreshPending: boolean;
+  refreshError?: string;
+  onRefresh: () => void;
   onLogout: () => void;
   logoutError?: string;
+  children?: ReactNode;
 };
 
-function activeRoute(currentPath: string, route: string): boolean {
-  const normalize = (value: string) => value.replace(/\/+$/, "") || "/";
-  return normalize(currentPath) === normalize(route);
+function isDeviceLocalRoute(route: StoreRoute): boolean {
+  return ["favorites", "recent", "access-requests", "tickets", "profile"].includes(route.page);
 }
 
 export function StorefrontSummary({
+  route,
   userName,
   email,
   role,
   source,
   myAppsCount,
   catalogCount,
-  currentPath,
+  requestCount,
+  ticketCount,
+  refreshPending,
+  refreshError,
+  onRefresh,
   onLogout,
-  logoutError
+  logoutError,
+  children
 }: StorefrontSummaryProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const pageContext = storePageContext(route);
+  const closeNavigation = useCallback(() => setMobileOpen(false), []);
+
   return (
-    <>
-      <header className="store-mobile-header">
-        <div>
-          <span className="eyebrow">Private PWA</span>
+    <div className="store-workspace-frame">
+      <StoreSidebar
+        currentPath={storeCurrentPath(route)}
+        mobileOpen={mobileOpen}
+        onNavigate={closeNavigation}
+        onClose={closeNavigation}
+        requestCount={requestCount}
+        ticketCount={ticketCount}
+      />
+      <div className="store-workspace-content">
+        <StoreTopbar
+          route={route}
+          userName={userName}
+          email={email}
+          role={role}
+          source={source}
+          refreshPending={refreshPending}
+          refreshError={refreshError}
+          onRefresh={onRefresh}
+          onOpenNavigation={() => setMobileOpen(true)}
+          onLogout={onLogout}
+        />
+        <div className="store-brand-region">
           <p className="store-brand horizon-brand-lockup" aria-label="Horizon Store">
             <img
               src="/store/horizon-mark.png"
@@ -45,65 +83,39 @@ export function StorefrontSummary({
             />
             <span className="horizon-brand-name">Horizon Store</span>
           </p>
-          <p>
-            {userName ?? "Loading account…"}
-            {email ? ` · ${email}` : ""}
-          </p>
         </div>
-        <div className="store-header-actions">
-          <ToneBadge tone="success">{source}</ToneBadge>
-          {role ? <ToneBadge tone="neutral">{role.replace("_", " ")}</ToneBadge> : null}
-          <button type="button" className="secondary-button" onClick={onLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      <nav className="store-navigation" aria-label="Horizon Store navigation">
-        {navigation.store.map((item) => {
-          const isActive = activeRoute(currentPath, item.route);
-          return (
-            <a
-              key={item.route}
-              href={item.route}
-              aria-current={isActive ? "page" : undefined}
-              onClick={(event) => {
-                event.preventDefault();
-                navigateBrowserPath(item.route);
-              }}
-            >
-              {item.label}
-            </a>
-          );
-        })}
-      </nav>
-
-      {logoutError ? (
-        <section className="store-action-error" role="alert">
-          <strong>Sign-out not completed.</strong> {logoutError}
-          <button type="button" className="secondary-button" onClick={onLogout}>
-            Retry sign out
-          </button>
+        {logoutError ? (
+          <section className="store-action-error" role="alert">
+            <strong>Sign-out not completed.</strong> {logoutError}
+            <button type="button" className="secondary-button" onClick={onLogout}>
+              Retry sign out
+            </button>
+          </section>
+        ) : null}
+        <section className="store-status-strip" aria-label="Store summary">
+          <div>
+            <Store size={17} />
+            <span>My Apps</span>
+            <strong>{myAppsCount}</strong>
+          </div>
+          <div>
+            <PackageSearch size={17} />
+            <span>Catalog</span>
+            <strong>{catalogCount}</strong>
+          </div>
+          <div>
+            <ShieldCheck size={17} />
+            <span>Access</span>
+            <strong>SSO</strong>
+          </div>
         </section>
-      ) : null}
-
-      <section className="store-status-strip" aria-label="Store summary">
-        <div>
-          <Store size={17} />
-          <span>My Apps</span>
-          <strong>{myAppsCount}</strong>
-        </div>
-        <div>
-          <PackageSearch size={17} />
-          <span>Catalog</span>
-          <strong>{catalogCount}</strong>
-        </div>
-        <div>
-          <ShieldCheck size={17} />
-          <span>Access</span>
-          <strong>SSO</strong>
-        </div>
-      </section>
-    </>
+        <StorePageHeader
+          {...pageContext}
+          count={route.page === "my-apps" ? myAppsCount : undefined}
+          deviceLocal={isDeviceLocalRoute(route)}
+        />
+        <div className="store-content-canvas">{children}</div>
+      </div>
+    </div>
   );
 }
