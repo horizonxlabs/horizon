@@ -70,6 +70,7 @@ export function StorefrontSummary({
           refreshPending={refreshPending}
           refreshError={refreshError}
           onRefresh={onRefresh}
+          navigationOpen={mobileOpen}
           onOpenNavigation={() => setMobileOpen(true)}
           onLogout={onLogout}
         />

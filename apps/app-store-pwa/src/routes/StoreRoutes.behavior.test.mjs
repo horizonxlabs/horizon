@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.window = {
@@ -76,4 +86,10 @@ test("workspace chrome keeps grouped navigation, search, refresh, and logout rec
   assert.match(html, /Refresh Store/);
   assert.match(html, /Retry sign out/);
   assert.match(html, /horizon-mark\.png/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /aria-controls="store-navigation-drawer"/);
+  assert.match(
+    html,
+    /<aside(?=[^>]*id="store-navigation-drawer")(?=[^>]*hidden="")(?=[^>]*aria-hidden="true")(?=[^>]*inert="")/
+  );
 });

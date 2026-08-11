@@ -18,6 +18,7 @@ export function StoreTopbar({
   refreshPending,
   refreshError,
   onRefresh,
+  navigationOpen,
   onOpenNavigation,
   onLogout
 }: {
@@ -29,6 +30,7 @@ export function StoreTopbar({
   refreshPending: boolean;
   refreshError?: string;
   onRefresh: () => void;
+  navigationOpen: boolean;
   onOpenNavigation: () => void;
   onLogout: () => void;
 }) {
@@ -44,6 +46,8 @@ export function StoreTopbar({
         type="button"
         className="store-navigation-trigger"
         aria-label="Open navigation"
+        aria-expanded={navigationOpen}
+        aria-controls="store-navigation-drawer"
         onClick={onOpenNavigation}
       >
         <Menu aria-hidden="true" />

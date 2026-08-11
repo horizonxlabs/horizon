@@ -27,6 +27,44 @@ function sidebarControls(sidebar: HTMLElement): HTMLElement[] {
   );
 }
 
+function StoreNavigation({
+  currentPath,
+  requestCount,
+  ticketCount,
+  onNavigate
+}: Omit<StoreSidebarProps, "mobileOpen" | "onClose">) {
+  return (
+    <nav aria-label="Horizon Store navigation">
+      {STORE_NAVIGATION_GROUPS.map((group) => (
+        <section key={group.label}>
+          <h2>{group.label}</h2>
+          {group.items.map((item) => {
+            const count = navigationCount(item.route, requestCount, ticketCount);
+            return (
+              <a
+                key={item.route}
+                href={item.route}
+                aria-current={isStoreRouteActive(currentPath, item.route) ? "page" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateBrowserPath(item.route);
+                  onNavigate();
+                }}
+              >
+                <item.icon aria-hidden="true" />
+                <span>{item.label}</span>
+                {count === undefined ? null : (
+                  <span className="store-navigation-count">{count}</span>
+                )}
+              </a>
+            );
+          })}
+        </section>
+      ))}
+    </nav>
+  );
+}
+
 export function StoreSidebar({
   currentPath,
   mobileOpen,
@@ -74,42 +112,32 @@ export function StoreSidebar({
 
   return (
     <>
+      <aside id="store-sidebar" className="store-sidebar store-sidebar-desktop">
+        <StoreNavigation
+          currentPath={currentPath}
+          requestCount={requestCount}
+          ticketCount={ticketCount}
+          onNavigate={onNavigate}
+        />
+      </aside>
       <aside
         ref={sidebarRef}
-        className={`store-sidebar ${mobileOpen ? "store-sidebar-open" : ""}`}
+        id="store-navigation-drawer"
+        className={`store-sidebar store-sidebar-drawer ${mobileOpen ? "store-sidebar-open" : ""}`}
         aria-label="Horizon Store navigation"
+        aria-hidden={!mobileOpen}
+        hidden={!mobileOpen}
+        inert={!mobileOpen}
       >
         <button type="button" className="store-sidebar-close" onClick={onClose}>
           Close navigation
         </button>
-        <nav>
-          {STORE_NAVIGATION_GROUPS.map((group) => (
-            <section key={group.label}>
-              <h2>{group.label}</h2>
-              {group.items.map((item) => {
-                const count = navigationCount(item.route, requestCount, ticketCount);
-                return (
-                  <a
-                    key={item.route}
-                    href={item.route}
-                    aria-current={isStoreRouteActive(currentPath, item.route) ? "page" : undefined}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      navigateBrowserPath(item.route);
-                      onNavigate();
-                    }}
-                  >
-                    <item.icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                    {count === undefined ? null : (
-                      <span className="store-navigation-count">{count}</span>
-                    )}
-                  </a>
-                );
-              })}
-            </section>
-          ))}
-        </nav>
+        <StoreNavigation
+          currentPath={currentPath}
+          requestCount={requestCount}
+          ticketCount={ticketCount}
+          onNavigate={onNavigate}
+        />
       </aside>
       {mobileOpen ? (
         <button className="store-drawer-backdrop" aria-label="Close navigation" onClick={onClose} />
