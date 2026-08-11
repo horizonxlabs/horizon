@@ -8,7 +8,13 @@ const originalReact = globalThis.React;
 const memory = new Map();
 
 globalThis.window = {
-  location: { pathname: "/store/search", href: "http://localhost/store/search" },
+  location: {
+    pathname: "/store/search",
+    href: "http://localhost/store/search",
+    assign(path) {
+      this.pathname = path;
+    }
+  },
   localStorage: {
     getItem: (key) => memory.get(key) ?? null,
     setItem: (key, value) => memory.set(key, value),
@@ -43,6 +49,7 @@ const app = (id, accessStatus, installStatus) => ({
   name: `${id} App`,
   description: `${id} workflow`,
   owner: `${id} Team`,
+  route: accessStatus === "active" ? `/apps/${id}` : undefined,
   myRole: accessStatus === "active" ? "member" : undefined,
   accessStatus,
   installStatus,
@@ -149,7 +156,7 @@ test("My Apps derives active access from the merged catalog", async () => {
   });
 });
 
-test("opening a Store card does not add recently opened history", async () => {
+test("card detail navigation does not record history but opening an active app does", async () => {
   memory.clear();
   const store = createStore();
   let renderer;
@@ -163,16 +170,24 @@ test("opening a Store card does not add recently opened history", async () => {
     );
   });
 
-  const alphaCard = renderer.root.findAllByProps({
-    className: "store-collection-main"
-  })[0];
+  const alphaCard = renderer.root.findAllByProps({ className: "store-app-detail-link" })[0];
   assert.ok(alphaCard);
   await act(async () => {
-    alphaCard.props.onClick();
+    alphaCard.props.onClick({ preventDefault() {} });
   });
 
   assert.equal(window.location.pathname, "/store/apps/Alpha");
   assert.deepEqual(store.getSnapshot().device.recent, []);
+
+  const primary = renderer.root
+    .findAllByProps({ className: "store-app-primary" })
+    .find((node) => node.props.href === "/apps/Alpha");
+  assert.ok(primary);
+  await act(async () => {
+    primary.props.onClick({ preventDefault() {} });
+  });
+  assert.equal(window.location.pathname, "/apps/Alpha");
+  assert.deepEqual(store.getSnapshot().device.recent, ["Alpha"]);
 
   await act(async () => {
     renderer.unmount();

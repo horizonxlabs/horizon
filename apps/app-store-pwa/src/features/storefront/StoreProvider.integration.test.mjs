@@ -7,7 +7,14 @@ const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
 const originalReact = globalThis.React;
 const memory = new Map();
 globalThis.window = {
-  location: { pathname: "/store/", hash: "", href: "http://localhost/store/" },
+  location: {
+    pathname: "/store/",
+    hash: "",
+    href: "http://localhost/store/",
+    assign(path) {
+      this.pathname = path;
+    }
+  },
   localStorage: {
     getItem: (key) => memory.get(key) ?? null,
     setItem: (key, value) => memory.set(key, value),
@@ -130,7 +137,7 @@ test("mounted Provider loads API collections, updates favorites, and keeps detai
   const myAppsView = JSON.stringify(renderer.toJSON());
   assert.match(myAppsView, /My API App/);
   assert.match(myAppsView, /Available API App/);
-  assert.match(myAppsView, /Access granted/);
+  assert.match(myAppsView, /People/);
   assert.doesNotMatch(myAppsView, /Access required/);
 
   const favorite = renderer.root.findAllByProps({
@@ -145,9 +152,14 @@ test("mounted Provider loads API collections, updates favorites, and keeps detai
   assert.match(JSON.stringify(renderer.toJSON()), /My API App/);
   assert.match(JSON.stringify(renderer.toJSON()), /This device/);
 
-  const card = renderer.root.findByProps({ className: "store-collection-main" });
+  const favoriteButton = renderer.root.findByProps({
+    "aria-label": "Remove My API App from favorites on this device"
+  });
+  assert.equal(favoriteButton.props["aria-pressed"], true);
+
+  const card = renderer.root.findByProps({ className: "store-app-detail-link" });
   await act(async () => {
-    card.props.onClick();
+    card.props.onClick({ preventDefault() {} });
   });
   assert.equal(window.location.pathname, "/store/apps/active-uninstalled");
   await act(async () => {
