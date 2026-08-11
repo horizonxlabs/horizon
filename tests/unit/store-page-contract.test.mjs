@@ -16,6 +16,22 @@ function readAllSourceFiles(dir) {
     .join("");
 }
 
+function cssBlock(css, marker) {
+  const markerIndex = css.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `Missing CSS marker: ${marker}`);
+  const openingBrace = marker.endsWith("{")
+    ? css.indexOf("{", markerIndex)
+    : css.indexOf("{", markerIndex + marker.length);
+  assert.notEqual(openingBrace, -1, `Missing CSS block for: ${marker}`);
+  let depth = 0;
+  for (let index = openingBrace; index < css.length; index += 1) {
+    if (css[index] === "{") depth += 1;
+    if (css[index] === "}") depth -= 1;
+    if (depth === 0) return css.slice(openingBrace + 1, index);
+  }
+  assert.fail(`Unclosed CSS block for: ${marker}`);
+}
+
 test("Store navigation points to distinct implemented pages", () => {
   const source = readAllSourceFiles("apps/app-store-pwa/src");
   for (const route of [
@@ -72,22 +88,33 @@ test("Store styles cover responsive workspace controls and application accents",
     ".store-action-error",
     ".store-action-success"
   ]) {
-    assert.match(css, new RegExp(`${selector.replace(".", "\\.")}\\s*\\{`));
+    assert.ok(cssBlock(css, selector).trim().length > 0);
   }
 
-  assert.match(css, /grid-template-columns:\s*80px minmax\(0, 1fr\)/);
-  assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(css, /min-height:\s*44px/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /\.store-workspace\s+:where\(\s*button:not\(\[class\]\),/);
-  assert.match(css, /\.store-sidebar nav a\s*\{[^}]*min-height:\s*44px/s);
-  assert.match(css, /\.store-workspace\s+:where\([^}]*\)\s*\{[^}]*min-height:\s*44px/s);
-  assert.match(css, /:where\([^}]*\.secondary-button[^}]*\)\s*\{[^}]*min-height:\s*44px/s);
+  const mobile = cssBlock(css, "@media (max-width: 759px)");
+  const mobileSidebar = cssBlock(mobile, ".store-sidebar {");
+  assert.match(mobileSidebar, /height:\s*100dvh/);
+  assert.match(mobileSidebar, /position:\s*fixed/);
+  assert.match(mobileSidebar, /left:\s*0/);
+  assert.match(mobileSidebar, /top:\s*0/);
+  assert.match(mobileSidebar, /max-width:\s*320px/);
+  assert.match(mobileSidebar, /width:\s*min\(88vw, 320px\)/);
+  assert.match(mobileSidebar, /transform:\s*translateX\(-100%\)/);
+  assert.match(cssBlock(mobile, ".store-sidebar-open"), /transform:\s*translateX\(0\)/);
+  assert.match(mobile, /\.store-filter-rail,\s*\.store-app-action-rail\s*\{\s*position:\s*static;/);
   assert.match(
-    css,
-    /\.store-navigation-trigger,\s*\.store-drawer-backdrop\s*\{\s*display:\s*none;/
+    cssBlock(mobile, ".store-workspace :is(a, button, input, select, textarea)"),
+    /min-height:\s*44px/
   );
+
+  const reducedMotion = cssBlock(css, "@media (prefers-reduced-motion: reduce)");
+  const reducedWorkspace = cssBlock(reducedMotion, ".store-workspace *,");
+  assert.match(reducedWorkspace, /animation-duration:\s*0\.01ms !important/);
+  assert.match(reducedWorkspace, /animation-iteration-count:\s*1 !important/);
+  assert.match(reducedWorkspace, /scroll-behavior:\s*auto !important/);
+  assert.match(reducedWorkspace, /transition-duration:\s*0\.01ms !important/);
+
   for (let accent = 0; accent < 6; accent += 1) {
-    assert.match(css, new RegExp(`\\[data-accent="${accent}"\\]`));
+    assert.ok(cssBlock(css, `.store-app-icon[data-accent="${accent}"]`).trim().length > 0);
   }
 });

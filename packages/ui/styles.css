@@ -1372,7 +1372,7 @@ th {
 .store-app-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .store-app-card {
@@ -1928,6 +1928,12 @@ th {
   position: fixed;
   width: 100%;
   z-index: 50;
+}
+
+@media (min-width: 1440px) {
+  .store-app-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1199px) and (min-width: 760px) {
