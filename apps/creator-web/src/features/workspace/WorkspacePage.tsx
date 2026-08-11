@@ -11,10 +11,12 @@ import type { WorkspaceAgentMode } from "@evcp/api-client";
 import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
+import { QuickMessages } from "./QuickMessages";
 import { VibeActionRow } from "./VibeActionRow";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
+import { buildQuickMessages } from "./quick-messages";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
@@ -39,13 +41,10 @@ const MODE_OPTIONS: Array<{
   { value: "build", label: "Build", description: "Apply changes", Icon: Hammer }
 ];
 
-const SUGGESTIONS: Record<WorkspaceAgentMode, string[]> = {
-  plan: ["Review current workspace", "Draft an implementation plan", "List delivery risks"],
-  build: ["Add an about page", "Make it dark mode", "Add a contact form"]
-};
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
+    currentPrdVersion,
     isVibing,
     vibeStatus,
     vibeTab,
@@ -64,7 +63,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     toggleProjectFileAttachment,
     handleUploadProjectFiles,
     workspaceMode,
-    setWorkspaceMode
+    setWorkspaceMode,
+    hasPreview
   } = app;
   const [showPublish, setShowPublish] = useState(false);
   // Auto-scroll the chat thread to the bottom as messages/tokens/reasoning stream in, so the
@@ -93,6 +93,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   const isPreviewAuthorized =
     previewAuthorizationState === "ready" &&
     authorizedPreviewRequestKey === previewRequestKey;
+  const quickMessages = buildQuickMessages({
+    mode: workspaceMode,
+    project: selectedProject,
+    prdSummary: currentPrdVersion?.changeSummary,
+    prdSections: currentPrdVersion?.sections,
+    messages: vibeMessages,
+    hasPreview,
+    hasProjectFiles: projectFiles.length > 0
+  });
   useEffect(() => {
     let active = true;
     setPreviewAuthorizationState("loading");
@@ -239,18 +248,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               )
             )}
           </div>
-          <div className="vibe-live-suggestions">
-            {SUGGESTIONS[workspaceMode].map((suggestion) => (
-              <Button
-                key={suggestion}
-                variant="secondary"
-                type="button"
-                onClick={() => setPromptDraft(suggestion)}
-              >
-                {suggestion}
-              </Button>
-            ))}
-          </div>
+          <QuickMessages
+            items={quickMessages}
+            disabled={isVibing}
+            onSubmit={(prompt) => {
+              void handleVibeChat({ prompt, mode: workspaceMode });
+            }}
+          />
           <div className="vibe-live-files">
             {projectFileMessage && (
               <span className="vibe-live-file-message">{projectFileMessage}</span>
