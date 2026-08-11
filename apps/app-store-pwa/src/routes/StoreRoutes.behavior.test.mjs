@@ -28,18 +28,22 @@ test("StoreRoutes composes the Store provider for Store URLs and preserves gener
 });
 
 test("logout errors retain Store chrome and expose the real retry control", () => {
-  const html = renderToStaticMarkup(React.createElement(StorefrontSummary, {
-    userName: "End User",
-    source: "Platform API",
-    myAppsCount: 2,
-    currentPath: "/store/",
-    isSigningIn: false,
-    onSignIn() {},
-    onLogout() {},
-    logoutError: "network unavailable"
-  }));
+  const html = renderToStaticMarkup(
+    React.createElement(StorefrontSummary, {
+      userName: "End User",
+      source: "Platform API",
+      myAppsCount: 2,
+      currentPath: "/store/",
+      isSigningIn: false,
+      onSignIn() {},
+      onLogout() {},
+      logoutError: "network unavailable"
+    })
+  );
 
   assert.match(html, /Sign-out not completed/);
   assert.match(html, /Retry sign out/);
   assert.match(html, />Logout</);
+  assert.match(html, /src="\/store\/horizon-mark\.png"/);
+  assert.match(html, /class="horizon-brand-name">Horizon Store<\/span>/);
 });

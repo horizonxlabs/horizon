@@ -24,7 +24,8 @@ test("Admin login renders the approved split shell and role-specific copy", () =
   assert.match(html, /class="creator-auth-screen"/);
   assert.match(html, /class="creator-auth-shell"/);
   assert.match(html, /<aside class="creator-auth-brand" aria-hidden="true">/);
-  assert.match(html, /src="\/horizon-logo\.png"/);
+  assert.match(html, /src="\/horizon-mark\.png"/);
+  assert.match(html, /class="horizon-brand-name">Horizon<\/span>/);
   assert.match(html, /Govern your platform with confidence\./);
   assert.match(html, /Monitor platform health, environments, and readiness/);
   assert.match(html, /Manage users, access policies, and enterprise authentication/);
@@ -49,7 +50,10 @@ test("Admin login keeps credentials and Keycloak tokens out of browser code", ()
 });
 
 test("Admin sidebar retains only the accessible logout action", () => {
-  assert.match(adminSource, /client\?\.request\("\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(
+    adminSource,
+    /client\s*\?\.request\("\/auth\/logout", \{ method: "POST" \}\)/
+  );
   assert.match(adminSource, /window\.location\.assign\(startAdminKeycloakLogout\(\)\)/);
   assert.doesNotMatch(adminSource, /Refresh Session/);
   assert.doesNotMatch(adminSource, /handleSignInBridge/);

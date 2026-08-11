@@ -140,10 +140,33 @@ body {
 }
 
 .horizon-logo {
-  display: block;
+  display: inline-flex;
   flex-shrink: 0;
-  object-fit: contain;
   user-select: none;
+}
+
+.horizon-brand-lockup {
+  align-items: center;
+  display: inline-flex;
+  gap: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.horizon-brand-mark {
+  display: block;
+  flex: none;
+  height: 32px;
+  object-fit: contain;
+  width: 51px;
+}
+
+.horizon-brand-name {
+  color: #0f2f68;
+  font-family: "LINE Seed Sans TH", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
 }
 
 /* Sidebar brand: full wordmark expanded, icon-only mark when collapsed. */
@@ -152,10 +175,20 @@ body {
   width: auto;
 }
 
+.horizon-logo-full .horizon-brand-mark {
+  height: 36px;
+  width: 57px;
+}
+
 .horizon-logo-icon {
   display: none;
   height: 34px;
-  width: auto;
+  width: 38px;
+}
+
+.horizon-logo-icon .horizon-brand-mark {
+  height: 28px;
+  width: 38px;
 }
 
 .app-shell-collapsed .horizon-logo-full {
@@ -163,17 +196,26 @@ body {
 }
 
 .app-shell-collapsed .horizon-logo-icon {
-  display: block;
+  display: inline-flex;
 }
 
 .horizon-logo-wordmark {
   height: 38px;
-  width: 132px;
+  width: auto;
 }
 
 .horizon-logo-auth {
-  height: auto;
-  width: 154px;
+  min-height: 48px;
+  width: auto;
+}
+
+.admin-sidebar-logo .horizon-brand-name {
+  color: #f8fafc;
+}
+
+.admin-sidebar-logo .horizon-brand-mark {
+  height: 30px;
+  width: 38px;
 }
 
 .sidebar-title {
@@ -6914,6 +6956,16 @@ button:disabled {
   box-sizing: border-box;
   padding: 6px 9px;
   width: 152px;
+}
+
+.creator-auth-brand-logo .horizon-brand-mark {
+  height: 32px;
+  width: 51px;
+}
+
+.creator-auth-brand-logo .horizon-brand-name {
+  color: #0f2f68;
+  font-size: 21px;
 }
 
 .creator-auth-brand-copy h2 {

@@ -333,10 +333,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
-      await deps.docker.startContainer(record.containerId!);
-      await waitForPreviewReady(deps.docker, record.containerId!);
-      const next = save({ ...record, state: "running", lastActivityAt: now() });
-      await persist(next);
+      const next = await recoverExistingWorkspace(
+        record,
+        { projectId, slug: record.slug },
+        resourceKeyForProject(projectId)
+      );
       audit({ action: "workspace.started", projectId });
       return next;
     },

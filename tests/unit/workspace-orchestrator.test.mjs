@@ -272,6 +272,27 @@ test("runtime records hydrate lifecycle state and persist transitions across an 
   assert.equal(runtimeRecords.snapshots.get("prj-leave-tracker").record.state, "running");
 });
 
+test("wakeWorkspace recreates an idle workspace whose container was deleted", async () => {
+  const { deps, audits } = createDeps();
+  const runtimeRecords = createRuntimeRecordStore();
+  const first = createWorkspaceOrchestrator({ ...deps, runtimeRecords });
+  const running = await first.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+  await first.stopWorkspace("prj-leave-tracker");
+  await deps.docker.removeContainer(running.containerId);
+
+  const restarted = createWorkspaceOrchestrator({ ...deps, runtimeRecords });
+  await restarted.hydrateRuntimeRecords(runtimeRecords);
+  const recovered = await restarted.wakeWorkspace("prj-leave-tracker");
+
+  assert.equal(recovered.state, "running");
+  assert.equal(recovered.containerId, deps.docker.state.containers[0].containerId);
+  assert.equal(deps.docker.state.containers.length, 1);
+  assert.ok(audits.some((event) => event.action === "workspace.recovered"));
+});
+
 test("stop/wake cycle follows state machine and audits", async () => {
   const { deps, audits } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
