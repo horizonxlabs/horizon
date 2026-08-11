@@ -70,6 +70,8 @@ test("Horizon is a self-contained English Keycloak v2 login theme", async () => 
   assert.match(properties, /^styles=css\/horizon-login\.css$/m);
   assert.match(template, /horizon-auth-shell/);
   assert.match(template, /horizon-brand-panel/);
+  assert.match(template, /horizon-brand-lockup/);
+  assert.match(template, /resourcesPath}\/img\/horizon-mark\.png/);
   assert.match(template, /<#nested "header">/);
   assert.match(template, /<#nested "form">/);
   assert.match(template, /kcSanitize\(message\.summary\)/);
@@ -80,8 +82,8 @@ test("Horizon is a self-contained English Keycloak v2 login theme", async () => 
   assert.match(messages, /^loginTitle=Sign in to Horizon$/m);
 
   await Promise.all([
-    access(`${root}/resources/img/horizon-logo.png`),
-    access(`${root}/resources/img/favicon.svg`),
+    access(`${root}/resources/img/horizon-mark.png`),
+    access(`${root}/resources/img/favicon.png`),
     access(`${root}/resources/fonts/LINESeedSansTH_W_Rg.woff2`),
     access(`${root}/resources/fonts/LINESeedSansTH_W_Bd.woff2`)
   ]);
@@ -97,18 +99,9 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
     css,
     ".horizon-auth-panel .pf-v5-c-form-control > :is(input, select, textarea),"
   );
-  const primaryButtonStyles = cssBlock(
-    css,
-    ".horizon-auth-panel .pf-v5-c-button.pf-m-primary,"
-  );
-  const secondaryButtonRule = cssRule(
-    css,
-    ".horizon-auth-panel .pf-v5-c-button.pf-m-secondary,"
-  );
-  const authenticatorSelectionStyles = cssBlock(
-    css,
-    ".horizon-auth-panel .select-auth-box-parent"
-  );
+  const primaryButtonStyles = cssBlock(css, ".horizon-auth-panel .pf-v5-c-button.pf-m-primary,");
+  const secondaryButtonRule = cssRule(css, ".horizon-auth-panel .pf-v5-c-button.pf-m-secondary,");
+  const authenticatorSelectionStyles = cssBlock(css, ".horizon-auth-panel .select-auth-box-parent");
   const standaloneControlSelector =
     '.horizon-auth-panel :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea)';
   const standaloneControlStyles = cssBlock(css, standaloneControlSelector);
@@ -177,13 +170,16 @@ test("Horizon auth CSS implements Brand Split and accessible responsive states",
   assert.doesNotMatch(authenticatorSelectionStyles, /width:\s*100%/);
 
   for (const severity of ["danger", "warning", "success", "info"]) {
-    const alertStyles = cssBlock(
-      css,
-      `.horizon-auth-panel .pf-v5-c-alert.pf-m-${severity},`
-    );
+    const alertStyles = cssBlock(css, `.horizon-auth-panel .pf-v5-c-alert.pf-m-${severity},`);
 
-    assert.match(alertStyles, new RegExp(`--pf-v5-c-alert__title--Color:\\s*var\\(--horizon-${severity}\\)`));
-    assert.match(alertStyles, new RegExp(`--pf-v5-c-alert__icon--Color:\\s*var\\(--horizon-${severity}\\)`));
+    assert.match(
+      alertStyles,
+      new RegExp(`--pf-v5-c-alert__title--Color:\\s*var\\(--horizon-${severity}\\)`)
+    );
+    assert.match(
+      alertStyles,
+      new RegExp(`--pf-v5-c-alert__icon--Color:\\s*var\\(--horizon-${severity}\\)`)
+    );
   }
 
   assert.doesNotMatch(css, /\.horizon-auth-panel\s+\.pf-m-(?:danger|warning|success|info)\s*\{/);

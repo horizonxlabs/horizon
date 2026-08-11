@@ -312,6 +312,28 @@ test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
   assert.match(html, /Publish<\/button>/);
 });
 
+test("WorkspacePage renders contextual Quick Messages", () => {
+  window.location.pathname = "/creator/projects/project-1";
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, {
+      app: {
+        ...app,
+        selectedProject: {
+          ...app.selectedProject,
+          id: "project-1",
+          name: "Sales KPI Dashboard",
+          appType: "Dashboard"
+        },
+        bootstrap: { ...app.bootstrap, status: "ready" }
+      }
+    })
+  );
+
+  assert.match(html, /aria-label="Suggested next"/);
+  assert.match(html, /Recommended: (Build first preview|Improve Sales KPI Dashboard)/);
+  assert.equal((html.match(/<button[^>]+vibe-live-suggestion/g) ?? []).length, 3);
+});
+
 test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input)", () => {
   window.location.pathname = "/creator/projects/project-1";
   const html = renderWithHook((app) =>

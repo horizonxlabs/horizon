@@ -39,7 +39,7 @@
         </#list>
     </#if>
     <title>${msg("loginTitle",(realm.displayName!''))}</title>
-    <link rel="icon" href="${url.resourcesPath}/img/favicon.svg" />
+    <link rel="icon" href="${url.resourcesPath}/img/favicon.png" type="image/png" />
     <#if properties.stylesCommon?has_content>
         <#list properties.stylesCommon?split(' ') as style>
             <link href="${url.resourcesCommonPath}/${style}" rel="stylesheet" />
@@ -135,7 +135,10 @@
 <body id="keycloak-bg" class="${properties.kcBodyClass!}" data-page-id="login-${pageId}">
   <div class="horizon-auth-shell">
     <aside class="horizon-brand-panel" aria-label="Horizon">
-      <img src="${url.resourcesPath}/img/horizon-logo.png" alt="Horizon" class="horizon-wordmark">
+      <span class="horizon-brand-lockup horizon-wordmark" role="img" aria-label="Horizon">
+        <img src="${url.resourcesPath}/img/horizon-mark.png" alt="" class="horizon-brand-mark">
+        <span class="horizon-brand-name">Horizon</span>
+      </span>
       <div class="horizon-brand-copy">
         <h2>Build securely.<br>Move with clarity.</h2>
         <p>One governed workspace for internal applications.</p>
@@ -143,7 +146,10 @@
       <p class="horizon-platform-name">Enterprise Vibe Coding Platform</p>
     </aside>
     <main class="horizon-auth-panel">
-      <img src="${url.resourcesPath}/img/horizon-logo.png" alt="Horizon" class="horizon-mobile-wordmark">
+      <span class="horizon-brand-lockup horizon-mobile-wordmark" role="img" aria-label="Horizon">
+        <img src="${url.resourcesPath}/img/horizon-mark.png" alt="" class="horizon-brand-mark">
+        <span class="horizon-brand-name">Horizon</span>
+      </span>
       <div class="${properties.kcLoginMain!}">
         <div class="${properties.kcLoginMainHeader!}">
           <h1 class="${properties.kcLoginMainTitle!}" id="kc-page-title"><#nested "header"></h1>

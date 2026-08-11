@@ -36,7 +36,15 @@ export function StorefrontSummary({
       <header className="store-mobile-header">
         <div>
           <span className="eyebrow">Private PWA</span>
-          <p className="store-brand">Horizon Store</p>
+          <p className="store-brand horizon-brand-lockup" aria-label="Horizon Store">
+            <img
+              src="/store/horizon-mark.png"
+              alt=""
+              className="horizon-brand-mark"
+              draggable={false}
+            />
+            <span className="horizon-brand-name">Horizon Store</span>
+          </p>
           <p>
             {userName ?? "Loading account…"}
             {email ? ` · ${email}` : ""}

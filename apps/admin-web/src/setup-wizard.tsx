@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, Building2, CheckCircle2, Rocket, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Select } from "@evcp/ui";
+import { HorizonLogo } from "@/shared/HorizonLogo";
 import { createAdminPlatformClient } from "@/shared/platform-client";
 
 const BRAND_POINTS = [
@@ -114,12 +115,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       <div className="creator-auth-shell setup-shell">
         <aside className="creator-auth-brand" aria-hidden="true">
           <div className="creator-auth-brand-top">
-            <img
-              src="/horizon-logo.png"
-              alt=""
-              className="horizon-logo horizon-logo-auth creator-auth-brand-logo"
-              draggable={false}
-            />
+            <HorizonLogo className="horizon-logo-auth creator-auth-brand-logo" />
           </div>
           <div className="creator-auth-brand-copy">
             <h2>Set up your Horizon platform in minutes.</h2>
