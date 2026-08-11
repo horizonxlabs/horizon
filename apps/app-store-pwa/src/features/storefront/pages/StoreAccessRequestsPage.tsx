@@ -12,7 +12,7 @@ export function StoreAccessRequestsPage() {
       <StorePageHeader
         eyebrow="Request receipts"
         title="Access Requests"
-        description="Request receipts and current access remembered on this device."
+        description="Request receipts are stored on this device. Current access reflects the latest Platform API catalog."
         count={device.accessReceipts.length}
         deviceLocal
       />

@@ -65,9 +65,15 @@ export function StoreTicketDetailPage({ ticketId }: { ticketId: string }) {
         <StorePageHeader eyebrow="Platform API ticket" title="Ticket details" />
         <StoreStatePanel eyebrow="Platform API" title="Ticket not found">
           <p>This ticket is unavailable to the current session.</p>
-          <button type="button" onClick={() => navigateBrowserPath("/store/tickets")}>
+          <a
+            href="/store/tickets"
+            onClick={(event) => {
+              event.preventDefault();
+              navigateBrowserPath("/store/tickets");
+            }}
+          >
             Return to Tickets
-          </button>
+          </a>
         </StoreStatePanel>
       </section>
     );
@@ -82,9 +88,15 @@ export function StoreTicketDetailPage({ ticketId }: { ticketId: string }) {
             <button type="button" onClick={() => void loadTicket()}>
               Retry ticket
             </button>
-            <button type="button" onClick={() => navigateBrowserPath("/store/tickets")}>
+            <a
+              href="/store/tickets"
+              onClick={(event) => {
+                event.preventDefault();
+                navigateBrowserPath("/store/tickets");
+              }}
+            >
               Return to Tickets
-            </button>
+            </a>
           </div>
         </StoreStatePanel>
       </section>

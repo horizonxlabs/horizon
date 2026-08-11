@@ -103,8 +103,13 @@ function output(renderer) {
   return JSON.stringify(renderer.toJSON());
 }
 
-function button(root, label) {
-  return root.findAllByType("button").find((node) => node.children.join("").includes(label));
+function textContent(node) {
+  if (typeof node === "string") return node;
+  return node.children.map(textContent).join("");
+}
+
+function link(root, label) {
+  return root.findAllByType("a").find((node) => node.children.join("").includes(label));
 }
 
 test("access receipt workspace distinguishes device receipt status from current API access status", async () => {
@@ -120,13 +125,20 @@ test("access receipt workspace distinguishes device receipt status from current 
     );
   });
   const view = output(renderer);
+  assert.match(
+    view,
+    /Request receipts are stored on this device\. Current access reflects the latest Platform API catalog\./
+  );
   assert.match(view, /Requested role/);
   assert.match(view, /Current access/);
   assert.match(view, /Device receipt status[^]*pending/);
   assert.match(view, /Current access[^]*active/);
   assert.match(view, /removed-app/);
   assert.match(view, /Current access unavailable/);
-  assert.doesNotMatch(view, /Current access[^]*pending[^]*removed-app/);
+  const unavailableReceipt = renderer.root.findByProps({
+    className: "store-history-card store-history-unavailable"
+  });
+  assert.doesNotMatch(textContent(unavailableReceipt), /Current access[^]*pending/);
   await act(async () => renderer.unmount());
 });
 
@@ -171,9 +183,56 @@ test("ticket detail loading and error states keep an h1 and safe Tickets return 
   });
   assert.equal(renderer.root.findByType("h1").children.join(""), "Ticket details");
   assert.match(output(renderer), /ticket offline/);
-  const returnButton = button(renderer.root, "Return to Tickets");
-  assert.ok(returnButton);
-  await act(async () => returnButton.props.onClick());
+  const returnLink = link(renderer.root, "Return to Tickets");
+  assert.ok(returnLink);
+  assert.equal(returnLink.props.href, "/store/tickets");
+  let prevented = false;
+  await act(async () =>
+    returnLink.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/tickets");
+  await act(async () => renderer.unmount());
+});
+
+test("ticket detail not-found state uses a native Tickets return link", async () => {
+  memory.clear();
+  window.location.pathname = "/store/tickets/ticket-1";
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        {
+          store: createStore(),
+          client: {
+            getStoreTicket: async () => {
+              throw new Error("404 not found");
+            }
+          }
+        },
+        React.createElement(StoreTicketDetailPage, { ticketId: "ticket-1" })
+      )
+    );
+    await Promise.resolve();
+  });
+  assert.match(output(renderer), /Ticket not found/);
+  const returnLink = link(renderer.root, "Return to Tickets");
+  assert.ok(returnLink);
+  assert.equal(returnLink.props.href, "/store/tickets");
+  let prevented = false;
+  await act(async () =>
+    returnLink.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
   assert.equal(window.location.pathname, "/store/tickets");
   await act(async () => renderer.unmount());
 });
