@@ -3116,21 +3116,84 @@ th {
 }
 
 .vibe-live-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: 7px;
   padding: 0 18px var(--evcp-space-2);
 }
 
+.vibe-live-suggestions-head {
+  align-items: center;
+  color: var(--evcp-color-muted);
+  display: flex;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vibe-live-suggestion-track {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 1px 1px 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.vibe-live-suggestion-track::-webkit-scrollbar {
+  display: none;
+}
+
 .vibe-live-suggestion {
-  background: var(--evcp-color-surface);
-  border: 1px solid var(--evcp-color-border-soft);
-  border-radius: var(--evcp-radius-pill);
-  color: #374151;
-  cursor: pointer;
+  background: color-mix(in srgb, var(--evcp-color-surface) 94%, #eef2ff);
+  border-color: var(--evcp-color-border-soft);
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  color: var(--evcp-color-body);
+  flex: 0 0 auto;
   font-size: 12px;
-  min-height: 28px;
-  padding: 4px 12px;
+  height: 36px;
+  max-width: 260px;
+  scroll-snap-align: start;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.vibe-live-suggestion span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vibe-live-suggestion:hover:not(:disabled) {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.vibe-live-suggestion.is-recommended {
+  background: linear-gradient(110deg, #eff6ff, #f5f3ff);
+  border-color: color-mix(in srgb, var(--evcp-color-primary) 46%, white);
+  color: var(--evcp-color-primary-strong);
+}
+
+@media (max-width: 760px) {
+  .vibe-live-suggestions {
+    padding-inline: 14px;
+  }
+
+  .vibe-live-suggestion {
+    max-width: min(78vw, 260px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vibe-live-suggestion {
+    transition: none;
+  }
 }
 
 .vibe-live-files {
