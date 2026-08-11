@@ -3180,22 +3180,6 @@ th {
   color: var(--evcp-color-primary-strong);
 }
 
-@media (max-width: 760px) {
-  .vibe-live-suggestions {
-    padding-inline: 14px;
-  }
-
-  .vibe-live-suggestion {
-    max-width: min(78vw, 260px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vibe-live-suggestion {
-    transition: none;
-  }
-}
-
 .vibe-live-files {
   display: flex;
   flex-direction: column;
@@ -5990,6 +5974,14 @@ button:disabled {
   .prompt-composer {
     display: grid;
   }
+
+  .vibe-live-suggestions {
+    padding-inline: 14px;
+  }
+
+  .vibe-live-suggestion {
+    max-width: min(78vw, 260px);
+  }
 }
 
 /* Vibe chat: shimmering "in progress" action title (opencode/lovable style). */
@@ -6548,6 +6540,10 @@ button:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .vibe-live-suggestion {
+    transition: none;
+  }
+
   .hz-card,
   .hz-chip,
   .hz-prompt,
