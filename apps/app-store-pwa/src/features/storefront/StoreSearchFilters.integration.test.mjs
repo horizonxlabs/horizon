@@ -10,6 +10,7 @@ const memory = new Map();
 globalThis.window = {
   location: {
     pathname: "/store/search",
+    search: "",
     href: "http://localhost/store/search",
     assign(path) {
       this.pathname = path;
@@ -22,10 +23,14 @@ globalThis.window = {
   },
   history: {
     pushState(_state, _title, path) {
-      window.location.pathname = String(path);
+      const url = new URL(String(path), "http://localhost");
+      window.location.pathname = url.pathname;
+      window.location.search = url.search;
     },
     replaceState(_state, _title, path) {
-      window.location.pathname = String(path);
+      const url = new URL(String(path), "http://localhost");
+      window.location.pathname = url.pathname;
+      window.location.search = url.search;
     }
   },
   addEventListener() {},
@@ -77,12 +82,49 @@ function createStore() {
 }
 
 function text(renderer) {
-  return JSON.stringify(renderer.toJSON());
+  const values = [];
+  const collect = (node) => {
+    if (typeof node === "string") values.push(node);
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node) collect(node.children);
+  };
+  collect(renderer.toJSON());
+  return values.join("");
 }
 
 function select(renderer, name) {
   return renderer.root.findByProps({ name });
 }
+
+test("search initializes from q and clear filters resets the URL and controls", async () => {
+  memory.clear();
+  window.location.pathname = "/store/search";
+  window.location.search = "?q=Gamma";
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: {} },
+        React.createElement(StoreSearchPage)
+      )
+    );
+  });
+  assert.equal(renderer.root.findByProps({ name: "query" }).props.value, "Gamma");
+  assert.match(text(renderer), /1 result/);
+  assert.doesNotMatch(text(renderer), /Alpha App|Beta App/);
+  const clear = renderer.root
+    .findAllByType("button")
+    .find((button) => button.children.join("") === "Clear filters");
+  assert.ok(clear);
+  await act(async () => clear.props.onClick());
+  assert.equal(window.location.pathname, "/store/search");
+  assert.equal(window.location.search, "");
+  assert.equal(renderer.root.findByProps({ name: "query" }).props.value, "");
+  assert.equal(select(renderer, "collection").props.value, "all");
+  assert.equal(select(renderer, "accessStatus").props.value, "all");
+  await act(async () => renderer.unmount());
+});
 
 test("search exposes access filters without installation state", async () => {
   memory.clear();
