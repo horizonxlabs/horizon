@@ -18,6 +18,8 @@ import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { buildQuickMessages } from "./quick-messages";
 import { stripSuggestions } from "./vibe-suggest";
+import { VibeQuestionBlock } from "./VibeQuestionBlock";
+import { extractQuestions, stripQuestions } from "./vibe-questions";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
@@ -214,13 +216,20 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   )}
                   <div className="vibe-message-text">
                     {message.text ? (
-                      <VibeMarkdown text={stripSuggestions(message.text)} />
+                      <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
                     ) : isVibing && !message.reasoning ? (
                       "▋"
                     ) : (
                       ""
                     )}
                   </div>
+                  {messageIndex === vibeMessages.length - 1 && !isVibing && (
+                    <VibeQuestionBlock
+                      questions={extractQuestions(message.text).questions}
+                      disabled={isVibing}
+                      onSubmit={(answer) => void handleVibeChat({ prompt: answer, mode: workspaceMode })}
+                    />
+                  )}
                   {message.actions.length > 0 && (
                     <div className="vibe-message-actions">
                       {message.actions.map((action, actionIndex) => (
