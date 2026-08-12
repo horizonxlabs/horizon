@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { PlatformRole } from "@evcp/types";
 import { navigateBrowserPath } from "@evcp/ui";
 import { STORE_NAVIGATION_GROUPS, isStoreRouteActive } from "./store-navigation";
 
@@ -9,6 +10,10 @@ type StoreSidebarProps = {
   onClose: () => void;
   requestCount: number;
   ticketCount: number;
+  userName?: string;
+  email?: string;
+  role?: PlatformRole;
+  onLogout?: () => void;
 };
 
 function navigationCount(
@@ -31,37 +36,75 @@ function StoreNavigation({
   currentPath,
   requestCount,
   ticketCount,
-  onNavigate
+  onNavigate,
+  userName,
+  email,
+  role,
+  onLogout
 }: Omit<StoreSidebarProps, "mobileOpen" | "onClose">) {
   return (
-    <nav aria-label="Horizon Store navigation">
-      {STORE_NAVIGATION_GROUPS.map((group) => (
-        <section key={group.label}>
-          <h2>{group.label}</h2>
-          {group.items.map((item) => {
-            const count = navigationCount(item.route, requestCount, ticketCount);
-            return (
-              <a
-                key={item.route}
-                href={item.route}
-                aria-current={isStoreRouteActive(currentPath, item.route) ? "page" : undefined}
-                onClick={(event) => {
-                  event.preventDefault();
-                  navigateBrowserPath(item.route);
-                  onNavigate();
-                }}
-              >
-                <item.icon aria-hidden="true" />
-                <span>{item.label}</span>
-                {count === undefined ? null : (
-                  <span className="store-navigation-count">{count}</span>
-                )}
-              </a>
-            );
-          })}
+    <div className="store-sidebar-layout">
+      <a
+        className="store-sidebar-brand horizon-brand-lockup"
+        href="/store/"
+        aria-label="Horizon Store home"
+        onClick={(event) => {
+          event.preventDefault();
+          navigateBrowserPath("/store/");
+          onNavigate();
+        }}
+      >
+        <img
+          src="/store/horizon-mark.png"
+          alt=""
+          className="horizon-brand-mark"
+          draggable={false}
+        />
+        <span className="store-sidebar-brand-name horizon-brand-name">Horizon Store</span>
+      </a>
+      <nav aria-label="Horizon Store navigation">
+        {STORE_NAVIGATION_GROUPS.map((group) => (
+          <section className="store-nav-group" key={group.label}>
+            <h2>{group.label}</h2>
+            {group.items.map((item) => {
+              const count = navigationCount(item.route, requestCount, ticketCount);
+              return (
+                <a
+                  key={item.route}
+                  href={item.route}
+                  aria-current={isStoreRouteActive(currentPath, item.route) ? "page" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigateBrowserPath(item.route);
+                    onNavigate();
+                  }}
+                >
+                  <item.icon aria-hidden="true" />
+                  <span className="store-nav-label">{item.label}</span>
+                  {count === undefined ? null : (
+                    <span className="store-navigation-count">{count}</span>
+                  )}
+                </a>
+              );
+            })}
+          </section>
+        ))}
+      </nav>
+      {userName || email || role || onLogout ? (
+        <section className="store-sidebar-account" aria-label="Store account">
+          <div className="store-sidebar-account-copy">
+            <strong>{userName ?? "Current account"}</strong>
+            {email ? <small>{email}</small> : null}
+            {role ? <span>{role.replace("_", " ")}</span> : null}
+          </div>
+          {onLogout ? (
+            <button type="button" className="store-sidebar-logout" onClick={onLogout}>
+              Logout
+            </button>
+          ) : null}
         </section>
-      ))}
-    </nav>
+      ) : null}
+    </div>
   );
 }
 
@@ -71,7 +114,11 @@ export function StoreSidebar({
   onNavigate,
   onClose,
   requestCount,
-  ticketCount
+  ticketCount,
+  userName,
+  email,
+  role,
+  onLogout
 }: StoreSidebarProps) {
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -118,6 +165,10 @@ export function StoreSidebar({
           requestCount={requestCount}
           ticketCount={ticketCount}
           onNavigate={onNavigate}
+          userName={userName}
+          email={email}
+          role={role}
+          onLogout={onLogout}
         />
       </aside>
       <aside
@@ -137,6 +188,10 @@ export function StoreSidebar({
           requestCount={requestCount}
           ticketCount={ticketCount}
           onNavigate={onNavigate}
+          userName={userName}
+          email={email}
+          role={role}
+          onLogout={onLogout}
         />
       </aside>
       {mobileOpen ? (

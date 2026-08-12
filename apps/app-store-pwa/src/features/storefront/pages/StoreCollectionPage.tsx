@@ -1,5 +1,6 @@
 import type { AppStoreItem } from "@evcp/types";
 import { navigateBrowserPath } from "@evcp/ui";
+import { useState } from "react";
 import { selectStoreCollection } from "../catalog";
 import { StoreAppCard } from "../StoreAppCard";
 import { StorePageHeader } from "../StorePageHeader";
@@ -58,8 +59,24 @@ export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
   );
 }
 
+function storeCollectionLink(href: string, label: string) {
+  return (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        navigateBrowserPath(href);
+      }}
+    >
+      {label}
+    </a>
+  );
+}
+
 export function StoreCollectionPage({ page }: { page: StoreCollectionPageName }) {
-  const { allApps, bootstrap, device } = useStorefront();
+  const { allApps, bootstrap, device, refreshHome } = useStorefront();
+  const [emptyRefreshPending, setEmptyRefreshPending] = useState(false);
+  const [emptyRefreshError, setEmptyRefreshError] = useState<string>();
   const copy = PAGE_COPY[page];
   const apps = appsForCollection(
     page,
@@ -70,23 +87,32 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
   const isEmptyCatalog = allApps.length === 0;
   const canPublish = bootstrap.role === "creator" || bootstrap.role === "admin";
   const deviceLocal = page === "favorites" || page === "recent";
+  async function refreshEmptyCatalog() {
+    setEmptyRefreshPending(true);
+    setEmptyRefreshError(undefined);
+    const result = await refreshHome({ preserveReadyOnFailure: true });
+    if (!result.ok) setEmptyRefreshError(result.error.message);
+    setEmptyRefreshPending(false);
+  }
   const emptyAction =
     isEmptyCatalog && canPublish ? (
       <button type="button" onClick={() => window.location.assign("/creator/")}>
         Open Creator Workspace
       </button>
+    ) : isEmptyCatalog ? (
+      <button
+        type="button"
+        onClick={() => void refreshEmptyCatalog()}
+        disabled={emptyRefreshPending}
+      >
+        {emptyRefreshPending ? "Refreshing Store…" : "Refresh Store"}
+      </button>
     ) : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active") ? (
-      <button type="button" onClick={() => navigateBrowserPath("/store/available")}>
-        Browse Available Apps
-      </button>
+      storeCollectionLink("/store/available", "Browse Available Apps")
     ) : page === "favorites" ? (
-      <button type="button" onClick={() => navigateBrowserPath("/store/available")}>
-        Browse Available Apps
-      </button>
+      storeCollectionLink("/store/available", "Browse Available Apps")
     ) : page === "recent" || page === "available" ? (
-      <button type="button" onClick={() => navigateBrowserPath("/store/")}>
-        View My Apps
-      </button>
+      storeCollectionLink("/store/", "View My Apps")
     ) : undefined;
 
   const emptyTitle =
@@ -119,6 +145,11 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
           action={emptyAction}
         >
           <p>{emptyDescription}</p>
+          {emptyRefreshError ? (
+            <p className="store-action-error" role="alert">
+              {emptyRefreshError}
+            </p>
+          ) : null}
         </StoreStatePanel>
       )}
     </section>

@@ -16,6 +16,21 @@ const originalDocument = globalThis.document;
 const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
 const originalReact = globalThis.React;
 const memory = new Map();
+const browserEvents = new EventTarget();
+let historyEntries = ["/store/search"];
+let historyIndex = 0;
+
+function applyHistoryUrl(path) {
+  const url = new URL(String(path), "http://localhost");
+  window.location.pathname = url.pathname;
+  window.location.search = url.search;
+}
+
+function resetHistory(path) {
+  historyEntries = [path];
+  historyIndex = 0;
+  applyHistoryUrl(path);
+}
 
 globalThis.window = {
   location: {
@@ -33,19 +48,37 @@ globalThis.window = {
   },
   history: {
     pushState(_state, _title, path) {
-      const url = new URL(String(path), "http://localhost");
-      window.location.pathname = url.pathname;
-      window.location.search = url.search;
+      historyEntries = historyEntries.slice(0, historyIndex + 1);
+      historyEntries.push(String(path));
+      historyIndex = historyEntries.length - 1;
+      applyHistoryUrl(path);
     },
     replaceState(_state, _title, path) {
-      const url = new URL(String(path), "http://localhost");
-      window.location.pathname = url.pathname;
-      window.location.search = url.search;
+      historyEntries[historyIndex] = String(path);
+      applyHistoryUrl(path);
+    },
+    back() {
+      if (historyIndex === 0) return;
+      historyIndex -= 1;
+      applyHistoryUrl(historyEntries[historyIndex]);
+      window.dispatchEvent(new Event("popstate"));
+    },
+    forward() {
+      if (historyIndex >= historyEntries.length - 1) return;
+      historyIndex += 1;
+      applyHistoryUrl(historyEntries[historyIndex]);
+      window.dispatchEvent(new Event("popstate"));
     }
   },
-  addEventListener() {},
-  removeEventListener() {},
-  dispatchEvent() {}
+  addEventListener(...args) {
+    browserEvents.addEventListener(...args);
+  },
+  removeEventListener(...args) {
+    browserEvents.removeEventListener(...args);
+  },
+  dispatchEvent(event) {
+    return browserEvents.dispatchEvent(event);
+  }
 };
 globalThis.document = { querySelector: () => null, title: "Store" };
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -54,6 +87,7 @@ globalThis.React = (await import("react")).default;
 const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
 const { StoreProvider } = await import("./StoreProvider.tsx");
+const { StorefrontSummary } = await import("./StorefrontSummary.tsx");
 const { StoreSearchPage } = await import("./pages/StoreSearchPage.tsx");
 const { StoreCollectionPage } = await import("./pages/StoreCollectionPage.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
@@ -106,10 +140,34 @@ function select(renderer, name) {
   return renderer.root.findByProps({ name });
 }
 
+function searchWorkspace(store) {
+  return React.createElement(
+    StoreProvider,
+    { store, client: {} },
+    React.createElement(
+      StorefrontSummary,
+      {
+        route: { page: "search" },
+        userName: "End User",
+        email: "user@example.com",
+        role: "end_user",
+        source: "Platform API",
+        myAppsCount: 2,
+        catalogCount: 3,
+        requestCount: 0,
+        ticketCount: 0,
+        refreshPending: false,
+        onRefresh() {},
+        onLogout() {}
+      },
+      React.createElement(StoreSearchPage)
+    )
+  );
+}
+
 test("search initializes from q and clear filters resets the URL and controls", async () => {
   memory.clear();
-  window.location.pathname = "/store/search";
-  window.location.search = "?q=Gamma";
+  resetHistory("/store/search?q=Gamma");
   let renderer;
   await act(async () => {
     renderer = create(
@@ -134,6 +192,59 @@ test("search initializes from q and clear filters resets the URL and controls", 
   assert.equal(select(renderer, "collection").props.value, "all");
   assert.equal(select(renderer, "accessStatus").props.value, "all");
   await act(async () => renderer.unmount());
+});
+
+test("same-path global search and query-only popstate resync the Search workspace", async (t) => {
+  memory.clear();
+  resetHistory("/store/search?q=Gamma");
+  let renderer;
+  t.after(async () => {
+    if (renderer) await act(async () => renderer.unmount());
+    window.location.search = "";
+  });
+  await act(async () => {
+    renderer = create(searchWorkspace(createStore()));
+  });
+
+  const globalQuery = renderer.root.findByProps({ type: "search" });
+  assert.equal(globalQuery.props.value, "Gamma");
+  assert.equal(select(renderer, "query").props.value, "Gamma");
+  assert.match(text(renderer), /Gamma App/);
+
+  await act(async () => {
+    globalQuery.props.onChange({ target: { value: "Alpha" } });
+  });
+  const globalSearch = renderer.root.findByProps({ className: "store-topbar-search" });
+  await act(async () => {
+    globalSearch.props.onSubmit({ preventDefault() {} });
+  });
+
+  assert.equal(window.location.pathname, "/store/search");
+  assert.equal(window.location.search, "?q=Alpha");
+  assert.equal(renderer.root.findByProps({ type: "search" }).props.value, "Alpha");
+  assert.equal(select(renderer, "query").props.value, "Alpha");
+  assert.match(text(renderer), /Alpha App/);
+  assert.doesNotMatch(text(renderer), /Gamma App/);
+
+  await act(async () => {
+    window.history.back();
+  });
+
+  assert.equal(window.location.search, "?q=Gamma");
+  assert.equal(renderer.root.findByProps({ type: "search" }).props.value, "Gamma");
+  assert.equal(select(renderer, "query").props.value, "Gamma");
+  assert.match(text(renderer), /Gamma App/);
+  assert.doesNotMatch(text(renderer), /Alpha App|Beta App/);
+
+  await act(async () => {
+    window.history.forward();
+  });
+
+  assert.equal(window.location.search, "?q=Alpha");
+  assert.equal(renderer.root.findByProps({ type: "search" }).props.value, "Alpha");
+  assert.equal(select(renderer, "query").props.value, "Alpha");
+  assert.match(text(renderer), /Alpha App/);
+  assert.doesNotMatch(text(renderer), /Beta App|Gamma App/);
 });
 
 test("search exposes access filters without installation state", async () => {

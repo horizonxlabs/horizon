@@ -58,7 +58,9 @@ test("logout errors retain Store chrome and expose the real retry control", () =
   assert.match(html, /Retry sign out/);
   assert.match(html, />Logout</);
   assert.match(html, /src="\/store\/horizon-mark\.png"/);
-  assert.match(html, /class="horizon-brand-name">Horizon Store<\/span>/);
+  assert.match(html, /class="store-sidebar-brand-name horizon-brand-name">Horizon Store<\/span>/);
+  assert.match(html, /class="store-sidebar-account"[^]*End User/);
+  assert.doesNotMatch(html, /store-brand-region|store-topbar-identity/);
 });
 
 test("workspace chrome keeps grouped navigation, search, refresh, and logout recovery", () => {
@@ -83,6 +85,11 @@ test("workspace chrome keeps grouped navigation, search, refresh, and logout rec
   assert.match(html, /Service/);
   assert.match(html, /Account/);
   assert.match(html, /Search applications/);
+  assert.match(
+    html,
+    /class="store-topbar-context"[^]*<strong>Search<\/strong>[^]*Find applications by name, owner, team, or role\./
+  );
+  assert.match(html, /class="store-sidebar-account"[^]*user@example\.com[^]*end user/);
   assert.match(html, /Refresh Store/);
   assert.match(html, /Retry sign out/);
   assert.match(html, /horizon-mark\.png/);

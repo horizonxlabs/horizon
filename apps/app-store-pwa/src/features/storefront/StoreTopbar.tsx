@@ -1,44 +1,68 @@
 import { useEffect, useState } from "react";
-import type { PlatformRole } from "@evcp/types";
 import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
 import { Menu, Search } from "lucide-react";
 import type { StoreRoute } from "@/routes/store-route";
-import { parseStoreSearchQuery, storeSearchHref } from "./store-navigation";
+import { parseStoreSearchQuery, storePageContext, storeSearchHref } from "./store-navigation";
+import { useStoreLocationSearch } from "./use-store-location-search";
 
-function currentSearchQuery(): string {
-  return typeof window === "undefined" ? "" : parseStoreSearchQuery(window.location.search ?? "");
-}
+export type StoreShellAvailability =
+  "loading" | "ready" | "authentication-error" | "platform-error";
 
 export function StoreTopbar({
   route,
-  userName,
-  email,
-  role,
   source,
+  availability = "ready",
   refreshPending,
   refreshError,
   onRefresh,
   navigationOpen,
-  onOpenNavigation,
-  onLogout
+  onOpenNavigation
 }: {
   route: StoreRoute;
-  userName?: string;
-  email?: string;
-  role?: PlatformRole;
   source: "Platform API";
+  availability?: StoreShellAvailability;
   refreshPending: boolean;
   refreshError?: string;
   onRefresh: () => void;
   navigationOpen: boolean;
   onOpenNavigation: () => void;
-  onLogout: () => void;
 }) {
-  const [query, setQuery] = useState(currentSearchQuery);
+  const locationSearch = useStoreLocationSearch();
+  const ready = availability === "ready";
+  const pageContext = storePageContext(route);
+  const [query, setQuery] = useState(() => (ready ? parseStoreSearchQuery(locationSearch) : ""));
 
   useEffect(() => {
-    setQuery(currentSearchQuery());
-  }, [route]);
+    setQuery(ready ? parseStoreSearchQuery(locationSearch) : "");
+  }, [locationSearch, ready]);
+
+  const status = refreshPending
+    ? { tone: "info" as const, label: source, message: "Refreshing Store…" }
+    : refreshError
+      ? {
+          tone: "warning" as const,
+          label: "Platform API warning",
+          message: "Refresh failed. Previous Store data is still visible."
+        }
+      : availability === "loading"
+        ? {
+            tone: "neutral" as const,
+            label: "Platform API connecting",
+            message: "Connecting to Store services."
+          }
+        : availability === "authentication-error"
+          ? {
+              tone: "warning" as const,
+              label: "Sign-in required",
+              message: "Sign in to connect to Store services."
+            }
+          : availability === "platform-error"
+            ? {
+                tone: "danger" as const,
+                label: "Platform API unavailable",
+                message: "Store services are unavailable."
+              }
+            : { tone: "success" as const, label: source, message: "Store data is current." };
 
   return (
     <header className="store-topbar">
@@ -52,12 +76,17 @@ export function StoreTopbar({
       >
         <Menu aria-hidden="true" />
       </button>
+      <div className="store-topbar-context">
+        <span>{pageContext.eyebrow}</span>
+        <strong>{pageContext.title}</strong>
+        <small>{pageContext.description}</small>
+      </div>
       <form
         className="store-topbar-search"
         role="search"
         onSubmit={(event) => {
           event.preventDefault();
-          navigateBrowserPath(storeSearchHref(query));
+          if (ready) navigateBrowserPath(storeSearchHref(query));
         }}
       >
         <label>
@@ -66,36 +95,25 @@ export function StoreTopbar({
           <input
             type="search"
             value={query}
+            disabled={!ready}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search applications"
           />
         </label>
       </form>
       <div className="store-topbar-status">
-        <ToneBadge tone="success">{source}</ToneBadge>
-        <span role="status">
-          {refreshPending
-            ? "Refreshing Store…"
-            : refreshError
-              ? "Refresh failed. Previous Store data is still visible."
-              : "Store data is current."}
-        </span>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={onRefresh}
-          disabled={refreshPending}
-        >
-          {refreshPending ? "Refreshing Store…" : "Refresh Store"}
-        </button>
-      </div>
-      <div className="store-topbar-identity">
-        <span>{userName ?? "Loading account…"}</span>
-        {email ? <small>{email}</small> : null}
-        {role ? <ToneBadge tone="neutral">{role.replace("_", " ")}</ToneBadge> : null}
-        <button type="button" className="secondary-button" onClick={onLogout}>
-          Logout
-        </button>
+        <ToneBadge tone={status.tone}>{status.label}</ToneBadge>
+        <span role={refreshError ? undefined : "status"}>{status.message}</span>
+        {ready ? (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onRefresh}
+            disabled={refreshPending}
+          >
+            {refreshPending ? "Refreshing Store…" : "Refresh Store"}
+          </button>
+        ) : null}
       </div>
     </header>
   );

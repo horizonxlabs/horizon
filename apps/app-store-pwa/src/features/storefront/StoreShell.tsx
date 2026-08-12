@@ -38,12 +38,19 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
   if (bootstrap.status === "loading") {
     return (
       <main className="store-workspace">
-        <div className="store-workspace-frame">
-          <section
-            className="store-content-canvas"
-            aria-busy="true"
-            aria-label="Loading Horizon Store"
-          >
+        <StorefrontSummary
+          route={route}
+          source="Platform API"
+          availability="loading"
+          myAppsCount={0}
+          catalogCount={0}
+          requestCount={0}
+          ticketCount={0}
+          refreshPending={false}
+          onRefresh={() => undefined}
+          onLogout={() => undefined}
+        >
+          <section aria-busy="true" aria-label="Loading Horizon Store">
             <span className="eyebrow">App Store</span>
             <h1>Loading Horizon Store</h1>
             <p>Loading your current access and available applications from Platform API.</p>
@@ -53,7 +60,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
               <span />
             </div>
           </section>
-        </div>
+        </StorefrontSummary>
       </main>
     );
   }
@@ -62,9 +69,21 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
     const authenticationError = isAuthenticationError(bootstrap.error);
     return (
       <main className="store-workspace">
-        <div className="store-workspace-frame">
+        <StorefrontSummary
+          route={route}
+          source="Platform API"
+          availability={authenticationError ? "authentication-error" : "platform-error"}
+          myAppsCount={0}
+          catalogCount={0}
+          requestCount={0}
+          ticketCount={0}
+          refreshPending={refreshPending}
+          onRefresh={() => void handleRefresh()}
+          onLogout={() => undefined}
+        >
           <StoreStatePanel
             tone="danger"
+            primary
             eyebrow={authenticationError ? "Secure session" : "Platform API"}
             title={authenticationError ? "Sign-in required" : "Store unavailable"}
             action={
@@ -85,7 +104,7 @@ export function StoreShell({ route, children }: { route: StoreRoute; children: R
           >
             <p>{bootstrap.error}</p>
           </StoreStatePanel>
-        </div>
+        </StorefrontSummary>
       </main>
     );
   }

@@ -48,6 +48,7 @@ const { createStoreDeviceState } = await import("./device-state.ts");
 const { StoreProvider } = await import("./StoreProvider.tsx");
 const { StoreAccessRequestsPage } = await import("./pages/StoreAccessRequestsPage.tsx");
 const { StoreTicketDetailPage } = await import("./pages/StoreTicketDetailPage.tsx");
+const { StoreTicketsPage } = await import("./pages/StoreTicketsPage.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
 
 function deferred() {
@@ -159,6 +160,60 @@ test("profile workspace separates identity and device-local data", async () => {
   assert.match(profileHtml, /Identity and SSO/);
   assert.match(profileHtml, /Device-local data/);
   assert.match(profileHtml, /Clear device preferences/);
+  await act(async () => renderer.unmount());
+});
+
+test("empty access-request and ticket panels provide native Store next actions", async () => {
+  memory.clear();
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: { getStoreTicket: async () => undefined } },
+        React.createElement(StoreAccessRequestsPage)
+      )
+    );
+  });
+
+  const accessAction = link(renderer.root, "Browse Available Apps");
+  assert.ok(accessAction);
+  assert.equal(accessAction.props.href, "/store/available");
+  let prevented = false;
+  await act(async () =>
+    accessAction.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/available");
+  await act(async () => renderer.unmount());
+
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: { getStoreTicket: async () => undefined } },
+        React.createElement(StoreTicketsPage)
+      )
+    );
+    await Promise.resolve();
+  });
+  const ticketAction = link(renderer.root, "View My Apps");
+  assert.ok(ticketAction);
+  assert.equal(ticketAction.props.href, "/store/");
+  prevented = false;
+  await act(async () =>
+    ticketAction.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/");
   await act(async () => renderer.unmount());
 });
 

@@ -75,7 +75,21 @@ export function StoreTicketsPage() {
         title="Ticket History"
       />
       {!ticketIds.length ? (
-        <StoreStatePanel eyebrow="This device" title="No ticket history on this device">
+        <StoreStatePanel
+          eyebrow="This device"
+          title="No ticket history on this device"
+          action={
+            <a
+              href="/store/"
+              onClick={(event) => {
+                event.preventDefault();
+                navigateBrowserPath("/store/");
+              }}
+            >
+              View My Apps
+            </a>
+          }
+        >
           <p>Submit a ticket from an app detail page to remember its ticket ID on this device.</p>
         </StoreStatePanel>
       ) : history.status === "loading" && !history.entries.length ? (

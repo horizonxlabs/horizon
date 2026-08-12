@@ -1,16 +1,18 @@
 import { Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { navigateBrowserPath } from "@evcp/ui";
 import { filterStoreApps, type StoreCatalogCollection, type StoreCatalogFilters } from "../catalog";
 import { StorePageHeader } from "../StorePageHeader";
 import { useStorefront } from "../StoreProvider";
 import { StoreStatePanel } from "../StoreStatePanel";
 import { parseStoreSearchQuery } from "../store-navigation";
+import { useStoreLocationSearch } from "../use-store-location-search";
 import { StoreAppList } from "./StoreCollectionPage";
 
 export function StoreSearchPage() {
   const { allApps } = useStorefront();
-  const [query, setQuery] = useState(() => parseStoreSearchQuery(window.location.search));
+  const locationSearch = useStoreLocationSearch();
+  const [query, setQuery] = useState(() => parseStoreSearchQuery(locationSearch));
   const [collection, setCollection] = useState<StoreCatalogCollection>("all");
   const [accessStatus, setAccessStatus] = useState<StoreCatalogFilters["accessStatus"] | "all">(
     "all"
@@ -19,6 +21,11 @@ export function StoreSearchPage() {
     collection,
     ...(accessStatus === "all" ? {} : { accessStatus })
   });
+
+  useEffect(() => {
+    setQuery(parseStoreSearchQuery(locationSearch));
+  }, [locationSearch]);
+
   const clearFilters = () => {
     setQuery("");
     setCollection("all");
@@ -77,7 +84,9 @@ export function StoreSearchPage() {
         </aside>
         <section className="store-search-results" aria-live="polite">
           <div className="store-results-summary">
-            <strong>{apps.length} {apps.length === 1 ? "result" : "results"}</strong>
+            <strong>
+              {apps.length} {apps.length === 1 ? "result" : "results"}
+            </strong>
             {query || collection !== "all" || accessStatus !== "all" ? (
               <button type="button" className="secondary-button" onClick={clearFilters}>
                 Clear filters
@@ -90,7 +99,11 @@ export function StoreSearchPage() {
             <StoreStatePanel
               eyebrow="Catalog"
               title="No matching apps"
-              action={<button type="button" onClick={clearFilters}>Clear filters</button>}
+              action={
+                <button type="button" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              }
             >
               <p>Try a different application name, owner, team, role, or access status.</p>
             </StoreStatePanel>

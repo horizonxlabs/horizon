@@ -2,10 +2,9 @@ import { useCallback, type ReactNode, useState } from "react";
 import type { PlatformRole } from "@evcp/types";
 import { PackageSearch, ShieldCheck, Store } from "lucide-react";
 import type { StoreRoute } from "@/routes/store-route";
-import { StorePageHeader } from "./StorePageHeader";
 import { StoreSidebar } from "./StoreSidebar";
-import { StoreTopbar } from "./StoreTopbar";
-import { storeCurrentPath, storePageContext } from "./store-navigation";
+import { StoreTopbar, type StoreShellAvailability } from "./StoreTopbar";
+import { storeCurrentPath } from "./store-navigation";
 
 type StorefrontSummaryProps = {
   route: StoreRoute;
@@ -13,6 +12,7 @@ type StorefrontSummaryProps = {
   email?: string;
   role?: PlatformRole;
   source: "Platform API";
+  availability?: StoreShellAvailability;
   myAppsCount: number;
   catalogCount: number;
   requestCount: number;
@@ -25,16 +25,13 @@ type StorefrontSummaryProps = {
   children?: ReactNode;
 };
 
-function isDeviceLocalRoute(route: StoreRoute): boolean {
-  return ["favorites", "recent", "access-requests", "tickets", "profile"].includes(route.page);
-}
-
 export function StorefrontSummary({
   route,
   userName,
   email,
   role,
   source,
+  availability = "ready",
   myAppsCount,
   catalogCount,
   requestCount,
@@ -47,8 +44,8 @@ export function StorefrontSummary({
   children
 }: StorefrontSummaryProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const pageContext = storePageContext(route);
   const closeNavigation = useCallback(() => setMobileOpen(false), []);
+  const ready = availability === "ready";
 
   return (
     <div className="store-workspace-frame">
@@ -57,34 +54,24 @@ export function StorefrontSummary({
         mobileOpen={mobileOpen}
         onNavigate={closeNavigation}
         onClose={closeNavigation}
-        requestCount={requestCount}
-        ticketCount={ticketCount}
+        requestCount={ready ? requestCount : 0}
+        ticketCount={ready ? ticketCount : 0}
+        userName={ready ? userName : undefined}
+        email={ready ? email : undefined}
+        role={ready ? role : undefined}
+        onLogout={ready ? onLogout : undefined}
       />
       <div className="store-workspace-content">
         <StoreTopbar
           route={route}
-          userName={userName}
-          email={email}
-          role={role}
           source={source}
+          availability={availability}
           refreshPending={refreshPending}
           refreshError={refreshError}
           onRefresh={onRefresh}
           navigationOpen={mobileOpen}
           onOpenNavigation={() => setMobileOpen(true)}
-          onLogout={onLogout}
         />
-        <div className="store-brand-region">
-          <p className="store-brand horizon-brand-lockup" aria-label="Horizon Store">
-            <img
-              src="/store/horizon-mark.png"
-              alt=""
-              className="horizon-brand-mark"
-              draggable={false}
-            />
-            <span className="horizon-brand-name">Horizon Store</span>
-          </p>
-        </div>
         {logoutError ? (
           <section className="store-action-error" role="alert">
             <strong>Sign-out not completed.</strong> {logoutError}
@@ -93,28 +80,25 @@ export function StorefrontSummary({
             </button>
           </section>
         ) : null}
-        <section className="store-status-strip" aria-label="Store summary">
-          <div>
-            <Store size={17} />
-            <span>My Apps</span>
-            <strong>{myAppsCount}</strong>
-          </div>
-          <div>
-            <PackageSearch size={17} />
-            <span>Catalog</span>
-            <strong>{catalogCount}</strong>
-          </div>
-          <div>
-            <ShieldCheck size={17} />
-            <span>Access</span>
-            <strong>SSO</strong>
-          </div>
-        </section>
-        <StorePageHeader
-          {...pageContext}
-          count={route.page === "my-apps" ? myAppsCount : undefined}
-          deviceLocal={isDeviceLocalRoute(route)}
-        />
+        {ready ? (
+          <section className="store-status-strip" aria-label="Store summary">
+            <div>
+              <Store size={17} />
+              <span>My Apps</span>
+              <strong>{myAppsCount}</strong>
+            </div>
+            <div>
+              <PackageSearch size={17} />
+              <span>Catalog</span>
+              <strong>{catalogCount}</strong>
+            </div>
+            <div>
+              <ShieldCheck size={17} />
+              <span>Access</span>
+              <strong>SSO</strong>
+            </div>
+          </section>
+        ) : null}
         <div className="store-content-canvas">{children}</div>
       </div>
     </div>

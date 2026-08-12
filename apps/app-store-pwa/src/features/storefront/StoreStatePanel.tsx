@@ -5,21 +5,24 @@ export function StoreStatePanel({
   eyebrow,
   title,
   children,
-  action
+  action,
+  primary = false
 }: {
   tone?: "neutral" | "danger";
   eyebrow: string;
   title: string;
   children: ReactNode;
   action?: ReactNode;
+  primary?: boolean;
 }) {
+  const Heading = primary ? "h1" : "h2";
   return (
     <section
       className={`store-state-panel store-state-panel-${tone}`}
       role={tone === "danger" ? "alert" : undefined}
     >
       <span className="eyebrow">{eyebrow}</span>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
       <div>{children}</div>
       {action}
     </section>

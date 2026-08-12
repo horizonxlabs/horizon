@@ -77,7 +77,11 @@ test("Store styles cover responsive workspace controls and application accents",
 
   for (const selector of [
     ".store-sidebar",
+    ".store-sidebar-layout",
+    ".store-sidebar-brand",
+    ".store-sidebar-account",
     ".store-topbar",
+    ".store-topbar-context",
     ".store-content",
     ".store-navigation-trigger",
     ".store-drawer-backdrop",

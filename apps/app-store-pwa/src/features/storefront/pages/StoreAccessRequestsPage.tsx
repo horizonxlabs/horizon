@@ -73,7 +73,21 @@ export function StoreAccessRequestsPage() {
           })}
         </div>
       ) : (
-        <StoreStatePanel eyebrow="This device" title="No access-request receipts">
+        <StoreStatePanel
+          eyebrow="This device"
+          title="No access-request receipts"
+          action={
+            <a
+              href="/store/available"
+              onClick={(event) => {
+                event.preventDefault();
+                navigateBrowserPath("/store/available");
+              }}
+            >
+              Browse Available Apps
+            </a>
+          }
+        >
           <p>
             Submit an access request from an app detail page to remember its receipt on this device.
           </p>
