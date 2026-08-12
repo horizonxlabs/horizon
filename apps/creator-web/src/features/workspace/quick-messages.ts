@@ -1,5 +1,6 @@
 import type { PrdSectionDto, WorkspaceAgentMode } from "@evcp/api-client";
 import type { CreatorProjectView } from "@/shared/types";
+import { extractSuggestions } from "./vibe-suggest";
 import type { VibeMessage } from "./vibe-stream";
 
 export type QuickMessageIntent = "continue" | "product" | "quality" | "release";
@@ -50,6 +51,15 @@ function uniqueFirstThree(candidates: QuickMessage[]): QuickMessage[] {
 }
 
 export function buildQuickMessages(context: QuickMessageContext): QuickMessage[] {
+  // Model-authored suggestions on the latest assistant reply are the freshest signal —
+  // they know what was just built. The heuristics below remain the fallback.
+  const lastAssistant = [...context.messages].reverse().find((m) => m.role === "assistant");
+  if (lastAssistant) {
+    const { suggestions } = extractSuggestions(lastAssistant.text);
+    if (suggestions.length) {
+      return suggestions.map((s) => ({ ...s, intent: "continue" as const }));
+    }
+  }
   const projectName = normalize(context.project.name) || "this project";
   const shortProjectName = clip(projectName);
   const appType = normalize(context.project.appType) || "application";
