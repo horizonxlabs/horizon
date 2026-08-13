@@ -291,16 +291,18 @@ test("Creator workspace actions are API-client backed", () => {
   assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
 });
 
-test("Creator project wizard creates a real project and generated PRD draft", () => {
+test("Creator project wizard creates a real project and generates the PRD draft in the background", () => {
   for (const method of ["createProject", "generatePrdDraft", "listPrdVersions", "getCurrentPrd"]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
     assert.match(creatorSource, new RegExp(method));
   }
 
   assert.match(creatorSource, /handleCreateProjectSubmit/);
-  assert.match(creatorSource, /Create Project \+ Generate PRD/);
+  assert.match(creatorSource, /"Create Project"/);
   assert.match(creatorSource, /client\.createProject/);
   assert.match(creatorSource, /client\.generatePrdDraft/);
+  assert.match(creatorSource, /beginBackgroundPrdGeneration\(project\.id\)/);
+  assert.match(creatorSource, /runBackgroundPrdGeneration/);
   assert.match(creatorSource, /loadCreatorBootstrap\(project\.id\)/);
   assert.match(creatorSource, /setCurrentPrdVersion\(draft\)/);
   assert.match(creatorSource, /creator-project-dialog/);

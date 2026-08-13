@@ -9,7 +9,6 @@ import {
 import {
   creatorApiFailureState,
   beginCreatorKeycloakLogout,
-  createProjectWithInitialPrd,
   loadCreatorBootstrap,
   signInCreatorSessionBridge
 } from "@/app/creator-app-helpers";
@@ -48,13 +47,13 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     prdVersionList,
     setPrdVersionList,
     prdMessage,
-    setPrdMessage,
     isGeneratingPrdDraft,
     visiblePrdSections,
     visibleVersionRows,
     refreshPrdState,
     handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
+    beginBackgroundPrdGeneration,
     resetPrdState
   } = useCreatorPrd(selectedProject);
   const creatorNavItems = createCreatorNavigation(selectedProject);
@@ -269,12 +268,12 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleCreateProjectSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsCreatingProject(true);
-    setCreateProjectMessage(
-      "Creating project and generating the first PRD draft through the Platform API."
-    );
+    setCreateProjectMessage("Creating the project through the Platform API.");
     try {
       const client = createCreatorPlatformClient();
-      const { project, draft, prdError } = await createProjectWithInitialPrd(client, {
+      // Only the fast createProject call blocks the wizard. The multi-minute PRD generation
+      // runs in the background (useCreatorPrd), so the dialog never sits on a long fetch.
+      const project = await client.createProject({
         name: createProjectForm.name.trim(),
         appType: createProjectForm.appType.trim() || "Workflow App",
         businessProblem: createProjectForm.businessProblem.trim(),
@@ -295,22 +294,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       publishAccess.setRegistryEntries([]);
       setIsCreateProjectDialogOpen(false);
       navigateBrowserPath(creatorPathForPage(project.id, "prd"));
-      if (draft) {
-        setCurrentPrdVersion(draft);
-        setPrdVersionList([draft]);
-        setPrdMessage(`PRD draft v${draft.version} generated through Platform API.`);
-        setCreateProjectMessage(
-          `สร้าง ${project.name} แล้ว และ PRD draft v${draft.version} พร้อม review`
-        );
-      } else {
-        const reason = prdError?.message ?? "Unknown provider error";
-        setCurrentPrdVersion(undefined);
-        setPrdVersionList([]);
-        setCreateProjectMessage(`สร้าง ${project.name} แล้ว แต่ PRD generation ล้มเหลว: ${reason}`);
-        setPrdMessage(
-          `Project created successfully, but PRD generation failed: ${reason}. Retry generation here.`
-        );
-      }
+      setCurrentPrdVersion(undefined);
+      setPrdVersionList([]);
+      beginBackgroundPrdGeneration(project.id);
+      setCreateProjectMessage(`สร้าง ${project.name} แล้ว — AI กำลังสร้าง PRD draft เบื้องหลัง`);
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
