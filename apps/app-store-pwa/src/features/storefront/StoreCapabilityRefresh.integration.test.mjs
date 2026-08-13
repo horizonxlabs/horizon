@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -113,10 +123,7 @@ test("an applied access approval refreshes View status to Open", async () => {
   memory.clear();
   const before = homeApp("pending");
   const after = homeApp("active");
-  const details = [
-    detail("pending", ["view_status"]),
-    detail("active", ["open", "submit_ticket"])
-  ];
+  const details = [detail("pending", ["view_status"]), detail("active", ["open", "submit_ticket"])];
   const store = createStore(before, [before, after]);
   const client = {
     getStoreAppDetail: async () => details.shift() ?? detail("active", ["open"])
@@ -155,12 +162,14 @@ test("detail refresh hides stale Open while access capabilities are unresolved",
   const before = homeApp("active");
   const after = homeApp("pending");
   const capabilityRefresh = deferred();
+  const retryRefresh = deferred();
   let detailCalls = 0;
   const client = {
     async getStoreAppDetail() {
       detailCalls += 1;
       if (detailCalls === 1) return detail("active", ["open", "submit_ticket"]);
       if (detailCalls === 2) return capabilityRefresh.promise;
+      if (detailCalls === 3) return retryRefresh.promise;
       return detail("pending", ["view_status"]);
     }
   };
@@ -191,15 +200,26 @@ test("detail refresh hides stale Open while access capabilities are unresolved",
   assert.equal(button(renderer.root, "Open app"), undefined);
   assert.equal(button(renderer.root, "Submit ticket"), undefined);
   assert.match(output(renderer), /Refreshing current app actions/);
+  assert.match(output(renderer), /Capability App/);
+  assert.match(output(renderer), /Initial release/);
   await act(async () => {
     capabilityRefresh.reject(new Error("capability refresh offline"));
     await Promise.resolve();
   });
   assert.match(output(renderer), /Current app actions unavailable/);
   assert.match(output(renderer), /capability refresh offline/);
+  assert.match(output(renderer), /Capability App/);
+  assert.match(output(renderer), /Initial release/);
 
   await act(async () => {
     button(renderer.root, "Retry current actions").props.onClick();
+    await Promise.resolve();
+  });
+  assert.match(output(renderer), /Refreshing current app actions/);
+  assert.match(output(renderer), /Capability App/);
+  assert.match(output(renderer), /Initial release/);
+  await act(async () => {
+    retryRefresh.resolve(detail("pending", ["view_status"]));
     await Promise.resolve();
   });
   assert.ok(button(renderer.root, "View status"));

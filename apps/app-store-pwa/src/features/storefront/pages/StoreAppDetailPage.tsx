@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
+import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
+import { StorePageHeader } from "../StorePageHeader";
 import { storeAppActionKey, type StoreAppAction } from "../StoreProvider";
 import { useStorefront } from "../StoreProvider";
 import {
@@ -15,7 +16,8 @@ import {
 } from "./StoreAppDetailStates";
 import { selectedStoreRole, StoreAccessRoleField } from "./StoreAccessRoleField";
 
-type TicketType = "bug" | "feedback" | "feature_request"; type TicketPriority = "low" | "medium" | "high";
+type TicketType = "bug" | "feedback" | "feature_request";
+type TicketPriority = "low" | "medium" | "high";
 
 export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const {
@@ -170,155 +172,191 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   };
   return (
     <section className="store-page store-app-detail">
-      <div className="store-page-heading">
-        <div>
-          <span className="eyebrow">Platform API app detail</span>
-          <h1>{app.name}</h1>
-          <p>{app.description}</p>
-        </div>
-        <ToneBadge tone={app.accessStatus === "active" ? "success" : "warning"}>
-          {app.accessStatus}
-        </ToneBadge>
-      </div>
-      <SectionCard eyebrow="Application" title="Current access">
-        <p>
-          {app.myRole ? `Role: ${app.myRole}` : "No assigned role"} ·{" "}
-          {app.accessStatus === "active" ? "Access granted" : "Access not granted"}
-        </p>
-        <p>
-          Owned by {app.ownerName} · {app.department} · {app.accessMode}
-        </p>
-        {supports("open") ? (
-          <button
-            type="button"
-            onClick={() => {
-              recordRecent(app.slug);
-              window.location.assign(app.route);
-            }}
-          >
-            Open app
-          </button>
-        ) : null}
-      </SectionCard>
-      <StoreAppCapabilityRefreshStatus
-        state={capabilityRefresh}
-        onRetry={() => void loadDetail({ preserveReady: true })}
+      <StorePageHeader
+        eyebrow="Application"
+        title={app.name}
+        description={app.description}
+        action={
+          <ToneBadge tone={app.accessStatus === "active" ? "success" : "warning"}>
+            {app.accessStatus}
+          </ToneBadge>
+        }
       />
-      <div className="store-action-feedback" aria-live="polite">
-        {feedback("request-access")}
-        {feedback("submit-ticket")}
+      <div className="store-app-detail-layout">
+        <div className="store-app-detail-main">
+          <section className="store-detail-panel">
+            <h2>About this application</h2>
+            <dl>
+              <div>
+                <dt>Owner</dt>
+                <dd>{app.ownerName}</dd>
+              </div>
+              <div>
+                <dt>Department</dt>
+                <dd>{app.department}</dd>
+              </div>
+              <div>
+                <dt>Health</dt>
+                <dd>{app.health}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{app.myRole ?? "No assigned role"}</dd>
+              </div>
+            </dl>
+          </section>
+          <section className="store-detail-panel">
+            <h2>Release notes</h2>
+            <ul>
+              {app.releaseNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+            <p>Support: {app.supportContact}</p>
+          </section>
+          {supports("submit_ticket") || actionState("submit-ticket") ? (
+            <section className="store-detail-panel">
+              <h2>Submit a ticket</h2>
+              {supports("submit_ticket") ? (
+                <form
+                  data-store-action="submit-ticket"
+                  onSubmit={submitTicket}
+                  className="store-form"
+                >
+                  <label>
+                    Type
+                    <select
+                      name="ticketType"
+                      value={ticketType}
+                      onChange={(event) => setTicketType(event.target.value as TicketType)}
+                    >
+                      <option value="bug">Bug</option>
+                      <option value="feedback">Feedback</option>
+                      <option value="feature_request">Feature request</option>
+                    </select>
+                  </label>
+                  <label>
+                    Priority
+                    <select
+                      name="ticketPriority"
+                      value={ticketPriority}
+                      onChange={(event) => setTicketPriority(event.target.value as TicketPriority)}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </label>
+                  <label>
+                    Title
+                    <input
+                      name="ticketTitle"
+                      value={ticketTitle}
+                      onChange={(event) => setTicketTitle(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Description
+                    <textarea
+                      name="ticketDescription"
+                      value={ticketDescription}
+                      onChange={(event) => setTicketDescription(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Device information
+                    <input
+                      name="ticketDevice"
+                      value={ticketDevice}
+                      onChange={(event) => setTicketDevice(event.target.value)}
+                    />
+                  </label>
+                  <button type="submit" disabled={pending("submit-ticket")}>
+                    {pending("submit-ticket") ? "Submitting…" : "Submit ticket"}
+                  </button>
+                  {feedback("submit-ticket")}
+                </form>
+              ) : (
+                feedback("submit-ticket")
+              )}
+            </section>
+          ) : null}
+        </div>
+        <aside className="store-app-action-rail" aria-label="Application actions">
+          <section className="store-detail-panel">
+            <h2>Current access</h2>
+            <p>{app.myRole ? `Role: ${app.myRole}` : "No assigned role"}</p>
+            {supports("open") ? (
+              <button
+                type="button"
+                onClick={() => {
+                  recordRecent(app.slug);
+                  window.location.assign(app.route);
+                }}
+              >
+                Open app
+              </button>
+            ) : null}
+            {supports("view_status") ? (
+              <button type="button" onClick={() => navigateBrowserPath("/store/access-requests")}>
+                View status
+              </button>
+            ) : null}
+          </section>
+          <StoreAppCapabilityRefreshStatus
+            state={capabilityRefresh}
+            onRetry={() => void loadDetail({ preserveReady: true })}
+          />
+          {supports("request_access") || actionState("request-access") ? (
+            <section className="store-detail-panel">
+              <h2>Request access</h2>
+              {supports("request_access") ? (
+                <form
+                  data-store-action="request-access"
+                  onSubmit={submitAccess}
+                  className="store-form"
+                >
+                  <label>
+                    Requested role
+                    <StoreAccessRoleField
+                      availableRoles={app.availableRoles}
+                      value={requestedRoleKey}
+                      onChange={setRequestedRoleKey}
+                    />
+                  </label>
+                  <label>
+                    Reason
+                    <input
+                      name="accessReason"
+                      value={accessReason}
+                      onChange={(event) => setAccessReason(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Department (optional)
+                    <input
+                      name="accessDepartment"
+                      value={accessDepartment}
+                      onChange={(event) => setAccessDepartment(event.target.value)}
+                    />
+                  </label>
+                  <button type="submit" disabled={pending("request-access")}>
+                    {pending("request-access") ? "Requesting…" : "Request access"}
+                  </button>
+                  {feedback("request-access")}
+                </form>
+              ) : (
+                feedback("request-access")
+              )}
+            </section>
+          ) : null}
+          {validationError ? (
+            <p role="alert" className="store-action-error">
+              {validationError}
+            </p>
+          ) : null}
+        </aside>
       </div>
-      {supports("view_status") ? (
-        <SectionCard eyebrow="Access" title="Access request pending">
-          <p>Your request is waiting for a Creator or administrator to review it.</p>
-          <button type="button" onClick={() => navigateBrowserPath("/store/access-requests")}>
-            View status
-          </button>
-        </SectionCard>
-      ) : null}
-      {supports("request_access") ? (
-        <SectionCard eyebrow="Access" title="Request access">
-          <form data-store-action="request-access" onSubmit={submitAccess}>
-            <label>
-              Requested role
-              <StoreAccessRoleField
-                availableRoles={app.availableRoles}
-                value={requestedRoleKey}
-                onChange={setRequestedRoleKey}
-              />
-            </label>
-            <label>
-              Reason
-              <input
-                name="accessReason"
-                value={accessReason}
-                onChange={(event) => setAccessReason(event.target.value)}
-              />
-            </label>
-            <label>
-              Department (optional)
-              <input
-                name="accessDepartment"
-                value={accessDepartment}
-                onChange={(event) => setAccessDepartment(event.target.value)}
-              />
-            </label>
-            <button type="submit" disabled={pending("request-access")}>
-              {pending("request-access") ? "Requesting…" : "Request access"}
-            </button>
-          </form>
-        </SectionCard>
-      ) : null}
-      {supports("submit_ticket") ? (
-        <SectionCard eyebrow="Support" title="Submit a ticket">
-          <form data-store-action="submit-ticket" onSubmit={submitTicket}>
-            <label>
-              Type
-              <select
-                name="ticketType"
-                value={ticketType}
-                onChange={(event) => setTicketType(event.target.value as TicketType)}
-              >
-                <option value="bug">Bug</option>
-                <option value="feedback">Feedback</option>
-                <option value="feature_request">Feature request</option>
-              </select>
-            </label>
-            <label>
-              Priority
-              <select
-                name="ticketPriority"
-                value={ticketPriority}
-                onChange={(event) => setTicketPriority(event.target.value as TicketPriority)}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-            <label>
-              Title
-              <input
-                name="ticketTitle"
-                value={ticketTitle}
-                onChange={(event) => setTicketTitle(event.target.value)}
-              />
-            </label>
-            <label>
-              Description
-              <input
-                name="ticketDescription"
-                value={ticketDescription}
-                onChange={(event) => setTicketDescription(event.target.value)}
-              />
-            </label>
-            <label>
-              Device information
-              <input
-                name="ticketDevice"
-                value={ticketDevice}
-                onChange={(event) => setTicketDevice(event.target.value)}
-              />
-            </label>
-            <button type="submit" disabled={pending("submit-ticket")}>
-              {pending("submit-ticket") ? "Submitting…" : "Submit ticket"}
-            </button>
-          </form>
-        </SectionCard>
-      ) : null}
-      {validationError ? (
-        <p role="alert" className="store-action-error">
-          {validationError}
-        </p>
-      ) : null}
-      <SectionCard eyebrow="Support" title="Release notes">
-        <ul>
-          {app.releaseNotes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-        <p>Support: {app.supportContact}</p>
-      </SectionCard>
     </section>
   );
 }
