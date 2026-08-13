@@ -4058,6 +4058,21 @@ th {
   padding: 0 18px var(--evcp-space-2);
 }
 
+.vibe-question-block {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-card);
+  display: grid;
+  gap: var(--evcp-space-3);
+  justify-items: start;
+  margin-top: var(--evcp-space-2);
+  padding: var(--evcp-space-3);
+}
+
+.vibe-question-block > div {
+  width: 100%;
+}
+
 .vibe-live-suggestions-head {
   align-items: center;
   color: var(--evcp-color-muted);
