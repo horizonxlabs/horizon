@@ -3182,6 +3182,22 @@ th {
   margin: 0;
 }
 
+.vibe-prd-panel {
+  display: grid;
+  gap: var(--evcp-space-4);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--evcp-space-4);
+}
+
+.vibe-action-lines {
+  color: var(--evcp-color-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .creator-prd-sections p {
   color: var(--evcp-color-muted);
   margin-top: 4px;

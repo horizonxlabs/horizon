@@ -25,7 +25,7 @@ export function CreateProjectWizard({
           <div>
             <span className="eyebrow">Create Project Wizard</span>
             <h2>สร้าง Project ใหม่</h2>
-            <p>ระบบจะสร้าง project แล้วพาเข้าหน้า PRD ทันที — AI สร้าง PRD draft แรกให้เบื้องหลัง</p>
+            <p>ระบบจะสร้าง project แล้วพาเข้า workspace ทันที — AI สร้าง PRD draft แรกให้เบื้องหลัง</p>
           </div>
           <Button variant="ghost" type="button" onClick={onClose} disabled={isCreating}>
             Close
@@ -90,9 +90,9 @@ export function CreateProjectWizard({
           badge={isCreating ? "Creating" : "Ready"}
           title={message}
           lines={[
-            "POST /projects — แล้วปิดหน้าต่างนี้ทันที",
-            "AI สร้าง PRD draft เบื้องหลัง (~2–3 นาที)",
-            "หน้า PRD อัปเดตเองเมื่อ draft พร้อม"
+            "POST /projects — แล้วเข้า workspace ทันที",
+            "AI สร้าง PRD draft เบื้องหลัง (~2–3 นาที) ดูได้ที่ tab PRD",
+            "เริ่มสั่ง build ได้เลยโดยไม่ต้องรอ"
           ]}
         />
         <footer>

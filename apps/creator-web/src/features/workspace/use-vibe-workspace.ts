@@ -11,6 +11,7 @@ import { loadWorkspaceState } from "./api";
 import { useProjectFiles } from "./use-project-files";
 import { useVibeChat } from "./use-vibe-chat";
 import { workspaceViewState } from "./workspace-view-state";
+import type { WorkspaceTab } from "./workspace-chrome";
 import { normalizeWorkspaceMode, persistWorkspaceMode, readWorkspaceMode } from "./workspace-mode";
 
 function browserStorage() {
@@ -26,7 +27,7 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     "Loading workspace state from Platform API."
   );
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  const [vibeTab, setVibeTab] = useState<"preview" | "code" | "database">("preview");
+  const [vibeTab, setVibeTab] = useState<WorkspaceTab>("preview");
   const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceAgentMode>(() =>
     readWorkspaceMode(browserStorage(), selectedProject.id)
   );

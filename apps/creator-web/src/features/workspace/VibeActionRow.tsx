@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { vibeActionIcon, vibeActionVerb, type VibeAction } from "./vibe-actions";
+import { actionLineCount, vibeActionIcon, vibeActionVerb, type VibeAction } from "./vibe-actions";
 
 export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
   const [open, setOpen] = useState(false);
@@ -8,6 +8,7 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
   const failed = action.status === "failed";
   const statusClass = running ? "running" : failed ? "failed" : "complete";
   const isDiff = action.find !== undefined || action.replace !== undefined;
+  const lineCount = actionLineCount(action);
 
   return (
     <div className={`vibe-action-row vibe-action-row-${statusClass}`}>
@@ -23,6 +24,11 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
           {vibeActionVerb(action.type, action.status)}
         </span>
         <span className="vibe-action-label">{action.label}</span>
+        {lineCount > 0 && (
+          <span className="vibe-action-lines" aria-live={running ? "polite" : undefined}>
+            {lineCount} lines
+          </span>
+        )}
         {hasBody && <span className="vibe-action-toggle">{open ? "▾" : "▸"}</span>}
       </button>
       {open && hasBody && (

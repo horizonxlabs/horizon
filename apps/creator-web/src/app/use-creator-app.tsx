@@ -278,18 +278,15 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       });
       const nextBootstrap = await loadCreatorBootstrap(project.id);
       setBootstrap(nextBootstrap);
-      vibeWorkspace.setWorkspaceSnapshot(undefined);
-      vibeWorkspace.setWorkspaceResult(undefined);
-      vibeWorkspace.setPreviewOverride(undefined);
-      publishAccess.setPublishReview(undefined);
-      publishAccess.setPublishResult(undefined);
-      publishAccess.setRegistryEntries([]);
       setIsCreateProjectDialogOpen(false);
-      navigateBrowserPath(creatorPathForPage(project.id, "prd"));
-      setCurrentPrdVersion(undefined);
-      setPrdVersionList([]);
+      // Straight into the workspace so building starts immediately; handleSelectProject
+      // provisions the sandbox and resets per-project state. The PRD generates in the
+      // background and lives in the workspace's PRD tab.
+      await handleSelectProject(nextBootstrap.selectedProject, "workspace");
       beginBackgroundPrdGeneration(project.id);
-      setCreateProjectMessage(`สร้าง ${project.name} แล้ว — AI กำลังสร้าง PRD draft เบื้องหลัง`);
+      setCreateProjectMessage(
+        `สร้าง ${project.name} แล้ว — สั่ง AI build ได้เลย (PRD draft ร่างให้เบื้องหลัง)`
+      );
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error
