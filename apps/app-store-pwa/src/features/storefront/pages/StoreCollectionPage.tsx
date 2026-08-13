@@ -1,8 +1,11 @@
 import type { AppStoreItem } from "@evcp/types";
-import { navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
-import { Heart, MonitorSmartphone } from "lucide-react";
+import { navigateBrowserPath } from "@evcp/ui";
+import { useState } from "react";
 import { selectStoreCollection } from "../catalog";
+import { StoreAppCard } from "../StoreAppCard";
+import { StorePageHeader } from "../StorePageHeader";
 import { useStorefront } from "../StoreProvider";
+import { StoreStatePanel } from "../StoreStatePanel";
 
 export type StoreCollectionPageName = "my-apps" | "available" | "favorites" | "recent";
 
@@ -46,57 +49,34 @@ export function appsForCollection(
 }
 
 export function StoreAppList({ apps }: { apps: AppStoreItem[] }) {
-  const { device, toggleFavorite } = useStorefront();
   if (!apps.length) return null;
   return (
-    <div className="store-app-list">
-      {apps.map((app) => {
-        const isFavorite = device.favorites.includes(app.slug);
-        return (
-          <article key={app.id} className="store-collection-card">
-            <button
-              type="button"
-              className="store-collection-main"
-              onClick={() => navigateToStoreApp(app.slug)}
-            >
-              <span className="store-app-icon" aria-hidden="true">
-                {app.name.slice(0, 1)}
-              </span>
-              <span>
-                <strong>{app.name}</strong>
-                <small>{app.description}</small>
-                <em>
-                  {app.myRole
-                    ? `Role: ${app.myRole}`
-                    : app.accessStatus === "active"
-                      ? "Access granted"
-                      : app.accessStatus === "pending"
-                        ? "Request pending"
-                        : "Access required"}
-                </em>
-              </span>
-              <ToneBadge tone={app.accessStatus === "active" ? "success" : "warning"}>
-                {app.accessStatus === "active" ? "active" : app.accessStatus}
-              </ToneBadge>
-            </button>
-            <button
-              type="button"
-              className="store-icon-button"
-              aria-pressed={isFavorite}
-              aria-label={`${isFavorite ? "Remove" : "Add"} ${app.name} ${isFavorite ? "from" : "to"} favorites on this device`}
-              onClick={() => toggleFavorite(app.slug)}
-            >
-              <Heart size={18} fill={isFavorite ? "currentColor" : "none"} />
-            </button>
-          </article>
-        );
-      })}
+    <div className="store-app-grid">
+      {apps.map((app) => (
+        <StoreAppCard key={app.id} app={app} />
+      ))}
     </div>
   );
 }
 
+function storeCollectionLink(href: string, label: string) {
+  return (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        navigateBrowserPath(href);
+      }}
+    >
+      {label}
+    </a>
+  );
+}
+
 export function StoreCollectionPage({ page }: { page: StoreCollectionPageName }) {
-  const { allApps, bootstrap, device } = useStorefront();
+  const { allApps, bootstrap, device, refreshHome } = useStorefront();
+  const [emptyRefreshPending, setEmptyRefreshPending] = useState(false);
+  const [emptyRefreshError, setEmptyRefreshError] = useState<string>();
   const copy = PAGE_COPY[page];
   const apps = appsForCollection(
     page,
@@ -106,45 +86,71 @@ export function StoreCollectionPage({ page }: { page: StoreCollectionPageName })
   );
   const isEmptyCatalog = allApps.length === 0;
   const canPublish = bootstrap.role === "creator" || bootstrap.role === "admin";
+  const deviceLocal = page === "favorites" || page === "recent";
+  async function refreshEmptyCatalog() {
+    setEmptyRefreshPending(true);
+    setEmptyRefreshError(undefined);
+    const result = await refreshHome({ preserveReadyOnFailure: true });
+    if (!result.ok) setEmptyRefreshError(result.error.message);
+    setEmptyRefreshPending(false);
+  }
+  const emptyAction =
+    isEmptyCatalog && canPublish ? (
+      <button type="button" onClick={() => window.location.assign("/creator/")}>
+        Open Creator Workspace
+      </button>
+    ) : isEmptyCatalog ? (
+      <button
+        type="button"
+        onClick={() => void refreshEmptyCatalog()}
+        disabled={emptyRefreshPending}
+      >
+        {emptyRefreshPending ? "Refreshing Store…" : "Refresh Store"}
+      </button>
+    ) : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active") ? (
+      storeCollectionLink("/store/available", "Browse Available Apps")
+    ) : page === "favorites" ? (
+      storeCollectionLink("/store/available", "Browse Available Apps")
+    ) : page === "recent" || page === "available" ? (
+      storeCollectionLink("/store/", "View My Apps")
+    ) : undefined;
+
+  const emptyTitle =
+    isEmptyCatalog && canPublish
+      ? "No apps published yet"
+      : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active")
+        ? "No apps with access yet"
+        : `No ${copy.title.toLocaleLowerCase()} yet`;
+  const emptyDescription =
+    isEmptyCatalog && canPublish
+      ? "The Store is ready. Publish a project from Creator Workspace to make its governed app available here."
+      : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active")
+        ? "Browse the catalog and request access to an available app."
+        : copy.empty;
 
   return (
     <section className="store-page">
-      <div className="store-page-heading">
-        <div>
-          <span className="eyebrow">{copy.eyebrow}</span>
-          <h1>{copy.title}</h1>
-        </div>
-        {page === "favorites" || page === "recent" ? (
-          <span className="store-device-label">
-            <MonitorSmartphone size={15} /> This device
-          </span>
-        ) : null}
-      </div>
+      <StorePageHeader
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        count={apps.length}
+        deviceLocal={deviceLocal}
+      />
       {apps.length ? (
         <StoreAppList apps={apps} />
-      ) : page === "my-apps" && isEmptyCatalog ? (
-        <SectionCard eyebrow="App Store catalog" title="No apps published yet">
-          <p>
-            The Store is ready. Publish a project from Creator Workspace to make its governed app
-            available here.
-          </p>
-          {canPublish ? (
-            <button type="button" onClick={() => window.location.assign("/creator/")}>
-              Open Creator Workspace
-            </button>
-          ) : null}
-        </SectionCard>
-      ) : page === "my-apps" && allApps.some((app) => app.accessStatus !== "active") ? (
-        <SectionCard eyebrow="Platform API catalog" title="No apps with access yet">
-          <p>Browse the catalog and request access to an available app.</p>
-          <button type="button" onClick={() => navigateBrowserPath("/store/available")}>
-            Browse Available Apps
-          </button>
-        </SectionCard>
       ) : (
-        <SectionCard eyebrow={copy.eyebrow} title={`No ${copy.title.toLocaleLowerCase()} yet`}>
-          <p>{copy.empty}</p>
-        </SectionCard>
+        <StoreStatePanel
+          eyebrow={isEmptyCatalog && canPublish ? "App Store catalog" : copy.eyebrow}
+          title={emptyTitle}
+          action={emptyAction}
+        >
+          <p>{emptyDescription}</p>
+          {emptyRefreshError ? (
+            <p className="store-action-error" role="alert">
+              {emptyRefreshError}
+            </p>
+          ) : null}
+        </StoreStatePanel>
       )}
     </section>
   );
