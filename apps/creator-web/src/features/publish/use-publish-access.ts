@@ -3,7 +3,8 @@ import {
   type AppAccessSnapshotResponse,
   type AppStoreRegistryEntryDto,
   type PublishResultResponse,
-  type PublishReviewResponse
+  type PublishReviewResponse,
+  type WorkspaceDeploymentDto
 } from "@evcp/api-client";
 import { useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
@@ -27,6 +28,7 @@ export function usePublishAccess({
   const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
+  const [runtimeDeployments, setRuntimeDeployments] = useState<WorkspaceDeploymentDto[]>([]);
   const [publishMessage, setPublishMessage] = useState("Loading publish state from Platform API.");
   const [isInvitingUser, setIsInvitingUser] = useState(false);
   const [decidingAccessRequestIds, setDecidingAccessRequestIds] = useState<ReadonlySet<string>>(
@@ -76,16 +78,41 @@ export function usePublishAccess({
       state: item.status,
       detail: item.detail
     })) ?? [];
-  const visibleDeployment = publishResult?.deployment;
   const visibleRegistryEntry =
     publishResult?.registryEntry ??
     registryEntries.find((entry) => entry.projectId === selectedProject.id);
+  const latestRuntimeDeployment = [...runtimeDeployments]
+    .filter((deployment) => deployment.healthStatus === "healthy")
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .at(-1);
+  const visibleDeployment = publishResult?.deployment
+    ? {
+        id: publishResult.deployment.id,
+        status: publishResult.deployment.status,
+        environment: publishResult.deployment.environment ?? "app_store",
+        manifestVersion:
+          publishResult.deployment.manifestVersion ??
+          publishResult.manifest.manifestVersion ??
+          "unknown"
+      }
+    : latestRuntimeDeployment
+      ? {
+          id: latestRuntimeDeployment.id,
+          status: latestRuntimeDeployment.healthStatus,
+          environment: latestRuntimeDeployment.environment,
+          manifestVersion:
+            visibleRegistryEntry?.manifestVersion ??
+            publishReview?.manifest.manifestVersion ??
+            "unknown"
+        }
+      : undefined;
 
   function resetPublishAccess() {
     setAppAccessSnapshot(undefined);
     setPublishReview(undefined);
     setPublishResult(undefined);
     setRegistryEntries([]);
+    setRuntimeDeployments([]);
   }
 
   async function refreshCreatorAccessState(projectId: string) {
@@ -106,6 +133,7 @@ export function usePublishAccess({
       const publishState = await loadPublishState(projectId);
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
+      setRuntimeDeployments(publishState.deployments);
       setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
     } catch (error) {
       const detail = error instanceof Error ? ` ${error.message}` : "";
@@ -211,7 +239,12 @@ export function usePublishAccess({
       const client = clientFactory();
       const result = await client.publishProject(selectedProject.id);
       setPublishResult(result);
-      setRegistryEntries(await client.listAppStoreRegistry());
+      const [registry, deployments] = await Promise.all([
+        client.listAppStoreRegistry(),
+        client.listDeployments(selectedProject.id)
+      ]);
+      setRegistryEntries(registry);
+      setRuntimeDeployments(deployments);
       setPublishMessage(
         "Published through Platform API. Deployment and App Store registry evidence updated."
       );
@@ -235,6 +268,8 @@ export function usePublishAccess({
     setPublishResult,
     registryEntries,
     setRegistryEntries,
+    runtimeDeployments,
+    setRuntimeDeployments,
     publishMessage,
     setPublishMessage,
     isInvitingUser,

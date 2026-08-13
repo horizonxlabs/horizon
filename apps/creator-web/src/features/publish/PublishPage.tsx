@@ -88,7 +88,8 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                 <div>
                   <strong>{visibleDeployment.id}</strong>
                   <span>
-                    {visibleDeployment.status} · manifest v{visibleDeployment.manifestVersion}
+                    {visibleDeployment.status} · {visibleDeployment.environment} · manifest v
+                    {visibleDeployment.manifestVersion}
                   </span>
                 </div>
               </div>

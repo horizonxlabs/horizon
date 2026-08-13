@@ -27,13 +27,31 @@ const aiGovernanceHookSource = readFileSync(
 );
 const adminClientSource = readFileSync("apps/admin-web/src/shared/platform-client.ts", "utf8");
 const adminConsoleSource = readAllSourceFiles("apps/admin-web/src/features/admin-console");
-const adminOperationsSource = readFileSync("apps/admin-web/src/features/platform-operations/use-production-observability.ts", "utf8");
-const adminAuditSource = readFileSync("apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx", "utf8");
-const creatorTicketsSource = readFileSync("apps/creator-web/src/features/tickets/TicketsPage.tsx", "utf8");
-const creatorTicketInboxSource = readFileSync("apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts", "utf8");
-const creatorTicketActionsSource = readFileSync("apps/creator-web/src/features/tickets/ticket-actions.ts", "utf8");
+const adminOperationsSource = readFileSync(
+  "apps/admin-web/src/features/platform-operations/use-production-observability.ts",
+  "utf8"
+);
+const adminAuditSource = readFileSync(
+  "apps/admin-web/src/features/audit-monitoring/AuditEvidenceSection.tsx",
+  "utf8"
+);
+const creatorTicketsSource = readFileSync(
+  "apps/creator-web/src/features/tickets/TicketsPage.tsx",
+  "utf8"
+);
+const creatorTicketInboxSource = readFileSync(
+  "apps/creator-web/src/features/tickets/use-creator-ticket-inbox.ts",
+  "utf8"
+);
+const creatorTicketActionsSource = readFileSync(
+  "apps/creator-web/src/features/tickets/ticket-actions.ts",
+  "utf8"
+);
 const creatorAppHookSource = readFileSync("apps/creator-web/src/app/use-creator-app.tsx", "utf8");
-const creatorPublishPageSource = readFileSync("apps/creator-web/src/features/publish/PublishPage.tsx", "utf8");
+const creatorPublishPageSource = readFileSync(
+  "apps/creator-web/src/features/publish/PublishPage.tsx",
+  "utf8"
+);
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
 const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
@@ -149,12 +167,19 @@ test("frontend shells use API-backed bootstrap instead of direct mock fixtures",
 
   assert.match(adminSource, /getSetupStatus/);
   assert.match(creatorSource, /loadCreatorBootstrap/);
+  assert.match(creatorPublishHookSource, /runtimeDeployments/);
+  assert.match(creatorPublishHookSource, /visibleDeployment/);
+  assert.match(creatorSource, /listDeployments/);
   assert.match(storeSource, /loadStoreBootstrap/);
 });
 
 test("Store and Creator fail closed instead of creating local success evidence", () => {
   assert.match(storeBootstrapSource, /status: "loading" \| "ready" \| "error"/);
-  for (const source of [storeBootstrapSource, creatorWorkspaceHookSource, creatorPublishHookSource]) {
+  for (const source of [
+    storeBootstrapSource,
+    creatorWorkspaceHookSource,
+    creatorPublishHookSource
+  ]) {
     assert.doesNotMatch(source, /Local fallback (generated|produced|recorded|kept)/);
     assert.doesNotMatch(source, /fallbackWorkspacePromptResult/);
   }
@@ -164,7 +189,10 @@ test("Store and Creator fail closed instead of creating local success evidence",
   assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
   assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
   assert.doesNotMatch(creatorAppHookSource, /prdSections|versionRows/);
-  assert.doesNotMatch(creatorPublishPageSource, /dep_leave_management_001|\/apps\/\$\{selectedProject\.id\}/);
+  assert.doesNotMatch(
+    creatorPublishPageSource,
+    /dep_leave_management_001|\/apps\/\$\{selectedProject\.id\}/
+  );
   assert.match(creatorPublishPageSource, /No deployment record/);
 });
 
@@ -173,7 +201,10 @@ test("Admin operations and audit views use Platform API data and fail closed", (
   assert.match(adminOperationsSource, /No local health evidence is shown/);
   assert.match(adminAuditSource, /\/audit-logs/);
   assert.match(adminAuditSource, /No local records are shown/);
-  assert.doesNotMatch(adminConsoleSource, /serviceHealthRows|productionServiceRows|authProviderRows/);
+  assert.doesNotMatch(
+    adminConsoleSource,
+    /serviceHealthRows|productionServiceRows|authProviderRows/
+  );
 });
 
 test("frontend shells retain platform session handling while Admin exposes logout only", () => {
