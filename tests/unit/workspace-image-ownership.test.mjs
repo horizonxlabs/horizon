@@ -3,10 +3,22 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const dockerfile = readFileSync("docker/workspace-next.Dockerfile", "utf8");
+const entrypoint = readFileSync("docker/workspace-entrypoint.sh", "utf8");
 
 test("workspace image repairs mounted workspace ownership before dropping privileges", () => {
   assert.match(dockerfile, /COPY docker\/workspace-entrypoint\.sh \/usr\/local\/bin\/workspace-entrypoint/);
-  const entrypoint = readFileSync("docker/workspace-entrypoint.sh", "utf8");
-  assert.match(entrypoint, /chown -R evcp:evcp \/workspace/);
+  // Selective repair: only wrong-owned entries are touched, with the blanket chown as fallback.
+  assert.match(entrypoint, /! -user evcp/);
+  assert.match(entrypoint, /\|\| chown -R evcp:evcp \/workspace/);
   assert.match(entrypoint, /exec su -s \/bin\/sh evcp -c/);
+});
+
+test("warm starts skip npm install via the manifest stamp", () => {
+  // The stamp lives in node_modules (inside the workspace volume) so it survives
+  // stop/start with the installed tree and disappears with it.
+  assert.match(entrypoint, /node_modules\/\.evcp-install-stamp/);
+  assert.match(entrypoint, /cksum/);
+  assert.match(entrypoint, /npm install/);
+  // The image bakes a matching stamp so even the first boot skips the redundant install.
+  assert.match(dockerfile, /\.evcp-install-stamp/);
 });

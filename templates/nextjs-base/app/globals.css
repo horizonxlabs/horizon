@@ -1,3 +1,27 @@
+@import "tailwindcss";
+
+/* Design tokens for every generated app. The generation prompt tells the AI to build on
+   these so screens stay consistent. Fonts are a system stack on purpose: workspace
+   containers on private servers may have no internet, and next/font/google would fail
+   the build there. */
+@theme {
+  --font-sans:
+    "Inter", "Noto Sans Thai", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue",
+    Arial, sans-serif;
+
+  --color-brand-50: oklch(0.97 0.014 262);
+  --color-brand-100: oklch(0.93 0.03 262);
+  --color-brand-200: oklch(0.87 0.06 262);
+  --color-brand-300: oklch(0.79 0.1 262);
+  --color-brand-400: oklch(0.69 0.15 262);
+  --color-brand-500: oklch(0.6 0.19 262);
+  --color-brand-600: oklch(0.53 0.21 262);
+  --color-brand-700: oklch(0.46 0.19 262);
+  --color-brand-800: oklch(0.4 0.16 262);
+  --color-brand-900: oklch(0.35 0.13 262);
+  --color-brand-950: oklch(0.26 0.09 262);
+}
+
 * {
   box-sizing: border-box;
 }

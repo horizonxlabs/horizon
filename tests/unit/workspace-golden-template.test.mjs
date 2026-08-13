@@ -47,14 +47,14 @@ test("template files reference env vars, never literal secrets", () => {
   assert.ok(!/sk-[a-zA-Z0-9]{10,}/.test(all), "no literal keys in template");
 });
 
-test("starter homepage presents the AI prompt in a centered visual layout", () => {
+test("starter homepage presents the AI prompt in a centered Tailwind layout", () => {
   const template = loadGoldenTemplate();
   const page = template.files.find((file) => file.path === "app/page.tsx");
   assert.ok(page, "starter homepage exists");
-  assert.match(page.content, /Your app starts here\. Ask the AI to build a feature\./);
-  assert.match(page.content, /starter-home/);
+  assert.match(page.content, /Your app starts here/);
+  assert.match(page.content, /items-center justify-center/, "layout stays centered");
   assert.doesNotMatch(page.content, /style jsx/, "server-rendered starter page avoids styled-jsx");
+  assert.doesNotMatch(page.content, /page\.module\.css/, "starter styles with Tailwind, not CSS modules");
   const moduleCss = template.files.find((file) => file.path === "app/page.module.css");
-  assert.ok(moduleCss, "starter homepage has local styles");
-  assert.doesNotMatch(moduleCss.content, /:global/, "CSS module has only locally scoped selectors");
+  assert.equal(moduleCss, undefined, "the CSS module was replaced by Tailwind utilities");
 });
