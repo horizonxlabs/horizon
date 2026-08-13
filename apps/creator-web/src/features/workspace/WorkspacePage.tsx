@@ -21,6 +21,7 @@ import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
 import { extractQuestions, stripQuestions } from "./vibe-questions";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
+import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -124,6 +125,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       active = false;
     };
   }, [selectedProject.id, vibePreviewKey, previewAuthorizationAttempt]);
+  usePreviewSessionKeepalive({
+    projectId: selectedProject.id,
+    enabled: previewAuthorizationState === "ready"
+  });
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">

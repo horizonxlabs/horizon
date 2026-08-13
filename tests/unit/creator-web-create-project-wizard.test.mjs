@@ -14,7 +14,8 @@ test("CreateProjectWizard renders primitive controls (Field/Input/Textarea/Butto
       form, onField: () => {}, onSubmit: () => {}, onClose: () => {}, message: "Ready", isCreating: false
     })
   );
-  assert.match(html, /Create Project \+ Generate PRD/);
+  assert.match(html, />Create Project</);
+  assert.match(html, /PRD draft.*เบื้องหลัง/);
   assert.match(html, /<textarea/);
   assert.match(html, /focus:ring-primary-soft/);
   assert.match(html, /Project name/);

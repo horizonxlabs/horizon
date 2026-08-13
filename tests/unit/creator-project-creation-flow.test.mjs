@@ -1,51 +1,53 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { createProjectWithInitialPrd } = await import(
-  "../../apps/creator-web/src/app/creator-app-helpers.ts"
-);
+const helpers = await import("../../apps/creator-web/src/app/creator-app-helpers.ts");
+const {
+  runBackgroundPrdGeneration,
+  isPrdGenerationTimedOut,
+  PRD_GENERATION_POLL_INTERVAL_MS,
+  PRD_GENERATION_TIMEOUT_MS
+} = helpers;
 
-const input = {
-  name: "Todolist",
-  appType: "Workflow App",
-  businessProblem: "Track tasks",
-  targetDepartment: "Operations",
-  intendedUsers: ["Internal teams"],
-  dataSensitivity: "internal"
-};
-const project = { id: "prj_todo", name: "Todolist" };
 const draft = { id: "prd_todo", projectId: "prj_todo", version: "0.1", status: "draft" };
 
-test("project creation returns partial success when initial PRD generation fails", async () => {
-  const calls = [];
-  const client = {
-    async createProject(received) {
-      calls.push(["project", received]);
-      return project;
-    },
-    async generatePrdDraft(projectId) {
-      calls.push(["prd", projectId]);
-      throw new Error("provider unavailable");
+test("background PRD generation reports the draft without blocking project creation", async () => {
+  const events = [];
+  await runBackgroundPrdGeneration(
+    { async generatePrdDraft(projectId) { events.push(["prd", projectId]); return draft; } },
+    "prj_todo",
+    {
+      onDraft: (received) => events.push(["draft", received.id]),
+      onError: () => events.push(["error"])
     }
-  };
-
-  const result = await createProjectWithInitialPrd(client, input);
-
-  assert.equal(result.project, project);
-  assert.equal(result.draft, undefined);
-  assert.match(result.prdError?.message ?? "", /provider unavailable/);
-  assert.deepEqual(calls, [["project", input], ["prd", "prj_todo"]]);
+  );
+  assert.deepEqual(events, [["prd", "prj_todo"], ["draft", "prd_todo"]]);
 });
 
-test("project creation returns the generated PRD when both calls succeed", async () => {
-  const client = {
-    async createProject() { return project; },
-    async generatePrdDraft() { return draft; }
-  };
+test("background PRD generation surfaces failures as Error and never throws", async () => {
+  const errors = [];
+  await runBackgroundPrdGeneration(
+    { async generatePrdDraft() { throw new Error("provider unavailable"); } },
+    "prj_todo",
+    { onDraft: () => assert.fail("draft must not be reported"), onError: (e) => errors.push(e) }
+  );
+  await runBackgroundPrdGeneration(
+    { async generatePrdDraft() { throw "boom"; } },
+    "prj_todo",
+    { onDraft: () => assert.fail("draft must not be reported"), onError: (e) => errors.push(e) }
+  );
+  assert.equal(errors.length, 2);
+  assert.match(errors[0].message, /provider unavailable/);
+  assert.ok(errors[1] instanceof Error);
+});
 
-  const result = await createProjectWithInitialPrd(client, input);
+test("the old blocking create+generate helper is gone", () => {
+  assert.equal(helpers.createProjectWithInitialPrd, undefined);
+});
 
-  assert.equal(result.project, project);
-  assert.equal(result.draft, draft);
-  assert.equal(result.prdError, undefined);
+test("polling recovery has a sane cadence and gives the AI enough time", () => {
+  assert.ok(PRD_GENERATION_POLL_INTERVAL_MS >= 2_000);
+  assert.ok(PRD_GENERATION_TIMEOUT_MS >= 5 * 60_000, "PRD calls can take minutes");
+  assert.equal(isPrdGenerationTimedOut(0, PRD_GENERATION_TIMEOUT_MS - 1), false);
+  assert.equal(isPrdGenerationTimedOut(0, PRD_GENERATION_TIMEOUT_MS), true);
 });

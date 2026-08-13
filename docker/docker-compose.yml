@@ -143,6 +143,9 @@ services:
       EVCP_LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       EVCP_WORKSPACE_SECRET_KEY: ${EVCP_WORKSPACE_SECRET_KEY}
       EVCP_WORKSPACE_IMAGE: ${EVCP_WORKSPACE_IMAGE:-evcp/workspace-next:1}
+      # 2 cores by default: next dev's cold compile is CPU-bound and painfully slow on 1.
+      EVCP_WORKSPACE_CPU: ${EVCP_WORKSPACE_CPU:-2}
+      EVCP_WORKSPACE_MEM_MB: ${EVCP_WORKSPACE_MEM_MB:-2048}
       EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
       EVCP_WORKSPACE_NETWORK: evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"
