@@ -103,6 +103,7 @@ export function AppShell({
       className={cn(
         "text-body min-h-screen [background:linear-gradient(180deg,rgba(219,234,254,0.42),rgba(238,243,248,0)_260px),var(--evcp-color-page)]",
         "max-md:min-w-0 max-md:overflow-x-hidden md:grid md:transition-[grid-template-columns] md:duration-200",
+        collapsed && "app-shell-collapsed",
         collapsed ? "md:grid-cols-[84px_minmax(0,1fr)]" : "md:grid-cols-[280px_minmax(0,1fr)]"
       )}
     >
