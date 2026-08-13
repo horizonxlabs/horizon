@@ -3,6 +3,8 @@ import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 const { createPlatformApiServices } =
   await import("../../apps/platform-api/src/platform-services.ts");
@@ -127,6 +129,15 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
   assert.equal(access.status, 201);
   assert.equal(access.body.data.status, "pending");
 
+  const duplicateAccess = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/store/apps/${appSlug}/access-requests`,
+    headers: endUserHeaders,
+    body: { requestedRoleKey: "manager", reason: "Duplicate click", department: "HR" }
+  });
+  assert.equal(duplicateAccess.status, 201);
+  assert.equal(duplicateAccess.body.data.id, access.body.data.id);
+
   const ticket = executePlatformApiRequest(services, {
     method: "POST",
     path: `/store/apps/${appSlug}/tickets`,
@@ -150,6 +161,21 @@ test("Sprint 7 API lists apps requests access submits ticket and tracks status",
   assert.equal(status.status, 200);
   assert.equal(status.body.data.ticketNumber, "TKT-0001");
   assert.ok(status.body.data.timeline.some((entry) => entry.status === "submitted"));
+
+  const invalidTicket = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/store/apps/${appSlug}/tickets`,
+    headers: endUserHeaders,
+    body: {
+      type: "bug",
+      priority: "medium",
+      title: "   ",
+      description: "Missing title must stay rejected.",
+      deviceInfo: "Desktop"
+    }
+  });
+  assert.equal(invalidTicket.status, 422);
+  assert.match(invalidTicket.body.error.message, /title is required/i);
 });
 
 test("Sprint 7 API routes tickets to Creator inbox and denies invisible ticket submission", () => {
