@@ -69,6 +69,32 @@ test("AppShell resolves the active navigation item from currentPath", () => {
   assert.match(html, /href="\/creator\/projects"[^>]*aria-current="page"/);
 });
 
+test("AppShell renders project context between the brand and primary navigation", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      AppShell,
+      {
+        ...shellProps,
+        sidebarContext: React.createElement(
+          "button",
+          { type: "button", "aria-label": "Switch project" },
+          "Project One"
+        )
+      },
+      "Content"
+    )
+  );
+
+  const contextPosition = html.indexOf('aria-label="Switch project"');
+  const navigationPosition = html.indexOf('aria-label="Primary"');
+
+  assert.ok(contextPosition >= 0, "the sidebar project context should render");
+  assert.ok(
+    contextPosition < navigationPosition,
+    "project context should appear before primary navigation"
+  );
+});
+
 test("usePageHeadingFocus focuses the main page heading after navigation", async () => {
   const source = await readFile(
     new URL("../../packages/ui/src/browser-navigation.ts", import.meta.url),

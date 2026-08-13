@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { HorizonLogo } from "@/shared/HorizonLogo";
 import { CreateProjectWizard } from "./CreateProjectWizard";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 
 export function CreatorShell({
   app,
@@ -27,6 +28,7 @@ export function CreatorShell({
     handleCreateProjectField,
     createProjectMessage,
     isEnteringWorkspace,
+    handleSelectProject,
     onNavigate,
     pathname
   } = app;
@@ -34,6 +36,18 @@ export function CreatorShell({
     <AppShell
       title="Horizon"
       logo={<HorizonLogo />}
+      sidebarContext={
+        <ProjectSwitcher
+          projects={bootstrap.projects}
+          selectedProject={selectedProject}
+          currentPage={creatorPage}
+          onSelectProject={(project, targetPage) => {
+            void handleSelectProject(project, targetPage);
+          }}
+          onViewAllProjects={() => onNavigate("/creator/")}
+          onCreateProject={() => setIsCreateProjectDialogOpen(true)}
+        />
+      }
       navItems={creatorNavItems}
       userName={bootstrap.userName}
       session={creatorSessionControls}

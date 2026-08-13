@@ -5,18 +5,20 @@ import type {
 } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
-export async function loadCreatorPublishState(
-  projectId: string
-): Promise<{
-  access: AppAccessSnapshotResponse;
+export async function loadCreatorPublishState(projectId: string): Promise<{
   review: PublishReviewResponse;
   registry: AppStoreRegistryEntryDto[];
 }> {
   const client = createCreatorPlatformClient();
-  const [access, review, registry] = await Promise.all([
-    client.getAppAccessSnapshot(projectId),
+  const [review, registry] = await Promise.all([
     client.getPublishReview(projectId),
     client.listAppStoreRegistry()
   ]);
-  return { access, review, registry };
+  return { review, registry };
+}
+
+export async function loadCreatorAccessState(
+  projectId: string
+): Promise<AppAccessSnapshotResponse> {
+  return createCreatorPlatformClient().getAppAccessSnapshot(projectId);
 }

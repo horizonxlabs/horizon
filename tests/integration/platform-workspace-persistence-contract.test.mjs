@@ -138,6 +138,33 @@ test("Workspace persistence service stores blocked task without replacing previe
   );
 });
 
+test("Workspace persistence exposes the latest validated code checkpoint as a publishable preview", async () => {
+  const client = new MemoryWorkspacePersistenceClient();
+  client.workspaceCodeCheckpoint = {
+    async findMany({ where }) {
+      assert.equal(where.projectId, project.id);
+      return [
+        {
+          id: "wcp_sales_dashboard_1",
+          projectId: project.id,
+          tag: "checkpoint/abc123def456",
+          commitSha: "abc123def4567890",
+          label: "Build the sales dashboard",
+          createdAt: new Date("2026-08-13T12:00:00.000Z")
+        }
+      ];
+    }
+  };
+  const service = createWorkspaceRepositoryBackedService(client);
+
+  const preview = await service.refreshPreview(creatorActor, { project, baseline });
+
+  assert.equal(preview.id, "preview_wcp_sales_dashboard_1");
+  assert.equal(preview.version, "preview-abc123def456");
+  assert.match(preview.summary, /Build the sales dashboard/);
+  assert.match(preview.highlights.join(" "), /abc123def456/);
+});
+
 test("runtime persistence wiring exposes Workspace service and routes", () => {
   assert.match(appFactory, /workspacePersistence\?: WorkspaceRepositoryBackedService/);
   assert.match(

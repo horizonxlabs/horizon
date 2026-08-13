@@ -47,6 +47,10 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
   const [ticketDescription, setTicketDescription] = useState("");
   const [ticketDevice, setTicketDevice] = useState("");
   const [validationError, setValidationError] = useState<string>();
+  const [launchState, setLaunchState] = useState<{
+    pending: boolean;
+    error?: string;
+  }>({ pending: false });
 
   const loadDetail = useCallback(
     async (options: { preserveReady?: boolean } = {}) => {
@@ -287,15 +291,32 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
             <h2>Current access</h2>
             <p>{app.myRole ? `Role: ${app.myRole}` : "No assigned role"}</p>
             {supports("open") ? (
-              <button
-                type="button"
-                onClick={() => {
-                  recordRecent(app.slug);
-                  window.location.assign(app.route);
-                }}
-              >
-                Open app
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={launchState.pending}
+                  onClick={() => {
+                    recordRecent(app.slug);
+                    setLaunchState({ pending: true });
+                    void api
+                      .authorizeStoreAppLaunch(app.slug, app.route)
+                      .then(() => window.location.assign(app.route))
+                      .catch((error: unknown) =>
+                        setLaunchState({
+                          pending: false,
+                          error: error instanceof Error ? error.message : "Unable to open this app."
+                        })
+                      );
+                  }}
+                >
+                  {launchState.pending ? "Opening…" : "Open app"}
+                </button>
+                {launchState.error ? (
+                  <p className="store-action-error" role="alert">
+                    {launchState.error}
+                  </p>
+                ) : null}
+              </>
             ) : null}
             {supports("view_status") ? (
               <button type="button" onClick={() => navigateBrowserPath("/store/access-requests")}>

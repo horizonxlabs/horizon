@@ -4,7 +4,6 @@ import {
   createPublishService,
   PRODUCTION_DOCKERFILE
 } from "../../apps/platform-api/src/publish/publish-service.ts";
-import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts";
 import { buildPublishServiceDeps as buildDeps } from "./publish-service-test-helpers.mjs";
 
 test("production Dockerfile preserves the npm dependency cache across source-only edits", () => {
@@ -74,7 +73,7 @@ test("staging image is built with a Next base path that keeps navigation behind 
     (file) => file.name === ".env.production"
   );
   assert.ok(environmentFile, "the deployment environment must be injected in-memory");
-  assert.equal(environmentFile.content, "EVCP_PREVIEW_BASE=/api/apps/prj-123/staging\n");
+  assert.equal(environmentFile.content, "EVCP_PREVIEW_BASE=/apps/prj-123/staging\n");
 });
 
 test("production image is built with its public app proxy base path", async () => {
@@ -92,7 +91,7 @@ test("production image is built with its public app proxy base path", async () =
     (file) => file.name === ".env.production"
   );
   assert.ok(environmentFile, "the deployment environment must be injected in-memory");
-  assert.equal(environmentFile.content, "EVCP_PREVIEW_BASE=/api/apps/prj-123\n");
+  assert.equal(environmentFile.content, "EVCP_PREVIEW_BASE=/apps/prj-123\n");
 });
 
 test("staging publish runs the immutable image without a shared writable workspace volume", async () => {
@@ -304,87 +303,4 @@ test("rollback: publishing an explicit older commit checks out that commit and t
   assert.equal(outcome.deployment.commitSha, "sha1");
   assert.deepEqual(deps.git.state.projects.p1.checkouts, ["sha1", "sha2"]);
   assert.ok(deps._audits.some((e) => e.action === "workspace.rollback"));
-});
-
-test("promote: reuses the healthy staging commitSha for production WITHOUT a rebuild from dev/HEAD", async () => {
-  const deps = buildDeps();
-  const service = createPublishService(deps);
-
-  // First deploy staging at HEAD (sha1); it becomes the current healthy staging deployment.
-  const staging = await service.publish({
-    projectId: "p1",
-    slug: "app",
-    environment: "staging",
-    publishedByUserId: "u1"
-  });
-  assert.equal(staging.ok, true);
-
-  // Advance dev HEAD so a rebuild-from-dev would pick a DIFFERENT commit — promote must NOT.
-  deps.git.state.projects.p1.head = "sha2";
-  const commitsBefore = deps.docker.state.commits.length;
-
-  const promoted = await service.promote({ projectId: "p1", slug: "app", publishedByUserId: "u1" });
-  assert.equal(promoted.ok, true);
-  assert.equal(promoted.deployment.environment, "production");
-  // production runs the exact bits validated in staging (same commit), not the newer HEAD
-  assert.equal(promoted.deployment.commitSha, "sha1");
-  assert.match(promoted.deployment.imageTag, /^evcp-production-app:sha1-[a-f0-9]{8}$/);
-  // the source of the promote image is the running staging container (no dev rebuild / pre-checks)
-  const lastCommit = deps.docker.state.commits[deps.docker.state.commits.length - 1];
-  assert.equal(lastCommit.containerId, staging.deployment.containerId);
-  assert.equal(deps.docker.state.commits.length, commitsBefore + 1);
-  assert.ok(deps._audits.some((e) => e.action === "workspace.promote"));
-});
-
-test("containers are keyed by the id-derived resource key (evcp-<env>-<resourceKey>), not a slug", async () => {
-  // The publish HTTP layer feeds the resource key (projectId with `_`→`-`) as the container key,
-  // since projects no longer carry a resource-usable slug after the slug→UUID change.
-  const resourceKey = resourceKeyForProject("prj_d91441edb0024adc874d6cb80cf2c6af");
-  assert.equal(resourceKey, "prj-d91441edb0024adc874d6cb80cf2c6af");
-
-  const deps = buildDeps();
-  const service = createPublishService(deps);
-  const outcome = await service.publish({
-    projectId: "p1",
-    slug: resourceKey,
-    environment: "staging",
-    publishedByUserId: "u1"
-  });
-
-  assert.equal(outcome.ok, true);
-  assert.equal(outcome.deployment.slug, resourceKey);
-  assert.match(
-    outcome.deployment.imageTag,
-    /^evcp-staging-prj-d91441edb0024adc874d6cb80cf2c6af:sha1-[a-f0-9]{8}$/
-  );
-  const container = deps.docker.state.containers.find(
-    (c) => c.spec.name === outcome.deployment.containerName
-  );
-  assert.ok(container, "container name must be evcp-<env>-<resourceKey>");
-  assert.deepEqual(container.spec.hostConfig.Binds, []);
-});
-
-test("promote: errors when there is no healthy staging deployment to promote", async () => {
-  const deps = buildDeps();
-  const service = createPublishService(deps);
-  await assert.rejects(
-    () => service.promote({ projectId: "p1", slug: "app", publishedByUserId: "u1" }),
-    /no healthy staging deployment/i
-  );
-});
-
-test("promote: ignores a FAILED staging deployment (only healthy staging can be promoted)", async () => {
-  const deps = buildDeps({ healthy: false });
-  const service = createPublishService(deps);
-  const staging = await service.publish({
-    projectId: "p1",
-    slug: "app",
-    environment: "staging",
-    publishedByUserId: "u1"
-  });
-  assert.equal(staging.ok, false);
-  await assert.rejects(
-    () => service.promote({ projectId: "p1", slug: "app", publishedByUserId: "u1" }),
-    /no healthy staging deployment/i
-  );
 });

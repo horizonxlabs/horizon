@@ -54,8 +54,20 @@ export const PRODUCTION_DOCKERIGNORE = `node_modules
  * and asset URLs that return through its proxy, without replacing user config or touching dev.
  */
 export function buildDeploymentEnvironment(slug: string, environment: EnvironmentName): string {
-  const basePath = environment === "staging" ? `/api/apps/${slug}/staging` : `/api/apps/${slug}`;
+  const basePath = environment === "staging" ? `/apps/${slug}/staging` : `/apps/${slug}`;
   return `EVCP_PREVIEW_BASE=${basePath}\n`;
+}
+
+function deploymentContainerName(
+  slug: string,
+  environment: EnvironmentName,
+  revisionSuffix: string
+): string {
+  const prefix = `evcp-${environment}-`;
+  const suffix = `-${revisionSuffix}`;
+  const maxDnsLabelLength = 63;
+  const slugLength = Math.max(1, maxDnsLabelLength - prefix.length - suffix.length);
+  return `${prefix}${slug.slice(0, slugLength)}${suffix}`;
 }
 
 export type PublishOutcome =
@@ -120,12 +132,6 @@ export function createPublishService(deps: PublishServiceDeps) {
     return image.imageId;
   };
 
-  // promote reuses the exact bits validated in staging: snapshot the running (already-built) staging
-  // container to the prod tag rather than rebuilding, so production == what staging health-gated.
-  const retagFromContainer = async (sourceContainerId: string, imageTag: string) => {
-    return (await deps.docker.commitContainer(sourceContainerId, imageTag)).imageId;
-  };
-
   // Shared deploy flow: materialize an env-scoped image from a source container, start a SEPARATE
   // container for that environment, health-gate it, and record the deployment. `publish` builds the
   // image from the dev container's /workspace (real Dockerfile); `promote` snapshots the validated
@@ -171,7 +177,7 @@ export function createPublishService(deps: PublishServiceDeps) {
       },
       environment
     );
-    const containerName = `evcp-${environment}-${input.slug}-${revisionSuffix}`;
+    const containerName = deploymentContainerName(input.slug, environment, revisionSuffix);
     spec.name = containerName;
     spec.labels["evcp.commit-sha"] = input.commitSha;
     spec.labels["evcp.container-name"] = containerName;
@@ -197,7 +203,7 @@ export function createPublishService(deps: PublishServiceDeps) {
       });
 
       const basePath =
-        environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
+        environment === "staging" ? `/apps/${input.slug}/staging` : `/apps/${input.slug}`;
       healthy = await deps.health.check(`http://${containerName}:3000${basePath}/api/health`);
       finalized = deps.deployments.updateHealth(deployment.id, healthy ? "healthy" : "failed");
       await deps.deployments.flush?.();
@@ -306,9 +312,9 @@ export function createPublishService(deps: PublishServiceDeps) {
       });
     },
 
-    // Promote the current HEALTHY staging deployment to production WITHOUT rebuilding: the running
-    // staging container is committed to a production image and started as prod, so production runs
-    // the exact bits validated in staging (same commitSha, no fresh build from dev/HEAD).
+    // Promote the current HEALTHY staging source commit to production. Next.js basePath is compiled
+    // at build time, so a staging image cannot be reused at the production route. Rebuild the same
+    // validated commit with production environment input, then restore the developer's current HEAD.
     async promote(input: {
       projectId: string;
       slug: string;
@@ -319,10 +325,8 @@ export function createPublishService(deps: PublishServiceDeps) {
         if (!staging) {
           throw new Error(`no healthy staging deployment to promote for slug '${input.slug}'`);
         }
-        if (!staging.containerId) {
-          throw new Error(`staging deployment '${staging.id}' has no container to promote`);
-        }
-        const sourceContainerId = staging.containerId;
+        const sourceContainerId = await deps.getDevContainerId(input.projectId);
+        const originalCommit = await deps.git.currentCommit(input.projectId);
 
         audit("workspace.promote", input.projectId, {
           slug: input.slug,
@@ -330,17 +334,22 @@ export function createPublishService(deps: PublishServiceDeps) {
           fromDeploymentId: staging.id
         });
 
-        return withDeployQueue(() =>
-          deployFromContainer({
-            projectId: input.projectId,
-            slug: input.slug,
-            environment: "production",
-            commitSha: staging.commitSha,
-            sourceContainerId,
-            publishedByUserId: input.publishedByUserId,
-            prepareImage: retagFromContainer
-          })
-        );
+        await deps.git.checkoutCommit(input.projectId, staging.commitSha);
+        try {
+          return await withDeployQueue(() =>
+            deployFromContainer({
+              projectId: input.projectId,
+              slug: input.slug,
+              environment: "production",
+              commitSha: staging.commitSha,
+              sourceContainerId,
+              publishedByUserId: input.publishedByUserId,
+              prepareImage: buildProductionImage
+            })
+          );
+        } finally {
+          await deps.git.checkoutCommit(input.projectId, originalCommit);
+        }
       });
     }
   };

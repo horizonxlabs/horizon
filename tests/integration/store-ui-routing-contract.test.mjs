@@ -31,9 +31,6 @@ const tickets = source("apps/app-store-pwa/src/features/storefront/pages/StoreTi
 const ticketDetail = source(
   "apps/app-store-pwa/src/features/storefront/pages/StoreTicketDetailPage.tsx"
 );
-const routes = source("apps/app-store-pwa/src/routes/StoreRoutes.tsx");
-const routeResolver = source("apps/app-store-pwa/src/routes/store-route.ts");
-
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
@@ -183,6 +180,7 @@ test("rendered Store states retain the workspace shell and a valid next action",
 test("App Store PWA actions are API-client backed through the scoped Provider coordinator", () => {
   for (const method of [
     "getStoreAppDetail",
+    "authorizeStoreAppLaunch",
     "requestStoreAccess",
     "submitStoreTicket",
     "getStoreTicket"
@@ -236,31 +234,20 @@ test("App Store guards unauthenticated and empty states before access-action der
 test("published app routing and Store detail Open compose into the generated runtime", () => {
   const caddyfile = source("docker/Caddyfile");
   assert.match(caddyfile, /handle \/apps\/\*/);
-  assert.match(caddyfile, /rewrite \* \/store\{uri\}/);
+  assert.match(caddyfile, /handle \/apps\/\* \{[^]*reverse_proxy platform-api:3100/);
   assert.match(caddyfile, /handle \/store\*/);
   assert.match(source("apps/creator-web/vite.config.ts"), /base: "\/creator\/"/);
   assert.match(source("apps/app-store-pwa/vite.config.ts"), /base: "\/store\/"/);
   assert.match(source("apps/app-store-pwa/index.html"), /href="manifest\.webmanifest"/);
   assert.match(caddyfile, /reverse_proxy app-store-pwa:4102/);
-  assert.match(routes, /GeneratedLeaveManagementApp/);
-  assert.match(routes, /pathname\.startsWith\("\/apps\/leave-management"\)/);
-  assert.match(routeResolver, /segments\[2\] === "apps"/);
   assert.match(composition, /<StoreAppDetailPage appSlug=\{route\.appSlug\} \/>/);
   const recordRecent = detail.indexOf("recordRecent(app.slug)");
+  const authorizeLaunch = detail.indexOf("authorizeStoreAppLaunch(app.slug, app.route)");
   const assignRuntime = detail.indexOf("window.location.assign(app.route)");
   assert.ok(recordRecent >= 0);
+  assert.ok(authorizeLaunch > recordRecent);
   assert.ok(assignRuntime > recordRecent);
-  const generatedApp = source(
-    "apps/app-store-pwa/src/features/generated-leave-management/GeneratedLeaveManagementApp.tsx"
-  );
-  for (const text of [
-    "New leave request",
-    "Submit request",
-    "Approval queue",
-    "approveRequest",
-    "Last submitted request"
-  ])
-    assert.match(generatedApp, new RegExp(text));
+  assert.ok(assignRuntime > authorizeLaunch);
 });
 
 test.after(() => {

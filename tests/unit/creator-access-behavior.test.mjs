@@ -47,10 +47,11 @@ const publishState = {
 };
 
 let latest;
-function AccessProbe({ client, loadPublishState }) {
+function AccessProbe({ client, loadAccessState, loadPublishState }) {
   latest = usePublishAccess({
     selectedProject,
     clientFactory: () => client,
+    loadAccessState: loadAccessState ?? (async () => publishState.access),
     loadPublishState
   });
   const ids = latest.decidingAccessRequestIds
@@ -58,6 +59,160 @@ function AccessProbe({ client, loadPublishState }) {
     : (latest.decidingAccessRequestId ?? "");
   return React.createElement("output", null, `${ids}|${latest.publishMessage}`);
 }
+
+const invitationInput = {
+  email: "new.user@company.com",
+  roleKey: "employee",
+  userType: "internal",
+  note: "Use the project app"
+};
+
+test("a successful invitation refreshes only app access and never requires publish readiness", async () => {
+  let invitationCalls = 0;
+  let accessRefreshCalls = 0;
+  let publishRefreshCalls = 0;
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(AccessProbe, {
+        client: {
+          createAppInvitation: async (_projectId, input) => {
+            invitationCalls += 1;
+            return { id: "invite-1", status: "pending", ...input };
+          }
+        },
+        loadAccessState: async () => {
+          accessRefreshCalls += 1;
+          return {
+            ...publishState.access,
+            invitations: [{ id: "invite-1", status: "pending", ...invitationInput }]
+          };
+        },
+        loadPublishState: async () => {
+          publishRefreshCalls += 1;
+          throw new Error("PRD baseline is required before opening workspace");
+        }
+      })
+    );
+  });
+
+  let result;
+  await act(async () => {
+    result = await latest.handleInviteUser(invitationInput);
+  });
+
+  assert.equal(result, true);
+  assert.equal(invitationCalls, 1);
+  assert.equal(accessRefreshCalls, 1);
+  assert.equal(publishRefreshCalls, 0);
+  assert.match(latest.publishMessage, /Invitation sent/i);
+  assert.doesNotMatch(latest.publishMessage, /baseline|workspace/i);
+  await act(async () => renderer.unmount());
+});
+
+test("a completed invitation stays successful when the access refresh fails", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(AccessProbe, {
+        client: {
+          createAppInvitation: async (_projectId, input) => ({
+            id: "invite-2",
+            status: "pending",
+            ...input
+          })
+        },
+        loadAccessState: async () => {
+          throw new Error("access refresh offline");
+        },
+        loadPublishState: async () => publishState
+      })
+    );
+  });
+
+  let result;
+  await act(async () => {
+    result = await latest.handleInviteUser(invitationInput);
+  });
+
+  assert.equal(result, true);
+  assert.match(latest.publishMessage, /Invitation sent/i);
+  assert.match(latest.publishMessage, /refresh failed.*access refresh offline/i);
+  assert.doesNotMatch(latest.publishMessage, /Invitation failed/i);
+  await act(async () => renderer.unmount());
+});
+
+test("an email with a pending invitation cannot be invited twice", async () => {
+  let invitationCalls = 0;
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(AccessProbe, {
+        client: {
+          createAppInvitation: async () => {
+            invitationCalls += 1;
+          }
+        },
+        loadAccessState: async () => publishState.access,
+        loadPublishState: async () => publishState
+      })
+    );
+  });
+  await act(async () => {
+    latest.setAppAccessSnapshot({
+      ...publishState.access,
+      invitations: [
+        {
+          id: "invite-existing",
+          email: "NEW.USER@company.com",
+          roleKey: "employee",
+          userType: "internal",
+          status: "pending"
+        }
+      ]
+    });
+  });
+
+  let result;
+  await act(async () => {
+    result = await latest.handleInviteUser(invitationInput);
+  });
+
+  assert.equal(result, false);
+  assert.equal(invitationCalls, 0);
+  assert.match(latest.publishMessage, /already has a pending invitation/i);
+  await act(async () => renderer.unmount());
+});
+
+test("the pending invitations view excludes accepted and revoked invitations", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(AccessProbe, {
+        client: {},
+        loadAccessState: async () => publishState.access,
+        loadPublishState: async () => publishState
+      })
+    );
+  });
+  await act(async () => {
+    latest.setAppAccessSnapshot({
+      ...publishState.access,
+      invitations: [
+        { id: "pending", status: "pending", ...invitationInput },
+        { id: "approval", status: "approval_required", ...invitationInput },
+        { id: "accepted", status: "accepted", ...invitationInput },
+        { id: "revoked", status: "revoked", ...invitationInput }
+      ]
+    });
+  });
+
+  assert.deepEqual(
+    latest.visiblePendingInvites.map((invitation) => invitation.status),
+    ["pending", "approval_required"]
+  );
+  await act(async () => renderer.unmount());
+});
 
 test("two access-request rows remain independently pending until each completion", async () => {
   const first = deferred();
@@ -129,9 +284,9 @@ test("access decision POST failure reports failure without refreshing", async ()
             throw new Error("decision rejected");
           }
         },
-        loadPublishState: async () => {
+        loadAccessState: async () => {
           refreshCalls += 1;
-          return publishState;
+          return publishState.access;
         }
       })
     );
@@ -164,9 +319,10 @@ test("access decision POST success remains confirmed when refresh fails", async 
             return { id: "request-1", status: "approved" };
           }
         },
-        loadPublishState: async () => {
+        loadAccessState: async () => {
           throw new Error("refresh offline");
-        }
+        },
+        loadPublishState: async () => publishState
       })
     );
   });

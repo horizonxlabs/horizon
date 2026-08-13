@@ -18,9 +18,9 @@ import {
   creatorPathForPage,
   creatorPageCopy,
   creatorRouteFromPath,
+  projectSwitchTargetPage,
   projectRouteSegmentFromPath,
-  type CreatorPage,
-  type CreatorSelectablePage
+  type CreatorPage
 } from "@/app/routes";
 import { clearLoginSession } from "@/shared/session";
 import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types";
@@ -115,7 +115,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
             "Signed in. Confirm PRD baseline before workspace generation."
           );
         }
-        await publishAccess.refreshCreatorPublishState(nextBootstrap.selectedProject.id).catch(() => undefined);
+        await publishAccess
+          .refreshCreatorPublishState(nextBootstrap.selectedProject.id)
+          .catch(() => undefined);
       })
       .catch((error) => {
         setBootstrap(
@@ -146,12 +148,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       return;
     }
     if (match.id === selectedProject.id) return;
-    const targetPage: CreatorSelectablePage =
-      creatorPage === "ticket-detail"
-        ? "tickets"
-        : creatorPage === "not-found"
-          ? "workspace"
-          : creatorPage;
+    const targetPage = projectSwitchTargetPage(creatorPage);
     void handleSelectProject(match, targetPage, { push: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, bootstrap.projects, selectedProject.id]);
@@ -196,12 +193,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     options: { push?: boolean } = {}
   ) {
     const { push = true } = options;
-    const selectableTargetPage: CreatorSelectablePage =
-      targetPage === "ticket-detail"
-        ? "tickets"
-        : targetPage === "not-found"
-          ? "workspace"
-          : targetPage;
+    const selectableTargetPage = projectSwitchTargetPage(targetPage);
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
     if (push) {

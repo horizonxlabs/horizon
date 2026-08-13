@@ -55,6 +55,7 @@ export type StorefrontContextValue = {
 export type StorePlatformClient = Pick<
   ReturnType<typeof createStorePlatformClient>,
   | "getStoreAppDetail"
+  | "authorizeStoreAppLaunch"
   | "installStoreApp"
   | "uninstallStoreApp"
   | "requestStoreAccess"
@@ -130,6 +131,9 @@ function createLazyStorePlatformClient(): StorePlatformClient {
   return {
     getStoreAppDetail(...args) {
       return createStorePlatformClient().getStoreAppDetail(...args);
+    },
+    authorizeStoreAppLaunch(...args) {
+      return createStorePlatformClient().authorizeStoreAppLaunch(...args);
     },
     installStoreApp(...args) {
       return createStorePlatformClient().installStoreApp(...args);

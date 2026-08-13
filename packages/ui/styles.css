@@ -9,6 +9,7 @@
 @source "./src";
 @import "react-data-grid/lib/styles.css";
 @import "./theme.css";
+@import "./creator-project-switcher.css";
 
 @theme inline {
   --color-page: var(--evcp-color-page);

@@ -1,12 +1,14 @@
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
-import { isLockedFile, type GoldenTemplate } from "../workspace-orchestrator/template";
+import { isLockedFile } from "../workspace-orchestrator/template";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { MigrationStore } from "./migration-store";
 import { applyFindReplace } from "./find-replace";
 import { parseEditBody } from "./generation-action-utils";
 import { containsTransactionControl } from "./migration-runner";
+import type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
 
 export { applyFindReplace };
+export type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
 
 // Read the CURRENT file (base64, byte-safe), apply the fuzzy find/replace so untouched regions
 // stay byte-for-byte identical, and write it back. Shared by the edit action and by the recovery
@@ -25,7 +27,13 @@ async function applyEditToFile(
   ]);
   const raw = (read.stdout ?? "").trim();
   if (raw === "__EVCP_MISSING__" || raw === "") {
-    return { ok: false, error: `cannot edit '${filePath}': file not found`, stdout: "", stderr: "", exitCode: -1 };
+    return {
+      ok: false,
+      error: `cannot edit '${filePath}': file not found`,
+      stdout: "",
+      stderr: "",
+      exitCode: -1
+    };
   }
   const current = Buffer.from(raw, "base64").toString("utf8");
   const edited = applyFindReplace(current, find, replace);
@@ -34,7 +42,13 @@ async function applyEditToFile(
       edited.reason === "not_found"
         ? "the SEARCH text was not found in the file (it must match the current file exactly)"
         : "the SEARCH text appears more than once; include more surrounding context so it is unique";
-    return { ok: false, error: `edit of '${filePath}' failed: ${detail}`, stdout: "", stderr: "", exitCode: -1 };
+    return {
+      ok: false,
+      error: `edit of '${filePath}' failed: ${detail}`,
+      stdout: "",
+      stderr: "",
+      exitCode: -1
+    };
   }
   const encoded = Buffer.from(edited.content, "utf8").toString("base64");
   const result = await docker.execInContainer(containerId, [
@@ -43,7 +57,13 @@ async function applyEditToFile(
     `echo ${encoded} | base64 -d > ${filePath}`
   ]);
   if (result.exitCode !== 0) {
-    return { ok: false, error: "edit write failed", stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+    return {
+      ok: false,
+      error: "edit write failed",
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode
+    };
   }
   return { ok: true, stdout: result.stdout };
 }
@@ -63,34 +83,6 @@ function conflictMarkerLine(text: string): string | undefined {
   return text.match(/^(?:<{7,}|={7,}|>{7,}|\|{7,})(?:[ \t].*)?$/m)?.[0];
 }
 
-export type RunnableAction =
-  | { id: string; type: "file"; filePath: string; content: string }
-  | { id: string; type: "edit"; filePath: string; find: string; replace: string }
-  | { id: string; type: "shell"; command: string }
-  | { id: string; type: "migration"; name: string; sql: string };
-
-export type ActionResult =
-  | { ok: true; stdout: string }
-  | { ok: false; error: string; stdout: string; stderr: string; exitCode: number };
-
-export interface ActionRunner {
-  runAction(input: {
-    containerId: string;
-    projectId: string;
-    template: GoldenTemplate;
-    action: RunnableAction;
-    commitSha?: string;
-    // For shell actions: called with each chunk of merged stdout/stderr as it streams.
-    onShellOutput?: (chunk: string) => void;
-  }): Promise<ActionResult>;
-  runMigrationBatch(input: {
-    containerId: string;
-    projectId: string;
-    actions: Array<Extract<RunnableAction, { type: "migration" }>>;
-    commitSha: string;
-  }): Promise<ActionResult>;
-}
-
 export function createActionRunner(deps: {
   docker: DockerEngine;
   checkpoints: CheckpointStore;
@@ -100,6 +92,57 @@ export function createActionRunner(deps: {
   runMigrationSql?: (databaseUrl: string, sql: string) => Promise<void>;
   runMigrationBatchSql?: (databaseUrl: string, statements: string[]) => Promise<void>;
 }): ActionRunner {
+  const syncMigrationArtifacts = async (input: {
+    containerId: string;
+    projectId: string;
+    actions: Array<Extract<RunnableAction, { type: "migration" }>>;
+  }): Promise<ActionResult> => {
+    try {
+      const artifacts = new Map(
+        (await deps.migrations.listMigrations(input.projectId)).map((migration) => [
+          migration.name,
+          migration.sql
+        ])
+      );
+      for (const action of input.actions) artifacts.set(action.name, action.sql);
+      if (artifacts.size === 0) return { ok: true, stdout: "" };
+
+      const scripts: string[] = [];
+      for (const [name, sql] of artifacts) {
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name)) {
+          throw new Error(`migration name '${name}' is not safe for a workspace artifact`);
+        }
+        const encoded = Buffer.from(sql, "utf8").toString("base64");
+        scripts.push(
+          `mkdir -p prisma/migrations/${name} && echo ${encoded} | base64 -d > prisma/migrations/${name}/migration.sql`
+        );
+      }
+      const result = await deps.docker.execInContainer(input.containerId, [
+        "sh",
+        "-c",
+        scripts.join(" && ")
+      ]);
+      if (result.exitCode !== 0) {
+        return {
+          ok: false,
+          error: "failed to materialize workspace migration artifacts",
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode
+        };
+      }
+      return { ok: true, stdout: result.stdout };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `migration artifact sync failed: ${(error as Error).message}`,
+        stdout: "",
+        stderr: (error as Error).message,
+        exitCode: 1
+      };
+    }
+  };
+
   const runMigrationBatch = async (input: {
     containerId: string;
     projectId: string;
@@ -160,6 +203,7 @@ export function createActionRunner(deps: {
   };
 
   return {
+    syncMigrationArtifacts,
     runMigrationBatch,
     async runAction(input) {
       const { action } = input;
@@ -287,12 +331,22 @@ export function createActionRunner(deps: {
         // Stream the output live when the engine + caller support it; otherwise run buffered.
         if (input.onShellOutput && deps.docker.execInContainerStream) {
           let output = "";
-          const { exitCode } = await deps.docker.execInContainerStream(input.containerId, cmd, (chunk) => {
-            output += chunk;
-            input.onShellOutput?.(chunk);
-          });
+          const { exitCode } = await deps.docker.execInContainerStream(
+            input.containerId,
+            cmd,
+            (chunk) => {
+              output += chunk;
+              input.onShellOutput?.(chunk);
+            }
+          );
           if (exitCode !== 0) {
-            return { ok: false, error: `shell command exited ${exitCode}`, stdout: output, stderr: "", exitCode };
+            return {
+              ok: false,
+              error: `shell command exited ${exitCode}`,
+              stdout: output,
+              stderr: "",
+              exitCode
+            };
           }
           return { ok: true, stdout: output };
         }

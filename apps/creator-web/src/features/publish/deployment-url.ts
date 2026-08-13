@@ -5,6 +5,6 @@ export function deploymentUrl(
   environment: DeploymentEnvironment,
   origin = typeof window !== "undefined" ? window.location.origin : ""
 ): string {
-  const base = `${origin}/api/apps/${slug}`;
+  const base = `${origin}/apps/${slug}`;
   return environment === "production" ? base : `${base}/staging`;
 }

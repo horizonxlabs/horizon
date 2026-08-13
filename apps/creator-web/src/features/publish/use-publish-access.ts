@@ -1,4 +1,5 @@
 import {
+  type AppInvitationInput,
   type AppAccessSnapshotResponse,
   type AppStoreRegistryEntryDto,
   type PublishResultResponse,
@@ -7,15 +8,17 @@ import {
 import { useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
-import { loadCreatorPublishState } from "./api";
+import { loadCreatorAccessState, loadCreatorPublishState } from "./api";
 
 export function usePublishAccess({
   selectedProject,
   clientFactory = createCreatorPlatformClient,
+  loadAccessState = loadCreatorAccessState,
   loadPublishState = loadCreatorPublishState
 }: {
   selectedProject: CreatorProjectView;
   clientFactory?: typeof createCreatorPlatformClient;
+  loadAccessState?: typeof loadCreatorAccessState;
   loadPublishState?: typeof loadCreatorPublishState;
 }) {
   const [appAccessSnapshot, setAppAccessSnapshot] = useState<AppAccessSnapshotResponse | undefined>(
@@ -41,13 +44,16 @@ export function usePublishAccess({
       lastAccess: member.lastAccessAt ? member.lastAccessAt.slice(0, 10) : "pending"
     })) ?? [];
   const visiblePendingInvites =
-    appAccessSnapshot?.invitations.map((invite) => ({
-      email: invite.email,
-      role: invite.roleKey,
-      invitedBy: "Creator User",
-      expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
-      status: invite.status
-    })) ?? [];
+    appAccessSnapshot?.invitations
+      .filter((invite) => ["pending", "approval_required"].includes(invite.status))
+      .map((invite) => ({
+        email: invite.email,
+        type: invite.userType,
+        role: invite.roleKey,
+        invitedBy: "Creator User",
+        expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
+        status: invite.status
+      })) ?? [];
   const visibleAccessRequests =
     appAccessSnapshot?.accessRequests.map((request) => ({
       id: request.id,
@@ -82,43 +88,72 @@ export function usePublishAccess({
     setRegistryEntries([]);
   }
 
+  async function refreshCreatorAccessState(projectId: string) {
+    const access = await loadAccessState(projectId);
+    setAppAccessSnapshot(access);
+    return access;
+  }
+
   async function refreshCreatorPublishState(projectId: string) {
     try {
+      await refreshCreatorAccessState(projectId);
+    } catch (error) {
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setPublishMessage(`App access unavailable.${detail || " Retry to load project access."}`);
+      throw error;
+    }
+    try {
       const publishState = await loadPublishState(projectId);
-      setAppAccessSnapshot(publishState.access);
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
     } catch (error) {
       const detail = error instanceof Error ? ` ${error.message}` : "";
-      setPublishMessage(
-        `Publish readiness unavailable.${detail || " Complete the PRD and frontend prerequisites, then retry."}`
-      );
+      setPublishMessage(`App access loaded. Publish readiness unavailable.${detail}`);
       throw error;
     }
   }
 
-  async function handleInviteUser() {
+  async function handleInviteUser(input: AppInvitationInput): Promise<boolean> {
+    const email = input.email.trim().toLowerCase();
+    const duplicate = appAccessSnapshot?.invitations.find(
+      (invitation) =>
+        invitation.email.trim().toLowerCase() === email &&
+        ["pending", "approval_required"].includes(invitation.status)
+    );
+    if (duplicate) {
+      setPublishMessage(`${email} already has a pending invitation for this app.`);
+      return false;
+    }
+
     setIsInvitingUser(true);
     try {
       const client = clientFactory();
       await client.createAppInvitation(selectedProject.id, {
-        email: "finance.manager@company.com",
-        roleKey: "manager",
-        userType: "internal",
-        note: "Join manager approval queue"
+        ...input,
+        email,
+        note: input.note?.trim() || undefined
       });
-      await refreshCreatorPublishState(selectedProject.id);
-      setPublishMessage("Invitation sent through Platform API and app access state refreshed.");
     } catch (error) {
       setPublishMessage(
         error instanceof Error
           ? `Invitation failed. Existing app access state was preserved. ${error.message}`
           : "Invitation failed. Existing app access state was preserved."
       );
+      setIsInvitingUser(false);
+      return false;
+    }
+
+    try {
+      await refreshCreatorAccessState(selectedProject.id);
+      setPublishMessage(`Invitation sent to ${email}. App access state refreshed.`);
+    } catch (error) {
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setPublishMessage(`Invitation sent to ${email}. App access refresh failed.${detail}`);
     } finally {
       setIsInvitingUser(false);
     }
+    return true;
   }
 
   async function handleAccessRequestDecision(requestId: string, decision: "approved" | "rejected") {
@@ -148,7 +183,7 @@ export function usePublishAccess({
         }
 
         try {
-          await refreshCreatorPublishState(selectedProject.id);
+          await refreshCreatorAccessState(selectedProject.id);
           setPublishMessage(`Access request ${decision} through Platform API.`);
         } catch (error) {
           const detail = error instanceof Error ? `: ${error.message}` : ".";
@@ -215,6 +250,7 @@ export function usePublishAccess({
     visibleDeployment,
     visibleRegistryEntry,
     resetPublishAccess,
+    refreshCreatorAccessState,
     refreshCreatorPublishState,
     handleInviteUser,
     handleAccessRequestDecision,

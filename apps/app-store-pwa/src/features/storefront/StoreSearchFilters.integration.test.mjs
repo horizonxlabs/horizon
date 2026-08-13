@@ -322,12 +322,22 @@ test("My Apps derives active access from the merged catalog", async () => {
 test("card detail navigation does not record history but opening an active app does", async () => {
   memory.clear();
   const store = createStore();
+  let launchAuthorized = false;
   let renderer;
   await act(async () => {
     renderer = create(
       React.createElement(
         StoreProvider,
-        { store, client: {} },
+        {
+          store,
+          client: {
+            authorizeStoreAppLaunch: async (appSlug) => {
+              assert.equal(appSlug, "Alpha");
+              launchAuthorized = true;
+              return { authorized: true };
+            }
+          }
+        },
         React.createElement(StoreCollectionPage, { page: "my-apps" })
       )
     );
@@ -344,11 +354,12 @@ test("card detail navigation does not record history but opening an active app d
 
   const primary = renderer.root
     .findAllByProps({ className: "store-app-primary" })
-    .find((node) => node.props.href === "/apps/Alpha");
+    .find((node) => node.props.href === "/store/apps/Alpha");
   assert.ok(primary);
   await act(async () => {
     primary.props.onClick({ preventDefault() {} });
   });
+  assert.equal(launchAuthorized, true);
   assert.equal(window.location.pathname, "/apps/Alpha");
   assert.deepEqual(store.getSnapshot().device.recent, ["Alpha"]);
 

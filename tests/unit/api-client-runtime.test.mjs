@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createPlatformApiClient, createPlatformSessionStore, PlatformApiError, success, failure } = await import("../../packages/api-client/src/index.ts");
+const { createPlatformApiClient, createPlatformSessionStore, PlatformApiError, success, failure } =
+  await import("../../packages/api-client/src/index.ts");
 
 function createMemoryStorage() {
   const data = new Map();
@@ -53,7 +54,12 @@ test("platform API client sends bearer session tokens", async () => {
       return new Response(
         JSON.stringify(
           success({
-            user: { id: "usr_admin", name: "Admin User", email: "admin@company.com", role: "admin" },
+            user: {
+              id: "usr_admin",
+              name: "Admin User",
+              email: "admin@company.com",
+              role: "admin"
+            },
             permissions: ["platform:admin"],
             auth: { mode: "platform_session", legacyMockFallback: false }
           })
@@ -80,7 +86,9 @@ test("platform API client sends explicit legacy mock header only when configured
       observedUser = init.headers.get("x-mock-user-email");
       observedAuthorization = init.headers.get("authorization") ?? "";
       assert.equal(String(url), "https://platform.example/api/projects");
-      return new Response(JSON.stringify(success([{ id: "proj_001", name: "Leave Management" }])), { status: 200 });
+      return new Response(JSON.stringify(success([{ id: "proj_001", name: "Leave Management" }])), {
+        status: 200
+      });
     }
   });
 
@@ -97,31 +105,47 @@ test("platform API client creates projects and generates PRD drafts", async () =
     baseUrl: "https://platform.example/api",
     legacyUserEmail: "creator@company.com",
     fetcher: async (url, init) => {
-      observed.push({ url: String(url), method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : undefined });
+      observed.push({
+        url: String(url),
+        method: init.method ?? "GET",
+        body: init.body ? JSON.parse(String(init.body)) : undefined
+      });
       if (String(url) === "https://platform.example/api/projects") {
-        return new Response(JSON.stringify(success({
-          id: "prj_expense_approval",
-          slug: "expense-approval",
-          name: "Expense Approval",
-          status: "draft",
-          ownerUserId: "usr_creator",
-          appType: "Workflow App",
-          businessProblem: "Reduce manual approvals",
-          targetDepartment: "Finance",
-          intendedUsers: ["Employee", "Manager"],
-          dataSensitivity: "internal",
-          createdAt: "2026-07-05T00:00:00.000Z"
-        })), { status: 201 });
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "prj_expense_approval",
+              slug: "expense-approval",
+              name: "Expense Approval",
+              status: "draft",
+              ownerUserId: "usr_creator",
+              appType: "Workflow App",
+              businessProblem: "Reduce manual approvals",
+              targetDepartment: "Finance",
+              intendedUsers: ["Employee", "Manager"],
+              dataSensitivity: "internal",
+              createdAt: "2026-07-05T00:00:00.000Z"
+            })
+          ),
+          { status: 201 }
+        );
       }
-      if (String(url) === "https://platform.example/api/projects/prj_expense_approval/prd/generate") {
-        return new Response(JSON.stringify(success({
-          id: "prdver_prj_expense_approval_01",
-          projectId: "prj_expense_approval",
-          version: "0.1",
-          status: "draft",
-          changeSummary: "Generated initial PRD draft for Expense Approval",
-          sections: [{ key: "overview", title: "Overview", body: "Draft", order: 1 }]
-        })), { status: 201 });
+      if (
+        String(url) === "https://platform.example/api/projects/prj_expense_approval/prd/generate"
+      ) {
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "prdver_prj_expense_approval_01",
+              projectId: "prj_expense_approval",
+              version: "0.1",
+              status: "draft",
+              changeSummary: "Generated initial PRD draft for Expense Approval",
+              sections: [{ key: "overview", title: "Overview", body: "Draft", order: 1 }]
+            })
+          ),
+          { status: 201 }
+        );
       }
       throw new Error(`Unexpected request ${url}`);
     }
@@ -150,12 +174,37 @@ test("platform API client installs and uninstalls App Store apps", async () => {
     baseUrl: "https://platform.example/api",
     legacyUserEmail: "user@company.com",
     fetcher: async (url, init) => {
-      observed.push({ url: String(url), method: init.method ?? "GET", user: init.headers.get("x-mock-user-email") });
+      observed.push({
+        url: String(url),
+        method: init.method ?? "GET",
+        user: init.headers.get("x-mock-user-email")
+      });
       if (String(url).endsWith("/store/apps/leave-management/install")) {
-        return new Response(JSON.stringify(success({ id: "appinst_001", appSlug: "leave-management", status: "active", installedAt: "2026-07-04T04:20:00.000Z" })), { status: 201 });
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "appinst_001",
+              appSlug: "leave-management",
+              status: "active",
+              installedAt: "2026-07-04T04:20:00.000Z"
+            })
+          ),
+          { status: 201 }
+        );
       }
       if (String(url).endsWith("/store/apps/leave-management/uninstall")) {
-        return new Response(JSON.stringify(success({ id: "appinst_001", appSlug: "leave-management", status: "disabled", installedAt: "2026-07-04T04:20:00.000Z", disabledAt: "2026-07-04T04:25:00.000Z" })), { status: 200 });
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "appinst_001",
+              appSlug: "leave-management",
+              status: "disabled",
+              installedAt: "2026-07-04T04:20:00.000Z",
+              disabledAt: "2026-07-04T04:25:00.000Z"
+            })
+          ),
+          { status: 200 }
+        );
       }
       throw new Error(`Unexpected request ${url}`);
     }
@@ -213,9 +262,24 @@ test("platform session store saves loads and clears browser tokens", () => {
 });
 
 test("platform API client builds Keycloak login and logout redirects without a browser token", async () => {
-  const { startKeycloakLogin, startKeycloakLogout } = await import("../../packages/api-client/src/index.ts");
-  assert.equal(startKeycloakLogin("https://platform.example/api", "creator", "https://creator.example/workspace"), "https://platform.example/api/auth/keycloak/start?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace");
-  assert.equal(startKeycloakLogout("https://platform.example/api", "creator", "https://creator.example/workspace"), "https://platform.example/api/auth/keycloak/logout?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace");
+  const { startKeycloakLogin, startKeycloakLogout } =
+    await import("../../packages/api-client/src/index.ts");
+  assert.equal(
+    startKeycloakLogin(
+      "https://platform.example/api",
+      "creator",
+      "https://creator.example/workspace"
+    ),
+    "https://platform.example/api/auth/keycloak/start?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace"
+  );
+  assert.equal(
+    startKeycloakLogout(
+      "https://platform.example/api",
+      "creator",
+      "https://creator.example/workspace"
+    ),
+    "https://platform.example/api/auth/keycloak/logout?app=creator&returnTo=https%3A%2F%2Fcreator.example%2Fworkspace"
+  );
 });
 
 test("platform API client posts AI provider test-call requests", async () => {
@@ -254,7 +318,11 @@ test("platform API client posts AI provider test-call requests", async () => {
   });
 
   assert.equal(observedUrl, "https://platform.example/api/ai/provider-test-call");
-  assert.deepEqual(observedBody, { scenario: "prd_generation", prompt: "Validate provider route", dryRun: true });
+  assert.deepEqual(observedBody, {
+    scenario: "prd_generation",
+    prompt: "Validate provider route",
+    dryRun: true
+  });
   assert.equal(result.providerName, "OpenAI Production");
   assert.equal(result.usageLogId, "aigw_0001");
 });
@@ -265,15 +333,35 @@ test("platform API client queues and reads durable AI jobs", async () => {
     baseUrl: "http://platform.test/api",
     fetcher: async (url, init = {}) => {
       calls.push({ url: String(url), method: init.method ?? "GET", body: init.body });
-      return new Response(JSON.stringify(success({ id: "aijob_1", requestId: "req_1", scenario: "frontend_coding", status: "queued", attempts: 0, createdAt: "2026-07-14T00:00:00.000Z", updatedAt: "2026-07-14T00:00:00.000Z" })), { status: 200 });
+      return new Response(
+        JSON.stringify(
+          success({
+            id: "aijob_1",
+            requestId: "req_1",
+            scenario: "frontend_coding",
+            status: "queued",
+            attempts: 0,
+            createdAt: "2026-07-14T00:00:00.000Z",
+            updatedAt: "2026-07-14T00:00:00.000Z"
+          })
+        ),
+        { status: 200 }
+      );
     }
   });
-  await client.enqueueDurableAiJob("project one", { prompt: "Build a review", scenario: "frontend_coding", requestId: "req_1" });
+  await client.enqueueDurableAiJob("project one", {
+    prompt: "Build a review",
+    scenario: "frontend_coding",
+    requestId: "req_1"
+  });
   await client.getDurableAiJob("project one", "aijob_1");
-  assert.deepEqual(calls.map((call) => `${call.method} ${call.url}`), [
-    "POST http://platform.test/api/projects/project%20one/ai-jobs",
-    "GET http://platform.test/api/projects/project%20one/ai-jobs/aijob_1"
-  ]);
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.url}`),
+    [
+      "POST http://platform.test/api/projects/project%20one/ai-jobs",
+      "GET http://platform.test/api/projects/project%20one/ai-jobs/aijob_1"
+    ]
+  );
 });
 
 test("platform API client manages AI governance resources", async () => {
@@ -287,28 +375,96 @@ test("platform API client manages AI governance resources", async () => {
       observed.push({ url: String(url), method, body });
 
       if (method === "GET" && String(url).endsWith("/ai/providers")) {
-        return new Response(JSON.stringify(success([{ id: "aip_openai", name: "OpenAI Production", adapter: "openai", models: ["gpt-4.1"], status: "active" }])), { status: 200 });
+        return new Response(
+          JSON.stringify(
+            success([
+              {
+                id: "aip_openai",
+                name: "OpenAI Production",
+                adapter: "openai",
+                models: ["gpt-4.1"],
+                status: "active"
+              }
+            ])
+          ),
+          { status: 200 }
+        );
       }
       if (method === "GET" && String(url).endsWith("/ai/api-keys")) {
-        return new Response(JSON.stringify(success([{ id: "aik_openai", providerId: "aip_openai", name: "Primary", maskedValue: "sk-...1234", fingerprint: "sha256:abc", status: "active" }])), { status: 200 });
+        return new Response(
+          JSON.stringify(
+            success([
+              {
+                id: "aik_openai",
+                providerId: "aip_openai",
+                name: "Primary",
+                maskedValue: "sk-...1234",
+                fingerprint: "sha256:abc",
+                status: "active"
+              }
+            ])
+          ),
+          { status: 200 }
+        );
       }
       if (method === "POST" && String(url).endsWith("/ai/providers")) {
-        return new Response(JSON.stringify(success({ id: "aip_new", name: body.name, adapter: body.adapter, baseUrl: body.baseUrl, models: body.models, status: "active" })), { status: 201 });
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "aip_new",
+              name: body.name,
+              adapter: body.adapter,
+              baseUrl: body.baseUrl,
+              models: body.models,
+              status: "active"
+            })
+          ),
+          { status: 201 }
+        );
       }
       if (method === "POST" && String(url).endsWith("/ai/api-keys")) {
-        return new Response(JSON.stringify(success({ id: "aik_new", providerId: body.providerId, name: body.name, maskedValue: "sk-...7890", fingerprint: "sha256:def", status: "active" })), { status: 201 });
+        return new Response(
+          JSON.stringify(
+            success({
+              id: "aik_new",
+              providerId: body.providerId,
+              name: body.name,
+              maskedValue: "sk-...7890",
+              fingerprint: "sha256:def",
+              status: "active"
+            })
+          ),
+          { status: 201 }
+        );
       }
       if (method === "POST" && String(url).endsWith("/ai/routes")) {
-        return new Response(JSON.stringify(success({ scenario: body.scenario, primary: { providerId: body.primaryProviderId, model: body.primaryModel } })), { status: 200 });
+        return new Response(
+          JSON.stringify(
+            success({
+              scenario: body.scenario,
+              primary: { providerId: body.primaryProviderId, model: body.primaryModel }
+            })
+          ),
+          { status: 200 }
+        );
       }
       if (method === "POST" && String(url).endsWith("/ai/quotas")) {
         return new Response(JSON.stringify(success(body)), { status: 200 });
       }
       if (method === "POST" && String(url).endsWith("/guardrails/rules")) {
-        return new Response(JSON.stringify(success({ id: "grd_new", ...body, status: "active" })), { status: 201 });
+        return new Response(JSON.stringify(success({ id: "grd_new", ...body, status: "active" })), {
+          status: 201
+        });
       }
       if (method === "GET" && String(url).endsWith("/guardrails/events")) {
-        return new Response(JSON.stringify(success([{ id: "gre_0001", decision: "block", prompt: "redacted", scenario: "prd_generation" }])), { status: 200 });
+        return new Response(
+          JSON.stringify(
+            success([
+              { id: "gre_0001", decision: "block", prompt: "redacted", scenario: "prd_generation" }
+            ])
+          ),
+          { status: 200 }
+        );
       }
       throw new Error(`Unexpected request ${method} ${url}`);
     }
@@ -316,11 +472,41 @@ test("platform API client manages AI governance resources", async () => {
 
   const providers = await client.listAiProviders();
   const keys = await client.listAiApiKeys();
-  const provider = await client.createAiProvider({ name: "OpenAI New", adapter: "openai", baseUrl: "https://api.openai.com/v1", models: ["gpt-4.1-mini"] });
-  const key = await client.createAiApiKey({ providerId: provider.id, name: "Primary", secret: "secret-value", usageMode: "production", quotaTokens: 1000, fallbackPriority: 1 });
-  const route = await client.configureAiRoute({ scenario: "prd_generation", primaryProviderId: provider.id, primaryModel: "gpt-4.1-mini" });
-  const quota = await client.configureAiQuota({ scope: "creator", dailyLimit: 1000, monthlyLimit: 30000, warningThreshold: 900, hardStop: true, usedToday: 0 });
-  const rule = await client.createGuardrailRule({ name: "Block payroll export", type: "keyword", pattern: "payroll", severity: "high", action: "block", scope: "organization" });
+  const provider = await client.createAiProvider({
+    name: "OpenAI New",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1-mini"]
+  });
+  const key = await client.createAiApiKey({
+    providerId: provider.id,
+    name: "Primary",
+    secret: "secret-value",
+    usageMode: "production",
+    quotaTokens: 1000,
+    fallbackPriority: 1
+  });
+  const route = await client.configureAiRoute({
+    scenario: "prd_generation",
+    primaryProviderId: provider.id,
+    primaryModel: "gpt-4.1-mini"
+  });
+  const quota = await client.configureAiQuota({
+    scope: "creator",
+    dailyLimit: 1000,
+    monthlyLimit: 30000,
+    warningThreshold: 900,
+    hardStop: true,
+    usedToday: 0
+  });
+  const rule = await client.createGuardrailRule({
+    name: "Block payroll export",
+    type: "keyword",
+    pattern: "payroll",
+    severity: "high",
+    action: "block",
+    scope: "organization"
+  });
   const events = await client.listGuardrailEvents();
 
   assert.equal(providers[0].id, "aip_openai");
@@ -427,7 +613,12 @@ test("platform API client saves installer setup and returns masked evidence", as
   const setup = await client.saveInstallerSetup({
     domain: "platform.company.test",
     databaseUrl: "postgresql://evcp:secret@postgres:5432/evcp",
-    storage: { provider: "minio", endpoint: "http://minio:9000", bucket: "evcp-artifacts", secretAccessKey: "secret" },
+    storage: {
+      provider: "minio",
+      endpoint: "http://minio:9000",
+      bucket: "evcp-artifacts",
+      secretAccessKey: "secret"
+    },
     auth: { mode: "keycloak", issuerUrl: "http://keycloak:8080/realms/evcp" },
     ai: { providerId: "aip_openai", model: "gpt-4.1" },
     guardrail: { defaultPolicy: "enterprise-default", blockHighRisk: true },
@@ -448,7 +639,10 @@ test("platform API client retrieves installer reports", async () => {
     fetcher: async (url, init) => {
       assert.equal(String(url), "https://platform.example/api/admin/installer/reports");
       assert.equal(init.headers.get("x-mock-user-email"), "admin@company.com");
-      return new Response(JSON.stringify(success([{ id: "instrep_0001", status: "passed", installBlocked: false }])), { status: 200 });
+      return new Response(
+        JSON.stringify(success([{ id: "instrep_0001", status: "passed", installBlocked: false }])),
+        { status: 200 }
+      );
     }
   });
 
@@ -456,440 +650,4 @@ test("platform API client retrieves installer reports", async () => {
 
   assert.equal(reports.length, 1);
   assert.equal(reports[0].status, "passed");
-});
-
-test("platform API client reads App Store app detail", async () => {
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "user@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/store/apps/leave-management");
-      assert.equal(init.headers.get("x-mock-user-email"), "user@company.com");
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "reg_leave",
-            appId: "app_leave",
-            projectId: "prj_leave",
-            slug: "leave-management",
-            name: "Leave Management",
-            ownerName: "Creator User",
-            accessStatus: "active",
-            myRole: "Employee",
-            health: "healthy",
-            version: "manifest v1",
-            actions: ["open", "submit_ticket"]
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const detail = await client.getStoreAppDetail("leave-management");
-
-  assert.equal(detail.slug, "leave-management");
-  assert.equal(detail.myRole, "Employee");
-});
-
-test("platform API client requests App Store access", async () => {
-  let observedBody = {};
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "user@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/store/apps/leave-management/access-requests");
-      observedBody = JSON.parse(String(init.body));
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "areq_0001",
-            appSlug: "leave-management",
-            requestedRoleKey: "manager",
-            requesterEmail: "user@company.com",
-            status: "pending",
-            reason: "Need approval access",
-            department: "HR",
-            createdAt: "2026-07-04T01:00:00.000Z"
-          })
-        ),
-        { status: 201 }
-      );
-    }
-  });
-
-  const request = await client.requestStoreAccess("leave-management", {
-    requestedRoleKey: "manager",
-    reason: "Need approval access",
-    department: "HR"
-  });
-
-  assert.equal(observedBody.requestedRoleKey, "manager");
-  assert.equal(request.status, "pending");
-  assert.equal(request.requesterEmail, "user@company.com");
-});
-
-test("platform API client submits App Store tickets and reads ticket status", async () => {
-  const seenUrls = [];
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    sessionToken: "evcp_session.payload.signature",
-    fetcher: async (url, init) => {
-      seenUrls.push(String(url));
-      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
-      if (String(url).endsWith("/tickets")) {
-        const body = JSON.parse(String(init.body));
-        assert.equal(body.title, "WFH leave type missing");
-        return new Response(
-          JSON.stringify(
-            success({
-              id: "ticket_0001",
-              ticketNumber: "TKT-0001",
-              appSlug: "leave-management",
-              type: "bug",
-              priority: "high",
-              title: "WFH leave type missing",
-              description: "The WFH option is not visible on mobile.",
-              deviceInfo: "iPhone Safari",
-              status: "submitted",
-              timeline: [{ id: "tl_001", status: "submitted", label: "Ticket submitted" }]
-            })
-          ),
-          { status: 201 }
-        );
-      }
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "ticket_0001",
-            ticketNumber: "TKT-0001",
-            appSlug: "leave-management",
-            appName: "Leave Management",
-            status: "submitted",
-            timeline: [{ id: "tl_001", status: "submitted", label: "Ticket submitted" }]
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const ticket = await client.submitStoreTicket("leave-management", {
-    type: "bug",
-    priority: "high",
-    title: "WFH leave type missing",
-    description: "The WFH option is not visible on mobile.",
-    deviceInfo: "iPhone Safari"
-  });
-  const status = await client.getStoreTicket(ticket.id);
-
-  assert.deepEqual(seenUrls, [
-    "https://platform.example/api/store/apps/leave-management/tickets",
-    "https://platform.example/api/store/tickets/ticket_0001"
-  ]);
-  assert.equal(status.ticketNumber, "TKT-0001");
-  assert.equal(status.timeline[0].status, "submitted");
-});
-
-test("platform API client reads Creator workspace snapshots", async () => {
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "creator@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace");
-      assert.equal(init.headers.get("x-mock-user-email"), "creator@company.com");
-      return new Response(
-        JSON.stringify(
-          success({
-            project: { id: "proj_001", name: "Leave Management", slug: "leave-management" },
-            baseline: { id: "prdv_001", version: "1.0", isBaseline: true },
-            preview: { id: "preview_0001", version: "preview-0001", summary: "Mock preview updated: Add WFH leave type", highlights: [] },
-            tasks: [],
-            usage: [],
-            tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const workspace = await client.getWorkspace("proj_001");
-
-  assert.equal(workspace.preview.version, "preview-0001");
-  assert.equal(workspace.tokenBudget.remainingToday, 880);
-});
-
-test("platform API client submits Creator workspace prompts", async () => {
-  let observedBody = {};
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    sessionToken: "evcp_session.payload.signature",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace/prompts");
-      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
-      observedBody = JSON.parse(String(init.body));
-      return new Response(
-        JSON.stringify(
-          success({
-            guardrail: { decision: "allow", eventId: "gre_0001" },
-            task: {
-              id: "wst_0001",
-              status: "ready",
-              prompt: "Add WFH leave type",
-              steps: [{ id: "wst_0001_step_1", label: "Understanding request", status: "done", order: 1 }]
-            },
-            preview: { id: "preview_0001", version: "preview-0001", summary: "Mock preview updated: Add WFH leave type", highlights: [] },
-            usage: { id: "ailog_0001", tokensUsed: 120, status: "succeeded" },
-            tokenBudget: { remainingToday: 880, remainingMonth: 4880, requestEstimate: 120 }
-          })
-        ),
-        { status: 201 }
-      );
-    }
-  });
-
-  const result = await client.submitWorkspacePrompt("proj_001", { prompt: "Add WFH leave type" });
-
-  assert.equal(observedBody.prompt, "Add WFH leave type");
-  assert.equal(result.task.status, "ready");
-  assert.equal(result.preview.version, "preview-0001");
-});
-
-test("platform API client refreshes Creator workspace preview", async () => {
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "creator@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/workspace/preview/refresh");
-      assert.equal(init.method, "POST");
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "preview_0001",
-            projectId: "proj_001",
-            version: "preview-0001",
-            summary: "Mock preview updated: Add WFH leave type",
-            device: "desktop",
-            screenTitle: "Leave Management",
-            highlights: ["WFH leave type"],
-            createdAt: "2026-07-04T01:00:00.000Z"
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const preview = await client.refreshWorkspacePreview("proj_001");
-
-  assert.equal(preview.version, "preview-0001");
-  assert.match(preview.summary, /WFH leave type/);
-});
-
-test("platform API client reads Creator app access snapshots", async () => {
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "creator@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/users");
-      assert.equal(init.headers.get("x-mock-user-email"), "creator@company.com");
-      return new Response(
-        JSON.stringify(
-          success({
-            app: { id: "app_leave", projectId: "proj_001", slug: "leave-management", name: "Leave Management", status: "draft", route: "/apps/leave-management" },
-            roles: [{ id: "role_employee", appId: "app_leave", key: "employee", name: "Employee", description: "Request leave", permissions: ["leave:request"], memberCount: 1 }],
-            members: [{ id: "mem_001", appId: "app_leave", email: "user@company.com", name: "End User", userType: "internal", roleKey: "employee", roleName: "Employee", status: "active" }],
-            invitations: [],
-            accessRequests: []
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const snapshot = await client.getAppAccessSnapshot("proj_001");
-
-  assert.equal(snapshot.app.slug, "leave-management");
-  assert.equal(snapshot.roles[0].key, "employee");
-});
-
-test("platform API client creates Creator app invitations", async () => {
-  let observedBody = {};
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    sessionToken: "evcp_session.payload.signature",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/invitations");
-      assert.equal(init.headers.get("authorization"), "Bearer evcp_session.payload.signature");
-      observedBody = JSON.parse(String(init.body));
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "appinv_0001",
-            appId: "app_leave",
-            projectId: "proj_001",
-            email: "manager@company.com",
-            userType: "internal",
-            roleKey: "manager",
-            invitedByUserId: "usr_creator",
-            status: "pending",
-            note: "Join manager queue",
-            createdAt: "2026-07-04T01:00:00.000Z"
-          })
-        ),
-        { status: 201 }
-      );
-    }
-  });
-
-  const invite = await client.createAppInvitation("proj_001", {
-    email: "manager@company.com",
-    roleKey: "manager",
-    userType: "internal",
-    note: "Join manager queue"
-  });
-
-  assert.equal(observedBody.email, "manager@company.com");
-  assert.equal(invite.status, "pending");
-});
-
-test("platform API client decides Creator app access requests", async () => {
-  let observedBody = {};
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "creator@company.com",
-    fetcher: async (url, init) => {
-      assert.equal(String(url), "https://platform.example/api/projects/proj_001/app/access-requests/decision");
-      observedBody = JSON.parse(String(init.body));
-      return new Response(
-        JSON.stringify(
-          success({
-            id: "appreq_0001",
-            appId: "app_leave",
-            projectId: "proj_001",
-            requesterEmail: "manager@company.com",
-            requestedRoleKey: "manager",
-            reason: "Approval queue",
-            status: "approved",
-            decidedByUserId: "usr_creator",
-            decidedAt: "2026-07-04T01:00:00.000Z",
-            createdAt: "2026-07-04T00:00:00.000Z"
-          })
-        ),
-        { status: 200 }
-      );
-    }
-  });
-
-  const request = await client.decideAppAccessRequest("proj_001", {
-    requestId: "appreq_0001",
-    decision: "approved"
-  });
-
-  assert.equal(observedBody.requestId, "appreq_0001");
-  assert.equal(request.status, "approved");
-});
-
-test("platform API client reviews publishes and lists Creator registry entries", async () => {
-  const seenUrls = [];
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    legacyUserEmail: "creator@company.com",
-    fetcher: async (url, init) => {
-      seenUrls.push(`${init.method ?? "GET"} ${String(url)}`);
-      if (String(url).endsWith("/publish/review")) {
-        return new Response(
-          JSON.stringify(
-            success({
-              ready: true,
-              manifest: { appId: "app_leave", manifestVersion: "1", app: { slug: "leave-management", route: "/apps/leave-management" }, roles: [] },
-              checklist: [{ key: "prd", label: "PRD baseline", status: "pass", detail: "Baseline v1.0" }]
-            })
-          ),
-          { status: 200 }
-        );
-      }
-      if (String(url).endsWith("/publish")) {
-        return new Response(
-          JSON.stringify(
-            success({
-              publishRequest: { id: "pubreq_0001", status: "published", blockingItems: [], manifestVersion: "1" },
-              deployment: { id: "dep_0001", status: "published", route: "/apps/leave-management" },
-              registryEntry: { id: "store_leave", slug: "leave-management", status: "published", route: "/apps/leave-management" },
-              manifest: { appId: "app_leave", manifestVersion: "1" }
-            })
-          ),
-          { status: 201 }
-        );
-      }
-      return new Response(
-        JSON.stringify(success([{ id: "store_leave", slug: "leave-management", status: "published" }])),
-        { status: 200 }
-      );
-    }
-  });
-
-  const review = await client.getPublishReview("proj_001");
-  const result = await client.publishProject("proj_001");
-  const registry = await client.listAppStoreRegistry();
-
-  assert.deepEqual(seenUrls, [
-    "GET https://platform.example/api/projects/proj_001/publish/review",
-    "POST https://platform.example/api/projects/proj_001/publish",
-    "GET https://platform.example/api/app-store/registry"
-  ]);
-  assert.equal(review.ready, true);
-  assert.equal(result.deployment.status, "published");
-  assert.equal(registry[0].slug, "leave-management");
-});
-
-test("workspace container publish routes parse bare (non-enveloped) shapes", async () => {
-  const dep = {
-    id: "dep-1",
-    projectId: "proj_x",
-    slug: "proj-x",
-    environment: "staging",
-    commitSha: "abc1234",
-    imageTag: "evcp-staging-proj-x:abc1234",
-    containerId: "c1",
-    publishedByUserId: "usr_1",
-    healthStatus: "healthy",
-    createdAt: "2026-07-10T00:00:00.000Z"
-  };
-  const client = createPlatformApiClient({
-    baseUrl: "https://platform.example/api",
-    fetcher: async (url, init) => {
-      const path = String(url);
-      if (path.endsWith("/deployments")) {
-        // raw shape: { deployments: [...] }, NOT the { ok, data } envelope
-        return new Response(JSON.stringify({ deployments: [dep] }), { status: 200 });
-      }
-      if (path.endsWith("/publish")) {
-        return new Response(JSON.stringify({ deployment: dep }), { status: 201 });
-      }
-      if (path.endsWith("/promote")) {
-        // bare error shape: { error: "<code>" }
-        return new Response(JSON.stringify({ error: "no_staging_deployment", message: "no healthy staging" }), {
-          status: 409
-        });
-      }
-      throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
-    }
-  });
-
-  const deployments = await client.listDeployments("proj_x");
-  assert.equal(deployments.length, 1);
-  assert.equal(deployments[0].healthStatus, "healthy");
-
-  const published = await client.publishProject("proj_x", "staging");
-  assert.equal(published.deployment.id, "dep-1");
-
-  // The bug: a bare { error } response used to throw "Cannot read properties of undefined
-  // (reading 'code')". It must now surface the route's error code.
-  await assert.rejects(
-    () => client.promoteDeployment("proj_x"),
-    (err) => err instanceof PlatformApiError && err.code === "no_staging_deployment"
-  );
 });

@@ -22,6 +22,12 @@ export type CreatorRoute = {
 
 export type CreatorSelectablePage = Exclude<CreatorPage, "ticket-detail" | "not-found">;
 
+export function projectSwitchTargetPage(page: CreatorPage): CreatorSelectablePage {
+  if (page === "projects" || page === "not-found") return "workspace";
+  if (page === "ticket-detail") return "tickets";
+  return page;
+}
+
 function decodeRouteSegment(segment: string): string | undefined {
   try {
     return decodeURIComponent(segment);
@@ -140,7 +146,7 @@ export const creatorPageCopy: Record<
   users: {
     eyebrow: "Access Management",
     title: "Users & Roles",
-    description: "จัดการ app members, invitations, access requests และ role permission matrix"
+    description: "Manage app members, invitations, access requests, and the role permission matrix."
   },
   publish: {
     eyebrow: "Publish & Registry",

@@ -6,9 +6,8 @@ import assert from "node:assert/strict";
 process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -234,7 +233,7 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
 
   for (const text of [
     "App Users",
-    "เชิญผู้ใช้",
+    "Invite user",
     "Access Requests",
     "App Roles",
     "Publish Review",

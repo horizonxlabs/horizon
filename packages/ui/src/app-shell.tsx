@@ -25,6 +25,7 @@ export function AppShell({
   environmentLabel = "Private Server MVP",
   session,
   logo,
+  sidebarContext,
   tagline = "Enterprise AI Workspace",
   tone = "dark",
   onNavigate,
@@ -37,6 +38,7 @@ export function AppShell({
   environmentLabel?: string;
   session?: ReactNode;
   logo?: ReactNode;
+  sidebarContext?: ReactNode;
   tagline?: string;
   tone?: "dark" | "light";
   onNavigate?: (route: string) => void;
@@ -152,8 +154,11 @@ export function AppShell({
         <div
           className={cn(
             "flex items-center gap-[10px] px-1",
-            logo ? "pt-1.5 pb-[18px]" : "pt-1 pb-4",
-            collapsed && "flex-col items-center gap-2 pb-4",
+            logo ? (sidebarContext ? "pt-1.5 pb-1" : "pt-1.5 pb-[18px]") : "pt-1 pb-4",
+            collapsed &&
+              (sidebarContext
+                ? "flex-col items-center gap-2 pb-1"
+                : "flex-col items-center gap-2 pb-4"),
             "max-md:!flex-row max-md:!items-center max-md:!pb-4"
           )}
         >
@@ -219,6 +224,8 @@ export function AppShell({
             <span aria-hidden="true">×</span>
           </button>
         </div>
+
+        {sidebarContext ? <div className="app-shell-sidebar-context">{sidebarContext}</div> : null}
 
         {/* Primary navigation */}
         <nav className={cn("flex flex-col gap-0.5", collapsed && "gap-1")} aria-label="Primary">

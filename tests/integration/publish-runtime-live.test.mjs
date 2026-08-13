@@ -123,7 +123,7 @@ test(
       const rollbackBody = await curlFromContainer(
         docker,
         record.containerId,
-        `http://${rollback.deployment.containerName}:3000/api/apps/${slug}`
+        `http://${rollback.deployment.containerName}:3000/apps/${slug}`
       );
       assert.match(rollbackBody, /VERSION_A/);
 

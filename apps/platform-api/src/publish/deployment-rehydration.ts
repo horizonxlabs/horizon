@@ -38,7 +38,7 @@ export async function rehydrateRunningDeployment(input: {
   }
 
   const basePath =
-    input.environment === "staging" ? `/api/apps/${input.slug}/staging` : `/api/apps/${input.slug}`;
+    input.environment === "staging" ? `/apps/${input.slug}/staging` : `/apps/${input.slug}`;
   if (!(await input.health.check(`http://${containerName}:3000${basePath}/api/health`))) {
     if (existing) {
       input.deployments.updateHealth(existing.id, "failed");

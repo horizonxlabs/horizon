@@ -29,8 +29,7 @@
 	}
 
 	handle /apps/* {
-		rewrite * /store{uri}
-		reverse_proxy app-store-pwa:80
+		reverse_proxy platform-api:3100
 	}
 
 	handle /store* {

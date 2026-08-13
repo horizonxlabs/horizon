@@ -15,14 +15,12 @@ const memory = new Map();
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalReact = globalThis.React;
-let recentAtAssignment;
 globalThis.window = {
   location: {
     pathname: "/store/apps/first",
     hash: "",
     href: "http://localhost/store/apps/first",
     assign(path) {
-      recentAtAssignment = createStoreDeviceState(window.localStorage).read().recent;
       this.pathname = path;
     }
   },
@@ -352,26 +350,6 @@ test("active access deduplicates pending tickets and persists only a confirmed i
   });
   assert.deepEqual(createStoreDeviceState(window.localStorage).read().ticketIds, ["ticket-1"]);
   assert.match(JSON.stringify(renderer.toJSON()), /Ticket submitted/);
-  await act(async () => {
-    renderer.unmount();
-  });
-});
-
-test("Open records recency before assigning the published runtime route", async () => {
-  memory.clear();
-  recentAtAssignment = undefined;
-  const client = { getStoreAppDetail: async () => detail() };
-  let renderer;
-  await act(async () => {
-    renderer = mount(createStore(), client);
-    await Promise.resolve();
-  });
-  await act(async () => {
-    button(renderer.root, "Open app").props.onClick();
-  });
-  assert.equal(window.location.pathname, "/apps/first");
-  assert.deepEqual(recentAtAssignment, ["first"]);
-  assert.deepEqual(createStoreDeviceState(window.localStorage).read().recent, ["first"]);
   await act(async () => {
     renderer.unmount();
   });

@@ -155,6 +155,10 @@ test("migration runs only after validation and code commit and records the resul
     chatHistory: createMemoryChatHistoryStore(),
     actionRunner: {
       runAction: async () => ({ ok: true, stdout: "" }),
+      syncMigrationArtifacts: async ({ actions }) => {
+        lifecycle.push(`sync:${actions.map((action) => action.name).join(",")}`);
+        return { ok: true, stdout: "" };
+      },
       runMigrationBatch: async ({ actions, commitSha }) => {
         lifecycle.push(`migration:${commitSha ?? "missing"}`);
         assert.deepEqual(
@@ -188,7 +192,13 @@ test("migration runs only after validation and code commit and records the resul
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "add users" }));
 
-  assert.deepEqual(lifecycle, ["prepare", "validate", "commit", "migration:new-sha"]);
+  assert.deepEqual(lifecycle, [
+    "prepare",
+    "sync:add_users",
+    "validate",
+    "commit",
+    "migration:new-sha"
+  ]);
   assert.equal(
     events.some((event) => event.type === "commit" && event.sha === "new-sha"),
     true

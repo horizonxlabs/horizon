@@ -6,10 +6,10 @@ const { deploymentUrl } =
 test("deploymentUrl creates public browser links for both deployment environments", () => {
   assert.equal(
     deploymentUrl("prj-123", "staging", "http://localhost:8088"),
-    "http://localhost:8088/api/apps/prj-123/staging"
+    "http://localhost:8088/apps/prj-123/staging"
   );
   assert.equal(
     deploymentUrl("prj-123", "production", "http://localhost:8088"),
-    "http://localhost:8088/api/apps/prj-123"
+    "http://localhost:8088/apps/prj-123"
   );
 });

@@ -1,27 +1,40 @@
 import type { AppStoreItem } from "@evcp/types";
 import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
 import { Heart } from "lucide-react";
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { useStorefront } from "./StoreProvider";
 import { storeAppAccent, storeAppCardAction } from "./store-app-card";
 
 export function StoreAppCard({ app }: { app: AppStoreItem }) {
-  const { device, toggleFavorite, recordRecent } = useStorefront();
+  const { api, device, toggleFavorite, recordRecent } = useStorefront();
   const action = storeAppCardAction(app);
   const isFavorite = device.favorites.includes(app.slug);
   const detailHref = `/store/apps/${encodeURIComponent(app.slug)}`;
+  const [launchState, setLaunchState] = useState<{ pending: boolean; error?: string }>({
+    pending: false
+  });
 
   function navigateToDetail(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     navigateBrowserPath(detailHref);
   }
 
-  function handlePrimaryAction(event: MouseEvent<HTMLAnchorElement>) {
+  async function handlePrimaryAction(event: MouseEvent<HTMLAnchorElement>) {
     if (!action.href) return;
     event.preventDefault();
     if (action.kind === "open") {
+      if (launchState.pending) return;
       recordRecent(app.slug);
-      window.location.assign(action.href);
+      setLaunchState({ pending: true });
+      try {
+        await api.authorizeStoreAppLaunch(app.slug, action.href);
+        window.location.assign(action.href);
+      } catch (error) {
+        setLaunchState({
+          pending: false,
+          error: error instanceof Error ? error.message : "Unable to open this app."
+        });
+      }
       return;
     }
     navigateBrowserPath(action.href);
@@ -54,9 +67,19 @@ export function StoreAppCard({ app }: { app: AppStoreItem }) {
       >
         <Heart aria-hidden="true" fill={isFavorite ? "currentColor" : "none"} />
       </button>
-      <a className="store-app-primary" href={action.href} onClick={handlePrimaryAction}>
-        {action.label}
+      <a
+        className="store-app-primary"
+        href={action.kind === "open" ? detailHref : action.href}
+        aria-disabled={launchState.pending || undefined}
+        onClick={(event) => void handlePrimaryAction(event)}
+      >
+        {launchState.pending ? "Opening…" : action.label}
       </a>
+      {launchState.error ? (
+        <p className="store-action-error" role="alert">
+          {launchState.error}
+        </p>
+      ) : null}
     </article>
   );
 }

@@ -1,18 +1,18 @@
-import { randomUUID } from "node:crypto";
 import type { WorkspaceAgentMode, WorkspaceChatMessage, WorkspaceChatAction } from "@evcp/types";
-import type { GoldenTemplate } from "../workspace-orchestrator/template";
-import { createMessageParser, type ActionType } from "./message-parser";
-import type { LlmCompletionClient } from "./llm-client";
-import type { ChatHistoryStore } from "./chat-history-store";
-import type { ActionResult, ActionRunner, RunnableAction } from "./action-runner";
-import type { createErrorFeedbackTracker } from "./error-feedback";
+import { createMessageParser } from "./message-parser";
+import type { ActionResult, RunnableAction } from "./action-runner";
 import { selectContextFiles } from "./context-selector";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
-import type { AiScenario, PlatformUser } from "../platform-services";
-import type { CheckpointStore } from "./checkpoint-store";
+import type { PlatformUser } from "../platform-services";
 import type { ChatStreamEvent } from "./generation-types";
-import { resolveGovernedCompletion, type StreamChunk } from "./governed-completion";
-import { asTokenChunks, buildErrorFeedback, buildSkillLoadFeedback, runShellStreaming, validateBuild, type GovernedContext } from "./generation-stream-helpers";
+import { resolveGovernedCompletion } from "./governed-completion";
+import {
+  asTokenChunks,
+  buildErrorFeedback,
+  buildSkillLoadFeedback,
+  runShellStreaming,
+  validateBuild
+} from "./generation-stream-helpers";
 import {
   buildActionPreview,
   clipActionText,
@@ -20,57 +20,16 @@ import {
   parseEditBody
 } from "./generation-action-utils";
 import { createProjectTurnLock } from "./project-turn-lock";
+import type { GenerationServiceDeps, OpenAction } from "./generation-service-types";
+import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 
 export type { ActionActionType, ChatStreamEvent } from "./generation-types";
-
-export interface GenerationServiceDeps {
-  llmClient: LlmCompletionClient;
-  // Private-server path: governed route/guardrails/quota/evidence. LLM client is the memory-test fallback.
-  governedCompletion?: (input: {
-    actor: PlatformUser;
-    projectId: string;
-    scenario: AiScenario;
-    prompt: string;
-    requestId: string;
-  }) => AsyncIterable<StreamChunk>;
-  /** Governed skills (names + descriptions, instructions on demand) and knowledge excerpts for the prompt. */
-  resolveGovernedContext?: (input: { actor: PlatformUser; projectId: string; scenario: AiScenario }) => Promise<GovernedContext>;
-  chatHistory: ChatHistoryStore;
-  actionRunner: ActionRunner;
-  errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
-  template: GoldenTemplate;
-  getApiKey: (projectId: string) => string;
-  getContainerId: (projectId: string) => string;
-  readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
-  readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
-  workspaceGuard: {
-    prepare(projectId: string): Promise<string>;
-    validate(projectId: string): Promise<void>;
-    restore(projectId: string, commitSha: string): Promise<void>;
-  };
-  commitAllChanges: (projectId: string, message: string) => Promise<string>;
-  checkpoints?: CheckpointStore;
-  onAudit?: (event: {
-    action: string;
-    projectId: string;
-    metadata?: Record<string, unknown>;
-  }) => void;
-}
-
-interface OpenAction {
-  id: string;
-  type: ActionType;
-  filePath?: string;
-  name?: string;
-  content: string;
-}
+export type { GenerationServiceDeps } from "./generation-service-types";
 
 // LLM round-trips per user turn (initial + up to 2 retries), also used for build self-heal.
 const MAX_ROUNDS = 3;
 
 export function createGenerationService(deps: GenerationServiceDeps) {
-  // Globally-unique per message (a shared in-memory counter reset on restart and collided).
-  const nextMessageId = () => `msg-${randomUUID()}`;
   const turnLock = createProjectTurnLock();
 
   return {
@@ -91,17 +50,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
       const releaseTurn = await turnLock.acquire(input.projectId);
       try {
         const agentMode: WorkspaceAgentMode = input.agentMode === "plan" ? "plan" : "build";
-        const userMessage: WorkspaceChatMessage = {
-          id: nextMessageId(),
-          projectId: input.projectId,
-          role: "user",
-          content: input.prompt,
-          agentMode,
-          artifactActionIds: [],
-          commitSha: null,
-          tokenUsage: null,
-          createdAt: new Date().toISOString()
-        };
+        const userMessage = createUserChatMessage(input.projectId, input.prompt, agentMode);
         await deps.chatHistory.appendMessage(userMessage);
 
         const containerId = deps.getContainerId(input.projectId);
@@ -119,7 +68,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         let turnFailed = false;
         let buildValidated = false;
         let prompt = input.prompt;
-        const governed = input.actor && deps.resolveGovernedContext ? await deps.resolveGovernedContext({ actor: input.actor, projectId: input.projectId, scenario: "frontend_coding" }).catch(() => undefined) : undefined;
+        const governed =
+          input.actor && deps.resolveGovernedContext
+            ? await deps
+                .resolveGovernedContext({
+                  actor: input.actor,
+                  projectId: input.projectId,
+                  scenario: "frontend_coding"
+                })
+                .catch(() => undefined)
+            : undefined;
 
         roundLoop: for (let round = 0; round < MAX_ROUNDS; round += 1) {
           const parser = createMessageParser();
@@ -139,7 +97,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             approvedPlan: input.approvedPlan
           };
           const systemPrompt =
-            agentMode === "plan" ? buildPlanSystemPrompt(promptInput) : buildSystemPrompt(promptInput);
+            agentMode === "plan"
+              ? buildPlanSystemPrompt(promptInput)
+              : buildSystemPrompt(promptInput);
 
           const priorMessages = (await deps.chatHistory.listMessages(input.projectId))
             .filter((message) => message.role !== "system")
@@ -148,8 +108,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
               content: message.content
             }));
 
-          const chatInput = { apiKey, systemPrompt, messages: [...priorMessages, { role: "user" as const, content: prompt }] };
-          const governedPrompt = [systemPrompt, "\nConversation:", ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)].join("\n");
+          const chatInput = {
+            apiKey,
+            systemPrompt,
+            messages: [...priorMessages, { role: "user" as const, content: prompt }]
+          };
+          const governedPrompt = [
+            systemPrompt,
+            "\nConversation:",
+            ...chatInput.messages.map((message) => `${message.role}: ${message.content}`)
+          ].join("\n");
           const tokens = deps.governedCompletion
             ? resolveGovernedCompletion(deps.governedCompletion, input, governedPrompt, agentMode)
             : asTokenChunks(deps.llmClient.streamChat(chatInput));
@@ -208,7 +176,13 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 if (open.type === "skill") {
                   // Load the skill's full instructions on demand and feed them into the next round.
                   const instruction = governed?.skillInstructions[open.name ?? ""];
-                  yield { type: "action_result", actionId: open.id, actionType: "skill", label: `Loaded skill: ${open.name ?? ""}`, ok: Boolean(instruction) };
+                  yield {
+                    type: "action_result",
+                    actionId: open.id,
+                    actionType: "skill",
+                    label: `Loaded skill: ${open.name ?? ""}`,
+                    ok: Boolean(instruction)
+                  };
                   prompt = buildSkillLoadFeedback(open.name ?? "", instruction);
                   roundFailed = true;
                   continue;
@@ -245,9 +219,22 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 }
                 let result: ActionResult;
                 try {
-                  result = runnable.type === "shell"
-                    ? yield* runShellStreaming(deps.actionRunner, deps.template, containerId, input.projectId, runnable, open.id)
-                    : await deps.actionRunner.runAction({ containerId, projectId: input.projectId, template: deps.template, action: runnable });
+                  result =
+                    runnable.type === "shell"
+                      ? yield* runShellStreaming(
+                          deps.actionRunner,
+                          deps.template,
+                          containerId,
+                          input.projectId,
+                          runnable,
+                          open.id
+                        )
+                      : await deps.actionRunner.runAction({
+                          containerId,
+                          projectId: input.projectId,
+                          template: deps.template,
+                          action: runnable
+                        });
                 } catch (error) {
                   result = {
                     ok: false,
@@ -309,9 +296,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           // Build-error self-heal: validate a clean file-changing round; feed errors back to fix (opencode-style).
           if (!turnFailed && !roundFailed && agentMode === "build" && roundHadFileAction) {
             const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
-            if (buildError && round < MAX_ROUNDS - 1) { prompt = buildErrorFeedback(buildError); roundFailed = true; }
-            else if (buildError) { turnFailed = true; yield { type: "error", message: `Build still failing after fixes: ${buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300)}` }; }
-            else buildValidated = true;
+            if (buildError && round < MAX_ROUNDS - 1) {
+              prompt = buildErrorFeedback(buildError);
+              roundFailed = true;
+            } else if (buildError) {
+              turnFailed = true;
+              yield {
+                type: "error",
+                message: `Build still failing after fixes: ${buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300)}`
+              };
+            } else buildValidated = true;
           }
 
           if (turnFailed || !roundFailed) {
@@ -320,21 +314,24 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           // roundFailed but a retry is still allowed: loop again with the updated `prompt`.
         }
 
-        const assistantMessage: WorkspaceChatMessage = {
-          id: nextMessageId(),
+        const assistantMessage = createAssistantChatMessage({
           projectId: input.projectId,
-          role: "assistant",
           content: assistantText,
           agentMode,
           artifactActionIds: actionIds,
-          actions: turnActions,
-          commitSha: null,
-          tokenUsage: null,
-          createdAt: new Date().toISOString()
-        };
+          actions: turnActions
+        });
 
         if (!turnFailed && agentMode === "build") {
           try {
+            const migrationArtifacts = await deps.actionRunner.syncMigrationArtifacts?.({
+              containerId,
+              projectId: input.projectId,
+              actions: deferredMigrations
+            });
+            if (migrationArtifacts && !migrationArtifacts.ok) {
+              throw new Error(migrationArtifacts.error);
+            }
             // Final gate: validate unless a self-heal round already confirmed the build.
             if (!buildValidated) await deps.workspaceGuard.validate(input.projectId);
             const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);

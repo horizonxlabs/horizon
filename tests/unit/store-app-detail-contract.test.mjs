@@ -15,10 +15,12 @@ test("Store app detail owns web open access and ticket actions without installat
   );
   for (const action of [
     "getStoreAppDetail",
+    "authorizeStoreAppLaunch",
     "requestStoreAccess",
     "submitStoreTicket",
     "recordRecent"
-  ]) assert.match(source, new RegExp(action));
+  ])
+    assert.match(source, new RegExp(action));
   for (const legacyAction of ["installStoreApp", "uninstallStoreApp", "App install journey"])
     assert.doesNotMatch(source, new RegExp(legacyAction));
   assert.match(source, /View status/);

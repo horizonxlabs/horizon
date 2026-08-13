@@ -135,7 +135,7 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.equal(publish.deployment.sourceCommitSha, "abc123");
   assert.equal(publish.deployment.runtimeRevision, 3);
   assert.equal(publish.manifest.runtime.deploymentRevisionId, "wdep_runtime_1");
-  assert.equal(publish.registryEntry.route, "/api/apps/prj-runtime-key");
+  assert.equal(publish.registryEntry.route, "/apps/prj-runtime-key");
   const republished = await service.publishApp(creatorActor, {
     project,
     baseline,
@@ -160,10 +160,10 @@ test("Publish/store persistence service stores access defaults publish registry 
   const storeHome = await service.listStoreApps(endUserActor);
   assert.ok(
     storeHome.availableApps.some(
-        (app) =>
-          app.slug === project.appId &&
-          app.accessStatus === "available" &&
-          app.installStatus === "not_installed"
+      (app) =>
+        app.slug === project.appId &&
+        app.accessStatus === "available" &&
+        app.installStatus === "not_installed"
     )
   );
 
@@ -172,9 +172,7 @@ test("Publish/store persistence service stores access defaults publish registry 
   assert.ok(
     creatorStoreHome.myApps.some(
       (app) =>
-        app.slug === project.appId &&
-        app.accessStatus === "active" &&
-        app.primaryAction === "open"
+        app.slug === project.appId && app.accessStatus === "active" && app.primaryAction === "open"
     )
   );
 
@@ -244,6 +242,30 @@ test("Publish/store persistence service blocks publish without baseline or previ
         deviceInfo: "Safari"
       }),
     /not visible|Unknown app/
+  );
+});
+
+test("Publish/store persistence rejects a duplicate active invitation case-insensitively", async () => {
+  const service = createPublishStoreRepositoryBackedService(
+    new MemoryPublishStorePersistenceClient()
+  );
+
+  await service.createInvitation(creatorActor, {
+    project,
+    email: "duplicate.user@company.com",
+    roleKey: "employee",
+    userType: "internal"
+  });
+
+  await assert.rejects(
+    () =>
+      service.createInvitation(creatorActor, {
+        project,
+        email: "DUPLICATE.USER@company.com",
+        roleKey: "manager",
+        userType: "internal"
+      }),
+    /already has a pending invitation/i
   );
 });
 

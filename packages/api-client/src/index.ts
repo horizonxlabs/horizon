@@ -13,6 +13,8 @@ export type {
   StoreTicketTimelineEntryDto
 } from "./store-ticket-types";
 import { PlatformApiError } from "./platform-api-error";
+import type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
+export type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
 
 export type ApiSuccess<T> = {
   ok: true;
@@ -183,26 +185,6 @@ export type ConfirmPrdBaselineInput = {
   versionId: string;
 };
 
-export type StorefrontAppCardDto = {
-  id: string;
-  appId: string;
-  projectId: string;
-  slug: string;
-  name: string;
-  description: string;
-  ownerName: string;
-  route: string;
-  accessStatus: "active" | "available" | "pending";
-  installStatus?: "installed" | "not_installed" | "disabled";
-  installationId?: string;
-  installedAt?: string;
-  myRole?: string;
-  health: string;
-  version: string;
-  lastUpdated: string;
-  primaryAction: string;
-};
-
 export type StorefrontHomeResponse = {
   profile: {
     userName: string;
@@ -211,24 +193,6 @@ export type StorefrontHomeResponse = {
   myApps: StorefrontAppCardDto[];
   availableApps: StorefrontAppCardDto[];
   notifications: unknown[];
-};
-
-export type StorefrontAppDetailResponse = StorefrontAppCardDto & {
-  ownerUserId: string;
-  department: string;
-  accessMode: string;
-  availableRoles?: string[];
-  releaseNotes: string[];
-  supportContact: string;
-  actions: Array<
-    | "open"
-    | "install"
-    | "uninstall"
-    | "request_access"
-    | "submit_ticket"
-    | "send_feedback"
-    | "view_status"
-  >;
 };
 
 export type StoreAppInstallationResponse = {
@@ -653,6 +617,14 @@ export class PlatformApiClient {
 
   getStoreAppDetail(appSlug: string): Promise<StorefrontAppDetailResponse> {
     return this.request<StorefrontAppDetailResponse>(`/store/apps/${encodeURIComponent(appSlug)}`);
+  }
+  authorizeStoreAppLaunch(appSlug: string, routePath: string): Promise<{ authorized: true }> {
+    return this.postJson<{ authorized: true }>(
+      `/store/apps/${encodeURIComponent(appSlug)}/launch-session`,
+      {
+        routePath
+      }
+    );
   }
 
   requestStoreAccess(

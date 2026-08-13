@@ -1,5 +1,4 @@
 import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-client";
-import { getMockPermissions } from "@evcp/auth-sdk";
 import { mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status, WorkspaceAgentMode } from "@evcp/types";
 import { createHash, createHmac, randomUUID } from "node:crypto";
@@ -11,11 +10,32 @@ import {
   maskSecret,
   providerErrorMessage
 } from "./ai-governance/ai-gateway-adapter";
-import { PROJECT_FILE_ALLOWED_MIME_TYPES, PROJECT_FILE_BUCKET, PROJECT_FILE_MAX_SIZE_BYTES } from "./project-file-constants";
+import { IdentityService } from "./identity-service";
+import {
+  ConflictError,
+  MockAuthError,
+  PermissionError,
+  QuotaExceededError,
+  ValidationError
+} from "./platform-errors";
+import {
+  PROJECT_FILE_ALLOWED_MIME_TYPES,
+  PROJECT_FILE_BUCKET,
+  PROJECT_FILE_MAX_SIZE_BYTES
+} from "./project-file-constants";
 import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 import { schemaNameFor } from "./workspace-orchestrator/postgres-provisioner";
 import { resourceKeyForProject } from "./workspace-orchestrator/resource-ports";
+
+export { IdentityService } from "./identity-service";
+export {
+  ConflictError,
+  MockAuthError,
+  PermissionError,
+  QuotaExceededError,
+  ValidationError
+} from "./platform-errors";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
@@ -778,9 +798,16 @@ export interface AppManifest {
   };
   roles: Array<Pick<AppRoleDefinition, "key" | "name" | "permissions">>;
   database: {
-    schemaName: string; tables: string[];
+    schemaName: string;
+    tables: string[];
   };
-  runtime?: { deploymentRevisionId: string; revision: number; sourceCommitSha: string; imageTag: string; imageDigest: string };
+  runtime?: {
+    deploymentRevisionId: string;
+    revision: number;
+    sourceCommitSha: string;
+    imageTag: string;
+    imageDigest: string;
+  };
   generatedAt: string;
 }
 
@@ -820,8 +847,14 @@ export interface DeploymentRecord {
   route: string;
   manifestVersion: string;
   prdVersion: string;
-  frontendCheckpointId: string; publishedByUserId: string;
-  deploymentRevisionId?: string; runtimeRevision?: number; sourceCommitSha?: string; imageTag?: string; imageDigest?: string; containerName?: string;
+  frontendCheckpointId: string;
+  publishedByUserId: string;
+  deploymentRevisionId?: string;
+  runtimeRevision?: number;
+  sourceCommitSha?: string;
+  imageTag?: string;
+  imageDigest?: string;
+  containerName?: string;
   publishedAt: string;
 }
 
@@ -943,13 +976,7 @@ export type StoreAppAccessStatus = "active" | "available" | "pending";
 export type StoreAppInstallStatus = "installed" | "not_installed" | "disabled";
 export type StorePrimaryAction = "open" | "install" | "request_access" | "view_status";
 export type TicketType =
-  | "bug"
-  | "feedback"
-  | "feature"
-  | "access_issue"
-  | "data_issue"
-  | "performance"
-  | "other";
+  "bug" | "feedback" | "feature" | "access_issue" | "data_issue" | "performance" | "other";
 export type TicketPriority = "low" | "medium" | "high" | "critical";
 export type TicketStatus = "submitted" | "in_review" | "planned" | "resolved" | "closed";
 
@@ -986,7 +1013,8 @@ export interface StorefrontHome {
 export interface StorefrontAppDetail extends StorefrontAppCard {
   ownerUserId: string;
   department: string;
-  accessMode: AppStoreRegistryEntry["accessMode"]; availableRoles: string[];
+  accessMode: AppStoreRegistryEntry["accessMode"];
+  availableRoles: string[];
   releaseNotes: string[];
   supportContact: string;
   actions: Array<
@@ -1075,11 +1103,7 @@ export interface InAppNotification {
 
 export type PrdChangeSourceType = "ticket" | "prompt" | "manual";
 export type PrdChangeStatus =
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "rejected"
-  | "changes_requested";
+  "draft" | "pending_approval" | "approved" | "rejected" | "changes_requested";
 export type PrdChangeRiskLevel = "low" | "medium" | "high" | "critical";
 export type ApprovalDecision = "approved" | "rejected" | "changes_requested";
 
@@ -1285,7 +1309,8 @@ export interface PolicyTemplate {
   externalExposureAllowed: boolean;
 }
 
-export type AiProviderAdapter = "openai" | "openrouter" | "lm_studio" | "anthropic" | "google" | "azure_openai" | "mock";
+export type AiProviderAdapter =
+  "openai" | "openrouter" | "lm_studio" | "anthropic" | "google" | "azure_openai" | "mock";
 export type AiProviderStatus = "active" | "disabled" | "warning" | "error";
 export type AiUsageMode = "production" | "development" | "fallback";
 export type AiScenario =
@@ -1306,13 +1331,7 @@ export type GuardrailDecision = "allow" | "warn" | "block";
 export type GuardrailRuleType = "keyword" | "regex" | "policy";
 
 export type KnowledgeSourceType =
-  | "pdf"
-  | "markdown"
-  | "text"
-  | "word"
-  | "excel"
-  | "image"
-  | "openapi_json";
+  "pdf" | "markdown" | "text" | "word" | "excel" | "image" | "openapi_json";
 export type KnowledgeSourceStatus = "draft" | "active" | "deprecated" | "archived";
 export type KnowledgeUploadStatus = "pending" | "uploaded" | "failed";
 export type KnowledgeIndexStatus = "pending" | "indexed" | "failed";
@@ -1680,60 +1699,7 @@ export interface GuardrailResult {
   eventId: string;
 }
 
-export class MockAuthError extends Error {
-  readonly statusCode = 401;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "MockAuthError";
-  }
-}
-
-export class PermissionError extends Error {
-  readonly statusCode = 403;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "PermissionError";
-  }
-}
-
-export class ValidationError extends Error {
-  readonly statusCode = 422;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
-
-export class ConflictError extends Error {
-  readonly statusCode = 409;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ConflictError";
-  }
-}
-
-export class QuotaExceededError extends Error {
-  readonly statusCode = 429;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "QuotaExceededError";
-  }
-}
-
 type HeaderBag = Record<string, string | string[] | undefined>;
-
-function toPlatformUser(user: MockUser): PlatformUser {
-  return {
-    ...user,
-    status: "active",
-    permissions: getMockPermissions(user.role)
-  };
-}
 
 function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
   const direct = headers[name];
@@ -1747,67 +1713,6 @@ function normalizeHeader(headers: HeaderBag, name: string): string | undefined {
 
   if (Array.isArray(value)) return value[0];
   return value;
-}
-
-export class IdentityService {
-  private readonly users = Object.values(mockUsers).map(toPlatformUser);
-
-  listUsers(): PlatformUser[] {
-    return [...this.users];
-  }
-
-  getUserByEmail(email: string): PlatformUser {
-    const user = this.users.find((candidate) => candidate.email === email);
-    if (!user) throw new MockAuthError(`Unknown mock user: ${email}`);
-    return user;
-  }
-
-  provisionSsoUser(input: {
-    email: string;
-    name: string;
-    platformRoles: PlatformRole[];
-  }): PlatformUser {
-    const email = input.email.trim().toLowerCase();
-    const existing = this.users.find((candidate) => candidate.email === email);
-    if (existing) return Object.assign(existing, { name: input.name.trim() || email, role: this.primaryPlatformRole(input.platformRoles), permissions: getMockPermissions(this.primaryPlatformRole(input.platformRoles)) });
-
-    const role = this.primaryPlatformRole(input.platformRoles);
-    const user: PlatformUser = {
-      id: `usr_sso_${createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
-      name: input.name.trim() || email,
-      email,
-      role,
-      status: "active",
-      permissions: getMockPermissions(role)
-    };
-    this.users.push(user);
-    return user;
-  }
-
-  private primaryPlatformRole(roles: PlatformRole[]): PlatformRole {
-    if (roles.includes("admin")) return "admin";
-    if (roles.includes("creator")) return "creator";
-    return "end_user";
-  }
-
-  /**
-   * Registers (or updates) a `PlatformUser` with a caller-specified id, upserting by email.
-   * Used to dual-write users created through core-persistence (e.g. the native `/admin/users`
-   * route) into this separate mock-identity store, so bearer session tokens issued for them
-   * later resolve correctly via `MockAuthService.resolve()`/`resolveCurrentUser()` (both of
-   * which look the user up here by email, not in core-persistence).
-   */
-  registerUser(user: PlatformUser): PlatformUser {
-    const email = user.email.trim().toLowerCase();
-    const existingIndex = this.users.findIndex((candidate) => candidate.email === email);
-    const normalized: PlatformUser = { ...user, email };
-    if (existingIndex >= 0) {
-      this.users[existingIndex] = normalized;
-    } else {
-      this.users.push(normalized);
-    }
-    return normalized;
-  }
 }
 
 export class AuditService {
@@ -1955,8 +1860,16 @@ export class MockAuthService {
 
   private resolveMockHeaderEmail(headers: HeaderBag): string {
     const disabled = String(process.env.EVCP_ALLOW_SIMULATE_LOGIN ?? "0") !== "1";
-    const email = disabled ? undefined : normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user");
-    if (!email) throw new MockAuthError(disabled ? "Mock header auth is disabled" : "Missing Authorization Bearer token or x-mock-user-email header"); return email;
+    const email = disabled
+      ? undefined
+      : (normalizeHeader(headers, "x-mock-user-email") ?? normalizeHeader(headers, "x-evcp-user"));
+    if (!email)
+      throw new MockAuthError(
+        disabled
+          ? "Mock header auth is disabled"
+          : "Missing Authorization Bearer token or x-mock-user-email header"
+      );
+    return email;
   }
 
   private verifyPlatformSessionToken(token: string): {
@@ -2686,7 +2599,8 @@ export class PlatformAuthSsoService {
     this.sessions.push(session);
     this.audit.record({
       actorId: actor.id,
-      action: provider.type === "keycloak" ? "auth.keycloak_login.succeeded" : "auth.sso_login.succeeded",
+      action:
+        provider.type === "keycloak" ? "auth.keycloak_login.succeeded" : "auth.sso_login.succeeded",
       resourceType: "platform_auth_session",
       resourceId: session.id,
       metadata: {
@@ -3658,9 +3572,30 @@ export class KnowledgeGovernanceService {
     private readonly projects: ProjectService
   ) {}
 
-  // Replace in-memory state with a persisted snapshot (used to rehydrate Prisma-backed state on boot).
-  hydrate(state: { sources: KnowledgeSource[]; versions: KnowledgeVersion[]; approvals: KnowledgeApproval[]; retrievalLogs: KnowledgeRetrievalLog[] }): void { this.sources.splice(0, this.sources.length, ...state.sources); this.versions.splice(0, this.versions.length, ...state.versions); this.approvals.splice(0, this.approvals.length, ...state.approvals); this.retrievalLogs.splice(0, this.retrievalLogs.length, ...state.retrievalLogs); }
-  snapshot(): { sources: KnowledgeSource[]; versions: KnowledgeVersion[]; approvals: KnowledgeApproval[]; retrievalLogs: KnowledgeRetrievalLog[] } { return { sources: [...this.sources], versions: [...this.versions], approvals: [...this.approvals], retrievalLogs: [...this.retrievalLogs] }; }
+  hydrate(state: {
+    sources: KnowledgeSource[];
+    versions: KnowledgeVersion[];
+    approvals: KnowledgeApproval[];
+    retrievalLogs: KnowledgeRetrievalLog[];
+  }): void {
+    this.sources.splice(0, this.sources.length, ...state.sources);
+    this.versions.splice(0, this.versions.length, ...state.versions);
+    this.approvals.splice(0, this.approvals.length, ...state.approvals);
+    this.retrievalLogs.splice(0, this.retrievalLogs.length, ...state.retrievalLogs);
+  }
+  snapshot(): {
+    sources: KnowledgeSource[];
+    versions: KnowledgeVersion[];
+    approvals: KnowledgeApproval[];
+    retrievalLogs: KnowledgeRetrievalLog[];
+  } {
+    return {
+      sources: [...this.sources],
+      versions: [...this.versions],
+      approvals: [...this.approvals],
+      retrievalLogs: [...this.retrievalLogs]
+    };
+  }
 
   createSource(
     actor: PlatformUser,
@@ -3733,7 +3668,8 @@ export class KnowledgeGovernanceService {
     this.auth.requireRole(actor, ["admin", "creator"]);
     this.projects.getProjectForActor(actor, project.id);
     if (!input.title.trim()) throw new ValidationError("Project file title is required");
-    if (!input.contentHash.trim()) throw new ValidationError("Project file content hash is required");
+    if (!input.contentHash.trim())
+      throw new ValidationError("Project file content hash is required");
 
     const now = new Date().toISOString();
     const source: KnowledgeSource = {
@@ -3746,7 +3682,12 @@ export class KnowledgeGovernanceService {
         department: project.targetDepartment,
         projectIds: [project.id],
         appIds: project.appId ? [project.appId] : [],
-        agentRoles: ["requirement_analyst", "frontend_developer", "backend_developer", "technical_writer"],
+        agentRoles: [
+          "requirement_analyst",
+          "frontend_developer",
+          "backend_developer",
+          "technical_writer"
+        ],
         scenarios: ["requirement_analysis", "frontend_coding", "backend_coding", "documentation"]
       },
       uploadStatus: "pending",
@@ -3797,7 +3738,9 @@ export class KnowledgeGovernanceService {
     const source = this.requireSource(input.sourceId);
     const version = this.requireVersion(input.versionId);
     if (version.sourceId !== source.id) {
-      throw new ValidationError(`Knowledge version ${version.id} does not belong to source ${source.id}`);
+      throw new ValidationError(
+        `Knowledge version ${version.id} does not belong to source ${source.id}`
+      );
     }
 
     const now = new Date().toISOString();
@@ -3896,7 +3839,8 @@ export class KnowledgeGovernanceService {
       version.isActive = true;
       version.approvedByUserId = actor.id;
       version.approvedAt = decidedAt;
-      source.status = "active"; source.indexStatus = "indexed"; // approved version's excerpts are the index; retrieve() needs indexStatus==="indexed"
+      source.status = "active";
+      source.indexStatus = "indexed"; // approved version's excerpts are the index; retrieve() needs indexStatus==="indexed"
       source.updatedAt = decidedAt;
     } else {
       version.approvalStatus = "rejected";
@@ -4333,7 +4277,10 @@ export class ProjectFileService {
   }
 
   private sanitizeFileName(fileName: string): string {
-    const sanitized = fileName.trim().replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "");
+    const sanitized = fileName
+      .trim()
+      .replace(/[^a-z0-9._-]+/gi, "_")
+      .replace(/^_+|_+$/g, "");
     return sanitized || "upload";
   }
 
@@ -4341,11 +4288,15 @@ export class ProjectFileService {
     file: ProjectFileUpload,
     input: { extractedText?: string; excerpts?: string[] }
   ): string[] {
-    if (input.excerpts?.length) return input.excerpts.map((excerpt) => excerpt.trim()).filter(Boolean);
+    if (input.excerpts?.length)
+      return input.excerpts.map((excerpt) => excerpt.trim()).filter(Boolean);
     const text = input.extractedText?.trim();
     if (!text) return [`Uploaded ${file.fileName} (${file.mimeType}, ${file.sizeBytes} bytes).`];
     const chunks = text.match(/[\s\S]{1,800}/g) ?? [text];
-    return chunks.slice(0, 8).map((chunk) => chunk.trim()).filter(Boolean);
+    return chunks
+      .slice(0, 8)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
   }
 }
 
@@ -4362,8 +4313,30 @@ export class SkillGovernanceService {
   ) {}
 
   // Replace in-memory state with a persisted snapshot (used to rehydrate Prisma-backed state on boot).
-  hydrate(state: { skills: SkillDefinition[]; versions: SkillVersion[]; approvals: SkillApproval[]; assignments: SkillAssignment[] }): void { this.skills.splice(0, this.skills.length, ...state.skills); this.versions.splice(0, this.versions.length, ...state.versions); this.approvals.splice(0, this.approvals.length, ...state.approvals); this.assignments.splice(0, this.assignments.length, ...state.assignments); }
-  snapshot(): { skills: SkillDefinition[]; versions: SkillVersion[]; approvals: SkillApproval[]; assignments: SkillAssignment[] } { return { skills: [...this.skills], versions: [...this.versions], approvals: [...this.approvals], assignments: [...this.assignments] }; }
+  hydrate(state: {
+    skills: SkillDefinition[];
+    versions: SkillVersion[];
+    approvals: SkillApproval[];
+    assignments: SkillAssignment[];
+  }): void {
+    this.skills.splice(0, this.skills.length, ...state.skills);
+    this.versions.splice(0, this.versions.length, ...state.versions);
+    this.approvals.splice(0, this.approvals.length, ...state.approvals);
+    this.assignments.splice(0, this.assignments.length, ...state.assignments);
+  }
+  snapshot(): {
+    skills: SkillDefinition[];
+    versions: SkillVersion[];
+    approvals: SkillApproval[];
+    assignments: SkillAssignment[];
+  } {
+    return {
+      skills: [...this.skills],
+      versions: [...this.versions],
+      approvals: [...this.approvals],
+      assignments: [...this.assignments]
+    };
+  }
 
   createSkill(
     actor: PlatformUser,
@@ -5495,6 +5468,15 @@ export class AppUserAccessService {
     this.requireRoleKey(app.id, input.roleKey);
     const email = input.email.trim().toLowerCase();
     if (!email) throw new ValidationError("Invitation email is required");
+
+    const duplicate = this.invitations.find(
+      (invitation) =>
+        invitation.appId === app.id &&
+        invitation.email.trim().toLowerCase() === email &&
+        ["pending", "approval_required"].includes(invitation.status)
+    );
+    if (duplicate)
+      throw new ValidationError(`${email} already has a pending invitation for this app`);
 
     const now = new Date().toISOString();
     const isExternal = input.userType === "external";
@@ -8025,10 +8007,30 @@ export class WorkspaceService {
     }
 
     if (input.agentMode === "plan") {
-      const plannedTask = this.createTask(project.id, actor.id, prompt, "blocked", guardrail, now, "done");
+      const plannedTask = this.createTask(
+        project.id,
+        actor.id,
+        prompt,
+        "blocked",
+        guardrail,
+        now,
+        "done"
+      );
       this.tasks.push(plannedTask);
-      this.audit.record({ actorId: actor.id, action: "workspace.prompt.plan_only", resourceType: "workspace_task", resourceId: plannedTask.id, severity: "info", metadata: { projectId: project.id } });
-      return { guardrail, task: plannedTask, preview: this.latestPreview(project.id), tokenBudget: this.buildTokenBudget(0) };
+      this.audit.record({
+        actorId: actor.id,
+        action: "workspace.prompt.plan_only",
+        resourceType: "workspace_task",
+        resourceId: plannedTask.id,
+        severity: "info",
+        metadata: { projectId: project.id }
+      });
+      return {
+        guardrail,
+        task: plannedTask,
+        preview: this.latestPreview(project.id),
+        tokenBudget: this.buildTokenBudget(0)
+      };
     }
 
     const skillSelection = this.resolveWorkspaceSkill(actor, project);
@@ -8045,10 +8047,7 @@ export class WorkspaceService {
       scenario: "frontend_coding",
       query: prompt,
       requiredKnowledgeSourceIds: [
-        ...new Set([
-          ...skillSelection.requiredKnowledgeSourceIds,
-          ...attachmentSelection.sourceIds
-        ])
+        ...new Set([...skillSelection.requiredKnowledgeSourceIds, ...attachmentSelection.sourceIds])
       ]
     });
     const route = this.aiGovernance.resolveRoute("frontend_coding");

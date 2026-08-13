@@ -7,6 +7,7 @@ import type { MigrationStore } from "../generation-loop/migration-store";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
+import { registerAppLaunchSessionRoute } from "./app-launch-session-route";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -71,11 +72,18 @@ function normalizeEnvironment(value: unknown): EnvironmentName {
   return value === "staging" || value === "dev" || value === "production" ? value : "production";
 }
 
-// Caddy's `handle_path /api/*` removes `/api` before this API sees the request. Deployed Next apps
-// are built with EVCP_PREVIEW_BASE including that prefix, so reconstruct it for the upstream page
-// and every asset request; omitting it makes Next resolve a non-existent root route and return 404.
 export function deploymentProxyPath(originalUrl: string): string {
-  return `/api${originalUrl || "/"}`;
+  return originalUrl || "/";
+}
+
+function appSessionHeaders(headers: HeaderBag): HeaderBag {
+  const encodedToken = String(headers.cookie ?? "").match(/(?:^|;\s*)evcp_app_token=([^;]+)/)?.[1];
+  if (!encodedToken) return headers;
+  try {
+    return { ...headers, authorization: `Bearer ${decodeURIComponent(encodedToken)}` };
+  } catch {
+    return headers;
+  }
 }
 
 /**
@@ -87,9 +95,8 @@ export function deploymentProxyPath(originalUrl: string): string {
  *   ALL  /apps/:slug[/*]                   — reverse-proxy the healthy PRODUCTION container
  *   ALL  /apps/:slug/staging[/*]          — reverse-proxy the healthy STAGING container
  *
- * NOTE (follow-up): public Caddy routing for `/apps/*` still points at the app-store PWA
- * (docker/Caddyfile) and is NOT changed here — these handlers are reachable directly on
- * platform-api (and via the dev `/api` proxy) for verification.
+ * Public Caddy routing sends `/apps/*` directly here; Store detail pages remain under
+ * `/store/apps/*`, so browser runtime routes and Store routes do not overlap.
  */
 export async function registerPublishHttpRoutes(opts: {
   rawApp: PublishRawExpress;
@@ -252,12 +259,41 @@ export async function registerPublishHttpRoutes(opts: {
   rawApp.all("/projects/:projectId/promote", promoteHandler);
   rawApp.all("/projects/:projectId/deployments", listDeploymentsHandler);
 
+  registerAppLaunchSessionRoute({
+    routes: {
+      post(path, handler) {
+        rawApp.all(path, async (req, res) => {
+          if (String(req.method).toUpperCase() !== "POST") {
+            res.status(405).json({ error: "method_not_allowed" });
+            return;
+          }
+          await handler(req, res as never);
+        });
+      }
+    },
+    authorize: async (headers, _appSlug, requestedRoutePath) => {
+      const match = requestedRoutePath?.trim().match(/^\/apps\/([a-zA-Z0-9_-]+)$/);
+      if (!match) throw new Error("Published app route is invalid");
+      const auth = await opts.resolvePublishAuth(headers);
+      if (!auth) throw new Error("Platform session is unavailable");
+      const slug = match[1];
+      const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () =>
+        rehydrateDeployment(slug, "production")
+      );
+      if (!decision.ok || !(await opts.canAccessDeployment(auth, decision.projectId))) {
+        throw new Error("Published app access is unavailable");
+      }
+      return { routePath: `/apps/${slug}` };
+    },
+    secureCookie: (opts.env ?? process.env).NODE_ENV === "production"
+  });
+
   // Public reverse proxy to a healthy deployment for the given environment. Publishing endpoints
   // above remain authenticated. Deployed apps receive their full base-path URL so Next can match
   // the EVCP_PREVIEW_BASE that was compiled into the image.
   const makeAppsHandler =
     (environment: EnvironmentName) => async (req: PublishReq, res: PublishRes) => {
-      const auth = await opts.resolvePublishAuth(req.headers ?? {});
+      const auth = await opts.resolvePublishAuth(appSessionHeaders(req.headers ?? {}));
       if (!auth) {
         res.status(401).json({ error: "unauthorized" });
         return;
