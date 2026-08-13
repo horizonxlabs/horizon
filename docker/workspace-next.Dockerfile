@@ -21,6 +21,10 @@ COPY templates/nextjs-base/ /workspace/
 # here we just need a working node_modules for the dev server).
 RUN corepack enable && npm install
 
+# Bake the install stamp the entrypoint checks, so even the first boot of a fresh workspace
+# skips the redundant npm install (the volume is seeded from this image's /workspace).
+RUN sh -c 'printf "%s" "$(cat package.json package-lock.json 2>/dev/null | cksum)" > node_modules/.evcp-install-stamp'
+
 # Ownership to the non-root user.
 RUN chown -R evcp:evcp /workspace
 
