@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
@@ -38,6 +48,7 @@ const { createStoreDeviceState } = await import("./device-state.ts");
 const { StoreProvider } = await import("./StoreProvider.tsx");
 const { StoreAccessRequestsPage } = await import("./pages/StoreAccessRequestsPage.tsx");
 const { StoreTicketDetailPage } = await import("./pages/StoreTicketDetailPage.tsx");
+const { StoreTicketsPage } = await import("./pages/StoreTicketsPage.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
 
 function deferred() {
@@ -93,11 +104,16 @@ function output(renderer) {
   return JSON.stringify(renderer.toJSON());
 }
 
-function button(root, label) {
-  return root.findAllByType("button").find((node) => node.children.join("").includes(label));
+function textContent(node) {
+  if (typeof node === "string") return node;
+  return node.children.map(textContent).join("");
 }
 
-test("access receipts distinguish device receipt status from current API access status", async () => {
+function link(root, label) {
+  return root.findAllByType("a").find((node) => node.children.join("").includes(label));
+}
+
+test("access receipt workspace distinguishes device receipt status from current API access status", async () => {
   memory.clear();
   let renderer;
   await act(async () => {
@@ -110,11 +126,94 @@ test("access receipts distinguish device receipt status from current API access 
     );
   });
   const view = output(renderer);
+  assert.match(
+    view,
+    /Request receipts are stored on this device\. Current access reflects the latest Platform API catalog\./
+  );
+  assert.match(view, /Requested role/);
+  assert.match(view, /Current access/);
   assert.match(view, /Device receipt status[^]*pending/);
-  assert.match(view, /Current access status[^]*active/);
+  assert.match(view, /Current access[^]*active/);
   assert.match(view, /removed-app/);
-  assert.match(view, /Current access status unavailable/);
-  assert.doesNotMatch(view, /Current access status[^]*pending[^]*removed-app/);
+  assert.match(view, /Current access unavailable/);
+  const unavailableReceipt = renderer.root.findByProps({
+    className: "store-history-card store-history-unavailable"
+  });
+  assert.doesNotMatch(textContent(unavailableReceipt), /Current access[^]*pending/);
+  await act(async () => renderer.unmount());
+});
+
+test("profile workspace separates identity and device-local data", async () => {
+  memory.clear();
+  const { StoreProfilePage } = await import("./pages/StoreProfilePage.tsx");
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: {} },
+        React.createElement(StoreProfilePage)
+      )
+    );
+  });
+  const profileHtml = output(renderer);
+  assert.match(profileHtml, /Identity and SSO/);
+  assert.match(profileHtml, /Device-local data/);
+  assert.match(profileHtml, /Clear device preferences/);
+  await act(async () => renderer.unmount());
+});
+
+test("empty access-request and ticket panels provide native Store next actions", async () => {
+  memory.clear();
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: { getStoreTicket: async () => undefined } },
+        React.createElement(StoreAccessRequestsPage)
+      )
+    );
+  });
+
+  const accessAction = link(renderer.root, "Browse Available Apps");
+  assert.ok(accessAction);
+  assert.equal(accessAction.props.href, "/store/available");
+  let prevented = false;
+  await act(async () =>
+    accessAction.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/available");
+  await act(async () => renderer.unmount());
+
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        { store: createStore(), client: { getStoreTicket: async () => undefined } },
+        React.createElement(StoreTicketsPage)
+      )
+    );
+    await Promise.resolve();
+  });
+  const ticketAction = link(renderer.root, "View My Apps");
+  assert.ok(ticketAction);
+  assert.equal(ticketAction.props.href, "/store/");
+  prevented = false;
+  await act(async () =>
+    ticketAction.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/");
   await act(async () => renderer.unmount());
 });
 
@@ -139,9 +238,56 @@ test("ticket detail loading and error states keep an h1 and safe Tickets return 
   });
   assert.equal(renderer.root.findByType("h1").children.join(""), "Ticket details");
   assert.match(output(renderer), /ticket offline/);
-  const returnButton = button(renderer.root, "Return to Tickets");
-  assert.ok(returnButton);
-  await act(async () => returnButton.props.onClick());
+  const returnLink = link(renderer.root, "Return to Tickets");
+  assert.ok(returnLink);
+  assert.equal(returnLink.props.href, "/store/tickets");
+  let prevented = false;
+  await act(async () =>
+    returnLink.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
+  assert.equal(window.location.pathname, "/store/tickets");
+  await act(async () => renderer.unmount());
+});
+
+test("ticket detail not-found state uses a native Tickets return link", async () => {
+  memory.clear();
+  window.location.pathname = "/store/tickets/ticket-1";
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        StoreProvider,
+        {
+          store: createStore(),
+          client: {
+            getStoreTicket: async () => {
+              throw new Error("404 not found");
+            }
+          }
+        },
+        React.createElement(StoreTicketDetailPage, { ticketId: "ticket-1" })
+      )
+    );
+    await Promise.resolve();
+  });
+  assert.match(output(renderer), /Ticket not found/);
+  const returnLink = link(renderer.root, "Return to Tickets");
+  assert.ok(returnLink);
+  assert.equal(returnLink.props.href, "/store/tickets");
+  let prevented = false;
+  await act(async () =>
+    returnLink.props.onClick({
+      preventDefault() {
+        prevented = true;
+      }
+    })
+  );
+  assert.equal(prevented, true);
   assert.equal(window.location.pathname, "/store/tickets");
   await act(async () => renderer.unmount());
 });
