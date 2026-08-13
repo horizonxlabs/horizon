@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { createPlatformApiClient } = await import("../../packages/api-client/src/index.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
@@ -130,6 +131,13 @@ test("App Store API client actions request access submit ticket and read status"
   assert.equal(access.status, "pending");
   assert.equal(access.requestedRoleKey, "manager");
 
+  const duplicateAccess = await client.requestStoreAccess(appSlug, {
+    requestedRoleKey: "manager",
+    reason: "Duplicate click",
+    department: "HR"
+  });
+  assert.equal(duplicateAccess.id, access.id);
+
   const ticket = await client.submitStoreTicket(appSlug, {
     type: "bug",
     priority: "high",
@@ -143,4 +151,16 @@ test("App Store API client actions request access submit ticket and read status"
   assert.equal(status.ticketNumber, "TKT-0001");
   assert.equal(status.appName, "Leave Management");
   assert.ok(status.timeline.some((entry) => entry.status === "submitted"));
+
+  await assert.rejects(
+    () =>
+      client.submitStoreTicket(appSlug, {
+        type: "bug",
+        priority: "medium",
+        title: " ",
+        description: "Missing title must stay rejected.",
+        deviceInfo: "Desktop"
+      }),
+    /title is required/i
+  );
 });
