@@ -5,17 +5,22 @@ import path from "node:path";
 import test from "node:test";
 
 function readAllSourceFiles(dir) {
-  return readdirSync(dir).map((entry) => {
-    const fullPath = path.join(dir, entry);
-    return statSync(fullPath).isDirectory()
-      ? readAllSourceFiles(fullPath)
-      : /\.(tsx?|jsx?)$/.test(entry) ? readFileSync(fullPath, "utf8") : "";
-  }).join("");
+  return readdirSync(dir)
+    .map((entry) => {
+      const fullPath = path.join(dir, entry);
+      return statSync(fullPath).isDirectory()
+        ? readAllSourceFiles(fullPath)
+        : /\.(tsx?|jsx?)$/.test(entry)
+          ? readFileSync(fullPath, "utf8")
+          : "";
+    })
+    .join("");
 }
 
 test("Store history pages disclose device-local scope and unsupported actions", () => {
   const source = readAllSourceFiles("apps/app-store-pwa/src/features/storefront/pages");
-  assert.match(source, /Stored on this device/);
+  assert.match(source, /Request receipts are stored on this device\./);
+  assert.match(source, /Current access reflects the latest Platform API catalog\./);
   assert.match(source, /Platform API support required/);
   assert.match(source, /clearDevicePreferences/);
   assert.match(source, /getStoreTicket/);
@@ -23,9 +28,18 @@ test("Store history pages disclose device-local scope and unsupported actions", 
 });
 
 test("Store device-history mounted behavior", () => {
-  execFileSync(process.execPath, ["--import", "tsx", "--test", "src/features/storefront/StoreDeviceHistoryPages.integration.test.mjs"], {
-    cwd: "apps/app-store-pwa",
-    encoding: "utf8",
-    stdio: "pipe"
-  });
+  execFileSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "--test",
+      "src/features/storefront/StoreDeviceHistoryPages.integration.test.mjs"
+    ],
+    {
+      cwd: "apps/app-store-pwa",
+      encoding: "utf8",
+      stdio: "pipe"
+    }
+  );
 });
