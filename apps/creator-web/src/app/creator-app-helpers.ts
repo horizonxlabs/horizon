@@ -2,9 +2,7 @@ import {
   createPlatformSessionStore,
   startKeycloakLogin,
   startKeycloakLogout,
-  type CreateProjectInput,
   type PlatformApiClient,
-  type PlatformProjectDto,
   type PrdVersionDto
 } from "@evcp/api-client";
 import { createCreatorPlatformClient, projectToView } from "@/shared/creator-client";
@@ -56,24 +54,25 @@ export async function loadPrdState(
   return { current, versions };
 }
 
-export type CreateProjectWithInitialPrdResult = {
-  project: PlatformProjectDto;
-  draft?: PrdVersionDto;
-  prdError?: Error;
-};
+// PRD generation runs for minutes; the wizard must never hold a blocking fetch for it.
+// The caller closes immediately after createProject and this fire-and-forget runner reports
+// the outcome, while the PRD page polls as the recovery path (see useCreatorPrd).
+export const PRD_GENERATION_POLL_INTERVAL_MS = 5_000;
+export const PRD_GENERATION_TIMEOUT_MS = 8 * 60_000;
 
-export async function createProjectWithInitialPrd(
-  client: Pick<PlatformApiClient, "createProject" | "generatePrdDraft">,
-  input: CreateProjectInput
-): Promise<CreateProjectWithInitialPrdResult> {
-  const project = await client.createProject(input);
+export function isPrdGenerationTimedOut(startedAtMs: number, nowMs: number): boolean {
+  return nowMs - startedAtMs >= PRD_GENERATION_TIMEOUT_MS;
+}
+
+export async function runBackgroundPrdGeneration(
+  client: Pick<PlatformApiClient, "generatePrdDraft">,
+  projectId: string,
+  handlers: { onDraft(draft: PrdVersionDto): void; onError(error: Error): void }
+): Promise<void> {
   try {
-    return { project, draft: await client.generatePrdDraft(project.id) };
+    handlers.onDraft(await client.generatePrdDraft(projectId));
   } catch (error) {
-    return {
-      project,
-      prdError: error instanceof Error ? error : new Error(String(error))
-    };
+    handlers.onError(error instanceof Error ? error : new Error(String(error)));
   }
 }
 
