@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StoreTicketResponse } from "@evcp/api-client";
 import { navigateBrowserPath, SectionCard, ToneBadge } from "@evcp/ui";
+import { StorePageHeader } from "../StorePageHeader";
+import { StoreStatePanel } from "../StoreStatePanel";
 import { useStorefront } from "../StoreProvider";
 
 type TicketDetailState =
@@ -50,56 +52,53 @@ export function StoreTicketDetailPage({ ticketId }: { ticketId: string }) {
   if (detail.status === "loading") {
     return (
       <section className="store-page">
-        <div className="store-page-heading">
-          <div>
-            <span className="eyebrow">Platform API ticket</span>
-            <h1>Ticket details</h1>
-          </div>
-        </div>
-        <SectionCard eyebrow="Platform API" title="Loading ticket">
+        <StorePageHeader eyebrow="Platform API ticket" title="Ticket details" />
+        <StoreStatePanel eyebrow="Platform API" title="Loading ticket">
           <p>Loading the current ticket timeline.</p>
-        </SectionCard>
+        </StoreStatePanel>
       </section>
     );
   }
   if (detail.status === "not-found") {
     return (
       <section className="store-page">
-        <div className="store-page-heading">
-          <div>
-            <span className="eyebrow">Platform API ticket</span>
-            <h1>Ticket details</h1>
-          </div>
-        </div>
-        <SectionCard eyebrow="Platform API" title="Ticket not found">
+        <StorePageHeader eyebrow="Platform API ticket" title="Ticket details" />
+        <StoreStatePanel eyebrow="Platform API" title="Ticket not found">
           <p>This ticket is unavailable to the current session.</p>
-          <button type="button" onClick={() => navigateBrowserPath("/store/tickets")}>
+          <a
+            href="/store/tickets"
+            onClick={(event) => {
+              event.preventDefault();
+              navigateBrowserPath("/store/tickets");
+            }}
+          >
             Return to Tickets
-          </button>
-        </SectionCard>
+          </a>
+        </StoreStatePanel>
       </section>
     );
   }
   if (detail.status === "error") {
     return (
       <section className="store-page">
-        <div className="store-page-heading">
-          <div>
-            <span className="eyebrow">Platform API ticket</span>
-            <h1>Ticket details</h1>
-          </div>
-        </div>
-        <SectionCard eyebrow="Platform API" title="Ticket unavailable">
+        <StorePageHeader eyebrow="Platform API ticket" title="Ticket details" />
+        <StoreStatePanel eyebrow="Platform API" title="Ticket unavailable">
           <p>{detail.message}</p>
           <div className="store-action-row">
             <button type="button" onClick={() => void loadTicket()}>
               Retry ticket
             </button>
-            <button type="button" onClick={() => navigateBrowserPath("/store/tickets")}>
+            <a
+              href="/store/tickets"
+              onClick={(event) => {
+                event.preventDefault();
+                navigateBrowserPath("/store/tickets");
+              }}
+            >
               Return to Tickets
-            </button>
+            </a>
           </div>
-        </SectionCard>
+        </StoreStatePanel>
       </section>
     );
   }
@@ -107,18 +106,16 @@ export function StoreTicketDetailPage({ ticketId }: { ticketId: string }) {
   const { ticket } = detail;
   return (
     <section className="store-page store-ticket-detail">
-      <div className="store-page-heading">
-        <div>
-          <span className="eyebrow">Platform API ticket</span>
-          <h1>{ticket.ticketNumber}</h1>
-          <p>
-            {ticket.appName ?? ticket.appSlug} · {ticket.title ?? "Support ticket"}
-          </p>
-        </div>
-        <ToneBadge tone={ticket.status === "resolved" ? "success" : "warning"}>
-          {ticket.status}
-        </ToneBadge>
-      </div>
+      <StorePageHeader
+        action={
+          <ToneBadge tone={ticket.status === "resolved" ? "success" : "warning"}>
+            {ticket.status}
+          </ToneBadge>
+        }
+        description={`${ticket.appName ?? ticket.appSlug} · ${ticket.title ?? "Support ticket"}`}
+        eyebrow="Platform API ticket"
+        title={ticket.ticketNumber}
+      />
       <SectionCard eyebrow="Timeline" title="Current ticket activity">
         {ticket.timeline.length ? (
           <ol className="store-ticket-timeline">
