@@ -1,16 +1,28 @@
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  }
+});
 
 const memory = new Map();
 const originalWindow = globalThis.window;
 const originalDocument = globalThis.document;
 const originalReact = globalThis.React;
+let recentAtAssignment;
 globalThis.window = {
   location: {
     pathname: "/store/apps/first",
     hash: "",
     href: "http://localhost/store/apps/first",
     assign(path) {
+      recentAtAssignment = createStoreDeviceState(window.localStorage).read().recent;
       this.pathname = path;
     }
   },
@@ -100,9 +112,7 @@ function mount(store, client, slug = "first") {
 }
 
 function button(root, label) {
-  const item = root
-    .findAllByType("button")
-    .find((node) => node.children.join("").includes(label));
+  const item = root.findAllByType("button").find((node) => node.children.join("").includes(label));
   assert.ok(item, `Expected ${label} button`);
   return item;
 }
@@ -154,6 +164,11 @@ test("active access opens a healthy published web app without installation", asy
   });
   assert.ok(button(renderer.root, "Open app"));
   const rendered = JSON.stringify(renderer.toJSON());
+  assert.match(rendered, /store-app-detail-layout/);
+  assert.match(rendered, /store-app-detail-main/);
+  assert.match(rendered, /store-app-action-rail/);
+  assert.match(rendered, /Open app/);
+  assert.doesNotMatch(rendered, /Install app|Uninstall app|Installation/);
   assert.doesNotMatch(
     rendered,
     /App install journey|Install on this account|Remove this installation/
@@ -207,9 +222,7 @@ test("Open fails closed for an unhealthy app or missing published route", async 
       await Promise.resolve();
     });
     assert.equal(
-      renderer.root
-        .findAllByType("button")
-        .some((item) => item.children.join("") === "Open app"),
+      renderer.root.findAllByType("button").some((item) => item.children.join("") === "Open app"),
       false
     );
     await act(async () => {
@@ -218,29 +231,31 @@ test("Open fails closed for an unhealthy app or missing published route", async 
   }
 });
 
-test("available access persists the returned access receipt", async () => {
+test("available access deduplicates pending requests and persists only a confirmed receipt", async () => {
+  memory.clear();
   const available = {
     ...detail("available", ["request_access"]),
     accessStatus: "available",
     primaryAction: "request_access"
   };
+  const request = deferred();
+  const submitted = [];
   const client = {
     getStoreAppDetail: async () => available,
-    requestStoreAccess: async (_slug, input) => ({
-      id: "receipt-1",
-      appSlug: "available",
-      requestedRoleKey: input.requestedRoleKey,
-      requesterEmail: "user@example.com",
-      status: "pending",
-      reason: input.reason,
-      createdAt: "2026-07-29"
-    })
+    requestStoreAccess: async (_slug, input) => {
+      submitted.push(input);
+      return request.promise;
+    }
   };
   let renderer;
   await act(async () => {
     renderer = mount(createStore(), client, "available");
     await Promise.resolve();
   });
+  const accessForm = renderer.root.findByProps({ "data-store-action": "request-access" });
+  await act(async () => accessForm.props.onSubmit({ preventDefault() {} }));
+  assert.deepEqual(submitted, []);
+  assert.match(JSON.stringify(renderer.toJSON()), /A requested role and reason are required/);
   const inputs = renderer.root.findAllByType("input");
   await act(async () => {
     inputs
@@ -248,30 +263,43 @@ test("available access persists the returned access receipt", async () => {
       .props.onChange({ target: { value: "Need it" } });
   });
   await act(async () => {
-    renderer.root
-      .findByProps({ "data-store-action": "request-access" })
-      .props.onSubmit({ preventDefault() {} });
+    accessForm.props.onSubmit({ preventDefault() {} });
+    accessForm.props.onSubmit({ preventDefault() {} });
     await Promise.resolve();
   });
-  assert.equal(createStoreDeviceState(window.localStorage).read().accessReceipts[0].id, "receipt-1");
+  assert.deepEqual(submitted, [{ requestedRoleKey: "member", reason: "Need it" }]);
+  assert.ok(button(renderer.root, "Requesting…"));
+  assert.deepEqual(createStoreDeviceState(window.localStorage).read().accessReceipts, []);
+  await act(async () => {
+    request.resolve({
+      id: "receipt-1",
+      appSlug: "available",
+      requestedRoleKey: "member",
+      requesterEmail: "user@example.com",
+      status: "pending",
+      reason: "Need it",
+      createdAt: "2026-07-29"
+    });
+    await Promise.resolve();
+  });
+  assert.equal(
+    createStoreDeviceState(window.localStorage).read().accessReceipts[0].id,
+    "receipt-1"
+  );
   await act(async () => {
     renderer.unmount();
   });
 });
 
-test("active access persists only the returned ticket identifier", async () => {
+test("active access deduplicates pending tickets and persists only a confirmed identifier", async () => {
+  memory.clear();
   const submitted = [];
+  const request = deferred();
   const client = {
     getStoreAppDetail: async () => detail(),
     submitStoreTicket: async (_slug, input) => {
       submitted.push(input);
-      return {
-        id: "ticket-1",
-        ticketNumber: "TKT-1",
-        appSlug: "first",
-        status: "submitted",
-        timeline: []
-      };
+      return request.promise;
     }
   };
   let renderer;
@@ -279,22 +307,27 @@ test("active access persists only the returned ticket identifier", async () => {
     renderer = mount(createStore(), client);
     await Promise.resolve();
   });
-  const inputs = renderer.root.findAllByType("input");
+  const ticketForm = renderer.root.findByProps({ "data-store-action": "submit-ticket" });
+  await act(async () => ticketForm.props.onSubmit({ preventDefault() {} }));
+  assert.deepEqual(submitted, []);
+  assert.match(
+    JSON.stringify(renderer.toJSON()),
+    /Ticket title, description, and device information are required/
+  );
   await act(async () => {
-    inputs
-      .find((input) => input.props.name === "ticketTitle")
+    renderer.root
+      .findByProps({ name: "ticketTitle" })
       .props.onChange({ target: { value: "  Broken flow  " } });
-    inputs
-      .find((input) => input.props.name === "ticketDescription")
+    renderer.root
+      .findByProps({ name: "ticketDescription" })
       .props.onChange({ target: { value: "  It fails  " } });
-    inputs
-      .find((input) => input.props.name === "ticketDevice")
+    renderer.root
+      .findByProps({ name: "ticketDevice" })
       .props.onChange({ target: { value: "  Safari  " } });
   });
   await act(async () => {
-    renderer.root
-      .findByProps({ "data-store-action": "submit-ticket" })
-      .props.onSubmit({ preventDefault() {} });
+    ticketForm.props.onSubmit({ preventDefault() {} });
+    ticketForm.props.onSubmit({ preventDefault() {} });
     await Promise.resolve();
   });
   assert.deepEqual(submitted[0], {
@@ -304,7 +337,21 @@ test("active access persists only the returned ticket identifier", async () => {
     description: "It fails",
     deviceInfo: "Safari"
   });
+  assert.equal(submitted.length, 1);
+  assert.ok(button(renderer.root, "Submitting…"));
+  assert.deepEqual(createStoreDeviceState(window.localStorage).read().ticketIds, []);
+  await act(async () => {
+    request.resolve({
+      id: "ticket-1",
+      ticketNumber: "TKT-1",
+      appSlug: "first",
+      status: "submitted",
+      timeline: []
+    });
+    await Promise.resolve();
+  });
   assert.deepEqual(createStoreDeviceState(window.localStorage).read().ticketIds, ["ticket-1"]);
+  assert.match(JSON.stringify(renderer.toJSON()), /Ticket submitted/);
   await act(async () => {
     renderer.unmount();
   });
@@ -312,6 +359,7 @@ test("active access persists only the returned ticket identifier", async () => {
 
 test("Open records recency before assigning the published runtime route", async () => {
   memory.clear();
+  recentAtAssignment = undefined;
   const client = { getStoreAppDetail: async () => detail() };
   let renderer;
   await act(async () => {
@@ -322,6 +370,7 @@ test("Open records recency before assigning the published runtime route", async 
     button(renderer.root, "Open app").props.onClick();
   });
   assert.equal(window.location.pathname, "/apps/first");
+  assert.deepEqual(recentAtAssignment, ["first"]);
   assert.deepEqual(createStoreDeviceState(window.localStorage).read().recent, ["first"]);
   await act(async () => {
     renderer.unmount();

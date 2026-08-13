@@ -213,17 +213,17 @@ test("Admin governance never substitutes local route, rule, or evidence fixtures
 
 test("Admin governance does not load while logged out and gates provider test calls", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
-  assert.match(source, /sessionActive \? createAdminPlatformClient\(\(\) => \{ clearAdminSession\(\); setSessionActive\(false\); \}\) : undefined/);
+  assert.match(
+    source,
+    /sessionActive\s*\?\s*createAdminPlatformClient\(\(\)\s*=>\s*\{\s*clearAdminSession\(\);\s*setSessionActive\(false\);\s*\}\)\s*:\s*undefined/
+  );
   assert.match(source, /if \(!client\) throw new Error\("AI governance API is unavailable"\)/);
   assert.match(source, /canMutateAiGovernance\(visibleAvailability\)/);
 });
 
 test("Admin logout disables governance and clears quota fixture evidence", () => {
   const source = readAllSourceFiles("apps/admin-web/src");
-  assert.match(
-    source,
-    /clearAdminSession\(\); setSessionActive\(false\);/
-  );
+  assert.match(source, /clearAdminSession\(\);\s*setSessionActive\(false\);/);
   assert.doesNotMatch(source, /latestAiQuota\?\.usedToday \?\? 0/);
   assert.doesNotMatch(source, /latestAiQuota\?\.dailyLimit \?\? aiGovernanceForm\.quotaDailyLimit/);
   assert.doesNotMatch(source, /Organization 1,000 daily/);

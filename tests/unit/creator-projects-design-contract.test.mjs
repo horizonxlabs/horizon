@@ -10,11 +10,16 @@ function declarationBlock(selector, source = css) {
     ?.declarations;
 }
 
-function mediaBlock(query) {
-  const start = css.indexOf(`@media (${query})`);
-  assert.notEqual(start, -1, `missing media query: ${query}`);
-  const next = css.indexOf("@media (", start + 1);
-  return css.slice(start, next === -1 ? undefined : next);
+function mediaBlock(query, requiredSelector) {
+  let start = -1;
+  while ((start = css.indexOf(`@media (${query})`, start + 1)) !== -1) {
+    const next = css.indexOf("@media (", start + 1);
+    const block = css.slice(start, next === -1 ? undefined : next);
+    if (!requiredSelector || block.includes(requiredSelector)) return block;
+  }
+  assert.fail(
+    `missing media query: ${query}${requiredSelector ? ` containing ${requiredSelector}` : ""}`
+  );
 }
 
 test("creator projects B1 styles cover studio, status, focus, and responsive layouts", () => {
@@ -55,7 +60,7 @@ test("creator projects grid and motion contracts have concrete declarations", ()
   const mobileGrid = declarationBlock(".hz-grid", mediaBlock("max-width: 640px"));
   assert.match(mobileGrid, /grid-template-columns:\s*minmax\(0, 1fr\)/);
 
-  const reducedMotion = mediaBlock("prefers-reduced-motion: reduce");
+  const reducedMotion = mediaBlock("prefers-reduced-motion: reduce", ".hz-card:hover");
   assert.match(reducedMotion, /transition:\s*none/);
   assert.match(declarationBlock(".hz-card:hover", reducedMotion), /transform:\s*none/);
   assert.match(declarationBlock(".hz-spinner", reducedMotion), /animation:\s*none !important/);
