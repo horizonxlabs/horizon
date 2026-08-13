@@ -17,6 +17,7 @@ import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { buildQuickMessages } from "./quick-messages";
+import { stripSuggestions } from "./vibe-suggest";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -218,7 +219,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   )}
                   <div className="vibe-message-text">
                     {message.text ? (
-                      <VibeMarkdown text={message.text} />
+                      <VibeMarkdown text={stripSuggestions(message.text)} />
                     ) : isVibing && !message.reasoning ? (
                       "▋"
                     ) : (
