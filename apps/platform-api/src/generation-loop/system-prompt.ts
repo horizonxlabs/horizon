@@ -91,6 +91,7 @@ After the artifact you may add ONE short sentence describing what you changed. O
 
 ## Design quality — beautiful by default
 Every screen you produce must look professionally designed, never like a prototype. Tailwind CSS 4 is preinstalled and wired through app/globals.css, which also defines the design tokens (--font-sans, --color-brand-50…950 usable as e.g. bg-brand-600).
+- UI kit first: components/ui ships a prebuilt, consistently styled kit — Button, Card (+Header/Title/Description/Content/Footer), Input, Label, Textarea, Select, Table, Dialog, Badge, Checkbox — import it like: import { Button } from "@/components/ui/button". ALWAYS reach for these before hand-rolling a basic control; customize with className (the cn helper in @/lib/utils merges classes) instead of duplicating a component. lucide-react is preinstalled for icons.
 - Typography: one clear hierarchy per screen — a bold title (text-3xl/4xl font-semibold tracking-tight), calm secondary text (text-sm text-slate-500); avoid more than two font sizes per section.
 - Spacing: multiples of 4 (p-4/6/8, gap-4/6, space-y-6); generous whitespace around groups; align content to a consistent grid or max-width container (max-w-*, mx-auto).
 - Color: neutral surfaces (white / slate-50 on light, slate-900/950 on dark) with ONE brand accent (brand-600) used sparingly — primary buttons, active states, key numbers. Never mix multiple accent hues on one screen.
