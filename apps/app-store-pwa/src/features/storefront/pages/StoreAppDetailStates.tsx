@@ -1,6 +1,8 @@
 import type { StorefrontAppDetailResponse } from "@evcp/api-client";
-import { navigateBrowserPath, SectionCard } from "@evcp/ui";
+import { navigateBrowserPath } from "@evcp/ui";
+import { StorePageHeader } from "../StorePageHeader";
 import type { StoreAppActionState } from "../StoreProvider";
+import { StoreStatePanel } from "../StoreStatePanel";
 
 export type StoreAppDetailState =
   | { status: "loading" }
@@ -52,13 +54,15 @@ export function StoreAppCapabilityRefreshStatus({
   if (state.status === "idle") return null;
   if (state.status === "refreshing") {
     return (
-      <SectionCard eyebrow="Platform API" title="Refreshing current app actions">
+      <div className="store-app-capability-status">
+        <h2>Refreshing current app actions</h2>
         <p role="status">Confirming the actions currently supported for this application.</p>
-      </SectionCard>
+      </div>
     );
   }
   return (
-    <SectionCard eyebrow="Platform API" title="Current app actions unavailable">
+    <div className="store-app-capability-status store-app-capability-status-error">
+      <h2>Current app actions unavailable</h2>
       <p role="alert">
         The latest app status is preserved, but current actions could not be refreshed:{" "}
         {state.error}
@@ -66,7 +70,7 @@ export function StoreAppCapabilityRefreshStatus({
       <button type="button" onClick={onRetry}>
         Retry current actions
       </button>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -88,15 +92,10 @@ export function StoreAppActionFeedback({ state }: { state?: StoreAppActionState 
 export function StoreAppDetailLoadingPage() {
   return (
     <section className="store-page">
-      <div className="store-page-heading">
-        <div>
-          <span className="eyebrow">Platform API app detail</span>
-          <h1>App details</h1>
-        </div>
-      </div>
-      <SectionCard eyebrow="Platform API" title="Loading app">
+      <StorePageHeader eyebrow="Application" title="App details" />
+      <StoreStatePanel eyebrow="Platform API" title="Loading app">
         <p>Loading app details and supported actions.</p>
-      </SectionCard>
+      </StoreStatePanel>
     </section>
   );
 }
@@ -104,13 +103,8 @@ export function StoreAppDetailLoadingPage() {
 export function StoreAppDetailErrorPage({ error, onRetry }: { error: string; onRetry(): void }) {
   return (
     <section className="store-page">
-      <div className="store-page-heading">
-        <div>
-          <span className="eyebrow">Platform API app detail</span>
-          <h1>App details</h1>
-        </div>
-      </div>
-      <SectionCard eyebrow="Platform API" title="App details unavailable">
+      <StorePageHeader eyebrow="Application" title="App details" />
+      <StoreStatePanel eyebrow="Platform API" title="App details unavailable" tone="danger">
         <p>{error}</p>
         <div className="store-action-row">
           <button type="button" onClick={onRetry}>
@@ -120,7 +114,7 @@ export function StoreAppDetailErrorPage({ error, onRetry }: { error: string; onR
             Return to Apps
           </button>
         </div>
-      </SectionCard>
+      </StoreStatePanel>
     </section>
   );
 }
