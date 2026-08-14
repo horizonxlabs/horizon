@@ -11,7 +11,7 @@ import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
-import { createGovernedContextResolver } from "./generation-loop/governed-context";
+import { createGovernedContextResolver, createPlatformBugAuditor } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
 import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
@@ -2357,7 +2357,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         versionIds: retrieval.matchedVersionIds,
         excerpts: retrieval.sources.flatMap((source) => source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`))
       };
-    }
+    },
+    onPlatformBug: createPlatformBugAuditor(services.audit)
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);

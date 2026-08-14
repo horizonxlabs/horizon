@@ -70,6 +70,9 @@ export function createChatSseHandler(deps: {
     projectId: string,
     planText: string
   ) => Promise<{ id: string; version: string; changeSummary: string }>;
+  // Errors traced to template-shipped files are platform defects, not model mistakes —
+  // audited so the team sees them (the thai.css lesson).
+  onPlatformBug?: (projectId: string, tag: ErrorTag) => void;
 }) {
   return async function handleChatRequest(
     req: IncomingMessage,
@@ -154,7 +157,10 @@ export function createChatSseHandler(deps: {
           tag.platformBug = true;
         }
         const fresh = debugTagMemory.filterNew(projectId, [tag]);
-        if (fresh.length > 0) debugTagMemory.markAttempted(projectId, fresh);
+        if (fresh.length > 0) {
+          debugTagMemory.markAttempted(projectId, fresh);
+          if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
+        }
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify(
@@ -285,6 +291,7 @@ export function createChatSseHandler(deps: {
         const fresh = debugTagMemory.filterNew(projectId, tags);
         if (fresh.length > 0) {
           debugTagMemory.markAttempted(projectId, fresh);
+          for (const tag of fresh) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
           res.write(
             `event: auto_debug\ndata: ${JSON.stringify({
               type: "auto_debug",
