@@ -5,7 +5,7 @@ import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
 import { QuickMessages } from "./QuickMessages";
 import { VibeActionSummary } from "./VibeActionSummary";
-import { VibeRestorePoint } from "./VibeRestorePoint";
+import { WorkspaceHistoryPanel } from "./WorkspaceHistoryPanel";
 import { VibeUserBubble } from "./VibeUserBubble";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
@@ -223,16 +223,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   <VibeActionSummary actions={message.actions} />
                   {message.commitSha && (
                     <div className="vibe-commit-chip">
-                      ⑂ committed {message.commitSha.slice(0, 8)}
-                      <VibeRestorePoint
-                        projectId={selectedProject.id}
-                        commitSha={message.commitSha}
-                        disabled={isVibing}
-                        onRestored={() => {
-                          void reloadChatHistory();
-                          setVibePreviewKey((key) => key + 1);
-                        }}
-                      />
+                      ⑂ committed {message.commitSha.slice(0, 8)} — ย้อนได้ที่ tab History
                     </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (
@@ -383,6 +374,16 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             </Suspense>
           ) : vibeTab === "prd" ? (
             <WorkspacePrdPanel app={app} />
+          ) : vibeTab === "history" ? (
+            <WorkspaceHistoryPanel
+              projectId={selectedProject.id}
+              messages={vibeMessages}
+              disabled={isVibing}
+              onRestored={() => {
+                void reloadChatHistory();
+                setVibePreviewKey((key) => key + 1);
+              }}
+            />
           ) : (
             <WorkspaceCodePanel projectId={selectedProject.id} />
           )}
