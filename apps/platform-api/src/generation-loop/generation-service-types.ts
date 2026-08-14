@@ -38,6 +38,7 @@ export interface GenerationServiceDeps {
 
 export interface GenerationService {
   history(projectId: string): Promise<WorkspaceChatMessage[]>;
+  restoreToCommit(projectId: string, commitSha: string): Promise<void>;
   listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>>;
   runTurn(input: {
     projectId: string;

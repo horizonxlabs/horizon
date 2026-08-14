@@ -30,6 +30,21 @@ export async function ensureVibeWorkspace(projectId: string): Promise<void> {
   );
 }
 
+// Rolls the workspace code back to a previous turn's commit. The server serializes on the
+// generation turn lock and appends a rollback note to chat history (the project's log).
+export async function restoreWorkspaceCommit(projectId: string, commitSha: string): Promise<void> {
+  const base = apiBaseUrl() ?? "/api";
+  const res = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat/restore`, {
+    method: "POST",
+    headers: vibeAuthHeaders(),
+    body: JSON.stringify({ commitSha })
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(body?.message ?? `Restore failed (${res.status})`);
+  }
+}
+
 // Builds the chat request body. Kept pure (no browser globals) so the approved-plan wiring is unit
 // tested directly; approvedPlan is included only when a Creator approved a plan (else omitted).
 export function vibeChatBody(

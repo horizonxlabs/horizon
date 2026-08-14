@@ -25,7 +25,7 @@ export function CreateProjectWizard({
           <div>
             <span className="eyebrow">Create Project Wizard</span>
             <h2>สร้าง Project ใหม่</h2>
-            <p>ระบบจะสร้าง project แล้วพาเข้า workspace ทันที — AI สร้าง PRD draft แรกให้เบื้องหลัง</p>
+            <p>ระบบจะสร้าง project แล้วพาเข้า workspace — AI เริ่ม build จาก business problem ทันที</p>
           </div>
           <Button variant="ghost" type="button" onClick={onClose} disabled={isCreating}>
             Close
@@ -92,7 +92,7 @@ export function CreateProjectWizard({
           lines={[
             "POST /projects — แล้วเข้า workspace ทันที",
             "AI เริ่ม build ร่างแรกจาก business problem ให้เอง",
-            "PRD draft ร่างเบื้องหลัง (~2–3 นาที) ดูได้ที่ tab PRD"
+            "chat history คือบันทึกโครงการ — สร้าง PRD ได้ทีหลังที่ tab PRD"
           ]}
         />
         <footer>

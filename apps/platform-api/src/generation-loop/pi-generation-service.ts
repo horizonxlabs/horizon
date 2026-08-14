@@ -15,12 +15,19 @@ import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
+import { restoreWorkspaceCommit } from "./workspace-restore";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
   const limits = resolvePiAgentLimits(deps.limits);
   return {
     history: (projectId) => deps.chatHistory.listMessages(projectId),
+    restoreToCommit: (projectId, commitSha) =>
+      restoreWorkspaceCommit(
+        { lock: turnLock, guard: deps.workspaceGuard, chatHistory: deps.chatHistory },
+        projectId,
+        commitSha
+      ),
     async listWorkspaceFiles(projectId) {
       return deps.readWorkspaceFiles?.(deps.getContainerId(projectId)) ?? [];
     },
