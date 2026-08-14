@@ -1,19 +1,19 @@
 import { useEffect, useRef } from "react";
 import { apiBaseUrl } from "@/shared/runtime-config";
+import type { BugReport } from "./vibe-bugs";
 import { vibeAuthHeaders } from "@/shared/session";
 
 // Listens for error reports posted by the preview iframe (dev-error-relay / error
-// boundary in the generated app). Each report goes to the platform, which decides —
-// one automatic repair per error signature, ever — and hands back the debug prompt;
-// sending it through the normal chat path means it queues politely behind other work.
+// boundary in the generated app). Each report is registered with the platform (audit +
+// classification) and lands in the Bug Report box — the USER decides when to fix.
 export function usePreviewErrorRelay(input: {
   projectId: string;
   enabled: boolean;
-  submitPrompt: (prompt: string) => void;
+  onBug: (bug: BugReport) => void;
 }): void {
-  const { projectId, enabled, submitPrompt } = input;
-  const submitRef = useRef(submitPrompt);
-  submitRef.current = submitPrompt;
+  const { projectId, enabled, onBug } = input;
+  const onBugRef = useRef(onBug);
+  onBugRef.current = onBug;
 
   useEffect(() => {
     if (!enabled || !projectId) return;
@@ -31,11 +31,8 @@ export function usePreviewErrorRelay(input: {
       })
         .then(async (res) => {
           if (!res.ok) return;
-          const body = (await res.json().catch(() => null)) as {
-            shouldDebug?: boolean;
-            debugPrompt?: string;
-          } | null;
-          if (body?.shouldDebug && body.debugPrompt) submitRef.current(body.debugPrompt);
+          const body = (await res.json().catch(() => null)) as { bug?: BugReport } | null;
+          if (body?.bug) onBugRef.current(body.bug);
         })
         .catch(() => undefined)
         .finally(() => {

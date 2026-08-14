@@ -3,6 +3,7 @@ import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
+import { BugReportBox } from "./BugReportBox";
 import { QuickMessages } from "./QuickMessages";
 import { VibeActionSummary } from "./VibeActionSummary";
 import { WorkspaceHistoryPanel } from "./WorkspaceHistoryPanel";
@@ -17,8 +18,8 @@ import { extractQuestions, stripQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { MODE_OPTIONS, TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
-import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { usePreviewGuards } from "./use-preview-guards";
+import { usePreviewAuthorization } from "./use-preview-authorization";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -51,12 +52,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     hasPreview,
     promptQueue,
     removeQueuedPrompt,
+    bugReports,
+    addBugReport,
+    dismissBugReport,
     reloadChatHistory
   } = app;
   const [showPublish, setShowPublish] = useState(false);
-  // Auto-scroll the chat thread to the bottom as messages/tokens/reasoning stream in, so the
-  // reply is always in view — but only while the user is already near the bottom, so scrolling
-  // up to read earlier output is never yanked back down.
+  // Auto-scroll to the newest output, but never yank the user back down while they scroll up.
   const threadRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const handleThreadScroll = () => {
@@ -67,19 +69,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     const el = threadRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [vibeMessages, isVibing, vibeStatus]);
-  const [previewAuthorizationState, setPreviewAuthorizationState] = useState<
-    "loading" | "ready" | "error"
-  >("loading");
-  const [previewAuthorizationAttempt, setPreviewAuthorizationAttempt] = useState(0);
-  const [authorizedPreviewRequestKey, setAuthorizedPreviewRequestKey] = useState("");
   // Preview is addressed by the id-derived resource key (matches the container name), not the
   // public slug, so it survives a rename. Project ids never contain hyphens.
-  const previewKey = selectedProject.id.replaceAll("_", "-");
-  const previewSrc = `/preview/${previewKey}`;
-  const previewRequestKey = `${selectedProject.id}:${vibePreviewKey}:${previewAuthorizationAttempt}`;
-  const isPreviewAuthorized =
-    previewAuthorizationState === "ready" &&
-    authorizedPreviewRequestKey === previewRequestKey;
+  const previewSrc = `/preview/${selectedProject.id.replaceAll("_", "-")}`;
+  const previewAuth = usePreviewAuthorization({
+    projectId: selectedProject.id,
+    previewKey: vibePreviewKey
+  });
+  const isPreviewAuthorized = previewAuth.isAuthorized;
+  const liveLines = turnLineTotal(vibeMessages.at(-1)?.actions ?? []);
   const quickMessages = buildQuickMessages({
     mode: workspaceMode,
     project: selectedProject,
@@ -89,29 +87,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     hasPreview,
     hasProjectFiles: projectFiles.length > 0
   });
-  useEffect(() => {
-    let active = true;
-    setPreviewAuthorizationState("loading");
-    setAuthorizedPreviewRequestKey("");
-    void createCreatorPlatformClient()
-      .authorizeWorkspacePreview(selectedProject.id)
-      .then(() => {
-        if (active) {
-          setAuthorizedPreviewRequestKey(previewRequestKey);
-          setPreviewAuthorizationState("ready");
-        }
-      })
-      .catch(() => {
-        if (active) setPreviewAuthorizationState("error");
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedProject.id, vibePreviewKey, previewAuthorizationAttempt]);
   usePreviewGuards({
     projectId: selectedProject.id,
-    enabled: previewAuthorizationState === "ready",
-    submitPrompt: (prompt) => void handleVibeChat({ prompt, mode: "build" })
+    enabled: previewAuth.state === "ready",
+    onBug: addBugReport
   });
   return (
     <div className="vibe-live-shell">
@@ -126,9 +105,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <span className={`vibe-live-status ${isVibing ? "is-running" : "is-ready"}`.trim()}>
             <span className="vibe-live-status-dot" />
             {vibeStatus || "ready"}
-            {isVibing && turnLineTotal(vibeMessages.at(-1)?.actions ?? []) > 0
-              ? ` · ${turnLineTotal(vibeMessages.at(-1)?.actions ?? [])} lines`
-              : ""}
+            {isVibing && liveLines > 0 ? ` · ${liveLines} lines` : ""}
           </span>
         </div>
         <div className="vibe-live-header-right">
@@ -217,7 +194,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}
                       disabled={isVibing}
-                      onSubmit={(answer) => void handleVibeChat({ prompt: answer, mode: workspaceMode })}
+                      onSubmit={(answer) =>
+                        void handleVibeChat({ prompt: answer, mode: workspaceMode })
+                      }
                     />
                   )}
                   <VibeActionSummary actions={message.actions} />
@@ -239,8 +218,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               )
             )}
           </div>
-          {/* Hidden while the AI works: mid-turn the chips are stale; when the turn ends they
-              re-derive from the model's own <suggest> lines in its latest reply. */}
+          {/* Hidden mid-turn (stale); re-derives from the model's <suggest> lines when done. */}
           {!isVibing && quickMessages.length > 0 && (
             <QuickMessages
               items={quickMessages}
@@ -279,6 +257,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </div>
             )}
           </div>
+          <BugReportBox
+            bugs={bugReports}
+            disabled={isVibing}
+            onFix={setPromptDraft}
+            onDismiss={dismissBugReport}
+          />
           <PromptQueue items={promptQueue} onRemove={removeQueuedPrompt} />
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
@@ -355,15 +339,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             />
           ) : vibeTab === "preview" ? (
             <div className="hz-db-empty" role="status">
-              {previewAuthorizationState === "loading"
+              {previewAuth.state === "loading"
                 ? "Authorizing preview…"
                 : "Preview authorization failed."}
-              {previewAuthorizationState === "error" ? (
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setPreviewAuthorizationAttempt((attempt) => attempt + 1)}
-                >
+              {previewAuth.state === "error" ? (
+                <Button variant="secondary" type="button" onClick={previewAuth.retry}>
                   Retry preview
                 </Button>
               ) : null}

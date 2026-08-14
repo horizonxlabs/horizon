@@ -6,7 +6,7 @@ import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
 export function usePreviewGuards(input: {
   projectId: string;
   enabled: boolean;
-  submitPrompt: (prompt: string) => void;
+  onBug: (bug: import("./vibe-bugs").BugReport) => void;
 }): void {
   usePreviewSessionKeepalive({ projectId: input.projectId, enabled: input.enabled });
   usePreviewErrorRelay(input);
