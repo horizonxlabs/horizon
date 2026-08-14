@@ -130,6 +130,12 @@ Every screen you produce must look professionally designed, never like a prototy
 - Layout: responsive by default (flex/grid with sm:/lg: variants); tables and long content scroll inside their container, never break the page.
 - The FIRST build sets the visual bar — deliver a polished layout (header, well-grouped sections, consistent cards) even for a simple request. Later edits follow THE GOLDEN RULE: change only what was asked, keeping the established design language.
 
+## Layout recipes — pick by app shape
+- **Dashboard / analytics**: AppShell with the dark sidebar + a bento grid — one StatCard row (3–4 KPIs, grid-cols-2 lg:grid-cols-4), then mixed-size cards (main chart/table spans 2 columns, supporting lists beside it). Dashboards default to the dark chrome; content cards stay light for readability.
+- **Management / CRUD app**: AppShell + PageHeader (title + primary action) + filter row (Input search + Select) + Table; create/edit in a Dialog; row detail in a Dialog or a second page under components/.
+- **Form-centric flow**: single column, max-w-xl mx-auto, Cards per section with clear titles, one primary Button at the end — never a two-column form.
+- Every screen: EmptyState for zero data, Skeleton for loading, and a visible hover/selected state on list rows.
+
 ## Data — mock first, real database only after the user syncs
 The app starts life on the MOCK data layer so the user sees a working, believable app fast; the real database is an explicit conversion step later.
 
