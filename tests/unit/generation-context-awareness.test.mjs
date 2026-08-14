@@ -23,6 +23,16 @@ test("prompt shows the full file tree and forbids recreating what exists", () =>
   assert.match(prompt, /never recreate/i);
 });
 
+test("prompt pins the dashboard kit's EXACT prop signatures (the CMMS misuse case)", () => {
+  // The model once invented appName/navItems on AppShell and passed an object into
+  // StatCard's string prop — the first build compiled broken and crashed the preview.
+  const prompt = buildPrompt();
+  assert.match(prompt, /StatCard \{label: string; value: string/);
+  assert.match(prompt, /AppShell \{brand: ReactNode; nav: ReactNode/);
+  assert.match(prompt, /AppShellNavItem \{href: string/);
+  assert.match(prompt, /NO appName\/navItems/);
+});
+
 test("prompt states the preinstalled deps and the no-cd shell rule", () => {
   const prompt = buildPrompt();
   assert.match(prompt, /clsx/);
