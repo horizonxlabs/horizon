@@ -230,18 +230,20 @@ test("Creator preview establishes an HttpOnly session without putting bearer tok
     "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
     "utf8"
   );
+  const previewAuthorizationHook = readFileSync(
+    "apps/creator-web/src/features/workspace/use-preview-authorization.ts",
+    "utf8"
+  );
   const appFactory = readFileSync("apps/platform-api/src/app-factory.ts", "utf8");
   const previewSessionRoutePath =
     "apps/platform-api/src/workspace-orchestrator/preview-session-route.ts";
 
   assert.doesNotMatch(workspacePage, /platformSessionToken/);
   assert.doesNotMatch(workspacePage, /[?&]token=/);
-  assert.match(workspacePage, /authorizeWorkspacePreview/);
-  assert.match(workspacePage, /previewAuthorizationState/);
-  assert.match(
-    workspacePage,
-    /\[selectedProject\.id, vibePreviewKey, previewAuthorizationAttempt\]/
-  );
+  assert.match(workspacePage, /usePreviewAuthorization/);
+  assert.match(workspacePage, /previewAuth\.isAuthorized/);
+  assert.match(previewAuthorizationHook, /authorizeWorkspacePreview/);
+  assert.match(previewAuthorizationHook, /\[input\.projectId, input\.previewKey, attempt\]/);
   assert.match(apiClient, /authorizeWorkspacePreview\(projectId: string\)/);
   assert.match(apiClient, /workspace\/preview-session/);
   assert.match(appFactory, /registerPreviewSessionRoute/);
