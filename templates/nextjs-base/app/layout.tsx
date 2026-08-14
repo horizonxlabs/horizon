@@ -1,3 +1,5 @@
+import "@fontsource-variable/anuphan";
+import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 
 export const metadata = { title: "Generated App" };
