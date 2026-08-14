@@ -180,3 +180,83 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
   assert.deepEqual(assistant.tokenUsage, { promptTokens: 20, completionTokens: 10 });
   assert.equal(JSON.stringify(assistant).includes("sk-"), false);
 });
+
+test("validation feedback self-heals on the same Pi session before commit", async () => {
+  const lifecycle = [];
+  let modelRounds = 0;
+  let validations = 0;
+  const executor = {
+    async executeAgentRound(_actor, input) {
+      modelRounds += 1;
+      return {
+        status: "succeeded",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: modelRounds === 1 ? "Initial build" : "Fixed build" }],
+          timestamp: modelRounds
+        },
+        usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
+        evidence: { requestId: input.requestId }
+      };
+    }
+  };
+  const deps = baseDeps(executor, lifecycle);
+  deps.workspaceGuard.validate = async () => {
+    validations += 1;
+    lifecycle.push("validate");
+    if (validations === 1) throw new Error("TypeScript error");
+  };
+  const service = createPiGenerationService(deps);
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Build and fix", agentMode: "build", actor })
+  );
+
+  assert.equal(modelRounds, 2);
+  assert.equal(validations, 2);
+  assert.equal(lifecycle.includes("restore"), false);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    true
+  );
+  assert.equal((await service.history("p1")).at(-1).content, "Fixed build");
+});
+
+test("Pi turns are FIFO per project but independent across projects", async () => {
+  const lifecycle = [];
+  const starts = [];
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const executor = {
+    async executeAgentRound(_actor, input) {
+      starts.push(input.projectId);
+      if (input.projectId === "p1" && starts.filter((id) => id === "p1").length === 1) {
+        await firstGate;
+      }
+      return {
+        status: "succeeded",
+        message: { role: "assistant", content: [{ type: "text", text: "done" }], timestamp: 2 },
+        usage: { input: 1, output: 1, totalTokens: 2, costUsd: 0 },
+        evidence: { requestId: input.requestId }
+      };
+    }
+  };
+  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const first = drain(
+    service.runTurn({ projectId: "p1", prompt: "first", agentMode: "plan", actor })
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const second = drain(
+    service.runTurn({ projectId: "p1", prompt: "second", agentMode: "plan", actor })
+  );
+  const independent = drain(
+    service.runTurn({ projectId: "p2", prompt: "other", agentMode: "plan", actor })
+  );
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.deepEqual(starts, ["p1", "p2"]);
+  releaseFirst();
+  await Promise.all([first, second, independent]);
+  assert.deepEqual(starts, ["p1", "p2", "p1"]);
+});

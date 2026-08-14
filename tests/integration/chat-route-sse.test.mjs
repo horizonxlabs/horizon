@@ -1,74 +1,60 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { createChatSseHandler } from "../../apps/platform-api/src/generation-loop/chat-route.ts";
-import { createGenerationService } from "../../apps/platform-api/src/generation-loop/generation-service.ts";
-import { createMemoryLlmCompletionClient } from "../../apps/platform-api/src/generation-loop/llm-client.ts";
-import { createMemoryChatHistoryStore } from "../../apps/platform-api/src/generation-loop/chat-history-store.ts";
-import { createActionRunner } from "../../apps/platform-api/src/generation-loop/action-runner.ts";
-import { createMemoryCheckpointStore } from "../../apps/platform-api/src/generation-loop/checkpoint-store.ts";
-import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
-import { createMemoryDockerEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
-import { createErrorFeedbackTracker } from "../../apps/platform-api/src/generation-loop/error-feedback.ts";
+import test from "node:test";
 
-const template = { name: "nextjs-base", lockedFiles: ["package.json"], files: [] };
+import { createChatSseHandler } from "../../apps/platform-api/src/generation-loop/chat-route.ts";
+
+const auth = {
+  userId: "u1",
+  roles: ["member"],
+  projectIds: ["p1"],
+  actor: { id: "u1", email: "creator@example.test", name: "Creator", role: "creator" }
+};
+
+function scriptedService(captured) {
+  return {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async *runTurn(input) {
+      captured.push(input);
+      yield { type: "token", content: input.agentMode === "plan" ? "Plan ready" : "Built" };
+      if (input.agentMode !== "plan") {
+        yield {
+          type: "action_result",
+          actionId: "call-1",
+          actionType: "file",
+          label: "app/page.tsx",
+          ok: true
+        };
+        yield { type: "commit", sha: "commit-sha-1" };
+      }
+      yield { type: "done" };
+    }
+  };
+}
 
 async function setup(resolveAuth, options = {}) {
-  const docker = createMemoryDockerEngine();
-  const { containerId } = await docker.createContainer({
-    name: "evcp-ws-demo",
-    image: "img",
-    env: [],
-    hostConfig: { NanoCpus: 1, Memory: 1, NetworkMode: "n", Binds: [] },
-    labels: {},
-    exposedPort: 3000,
-    publishPorts: false
-  });
-
-  const scriptedReply =
-    'Sure thing.\n<artifact id="a1" title="add page">' +
-    '<action type="file" filePath="app/page.tsx">export default function Home(){}</action>' +
-    "</artifact>";
-
-  const generationService = createGenerationService({
-    llmClient: options.llmClient ?? createMemoryLlmCompletionClient([scriptedReply]),
-    chatHistory: createMemoryChatHistoryStore(),
-    actionRunner: createActionRunner({
-      docker,
-      checkpoints: createMemoryCheckpointStore(),
-      migrations: createMemoryMigrationStore()
-    }),
-    errorFeedback: createErrorFeedbackTracker(),
-    template,
-    getApiKey: () => "sk-fake",
-    getContainerId: () => containerId,
-    workspaceGuard: {
-      prepare: async () => "base-sha",
-      validate: async () => {},
-      restore: async () => {}
-    },
-    commitAllChanges: async () => "commit-sha-1"
-  });
-
+  const captured = [];
   const handler = createChatSseHandler({
-    generationService,
+    generationService: options.generationService ?? scriptedService(captured),
     resolveAuth,
     resolveAttachmentContext: options.resolveAttachmentContext
   });
-
   const server = http.createServer((req, res) => {
     handler(req, res).catch((error) => {
       res.writeHead(500);
       res.end(String(error));
     });
   });
-
   await new Promise((resolve) => server.listen(0, resolve));
-  const { port } = server.address();
-  return { server, port };
+  return { server, port: server.address().port, captured };
 }
 
-async function postChat(port, path, body) {
+function postChat(port, path, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
@@ -95,16 +81,10 @@ async function postChat(port, path, body) {
   });
 }
 
-test("POST /projects/:projectId/chat streams SSE events for an authorized member", async () => {
-  const { server, port } = await setup(() => ({
-    userId: "u1",
-    roles: ["member"],
-    projectIds: ["p1"]
-  }));
-
+test("authorized Build streams Creator SSE events", async () => {
+  const { server, port } = await setup(() => auth);
   try {
     const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
-
     assert.equal(raw.statusCode, 200);
     assert.match(raw.headers["content-type"], /text\/event-stream/);
     assert.match(raw.body, /event: token/);
@@ -116,86 +96,54 @@ test("POST /projects/:projectId/chat streams SSE events for an authorized member
   }
 });
 
-test("POST /projects/:projectId/chat in Plan mode streams guidance without write actions", async () => {
-  const { server, port } = await setup(
-    () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }),
-    {
-      llmClient: createMemoryLlmCompletionClient([
-        "Plan: inspect app/page.tsx first, then list the smallest implementation steps."
-      ])
-    }
-  );
+test("Plan streams guidance without mutable events", async () => {
+  const { server, port } = await setup(() => auth);
   try {
     const raw = await postChat(port, "/projects/p1/chat", {
-      prompt: "plan the home page update",
+      prompt: "plan update",
       agentMode: "plan"
     });
-    assert.equal(raw.statusCode, 200);
     assert.match(raw.body, /event: token/);
     assert.match(raw.body, /event: done/);
-    assert.doesNotMatch(raw.body, /event: action_result/);
-    assert.doesNotMatch(raw.body, /event: commit/);
+    assert.doesNotMatch(raw.body, /event: action_result|event: commit/);
   } finally {
     server.close();
   }
 });
 
-test("POST /projects/:projectId/chat returns 403 when caller is not a member of the project", async () => {
-  const { server, port } = await setup(() => ({
-    userId: "u1",
-    roles: ["member"],
-    projectIds: ["p1"]
-  }));
-
+test("rejects missing session and non-member", async () => {
+  const missing = await setup(() => null);
+  const forbidden = await setup(() => auth);
   try {
-    const raw = await postChat(port, "/projects/p2/chat", { prompt: "add home page" });
-
-    assert.equal(raw.statusCode, 403);
+    assert.equal(
+      (await postChat(missing.port, "/projects/p1/chat", { prompt: "x" })).statusCode,
+      401
+    );
+    assert.equal(
+      (await postChat(forbidden.port, "/projects/p2/chat", { prompt: "x" })).statusCode,
+      403
+    );
   } finally {
-    server.close();
+    missing.server.close();
+    forbidden.server.close();
   }
 });
 
-test("POST /projects/:projectId/chat returns 401 when there is no session", async () => {
-  const { server, port } = await setup(() => null);
-
-  try {
-    const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
-
-    assert.equal(raw.statusCode, 401);
-  } finally {
-    server.close();
-  }
-});
-
-test("POST /projects/:projectId/chat adds validated attachment excerpts to the LLM prompt", async () => {
-  let capturedPrompt = "";
-  const llmClient = {
-    async *streamChat(input) {
-      capturedPrompt = input.messages.at(-1)?.content ?? "";
-      yield 'Sure.\n<artifact id="a1" title="noop"></artifact>';
-    }
-  };
-  const { server, port } = await setup(
-    () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }),
-    {
-      llmClient,
-      resolveAttachmentContext: async (_req, _projectId, attachmentIds) => ({
-        versionIds: attachmentIds.map((id) => `knsrc_${id}_v1`),
-        excerpts: ["Brand guide excerpt: use a teal logo."]
-      })
-    }
-  );
-
+test("adds validated attachment excerpts to the governed prompt", async () => {
+  const { server, port, captured } = await setup(() => auth, {
+    resolveAttachmentContext: async () => ({
+      versionIds: ["knsrc_upl_test_v1"],
+      excerpts: ["Brand guide excerpt: use a teal logo."]
+    })
+  });
   try {
     await postChat(port, "/projects/p1/chat", {
-      prompt: "Apply the uploaded brand guide",
-      attachmentIds: ["upl_test_0001"]
+      prompt: "Apply the guide",
+      attachmentIds: ["upl_test"]
     });
-
-    assert.match(capturedPrompt, /Apply the uploaded brand guide/);
-    assert.match(capturedPrompt, /Brand guide excerpt: use a teal logo/);
-    assert.match(capturedPrompt, /upl_test_0001/);
+    assert.match(captured[0].prompt, /Apply the guide/);
+    assert.match(captured[0].prompt, /teal logo/);
+    assert.match(captured[0].prompt, /upl_test/);
   } finally {
     server.close();
   }
@@ -222,30 +170,16 @@ test("client disconnect aborts the active generation turn", async () => {
       yield { type: "done" };
     }
   };
-  const handler = createChatSseHandler({
-    generationService,
-    resolveAuth: () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] })
-  });
-  const server = http.createServer((req, res) => handler(req, res));
-  await new Promise((resolve) => server.listen(0, resolve));
-  const { port } = server.address();
-
+  const { server, port } = await setup(() => auth, { generationService });
   try {
     await new Promise((resolve, reject) => {
       const req = http.request(
-        {
-          host: "127.0.0.1",
-          port,
-          path: "/projects/p1/chat",
-          method: "POST",
-          headers: { "content-type": "application/json" }
-        },
-        (res) => {
+        { host: "127.0.0.1", port, path: "/projects/p1/chat", method: "POST" },
+        (res) =>
           res.once("data", () => {
             res.destroy();
             resolve();
-          });
-        }
+          })
       );
       req.on("error", reject);
       req.end(JSON.stringify({ prompt: "Build" }));

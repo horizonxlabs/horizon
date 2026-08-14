@@ -3,7 +3,6 @@ import { isLockedFile } from "../workspace-orchestrator/template";
 import type { CheckpointStore } from "./checkpoint-store";
 import type { MigrationStore } from "./migration-store";
 import { applyFindReplace } from "./find-replace";
-import { parseEditBody } from "./generation-action-utils";
 import { containsTransactionControl } from "./migration-runner";
 import { boundedExecution, boundedExecutionError } from "./action-execution-boundary";
 import type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
@@ -222,20 +221,6 @@ export function createActionRunner(deps: {
         }
         const marker = conflictMarkerLine(action.content);
         if (marker) {
-          // Forgiving recovery (opencode-style): a weaker model frequently emits a SEARCH/REPLACE
-          // edit but wraps it in a type="file" action, leaking the conflict markers into the file
-          // body. If the content IS a parseable SEARCH/REPLACE block, apply it as a surgical edit
-          // instead of failing — committing the raw markers would break the build.
-          const recovered = parseEditBody(action.content);
-          if (recovered.find && input.containerId) {
-            return applyEditToFile(
-              deps.docker,
-              input.containerId,
-              action.filePath,
-              recovered.find,
-              recovered.replace
-            );
-          }
           return {
             ok: false,
             error:
@@ -263,9 +248,8 @@ export function createActionRunner(deps: {
               ok: false,
               error:
                 `refusing to overwrite the existing file '${action.filePath}' (${size} bytes) with a whole-file write. ` +
-                `To change an existing file you MUST use an <action type="edit"> with a SEARCH/REPLACE block that ` +
-                `targets ONLY the lines to change and leaves the rest of the file identical. type="file" is only for ` +
-                `creating new files.`,
+                `To change an existing file use edit_workspace_file and target only the unique text ` +
+                `that must change. write_workspace_file is only for creating new files.`,
               stdout: "",
               stderr: "",
               exitCode: -1
