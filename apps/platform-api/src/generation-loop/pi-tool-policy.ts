@@ -28,6 +28,18 @@ export type PiAgentToolLimits = {
   shellTimeoutMs: number;
 };
 
+export function filterAgentWorkspaceFiles(
+  files: Array<{ path: string; content: string }>
+): Array<{ path: string; content: string }> {
+  return files.filter((file) => {
+    try {
+      return normalizeProjectPath(file.path) === file.path;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function normalizeProjectPath(path: string, options?: { allowRoot?: boolean }): string {
   const trimmed = path.trim();
   if (!trimmed) throw new Error("workspace path is required");
@@ -108,6 +120,17 @@ export function clipUtf8(text: string, maxBytes: number): string {
 export function safeToolError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
+    .replace(
+      /\b(?:DATABASE_URL|LITELLM_MASTER_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)\b(?:\s*=\s*[^\s]+)?/gi,
+      "[redacted-secret]"
+    )
+    .replace(/\bprovider\.secret\b(?:\s*=\s*[^\s]+)?/gi, "[redacted-secret]")
     .replace(/sk-[A-Za-z0-9._-]+/g, "sk-[redacted]")
-    .replace(/(?:postgres(?:ql)?:\/\/)[^\s]+/gi, "postgresql://[redacted]");
+    .replace(/(?:postgres(?:ql)?:\/\/)[^\s]+/gi, "postgresql://[redacted]")
+    .replace(
+      /(?:\/Users|\/home|\/var\/folders|\/private\/(?:tmp|var)|\/tmp)(?:\/[^\s'"]*)?/g,
+      "[redacted-host-path]"
+    )
+    .replace(/\b(?:container|mem)-[A-Za-z0-9][A-Za-z0-9_.-]*\b/g, "[redacted-container]")
+    .replace(/\b[0-9a-f]{12,64}\b/gi, "[redacted-container]");
 }

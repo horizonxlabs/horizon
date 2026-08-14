@@ -25,5 +25,12 @@ test("factory is Pi-only and exposes no engine selector or completion client", a
     "utf8"
   );
   assert.match(source, /createPiGenerationService/);
-  assert.doesNotMatch(source, /createGenerationService|LlmCompletionClient|EVCP_AGENT_ENGINE/);
+  const forbidden = new RegExp(
+    [
+      "createGenerationService",
+      ["LlmCompletion", "Client"].join(""),
+      ["EVCP_AGENT", "ENGINE"].join("_")
+    ].join("|")
+  );
+  assert.doesNotMatch(source, forbidden);
 });

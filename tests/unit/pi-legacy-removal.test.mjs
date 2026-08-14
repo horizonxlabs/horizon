@@ -3,11 +3,18 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 test("Coding AI has no legacy engine or markup parser", () => {
+  const forbidden = [
+    ["EVCP_AGENT", "ENGINE"].join("_"),
+    ["LlmCompletion", "Client"].join(""),
+    ["createMessage", "Parser"].join(""),
+    ["governed", "Completion"].join(""),
+    ["<action", " type="].join("")
+  ].join("|");
   const result = spawnSync(
     "rg",
     [
       "-n",
-      "EVCP_AGENT_ENGINE|LlmCompletionClient|createMessageParser|governedCompletion|<action type=",
+      forbidden,
       "apps/platform-api/src/generation-loop",
       "apps/platform-api/src/app-factory.ts"
     ],

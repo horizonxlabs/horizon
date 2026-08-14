@@ -30,12 +30,18 @@ For an existing file, change only the requested region and preserve every unrela
 - Preserve existing features unless the user explicitly removes them.
 - Keep small apps focused; split large UI into components and create every imported file.
 - Files using hooks, event handlers, or browser APIs must begin with "use client".
-- Prefer the prebuilt components/ui kit, Tailwind utilities, @/lib/utils, and lucide-react.
+- Prefer the prebuilt components/ui kit, Tailwind utilities, @/lib/utils, and lucide-react. For example: import { Button } from "@/components/ui/button".
 - Never modify locked files:
 ${lockedFiles(input.template)}
 
 ## Clarifying questions
-On a first build, choose sensible defaults and build. Later, ask only when a decision materially changes roles, workflow, or data rules. Batch at most three questions. Do not ask about ordinary visual defaults.
+On a first build, never ask questions: assume sensible defaults and build. Later, ask only when a decision materially changes roles, workflow, or data rules. Batch at most three questions and render each as a dropdown using exactly this format:
+<question>
+Question text?
+- Option one
+- Option two
+</question>
+Do not ask about ordinary visual defaults.
 
 ## Suggested next steps
 End successful replies with 2–3 stage-aware lines formatted as <suggest>specific standalone next action</suggest>. They render as clickable chips. Keep each under 40 characters and in the user's language.
@@ -53,8 +59,7 @@ When the user explicitly requests real database sync, derive the schema and seed
 ${summarySection(input)}${skillsSection(input)}${knowledgeSection(input)}${productSpecSection(input)}${
     approvedPlan
       ? `
-## Approved plan
-The user approved this plan. Implement it exactly and do not broaden scope.
+## Approved plan (the user approved this plan — implement exactly it, nothing more)
 ${approvedPlan}
 `
       : ""
@@ -121,7 +126,7 @@ ${input.knowledgeExcerpts.map((excerpt, index) => `${index + 1}. ${excerpt}`).jo
 function productSpecSection(input: GenerationSystemPromptInput): string {
   return input.productSpec
     ? `
-## Product spec — confirmed PRD baseline
+## Product spec (the approved PRD — build toward it)
 ${input.productSpec}
 `
     : "";
@@ -129,5 +134,5 @@ ${input.productSpec}
 
 function truncate(value: string | undefined, max: number): string | undefined {
   if (!value || value.length <= max) return value;
-  return `${value.slice(0, max)}\n… (truncated)`;
+  return `${value.slice(0, max)}\n… (plan truncated)`;
 }

@@ -14,7 +14,7 @@ import { PiSessionEventQueue } from "./pi-session-event-queue";
 import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
 import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
-import { safeToolError } from "./pi-tool-policy";
+import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
@@ -57,7 +57,9 @@ async function* runLockedTurn(
         scenario: "frontend_coding"
       })
     : { availableSkills: [], skillInstructions: {}, knowledgeExcerpts: [] };
-  const liveFiles = deps.readContextFiles ? await deps.readContextFiles(containerId) : [];
+  const liveFiles = filterAgentWorkspaceFiles(
+    deps.readContextFiles ? await deps.readContextFiles(containerId) : []
+  );
   assertFileLimits(liveFiles, limits.maxFileBytes);
   const contextFiles = liveFiles.length
     ? liveFiles
@@ -102,7 +104,7 @@ async function* runLockedTurn(
       template: deps.template,
       actionRunner: deps.actionRunner,
       readWorkspaceFiles: async (id) => {
-        const files = await (deps.readWorkspaceFiles?.(id) ?? []);
+        const files = filterAgentWorkspaceFiles(await (deps.readWorkspaceFiles?.(id) ?? []));
         assertFileLimits(files, limits.maxFileBytes);
         return files;
       },

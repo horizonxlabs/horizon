@@ -9,6 +9,7 @@ import {
   assertInputLimit,
   assertSafeCommand,
   clipUtf8,
+  filterAgentWorkspaceFiles,
   normalizeProjectPath,
   safeToolError,
   type PiAgentToolLimits
@@ -48,9 +49,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     Type.Object({ path: Type.String() }, { additionalProperties: false }),
     async (id, params) => {
       const path = normalizeProjectPath(params.path);
-      const file = (await context.readWorkspaceFiles(context.containerId)).find(
-        (candidate) => candidate.path === path
-      );
+      const file = (await workspaceFiles(context)).find((candidate) => candidate.path === path);
       if (!file) throw new Error(`workspace file '${path}' was not found`);
       return success(id, "file", path, context, { body: file.content }, file.content);
     }
@@ -65,7 +64,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       const prefix = params.prefix
         ? normalizeProjectPath(params.prefix, { allowRoot: true })
         : undefined;
-      const paths = (await context.readWorkspaceFiles(context.containerId))
+      const paths = (await workspaceFiles(context))
         .map((file) => file.path)
         .filter((path) => !prefix || path === prefix || path.startsWith(`${prefix}/`))
         .sort();
@@ -82,7 +81,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     async (id, params) => {
       const path = normalizeProjectPath(params.path);
       assertUnlocked(context.template, path);
-      const files = await context.readWorkspaceFiles(context.containerId);
+      const files = await workspaceFiles(context);
       if (files.some((file) => file.path === path)) {
         throw new Error(`workspace file '${path}' already exists; use edit_workspace_file`);
       }
@@ -107,9 +106,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       const path = normalizeProjectPath(params.path);
       assertUnlocked(context.template, path);
       if (!params.find) throw new Error("edit find text is required");
-      const file = (await context.readWorkspaceFiles(context.containerId)).find(
-        (candidate) => candidate.path === path
-      );
+      const file = (await workspaceFiles(context)).find((candidate) => candidate.path === path);
       if (!file) throw new Error(`workspace file '${path}' was not found`);
       const count = file.content.split(params.find).length - 1;
       if (count !== 1) {
@@ -326,4 +323,10 @@ function boundedPreview(
       ? {}
       : { replace: clipUtf8(preview.replace, context.limits.maxToolOutputBytes) })
   };
+}
+
+async function workspaceFiles(
+  context: HorizonPiToolContext
+): Promise<Array<{ path: string; content: string }>> {
+  return filterAgentWorkspaceFiles(await context.readWorkspaceFiles(context.containerId));
 }
