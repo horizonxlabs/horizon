@@ -92,6 +92,40 @@ export async function listWorkspaceTree(
   }
 }
 
+// Runtime probe (self-debug detection): fetch the app at its real base path from inside the
+// container and lift the visible error text when it is not serving 200 — this is what
+// catches "blank page" states that build validation cannot see.
+export async function probeWorkspaceRuntime(
+  docker: Pick<DockerEngine, "execInContainer">,
+  containerId: string,
+  previewKey: string
+): Promise<{ status: number; errors: string[] }> {
+  if (!/^[\w-]+$/.test(previewKey)) return { status: 0, errors: [] };
+  const url = `http://127.0.0.1:3000/preview/${previewKey}`;
+  const script = [
+    `status=$(wget -T 12 -q -O /tmp/evcp-probe --server-response '${url}' 2>&1 | awk '/^  HTTP\\//{code=$2} END{print code+0}')`,
+    'echo "STATUS:$status"',
+    'if [ "$status" != "200" ]; then',
+    "  grep -oE '(Error:|Module not found|Unhandled Runtime Error|Syntax Error)[^<]{0,220}' /tmp/evcp-probe 2>/dev/null | head -3 | sed 's/^/EXCERPT:/'",
+    "fi"
+  ].join("\n");
+  try {
+    const result = await docker.execInContainer(containerId, ["sh", "-c", script]);
+    const lines = (result.stdout ?? "").replace(/\r\n/g, "\n").split("\n");
+    const status = Number(lines.find((line) => line.startsWith("STATUS:"))?.slice(7) ?? 0);
+    const errors = lines
+      .filter((line) => line.startsWith("EXCERPT:"))
+      .map((line) => line.slice(8).trim())
+      .filter(Boolean);
+    if (status !== 200 && errors.length === 0) {
+      errors.push(`App responded with HTTP ${status || "no response"} at ${url}`);
+    }
+    return { status, errors: status === 200 ? [] : errors };
+  } catch {
+    return { status: 0, errors: [] }; // probe infra failure is never a user-facing error
+  }
+}
+
 // Reads the workspace file tree for the Creator Code tab. This deliberately differs from
 // createContainerFileReader above, which is capped to a tiny prompt context for AI edits.
 export function createWorkspaceFileBrowserReader(docker: DockerEngine): WorkspaceFileBrowserReader {

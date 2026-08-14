@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
+import { AUTO_DEBUG_PREFIX, buildDebugPrompt, createErrorTag, createTagMemory, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
@@ -25,8 +26,35 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+
+// One shared memory per process: each error signature gets a single automatic repair, ever.
+const debugTagMemory = createTagMemory();
+
+async function collectPostTurnTags(
+  service: {
+    probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
+    templateLockedFiles?: string[];
+  },
+  projectId: string,
+  turnErrors: string[]
+): Promise<ErrorTag[]> {
+  const tags = turnErrors.filter(Boolean).map((message) => createErrorTag("build", message));
+  const probe = await service.probeRuntime?.(projectId).catch(() => undefined);
+  for (const message of probe?.errors ?? []) {
+    const file = message.match(/(?:\.\/)?((?:app|components|lib)\/[\w./-]+)/)?.[1];
+    const tag = createErrorTag("runtime", message, file);
+    if (file && isPlatformFile(file, service.templateLockedFiles ?? [])) tag.platformBug = true;
+    tags.push(tag);
+  }
+  return tags;
+}
+
 export function createChatSseHandler(deps: {
-  generationService: ReturnType<typeof createGenerationService>;
+  generationService: ReturnType<typeof createGenerationService> & {
+    // Optional self-debug surface, attached by the default factory (real mode only).
+    probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
+    templateLockedFiles?: string[];
+  };
   resolveAuth: (
     req: IncomingMessage
   ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
@@ -180,6 +208,7 @@ export function createChatSseHandler(deps: {
     res.write(": open\n\n");
 
     try {
+      const turnErrors: string[] = [];
       for await (const event of deps.generationService.runTurn({
         projectId,
         prompt,
@@ -187,6 +216,7 @@ export function createChatSseHandler(deps: {
         actor: auth.actor,
         approvedPlan
       })) {
+        if (event.type === "error") turnErrors.push(String((event as { message?: string }).message ?? ""));
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
       if (approvedPlan && agentMode === "build" && deps.recordPrdVersionFromPlan && auth.actor) {
@@ -195,6 +225,44 @@ export function createChatSseHandler(deps: {
           res.write(`event: prd_version\ndata: ${JSON.stringify({ type: "prd_version", ...created })}\n\n`);
         } catch {
           // Recording the spec change is best-effort — never disturb the generation stream.
+        }
+      }
+      // Self-debug: exactly ONE automatic repair turn per user turn, streamed into the same
+      // response. Never triggers on an auto-debug prompt itself, and each error signature
+      // earns one attempt ever (tag memory) — repeats go back to the user.
+      if (agentMode === "build" && !prompt.startsWith(AUTO_DEBUG_PREFIX)) {
+        const tags = await collectPostTurnTags(deps.generationService, projectId, turnErrors);
+        const fresh = debugTagMemory.filterNew(projectId, tags);
+        if (fresh.length > 0) {
+          debugTagMemory.markAttempted(projectId, fresh);
+          res.write(
+            `event: auto_debug\ndata: ${JSON.stringify({
+              type: "auto_debug",
+              count: fresh.length,
+              summaries: fresh.map((tag) => tag.message.split("\n")[0].slice(0, 140))
+            })}\n\n`
+          );
+          const debugPrompt = buildDebugPrompt(fresh, {
+            previousTurnRolledBack: turnErrors.length > 0
+          });
+          for await (const event of deps.generationService.runTurn({
+            projectId,
+            prompt: debugPrompt,
+            agentMode: "build",
+            actor: auth.actor
+          })) {
+            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          }
+          const after = (await deps.generationService.probeRuntime?.(projectId)) ?? {
+            status: 0,
+            errors: []
+          };
+          res.write(
+            `event: auto_debug_result\ndata: ${JSON.stringify({
+              type: "auto_debug_result",
+              clean: after.errors.length === 0
+            })}\n\n`
+          );
         }
       }
     } catch (error) {

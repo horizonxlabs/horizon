@@ -19,7 +19,7 @@ import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { createContainerGitCommitter } from "./container-git";
-import { createContainerFileReader, createWorkspaceFileBrowserReader, listWorkspaceTree } from "./container-files";
+import { createContainerFileReader, createWorkspaceFileBrowserReader, listWorkspaceTree, probeWorkspaceRuntime } from "./container-files";
 import { buildSyntaxCheckCommand } from "./turn-checks";
 import { createPgMigrationRunner } from "./migration-runner";
 import type { GovernedAiExecutor } from "../ai-governance/execution-service";
@@ -86,7 +86,11 @@ export async function createDefaultGenerationService(opts: {
   const fileReader = createContainerFileReader(docker);
   const fileBrowserReader = createWorkspaceFileBrowserReader(docker);
 
-  return createGenerationService({
+  const template = env.EVCP_TEMPLATE_DIR
+    ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR)
+    : loadGoldenTemplate();
+
+  const service = createGenerationService({
     llmClient,
     ...(opts.resolveGovernedContext ? { resolveGovernedContext: opts.resolveGovernedContext } : {}),
     ...(opts.governedAiExecutor
@@ -113,9 +117,7 @@ export async function createDefaultGenerationService(opts: {
         : {})
     }),
     errorFeedback: createErrorFeedbackTracker(),
-    template: env.EVCP_TEMPLATE_DIR
-      ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR)
-      : loadGoldenTemplate(),
+    template,
     // MVP: authenticate to LiteLLM with the master key server-side. Never surfaced to the Creator.
     // Per-project virtual-key budgets are a follow-up.
     getApiKey: () => env.EVCP_LITELLM_MASTER_KEY ?? "",
@@ -169,4 +171,16 @@ export async function createDefaultGenerationService(opts: {
     },
     onAudit: opts.onAudit
   });
+
+  return {
+    ...service,
+    // Self-debug surface: post-turn runtime probe + template ownership info for tag
+    // classification. Attached here (not in generation-service) to hold its size ratchet.
+    templateLockedFiles: template.lockedFiles,
+    probeRuntime: async (projectId: string): Promise<{ status: number; errors: string[] }> => {
+      const workspace = opts.orchestrator.getWorkspace(projectId);
+      if (!workspace?.containerId) return { status: 0, errors: [] };
+      return probeWorkspaceRuntime(docker, workspace.containerId, projectId.replaceAll("_", "-"));
+    }
+  };
 }
