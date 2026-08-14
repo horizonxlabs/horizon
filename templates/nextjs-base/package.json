@@ -7,6 +7,8 @@
     "start": "next start --port 3000 --hostname 0.0.0.0"
   },
   "dependencies": {
+    "@fontsource-variable/anuphan": "^5.1.0",
+    "@fontsource-variable/jetbrains-mono": "^5.1.0",
     "@prisma/client": "^6.0.0",
     "@radix-ui/react-checkbox": "^1.1.0",
     "@radix-ui/react-dialog": "^1.1.0",
