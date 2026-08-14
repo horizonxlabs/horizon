@@ -4,6 +4,7 @@ import { fetchChatHistory } from "./chat-history";
 import { vibeActionVerb } from "./vibe-actions";
 import { ensureVibeWorkspace, streamVibeChat } from "./api";
 import { enqueuePrompt, removeQueued, takeNext, type QueuedPrompt } from "./vibe-queue";
+import { mergeBugReports, type BugReport } from "./vibe-bugs";
 import { applyVibeEvent, buildApproveTurn, type VibeMessage } from "./vibe-stream";
 
 type VibeChatOptions = {
@@ -26,6 +27,7 @@ export function useVibeChat({
   const [isVibing, setIsVibing] = useState(false);
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
   const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([]);
+  const [bugReports, setBugReports] = useState<BugReport[]>([]);
   // Refs so the busy-check and the drain effect never act on stale closures.
   const isVibingRef = useRef(false);
   isVibingRef.current = isVibing;
@@ -34,6 +36,7 @@ export function useVibeChat({
     setVibeMessages([]);
     setVibeStatus("");
     setPromptQueue([]);
+    setBugReports([]);
     if (!selectedProjectId) return;
     let ignore = false;
     fetchChatHistory(selectedProjectId).then((restored) => {
@@ -78,12 +81,9 @@ export function useVibeChat({
     setPromptDraft("");
     setIsVibing(true);
     setVibeStatus(mode === "plan" ? "Planning…" : "Provisioning workspace…");
-    // The self-debug repair turn streams into the same response: on auto_debug the patch
-    // target switches to a fresh assistant message so its tokens never mix with turn one.
-    let activeAssistantId = assistantId;
     const patchAssistant = (fn: (message: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) =>
-        prev.map((message) => (message.id === activeAssistantId ? fn(message) : message))
+        prev.map((message) => (message.id === assistantId ? fn(message) : message))
       );
     try {
       if (mode === "build") await ensureVibeWorkspace(projectId);
@@ -95,28 +95,12 @@ export function useVibeChat({
             : typeof data === "string"
               ? data
               : "";
-        if (type === "auto_debug") {
-          const debugAssistantId = `a-debug-${Date.now()}`;
-          setVibeMessages((prev) => [
-            ...prev,
-            {
-              id: `sys-debug-${Date.now()}`,
-              role: "assistant",
-              text: `🔧 ตรวจพบปัญหา ${field("count")} รายการ — กำลังแก้ให้อัตโนมัติ`,
-              actions: []
-            },
-            { id: debugAssistantId, role: "assistant", text: "", actions: [] }
-          ]);
-          activeAssistantId = debugAssistantId;
-          setVibeStatus("🔧 Auto-debug…");
-          return;
-        }
-        if (type === "auto_debug_result") {
-          setVibeStatus(
-            field("clean") === "true"
-              ? "🔧 แก้อัตโนมัติสำเร็จ ✓"
-              : "🔧 ยังมีปัญหาค้าง — ใช้ ⏪ หรือพิมพ์สั่งแก้ต่อได้"
-          );
+        if (type === "bug_report") {
+          const bugs = Array.isArray((data as { bugs?: unknown })?.bugs)
+            ? ((data as { bugs: BugReport[] }).bugs)
+            : [];
+          // Post-turn scans REPLACE the box: fixed bugs disappear, open ones stay visible.
+          setBugReports(bugs);
           return;
         }
         patchAssistant((message) => applyVibeEvent(message, type, data as Record<string, unknown>));
@@ -180,6 +164,10 @@ export function useVibeChat({
     setVibePreviewKey,
     promptQueue,
     removeQueuedPrompt,
+    bugReports,
+    addBugReport: (bug: BugReport) => setBugReports((current) => mergeBugReports(current, [bug])),
+    dismissBugReport: (signature: string) =>
+      setBugReports((current) => current.filter((bug) => bug.signature !== signature)),
     handleVibeChat,
     approveAndImplement,
     reloadChatHistory

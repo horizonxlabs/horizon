@@ -3343,6 +3343,98 @@ th {
   border-color: var(--evcp-color-danger, #dc2626);
 }
 
+.vibe-bug-box {
+  background: var(--evcp-color-danger-bg, #fef2f2);
+  border-top: 1px solid var(--evcp-color-danger, #dc2626);
+  display: grid;
+  gap: 6px;
+  padding: var(--evcp-space-2) 18px;
+}
+
+.vibe-bug-box-head {
+  align-items: center;
+  color: var(--evcp-color-danger, #dc2626);
+  display: flex;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vibe-bug-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vibe-bug-item {
+  align-items: center;
+  background: var(--evcp-color-surface, #fff);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.vibe-bug-body {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.vibe-bug-message {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vibe-bug-meta {
+  color: var(--evcp-color-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.vibe-bug-fix {
+  align-items: center;
+  background: var(--evcp-color-danger, #dc2626);
+  border: 0;
+  border-radius: var(--evcp-radius-pill, 999px);
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 650;
+  gap: 4px;
+  padding: 3px 10px;
+}
+
+.vibe-bug-fix:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.vibe-bug-dismiss {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 3px;
+}
+
+.vibe-bug-dismiss:hover {
+  background: var(--evcp-color-border);
+}
+
 .vibe-prompt-queue {
   border-top: 1px dashed var(--evcp-color-border);
   display: grid;

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
-import { AUTO_DEBUG_PREFIX, buildDebugPrompt, createErrorTag, createTagMemory, isPlatformFile, type ErrorTag } from "./error-tags";
+import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
@@ -27,8 +27,6 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 
-// One shared memory per process: each error signature gets a single automatic repair, ever.
-const debugTagMemory = createTagMemory();
 
 async function collectPostTurnTags(
   service: {
@@ -156,23 +154,18 @@ export function createChatSseHandler(deps: {
         if (file && isPlatformFile(file, deps.generationService.templateLockedFiles ?? [])) {
           tag.platformBug = true;
         }
-        const allowed = debugTagMemory.allowAttempt(projectId);
-        const fresh = allowed ? debugTagMemory.filterNew(projectId, [tag]) : [];
-        if (fresh.length > 0) {
-          debugTagMemory.markAttempted(projectId, fresh);
-          if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
-        }
+        if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
-          JSON.stringify(
-            fresh.length > 0
-              ? {
-                  shouldDebug: true,
-                  debugPrompt: buildDebugPrompt(fresh, { previousTurnRolledBack: false }),
-                  platformBug: Boolean(tag.platformBug)
-                }
-              : { shouldDebug: false }
-          )
+          JSON.stringify({
+            bug: {
+              signature: tag.signature,
+              source: tag.source,
+              file: tag.file,
+              message: tag.message.slice(0, 300),
+              platformBug: Boolean(tag.platformBug)
+            }
+          })
         );
       } catch (error) {
         res.writeHead(400, { "content-type": "application/json" });
@@ -284,44 +277,24 @@ export function createChatSseHandler(deps: {
           // Recording the spec change is best-effort — never disturb the generation stream.
         }
       }
-      // Self-debug: exactly ONE automatic repair turn per user turn, streamed into the same
-      // response. Never triggers on an auto-debug prompt itself, and each error signature
-      // earns one attempt ever (tag memory) — repeats go back to the user.
-      if (agentMode === "build" && !prompt.startsWith(AUTO_DEBUG_PREFIX)) {
+      // Bug report (user-in-command): detection still runs after every build turn, but the
+      // findings go to the client's Bug Report box — the USER decides when to fix, and the
+      // fix message travels through the normal chat so it lives in history.
+      if (agentMode === "build") {
         const tags = await collectPostTurnTags(deps.generationService, projectId, turnErrors);
-        const fresh = debugTagMemory.filterNew(projectId, tags);
-        if (fresh.length > 0 && debugTagMemory.allowAttempt(projectId)) {
-          debugTagMemory.markAttempted(projectId, fresh);
-          for (const tag of fresh) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
-          res.write(
-            `event: auto_debug\ndata: ${JSON.stringify({
-              type: "auto_debug",
-              count: fresh.length,
-              summaries: fresh.map((tag) => tag.message.split("\n")[0].slice(0, 140))
-            })}\n\n`
-          );
-          // Failed turns keep their files now (no automatic rollback) — the repair edits
-          // in place instead of rebuilding the app from scratch.
-          const debugPrompt = buildDebugPrompt(fresh, { previousTurnRolledBack: false });
-          for await (const event of deps.generationService.runTurn({
-            projectId,
-            prompt: debugPrompt,
-            agentMode: "build",
-            actor: auth.actor
-          })) {
-            res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-          }
-          const after = (await deps.generationService.probeRuntime?.(projectId)) ?? {
-            status: 0,
-            errors: []
-          };
-          res.write(
-            `event: auto_debug_result\ndata: ${JSON.stringify({
-              type: "auto_debug_result",
-              clean: after.errors.length === 0
-            })}\n\n`
-          );
-        }
+        for (const tag of tags) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
+        res.write(
+          `event: bug_report\ndata: ${JSON.stringify({
+            type: "bug_report",
+            bugs: tags.map((tag) => ({
+              signature: tag.signature,
+              source: tag.source,
+              file: tag.file,
+              message: tag.message.slice(0, 300),
+              platformBug: Boolean(tag.platformBug)
+            }))
+          })}\n\n`
+        );
       }
     } catch (error) {
       if (!res.headersSent) {
