@@ -87,13 +87,17 @@ docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
 docker logs evcp-litellm 2>&1 | tail -20      # expect it to bind and load coding-default
 ```
 
-Verify the full vibe-coding flow (guarded live test, runs inside the recreated container):
+Verify the Pi-only Creator flow from the repository checkout with an authenticated Creator token:
 
 ```
-docker exec -e EVCP_VIBE_LIVE=1 -e EVCP_WORKSPACE_REAL_ADAPTERS=1 -e EVCP_TEST_SEED=$RANDOM \
-  evcp-platform-api sh -lc 'cd /workspace && node --import tsx --test tests/integration/vibe-coding-e2e-live.test.mjs'
-# expect: a prompt produces a real file + git commit inside the project container
+EVCP_PI_LIVE_TEST=1 \
+EVCP_PI_BASE_URL=http://localhost:9801 \
+EVCP_PI_CREATOR_TOKEN='<creator bearer token>' \
+  node --import tsx --test tests/live/pi-agent-e2e.test.mjs
+# expect: Todo create/update and Sales Pipeline + migration commit, then preview-ready
 ```
+
+See [Pi agent verification](./pi-agent-verification.md) for evidence queries, timeout controls, and cleanup.
 
 **MVP note:** chat authenticates server-side and never exposes a LiteLLM credential to Creator.
 Chat messages, durable governed jobs, applied migrations, runtime records, and immutable Git code

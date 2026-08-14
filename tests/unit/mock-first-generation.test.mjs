@@ -2,9 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSystemPrompt } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
 
-const { loadGoldenTemplate } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/template.ts"
-);
+const { loadGoldenTemplate } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/template.ts");
 
 function buildPrompt() {
   return buildSystemPrompt({
@@ -24,7 +23,8 @@ test("prompt makes mock data the default and defers the real database to an expl
   assert.match(prompt, /sync/i);
   assert.match(prompt, /derive .*from the mock/i);
   // the real-database mechanics stay documented for the post-sync phase
-  assert.match(prompt, /<action type="migration"/);
+  assert.match(prompt, /propose_database_migration/);
+  assert.doesNotMatch(prompt, /<action|<artifact/);
   assert.match(prompt, /DATABASE_URL/);
 });
 
