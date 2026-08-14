@@ -135,6 +135,13 @@ export function useVibeChat({
     void handleVibeChat(buildApproveTurn(sourcePrompt, planText));
   }
 
+  // Re-pull persisted history (used after a code rollback appends its note server-side).
+  async function reloadChatHistory() {
+    if (!selectedProjectId) return;
+    const restored = await fetchChatHistory(selectedProjectId).catch(() => []);
+    if (restored.length > 0) setVibeMessages(restored);
+  }
+
   return {
     vibeMessages,
     setVibeMessages,
@@ -147,6 +154,7 @@ export function useVibeChat({
     promptQueue,
     removeQueuedPrompt,
     handleVibeChat,
-    approveAndImplement
+    approveAndImplement,
+    reloadChatHistory
   };
 }

@@ -4,7 +4,8 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
 import { QuickMessages } from "./QuickMessages";
-import { VibeActionRow } from "./VibeActionRow";
+import { VibeActionSummary } from "./VibeActionSummary";
+import { VibeRestorePoint } from "./VibeRestorePoint";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
@@ -48,7 +49,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     setWorkspaceMode,
     hasPreview,
     promptQueue,
-    removeQueuedPrompt
+    removeQueuedPrompt,
+    reloadChatHistory
   } = app;
   const [showPublish, setShowPublish] = useState(false);
   // Auto-scroll the chat thread to the bottom as messages/tokens/reasoning stream in, so the
@@ -218,19 +220,19 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                       onSubmit={(answer) => void handleVibeChat({ prompt: answer, mode: workspaceMode })}
                     />
                   )}
-                  {message.actions.length > 0 && (
-                    <div className="vibe-message-actions">
-                      {message.actions.map((action, actionIndex) => (
-                        <VibeActionRow
-                          key={`${message.id}:${action.id}:${actionIndex}`}
-                          action={action}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <VibeActionSummary actions={message.actions} />
                   {message.commitSha && (
                     <div className="vibe-commit-chip">
                       ⑂ committed {message.commitSha.slice(0, 8)}
+                      <VibeRestorePoint
+                        projectId={selectedProject.id}
+                        commitSha={message.commitSha}
+                        disabled={isVibing}
+                        onRestored={() => {
+                          void reloadChatHistory();
+                          setVibePreviewKey((key) => key + 1);
+                        }}
+                      />
                     </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (

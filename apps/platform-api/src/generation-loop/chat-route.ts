@@ -68,6 +68,39 @@ export function createChatSseHandler(deps: {
       return;
     }
 
+    // POST /projects/:id/chat/restore — roll the workspace code back to a turn's commit.
+    // Serialized on the generation turn lock; the rollback is logged into chat history.
+    const restoreMatch = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat\/restore$/);
+    if (restoreMatch && req.method === "POST") {
+      const projectId = restoreMatch[1];
+      const auth = await deps.resolveAuth(req);
+      if (!auth) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+      if (!isMember(auth, projectId)) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "forbidden" }));
+        return;
+      }
+      try {
+        const parsed = JSON.parse((await readBody(req)) || "{}") as { commitSha?: unknown };
+        await deps.generationService.restoreToCommit(projectId, String(parsed?.commitSha ?? ""));
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (error) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "restore_failed",
+            message: error instanceof Error ? error.message : "Restore failed"
+          })
+        );
+      }
+      return;
+    }
+
     const match = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat$/);
     if (!match || req.method !== "POST") {
       res.writeHead(404, { "content-type": "application/json" });

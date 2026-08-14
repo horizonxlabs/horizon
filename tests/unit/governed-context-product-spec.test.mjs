@@ -18,20 +18,19 @@ const services = (over = {}) => ({
 
 const input = { actor: { id: "u1", role: "creator" }, projectId: "p1", scenario: "frontend_coding" };
 
-test("includes the confirmed baseline spec as productSpec", async () => {
+// Context lean-down (2026-08): the PRD is deliberately OUT of the generation loop — chat
+// history carries the project's memory instead. Even a confirmed baseline must not inject.
+test("never injects productSpec, even with a confirmed baseline", async () => {
   const resolve = createGovernedContextResolver(services());
   const ctx = await resolve(input);
-  assert.match(ctx.productSpec, /## Overview\nAn expense tracker\./);
-});
-
-test("leaves productSpec undefined when there is no baseline", async () => {
-  const resolve = createGovernedContextResolver(services({ prds: { listVersions: () => [] } }));
-  const ctx = await resolve(input);
   assert.equal(ctx.productSpec, undefined);
 });
 
-test("leaves productSpec undefined (no throw) when the PRD read fails", async () => {
-  const resolve = createGovernedContextResolver(services({ prds: { listVersions() { throw new Error("no prd"); } } }));
-  const ctx = await resolve(input);
-  assert.equal(ctx.productSpec, undefined);
+test("stays quiet when there is no baseline or the PRD read fails", async () => {
+  const noBaseline = createGovernedContextResolver(services({ prds: { listVersions: () => [] } }));
+  assert.equal((await noBaseline(input)).productSpec, undefined);
+  const failing = createGovernedContextResolver(
+    services({ prds: { listVersions() { throw new Error("no prd"); } } })
+  );
+  assert.equal((await failing(input)).productSpec, undefined);
 });

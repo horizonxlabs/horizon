@@ -23,6 +23,24 @@ export function turnLineTotal(actions: VibeAction[]): number {
   return actions.reduce((total, action) => total + actionLineCount(action), 0);
 }
 
+// One human-readable rollup for a turn's actions — non-programmer users see the summary,
+// the per-file rows stay behind an expander.
+export function summarizeActions(actions: VibeAction[]): {
+  total: number;
+  done: number;
+  failed: number;
+  running: number;
+  lines: number;
+} {
+  return {
+    total: actions.length,
+    done: actions.filter((action) => action.status === "done").length,
+    failed: actions.filter((action) => action.status === "failed").length,
+    running: actions.filter((action) => action.status === "running").length,
+    lines: turnLineTotal(actions)
+  };
+}
+
 export const VIBE_ACTION_VERBS: Record<string, [string, string]> = {
   file: ["Creating", "Created"],
   edit: ["Editing", "Edited"],

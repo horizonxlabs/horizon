@@ -22,6 +22,8 @@ import {
 import { createProjectTurnLock } from "./project-turn-lock";
 import type { GenerationServiceDeps, OpenAction } from "./generation-service-types";
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
+import { resolveGovernedTurnContext } from "./generation-turn-context";
+import { restoreWorkspaceCommit } from "./workspace-restore";
 
 export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 export type { GenerationServiceDeps } from "./generation-service-types";
@@ -35,6 +37,13 @@ export function createGenerationService(deps: GenerationServiceDeps) {
   return {
     history(projectId: string): Promise<WorkspaceChatMessage[]> {
       return deps.chatHistory.listMessages(projectId);
+    },
+    restoreToCommit(projectId: string, commitSha: string): Promise<void> {
+      return restoreWorkspaceCommit(
+        { lock: turnLock, guard: deps.workspaceGuard, chatHistory: deps.chatHistory },
+        projectId,
+        commitSha
+      );
     },
     async listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>> {
       const containerId = deps.getContainerId(projectId);
@@ -70,16 +79,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         let turnFailed = false;
         let buildValidated = false;
         let prompt = input.prompt;
-        const governed =
-          input.actor && deps.resolveGovernedContext
-            ? await deps
-                .resolveGovernedContext({
-                  actor: input.actor,
-                  projectId: input.projectId,
-                  scenario: "frontend_coding"
-                })
-                .catch(() => undefined)
-            : undefined;
+        const governed = await resolveGovernedTurnContext(deps, input);
 
         roundLoop: for (let round = 0; round < MAX_ROUNDS; round += 1) {
           const parser = createMessageParser();

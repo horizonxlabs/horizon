@@ -36,7 +36,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
   const [createProjectMessage, setCreateProjectMessage] = useState(
-    "กรอกข้อมูลแอป แล้วระบบจะสร้าง project และ PRD draft ให้ทันที"
+    "กรอกข้อมูลแอป แล้วระบบจะสร้าง project และเริ่ม build ให้ทันที"
   );
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
@@ -53,7 +53,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     refreshPrdState,
     handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
-    beginBackgroundPrdGeneration,
     resetPrdState
   } = useCreatorPrd(selectedProject);
   const creatorNavItems = createCreatorNavigation(selectedProject);
@@ -283,7 +282,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       // provisions the sandbox and resets per-project state. The PRD generates in the
       // background and lives in the workspace's PRD tab.
       await handleSelectProject(nextBootstrap.selectedProject, "workspace");
-      beginBackgroundPrdGeneration(project.id);
+      // PRD is out of the loop for now — the chat log is the project's memory. The PRD tab
+      // still offers manual generation whenever the user wants a document.
       setCreateProjectMessage(
         `สร้าง ${project.name} แล้ว — AI กำลัง build ร่างแรกจาก business problem ของคุณ`
       );

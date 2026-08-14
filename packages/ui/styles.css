@@ -3190,6 +3190,63 @@ th {
   padding: var(--evcp-space-4);
 }
 
+.vibe-restore-button,
+.vibe-restore-confirm button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-pill, 999px);
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+}
+
+.vibe-restore-button:hover,
+.vibe-restore-confirm button:hover {
+  background: var(--evcp-color-surface-muted);
+  color: var(--evcp-color-body, inherit);
+}
+
+.vibe-restore-confirm {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.vibe-restore-error {
+  color: var(--evcp-color-danger, #dc2626);
+}
+
+.vibe-action-rollup {
+  align-items: center;
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  color: var(--evcp-color-body, inherit);
+  cursor: pointer;
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.vibe-action-rollup:hover {
+  background: var(--evcp-color-border);
+}
+
+.vibe-action-rollup.has-failed {
+  border-color: var(--evcp-color-danger, #dc2626);
+}
+
 .vibe-prompt-queue {
   border-top: 1px dashed var(--evcp-color-border);
   display: grid;

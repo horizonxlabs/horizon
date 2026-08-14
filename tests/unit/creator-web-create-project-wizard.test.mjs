@@ -15,7 +15,7 @@ test("CreateProjectWizard renders primitive controls (Field/Input/Textarea/Butto
     })
   );
   assert.match(html, />Create Project</);
-  assert.match(html, /PRD draft.*เบื้องหลัง/);
+  assert.match(html, /chat history.*บันทึกโครงการ/);
   assert.match(html, /<textarea/);
   assert.match(html, /focus:ring-primary-soft/);
   assert.match(html, /Project name/);
