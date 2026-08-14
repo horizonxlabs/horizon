@@ -30,6 +30,7 @@ The repository is a pnpm monorepo containing the platform services and three foc
 ## What Horizon Provides
 
 - **Governed AI delivery** — provider configuration, API-key protection, quotas, guardrails, prompt controls, and usage evidence.
+- **Pi-powered Coding AI** — native structured tool use with Horizon-owned Docker isolation, guardrails, quotas, audit evidence, and transactional checkpoints.
 - **Creator workflow** — project setup, PRD baselines, AI-assisted workspace actions, preview checkpoints, and publishing readiness.
 - **Enterprise access** — platform and app roles, invitations, access requests, simulated SSO foundation, and break-glass controls.
 - **Application lifecycle** — app manifests, deployment traceability, generated-runtime evidence, health checks, and rollback/upgrade visibility.
@@ -159,6 +160,9 @@ pnpm build
 # Run unit, integration, and end-to-end tests
 pnpm test
 
+# Opt-in real-provider Pi acceptance (requires live credentials and stack)
+EVCP_PI_LIVE_TEST=1 node --import tsx --test tests/live/pi-agent-e2e.test.mjs
+
 # Run the complete Sprint 14 regression suite
 pnpm verify:sprint14
 ```
@@ -174,6 +178,7 @@ pnpm check:changed --base origin/main
 - [Platform service design](./docs/architecture/platform-service-design.md)
 - [Private-server installation](./docs/operations/real-mvp-install.md)
 - [AI provider secret-store runbook](./docs/operations/ai-secret-store.md)
+- [Pi agent verification runbook](./docs/runbooks/pi-agent-verification.md)
 - [Production candidate readiness](./docs/delivery/production-candidate-readiness.md)
 
 ## MVP Progress
@@ -188,6 +193,7 @@ Detailed, phase-by-phase release work is tracked in the authoritative [MVP pendi
 - ✅ Private-stack components for PostgreSQL, Redis, MinIO, Keycloak, LiteLLM, Caddy, Platform API, and all three product surfaces.
 - ✅ API-backed core product flows, including key Admin, Creator, publishing, App Store, audit, and ticket paths, with fail-closed behavior when live data is unavailable.
 - ✅ Governed AI execution: provider routing and fallback, scoped quota accounting, guardrails, timeout/retry/circuit-breaker controls, and persisted sanitized evidence for usage, latency, tokens, and cost.
+- ✅ Pi is the sole Creator Coding AI engine, with seven project-bound Horizon tools, no Pi built-in tools or local resource discovery, and one governed evidence record per model round.
 - ✅ PostgreSQL-backed platform session verification, refresh/logout/revocation APIs, frontend refresh lifecycle, and Admin session management UI.
 - ✅ Restart-safe PostgreSQL AI job worker with encrypted payloads, lease recovery/heartbeat, request idempotency, and persisted execution evidence.
 - ✅ Project file/attachment metadata in Prisma with object payloads in MinIO; Creator no longer treats legacy in-memory upload state as authoritative.

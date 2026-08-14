@@ -52,16 +52,20 @@ tracked in Phase 10; it is not claimed by this document.
 
 ## Live workspace and generation proof
 
-The opt-in integration test used the local Docker/PostgreSQL/MinIO/LiteLLM/OpenBao stack and an
-operator-configured provider. Secret values were loaded from server-held configuration and were not
-printed.
+The recorded pre-Pi integration drill used the local Docker/PostgreSQL/MinIO/LiteLLM/OpenBao stack
+and an operator-configured provider. Secret values were loaded from server-held configuration and
+were not printed. That legacy harness has since been retired; reproduce the current Pi-only
+acceptance with:
 
 ```sh
-EVCP_VIBE_LIVE=1 EVCP_TEST_SEED=<unique-number> \
-  pnpm exec tsx --test tests/integration/vibe-coding-e2e-live.test.mjs
+EVCP_PI_LIVE_TEST=1 \
+EVCP_PI_BASE_URL=http://localhost:9801 \
+EVCP_PI_CREATOR_TOKEN='<creator bearer token>' \
+  node --import tsx --test tests/live/pi-agent-e2e.test.mjs
 ```
 
-Result: 1 passing, 0 failing; test duration 83,983.24 ms (83.98 seconds).
+Historical result before the Pi migration: 1 passing, 0 failing; test duration 83,983.24 ms
+(83.98 seconds). See `docs/runbooks/pi-agent-verification.md` for the current evidence contract.
 
 The test proved one flow, not separate mocks:
 

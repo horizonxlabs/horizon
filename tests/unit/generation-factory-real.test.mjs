@@ -20,7 +20,12 @@ test("real mode requires no throwing docker placeholder (constructs cleanly)", a
   // internally rather than the throwing placeholder. Constructing must not throw.
   const svc = await createDefaultGenerationService({
     orchestrator: orch("c1"),
-    env: { EVCP_WORKSPACE_REAL_ADAPTERS: "1", EVCP_LITELLM_BASE_URL: "http://litellm:4000", EVCP_LITELLM_MASTER_KEY: "sk-master" }
+    env: { EVCP_WORKSPACE_REAL_ADAPTERS: "1" },
+    governedAiExecutor: {
+      async executeAgentRound() {
+        throw new Error("not invoked during construction");
+      }
+    }
   });
   assert.equal(typeof svc.runTurn, "function");
 });
