@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { seedDesignSystemSkill, seedDemoLeaveSkill } from "./seed-skills";
 
 const prisma = new PrismaClient();
 
@@ -51,6 +52,7 @@ async function seedKeycloakProvider() {
   });
 }
 
+
 async function main() {
   for (const role of roles) {
     await prisma.platformRole.upsert({
@@ -69,6 +71,7 @@ async function main() {
   // Keycloak is required for every private-server installation; all human identities
   // and sample business data are explicit local-demo opt-ins.
   await seedKeycloakProvider();
+  await seedDesignSystemSkill();
   if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;
 
   await prisma.platformGroup.upsert({
@@ -1746,105 +1749,7 @@ async function main() {
     }
   });
 
-  await prisma.skillDefinition.upsert({
-    where: { key: "frontend-developer-leave" },
-    update: {
-      name: "Frontend Developer Leave Skill",
-      description: "Generate governed leave management frontend changes.",
-      ownerUserId: "usr_admin",
-      status: "active"
-    },
-    create: {
-      id: "skdef_frontend_developer_leave",
-      key: "frontend-developer-leave",
-      name: "Frontend Developer Leave Skill",
-      description: "Generate governed leave management frontend changes.",
-      ownerUserId: "usr_admin",
-      status: "active"
-    }
-  });
-
-  await prisma.skillVersion.upsert({
-    where: { id: "skver_frontend_developer_leave_v1" },
-    update: {
-      instruction: "Use approved leave policy knowledge before generating frontend changes.",
-      inputSchema: { type: "object", required: ["prompt"] },
-      outputSchema: { type: "object", required: ["preview"] },
-      requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"],
-      allowedTools: ["prd_reader", "ui_generator", "policy_checker"],
-      approvalStatus: "approved",
-      lifecycleStatus: "active",
-      isActive: true,
-      approvedByUserId: "usr_admin",
-      approvedAt: new Date("2026-09-08T09:10:00.000Z")
-    },
-    create: {
-      id: "skver_frontend_developer_leave_v1",
-      skillId: "skdef_frontend_developer_leave",
-      version: "v1",
-      instruction: "Use approved leave policy knowledge before generating frontend changes.",
-      inputSchema: { type: "object", required: ["prompt"] },
-      outputSchema: { type: "object", required: ["preview"] },
-      requiredKnowledgeSourceIds: ["knsrc_leave_policy_001"],
-      allowedTools: ["prd_reader", "ui_generator", "policy_checker"],
-      contentHash: "sha256:seed-skill-frontend-leave-v1",
-      approvalStatus: "approved",
-      lifecycleStatus: "active",
-      isActive: true,
-      approvedByUserId: "usr_admin",
-      approvedAt: new Date("2026-09-08T09:10:00.000Z"),
-      createdByUserId: "usr_admin"
-    }
-  });
-
-  await prisma.skillApproval.upsert({
-    where: { id: "skapp_frontend_developer_leave_v1" },
-    update: {
-      decision: "approved",
-      note: "Approved Sprint 11 active skill contract.",
-      decidedByUserId: "usr_admin"
-    },
-    create: {
-      id: "skapp_frontend_developer_leave_v1",
-      skillId: "skdef_frontend_developer_leave",
-      versionId: "skver_frontend_developer_leave_v1",
-      decision: "approved",
-      note: "Approved Sprint 11 active skill contract.",
-      decidedByUserId: "usr_admin",
-      decidedAt: new Date("2026-09-08T09:11:00.000Z")
-    }
-  });
-
-  await prisma.skillAssignment.upsert({
-    where: { id: "skassign_frontend_leave_project" },
-    update: {
-      skillId: "skdef_frontend_developer_leave",
-      skillVersionId: "skver_frontend_developer_leave_v1",
-      agentRole: "frontend_developer",
-      scenario: "frontend_coding",
-      scopeType: "project",
-      scopeId: "prj_leave_management",
-      projectId: "prj_leave_management",
-      appId: "app_leave_management",
-      department: "HR Department",
-      priority: 20,
-      status: "active"
-    },
-    create: {
-      id: "skassign_frontend_leave_project",
-      skillId: "skdef_frontend_developer_leave",
-      skillVersionId: "skver_frontend_developer_leave_v1",
-      agentRole: "frontend_developer",
-      scenario: "frontend_coding",
-      scopeType: "project",
-      scopeId: "prj_leave_management",
-      projectId: "prj_leave_management",
-      appId: "app_leave_management",
-      department: "HR Department",
-      priority: 20,
-      status: "active"
-    }
-  });
+  await seedDemoLeaveSkill();
 
   await prisma.installerReport.upsert({
     where: { id: "instrep_private_server_ready" },

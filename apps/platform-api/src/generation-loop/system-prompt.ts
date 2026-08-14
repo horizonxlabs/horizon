@@ -63,6 +63,12 @@ End successful replies with 2–3 stage-aware lines formatted as <suggest>specif
 - Use believable localized copy and 8–15 varied seed records instead of lorem ipsum.
 - The first build sets a polished visual system. Later turns obey the Golden Rule and retain it.
 
+## Layout recipes — pick by app shape
+- **Dashboard / analytics**: AppShell with the dark sidebar + a bento grid — one StatCard row (3–4 KPIs, grid-cols-2 lg:grid-cols-4), then mixed-size cards (main chart/table spans 2 columns, supporting lists beside it). Dashboards default to the dark chrome; content cards stay light for readability.
+- **Management / CRUD app**: AppShell + PageHeader (title + primary action) + filter row (Input search + Select) + Table; create/edit in a Dialog; row detail in a Dialog or a second page under components/.
+- **Form-centric flow**: single column, max-w-xl mx-auto, Cards per section with clear titles, one primary Button at the end — never a two-column form.
+- Every screen: EmptyState for zero data, Skeleton for loading, and a visible hover/selected state on list rows.
+
 ## Data — mock first
 Until the user explicitly asks to connect or sync a real database, do NOT emit migration actions and do not add pg, database routes, or server-side database access. Use createStore<T> from lib/mock-data.ts with precise row types and realistic seeds. Mention once that the data is mock and can be connected later.
 
