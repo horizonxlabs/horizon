@@ -205,7 +205,9 @@ test("migration runs only after validation and code commit and records the resul
   );
 });
 
-test("unexpected action exception restores last-known-good and completes with an error event", async () => {
+// Self-debug policy (2026-08): failed turns KEEP their files so the automatic repair can
+// edit in place — the pre-turn commit stays available as a ⏪ restore point instead.
+test("failed turn keeps its work (no auto-restore), skips commit, and emits an error event", async () => {
   let actions = 0;
   let restored = null;
   const service = createGenerationService({
@@ -236,7 +238,7 @@ test("unexpected action exception restores last-known-good and completes with an
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "edit both" }));
 
-  assert.equal(restored, "base-sha");
+  assert.equal(restored, null);
   assert.equal(
     events.some((event) => event.type === "commit"),
     false

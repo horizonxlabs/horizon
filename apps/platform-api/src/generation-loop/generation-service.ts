@@ -385,9 +385,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             yield { type: "error", message: (error as Error).message };
           }
         } else {
-          if (turnFailed && baseCommit) {
-            await deps.workspaceGuard.restore(input.projectId, baseCommit);
-          }
+          // Failed turns KEEP their work: the auto-debug turn repairs the files in place
+          // (seconds) instead of recreating a rolled-back app from scratch (minutes). The
+          // pre-turn commit stays a restore point — rollback is the ⏪ button's job now.
           await deps.chatHistory.appendMessage(assistantMessage);
         }
 

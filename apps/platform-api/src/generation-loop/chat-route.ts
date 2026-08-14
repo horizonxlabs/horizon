@@ -156,7 +156,8 @@ export function createChatSseHandler(deps: {
         if (file && isPlatformFile(file, deps.generationService.templateLockedFiles ?? [])) {
           tag.platformBug = true;
         }
-        const fresh = debugTagMemory.filterNew(projectId, [tag]);
+        const allowed = debugTagMemory.allowAttempt(projectId);
+        const fresh = allowed ? debugTagMemory.filterNew(projectId, [tag]) : [];
         if (fresh.length > 0) {
           debugTagMemory.markAttempted(projectId, fresh);
           if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
@@ -289,7 +290,7 @@ export function createChatSseHandler(deps: {
       if (agentMode === "build" && !prompt.startsWith(AUTO_DEBUG_PREFIX)) {
         const tags = await collectPostTurnTags(deps.generationService, projectId, turnErrors);
         const fresh = debugTagMemory.filterNew(projectId, tags);
-        if (fresh.length > 0) {
+        if (fresh.length > 0 && debugTagMemory.allowAttempt(projectId)) {
           debugTagMemory.markAttempted(projectId, fresh);
           for (const tag of fresh) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
           res.write(
@@ -299,9 +300,9 @@ export function createChatSseHandler(deps: {
               summaries: fresh.map((tag) => tag.message.split("\n")[0].slice(0, 140))
             })}\n\n`
           );
-          const debugPrompt = buildDebugPrompt(fresh, {
-            previousTurnRolledBack: turnErrors.length > 0
-          });
+          // Failed turns keep their files now (no automatic rollback) — the repair edits
+          // in place instead of rebuilding the app from scratch.
+          const debugPrompt = buildDebugPrompt(fresh, { previousTurnRolledBack: false });
           for await (const event of deps.generationService.runTurn({
             projectId,
             prompt: debugPrompt,

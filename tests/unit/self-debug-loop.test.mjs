@@ -43,6 +43,23 @@ test("debug prompt is fix-only, carries every tag, and flags rolled-back turns",
   assert.doesNotMatch(prompt, /rolled back/i);
   const rolled = buildDebugPrompt(tags, { previousTurnRolledBack: true });
   assert.match(rolled, /rolled back/i);
+  // default (failed work is KEPT now): repair in place, never rebuild from scratch
+  assert.match(prompt, /STILL PRESENT/);
+  assert.match(prompt, /IN PLACE/);
+  assert.match(prompt, /do NOT recreate existing files/i);
+});
+
+test("attempt budget caps repairs per window even when signatures keep changing", () => {
+  const memory = createTagMemory();
+  const t0 = 1_000_000;
+  assert.equal(memory.allowAttempt("prj_1", t0), true);
+  memory.markAttempted("prj_1", [createErrorTag("build", "err A")], t0);
+  assert.equal(memory.allowAttempt("prj_1", t0 + 1000), true);
+  memory.markAttempted("prj_1", [createErrorTag("build", "err B")], t0 + 1000);
+  // third new signature inside the window: budget exhausted — back to the user
+  assert.equal(memory.allowAttempt("prj_1", t0 + 2000), false);
+  // window expiry restores the budget
+  assert.equal(memory.allowAttempt("prj_1", t0 + 11 * 60 * 1000), true);
 });
 
 test("platform files are classified so bugs blame the template, not the model", () => {
