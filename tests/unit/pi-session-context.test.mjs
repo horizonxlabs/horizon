@@ -20,7 +20,7 @@ const toolNames = [
   "write_workspace_file",
   "edit_workspace_file",
   "run_workspace_command",
-  "queue_database_migration"
+  "propose_database_migration"
 ];
 
 function customTool(name) {

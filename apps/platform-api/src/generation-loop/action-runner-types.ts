@@ -3,7 +3,7 @@ import type { GoldenTemplate } from "../workspace-orchestrator/template";
 export type RunnableAction =
   | { id: string; type: "file"; filePath: string; content: string }
   | { id: string; type: "edit"; filePath: string; find: string; replace: string }
-  | { id: string; type: "shell"; command: string }
+  | { id: string; type: "shell"; command: string; args?: string[] }
   | { id: string; type: "migration"; name: string; sql: string };
 
 export type ActionResult =
@@ -18,6 +18,9 @@ export interface ActionRunner {
     action: RunnableAction;
     commitSha?: string;
     onShellOutput?: (chunk: string) => void;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    maxOutputBytes?: number;
   }): Promise<ActionResult>;
   runMigrationBatch(input: {
     containerId: string;

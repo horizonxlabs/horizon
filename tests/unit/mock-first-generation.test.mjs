@@ -23,7 +23,7 @@ test("prompt makes mock data the default and defers the real database to an expl
   assert.match(prompt, /sync/i);
   assert.match(prompt, /derive .*from the mock/i);
   // the real-database mechanics stay documented for the post-sync phase
-  assert.match(prompt, /queue_database_migration/);
+  assert.match(prompt, /propose_database_migration/);
   assert.doesNotMatch(prompt, /<action|<artifact/);
   assert.match(prompt, /DATABASE_URL/);
 });

@@ -5,6 +5,7 @@ import type { MigrationStore } from "./migration-store";
 import { applyFindReplace } from "./find-replace";
 import { parseEditBody } from "./generation-action-utils";
 import { containsTransactionControl } from "./migration-runner";
+import { boundedExecution, boundedExecutionError } from "./action-execution-boundary";
 import type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
 
 export { applyFindReplace };
@@ -207,6 +208,7 @@ export function createActionRunner(deps: {
     runMigrationBatch,
     async runAction(input) {
       const { action } = input;
+      if (input.signal?.aborted) return boundedExecutionError("action aborted");
 
       if (action.type === "file") {
         if (isLockedFile(input.template, action.filePath)) {
@@ -327,18 +329,23 @@ export function createActionRunner(deps: {
       }
 
       if (action.type === "shell") {
-        const cmd = ["sh", "-c", action.command];
+        const cmd = action.args ? [action.command, ...action.args] : ["sh", "-c", action.command];
+        const maxOutputBytes = input.maxOutputBytes ?? Number.MAX_SAFE_INTEGER;
         // Stream the output live when the engine + caller support it; otherwise run buffered.
         if (input.onShellOutput && deps.docker.execInContainerStream) {
           let output = "";
-          const { exitCode } = await deps.docker.execInContainerStream(
-            input.containerId,
-            cmd,
-            (chunk) => {
-              output += chunk;
-              input.onShellOutput?.(chunk);
-            }
-          );
+          let collectedBytes = 0;
+          const execution = deps.docker.execInContainerStream(input.containerId, cmd, (chunk) => {
+            if (collectedBytes >= maxOutputBytes || input.signal?.aborted) return;
+            const remaining = maxOutputBytes - collectedBytes;
+            const bounded = Buffer.from(chunk, "utf8").subarray(0, remaining).toString("utf8");
+            collectedBytes += Buffer.byteLength(bounded, "utf8");
+            output += bounded;
+            input.onShellOutput?.(bounded);
+          });
+          const bounded = await boundedExecution(execution, input.signal, input.timeoutMs);
+          if (!bounded.ok) return bounded.result;
+          const { exitCode } = bounded.value;
           if (exitCode !== 0) {
             return {
               ok: false,
@@ -350,7 +357,16 @@ export function createActionRunner(deps: {
           }
           return { ok: true, stdout: output };
         }
-        const result = await deps.docker.execInContainer(input.containerId, cmd);
+        const execution = deps.docker.execInContainer(input.containerId, cmd);
+        const bounded = await boundedExecution(execution, input.signal, input.timeoutMs);
+        if (!bounded.ok) return bounded.result;
+        const result = bounded.value;
+        result.stdout = Buffer.from(result.stdout, "utf8")
+          .subarray(0, maxOutputBytes)
+          .toString("utf8");
+        result.stderr = Buffer.from(result.stderr, "utf8")
+          .subarray(0, maxOutputBytes)
+          .toString("utf8");
         if (result.exitCode !== 0) {
           return {
             ok: false,

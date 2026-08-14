@@ -15,7 +15,8 @@ export function buildActionPreview(
     return { find: clipActionText(action.find), replace: clipActionText(action.replace) };
   }
   if (action.type === "file") return { body: clipActionText(action.content) };
-  return { body: clipActionText(`$ ${action.command}\n${result.stdout}`.trim()) };
+  const command = [action.command, ...(action.args ?? [])].join(" ");
+  return { body: clipActionText(`$ ${command}\n${result.stdout}`.trim()) };
 }
 
 export function describeRunnable(action: RunnableAction): string {

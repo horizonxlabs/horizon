@@ -61,3 +61,41 @@ test("shell action falls back to buffered execInContainer when no onShellOutput 
   assert.equal(result.stdout, "done\n");
   assert.equal(streamedUsed, false);
 });
+
+test("Pi shell actions use direct argv, bound output, and honor pre-abort", async () => {
+  const calls = [];
+  const docker = {
+    async execInContainer(containerId, command) {
+      calls.push({ containerId, command });
+      return { stdout: "x".repeat(100), stderr: "", exitCode: 0 };
+    }
+  };
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a1", type: "shell", command: "pnpm", args: ["test"] },
+    maxOutputBytes: 12
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.stdout.length, 12);
+  assert.deepEqual(calls[0].command, ["pnpm", "test"]);
+
+  const controller = new AbortController();
+  controller.abort();
+  const aborted = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a2", type: "shell", command: "pnpm", args: ["test"] },
+    signal: controller.signal
+  });
+  assert.equal(aborted.ok, false);
+  assert.match(aborted.error, /aborted/);
+  assert.equal(calls.length, 1);
+});

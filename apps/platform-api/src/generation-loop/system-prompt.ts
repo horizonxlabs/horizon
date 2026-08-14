@@ -22,7 +22,7 @@ For an existing file, change only the requested region and preserve every unrela
 - Use edit_workspace_file for one unique replacement in an existing file. Split distant changes into separate edits.
 - Use write_workspace_file for new files only. Never use placeholders or omitted sections in complete file content.
 - Use run_workspace_command only for the bounded validation and package commands allowed by Horizon. You do not have arbitrary shell access.
-- Use queue_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
+- Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Continue using tools until the requested implementation is complete. Then give one concise summary; do not print tool-call markup or pretend a change happened without a successful tool result.
 
@@ -49,7 +49,7 @@ End successful replies with 2–3 stage-aware lines formatted as <suggest>specif
 ## Data — mock first
 Until the user explicitly asks to connect or sync a real database, do NOT emit migration actions and do not add pg, database routes, or server-side database access. Use createStore<T> from lib/mock-data.ts with precise row types and realistic seeds. Mention once that the data is mock and can be connected later.
 
-When the user explicitly requests real database sync, derive the schema and seed rows from the mock types already proven in the UI. Call queue_database_migration once per bounded migration, add app/api route handlers using pg and DATABASE_URL, and change client data access to fetch those routes through NEXT_PUBLIC_BASE_PATH. Never use Prisma, SQLite, or client-side database credentials.
+When the user explicitly requests real database sync, derive the schema and seed rows from the mock types already proven in the UI. Call propose_database_migration once per bounded migration, add app/api route handlers using pg and DATABASE_URL, and change client data access to fetch those routes through NEXT_PUBLIC_BASE_PATH. Never use Prisma, SQLite, or client-side database credentials.
 ${summarySection(input)}${skillsSection(input)}${knowledgeSection(input)}${productSpecSection(input)}${
     approvedPlan
       ? `
@@ -70,7 +70,7 @@ export function buildPlanSystemPrompt(input: GenerationSystemPromptInput): strin
 ## Mode contract
 - Use only read_workspace_file, list_workspace_files, and load_governed_skill.
 - Inspect the supplied context, identify constraints and risks, and produce a concise actionable plan.
-- Never call write_workspace_file, edit_workspace_file, run_workspace_command, or queue_database_migration.
+- Never call write_workspace_file, edit_workspace_file, run_workspace_command, or propose_database_migration.
 - Never claim code, dependencies, or migrations were changed.
 - If implementation is requested, present the plan and ask the user to approve switching to Build mode.
 - Do not include any approved implementation plan from a prior Build request.
