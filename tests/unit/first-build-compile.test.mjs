@@ -87,6 +87,38 @@ test("first build that compiles clean: single validate, commit, no error events"
   assert.ok(!events.some((event) => event.type === "error"));
 });
 
+test("inspect turn on a broken workspace: readable Compile check failed, work kept, no restore", async () => {
+  // The CMMS case round 2: a shell-only turn on an already-broken workspace used to hit
+  // the raw final-gate validate — ANSI garbage in chat + a pointless rollback.
+  const chatHistory = createMemoryChatHistoryStore();
+  await chatHistory.appendMessage({
+    id: "m0",
+    projectId: "p1",
+    role: "assistant",
+    content: "built the base app",
+    commitSha: "sha0"
+  });
+  const { service, state } = buildService({
+    chatHistory,
+    replies: ["ขอดูไฟล์ก่อน (no artifact this turn)"],
+    validate: () => {
+      throw new Error(
+        "workspace validation failed (exit 1): \u001B[33mLinting and checking validity of types\u001B[39m\r\nFailed to compile.\r\nType error: x is not assignable"
+      );
+    }
+  });
+
+  const events = await collect(service.runTurn({ projectId: "p1", prompt: "why is the page broken?" }));
+
+  const error = events.find((event) => event.type === "error");
+  assert.ok(error, "expected a compile error event");
+  assert.ok(error.message.startsWith("Compile check failed: "), error.message);
+  assert.ok(!error.message.includes("\u001B"), "no ANSI garbage in chat");
+  assert.match(error.message, /Failed to compile/);
+  assert.equal(state.committed, null, "nothing to commit on an inspect turn");
+  assert.equal(state.restored, false, "pre-existing brokenness must not trigger a rollback");
+});
+
 test("retry rounds see a FRESH file tree including files written earlier in the turn", async () => {
   // Follow-up build (prior commit exists) so the self-heal feedback round still runs.
   const chatHistory = createMemoryChatHistoryStore();

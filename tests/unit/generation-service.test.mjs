@@ -97,7 +97,7 @@ test("successful file-action turn streams tokens, action_result, commit, then do
   assert.deepEqual(lifecycle, ["prepare", "validate", "commit"]);
 });
 
-test("validation failure restores the starting revision and creates no commit or checkpoint", async () => {
+test("validation failure keeps the work UNCOMMITTED (no checkpoint, no auto-restore)", async () => {
   const checkpoints = createMemoryCheckpointStore();
   const lifecycle = [];
   let commitAttempts = 0;
@@ -135,16 +135,16 @@ test("validation failure restores the starting revision and creates no commit or
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "break it" }));
 
-  // Build-error self-heal: the failed build is validated in the round loop AND re-checked by the
-  // finalization gate before commit, so validate runs twice; the atomicity guarantee is unchanged —
-  // it still ends in a restore to the known-good revision with no commit.
-  assert.deepEqual(lifecycle, ["prepare", "validate", "validate", "restore:known-good"]);
+  // Self-heal validates in the round loop, then the code-complete check re-validates.
+  // A still-broken build is NEVER committed — but the work is KEPT (no auto-restore;
+  // rollback is the History button's job) and the error is the readable bug-box form.
+  assert.deepEqual(lifecycle, ["prepare", "validate", "validate"]);
   assert.equal(commitAttempts, 0);
   assert.equal(
     events.some((event) => event.type === "commit"),
     false
   );
-  assert.match(events.find((event) => event.type === "error").message, /build failed/);
+  assert.match(events.find((event) => event.type === "error").message, /^Compile check failed: .*build failed/s);
   assert.deepEqual(await checkpoints.listCheckpoints("p1"), []);
 });
 
@@ -194,13 +194,9 @@ test("migration runs only after validation and code commit and records the resul
 
   const events = await collect(service.runTurn({ projectId: "p1", prompt: "add users" }));
 
-  assert.deepEqual(lifecycle, [
-    "prepare",
-    "sync:add_users",
-    "validate",
-    "commit",
-    "migration:new-sha"
-  ]);
+  // Validate moved to the single code-complete compile point (before artifact sync);
+  // the invariant stands: migration SQL runs only after a VALIDATED code commit.
+  assert.deepEqual(lifecycle, ["prepare", "validate", "sync:add_users", "commit", "migration:new-sha"]);
   assert.equal(
     events.some((event) => event.type === "commit" && event.sha === "new-sha"),
     true

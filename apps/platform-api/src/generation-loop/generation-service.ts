@@ -80,7 +80,6 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         let assistantText = "";
         let turnFailed = false;
         let buildValidated = false;
-        let turnHadFileAction = false;
         let prompt = input.prompt;
         const governed = await resolveGovernedTurnContext(deps, input);
         // First build (no successful AI commit yet): no mid-turn bug scans — see below.
@@ -184,7 +183,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 const open = openActions.get(event.actionId);
                 if (!open) continue;
                 actionIds.push(open.id);
-                if (open.type === "file" || open.type === "edit") roundHadFileAction = turnHadFileAction = true;
+                if (open.type === "file" || open.type === "edit") roundHadFileAction = true;
 
                 if (open.type === "skill") {
                   // Load the skill's full instructions on demand and feed them into the next round.
@@ -306,14 +305,17 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           // roundFailed but a retry is still allowed: loop again with the updated `prompt`.
         }
 
-        // First build: ONE compile at code-complete — findings go to the Bug box (prefix
-        // pinned in error-tags) and the work is still committed; never a rollback.
-        if (firstBuild && !turnFailed && turnHadFileAction) {
+        // ONE compile at code-complete whenever no clean round already validated (every
+        // first build; also follow-up turns that wrote nothing, e.g. inspecting an
+        // already-broken workspace). Message is readable + bug-box classified (pinned prefix).
+        if (!turnFailed && agentMode === "build" && !buildValidated) {
           const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
           buildValidated = true;
           if (buildError) {
-            const clean = buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300);
-            yield { type: "error", message: `Compile check failed: ${clean}` };
+            yield { type: "error", message: `Compile check failed: ${buildError.slice(0, 300)}` };
+            // First builds still commit for inspection; any other turn keeps its work
+            // UNCOMMITTED — pre-existing brokenness is not this turn's doing, no rollback.
+            if (!firstBuild) turnFailed = true;
           }
         }
 
@@ -335,8 +337,6 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             if (migrationArtifacts && !migrationArtifacts.ok) {
               throw new Error(migrationArtifacts.error);
             }
-            // Final gate: validate unless a self-heal round already confirmed the build.
-            if (!buildValidated) await deps.workspaceGuard.validate(input.projectId);
             const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
             if (deferredMigrations.length > 0) {
               const migrationResult = await deps.actionRunner.runMigrationBatch({
