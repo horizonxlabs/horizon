@@ -322,7 +322,7 @@ test("Creator workspace actions are API-client backed", () => {
   assert.doesNotMatch(creatorSource, /const taskSteps = \[/);
 });
 
-test("Creator project wizard creates a real project and generates the PRD draft in the background", () => {
+test("Creator project wizard creates a real project and starts the first AI build", () => {
   for (const method of ["createProject", "generatePrdDraft", "listPrdVersions", "getCurrentPrd"]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
     assert.match(creatorSource, new RegExp(method));
@@ -332,10 +332,16 @@ test("Creator project wizard creates a real project and generates the PRD draft 
   assert.match(creatorSource, /"Create Project"/);
   assert.match(creatorSource, /client\.createProject/);
   assert.match(creatorSource, /client\.generatePrdDraft/);
-  assert.match(creatorSource, /beginBackgroundPrdGeneration\(project\.id\)/);
-  assert.match(creatorSource, /runBackgroundPrdGeneration/);
+  assert.match(
+    creatorAppHookSource,
+    /const firstBuildPrompt = createProjectForm\.businessProblem\.trim\(\)/
+  );
+  assert.match(creatorAppHookSource, /vibeWorkspace\.handleVibeChat\(\{/);
+  assert.match(creatorAppHookSource, /projectId: project\.id/);
+  assert.match(creatorAppHookSource, /mode: "build"/);
+  assert.doesNotMatch(creatorAppHookSource, /beginBackgroundPrdGeneration\(project\.id\)/);
   assert.match(creatorSource, /loadCreatorBootstrap\(project\.id\)/);
-  assert.match(creatorSource, /setCurrentPrdVersion\(draft\)/);
+  assert.match(creatorSource, /handleGeneratePrdDraft/);
   assert.match(creatorSource, /creator-project-dialog/);
   assert.match(creatorSource, /createCreatorNavigation/);
   assert.doesNotMatch(creatorSource, /navItems=\{navigation\.creator\}/);
