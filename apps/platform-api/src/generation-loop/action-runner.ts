@@ -278,7 +278,12 @@ export function createActionRunner(deps: {
                 `refusing to overwrite the existing file '${action.filePath}' (${size} bytes) with a whole-file write. ` +
                 `To change an existing file you MUST use an <action type="edit"> with a SEARCH/REPLACE block that ` +
                 `targets ONLY the lines to change and leaves the rest of the file identical. type="file" is only for ` +
-                `creating new files.`,
+                `creating new files.\n` +
+                // The retry can only produce a matching SEARCH block if it sees the exact bytes —
+                // without this the model guessed, missed, and burned every retry (the CMMS case).
+                `Current content of '${action.filePath}' (copy SEARCH text EXACTLY from here):\n` +
+                current.slice(0, 12000) +
+                (current.length > 12000 ? "\n… (truncated — edit only within the shown part)" : ""),
               stdout: "",
               stderr: "",
               exitCode: -1

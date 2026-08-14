@@ -41,7 +41,9 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         'tar -C /workspace --exclude=.git --exclude=node_modules --exclude=.next --exclude=.next-* -cf - . | tar -C "$validation_dir" -xf -',
         'ln -s /workspace/node_modules "$validation_dir/node_modules"',
         'cd "$validation_dir"',
-        "EVCP_VALIDATION_DIST_DIR=.next ./node_modules/.bin/next build"
+        // NEXT_TELEMETRY_DISABLED kills the "Attention: Next.js now collects..." banner that
+        // once filled the whole bug-box excerpt before the actual compile error (CMMS case).
+        "NEXT_TELEMETRY_DISABLED=1 EVCP_VALIDATION_DIST_DIR=.next ./node_modules/.bin/next build"
       ].join(" && ");
       await run(containerId, script, "workspace validation");
     },

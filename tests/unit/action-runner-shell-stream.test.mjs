@@ -35,6 +35,38 @@ test("shell action streams merged output via onShellOutput and returns the accum
   assert.equal(result.stdout, "Installing...\nadded 1 package\n");
 });
 
+test("runShellStreaming strips ANSI codes from streamed chunks — chat never shows [33m garbage", async () => {
+  const { runShellStreaming } = await import(
+    "../../apps/platform-api/src/generation-loop/generation-stream-helpers.ts"
+  );
+  const ESC = "\u001B";
+  const actionRunner = {
+    async runAction({ onShellOutput }) {
+      onShellOutput(`${ESC}[33mwarn${ESC}[39m deprecated\r\n`);
+      onShellOutput(`${ESC}[2K${ESC}[1G Linting and checking validity of types\n`);
+      return { ok: true, stdout: "", stderr: "", exitCode: 0 };
+    }
+  };
+  const events = [];
+  const generator = runShellStreaming(
+    actionRunner,
+    template,
+    "c1",
+    "p1",
+    { id: "a1", type: "shell", command: "npm run build" },
+    "a1"
+  );
+  let step = await generator.next();
+  while (!step.done) {
+    events.push(step.value);
+    step = await generator.next();
+  }
+  const text = events.map((event) => event.content).join("");
+  assert.ok(!text.includes(ESC), "no escape bytes reach the chat stream");
+  assert.ok(!text.includes("[33m"));
+  assert.match(text, /warn deprecated/);
+});
+
 test("shell action falls back to buffered execInContainer when no onShellOutput is given", async () => {
   let streamedUsed = false;
   const docker = {

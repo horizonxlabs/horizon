@@ -2,8 +2,18 @@ import type { ActionResult, RunnableAction } from "./action-runner";
 
 const PREVIEW_MAX = 4000;
 
+// Tool/build output carries ANSI escape sequences (colors, cursor moves) and \r line
+// rewrites; rendered raw in chat they read as "[33m [39m" garbage. Strip everywhere output
+// becomes user- or model-facing text.
+const ANSI_PATTERN = new RegExp(String.raw`\u001B\[[0-9;?]*[ -/]*[@-~]|\u001B`, "g");
+
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, "").replace(/\r\n?/g, "\n");
+}
+
 export function clipActionText(text: string): string {
-  return text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX)}\n… (truncated)` : text;
+  const clean = stripAnsi(text);
+  return clean.length > PREVIEW_MAX ? `${clean.slice(0, PREVIEW_MAX)}\n… (truncated)` : clean;
 }
 
 export function buildActionPreview(

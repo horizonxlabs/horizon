@@ -78,6 +78,7 @@ test("validate builds from a disposable source tree and always cleans it", async
   assert.match(script, /ln -s \/workspace\/node_modules/);
   assert.match(script, /cd "\$validation_dir"/);
   assert.match(script, /EVCP_VALIDATION_DIST_DIR=.next .*next build/);
+  assert.match(script, /NEXT_TELEMETRY_DISABLED=1/, "telemetry banner must never pollute build errors");
 });
 
 test("validate never backs up, restores, or builds from active workspace files", async () => {
