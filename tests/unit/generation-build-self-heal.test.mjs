@@ -18,6 +18,17 @@ test("build-error self-heal: a failed build is fed back, fixed, and committed (n
   let committed = null;
   const lifecycle = [];
 
+  // Self-heal applies to FOLLOW-UP builds; the first build compiles once at code-complete
+  // instead (see first-build-compile.test.mjs). Seed a prior commit to make this a follow-up.
+  const chatHistory = createMemoryChatHistoryStore();
+  await chatHistory.appendMessage({
+    id: "m0",
+    projectId: "p1",
+    role: "assistant",
+    content: "built the base app",
+    commitSha: "sha0"
+  });
+
   const service = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([
       // Round 0 writes code whose build fails.
@@ -27,7 +38,7 @@ test("build-error self-heal: a failed build is fed back, fixed, and committed (n
         "<<<<<<< SEARCH\nexport default function Home(){ return 1 }\n=======\n" +
         "export default function Home() { return null; }\n>>>>>>> REPLACE</action></artifact>"
     ]),
-    chatHistory: createMemoryChatHistoryStore(),
+    chatHistory,
     actionRunner: { runAction: async () => ({ ok: true, stdout: "" }) },
     errorFeedback: createErrorFeedbackTracker(),
     template,

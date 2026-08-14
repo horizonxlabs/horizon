@@ -18,7 +18,7 @@ export function buildSystemPrompt(input: {
     ? input.fileTree
     : (input.template.files ?? []).map((file) => file.path);
   const fileTreeSection = treePaths.length
-    ? `\n## Project file tree (every file that EXISTS right now)\n${treePaths.map((path) => `- ${path}`).join("\n")}\nEvery path above exists on disk — never recreate one with type="file" (edit it instead), even if its contents are not shown under "Current project files".\n`
+    ? `\n## Project file tree (every file that EXISTS right now)\n${treePaths.map((path) => `- ${path}`).join("\n")}\nEvery path above exists on disk — never recreate one with type="file" (edit it instead), even if its contents are not shown under "Current project files". The same holds for every file YOUR earlier actions created: a successful action result means it IS on disk — never send that file again.\n`
     : "";
 
   const summarySection = input.rollingSummary

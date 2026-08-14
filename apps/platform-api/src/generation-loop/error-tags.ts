@@ -26,9 +26,14 @@ export function createErrorTag(source: ErrorTagSource, message: string, file?: s
 // The Bug Report box shows only problems that survive to the END of a turn: post-write
 // compile findings (these prefixes) plus the runtime probe. Mid-turn process noise
 // ("Action failed after retries...") already streamed into the chat and reads as
-// gibberish when repeated as a bug. Wording is duplicated from generation-service
-// (its 400-line ratchet blocks a shared import) — pinned by self-debug-loop tests.
-const COMPILE_ERROR_PREFIXES = ["Write checks still failing: ", "Build still failing after fixes: "];
+// gibberish when repeated as a bug. Wording is duplicated from turn-checks and
+// generation-service (400-line ratchet blocks a shared import) — pinned by
+// self-debug-loop tests.
+const COMPILE_ERROR_PREFIXES = [
+  "Write checks still failing: ",
+  "Build still failing after fixes: ",
+  "Compile check failed: "
+];
 
 export function compileErrorFromTurn(message: string): string | null {
   for (const prefix of COMPILE_ERROR_PREFIXES) {

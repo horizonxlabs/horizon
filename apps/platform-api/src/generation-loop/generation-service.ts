@@ -8,7 +8,6 @@ import type { ChatStreamEvent } from "./generation-types";
 import { resolveGovernedCompletion } from "./governed-completion";
 import {
   asTokenChunks,
-  buildErrorFeedback,
   buildSkillLoadFeedback,
   runShellStreaming,
   validateBuild
@@ -24,7 +23,7 @@ import type { GenerationServiceDeps, OpenAction } from "./generation-service-typ
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 import { resolveGovernedTurnContext } from "./generation-turn-context";
 import { restoreWorkspaceCommit } from "./workspace-restore";
-import { collectRoundIssues } from "./turn-checks";
+import { runInterimChecks } from "./turn-checks";
 
 export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 export type { GenerationServiceDeps } from "./generation-service-types";
@@ -81,15 +80,19 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         let assistantText = "";
         let turnFailed = false;
         let buildValidated = false;
+        let turnHadFileAction = false;
         let prompt = input.prompt;
         const governed = await resolveGovernedTurnContext(deps, input);
+        // First build (no successful AI commit yet): no mid-turn bug scans — see below.
+        const firstBuild =
+          agentMode === "build" &&
+          !(await deps.chatHistory.listMessages(input.projectId)).some((message) => message.commitSha);
 
         roundLoop: for (let round = 0; round < MAX_ROUNDS; round += 1) {
           const parser = createMessageParser();
           const openActions = new Map<string, OpenAction>();
           let roundFailed = false;
           let roundHadFileAction = false;
-          const roundWriteIssues: string[] = [];
           const roundWrites: Array<{ path: string; content: string }> = [];
 
           const contextFiles =
@@ -97,7 +100,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           const promptInput = {
             template: deps.template,
             contextFiles,
-            fileTree: liveTree,
+            // knownPaths, not the turn-start tree: retry rounds must see files written in
+            // earlier rounds, or the model recreates them and hits the overwrite guard.
+            fileTree: [...knownPaths],
             rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
             availableSkills: governed?.availableSkills,
             knowledgeExcerpts: governed?.knowledgeExcerpts,
@@ -179,7 +184,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                 const open = openActions.get(event.actionId);
                 if (!open) continue;
                 actionIds.push(open.id);
-                if (open.type === "file" || open.type === "edit") roundHadFileAction = true;
+                if (open.type === "file" || open.type === "edit") roundHadFileAction = turnHadFileAction = true;
 
                 if (open.type === "skill") {
                   // Load the skill's full instructions on demand and feed them into the next round.
@@ -284,37 +289,32 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             }
           }
 
-          if (!turnFailed && !roundFailed && roundWrites.length > 0) {
-            roundWriteIssues.push(...(await collectRoundIssues(deps, containerId, roundWrites, knownPaths)));
-          }
-          if (!turnFailed && !roundFailed && roundWriteIssues.length > 0) {
-            if (round < MAX_ROUNDS - 1) {
-              prompt = buildErrorFeedback(roundWriteIssues.join("\n\n"));
-              roundFailed = true;
-            } else {
-              turnFailed = true;
-              yield { type: "error", message: `Write checks still failing: ${roundWriteIssues[0].slice(0, 300)}` };
-            }
-          }
-          // Build-error self-heal: validate a clean file-changing round; feed errors back to fix (opencode-style).
-          if (!turnFailed && !roundFailed && agentMode === "build" && roundHadFileAction) {
-            const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
-            if (buildError && round < MAX_ROUNDS - 1) {
-              prompt = buildErrorFeedback(buildError);
-              roundFailed = true;
-            } else if (buildError) {
-              turnFailed = true;
-              yield {
-                type: "error",
-                message: `Build still failing after fixes: ${buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300)}`
-              };
-            } else buildValidated = true;
+          // Follow-up builds: write checks + build self-heal per round (first builds compile
+          // once after the loop instead — no mid-turn bug scans).
+          if (!turnFailed && !roundFailed && agentMode === "build" && !firstBuild) {
+            const check = await runInterimChecks(deps, containerId, input.projectId, {
+              roundWrites, knownPaths, roundHadFileAction, finalRound: round >= MAX_ROUNDS - 1
+            });
+            if (check.feedbackPrompt) { prompt = check.feedbackPrompt; roundFailed = true; }
+            if (check.errorMessage) { turnFailed = true; yield { type: "error", message: check.errorMessage }; }
+            if (check.validated) buildValidated = true;
           }
 
           if (turnFailed || !roundFailed) {
             break roundLoop;
           }
           // roundFailed but a retry is still allowed: loop again with the updated `prompt`.
+        }
+
+        // First build: ONE compile at code-complete — findings go to the Bug box (prefix
+        // pinned in error-tags) and the work is still committed; never a rollback.
+        if (firstBuild && !turnFailed && turnHadFileAction) {
+          const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
+          buildValidated = true;
+          if (buildError) {
+            const clean = buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300);
+            yield { type: "error", message: `Compile check failed: ${clean}` };
+          }
         }
 
         const assistantMessage = createAssistantChatMessage({

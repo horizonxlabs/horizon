@@ -281,6 +281,37 @@ test("drift guard: rejects a whole-file write to a large existing file, steering
   assert.ok(!docker.state.execCalls.some((c) => (c.cmd.at(-1) || "").includes("base64 -d")));
 });
 
+test("drift guard: an IDENTICAL whole-file re-write is a no-op success, never an overwrite error", async () => {
+  // The model losing track of its own progress re-sends files it already wrote; failing
+  // that burned whole turns on "refusing to overwrite" retries (the Calibration case).
+  const content = "x".repeat(5000);
+  const docker = stubDockerWithSizes({ "app/page.tsx": 5000 });
+  const baseExec = docker.execInContainer.bind(docker);
+  docker.execInContainer = async (containerId, cmd) => {
+    const script = cmd[cmd.length - 1] || "";
+    if (script.startsWith("base64 app/page.tsx")) {
+      docker.state.execCalls.push({ containerId, cmd });
+      return { stdout: Buffer.from(content, "utf8").toString("base64"), stderr: "", exitCode: 0 };
+    }
+    return baseExec(containerId, cmd);
+  };
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a1", type: "file", filePath: "app/page.tsx", content }
+  });
+  assert.equal(result.ok, true);
+  assert.match(result.stdout, /already/i);
+  // nothing rewritten on disk
+  assert.ok(!docker.state.execCalls.some((c) => (c.cmd.at(-1) || "").includes("base64 -d")));
+});
+
 test("drift guard: allows a whole-file write to a small existing file (weaker models do this reliably)", async () => {
   const docker = stubDockerWithSizes({ "app/api/route.ts": 700 });
   const runner = createActionRunner({

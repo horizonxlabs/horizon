@@ -101,11 +101,13 @@ test("validation failure restores the starting revision and creates no commit or
   const checkpoints = createMemoryCheckpointStore();
   const lifecycle = [];
   let commitAttempts = 0;
+  const chatHistory = createMemoryChatHistoryStore(); // seeded: first builds keep work + Bug box instead
+  await chatHistory.appendMessage({ id: "m0", projectId: "p1", role: "assistant", content: "built", commitSha: "sha0" });
   const service = createGenerationService({
     llmClient: createMemoryLlmCompletionClient([
       '<artifact id="a1" title="broken"><action type="file" filePath="app/page.tsx">broken source</action></artifact>'
     ]),
-    chatHistory: createMemoryChatHistoryStore(),
+    chatHistory,
     actionRunner: { runAction: async () => ({ ok: true, stdout: "" }) },
     errorFeedback: createErrorFeedbackTracker(),
     template,

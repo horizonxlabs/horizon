@@ -16,9 +16,13 @@ export function mergeBugReports(current: BugReport[], incoming: BugReport[]): Bu
   return [...merged.values()];
 }
 
+// Fix requests keep old code untouched: surgical edits on the involved lines only —
+// never a whole-file rewrite, never changes to unrelated files.
+const FIX_SCOPE = "แก้เฉพาะจุดที่เกี่ยวข้องแบบ edit ทีละจุด ไม่กระทบส่วนอื่น ห้ามเขียนทับทั้งไฟล์ และห้ามแตะไฟล์อื่นที่ไม่เกี่ยวข้อง";
+
 export function buildFixMessage(bug: BugReport): string {
   const location = bug.file ? ` (ไฟล์ ${bug.file})` : "";
-  return `แก้ bug นี้โดยแก้เฉพาะจุดที่เกี่ยวข้อง ไม่กระทบส่วนอื่น: ${bug.message}${location}`;
+  return `แก้ bug นี้โดย${FIX_SCOPE}: ${bug.message}${location}`;
 }
 
 // "Fix ทั้งหมด": one composer message covering every open bug, so multi-bug turns cost
@@ -27,8 +31,5 @@ export function buildFixAllMessage(bugs: BugReport[]): string {
   const lines = bugs.map(
     (bug, index) => `${index + 1}. ${bug.message}${bug.file ? ` (ไฟล์ ${bug.file})` : ""}`
   );
-  return [
-    `แก้ bug ทั้งหมด ${bugs.length} รายการต่อไปนี้ โดยแก้เฉพาะจุดที่เกี่ยวข้อง ไม่กระทบส่วนอื่น:`,
-    ...lines
-  ].join("\n");
+  return [`แก้ bug ทั้งหมด ${bugs.length} รายการต่อไปนี้ โดย${FIX_SCOPE}:`, ...lines].join("\n");
 }

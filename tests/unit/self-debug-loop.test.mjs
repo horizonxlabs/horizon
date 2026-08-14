@@ -46,18 +46,22 @@ test("bug box classification: only post-write compile findings count, process no
     compileErrorFromTurn("Build still failing after fixes: Type error: Property 'foo' does not exist"),
     /Type error/
   );
+  assert.match(
+    compileErrorFromTurn("Compile check failed: Type error: cannot return 1"),
+    /Type error/
+  );
 });
 
-test("compile prefixes stay pinned to the generation-service wording", async () => {
-  // error-tags cannot import these from generation-service (400-line ratchet), so the
-  // wording is duplicated — this pin fails the moment either side drifts.
+test("compile prefixes stay pinned to the generation-loop wording", async () => {
+  // error-tags cannot import these from the generation loop (generation-service sits at
+  // the 400-line ratchet), so the wording is duplicated — this pin fails on any drift.
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(
-    new URL("../../apps/platform-api/src/generation-loop/generation-service.ts", import.meta.url),
-    "utf8"
-  );
-  assert.match(source, /Write checks still failing: /);
-  assert.match(source, /Build still failing after fixes: /);
+  const load = (file) =>
+    readFile(new URL(`../../apps/platform-api/src/generation-loop/${file}`, import.meta.url), "utf8");
+  const turnChecks = await load("turn-checks.ts");
+  assert.match(turnChecks, /Write checks still failing: /);
+  assert.match(turnChecks, /Build still failing after fixes: /);
+  assert.match(await load("generation-service.ts"), /Compile check failed: /);
 });
 
 test("post-turn tags: compile errors become build bugs with a file, action failures don't", async () => {

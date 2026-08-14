@@ -257,6 +257,21 @@ export function createActionRunner(deps: {
           ]);
           const size = Number.parseInt((sizeResult.stdout ?? "").trim(), 10);
           if (Number.isFinite(size) && size > WHOLE_FILE_REWRITE_LIMIT) {
+            // A model that lost track of its progress re-sends files it already wrote.
+            // Identical content is a no-op, not a violation — succeed without writing so the
+            // turn never burns retries on an overwrite error (the Calibration Report case).
+            const read = await deps.docker.execInContainer(input.containerId, [
+              "sh",
+              "-c",
+              `base64 ${action.filePath} 2>/dev/null`
+            ]);
+            const current = Buffer.from((read.stdout ?? "").trim(), "base64").toString("utf8");
+            if (current.trimEnd() === action.content.trimEnd()) {
+              return {
+                ok: true,
+                stdout: `'${action.filePath}' already has exactly this content — nothing to write.`
+              };
+            }
             return {
               ok: false,
               error:

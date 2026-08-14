@@ -26,6 +26,8 @@ test("Fix bug pre-fills a scoped, history-friendly fix request", () => {
   assert.match(message, /Cannot read properties of undefined/);
   assert.match(message, /app\/page\.tsx/);
   assert.match(message, /ไม่กระทบส่วนอื่น/);
+  // Old code stays untouched: fixes must be surgical edits, never file rewrites.
+  assert.match(message, /ห้ามเขียนทับทั้งไฟล์/);
   const noFile = buildFixMessage({ signature: "s3", source: "build", message: "TS1005" });
   assert.doesNotMatch(noFile, /ไฟล์ undefined/);
 });
@@ -40,4 +42,5 @@ test("Fix all pre-fills ONE message that covers every open bug", () => {
   assert.match(message, /2\. 500 on \//);
   assert.match(message, /app\/page\.tsx/);
   assert.match(message, /ไม่กระทบส่วนอื่น/);
+  assert.match(message, /ห้ามเขียนทับทั้งไฟล์/);
 });

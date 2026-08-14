@@ -1,3 +1,5 @@
+import { buildErrorFeedback, validateBuild } from "./generation-stream-helpers";
+
 // In-turn write checks (detection layer 1): catch syntax errors and broken local imports
 // the moment a file lands — the model fixes them in the SAME turn via the round-retry
 // feedback, long before the full build validation (and before the user sees anything).
@@ -57,6 +59,42 @@ export async function collectRoundIssues(
     issues.push(...(await collectWriteIssues(deps, containerId, written, knownPaths)));
   }
   return issues;
+}
+
+// Interim (mid-turn) bug scanning — FOLLOW-UP builds only: per-round write checks plus the
+// build self-heal loop. The FIRST build skips this entirely (the user's rule: no bug checks
+// while the code is still being written — they were pure process noise on large fresh
+// generations); it compiles ONCE at code-complete and reports findings to the Bug box.
+// Error-message prefixes here are pinned by tests/unit/self-debug-loop.test.mjs — the Bug
+// box classifier (error-tags.ts compileErrorFromTurn) matches them verbatim.
+export async function runInterimChecks(
+  deps: {
+    checkFileSyntax?: (containerId: string, path: string) => Promise<string>;
+    workspaceGuard: { validate(projectId: string): Promise<void> };
+  },
+  containerId: string,
+  projectId: string,
+  round: {
+    roundWrites: Array<{ path: string; content: string }>;
+    knownPaths: Set<string>;
+    roundHadFileAction: boolean;
+    finalRound: boolean;
+  }
+): Promise<{ feedbackPrompt?: string; errorMessage?: string; validated?: boolean }> {
+  if (round.roundWrites.length > 0) {
+    const issues = await collectRoundIssues(deps, containerId, round.roundWrites, round.knownPaths);
+    if (issues.length > 0) {
+      return round.finalRound
+        ? { errorMessage: `Write checks still failing: ${issues[0].slice(0, 300)}` }
+        : { feedbackPrompt: buildErrorFeedback(issues.join("\n\n")) };
+    }
+  }
+  if (!round.roundHadFileAction) return {};
+  const buildError = await validateBuild(deps.workspaceGuard, projectId);
+  if (!buildError) return { validated: true };
+  return round.finalRound
+    ? { errorMessage: `Build still failing after fixes: ${buildError.replace(/\[[0-9;]*m/g, "").slice(0, 300)}` }
+    : { feedbackPrompt: buildErrorFeedback(buildError) };
 }
 
 export async function collectWriteIssues(
