@@ -3,12 +3,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const schema = readFileSync("apps/platform-api/prisma/schema.prisma", "utf8");
-const migrationPath = "apps/platform-api/prisma/migrations/20260703000010_sprint11_knowledge_skill_governance/migration.sql";
+const migrationPath =
+  "apps/platform-api/prisma/migrations/20260703000010_sprint11_knowledge_skill_governance/migration.sql";
 const migration = existsSync(migrationPath) ? readFileSync(migrationPath, "utf8") : "";
 const seed = readFileSync("apps/platform-api/prisma/seed.ts", "utf8");
+const skillSeed = readFileSync("apps/platform-api/prisma/seed-skills.ts", "utf8");
 
 test("Sprint 11 Prisma schema defines knowledge governance models and relations", () => {
-  for (const model of ["KnowledgeSource", "KnowledgeVersion", "KnowledgeApproval", "KnowledgeIndexChunk", "KnowledgeRetrievalLog"]) {
+  for (const model of [
+    "KnowledgeSource",
+    "KnowledgeVersion",
+    "KnowledgeApproval",
+    "KnowledgeIndexChunk",
+    "KnowledgeRetrievalLog"
+  ]) {
     assert.match(schema, new RegExp(`model ${model}`));
   }
 
@@ -91,6 +99,6 @@ test("Sprint 11 seed includes representative knowledge and skill governance reco
     "skver_frontend_developer_leave_v1",
     "skassign_frontend_leave_project"
   ]) {
-    assert.match(seed, new RegExp(token));
+    assert.match(`${seed}\n${skillSeed}`, new RegExp(token));
   }
 });
