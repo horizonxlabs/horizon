@@ -129,6 +129,56 @@ export function createChatSseHandler(deps: {
       return;
     }
 
+    // POST /projects/:id/chat/error-report — browser relay (iframe error hook / boundary).
+    // Decides whether this signature earns its one automatic repair; the client then sends
+    // the returned prompt through the normal chat/queue machinery.
+    const reportMatch = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat\/error-report$/);
+    if (reportMatch && req.method === "POST") {
+      const projectId = reportMatch[1];
+      const auth = await deps.resolveAuth(req);
+      if (!auth || !isMember(auth, projectId)) {
+        res.writeHead(auth ? 403 : 401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: auth ? "forbidden" : "unauthorized" }));
+        return;
+      }
+      try {
+        const parsed = JSON.parse((await readBody(req)) || "{}") as {
+          message?: unknown;
+          source?: unknown;
+        };
+        const message = String(parsed?.message ?? "").slice(0, 1000);
+        if (!message) throw new Error("empty report");
+        const file = message.match(/(?:\.\/)?((?:app|components|lib)\/[\w./-]+)/)?.[1];
+        const tag = createErrorTag("relay", `[${String(parsed?.source ?? "browser")}] ${message}`, file);
+        if (file && isPlatformFile(file, deps.generationService.templateLockedFiles ?? [])) {
+          tag.platformBug = true;
+        }
+        const fresh = debugTagMemory.filterNew(projectId, [tag]);
+        if (fresh.length > 0) debugTagMemory.markAttempted(projectId, fresh);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify(
+            fresh.length > 0
+              ? {
+                  shouldDebug: true,
+                  debugPrompt: buildDebugPrompt(fresh, { previousTurnRolledBack: false }),
+                  platformBug: Boolean(tag.platformBug)
+                }
+              : { shouldDebug: false }
+          )
+        );
+      } catch (error) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "report_failed",
+            message: error instanceof Error ? error.message : "Report failed"
+          })
+        );
+      }
+      return;
+    }
+
     const match = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat$/);
     if (!match || req.method !== "POST") {
       res.writeHead(404, { "content-type": "application/json" });

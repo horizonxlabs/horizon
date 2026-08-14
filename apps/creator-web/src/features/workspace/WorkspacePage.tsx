@@ -18,7 +18,7 @@ import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { MODE_OPTIONS, TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
-import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
+import { usePreviewGuards } from "./use-preview-guards";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -108,9 +108,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       active = false;
     };
   }, [selectedProject.id, vibePreviewKey, previewAuthorizationAttempt]);
-  usePreviewSessionKeepalive({
+  usePreviewGuards({
     projectId: selectedProject.id,
-    enabled: previewAuthorizationState === "ready"
+    enabled: previewAuthorizationState === "ready",
+    submitPrompt: (prompt) => void handleVibeChat({ prompt, mode: "build" })
   });
   return (
     <div className="vibe-live-shell">
