@@ -24,7 +24,7 @@ import type { GenerationServiceDeps, OpenAction } from "./generation-service-typ
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 import { resolveGovernedTurnContext } from "./generation-turn-context";
 import { restoreWorkspaceCommit } from "./workspace-restore";
-import { collectWriteIssues } from "./turn-checks";
+import { collectRoundIssues } from "./turn-checks";
 
 export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 export type { GenerationServiceDeps } from "./generation-service-types";
@@ -90,6 +90,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           let roundFailed = false;
           let roundHadFileAction = false;
           const roundWriteIssues: string[] = [];
+          const roundWrites: Array<{ path: string; content: string }> = [];
 
           const contextFiles =
             liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
@@ -266,13 +267,10 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                   deps.errorFeedback.reset(open.id);
                   if (runnable.type === "file" || runnable.type === "edit") {
                     knownPaths.add(runnable.filePath);
-                    const written = {
+                    roundWrites.push({
                       path: runnable.filePath,
                       content: runnable.type === "file" ? runnable.content : runnable.replace
-                    };
-                    roundWriteIssues.push(
-                      ...(await collectWriteIssues(deps, containerId, written, knownPaths))
-                    );
+                    });
                   }
                 }
               }
@@ -286,7 +284,9 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             }
           }
 
-          // In-turn write checks (syntax + missing imports) — cheaper feedback before full build.
+          if (!turnFailed && !roundFailed && roundWrites.length > 0) {
+            roundWriteIssues.push(...(await collectRoundIssues(deps, containerId, roundWrites, knownPaths)));
+          }
           if (!turnFailed && !roundFailed && roundWriteIssues.length > 0) {
             if (round < MAX_ROUNDS - 1) {
               prompt = buildErrorFeedback(roundWriteIssues.join("\n\n"));

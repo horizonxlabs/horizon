@@ -87,6 +87,13 @@ test("runtime probe reports non-200 pages with the error excerpt", async () => {
   );
   assert.equal(healthy.status, 200);
   assert.deepEqual(healthy.errors, []);
+  // timeout / mid-compile (status 0) is probe uncertainty, never a user-facing error
+  const compiling = await probeWorkspaceRuntime(
+    { async execInContainer() { return { stdout: "STATUS:0\n" }; } },
+    "c1",
+    "prj-abc"
+  );
+  assert.deepEqual(compiling.errors, []);
 });
 
 const { loadGoldenTemplate } = await import(
