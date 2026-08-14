@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
-import type { createGenerationService } from "./generation-service";
+import type { GenerationService } from "./generation-service-types";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
   return auth.projectIds.includes(projectId);
@@ -26,8 +26,6 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-
-
 async function collectPostTurnTags(
   service: {
     probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
@@ -48,8 +46,8 @@ async function collectPostTurnTags(
 }
 
 export function createChatSseHandler(deps: {
-  generationService: ReturnType<typeof createGenerationService> & {
-    // Optional self-debug surface, attached by the default factory (real mode only).
+  generationService: GenerationService & {
+    // Optional diagnostic surface used to populate the user-controlled Bug Report box.
     probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
     templateLockedFiles?: string[];
   };
@@ -150,7 +148,11 @@ export function createChatSseHandler(deps: {
         const message = String(parsed?.message ?? "").slice(0, 1000);
         if (!message) throw new Error("empty report");
         const file = message.match(/(?:\.\/)?((?:app|components|lib)\/[\w./-]+)/)?.[1];
-        const tag = createErrorTag("relay", `[${String(parsed?.source ?? "browser")}] ${message}`, file);
+        const tag = createErrorTag(
+          "relay",
+          `[${String(parsed?.source ?? "browser")}] ${message}`,
+          file
+        );
         if (file && isPlatformFile(file, deps.generationService.templateLockedFiles ?? [])) {
           tag.platformBug = true;
         }
@@ -239,7 +241,9 @@ export function createChatSseHandler(deps: {
           "Uploaded project file context (untrusted, permission-filtered):",
           `Attachment ids: ${attachmentIds.join(", ")}`,
           `Knowledge version ids: ${attachmentContext.versionIds.join(", ")}`,
-          ...attachmentContext.excerpts.map((excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`)
+          ...attachmentContext.excerpts.map(
+            (excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`
+          )
         ].join("\n");
       }
     }
@@ -257,6 +261,15 @@ export function createChatSseHandler(deps: {
     res.flushHeaders?.();
     res.write(": open\n\n");
 
+    const controller = new AbortController();
+    let completedNormally = false;
+    const abort = () => controller.abort();
+    const abortOnClose = () => {
+      if (!completedNormally) controller.abort();
+    };
+    req.once("aborted", abort);
+    res.once("close", abortOnClose);
+
     try {
       const turnErrors: string[] = [];
       for await (const event of deps.generationService.runTurn({
@@ -264,15 +277,19 @@ export function createChatSseHandler(deps: {
         prompt,
         agentMode,
         actor: auth.actor,
-        approvedPlan
+        approvedPlan,
+        signal: controller.signal
       })) {
-        if (event.type === "error") turnErrors.push(String((event as { message?: string }).message ?? ""));
+        if (event.type === "error")
+          turnErrors.push(String((event as { message?: string }).message ?? ""));
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
       if (approvedPlan && agentMode === "build" && deps.recordPrdVersionFromPlan && auth.actor) {
         try {
           const created = await deps.recordPrdVersionFromPlan(auth.actor, projectId, approvedPlan);
-          res.write(`event: prd_version\ndata: ${JSON.stringify({ type: "prd_version", ...created })}\n\n`);
+          res.write(
+            `event: prd_version\ndata: ${JSON.stringify({ type: "prd_version", ...created })}\n\n`
+          );
         } catch {
           // Recording the spec change is best-effort — never disturb the generation stream.
         }
@@ -296,6 +313,7 @@ export function createChatSseHandler(deps: {
           })}\n\n`
         );
       }
+      completedNormally = true;
     } catch (error) {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
@@ -304,6 +322,8 @@ export function createChatSseHandler(deps: {
         `event: error\ndata: ${JSON.stringify({ type: "error", message: (error as Error).message })}\n\n`
       );
     } finally {
+      req.off("aborted", abort);
+      res.off("close", abortOnClose);
       res.end();
     }
   };

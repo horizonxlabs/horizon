@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 
-// Self-debug error tags: every detected problem (failed action, build error, runtime 500,
-// browser relay report) becomes a signed tag. The signature is the loop-safety anchor —
-// each signature earns exactly ONE automatic debug turn, ever; repeats go back to the user.
+// Error tags normalize every detected problem (failed action, build error, runtime 500,
+// browser relay report) for the user-controlled Bug Report box.
 
 export type ErrorTagSource = "action" | "build" | "runtime" | "relay";
 
@@ -24,9 +23,15 @@ export function createErrorTag(source: ErrorTagSource, message: string, file?: s
 }
 
 // Files the model does not own: locked files plus everything the template ships under its
-// managed roots. Errors here are platform bugs — the debug turn may fix them, and the
-// classification is audited so the team sees template defects instead of blaming the model.
-const PLATFORM_ROOTS = ["components/ui/", "lib/mock-data", "lib/utils", "app/layout", "app/globals"];
+// managed roots. Errors here are platform bugs; the classification is audited so the team
+// sees template defects instead of blaming the generated app.
+const PLATFORM_ROOTS = [
+  "components/ui/",
+  "lib/mock-data",
+  "lib/utils",
+  "app/layout",
+  "app/globals"
+];
 
 export function isPlatformFile(file: string, lockedFiles: string[]): boolean {
   if (lockedFiles.includes(file)) return true;
