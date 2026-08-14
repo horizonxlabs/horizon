@@ -3420,6 +3420,12 @@ th {
   pointer-events: none;
 }
 
+.vibe-bug-fix-all {
+  letter-spacing: normal;
+  margin-left: auto;
+  text-transform: none;
+}
+
 .vibe-bug-dismiss {
   background: transparent;
   border: 0;

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { mergeBugReports, buildFixMessage } = await import(
+const { mergeBugReports, buildFixMessage, buildFixAllMessage } = await import(
   "../../apps/creator-web/src/features/workspace/vibe-bugs.ts"
 );
 
@@ -28,4 +28,16 @@ test("Fix bug pre-fills a scoped, history-friendly fix request", () => {
   assert.match(message, /ไม่กระทบส่วนอื่น/);
   const noFile = buildFixMessage({ signature: "s3", source: "build", message: "TS1005" });
   assert.doesNotMatch(noFile, /ไฟล์ undefined/);
+});
+
+test("Fix all pre-fills ONE message that covers every open bug", () => {
+  const message = buildFixAllMessage([
+    { signature: "s1", source: "build", message: "TS1005: ';' expected", file: "app/page.tsx" },
+    { signature: "s2", source: "runtime", message: "500 on /" }
+  ]);
+  assert.match(message, /2 รายการ/);
+  assert.match(message, /1\. TS1005/);
+  assert.match(message, /2\. 500 on \//);
+  assert.match(message, /app\/page\.tsx/);
+  assert.match(message, /ไม่กระทบส่วนอื่น/);
 });

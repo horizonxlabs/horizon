@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createErrorTag, isPlatformFile } = await import(
+const { createErrorTag, isPlatformFile, compileErrorFromTurn } = await import(
   "../../apps/platform-api/src/generation-loop/error-tags.ts"
+);
+const { collectPostTurnTags } = await import(
+  "../../apps/platform-api/src/generation-loop/chat-route.ts"
 );
 const { probeWorkspaceRuntime } = await import(
   "../../apps/platform-api/src/generation-loop/container-files.ts"
@@ -21,6 +24,55 @@ test("platform files are classified so bugs blame the template, not the model", 
   assert.equal(isPlatformFile("app/layout.tsx", lockedFiles), true); // template-shipped
   assert.equal(isPlatformFile("lib/storage.ts", lockedFiles), true);
   assert.equal(isPlatformFile("components/Dashboard.tsx", lockedFiles), false);
+});
+
+test("bug box classification: only post-write compile findings count, process noise stays out", () => {
+  // Mid-turn action failures already surfaced in the chat stream — repeating them in the
+  // bug box reads as gibberish to users ("refusing to overwrite..." on the Calibration case).
+  assert.equal(
+    compileErrorFromTurn(
+      "Action failed after retries: refusing to overwrite the existing file 'app/page.tsx' (1200 bytes) with a whole-file write. Command: write app/page.tsx"
+    ),
+    null
+  );
+  assert.equal(compileErrorFromTurn("Attachment context failed"), null);
+  assert.match(
+    compileErrorFromTurn(
+      "Write checks still failing: Syntax check failed for app/page.tsx:\napp/page.tsx(3,1): error TS1005"
+    ),
+    /Syntax check failed/
+  );
+  assert.match(
+    compileErrorFromTurn("Build still failing after fixes: Type error: Property 'foo' does not exist"),
+    /Type error/
+  );
+});
+
+test("compile prefixes stay pinned to the generation-service wording", async () => {
+  // error-tags cannot import these from generation-service (400-line ratchet), so the
+  // wording is duplicated — this pin fails the moment either side drifts.
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL("../../apps/platform-api/src/generation-loop/generation-service.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /Write checks still failing: /);
+  assert.match(source, /Build still failing after fixes: /);
+});
+
+test("post-turn tags: compile errors become build bugs with a file, action failures don't", async () => {
+  const tags = await collectPostTurnTags(
+    { probeRuntime: async () => ({ status: 200, errors: [] }), templateLockedFiles: [] },
+    "prj-abc",
+    [
+      "Action failed after retries: refusing to overwrite the existing file 'components/CertificateForm.tsx' (900 bytes) with a whole-file write. Command: write components/CertificateForm.tsx",
+      "Write checks still failing: Syntax check failed for components/CertificateForm.tsx:\ncomponents/CertificateForm.tsx(10,5): error TS1005"
+    ]
+  );
+  assert.equal(tags.length, 1);
+  assert.equal(tags[0].source, "build");
+  assert.equal(tags[0].file, "components/CertificateForm.tsx");
+  assert.match(tags[0].message, /Syntax check failed/);
 });
 
 test("runtime probe reports non-200 pages with the error excerpt", async () => {

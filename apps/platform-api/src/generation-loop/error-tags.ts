@@ -23,6 +23,20 @@ export function createErrorTag(source: ErrorTagSource, message: string, file?: s
   return { signature, source, ...(file ? { file } : {}), message: message.slice(0, 1200) };
 }
 
+// The Bug Report box shows only problems that survive to the END of a turn: post-write
+// compile findings (these prefixes) plus the runtime probe. Mid-turn process noise
+// ("Action failed after retries...") already streamed into the chat and reads as
+// gibberish when repeated as a bug. Wording is duplicated from generation-service
+// (its 400-line ratchet blocks a shared import) — pinned by self-debug-loop tests.
+const COMPILE_ERROR_PREFIXES = ["Write checks still failing: ", "Build still failing after fixes: "];
+
+export function compileErrorFromTurn(message: string): string | null {
+  for (const prefix of COMPILE_ERROR_PREFIXES) {
+    if (message.startsWith(prefix)) return message.slice(prefix.length);
+  }
+  return null;
+}
+
 // Files the model does not own: locked files plus everything the template ships under its
 // managed roots. Errors here are platform bugs — the debug turn may fix them, and the
 // classification is audited so the team sees template defects instead of blaming the model.

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
-import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
+import { compileErrorFromTurn, createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { createGenerationService } from "./generation-service";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
@@ -28,7 +28,10 @@ async function readBody(req: IncomingMessage): Promise<string> {
 
 
 
-async function collectPostTurnTags(
+// Exported for tests. Bug box policy: only what is still broken AFTER the writing
+// finished — compile findings from the write/build checks plus the runtime probe.
+// Mid-turn action failures stay in the chat stream where their context lives.
+export async function collectPostTurnTags(
   service: {
     probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
     templateLockedFiles?: string[];
@@ -36,14 +39,19 @@ async function collectPostTurnTags(
   projectId: string,
   turnErrors: string[]
 ): Promise<ErrorTag[]> {
-  const tags = turnErrors.filter(Boolean).map((message) => createErrorTag("build", message));
-  const probe = await service.probeRuntime?.(projectId).catch(() => undefined);
-  for (const message of probe?.errors ?? []) {
+  const tags: ErrorTag[] = [];
+  const pushTag = (source: "build" | "runtime", message: string) => {
     const file = message.match(/(?:\.\/)?((?:app|components|lib)\/[\w./-]+)/)?.[1];
-    const tag = createErrorTag("runtime", message, file);
+    const tag = createErrorTag(source, message, file);
     if (file && isPlatformFile(file, service.templateLockedFiles ?? [])) tag.platformBug = true;
     tags.push(tag);
+  };
+  for (const turnError of turnErrors) {
+    const compileError = compileErrorFromTurn(turnError);
+    if (compileError) pushTag("build", compileError);
   }
+  const probe = await service.probeRuntime?.(projectId).catch(() => undefined);
+  for (const message of probe?.errors ?? []) pushTag("runtime", message);
   return tags;
 }
 

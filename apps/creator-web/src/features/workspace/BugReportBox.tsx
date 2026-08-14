@@ -1,5 +1,5 @@
 import { Bug, Wrench, X } from "lucide-react";
-import { buildFixMessage, type BugReport } from "./vibe-bugs";
+import { buildFixAllMessage, buildFixMessage, type BugReport } from "./vibe-bugs";
 
 // Sits OUTSIDE the chat thread, above the composer. Every detected problem waits here
 // until the user presses "Fix bug" — nothing runs automatically.
@@ -20,6 +20,17 @@ export function BugReportBox({
       <div className="vibe-bug-box-head">
         <Bug size={13} aria-hidden="true" />
         <span>พบปัญหา ({bugs.length})</span>
+        {bugs.length > 1 ? (
+          <button
+            type="button"
+            className="vibe-bug-fix vibe-bug-fix-all"
+            disabled={disabled}
+            onClick={() => onFix(buildFixAllMessage(bugs))}
+          >
+            <Wrench size={12} />
+            Fix ทั้งหมด
+          </button>
+        ) : null}
       </div>
       <ul className="vibe-bug-list">
         {bugs.map((bug) => (
