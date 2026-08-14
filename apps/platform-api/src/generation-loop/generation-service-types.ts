@@ -1,23 +1,15 @@
+import type { WorkspaceAgentMode, WorkspaceChatMessage } from "@evcp/types";
 import type { AiScenario, PlatformUser } from "../platform-services";
+import type { GovernedAiExecutor } from "../ai-governance/execution-service";
 import type { ActionRunner } from "./action-runner";
 import type { ChatHistoryStore } from "./chat-history-store";
 import type { CheckpointStore } from "./checkpoint-store";
-import type { createErrorFeedbackTracker } from "./error-feedback";
 import type { GovernedContext } from "./generation-stream-helpers";
-import type { StreamChunk } from "./governed-completion";
-import type { LlmCompletionClient } from "./llm-client";
-import type { ActionType } from "./message-parser";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
+import type { ChatStreamEvent } from "./generation-types";
+import type { PiAgentLimits } from "./pi-limits";
 
 export interface GenerationServiceDeps {
-  llmClient: LlmCompletionClient;
-  governedCompletion?: (input: {
-    actor: PlatformUser;
-    projectId: string;
-    scenario: AiScenario;
-    prompt: string;
-    requestId: string;
-  }) => AsyncIterable<StreamChunk>;
   resolveGovernedContext?: (input: {
     actor: PlatformUser;
     projectId: string;
@@ -25,9 +17,7 @@ export interface GenerationServiceDeps {
   }) => Promise<GovernedContext>;
   chatHistory: ChatHistoryStore;
   actionRunner: ActionRunner;
-  errorFeedback: ReturnType<typeof createErrorFeedbackTracker>;
   template: GoldenTemplate;
-  getApiKey: (projectId: string) => string;
   getContainerId: (projectId: string) => string;
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   listWorkspaceTree?: (containerId: string) => Promise<string[]>;
@@ -46,10 +36,20 @@ export interface GenerationServiceDeps {
   }) => void;
 }
 
-export interface OpenAction {
-  id: string;
-  type: ActionType;
-  filePath?: string;
-  name?: string;
-  content: string;
+export interface GenerationService {
+  history(projectId: string): Promise<WorkspaceChatMessage[]>;
+  listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>>;
+  runTurn(input: {
+    projectId: string;
+    prompt: string;
+    agentMode?: WorkspaceAgentMode;
+    actor?: PlatformUser;
+    approvedPlan?: string;
+    signal?: AbortSignal;
+  }): AsyncIterable<ChatStreamEvent>;
 }
+
+export type PiGenerationServiceDeps = GenerationServiceDeps & {
+  governedAiExecutor: Pick<GovernedAiExecutor, "executeAgentRound">;
+  limits?: Partial<PiAgentLimits>;
+};
