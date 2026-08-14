@@ -2,7 +2,7 @@ ARG APP_PACKAGE
 ARG APP_DIR
 ARG STATIC_PREFIX=
 
-FROM node:22-alpine AS builder
+FROM node:22.22.0-alpine AS builder
 
 ARG APP_PACKAGE
 ARG APP_DIR

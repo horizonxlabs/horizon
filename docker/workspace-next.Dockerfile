@@ -1,7 +1,7 @@
 # docker/workspace-next.Dockerfile
 # Dev-workspace image for AI-generated Next.js projects.
 # EXPOSE only (the orchestrator never publishes host ports).
-FROM node:22-alpine
+FROM node:22.22.0-alpine
 
 # git is needed for the checkpoint/version-control layer (Plan 7); curl/wget for health checks.
 RUN apk add --no-cache git curl
