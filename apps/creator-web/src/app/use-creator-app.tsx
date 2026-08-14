@@ -285,8 +285,20 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       await handleSelectProject(nextBootstrap.selectedProject, "workspace");
       beginBackgroundPrdGeneration(project.id);
       setCreateProjectMessage(
-        `สร้าง ${project.name} แล้ว — สั่ง AI build ได้เลย (PRD draft ร่างให้เบื้องหลัง)`
+        `สร้าง ${project.name} แล้ว — AI กำลัง build ร่างแรกจาก business problem ของคุณ`
       );
+      // The form's business problem becomes the FIRST build immediately — the user's words
+      // must never vanish into a background PRD. Same pattern as handleCreateFromPrompt:
+      // explicit overrides because the vibe hook's closure still holds the previous project.
+      const firstBuildPrompt = createProjectForm.businessProblem.trim();
+      if (firstBuildPrompt) {
+        vibeWorkspace.setPromptDraft("");
+        void vibeWorkspace.handleVibeChat({
+          prompt: firstBuildPrompt,
+          projectId: project.id,
+          mode: "build"
+        });
+      }
     } catch (error) {
       setCreateProjectMessage(
         error instanceof Error

@@ -91,8 +91,8 @@ export function CreateProjectWizard({
           title={message}
           lines={[
             "POST /projects — แล้วเข้า workspace ทันที",
-            "AI สร้าง PRD draft เบื้องหลัง (~2–3 นาที) ดูได้ที่ tab PRD",
-            "เริ่มสั่ง build ได้เลยโดยไม่ต้องรอ"
+            "AI เริ่ม build ร่างแรกจาก business problem ให้เอง",
+            "PRD draft ร่างเบื้องหลัง (~2–3 นาที) ดูได้ที่ tab PRD"
           ]}
         />
         <footer>
