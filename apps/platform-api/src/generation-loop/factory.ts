@@ -9,7 +9,11 @@ import { loadGoldenTemplate } from "../workspace-orchestrator/template";
 import { createActionRunner } from "./action-runner";
 import { createMemoryChatHistoryStore, type ChatHistoryStore } from "./chat-history-store";
 import { createMemoryCheckpointStore } from "./checkpoint-store";
-import { createContainerFileReader, createWorkspaceFileBrowserReader } from "./container-files";
+import {
+  createContainerFileReader,
+  createWorkspaceFileBrowserReader,
+  listWorkspaceTree
+} from "./container-files";
 import { createContainerGitCommitter } from "./container-git";
 import type { GenerationServiceDeps } from "./generation-service-types";
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
@@ -84,6 +88,7 @@ export async function createDefaultGenerationService(opts: {
       : loadGoldenTemplate(),
     getContainerId: (projectId) => workspaceContainerId(opts.orchestrator, projectId),
     readContextFiles: (containerId) => fileReader.read(containerId),
+    listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
     workspaceGuard: {
       prepare: async (projectId) => {

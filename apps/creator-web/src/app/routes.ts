@@ -96,7 +96,8 @@ export function slugifyProjectName(name: string): string {
   );
 }
 
-const EXCLUDED_CREATOR_NAV_LABELS = new Set(["Creator Workspace"]);
+// "PRD Review" moved into the workspace as a tab (workspace-first flow) — no sidebar entry.
+const EXCLUDED_CREATOR_NAV_LABELS = new Set(["Creator Workspace", "PRD Review"]);
 
 export function createCreatorNavigation(project: CreatorProjectView) {
   const projectBaseRoute = `/creator/projects/${encodeURIComponent(project.id)}`;

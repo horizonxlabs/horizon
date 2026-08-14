@@ -60,6 +60,7 @@ async function* runLockedTurn(
   const liveFiles = filterAgentWorkspaceFiles(
     deps.readContextFiles ? await deps.readContextFiles(containerId) : []
   );
+  const fileTree = deps.listWorkspaceTree ? await deps.listWorkspaceTree(containerId) : [];
   assertFileLimits(liveFiles, limits.maxFileBytes);
   const contextFiles = liveFiles.length
     ? liveFiles
@@ -67,6 +68,7 @@ async function* runLockedTurn(
   const systemInput = {
     template: deps.template,
     contextFiles,
+    fileTree,
     rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
     availableSkills: governed.availableSkills,
     knowledgeExcerpts: governed.knowledgeExcerpts,

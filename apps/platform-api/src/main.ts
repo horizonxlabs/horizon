@@ -1,5 +1,6 @@
 import { hydrateFileBackedSecrets } from "./config/file-backed-secrets";
 import { createPlatformApiApp, createRuntimePlatformApiServices, resolveCorePersistenceMode } from "./app-factory";
+import { allowLongAiStreams } from "./http-timeouts";
 import { readKeycloakConfig } from "./keycloak/config";
 import { KeycloakOidcService } from "./keycloak/oidc-service";
 import { registerKeycloakOidcRoutes } from "./keycloak/routes";
@@ -40,6 +41,7 @@ if (process.env.KEYCLOAK_ISSUER_URL) {
   }), platformSessions);
 }
 await app.listen(port, host);
+allowLongAiStreams(app.getHttpServer());
 
 if (services.corePersistence && services.governedAiExecutor && services.durableAiJobs) {
   if (!services.durableAiJobPayloadCipher) {

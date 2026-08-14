@@ -20,6 +20,7 @@ export interface GenerationServiceDeps {
   template: GoldenTemplate;
   getContainerId: (projectId: string) => string;
   readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
+  listWorkspaceTree?: (containerId: string) => Promise<string[]>;
   readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   workspaceGuard: {
     prepare(projectId: string): Promise<string>;

@@ -38,7 +38,10 @@ export function createContainerFileReader(docker: DockerEngine): ContainerFileRe
     async read(containerId: string): Promise<Array<{ path: string; content: string }>> {
       const script = [
         "cd /workspace 2>/dev/null || exit 0",
-        "for f in $(find app components lib -type f \\( -name '*.tsx' -o -name '*.ts' -o -name '*.css' -o -name '*.jsx' -o -name '*.js' \\) 2>/dev/null | grep -v node_modules | grep -v '.next' | head -8); do",
+        // app and lib first: their handful of files (page, layout, mock-data, utils) must make
+        // the cap before the ten-file ui kit exhausts it — the model needs the page + data layer
+        // contents most; the kit's existence comes from the file tree + prompt contract.
+        "for f in $(find app lib components -type f \\( -name '*.tsx' -o -name '*.ts' -o -name '*.css' -o -name '*.jsx' -o -name '*.js' \\) 2>/dev/null | grep -v node_modules | grep -v '.next' | head -8); do",
         `  echo "${MARKER}$f===";`,
         '  cat "$f";',
         '  echo "";',
@@ -63,6 +66,30 @@ export function createContainerFileReader(docker: DockerEngine): ContainerFileRe
       return parseMarkedFiles(stdout, MAX_FILE_CHARS);
     }
   };
+}
+
+// Every workspace file PATH (no contents, no cap) for the system prompt's file tree — the
+// model must know what already exists so it edits instead of recreating, and never
+// reinstalls what the template already ships.
+export async function listWorkspaceTree(
+  docker: Pick<DockerEngine, "execInContainer">,
+  containerId: string
+): Promise<string[]> {
+  const script = [
+    "cd /workspace 2>/dev/null || exit 0",
+    "find . \\( -path './node_modules' -o -path './.next' -o -path './.git' \\) -prune -o -type f -print 2>/dev/null | sed 's|^\\./||' | sort"
+  ].join("\n");
+  try {
+    const result = await docker.execInContainer(containerId, ["sh", "-c", script]);
+    return (result.stdout ?? "")
+      .replace(/\r\n/g, "\n")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 // Reads the workspace file tree for the Creator Code tab. This deliberately differs from

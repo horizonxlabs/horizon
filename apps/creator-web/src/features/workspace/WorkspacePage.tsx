@@ -1,13 +1,4 @@
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ClipboardList,
-  Hammer,
-  Plus,
-  RotateCw,
-  Send
-} from "lucide-react";
-import type { WorkspaceAgentMode } from "@evcp/api-client";
+import { ArrowUpRight, ChevronLeft, Plus, RotateCw, Send } from "lucide-react";
 import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
@@ -20,6 +11,9 @@ import { buildQuickMessages } from "./quick-messages";
 import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
 import { extractQuestions, stripQuestions } from "./vibe-questions";
+import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
+import { MODE_OPTIONS, TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
+import { turnLineTotal } from "./vibe-actions";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -27,23 +21,6 @@ import type { useCreatorApp } from "@/app/use-creator-app";
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
 // Node test environments (render-smoke) never pulls in the CSS/grid module.
 const WorkspaceDatabasePanel = lazy(() => import("./WorkspaceDatabasePanel"));
-
-const WORKSPACE_TABS = ["preview", "code", "database"] as const;
-const TAB_LABELS: Record<(typeof WORKSPACE_TABS)[number], string> = {
-  preview: "Preview",
-  code: "Code",
-  database: "Database"
-};
-
-const MODE_OPTIONS: Array<{
-  value: WorkspaceAgentMode;
-  label: string;
-  description: string;
-  Icon: typeof ClipboardList;
-}> = [
-  { value: "plan", label: "Plan", description: "Read-only analysis", Icon: ClipboardList },
-  { value: "build", label: "Build", description: "Apply changes", Icon: Hammer }
-];
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -142,6 +119,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <span className={`vibe-live-status ${isVibing ? "is-running" : "is-ready"}`.trim()}>
             <span className="vibe-live-status-dot" />
             {vibeStatus || "ready"}
+            {isVibing && turnLineTotal(vibeMessages.at(-1)?.actions ?? []) > 0
+              ? ` · ${turnLineTotal(vibeMessages.at(-1)?.actions ?? [])} lines`
+              : ""}
           </span>
         </div>
         <div className="vibe-live-header-right">
@@ -263,13 +243,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               )
             )}
           </div>
-          <QuickMessages
-            items={quickMessages}
-            disabled={isVibing}
-            onSubmit={(prompt) => {
-              void handleVibeChat({ prompt, mode: workspaceMode });
-            }}
-          />
+          {/* Hidden while the AI works: mid-turn the chips are stale; when the turn ends they
+              re-derive from the model's own <suggest> lines in its latest reply. */}
+          {!isVibing && quickMessages.length > 0 && (
+            <QuickMessages
+              items={quickMessages}
+              disabled={isVibing}
+              onSubmit={(prompt) => {
+                void handleVibeChat({ prompt, mode: workspaceMode });
+              }}
+            />
+          )}
           <div className="vibe-live-files">
             {projectFileMessage && (
               <span className="vibe-live-file-message">{projectFileMessage}</span>
@@ -387,6 +371,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             <Suspense fallback={<div className="hz-db-empty">กำลังโหลด Database…</div>}>
               <WorkspaceDatabasePanel projectId={selectedProject.id} />
             </Suspense>
+          ) : vibeTab === "prd" ? (
+            <WorkspacePrdPanel app={app} />
           ) : (
             <WorkspaceCodePanel projectId={selectedProject.id} />
           )}
