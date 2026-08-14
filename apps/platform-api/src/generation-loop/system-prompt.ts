@@ -4,6 +4,7 @@ export function buildSystemPrompt(input: {
   template: GoldenTemplate;
   contextFiles: Array<{ path: string; content: string }>;
   rollingSummary: string | null;
+  fileTree?: string[];
   availableSkills?: Array<{ name: string; description: string }>;
   knowledgeExcerpts?: string[];
   productSpec?: string;
@@ -13,6 +14,12 @@ export function buildSystemPrompt(input: {
   const contextBlock = input.contextFiles
     .map((file) => `### ${file.path}\n\`\`\`\n${file.content}\n\`\`\``)
     .join("\n\n");
+  const treePaths = input.fileTree?.length
+    ? input.fileTree
+    : (input.template.files ?? []).map((file) => file.path);
+  const fileTreeSection = treePaths.length
+    ? `\n## Project file tree (every file that EXISTS right now)\n${treePaths.map((path) => `- ${path}`).join("\n")}\nEvery path above exists on disk — never recreate one with type="file" (edit it instead), even if its contents are not shown under "Current project files".\n`
+    : "";
 
   const summarySection = input.rollingSummary
     ? `\n## Conversation summary so far\n${input.rollingSummary}\n`
@@ -142,14 +149,18 @@ The real-database mechanics for Phase 2 — follow EXACTLY:
 ## Other capabilities
 - Shell: run ANY command in the app's container with <action type="shell">command</action>. Use it
   to install dependencies (npm install <pkg>), run generators/build steps, scaffold files, inspect
-  the project (ls, cat), or run any CLI tool. The working directory is the app root (Node + npm
-  available); the command's output is captured and shown to the user.
+  the project (ls, cat), or run any CLI tool. Commands already run at the app root — do NOT cd
+  anywhere (absolute paths like /app do not exist); the command's output is captured and shown
+  to the user.
+- Preinstalled — never run npm install for these: clsx, tailwind-merge, lucide-react, every
+  @radix-ui package the ui kit uses, pg, next/react. The components/ui kit, lib/utils.ts (cn)
+  and lib/mock-data.ts ship with every project — import them, never recreate them.
 
 ## Constraints
 - These files are LOCKED — never modify them:
 ${lockedList}
 - Never ask for or reference secret values; only secret names may appear.
-${summarySection}${skillsSection}${knowledgeSection}${productSpecSection}${approvedPlanSection}
+${summarySection}${skillsSection}${knowledgeSection}${productSpecSection}${approvedPlanSection}${fileTreeSection}
 ## Current project files (the app's LIVE current state — edit these in place, keep existing features)
 ${contextBlock || "(the app currently uses the default template; write app/page.tsx to replace the homepage)"}
   `;

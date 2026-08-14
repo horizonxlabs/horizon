@@ -61,6 +61,8 @@ export function createGenerationService(deps: GenerationServiceDeps) {
         const liveFiles = deps.readContextFiles
           ? await deps.readContextFiles(containerId).catch(() => [])
           : [];
+        // Uncapped path listing so the model knows what exists beyond the few contents shown.
+        const liveTree = (await deps.listWorkspaceTree?.(containerId).catch(() => [])) ?? [];
         const actionIds: string[] = [];
         const turnActions: WorkspaceChatAction[] = [];
         const deferredMigrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
@@ -90,6 +92,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           const promptInput = {
             template: deps.template,
             contextFiles,
+            fileTree: liveTree,
             rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
             availableSkills: governed?.availableSkills,
             knowledgeExcerpts: governed?.knowledgeExcerpts,

@@ -19,7 +19,7 @@ import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { createContainerGitCommitter } from "./container-git";
-import { createContainerFileReader, createWorkspaceFileBrowserReader } from "./container-files";
+import { createContainerFileReader, createWorkspaceFileBrowserReader, listWorkspaceTree } from "./container-files";
 import { createPgMigrationRunner } from "./migration-runner";
 import type { GovernedAiExecutor } from "../ai-governance/execution-service";
 import type { AiExecutionEvidence } from "../ai-governance/execution-service";
@@ -126,6 +126,7 @@ export async function createDefaultGenerationService(opts: {
       return workspace.containerId;
     },
     readContextFiles: (containerId) => fileReader.read(containerId),
+    listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
     workspaceGuard: {
       prepare: async (projectId) => {
