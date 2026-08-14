@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
-const { findMissingImports, buildSyntaxCheckCommand, collectWriteIssues, collectRoundIssues } = await import(
-  "../../apps/platform-api/src/generation-loop/turn-checks.ts"
-);
+const { findMissingImports, buildSyntaxCheckCommand, collectWriteIssues, collectRoundIssues } =
+  await import("../../apps/platform-api/src/generation-loop/turn-checks.ts");
 
 const KNOWN = new Set([
   "app/page.tsx",
@@ -77,4 +77,13 @@ test("round-final evaluation: imports satisfied by later files in the artifact n
     finalPaths
   );
   assert.deepEqual(issues, []);
+});
+
+test("Pi generation performs round-final write checks before full validation", async () => {
+  const source = await readFile(
+    "apps/platform-api/src/generation-loop/pi-generation-service.ts",
+    "utf8"
+  );
+  assert.match(source, /collectRoundIssues/);
+  assert.match(source, /collectPiWriteIssues/);
 });
