@@ -2,9 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSystemPrompt } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
 
-const { createContainerFileReader, listWorkspaceTree } = await import(
-  "../../apps/platform-api/src/generation-loop/container-files.ts"
-);
+const { createContainerFileReader, listWorkspaceTree } =
+  await import("../../apps/platform-api/src/generation-loop/container-files.ts");
 
 function buildPrompt(fileTree) {
   return buildSystemPrompt({
@@ -23,13 +22,13 @@ test("prompt shows the full file tree and forbids recreating what exists", () =>
   assert.match(prompt, /never recreate/i);
 });
 
-test("prompt states the preinstalled deps and the no-cd shell rule", () => {
+test("prompt exposes only bounded native Horizon workspace tools", () => {
   const prompt = buildPrompt();
-  assert.match(prompt, /clsx/);
-  assert.match(prompt, /tailwind-merge/);
-  assert.match(prompt, /lucide-react/);
-  assert.match(prompt, /never run npm install for these/i);
-  assert.match(prompt, /do NOT cd/i);
+  assert.match(prompt, /list_workspace_files/);
+  assert.match(prompt, /read_workspace_file/);
+  assert.match(prompt, /run_workspace_command/);
+  assert.match(prompt, /bounded validation and package commands/i);
+  assert.match(prompt, /do not have arbitrary shell access/i);
 });
 
 test("context file contents prioritize app and lib before the large ui kit", async () => {

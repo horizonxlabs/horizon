@@ -23,7 +23,7 @@ export function buildTransactionalMigrationSql(databaseUrl: string, sql: string)
   return `BEGIN; ${searchPath}${sql}; COMMIT;`;
 }
 
-// Executes a generated <action type="migration"> SQL statement against the project's own
+// Executes a governed migration SQL statement against the project's own
 // Postgres database, using the container's DATABASE_URL (which authenticates as the per-project
 // role and targets the per-project schema). node-pg ignores the Prisma-style `?schema=` query
 // param, so we set search_path explicitly to ensure objects land in the project schema (and are
