@@ -30,3 +30,27 @@ export function parseEditBody(body: string): { find: string; replace: string } {
   );
   return match ? { find: match[1], replace: match[2] } : { find: "", replace: "" };
 }
+
+// Builds the executable action from a streamed open action (extracted from generation-service).
+export function toRunnableAction(open: {
+  id: string;
+  type: string;
+  filePath?: string;
+  content: string;
+}): RunnableAction {
+  if (open.type === "file") {
+    return { id: open.id, type: "file", filePath: open.filePath ?? "", content: open.content };
+  }
+  if (open.type === "edit") {
+    const editParsed = parseEditBody(open.content);
+    return {
+      id: open.id,
+      type: "edit",
+      filePath: open.filePath ?? "",
+      find: editParsed?.find ?? "",
+      replace: editParsed?.replace ?? ""
+    };
+  }
+  if (open.type === "shell") return { id: open.id, type: "shell", command: open.content };
+  return { id: open.id, type: "migration", name: open.filePath ?? open.id, sql: open.content };
+}

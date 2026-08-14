@@ -20,6 +20,7 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { createContainerGitCommitter } from "./container-git";
 import { createContainerFileReader, createWorkspaceFileBrowserReader, listWorkspaceTree } from "./container-files";
+import { buildSyntaxCheckCommand } from "./turn-checks";
 import { createPgMigrationRunner } from "./migration-runner";
 import type { GovernedAiExecutor } from "../ai-governance/execution-service";
 import type { AiExecutionEvidence } from "../ai-governance/execution-service";
@@ -127,6 +128,14 @@ export async function createDefaultGenerationService(opts: {
     },
     readContextFiles: (containerId) => fileReader.read(containerId),
     listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
+    checkFileSyntax: async (containerId, path) => {
+      const result = await docker.execInContainer(containerId, [
+        "sh",
+        "-c",
+        buildSyntaxCheckCommand(path)
+      ]);
+      return (result.stdout ?? "").replace(/\r\n/g, "\n");
+    },
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
     workspaceGuard: {
       prepare: async (projectId) => {

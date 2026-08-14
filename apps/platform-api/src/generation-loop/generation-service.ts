@@ -17,13 +17,14 @@ import {
   buildActionPreview,
   clipActionText,
   describeRunnable,
-  parseEditBody
+  toRunnableAction
 } from "./generation-action-utils";
 import { createProjectTurnLock } from "./project-turn-lock";
 import type { GenerationServiceDeps, OpenAction } from "./generation-service-types";
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 import { resolveGovernedTurnContext } from "./generation-turn-context";
 import { restoreWorkspaceCommit } from "./workspace-restore";
+import { collectWriteIssues } from "./turn-checks";
 
 export type { ActionActionType, ChatStreamEvent } from "./generation-types";
 export type { GenerationServiceDeps } from "./generation-service-types";
@@ -72,6 +73,8 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           : [];
         // Uncapped path listing so the model knows what exists beyond the few contents shown.
         const liveTree = (await deps.listWorkspaceTree?.(containerId).catch(() => [])) ?? [];
+        const templatePaths = (deps.template.files ?? []).map((file) => file.path);
+        const knownPaths = new Set(liveTree.length ? liveTree : templatePaths);
         const actionIds: string[] = [];
         const turnActions: WorkspaceChatAction[] = [];
         const deferredMigrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
@@ -86,6 +89,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
           const openActions = new Map<string, OpenAction>();
           let roundFailed = false;
           let roundHadFileAction = false;
+          const roundWriteIssues: string[] = [];
 
           const contextFiles =
             liveFiles.length > 0 ? liveFiles : selectContextFiles(deps.template, prompt);
@@ -190,31 +194,7 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                   roundFailed = true;
                   continue;
                 }
-                const editParsed = open.type === "edit" ? parseEditBody(open.content) : null;
-                const runnable: RunnableAction =
-                  open.type === "file"
-                    ? {
-                        id: open.id,
-                        type: "file",
-                        filePath: open.filePath ?? "",
-                        content: open.content
-                      }
-                    : open.type === "edit"
-                      ? {
-                          id: open.id,
-                          type: "edit",
-                          filePath: open.filePath ?? "",
-                          find: editParsed?.find ?? "",
-                          replace: editParsed?.replace ?? ""
-                        }
-                      : open.type === "shell"
-                        ? { id: open.id, type: "shell", command: open.content }
-                        : {
-                            id: open.id,
-                            type: "migration",
-                            name: open.filePath ?? open.id,
-                            sql: open.content
-                          };
+                const runnable: RunnableAction = toRunnableAction(open);
 
                 if (runnable.type === "migration") {
                   deferredMigrations.push(runnable);
@@ -284,6 +264,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
                   }
                 } else {
                   deps.errorFeedback.reset(open.id);
+                  if (runnable.type === "file" || runnable.type === "edit") {
+                    knownPaths.add(runnable.filePath);
+                    const written = {
+                      path: runnable.filePath,
+                      content: runnable.type === "file" ? runnable.content : runnable.replace
+                    };
+                    roundWriteIssues.push(
+                      ...(await collectWriteIssues(deps, containerId, written, knownPaths))
+                    );
+                  }
                 }
               }
             }
@@ -296,6 +286,16 @@ export function createGenerationService(deps: GenerationServiceDeps) {
             }
           }
 
+          // In-turn write checks (syntax + missing imports) — cheaper feedback before full build.
+          if (!turnFailed && !roundFailed && roundWriteIssues.length > 0) {
+            if (round < MAX_ROUNDS - 1) {
+              prompt = buildErrorFeedback(roundWriteIssues.join("\n\n"));
+              roundFailed = true;
+            } else {
+              turnFailed = true;
+              yield { type: "error", message: `Write checks still failing: ${roundWriteIssues[0].slice(0, 300)}` };
+            }
+          }
           // Build-error self-heal: validate a clean file-changing round; feed errors back to fix (opencode-style).
           if (!turnFailed && !roundFailed && agentMode === "build" && roundHadFileAction) {
             const buildError = await validateBuild(deps.workspaceGuard, input.projectId);
