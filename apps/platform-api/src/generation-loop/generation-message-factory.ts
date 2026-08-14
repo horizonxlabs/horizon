@@ -30,6 +30,7 @@ export function createAssistantChatMessage(input: {
   agentMode: WorkspaceAgentMode;
   artifactActionIds: string[];
   actions: WorkspaceChatAction[];
+  tokenUsage?: { promptTokens: number; completionTokens: number };
 }): WorkspaceChatMessage {
   return {
     id: nextMessageId(),
@@ -40,7 +41,7 @@ export function createAssistantChatMessage(input: {
     artifactActionIds: input.artifactActionIds,
     actions: input.actions,
     commitSha: null,
-    tokenUsage: null,
+    tokenUsage: input.tokenUsage ?? null,
     createdAt: new Date().toISOString()
   };
 }
