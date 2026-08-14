@@ -71,11 +71,23 @@ async function setup(resolveAuth, options = {}) {
 async function postChat(port, path, body) {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { host: "127.0.0.1", port, path, method: "POST", headers: { "content-type": "application/json" } },
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      },
       (res) => {
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve({ statusCode: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString("utf8") }));
+        res.on("end", () =>
+          resolve({
+            statusCode: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("utf8")
+          })
+        );
       }
     );
     req.on("error", reject);
@@ -84,7 +96,11 @@ async function postChat(port, path, body) {
 }
 
 test("POST /projects/:projectId/chat streams SSE events for an authorized member", async () => {
-  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
+  const { server, port } = await setup(() => ({
+    userId: "u1",
+    roles: ["member"],
+    projectIds: ["p1"]
+  }));
 
   try {
     const raw = await postChat(port, "/projects/p1/chat", { prompt: "add home page" });
@@ -125,7 +141,11 @@ test("POST /projects/:projectId/chat in Plan mode streams guidance without write
 });
 
 test("POST /projects/:projectId/chat returns 403 when caller is not a member of the project", async () => {
-  const { server, port } = await setup(() => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] }));
+  const { server, port } = await setup(() => ({
+    userId: "u1",
+    roles: ["member"],
+    projectIds: ["p1"]
+  }));
 
   try {
     const raw = await postChat(port, "/projects/p2/chat", { prompt: "add home page" });
@@ -176,6 +196,62 @@ test("POST /projects/:projectId/chat adds validated attachment excerpts to the L
     assert.match(capturedPrompt, /Apply the uploaded brand guide/);
     assert.match(capturedPrompt, /Brand guide excerpt: use a teal logo/);
     assert.match(capturedPrompt, /upl_test_0001/);
+  } finally {
+    server.close();
+  }
+});
+
+test("client disconnect aborts the active generation turn", async () => {
+  let capturedSignal;
+  let resolveAborted;
+  const aborted = new Promise((resolve) => {
+    resolveAborted = resolve;
+  });
+  const generationService = {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async *runTurn(input) {
+      capturedSignal = input.signal;
+      if (input.signal.aborted) resolveAborted();
+      else input.signal.addEventListener("abort", resolveAborted, { once: true });
+      await aborted;
+      yield { type: "done" };
+    }
+  };
+  const handler = createChatSseHandler({
+    generationService,
+    resolveAuth: () => ({ userId: "u1", roles: ["member"], projectIds: ["p1"] })
+  });
+  const server = http.createServer((req, res) => handler(req, res));
+  await new Promise((resolve) => server.listen(0, resolve));
+  const { port } = server.address();
+
+  try {
+    await new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/projects/p1/chat",
+          method: "POST",
+          headers: { "content-type": "application/json" }
+        },
+        (res) => {
+          res.once("data", () => {
+            res.destroy();
+            resolve();
+          });
+        }
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify({ prompt: "Build" }));
+    });
+    await aborted;
+    assert.equal(capturedSignal.aborted, true);
   } finally {
     server.close();
   }
