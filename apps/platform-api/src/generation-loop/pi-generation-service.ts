@@ -16,6 +16,7 @@ import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
+import { collectRoundIssues } from "./turn-checks";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
@@ -84,7 +85,7 @@ async function* runLockedTurn(
   };
   const systemPrompt =
     mode === "plan" ? buildPlanSystemPrompt(systemInput) : buildSystemPrompt(systemInput);
-  const baseCommit = mode === "build" ? await deps.workspaceGuard.prepare(input.projectId) : null;
+  if (mode === "build") await deps.workspaceGuard.prepare(input.projectId);
   const timeoutSignal = AbortSignal.timeout(limits.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
   const migrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
@@ -96,6 +97,7 @@ async function* runLockedTurn(
   let queue: PiSessionEventQueue | undefined;
   const actionIds: string[] = [];
   const actions: WorkspaceChatAction[] = [];
+  const writtenPaths = new Set<string>();
   let failedTool: HorizonPiToolDetails | undefined;
 
   try {
@@ -145,6 +147,17 @@ async function* runLockedTurn(
     ensureNoFailedTool(failedTool);
 
     if (mode === "build") {
+      const writeIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
+      if (writeIssues.length > 0) {
+        for await (const event of queue.prompt(buildWriteFeedback(writeIssues))) {
+          collectEvent(event);
+          for (const adapted of adaptPiEvent(event)) yield adapted;
+        }
+        ensureNoFailedTool(failedTool);
+        const remainingIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
+        if (remainingIssues.length > 0) throw new Error(remainingIssues.join("\n"));
+      }
+
       let validationFailure: unknown;
       for (let attempt = 0; attempt <= limits.validationRetries; attempt += 1) {
         try {
@@ -201,7 +214,6 @@ async function* runLockedTurn(
     }
   } catch (error) {
     await session?.abort().catch(() => undefined);
-    if (baseCommit) await deps.workspaceGuard.restore(input.projectId, baseCommit);
     const assistant = createAssistantChatMessage({
       projectId: input.projectId,
       content: assistantText,
@@ -233,6 +245,13 @@ async function* runLockedTurn(
     if (event.type === "tool_execution_end") {
       const details = event.result?.details as HorizonPiToolDetails | undefined;
       if (!details) return;
+      if (
+        details.ok &&
+        !event.isError &&
+        (details.actionType === "file" || details.actionType === "edit")
+      ) {
+        writtenPaths.add(details.label);
+      }
       actionIds.push(event.toolCallId);
       actions.push({
         id: event.toolCallId,
@@ -243,6 +262,20 @@ async function* runLockedTurn(
       if (!details.ok || event.isError) failedTool = details;
     }
   }
+}
+
+async function collectPiWriteIssues(
+  deps: PiGenerationServiceDeps,
+  containerId: string,
+  writtenPaths: Set<string>,
+  limits: ReturnType<typeof resolvePiAgentLimits>
+): Promise<string[]> {
+  if (!writtenPaths.size || !deps.readWorkspaceFiles) return [];
+  const files = filterAgentWorkspaceFiles(await deps.readWorkspaceFiles(containerId));
+  assertFileLimits(files, limits.maxFileBytes);
+  const knownPaths = new Set(files.map((file) => file.path));
+  const writes = files.filter((file) => writtenPaths.has(file.path));
+  return collectRoundIssues(deps, containerId, writes, knownPaths);
 }
 
 function assertFileLimits(
@@ -259,6 +292,10 @@ function buildValidationFeedback(error: unknown): string {
     .replace(/\[[0-9;]*m/g, "")
     .slice(0, 4_000);
   return `Validation failed. Fix only these errors with Horizon tools, then stop:\n${message}`;
+}
+
+function buildWriteFeedback(issues: string[]): string {
+  return `The files were saved, but Horizon detected these write issues. Repair only these issues in place; do not recreate working files:\n${issues.join("\n")}`;
 }
 
 function ensureNoFailedTool(details: HorizonPiToolDetails | undefined): void {

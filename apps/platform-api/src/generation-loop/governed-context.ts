@@ -1,5 +1,6 @@
 import type { AiScenario, PlatformApiServices, PlatformUser } from "../platform-services";
 import type { GovernedContext } from "./generation-stream-helpers";
+import type { ErrorTag } from "./error-tags";
 
 // Turns a project's governed skill assignment + knowledge scope into the generation prompt context.
 // Reuses the same in-memory governance services as the admin console (hydrated from Postgres at
@@ -46,4 +47,27 @@ export function createGovernedContextResolver(services: Pick<PlatformApiServices
     // spec injection can return here when the loop needs it again.
     return { availableSkills, skillInstructions, knowledgeExcerpts };
   };
+}
+
+// Audit sink for platformBug error tags (template defects hit by real users) — kept out
+// of app-factory, which is size-ratcheted and may only shrink.
+export function createPlatformBugAuditor(audit: {
+  record(entry: {
+    actorId: string;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    severity?: string;
+    metadata?: Record<string, unknown>;
+  }): unknown;
+}): (projectId: string, tag: ErrorTag) => void {
+  return (projectId, tag) =>
+    audit.record({
+      actorId: "system",
+      action: "generation.platform_bug_suspected",
+      resourceType: "workspace_container",
+      resourceId: projectId,
+      severity: "warning",
+      metadata: { signature: tag.signature, file: tag.file, message: tag.message.slice(0, 300) }
+    });
 }

@@ -6,6 +6,7 @@ import { PromptQueue } from "./PromptQueue";
 import { QuickMessages } from "./QuickMessages";
 import { VibeActionSummary } from "./VibeActionSummary";
 import { VibeRestorePoint } from "./VibeRestorePoint";
+import { VibeUserBubble } from "./VibeUserBubble";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
@@ -17,7 +18,7 @@ import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { MODE_OPTIONS, TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
-import { usePreviewSessionKeepalive } from "./use-preview-session-keepalive";
+import { usePreviewGuards } from "./use-preview-guards";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -107,9 +108,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       active = false;
     };
   }, [selectedProject.id, vibePreviewKey, previewAuthorizationAttempt]);
-  usePreviewSessionKeepalive({
+  usePreviewGuards({
     projectId: selectedProject.id,
-    enabled: previewAuthorizationState === "ready"
+    enabled: previewAuthorizationState === "ready",
+    submitPrompt: (prompt) => void handleVibeChat({ prompt, mode: "build" })
   });
   return (
     <div className="vibe-live-shell">
@@ -185,9 +187,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             )}
             {vibeMessages.map((message, messageIndex) =>
               message.role === "user" ? (
-                <div key={message.id} className="vibe-message vibe-message-user">
-                  {message.text}
-                </div>
+                <VibeUserBubble key={message.id} text={message.text} />
               ) : (
                 <div key={message.id} className="vibe-message vibe-message-assistant">
                   {message.reasoning && (

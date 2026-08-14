@@ -12,13 +12,15 @@ import { createMemoryCheckpointStore } from "./checkpoint-store";
 import {
   createContainerFileReader,
   createWorkspaceFileBrowserReader,
-  listWorkspaceTree
+  listWorkspaceTree,
+  probeWorkspaceRuntime
 } from "./container-files";
 import { createContainerGitCommitter } from "./container-git";
 import type { GenerationServiceDeps } from "./generation-service-types";
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
 import { createPgMigrationRunner } from "./migration-runner";
 import { createPiGenerationService } from "./pi-generation-service";
+import { buildSyntaxCheckCommand } from "./turn-checks";
 
 export async function createDefaultGenerationService(opts: {
   orchestrator: WorkspaceOrchestrator;
@@ -70,7 +72,11 @@ export async function createDefaultGenerationService(opts: {
   const fileBrowserReader = createWorkspaceFileBrowserReader(docker);
   const migrationRunner = createPgMigrationRunner();
 
-  return createPiGenerationService({
+  const template = env.EVCP_TEMPLATE_DIR
+    ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR)
+    : loadGoldenTemplate();
+
+  const service = createPiGenerationService({
     governedAiExecutor,
     ...(opts.resolveGovernedContext ? { resolveGovernedContext: opts.resolveGovernedContext } : {}),
     chatHistory,
@@ -83,12 +89,18 @@ export async function createDefaultGenerationService(opts: {
         ? { runMigrationSql: migrationRunner.run, runMigrationBatchSql: migrationRunner.runBatch }
         : {})
     }),
-    template: env.EVCP_TEMPLATE_DIR
-      ? loadGoldenTemplate(env.EVCP_TEMPLATE_DIR)
-      : loadGoldenTemplate(),
+    template,
     getContainerId: (projectId) => workspaceContainerId(opts.orchestrator, projectId),
     readContextFiles: (containerId) => fileReader.read(containerId),
     listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
+    checkFileSyntax: async (containerId, path) => {
+      const result = await docker.execInContainer(containerId, [
+        "sh",
+        "-c",
+        buildSyntaxCheckCommand(path)
+      ]);
+      return (result.stdout ?? "").replace(/\r\n/g, "\n");
+    },
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
     workspaceGuard: {
       prepare: async (projectId) => {
@@ -108,6 +120,18 @@ export async function createDefaultGenerationService(opts: {
     },
     onAudit: opts.onAudit
   });
+
+  return {
+    ...service,
+    // Self-debug surface: post-turn runtime probe + template ownership info for tag
+    // classification. Attached here (not in generation-service) to hold its size ratchet.
+    templateLockedFiles: template.lockedFiles,
+    probeRuntime: async (projectId: string): Promise<{ status: number; errors: string[] }> => {
+      const workspace = opts.orchestrator.getWorkspace(projectId);
+      if (!workspace?.containerId) return { status: 0, errors: [] };
+      return probeWorkspaceRuntime(docker, workspace.containerId, projectId.replaceAll("_", "-"));
+    }
+  };
 }
 
 function workspaceContainerId(orchestrator: WorkspaceOrchestrator, projectId: string): string {

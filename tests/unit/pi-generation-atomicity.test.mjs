@@ -6,7 +6,7 @@ import { createPiGenerationService } from "../../apps/platform-api/src/generatio
 
 const actor = { id: "creator-1", email: "creator@example.test", name: "Creator", role: "creator" };
 
-test("failed Build restores base commit and creates no checkpoint", async () => {
+test("failed Build keeps files for manual repair and creates no checkpoint", async () => {
   const lifecycle = [];
   let checkpoints = 0;
   const service = createPiGenerationService({
@@ -78,7 +78,7 @@ test("failed Build restores base commit and creates no checkpoint", async () => 
     events.push(event);
   }
 
-  assert.deepEqual(lifecycle, ["prepare", "validate", "commit", "restore:base-sha"]);
+  assert.deepEqual(lifecycle, ["prepare", "validate", "commit"]);
   assert.equal(checkpoints, 0);
   assert.deepEqual(
     events.slice(-2).map((event) => event.type),
