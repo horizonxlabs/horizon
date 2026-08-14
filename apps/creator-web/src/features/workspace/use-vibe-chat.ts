@@ -78,9 +78,12 @@ export function useVibeChat({
     setPromptDraft("");
     setIsVibing(true);
     setVibeStatus(mode === "plan" ? "Planning…" : "Provisioning workspace…");
+    // The self-debug repair turn streams into the same response: on auto_debug the patch
+    // target switches to a fresh assistant message so its tokens never mix with turn one.
+    let activeAssistantId = assistantId;
     const patchAssistant = (fn: (message: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) =>
-        prev.map((message) => (message.id === assistantId ? fn(message) : message))
+        prev.map((message) => (message.id === activeAssistantId ? fn(message) : message))
       );
     try {
       if (mode === "build") await ensureVibeWorkspace(projectId);
@@ -92,6 +95,30 @@ export function useVibeChat({
             : typeof data === "string"
               ? data
               : "";
+        if (type === "auto_debug") {
+          const debugAssistantId = `a-debug-${Date.now()}`;
+          setVibeMessages((prev) => [
+            ...prev,
+            {
+              id: `sys-debug-${Date.now()}`,
+              role: "assistant",
+              text: `🔧 ตรวจพบปัญหา ${field("count")} รายการ — กำลังแก้ให้อัตโนมัติ`,
+              actions: []
+            },
+            { id: debugAssistantId, role: "assistant", text: "", actions: [] }
+          ]);
+          activeAssistantId = debugAssistantId;
+          setVibeStatus("🔧 Auto-debug…");
+          return;
+        }
+        if (type === "auto_debug_result") {
+          setVibeStatus(
+            field("clean") === "true"
+              ? "🔧 แก้อัตโนมัติสำเร็จ ✓"
+              : "🔧 ยังมีปัญหาค้าง — ใช้ ⏪ หรือพิมพ์สั่งแก้ต่อได้"
+          );
+          return;
+        }
         patchAssistant((message) => applyVibeEvent(message, type, data as Record<string, unknown>));
         if (type === "action_start") {
           setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);

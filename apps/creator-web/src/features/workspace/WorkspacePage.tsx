@@ -6,6 +6,7 @@ import { PromptQueue } from "./PromptQueue";
 import { QuickMessages } from "./QuickMessages";
 import { VibeActionSummary } from "./VibeActionSummary";
 import { VibeRestorePoint } from "./VibeRestorePoint";
+import { VibeUserBubble } from "./VibeUserBubble";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
@@ -185,9 +186,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             )}
             {vibeMessages.map((message, messageIndex) =>
               message.role === "user" ? (
-                <div key={message.id} className="vibe-message vibe-message-user">
-                  {message.text}
-                </div>
+                <VibeUserBubble key={message.id} text={message.text} />
               ) : (
                 <div key={message.id} className="vibe-message vibe-message-assistant">
                   {message.reasoning && (
