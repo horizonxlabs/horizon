@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { findMissingImports, buildSyntaxCheckCommand, collectWriteIssues } = await import(
+const { findMissingImports, buildSyntaxCheckCommand, collectWriteIssues, collectRoundIssues } = await import(
   "../../apps/platform-api/src/generation-loop/turn-checks.ts"
 );
 
@@ -60,4 +60,21 @@ test("collectWriteIssues merges syntax and import findings", async () => {
     KNOWN
   );
   assert.deepEqual(clean, []);
+});
+
+test("round-final evaluation: imports satisfied by later files in the artifact never flag", async () => {
+  // page.tsx (written first) imports CertForm (written after) — evaluated at round end
+  // against the FINAL file set, this is clean. The per-action version of this check once
+  // told the model its files "weren't saved" and triggered a full 767-line rebuild.
+  const finalPaths = new Set([...KNOWN, "app/page.tsx", "components/CertForm.tsx"]);
+  const issues = await collectRoundIssues(
+    { checkFileSyntax: async () => "" },
+    "c1",
+    [
+      { path: "app/page.tsx", content: 'import { CertForm } from "@/components/CertForm";' },
+      { path: "components/CertForm.tsx", content: "export function CertForm() { return null; }" }
+    ],
+    finalPaths
+  );
+  assert.deepEqual(issues, []);
 });

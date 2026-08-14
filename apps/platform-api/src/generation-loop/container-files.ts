@@ -117,8 +117,12 @@ export async function probeWorkspaceRuntime(
       .filter((line) => line.startsWith("EXCERPT:"))
       .map((line) => line.slice(8).trim())
       .filter(Boolean);
+    // status 0 = wget timed out or the dev server is mid-compile — indistinguishable from
+    // probe infrastructure trouble, so it must NEVER become an error tag (a false "app is
+    // down" once sent the model rebuilding a healthy app from scratch).
+    if (status === 0) return { status, errors: [] };
     if (status !== 200 && errors.length === 0) {
-      errors.push(`App responded with HTTP ${status || "no response"} at ${url}`);
+      errors.push(`App responded with HTTP ${status} at ${url}`);
     }
     return { status, errors: status === 200 ? [] : errors };
   } catch {

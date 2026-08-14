@@ -43,6 +43,22 @@ export function buildSyntaxCheckCommand(path: string): string {
   return `cd /workspace && ./node_modules/.bin/tsc --noEmit --noResolve --skipLibCheck --allowJs --jsx preserve --module esnext --target es2022 --moduleResolution bundler '${path}' 2>&1 | head -20`;
 }
 
+// Round-final evaluation: imports are checked ONLY after the whole round's files landed,
+// so "page.tsx imports a component created later in the same artifact" never false-positives
+// (that false alarm once made the model rebuild a healthy 767-line app from scratch).
+export async function collectRoundIssues(
+  deps: { checkFileSyntax?: (containerId: string, path: string) => Promise<string> },
+  containerId: string,
+  writes: Array<{ path: string; content: string }>,
+  knownPaths: Set<string>
+): Promise<string[]> {
+  const issues: string[] = [];
+  for (const written of writes) {
+    issues.push(...(await collectWriteIssues(deps, containerId, written, knownPaths)));
+  }
+  return issues;
+}
+
 export async function collectWriteIssues(
   deps: { checkFileSyntax?: (containerId: string, path: string) => Promise<string> },
   containerId: string,
