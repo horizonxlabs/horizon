@@ -2,6 +2,7 @@ import { ArrowUpRight, ChevronLeft, Plus, RotateCw, Send } from "lucide-react";
 import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
+import { PromptQueue } from "./PromptQueue";
 import { QuickMessages } from "./QuickMessages";
 import { VibeActionRow } from "./VibeActionRow";
 import { VibeReasoning } from "./VibeReasoning";
@@ -45,7 +46,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     handleUploadProjectFiles,
     workspaceMode,
     setWorkspaceMode,
-    hasPreview
+    hasPreview,
+    promptQueue,
+    removeQueuedPrompt
   } = app;
   const [showPublish, setShowPublish] = useState(false);
   // Auto-scroll the chat thread to the bottom as messages/tokens/reasoning stream in, so the
@@ -283,6 +286,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </div>
             )}
           </div>
+          <PromptQueue items={promptQueue} onRemove={removeQueuedPrompt} />
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <Textarea
@@ -292,11 +296,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
-                    if (!isVibing && promptDraft.trim()) void handleVibeChat();
+                    if (promptDraft.trim()) void handleVibeChat();
                   }
                 }}
                 placeholder={
-                  workspaceMode === "plan" ? "Ask for plan or review..." : "Ask AI to build…"
+                  isVibing
+                    ? "พิมพ์สั่งต่อได้เลย — งานจะเข้าคิวรอ"
+                    : workspaceMode === "plan"
+                      ? "Ask for plan or review..."
+                      : "Ask AI to build…"
                 }
                 rows={1}
               />
@@ -334,8 +342,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     variant="primary"
                     type="button"
                     onClick={() => void handleVibeChat()}
-                    disabled={isVibing || !promptDraft.trim()}
-                    aria-label="Send prompt"
+                    disabled={!promptDraft.trim()}
+                    aria-label={isVibing ? "Queue prompt" : "Send prompt"}
                   >
                     <Send size={16} />
                   </Button>

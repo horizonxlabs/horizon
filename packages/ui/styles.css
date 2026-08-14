@@ -3190,6 +3190,90 @@ th {
   padding: var(--evcp-space-4);
 }
 
+.vibe-prompt-queue {
+  border-top: 1px dashed var(--evcp-color-border);
+  display: grid;
+  gap: 6px;
+  padding: var(--evcp-space-2) 18px;
+}
+
+.vibe-prompt-queue-head {
+  align-items: center;
+  color: var(--evcp-color-muted);
+  display: flex;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vibe-prompt-queue-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vibe-prompt-queue-item {
+  align-items: center;
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  display: flex;
+  gap: 8px;
+  padding: 5px 8px;
+}
+
+.vibe-prompt-queue-status {
+  color: var(--evcp-color-muted);
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.vibe-prompt-queue-status.is-next {
+  color: var(--evcp-color-primary);
+}
+
+.vibe-prompt-queue-text {
+  flex: 1;
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vibe-prompt-queue-mode {
+  background: var(--evcp-color-primary-soft, rgba(59, 91, 219, 0.12));
+  border-radius: var(--evcp-radius-pill, 999px);
+  color: var(--evcp-color-primary);
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+}
+
+.vibe-prompt-queue-remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--evcp-color-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  padding: 3px;
+}
+
+.vibe-prompt-queue-remove:hover {
+  background: var(--evcp-color-border);
+  color: var(--evcp-color-body, inherit);
+}
+
 .vibe-action-lines {
   color: var(--evcp-color-muted);
   font-size: 11px;
