@@ -1,4 +1,6 @@
+import type { WorkspaceAgentMode, WorkspaceChatMessage } from "@evcp/types";
 import type { AiScenario, PlatformUser } from "../platform-services";
+import type { GovernedAiExecutor } from "../ai-governance/execution-service";
 import type { ActionRunner } from "./action-runner";
 import type { ChatHistoryStore } from "./chat-history-store";
 import type { CheckpointStore } from "./checkpoint-store";
@@ -8,6 +10,8 @@ import type { StreamChunk } from "./governed-completion";
 import type { LlmCompletionClient } from "./llm-client";
 import type { ActionType } from "./message-parser";
 import type { GoldenTemplate } from "../workspace-orchestrator/template";
+import type { ChatStreamEvent } from "./generation-types";
+import type { PiAgentLimits } from "./pi-limits";
 
 export interface GenerationServiceDeps {
   llmClient: LlmCompletionClient;
@@ -52,3 +56,24 @@ export interface OpenAction {
   name?: string;
   content: string;
 }
+
+export interface GenerationService {
+  history(projectId: string): Promise<WorkspaceChatMessage[]>;
+  listWorkspaceFiles(projectId: string): Promise<Array<{ path: string; content: string }>>;
+  runTurn(input: {
+    projectId: string;
+    prompt: string;
+    agentMode?: WorkspaceAgentMode;
+    actor?: PlatformUser;
+    approvedPlan?: string;
+    signal?: AbortSignal;
+  }): AsyncIterable<ChatStreamEvent>;
+}
+
+export type PiGenerationServiceDeps = Omit<
+  GenerationServiceDeps,
+  "llmClient" | "governedCompletion" | "errorFeedback" | "getApiKey"
+> & {
+  governedAiExecutor: Pick<GovernedAiExecutor, "executeAgentRound">;
+  limits?: Partial<PiAgentLimits>;
+};

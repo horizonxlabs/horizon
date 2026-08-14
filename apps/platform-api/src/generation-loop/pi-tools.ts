@@ -315,10 +315,15 @@ function boundedPreview(
   preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
   context: HorizonPiToolContext
 ) {
-  return Object.fromEntries(
-    Object.entries(preview).map(([key, value]) => [
-      key,
-      value === undefined ? value : clipUtf8(value, context.limits.maxToolOutputBytes)
-    ])
-  );
+  return {
+    ...(preview.body === undefined
+      ? {}
+      : { body: clipUtf8(preview.body, context.limits.maxToolOutputBytes) }),
+    ...(preview.find === undefined
+      ? {}
+      : { find: clipUtf8(preview.find, context.limits.maxToolOutputBytes) }),
+    ...(preview.replace === undefined
+      ? {}
+      : { replace: clipUtf8(preview.replace, context.limits.maxToolOutputBytes) })
+  };
 }

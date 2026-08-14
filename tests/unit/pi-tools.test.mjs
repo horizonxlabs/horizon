@@ -99,8 +99,11 @@ test("write, edit, and direct command tools delegate bound actions", async () =>
   );
 
   assert.equal(write.details.actionType, "file");
+  assert.equal(write.details.ok, true);
   assert.equal(edit.details.actionType, "edit");
+  assert.equal(edit.details.ok, true);
   assert.equal(shell.details.actionType, "shell");
+  assert.equal(shell.details.ok, true);
   assert.deepEqual(actionRunnerCalls[2].action, {
     id: "call-run_workspace_command",
     type: "shell",
