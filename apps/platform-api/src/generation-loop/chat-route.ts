@@ -69,6 +69,7 @@ export function createChatSseHandler(deps: {
   // Errors traced to template-shipped files are platform defects, not model mistakes —
   // audited so the team sees them (the thai.css lesson).
   onPlatformBug?: (projectId: string, tag: ErrorTag) => void;
+  heartbeatIntervalMs?: number;
 }) {
   return async function handleChatRequest(
     req: IncomingMessage,
@@ -260,6 +261,12 @@ export function createChatSseHandler(deps: {
     // reverse proxy time out the request with a 504 before the stream ever opens.
     res.flushHeaders?.();
     res.write(": open\n\n");
+    const heartbeatIntervalMs =
+      deps.heartbeatIntervalMs && deps.heartbeatIntervalMs > 0 ? deps.heartbeatIntervalMs : 15_000;
+    const heartbeat = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded) res.write(": keepalive\n\n");
+    }, heartbeatIntervalMs);
+    heartbeat.unref();
 
     const controller = new AbortController();
     let completedNormally = false;
@@ -272,6 +279,7 @@ export function createChatSseHandler(deps: {
 
     try {
       const turnErrors: string[] = [];
+      let generationDone = false;
       for await (const event of deps.generationService.runTurn({
         projectId,
         prompt,
@@ -280,10 +288,15 @@ export function createChatSseHandler(deps: {
         approvedPlan,
         signal: controller.signal
       })) {
+        if (event.type === "done") {
+          generationDone = true;
+          continue;
+        }
         if (event.type === "error")
           turnErrors.push(String((event as { message?: string }).message ?? ""));
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
+      if (!generationDone) throw new Error("Generation stream ended before the done event");
       if (approvedPlan && agentMode === "build" && deps.recordPrdVersionFromPlan && auth.actor) {
         try {
           const created = await deps.recordPrdVersionFromPlan(auth.actor, projectId, approvedPlan);
@@ -313,6 +326,7 @@ export function createChatSseHandler(deps: {
           })}\n\n`
         );
       }
+      res.write(`event: done\ndata: ${JSON.stringify({ type: "done" })}\n\n`);
       completedNormally = true;
     } catch (error) {
       if (!res.headersSent) {
@@ -321,7 +335,9 @@ export function createChatSseHandler(deps: {
       res.write(
         `event: error\ndata: ${JSON.stringify({ type: "error", message: (error as Error).message })}\n\n`
       );
+      res.write(`event: done\ndata: ${JSON.stringify({ type: "done" })}\n\n`);
     } finally {
+      clearInterval(heartbeat);
       req.off("aborted", abort);
       res.off("close", abortOnClose);
       res.end();

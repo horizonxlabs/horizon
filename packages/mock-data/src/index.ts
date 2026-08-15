@@ -1,4 +1,4 @@
-import type { AppStoreItem, MockUser, ProjectSummary, ServiceStatus } from "@evcp/types";
+import type { AppStoreItem, MockUser, ProjectSummary } from "@evcp/types";
 
 export const mockUsers: Record<string, MockUser> = {
   admin: {
@@ -20,13 +20,6 @@ export const mockUsers: Record<string, MockUser> = {
     role: "end_user"
   }
 };
-
-export const serviceStatuses: ServiceStatus[] = [
-  { name: "PostgreSQL", status: "healthy", detail: "Connected" },
-  { name: "Keycloak", status: "healthy", detail: "Mock broker ready" },
-  { name: "AI Gateway", status: "warning", detail: "Mock provider only" },
-  { name: "Caddy", status: "healthy", detail: "Routes mocked" }
-];
 
 export const projects: ProjectSummary[] = [
   {
@@ -62,4 +55,3 @@ export const appStoreItems: AppStoreItem[] = [
     health: "healthy"
   }
 ];
-

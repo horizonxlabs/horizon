@@ -11,6 +11,12 @@ export interface DevContainerSpec {
     Memory: number;
     NetworkMode: string;
     Binds: string[];
+    Mounts?: Array<{
+      Type: "volume";
+      Source: string;
+      Target: string;
+      VolumeOptions: { NoCopy: boolean };
+    }>;
   };
   labels: Record<string, string>;
   exposedPort: 3000;
@@ -36,7 +42,15 @@ export function buildDevContainerSpec(input: {
       NanoCpus: Math.round(input.cpuCores * 1_000_000_000),
       Memory: input.memoryMb * 1024 * 1024,
       NetworkMode: input.network,
-      Binds: [`${input.workspaceVolume}:/workspace`]
+      Binds: [],
+      Mounts: [
+        {
+          Type: "volume",
+          Source: input.workspaceVolume,
+          Target: "/workspace",
+          VolumeOptions: { NoCopy: true }
+        }
+      ]
     },
     labels: {
       "evcp.managed": "true",
@@ -118,21 +132,21 @@ export interface DockerEngine {
   removeContainer(containerId: string): Promise<void>;
   // Look up an existing container by its name (e.g. "evcp-ws-<slug>"). Returns null if none.
   // Used to self-heal the orchestrator after a restart and to keep provisioning idempotent.
-  inspectContainer(
-    name: string
-  ): Promise<{
+  inspectContainer(name: string): Promise<{
     containerId: string;
     running: boolean;
     image: string;
     labels: Record<string, string>;
     env: string[];
   } | null>;
-  listManagedContainers(): Promise<Array<{
-    containerId: string;
-    name: string;
-    running: boolean;
-    labels: Record<string, string>;
-  }>>;
+  listManagedContainers(): Promise<
+    Array<{
+      containerId: string;
+      name: string;
+      running: boolean;
+      labels: Record<string, string>;
+    }>
+  >;
   execInContainer(
     containerId: string,
     cmd: string[]

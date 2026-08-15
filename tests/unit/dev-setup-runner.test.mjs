@@ -9,11 +9,12 @@ test("development startup generates env and passes preflight before Compose star
   runStartupCommands({
     ensureEnv: () => calls.push("env"),
     runPreflight: () => calls.push("preflight"),
+    buildWorkspaceImage: () => calls.push("workspace-image"),
     prepareCompose: () => calls.push("prepare-compose"),
     startCompose: () => calls.push("compose")
   });
 
-  assert.deepEqual(calls, ["env", "preflight", "prepare-compose", "compose"]);
+  assert.deepEqual(calls, ["env", "preflight", "workspace-image", "prepare-compose", "compose"]);
 });
 
 test("development startup does not invoke Compose after a preflight failure", () => {
@@ -27,6 +28,7 @@ test("development startup does not invoke Compose after a preflight failure", ()
           calls.push("preflight");
           throw new Error("preflight failed");
         },
+        buildWorkspaceImage: () => calls.push("workspace-image"),
         prepareCompose: () => calls.push("prepare-compose"),
         startCompose: () => calls.push("compose")
       }),

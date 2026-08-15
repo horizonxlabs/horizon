@@ -79,6 +79,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     "Create one new file in an allowed project root.",
     Type.Object({ path: Type.String(), content: Type.String() }, { additionalProperties: false }),
     async (id, params) => {
+      assertUnlocked(context.template, params.path.trim());
       const path = normalizeProjectPath(params.path);
       assertUnlocked(context.template, path);
       const files = await workspaceFiles(context);
@@ -103,6 +104,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       { additionalProperties: false }
     ),
     async (id, params) => {
+      assertUnlocked(context.template, params.path.trim());
       const path = normalizeProjectPath(params.path);
       assertUnlocked(context.template, path);
       if (!params.find) throw new Error("edit find text is required");

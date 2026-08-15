@@ -28,11 +28,15 @@ export function useVibeChat({
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
   const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([]);
   const [bugReports, setBugReports] = useState<BugReport[]>([]);
+  const activeStreamAbort = useRef<AbortController | undefined>(undefined);
   // Refs so the busy-check and the drain effect never act on stale closures.
   const isVibingRef = useRef(false);
   isVibingRef.current = isVibing;
 
   useEffect(() => {
+    activeStreamAbort.current?.abort();
+    activeStreamAbort.current = undefined;
+    setIsVibing(false);
     setVibeMessages([]);
     setVibeStatus("");
     setPromptQueue([]);
@@ -76,7 +80,14 @@ export function useVibeChat({
         text: attachmentIds.length ? `${prompt}\nAttached files: ${attachmentIds.length}` : prompt,
         actions: []
       },
-      { id: assistantId, role: "assistant", text: "", actions: [], isPlan: mode === "plan", sourcePrompt: prompt }
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        actions: [],
+        isPlan: mode === "plan",
+        sourcePrompt: prompt
+      }
     ]);
     setPromptDraft("");
     setIsVibing(true);
@@ -85,45 +96,80 @@ export function useVibeChat({
       setVibeMessages((prev) =>
         prev.map((message) => (message.id === assistantId ? fn(message) : message))
       );
+    const streamController = new AbortController();
+    activeStreamAbort.current?.abort();
+    activeStreamAbort.current = streamController;
     try {
-      if (mode === "build") await ensureVibeWorkspace(projectId);
+      if (mode === "build") await ensureVibeWorkspace(projectId, streamController.signal);
       setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "AI is working…");
-      await streamVibeChat(projectId, prompt, attachmentIds, mode, (type, data) => {
-        const field = (key: string): string =>
-          data && typeof data === "object" && key in data
-            ? String((data as Record<string, unknown>)[key])
-            : typeof data === "string"
-              ? data
-              : "";
-        if (type === "bug_report") {
-          const bugs = Array.isArray((data as { bugs?: unknown })?.bugs)
-            ? ((data as { bugs: BugReport[] }).bugs)
-            : [];
-          // Post-turn scans REPLACE the box: fixed bugs disappear, open ones stay visible.
-          setBugReports(bugs);
-          return;
-        }
-        patchAssistant((message) => applyVibeEvent(message, type, data as Record<string, unknown>));
-        if (type === "action_start") {
-          setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
-        } else if (type === "commit") {
-          setVibeStatus(`Committed ${field("sha").slice(0, 8)}`);
-        } else if (type === "done") {
-          setVibeStatus((previous) =>
-            mode === "plan" ? "Plan ready" : previous.startsWith("Committed") ? previous : "Done"
+      await streamVibeChat(
+        projectId,
+        prompt,
+        attachmentIds,
+        mode,
+        (type, data) => {
+          const field = (key: string): string =>
+            data && typeof data === "object" && key in data
+              ? String((data as Record<string, unknown>)[key])
+              : typeof data === "string"
+                ? data
+                : "";
+          if (type === "bug_report") {
+            const bugs = Array.isArray((data as { bugs?: unknown })?.bugs)
+              ? (data as { bugs: BugReport[] }).bugs
+              : [];
+            // Post-turn scans REPLACE the box: fixed bugs disappear, open ones stay visible.
+            setBugReports(bugs);
+            return;
+          }
+          patchAssistant((message) =>
+            applyVibeEvent(message, type, data as Record<string, unknown>)
           );
-          if (mode === "build") setVibePreviewKey((key) => key + 1);
-        }
-      }, overrides?.approvedPlan);
+          if (type === "action_start") {
+            setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
+          } else if (type === "commit") {
+            setVibeStatus(`Committed ${field("sha").slice(0, 8)}`);
+          } else if (type === "error") {
+            setVibeStatus(`Error: ${field("message")}`);
+          } else if (type === "done") {
+            setVibeStatus((previous) =>
+              previous.startsWith("Error:")
+                ? previous
+                : mode === "plan"
+                  ? "Plan ready"
+                  : previous.startsWith("Committed")
+                    ? previous
+                    : "Done"
+            );
+            if (mode === "build") setVibePreviewKey((key) => key + 1);
+          }
+        },
+        overrides?.approvedPlan,
+        streamController.signal
+      );
     } catch (error) {
-      patchAssistant((message) => ({
-        ...message,
-        text: message.text + `\n\n⚠️ ${(error as Error).message}`
-      }));
-      setVibeStatus(`Error: ${(error as Error).message}`);
+      const cancelled = streamController.signal.aborted;
+      if (!cancelled) {
+        patchAssistant((message) => ({
+          ...message,
+          text: message.text + `\n\n⚠️ ${(error as Error).message}`
+        }));
+      }
+      if (activeStreamAbort.current === streamController) {
+        setVibeStatus(cancelled ? "Stopped" : `Error: ${(error as Error).message}`);
+      }
     } finally {
-      setIsVibing(false);
+      if (activeStreamAbort.current === streamController) {
+        activeStreamAbort.current = undefined;
+        setIsVibing(false);
+      }
     }
+  }
+
+  function cancelVibe() {
+    if (!activeStreamAbort.current) return;
+    setVibeStatus("Stopping…");
+    activeStreamAbort.current.abort();
   }
 
   // Drain the queue one item per finished turn: when the AI goes idle and work is waiting,
@@ -168,6 +214,7 @@ export function useVibeChat({
     addBugReport: (bug: BugReport) => setBugReports((current) => mergeBugReports(current, [bug])),
     dismissBugReport: (signature: string) =>
       setBugReports((current) => current.filter((bug) => bug.signature !== signature)),
+    cancelVibe,
     handleVibeChat,
     approveAndImplement,
     reloadChatHistory

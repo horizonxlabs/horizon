@@ -28,7 +28,8 @@ export function buildCreateContainerBody(spec: DevContainerSpec): Record<string,
       NanoCpus: spec.hostConfig.NanoCpus,
       Memory: spec.hostConfig.Memory,
       NetworkMode: spec.hostConfig.NetworkMode,
-      Binds: spec.hostConfig.Binds
+      Binds: spec.hostConfig.Binds,
+      Mounts: spec.hostConfig.Mounts ?? []
       // intentionally NO PortBindings — containers never publish host ports
     }
   };
@@ -215,23 +216,34 @@ export function createDockerSocketEngine(
         image: String(payload?.Config?.Image ?? ""),
         labels:
           payload?.Config?.Labels && typeof payload.Config.Labels === "object"
-            ? Object.fromEntries(Object.entries(payload.Config.Labels).map(([key, value]) => [key, String(value)]))
+            ? Object.fromEntries(
+                Object.entries(payload.Config.Labels).map(([key, value]) => [key, String(value)])
+              )
             : {},
         env: Array.isArray(payload?.Config?.Env) ? payload.Config.Env.map(String) : []
       };
     },
     async listManagedContainers() {
       const filters = encodeURIComponent(JSON.stringify({ label: ["evcp.managed=true"] }));
-      const result = await request({ method: "GET", path: `/containers/json?all=true&filters=${filters}` });
+      const result = await request({
+        method: "GET",
+        path: `/containers/json?all=true&filters=${filters}`
+      });
       await expect("list-managed", result, [200]);
       const payload = await result.json();
       return (Array.isArray(payload) ? payload : []).map((container: any) => ({
         containerId: String(container.Id),
-        name: String(Array.isArray(container.Names) ? container.Names[0] ?? "" : "").replace(/^\//, ""),
+        name: String(Array.isArray(container.Names) ? (container.Names[0] ?? "") : "").replace(
+          /^\//,
+          ""
+        ),
         running: String(container.State) === "running",
-        labels: container.Labels && typeof container.Labels === "object"
-          ? Object.fromEntries(Object.entries(container.Labels).map(([key, value]) => [key, String(value)]))
-          : {}
+        labels:
+          container.Labels && typeof container.Labels === "object"
+            ? Object.fromEntries(
+                Object.entries(container.Labels).map(([key, value]) => [key, String(value)])
+              )
+            : {}
       }));
     },
     async execInContainer(containerId, cmd) {

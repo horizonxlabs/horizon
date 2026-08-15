@@ -1,5 +1,6 @@
 export function apiBaseUrl(): string | undefined {
-  const configured = import.meta.env.VITE_PLATFORM_API_BASE_URL;
+  const configured = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_PLATFORM_API_BASE_URL;
   if (
     (!configured || configured === "/api") &&
     typeof window !== "undefined" &&

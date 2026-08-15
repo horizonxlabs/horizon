@@ -89,6 +89,21 @@ test("rejects unsafe paths, locked writes, and non-unique edits before action ru
   assert.equal(calls.length, 0);
 });
 
+test("reports a locked root manifest instead of misclassifying it as outside the project", async () => {
+  const { tools, calls } = securedFixture({
+    template: { name: "Web App", lockedFiles: ["package.json"], files: [] }
+  });
+
+  const result = await run(tools, "write_workspace_file", {
+    path: "package.json",
+    content: "{}"
+  });
+
+  assert.equal(result.details.ok, false);
+  assert.equal(result.details.error, "workspace file 'package.json' is locked");
+  assert.equal(calls.length, 0);
+});
+
 test("rejects oversized inputs and clips workspace output by UTF-8 bytes", async () => {
   const { tools, calls } = securedFixture();
   const write = await run(tools, "write_workspace_file", {

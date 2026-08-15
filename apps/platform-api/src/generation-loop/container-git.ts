@@ -29,7 +29,7 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         `${g} rev-parse --is-inside-work-tree >/dev/null 2>&1 || ${g} init -q`,
         `${g} config user.email >/dev/null 2>&1 || ${g} config user.email "ai@evcp.local"`,
         `${g} config user.name >/dev/null 2>&1 || ${g} config user.name "EVCP AI"`,
-        `if ${g} rev-parse --verify HEAD >/dev/null 2>&1; then ${g} reset --hard HEAD >/dev/null && ${g} clean -fd >/dev/null; else ${g} add -A && ${g} commit --allow-empty -q -m "EVCP initial workspace"; fi`,
+        `if ! ${g} rev-parse --verify HEAD >/dev/null 2>&1; then ${g} add -A && ${g} commit --allow-empty -q -m "EVCP initial workspace"; fi`,
         `${g} rev-parse HEAD`
       ].join(" && ");
       return run(containerId, script, "workspace prepare");

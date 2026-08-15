@@ -1,6 +1,13 @@
-export function runStartupCommands({ ensureEnv, runPreflight, prepareCompose, startCompose }) {
+export function runStartupCommands({
+  ensureEnv,
+  runPreflight,
+  buildWorkspaceImage,
+  prepareCompose,
+  startCompose
+}) {
   ensureEnv();
   runPreflight();
+  buildWorkspaceImage();
   prepareCompose();
   startCompose();
 }

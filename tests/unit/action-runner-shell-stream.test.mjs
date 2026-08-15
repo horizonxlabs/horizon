@@ -62,7 +62,7 @@ test("shell action falls back to buffered execInContainer when no onShellOutput 
   assert.equal(streamedUsed, false);
 });
 
-test("Pi shell actions use direct argv, bound output, and honor pre-abort", async () => {
+test("Pi shell actions run as the unprivileged workspace owner, bound output, and honor pre-abort", async () => {
   const calls = [];
   const docker = {
     async execInContainer(containerId, command) {
@@ -84,7 +84,8 @@ test("Pi shell actions use direct argv, bound output, and honor pre-abort", asyn
   });
   assert.equal(result.ok, true);
   assert.equal(result.stdout.length, 12);
-  assert.deepEqual(calls[0].command, ["pnpm", "test"]);
+  assert.deepEqual(calls[0].command.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  assert.match(calls[0].command[5], /cd \/workspace && exec 'pnpm' 'test'/);
 
   const controller = new AbortController();
   controller.abort();
@@ -98,4 +99,34 @@ test("Pi shell actions use direct argv, bound output, and honor pre-abort", asyn
   assert.equal(aborted.ok, false);
   assert.match(aborted.error, /aborted/);
   assert.equal(calls.length, 1);
+});
+
+test("npm build validates in a disposable tree without replacing the live preview cache", async () => {
+  const calls = [];
+  const docker = {
+    async execInContainer(containerId, command) {
+      calls.push({ containerId, command });
+      return { stdout: "build passed\n", stderr: "", exitCode: 0 };
+    }
+  };
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a-build", type: "shell", command: "npm", args: ["run", "build"] }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls[0].command.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  const script = calls[0].command[5];
+  assert.match(script, /mktemp -d \/tmp\/evcp-agent-validation/);
+  assert.match(script, /--exclude=\.next/);
+  assert.match(script, /EVCP_VALIDATION_DIST_DIR=\.next/);
+  assert.doesNotMatch(script, /cd \/workspace && exec 'npm' 'run' 'build'/);
 });

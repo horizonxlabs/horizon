@@ -3,11 +3,11 @@ import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { apiBaseUrl } from "@/shared/runtime-config";
 import { vibeAuthHeaders } from "@/shared/session";
 
-export async function ensureVibeWorkspace(projectId: string): Promise<void> {
+export async function ensureVibeWorkspace(projectId: string, signal?: AbortSignal): Promise<void> {
   const base = apiBaseUrl() ?? "/api";
   const containerUrl = `${base}/projects/${encodeURIComponent(projectId)}/workspace/container`;
   const readState = async (): Promise<string | undefined> => {
-    const res = await fetch(containerUrl, { headers: vibeAuthHeaders() });
+    const res = await fetch(containerUrl, { headers: vibeAuthHeaders(), signal });
     if (!res.ok) return undefined;
     const body = (await res.json().catch(() => null)) as {
       data?: { workspace?: { state?: string } };
@@ -20,7 +20,8 @@ export async function ensureVibeWorkspace(projectId: string): Promise<void> {
   const res = await fetch(containerUrl, {
     method: "POST",
     headers: vibeAuthHeaders(),
-    body: JSON.stringify({ projectId, slug: projectId })
+    body: JSON.stringify({ projectId, slug: projectId }),
+    signal
   });
   if (res.ok || res.status === 409) return;
   const after = await readState();
@@ -62,39 +63,50 @@ export async function streamVibeChat(
   attachmentIds: string[],
   agentMode: WorkspaceAgentMode,
   onEvent: (type: string, data: unknown) => void,
-  approvedPlan?: string
+  approvedPlan?: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const base = apiBaseUrl() ?? "/api";
   const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat`, {
     method: "POST",
     headers: vibeAuthHeaders(),
-    body: JSON.stringify(vibeChatBody(prompt, attachmentIds, agentMode, approvedPlan))
+    body: JSON.stringify(vibeChatBody(prompt, attachmentIds, agentMode, approvedPlan)),
+    signal
   });
   if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedDone = false;
+  const dispatchFrame = (frame: string) => {
+    const lines = frame.split(/\r?\n/);
+    const eventLine = lines.find((line) => line.startsWith("event:"));
+    const dataLine = lines.find((line) => line.startsWith("data:"));
+    if (!dataLine) return;
+    if (receivedDone)
+      throw new Error("Chat stream received an event after the terminal done event");
+    const raw = dataLine.slice("data:".length).trim();
+    let data: unknown = raw;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      /* keep raw string */
+    }
+    const type = eventLine ? eventLine.slice("event:".length).trim() : "message";
+    onEvent(type, data);
+    if (type === "done") receivedDone = true;
+  };
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const frames = buffer.split("\n\n");
+    const frames = buffer.split(/\r?\n\r?\n/);
     buffer = frames.pop() ?? "";
-    for (const frame of frames) {
-      const lines = frame.split("\n");
-      const eventLine = lines.find((line) => line.startsWith("event:"));
-      const dataLine = lines.find((line) => line.startsWith("data:"));
-      if (!dataLine) continue;
-      const raw = dataLine.slice("data:".length).trim();
-      let data: unknown = raw;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        /* keep raw string */
-      }
-      onEvent(eventLine ? eventLine.slice("event:".length).trim() : "message", data);
-    }
+    for (const frame of frames) dispatchFrame(frame);
   }
+  buffer += decoder.decode();
+  if (buffer.trim()) dispatchFrame(buffer);
+  if (!receivedDone) throw new Error("Chat stream ended before the terminal done event");
 }
 
 export async function loadWorkspaceState(projectId: string): Promise<WorkspaceSnapshotResponse> {

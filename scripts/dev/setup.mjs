@@ -83,6 +83,10 @@ runStartupCommands({
       { cwd: root, stdio: "inherit" }
     );
   },
+  buildWorkspaceImage: () => {
+    console.log("Refreshing the AI workspace image from the current golden template...");
+    execFileSync("sh", ["docker/build-workspace-image.sh"], { cwd: root, stdio: "inherit" });
+  },
   prepareCompose: () => {
     // Older revisions used a fixed Compose project. Remove only its replaceable
     // containers/network so generated credentials can start against clean, project-scoped

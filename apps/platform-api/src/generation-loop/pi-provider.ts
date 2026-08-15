@@ -187,6 +187,25 @@ function createEventState(stream: AssistantMessageEventStream, partial: Assistan
   return {
     onEvent,
     finish(result: GovernedAiAgentRoundResult) {
+      for (const block of result.message!.content) {
+        if (block.type === "text" && textIndex === undefined && block.text) {
+          textIndex = partial.content.length;
+          partial.content.push({ type: "text", text: block.text });
+          stream.push({ type: "text_start", contentIndex: textIndex, partial });
+          stream.push({ type: "text_delta", contentIndex: textIndex, delta: block.text, partial });
+        }
+        if (block.type === "thinking" && thinkingIndex === undefined && block.thinking) {
+          thinkingIndex = partial.content.length;
+          partial.content.push({ type: "thinking", thinking: block.thinking });
+          stream.push({ type: "thinking_start", contentIndex: thinkingIndex, partial });
+          stream.push({
+            type: "thinking_delta",
+            contentIndex: thinkingIndex,
+            delta: block.thinking,
+            partial
+          });
+        }
+      }
       if (textIndex !== undefined) {
         const block = partial.content[textIndex];
         stream.push({

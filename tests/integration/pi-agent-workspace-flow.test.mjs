@@ -263,6 +263,8 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     (await migrations.listMigrations("project-flow")).map((migration) => migration.name),
     ["001_create_leads", "002_create_stages"]
   );
-  const directCommand = docker.state.execCalls.find(({ cmd }) => cmd[0] === "pnpm");
-  assert.deepEqual(directCommand?.cmd, ["pnpm", "test"]);
+  const directCommand = docker.state.execCalls.find(
+    ({ cmd }) => cmd[0] === "su" && cmd.at(-1)?.includes("'pnpm' 'test'")
+  );
+  assert.deepEqual(directCommand?.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
 });
