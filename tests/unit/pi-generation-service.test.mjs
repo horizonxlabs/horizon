@@ -170,7 +170,7 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
   ]);
   assert.deepEqual(
     events.map((event) => event.type),
-    ["action_start", "action_result", "commit", "done"]
+    ["action_start", "action_result", "token", "commit", "done"]
   );
   const assistant = (await service.history("p1")).at(-1);
   assert.equal(assistant.content, "Built dashboard");
@@ -186,13 +186,15 @@ test("validation feedback self-heals on the same Pi session before commit", asyn
   let modelRounds = 0;
   let validations = 0;
   const executor = {
-    async executeAgentRound(_actor, input) {
+    async executeAgentRound(_actor, input, onEvent) {
       modelRounds += 1;
+      const text = modelRounds === 1 ? "Initial build" : "Fixed build";
+      onEvent({ type: "text_delta", delta: text });
       return {
         status: "succeeded",
         message: {
           role: "assistant",
-          content: [{ type: "text", text: modelRounds === 1 ? "Initial build" : "Fixed build" }],
+          content: [{ type: "text", text }],
           timestamp: modelRounds
         },
         usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
@@ -218,7 +220,12 @@ test("validation feedback self-heals on the same Pi session before commit", asyn
     events.some((event) => event.type === "commit"),
     true
   );
-  assert.equal((await service.history("p1")).at(-1).content, "Fixed build");
+  const streamedText = events
+    .filter((event) => event.type === "token")
+    .map((event) => event.content)
+    .join("");
+  assert.equal(streamedText, "Initial buildFixed build");
+  assert.equal((await service.history("p1")).at(-1).content, streamedText);
 });
 
 test("Pi turns are FIFO per project but independent across projects", async () => {

@@ -12,6 +12,10 @@ import {
   workspaceVolumeLabels,
   workspaceVolumeName
 } from "./workspace-lifecycle";
+import {
+  persistWorkspaceSecrets,
+  provisionIndependentWorkspaceResources
+} from "./workspace-provisioning";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -38,7 +42,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     return next;
   };
 
-  const persist = async (record: WorkspaceContainerRecord): Promise<void> => { await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) }); };
+  const persist = async (record: WorkspaceContainerRecord): Promise<void> => {
+    await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
+  };
 
   const buildWorkspaceSpec = async (projectId: string, resourceKey: string) =>
     buildDevContainerSpec({
@@ -81,9 +87,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return recovered;
     }
 
-    // A deleted container is disposable: its named workspace volume and project resources remain.
-    // Load encrypted at-rest secrets first so a post-restart recovery can recreate the container
-    // without attempting to create its schema, bucket, or LLM key again.
+    // A deleted container is disposable; hydrate secrets and reuse its durable resources.
     await deps.secrets.hydrate();
     if (Object.keys(await deps.secrets.resolveEnv(input.projectId)).length === 0) {
       throw new Error(
@@ -105,9 +109,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       state: "running",
       containerId,
       lastActivityAt: now(),
-        lastError: undefined
-      });
-      await persist(recovered);
+      lastError: undefined
+    });
+    await persist(recovered);
     audit({
       action: "workspace.recovered",
       projectId: input.projectId,
@@ -128,13 +132,15 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
       for (const snapshot of await store.list()) {
-        // A persisted "running" record is stale after a stack restart (the container stopped without
-        // going through the idle transition). Reconcile with the real container so preview access can
-        // wake it — otherwise resolvePreviewTarget trusts the stale state and proxies to a dead
-        // container, returning 503 forever.
-        const live = snapshot.record.state !== "running" || !snapshot.record.containerId
-          ? true
-          : (await deps.docker.inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`).catch(() => null))?.running ?? false;
+        // Reconcile persisted state with Docker so a stack restart cannot leave preview stuck at 503.
+        const live =
+          snapshot.record.state !== "running" || !snapshot.record.containerId
+            ? true
+            : ((
+                await deps.docker
+                  .inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`)
+                  .catch(() => null)
+              )?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
         records.set(record.projectId, record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
@@ -182,8 +188,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       projectId: string;
       slug: string;
     }): Promise<WorkspaceContainerRecord> {
-      // Physical resources are named by the immutable id-derived key, never the mutable slug, so a
-      // rename never orphans them. The slug is kept only as a display field on the record.
+      // Immutable id-derived resource names prevent project renames from orphaning infrastructure.
       const resourceKey = resourceKeyForProject(input.projectId);
       const existing = records.get(input.projectId);
       if (existing && existing.state !== "failed") {
@@ -191,9 +196,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         return recoverExistingWorkspace(existing, input, resourceKey);
       }
 
-      // Self-heal: after a platform-api restart the in-memory record is gone, but the container
-      // (and its pg schema / bucket) usually still exist. Re-attach to the running container
-      // rather than re-provisioning, which would collide with the orphaned resources (500).
+      // After API restart, reattach to durable Docker resources instead of provisioning duplicates.
       const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
       if (found) {
         if (!found.running) {
@@ -245,34 +248,29 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
       const rollbacks: Array<() => Promise<void>> = [];
       try {
-        const pg = await deps.postgres.provisionSchema(resourceKey);
-        rollbacks.push(() => deps.postgres.releaseSchema(resourceKey));
-
-        const bucket = await deps.objectStorage.provisionBucket(resourceKey);
-        rollbacks.push(() => deps.objectStorage.releaseBucket(resourceKey));
-
-        const llmKey = await deps.llmGateway.createVirtualKey({
-          projectId: input.projectId,
-          slug: resourceKey
-        });
-        llmKeyIds.set(input.projectId, llmKey.keyId);
-        rollbacks.push(() => deps.llmGateway.revokeVirtualKey(llmKey.keyId));
-
-        await deps.secrets.put(
-          input.projectId,
-          "DATABASE_URL",
-          `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`
-        );
-        await deps.secrets.put(input.projectId, "S3_ENDPOINT", s3Endpoint);
-        await deps.secrets.put(input.projectId, "S3_BUCKET", bucket.bucket);
-        await deps.secrets.put(input.projectId, "S3_ACCESS_KEY", bucket.accessKey);
-        await deps.secrets.put(input.projectId, "S3_SECRET_KEY", bucket.secretKey);
-        await deps.secrets.put(input.projectId, "LLM_GATEWAY_KEY", llmKey.key);
-        rollbacks.push(() => deps.secrets.removeAll(input.projectId));
-
         const volumeName = workspaceVolumeName(resourceKey);
-        await deps.docker.ensureVolume(volumeName, workspaceVolumeLabels(input.projectId));
-        rollbacks.push(() => deps.docker.removeVolume(volumeName));
+        const {
+          pg,
+          bucket,
+          llmKey,
+          rollbacks: resourceRollbacks
+        } = await provisionIndependentWorkspaceResources(deps, {
+          projectId: input.projectId,
+          resourceKey,
+          volumeName
+        });
+        rollbacks.push(...resourceRollbacks);
+        llmKeyIds.set(input.projectId, llmKey.keyId);
+
+        rollbacks.push(() => deps.secrets.removeAll(input.projectId));
+        await persistWorkspaceSecrets(deps, input.projectId, {
+          DATABASE_URL: `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`,
+          S3_ENDPOINT: s3Endpoint,
+          S3_BUCKET: bucket.bucket,
+          S3_ACCESS_KEY: bucket.accessKey,
+          S3_SECRET_KEY: bucket.secretKey,
+          LLM_GATEWAY_KEY: llmKey.key
+        });
         const { containerId } = await deps.docker.createContainer(
           await buildWorkspaceSpec(input.projectId, resourceKey)
         );
@@ -396,4 +394,5 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 }
 
-export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>; export { schemaNameFor, roleNameFor };
+export type WorkspaceOrchestrator = ReturnType<typeof createWorkspaceOrchestrator>;
+export { schemaNameFor, roleNameFor };

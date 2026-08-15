@@ -1,11 +1,5 @@
 import type { NavItem, Surface } from "@evcp/types";
 
-export const surfaceRoutes: Record<Surface, string> = {
-  admin: "/admin",
-  creator: "/creator",
-  store: "/store"
-};
-
 export const navigation: Record<Surface, NavItem[]> = {
   admin: [
     { label: "Dashboard", route: "/admin", icon: "dashboard" },

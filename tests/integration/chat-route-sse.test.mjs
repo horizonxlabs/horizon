@@ -42,7 +42,9 @@ async function setup(resolveAuth, options = {}) {
   const handler = createChatSseHandler({
     generationService: options.generationService ?? scriptedService(captured),
     resolveAuth,
-    resolveAttachmentContext: options.resolveAttachmentContext
+    resolveAttachmentContext: options.resolveAttachmentContext,
+    recordPrdVersionFromPlan: options.recordPrdVersionFromPlan,
+    heartbeatIntervalMs: options.heartbeatIntervalMs
   });
   const server = http.createServer((req, res) => {
     handler(req, res).catch((error) => {
@@ -90,6 +92,58 @@ test("authorized Build streams Creator SSE events", async () => {
     assert.match(raw.body, /event: token/);
     assert.match(raw.body, /event: action_result/);
     assert.match(raw.body, /event: commit/);
+    assert.match(raw.body, /event: done/);
+  } finally {
+    server.close();
+  }
+});
+
+test("done is the terminal SSE event after all post-turn metadata", async () => {
+  const { server, port } = await setup(() => auth, {
+    recordPrdVersionFromPlan: async () => ({
+      id: "prd-1",
+      version: "1.0",
+      changeSummary: "Approved home page"
+    })
+  });
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "add home page",
+      agentMode: "build",
+      approvedPlan: "Build the approved home page"
+    });
+    const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
+
+    assert.equal(eventNames.at(-1), "done");
+    assert.ok(eventNames.includes("prd_version"));
+    assert.ok(eventNames.includes("bug_report"));
+    assert.ok(eventNames.indexOf("prd_version") < eventNames.indexOf("done"));
+    assert.ok(eventNames.indexOf("bug_report") < eventNames.indexOf("done"));
+  } finally {
+    server.close();
+  }
+});
+
+test("long-running turns emit SSE heartbeat comments before completion", async () => {
+  const generationService = {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async *runTurn() {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      yield { type: "done" };
+    }
+  };
+  const { server, port } = await setup(() => auth, {
+    generationService,
+    heartbeatIntervalMs: 5
+  });
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", { prompt: "wait" });
+    assert.match(raw.body, /: keepalive\n\n/);
     assert.match(raw.body, /event: done/);
   } finally {
     server.close();

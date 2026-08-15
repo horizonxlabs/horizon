@@ -40,7 +40,7 @@ export async function waitForPreviewReady(
   const result = await docker.execInContainer(containerId, [
     "sh",
     "-c",
-    'attempt=0; url="http://127.0.0.1:3000${EVCP_PREVIEW_BASE:-}/api/health"; while [ "$attempt" -lt 120 ]; do curl -fsS "$url" >/dev/null 2>&1 && exit 0; attempt=$((attempt + 1)); sleep 1; done; exit 1'
+    'attempt=0; url="http://127.0.0.1:3000${EVCP_PREVIEW_BASE:-}/api/health"; while [ "$attempt" -lt 600 ]; do curl -fsS "$url" >/dev/null 2>&1 && exit 0; attempt=$((attempt + 1)); sleep 0.2; done; exit 1'
   ]);
   if (result.exitCode !== 0) {
     throw new Error("workspace preview readiness timed out after 120 seconds");

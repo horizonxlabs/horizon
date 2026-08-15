@@ -123,3 +123,71 @@ test("Pi bridge stops before governance when the model-round limit is exceeded",
   assert.equal(terminal.at(-1).reason, "error");
   assert.match(terminal.at(-1).error.errorMessage, /model round limit/i);
 });
+
+test("Pi bridge streams final text when the governed provider emitted no deltas", async () => {
+  const { modelRuntime, model } = await createHorizonPiRuntime({
+    executor: {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "succeeded",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Final-only answer" }],
+            timestamp: 2
+          },
+          usage: { input: 2, output: 3, totalTokens: 5, costUsd: 0 },
+          evidence: { requestId: input.requestId }
+        };
+      }
+    },
+    actor,
+    projectId: "p1",
+    scenario: "frontend_coding",
+    turnId: "turn-final-only",
+    maxModelRounds: 1
+  });
+  const events = [];
+
+  for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["start", "text_start", "text_delta", "text_end", "done"]
+  );
+  assert.equal(events.find((event) => event.type === "text_delta").delta, "Final-only answer");
+});
+
+test("Pi bridge streams final reasoning when the governed provider emitted no deltas", async () => {
+  const { modelRuntime, model } = await createHorizonPiRuntime({
+    executor: {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "succeeded",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "Final-only reasoning" },
+              { type: "text", text: "Answer" }
+            ],
+            timestamp: 2
+          },
+          usage: { input: 2, output: 4, totalTokens: 6, costUsd: 0 },
+          evidence: { requestId: input.requestId }
+        };
+      }
+    },
+    actor,
+    projectId: "p1",
+    scenario: "frontend_coding",
+    turnId: "turn-final-reasoning",
+    maxModelRounds: 1
+  });
+  const events = [];
+
+  for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+
+  assert.equal(
+    events.find((event) => event.type === "thinking_delta")?.delta,
+    "Final-only reasoning"
+  );
+});

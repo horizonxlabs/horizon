@@ -48,7 +48,7 @@ test("throws if the git command fails hard (non-zero on the rev-parse read)", as
   await assert.rejects(() => committer.commit("c1", "msg"), /git commit failed|rev-parse/i);
 });
 
-test("prepare creates an initial immutable baseline and removes crash-left dirty changes", async () => {
+test("prepare creates an initial baseline without discarding failed-turn repair files", async () => {
   const docker = fakeDocker([["rev-parse HEAD", { stdout: "base123\n", stderr: "", exitCode: 0 }]]);
   const workspace = createContainerGitCommitter(docker);
 
@@ -57,8 +57,8 @@ test("prepare creates an initial immutable baseline and removes crash-left dirty
   assert.equal(sha, "base123");
   const script = docker.calls[0].cmd.join(" ");
   assert.match(script, /rev-parse --verify HEAD/);
-  assert.match(script, /reset --hard HEAD/);
-  assert.match(script, /clean -fd/);
+  assert.doesNotMatch(script, /reset --hard HEAD/);
+  assert.doesNotMatch(script, /clean -fd/);
   assert.match(script, /EVCP initial workspace/);
 });
 

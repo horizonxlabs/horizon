@@ -1,12 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createDockerSocketEngine, buildCreateContainerBody } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/docker-socket-engine.ts"
-);
-const { buildDevContainerSpec } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts"
-);
+const { createDockerSocketEngine, buildCreateContainerBody } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/docker-socket-engine.ts");
+const { buildDevContainerSpec } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
 
 const spec = buildDevContainerSpec({
   projectId: "prj_leave_tracker",
@@ -26,7 +24,15 @@ test("buildCreateContainerBody maps the spec to Docker API shape without port pu
   assert.equal(body.HostConfig.NanoCpus, 1_000_000_000);
   assert.equal(body.HostConfig.Memory, 2048 * 1024 * 1024);
   assert.equal(body.HostConfig.NetworkMode, "evcp-internal");
-  assert.deepEqual(body.HostConfig.Binds, ["evcp-ws-leave-tracker-data:/workspace"]);
+  assert.deepEqual(body.HostConfig.Binds, []);
+  assert.deepEqual(body.HostConfig.Mounts, [
+    {
+      Type: "volume",
+      Source: "evcp-ws-leave-tracker-data",
+      Target: "/workspace",
+      VolumeOptions: { NoCopy: true }
+    }
+  ]);
   assert.equal(body.Labels["evcp.project-slug"], "leave-tracker");
   assert.ok(!("PortBindings" in body.HostConfig), "must never publish host ports");
 });
@@ -154,11 +160,13 @@ test("inspectContainer resolves a running Swarm task by service label when no ex
       if (path.startsWith("/containers/json?all=true&filters=")) {
         return {
           status: 200,
-          json: async () => [{
-            Id: "minio-task-123",
-            State: "running",
-            Labels: { "com.docker.swarm.service.name": "evcp_minio" }
-          }]
+          json: async () => [
+            {
+              Id: "minio-task-123",
+              State: "running",
+              Labels: { "com.docker.swarm.service.name": "evcp_minio" }
+            }
+          ]
         };
       }
       if (path === "/containers/minio-task-123/json") {
@@ -199,22 +207,26 @@ test("listManagedContainers uses the managed label filter and normalizes Docker 
       calls.push(path);
       return {
         status: 200,
-        json: async () => [{
-          Id: "container-123",
-          Names: ["/evcp-ws-prj-123"],
-          State: "exited",
-          Labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
-        }]
+        json: async () => [
+          {
+            Id: "container-123",
+            Names: ["/evcp-ws-prj-123"],
+            State: "exited",
+            Labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
+          }
+        ]
       };
     }
   });
 
-  assert.deepEqual(await engine.listManagedContainers(), [{
-    containerId: "container-123",
-    name: "evcp-ws-prj-123",
-    running: false,
-    labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
-  }]);
+  assert.deepEqual(await engine.listManagedContainers(), [
+    {
+      containerId: "container-123",
+      name: "evcp-ws-prj-123",
+      running: false,
+      labels: { "evcp.managed": "true", "evcp.project-id": "prj_123" }
+    }
+  ]);
   assert.match(calls[0], /^\/containers\/json\?all=true&filters=/);
 });
 
@@ -233,7 +245,8 @@ test("createContainer recovers from a 409 name conflict by removing then retryin
       calls.push(`${method} ${path}`);
       if (path.startsWith("/containers/create")) {
         createAttempts += 1;
-        if (createAttempts === 1) return { status: 409, json: async () => ({ message: "name in use" }) };
+        if (createAttempts === 1)
+          return { status: 409, json: async () => ({ message: "name in use" }) };
         return { status: 201, json: async () => ({ Id: "abc123" }) };
       }
       return { status: 204, json: async () => ({}) };
@@ -243,12 +256,18 @@ test("createContainer recovers from a 409 name conflict by removing then retryin
   assert.equal(containerId, "abc123");
   // must have: create(409) -> delete by name -> create(201)
   assert.equal(createAttempts, 2);
-  assert.ok(calls.some((c) => c.startsWith("DELETE /containers/evcp-ws-leave-tracker")), "removed stale container by name");
+  assert.ok(
+    calls.some((c) => c.startsWith("DELETE /containers/evcp-ws-leave-tracker")),
+    "removed stale container by name"
+  );
 });
 
 test("error message includes the daemon message", async () => {
   const engine = createDockerSocketEngine({
     request: async () => ({ status: 500, json: async () => ({ message: "disk full" }) })
   });
-  await assert.rejects(() => engine.startContainer("abc123"), /docker engine start failed \(500\).*disk full/s);
+  await assert.rejects(
+    () => engine.startContainer("abc123"),
+    /docker engine start failed \(500\).*disk full/s
+  );
 });

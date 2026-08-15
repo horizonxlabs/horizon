@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronLeft, Plus, RotateCw, Send } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, Plus, RotateCw, Send, Square } from "lucide-react";
 import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
@@ -38,6 +38,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     vibeMessages,
     promptDraft,
     setPromptDraft,
+    cancelVibe,
     handleVibeChat,
     approveAndImplement,
     vibePreviewKey,
@@ -315,6 +316,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                       </Button>
                     ))}
                   </div>
+                  {isVibing ? (
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={cancelVibe}
+                      aria-label="Stop generation"
+                      title="Stop generation"
+                    >
+                      <Square size={15} aria-hidden="true" />
+                    </Button>
+                  ) : null}
                   <Button
                     variant="primary"
                     type="button"

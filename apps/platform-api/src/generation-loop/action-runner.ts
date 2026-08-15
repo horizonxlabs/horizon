@@ -6,6 +6,7 @@ import { applyFindReplace } from "./find-replace";
 import { containsTransactionControl } from "./migration-runner";
 import { boundedExecution, boundedExecutionError } from "./action-execution-boundary";
 import type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
+import { workspaceShellCommand } from "./workspace-shell-command";
 
 export { applyFindReplace };
 export type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
@@ -313,7 +314,7 @@ export function createActionRunner(deps: {
       }
 
       if (action.type === "shell") {
-        const cmd = action.args ? [action.command, ...action.args] : ["sh", "-c", action.command];
+        const cmd = workspaceShellCommand(action);
         const maxOutputBytes = input.maxOutputBytes ?? Number.MAX_SAFE_INTEGER;
         // Stream the output live when the engine + caller support it; otherwise run buffered.
         if (input.onShellOutput && deps.docker.execInContainerStream) {

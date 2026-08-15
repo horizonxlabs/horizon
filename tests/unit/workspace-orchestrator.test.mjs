@@ -32,9 +32,15 @@ function createRuntimeRecordStore() {
   const snapshots = new Map();
   return {
     snapshots,
-    async list() { return [...snapshots.values()]; },
-    async save(snapshot) { snapshots.set(snapshot.record.projectId, structuredClone(snapshot)); },
-    async remove(projectId) { snapshots.delete(projectId); }
+    async list() {
+      return [...snapshots.values()];
+    },
+    async save(snapshot) {
+      snapshots.set(snapshot.record.projectId, structuredClone(snapshot));
+    },
+    async remove(projectId) {
+      snapshots.delete(projectId);
+    }
   };
 }
 

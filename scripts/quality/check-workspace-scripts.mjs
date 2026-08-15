@@ -2,6 +2,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
+import { validateWorkspaceContracts } from "./workspace-contracts.mjs";
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const workspace = YAML.parse(readFileSync("pnpm-workspace.yaml", "utf8"));
@@ -49,7 +50,9 @@ function listWorkspacePackageDirs() {
   return dirs;
 }
 
-for (const packageDir of listWorkspacePackageDirs()) {
+const workspacePackageDirs = listWorkspacePackageDirs();
+
+for (const packageDir of workspacePackageDirs) {
   const packageJsonPath = join(packageDir, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
   for (const scriptName of ["build", "typecheck"]) {
@@ -58,6 +61,15 @@ for (const packageDir of listWorkspacePackageDirs()) {
     }
   }
 }
+
+failures.push(
+  ...validateWorkspaceContracts(
+    workspacePackageDirs.map((directory) => ({
+      directory,
+      manifest: JSON.parse(readFileSync(join(directory, "package.json"), "utf8"))
+    }))
+  )
+);
 
 if (failures.length > 0) {
   console.error(failures.join("\n"));

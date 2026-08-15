@@ -276,6 +276,20 @@ test("ProjectsPage is create-first: shows the create CTA and no free-text prompt
   assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
 });
 
+test("WorkspacePage offers an accessible stop control during generation", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(WorkspacePage, {
+      app: {
+        ...app,
+        isVibing: true,
+        cancelVibe() {}
+      }
+    })
+  );
+
+  assert.match(html, /aria-label="Stop generation"/);
+});
+
 test("UsersPage visibly presents access decision feedback with alert semantics", () => {
   const html = renderWithHook((app) =>
     React.createElement(UsersPage, {
@@ -292,7 +306,10 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
 
 test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
-  assert.match(html, /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/);
+  assert.match(
+    html,
+    /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/
+  );
   assert.match(html, /สร้าง Project ใหม่/);
   assert.doesNotMatch(html, /hz-prompt-cta/);
 });
@@ -305,7 +322,9 @@ test("PrdPage offers API-backed PRD recovery with the @evcp/ui Button primitive"
 test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
   window.location.pathname = "/creator/projects/project-1";
   const html = renderWithHook((app) =>
-    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+    React.createElement(WorkspacePage, {
+      app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } }
+    })
   );
   assert.doesNotMatch(html, /class="vibe-live-tab /);
   assert.doesNotMatch(html, /class="[^"]*vibe-live-icon-btn/);
@@ -337,7 +356,9 @@ test("WorkspacePage renders contextual Quick Messages", () => {
 test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input)", () => {
   window.location.pathname = "/creator/projects/project-1";
   const html = renderWithHook((app) =>
-    React.createElement(WorkspacePage, { app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } } })
+    React.createElement(WorkspacePage, {
+      app: { ...app, bootstrap: { ...app.bootstrap, status: "ready" } }
+    })
   );
   assert.doesNotMatch(html, /class="vibe-live-send"/);
   assert.doesNotMatch(html, /class="vibe-live-input"/);
@@ -346,7 +367,9 @@ test("WorkspacePage composer uses primitive Textarea + Button (no raw send/input
 test("WorkspaceCodePanel renders on primitives without throwing", () => {
   window.location.pathname = "/creator/projects/project-1";
   const html = renderWithHook((app) =>
-    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "code", bootstrap: { ...app.bootstrap, status: "ready" } } })
+    React.createElement(WorkspacePage, {
+      app: { ...app, vibeTab: "code", bootstrap: { ...app.bootstrap, status: "ready" } }
+    })
   );
   assert.equal(typeof html, "string");
 });
@@ -354,7 +377,9 @@ test("WorkspaceCodePanel renders on primitives without throwing", () => {
 test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
   window.location.pathname = "/creator/projects/project-1";
   const html = renderWithHook((app) =>
-    React.createElement(WorkspacePage, { app: { ...app, vibeTab: "database", bootstrap: { ...app.bootstrap, status: "ready" } } })
+    React.createElement(WorkspacePage, {
+      app: { ...app, vibeTab: "database", bootstrap: { ...app.bootstrap, status: "ready" } }
+    })
   );
   assert.equal(typeof html, "string");
 });

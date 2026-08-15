@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@evcp/api-client": "workspace:*",
-    "@evcp/config": "workspace:*",
     "@evcp/types": "workspace:*",
     "@evcp/ui": "workspace:*",
     "lucide-react": "^1.31.0",

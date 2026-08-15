@@ -91,10 +91,12 @@ async function* runLockedTurn(
   const migrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
   let toolCalls = 0;
   let assistantText = "";
+  let currentAssistantDeltaText = "";
   let promptTokens = 0;
   let completionTokens = 0;
   let session: Awaited<ReturnType<typeof createHorizonPiSession>> | undefined;
   let queue: PiSessionEventQueue | undefined;
+  let detachSessionAbort: (() => void) | undefined;
   const actionIds: string[] = [];
   const actions: WorkspaceChatAction[] = [];
   const writtenPaths = new Set<string>();
@@ -139,11 +141,18 @@ async function* runLockedTurn(
       messages: history,
       currentMessageId: userMessage.id
     });
+    const abortSession = () => {
+      void session?.abort().catch(() => undefined);
+    };
+    signal.addEventListener("abort", abortSession, { once: true });
+    detachSessionAbort = () => signal.removeEventListener("abort", abortSession);
+    if (signal.aborted) abortSession();
     queue = new PiSessionEventQueue(session);
     for await (const event of queue.prompt(input.prompt)) {
       collectEvent(event);
       for (const adapted of adaptPiEvent(event)) yield adapted;
     }
+    signal.throwIfAborted();
     ensureNoFailedTool(failedTool);
 
     if (mode === "build") {
@@ -153,6 +162,7 @@ async function* runLockedTurn(
           collectEvent(event);
           for (const adapted of adaptPiEvent(event)) yield adapted;
         }
+        signal.throwIfAborted();
         ensureNoFailedTool(failedTool);
         const remainingIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
         if (remainingIssues.length > 0) throw new Error(remainingIssues.join("\n"));
@@ -171,12 +181,14 @@ async function* runLockedTurn(
             collectEvent(event);
             for (const adapted of adaptPiEvent(event)) yield adapted;
           }
+          signal.throwIfAborted();
           ensureNoFailedTool(failedTool);
         }
       }
       if (validationFailure) throw validationFailure;
     }
 
+    signal.throwIfAborted();
     const assistant = createAssistantChatMessage({
       projectId: input.projectId,
       content: assistantText,
@@ -214,31 +226,48 @@ async function* runLockedTurn(
     }
   } catch (error) {
     await session?.abort().catch(() => undefined);
+    const errorMessage = safeToolError(error);
+    const persistedContent = input.signal?.aborted
+      ? assistantText
+      : `${assistantText}\n\n⚠️ ${errorMessage}`;
     const assistant = createAssistantChatMessage({
       projectId: input.projectId,
-      content: assistantText,
+      content: persistedContent,
       agentMode: mode,
       artifactActionIds: actionIds,
       actions,
       tokenUsage: { promptTokens, completionTokens }
     });
     await deps.chatHistory.appendMessage(assistant);
-    yield { type: "error", message: safeToolError(error) };
+    yield { type: "error", message: errorMessage };
   } finally {
+    detachSessionAbort?.();
     queue?.close();
     session?.dispose();
   }
   yield { type: "done" };
 
   function collectEvent(event: AgentSessionEvent): void {
+    if (event.type === "message_start" && event.message.role === "assistant") {
+      currentAssistantDeltaText = "";
+    }
     const delta = assistantTextDelta(event);
-    if (delta) assistantText += delta;
+    if (delta) {
+      assistantText += delta;
+      currentAssistantDeltaText += delta;
+    }
     if (event.type === "message_end" && event.message.role === "assistant") {
+      if (event.message.stopReason === "error" || event.message.stopReason === "aborted") {
+        throw new Error(event.message.errorMessage ?? `Pi model round ${event.message.stopReason}`);
+      }
       const text = event.message.content
         .filter((block) => block.type === "text")
         .map((block) => block.text)
         .join("");
-      if (text) assistantText = text;
+      if (!currentAssistantDeltaText && text) assistantText += text;
+      if (currentAssistantDeltaText && text !== currentAssistantDeltaText) {
+        throw new Error("Pi streamed assistant text does not match the completed message");
+      }
       promptTokens += event.message.usage.input;
       completionTokens += event.message.usage.output;
     }
@@ -251,6 +280,7 @@ async function* runLockedTurn(
         (details.actionType === "file" || details.actionType === "edit")
       ) {
         writtenPaths.add(details.label);
+        if (failedTool?.label === details.label) failedTool = undefined;
       }
       actionIds.push(event.toolCallId);
       actions.push({
