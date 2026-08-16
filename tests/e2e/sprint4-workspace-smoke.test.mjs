@@ -2,10 +2,11 @@ import { readAllSourceFiles } from "./read-creator-source.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -142,12 +143,12 @@ test("Sprint 4 API smoke blocks guardrail prompt before preview update", () => {
   assert.equal(response.body.data.preview.version, "preview-0000");
 });
 
-test("Sprint 4 Creator workspace UI exposes live AI planning build preview code and database tools", () => {
+test("Sprint 4 Creator workspace UI exposes one Auto Pi composer and existing workspace tools", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "Plan with AI",
-    "Build with AI",
+    "Create and understand your app with Pi",
+    "Ask Pi about the app or describe a change. Files change only when your request asks for it.",
     "Preview",
     "Code",
     "Database",
@@ -155,17 +156,16 @@ test("Sprint 4 Creator workspace UI exposes live AI planning build preview code 
     "Project files",
     "Authorizing preview",
     "Retry preview",
-    "Workspace mode",
     "committed"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const component of [
-    "WorkspaceCodePanel",
-    "WorkspaceDatabasePanel",
-    "PublishDialog"
-  ]) {
+  for (const component of ["WorkspaceCodePanel", "WorkspaceDatabasePanel", "PublishDialog"]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
+  }
+
+  for (const removedText of ["Plan with AI", "Build with AI", "Workspace mode"]) {
+    assert.doesNotMatch(creatorSource, new RegExp(removedText));
   }
 });

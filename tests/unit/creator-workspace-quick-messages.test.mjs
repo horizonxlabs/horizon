@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { buildQuickMessages } = await import(
-  "../../apps/creator-web/src/features/workspace/quick-messages.ts"
-);
+const { buildQuickMessages } =
+  await import("../../apps/creator-web/src/features/workspace/quick-messages.ts");
 
 const base = {
   project: { name: "Sales KPI Dashboard", appType: "Dashboard" },
@@ -20,28 +19,29 @@ const base = {
   hasProjectFiles: false
 };
 
-test("Build suggestions use project and PRD context", () => {
-  const messages = buildQuickMessages({ ...base, mode: "build", hasPreview: true });
+test("Auto suggestions mix explicit review and mutation intents using project context", () => {
+  const messages = buildQuickMessages({ ...base, hasPreview: true });
 
   assert.equal(messages.length, 3);
-  assert.equal(new Set(messages.map((message) => message.id)).size, 3);
-  assert.match(messages[0].label, /Sales KPI/);
-  assert.match(messages[0].prompt, /Sales KPI Dashboard/);
-  assert.match(messages[0].prompt, /sales performance/i);
-});
-
-test("Plan suggestions stay read-only and plan the first preview", () => {
-  const messages = buildQuickMessages({ ...base, mode: "plan", hasPreview: false });
-
-  assert.equal(messages.length, 3);
-  assert.match(messages.map((message) => message.label).join(" "), /Plan first preview/);
-  assert.ok(messages.every((message) => /review|plan|identify|assess/i.test(message.prompt)));
+  assert.deepEqual(
+    messages.map((message) => message.id),
+    ["next-prd-improvement", "review-prd", "polish-edge-states"]
+  );
+  assert.ok(messages.every((message) => /Sales KPI Dashboard/.test(message.prompt)));
+  assert.ok(messages.some((message) => /without changing files/i.test(message.prompt)));
+  assert.ok(messages.some((message) => /\b(?:Build|Implement|Fix|Improve)\b/.test(message.prompt)));
+  assert.ok(
+    messages.every(
+      (message) =>
+        /without changing files/i.test(message.prompt) ||
+        /\b(?:Build|Implement|Fix|Improve)\b/.test(message.prompt)
+    )
+  );
 });
 
 test("a failed workspace action becomes the recommended recovery", () => {
   const messages = buildQuickMessages({
     ...base,
-    mode: "build",
     hasPreview: true,
     messages: [
       {
@@ -61,10 +61,32 @@ test("a failed workspace action becomes the recommended recovery", () => {
 test("attached files produce a project-file suggestion", () => {
   const messages = buildQuickMessages({
     ...base,
-    mode: "build",
     hasPreview: true,
     hasProjectFiles: true
   });
 
-  assert.ok(messages.some((message) => message.id === "use-project-files"));
+  assert.deepEqual(
+    messages.map((message) => message.id),
+    ["next-prd-improvement", "review-prd", "use-project-files"]
+  );
+});
+
+test("model-authored suggestions remain authoritative", () => {
+  const messages = buildQuickMessages({
+    ...base,
+    hasPreview: true,
+    messages: [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        text: "Done.\n<suggest>Connect the live sales feed</suggest>",
+        actions: []
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    messages.map((message) => message.prompt),
+    ["Connect the live sales feed"]
+  );
 });

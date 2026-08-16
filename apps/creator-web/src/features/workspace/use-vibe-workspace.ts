@@ -1,10 +1,9 @@
 import {
   type PreviewVersionDto,
-  type WorkspaceAgentMode,
   type WorkspacePromptResultDto,
   type WorkspaceSnapshotResponse
 } from "@evcp/api-client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
 import { loadWorkspaceState } from "./api";
@@ -12,11 +11,6 @@ import { useProjectFiles } from "./use-project-files";
 import { useVibeChat } from "./use-vibe-chat";
 import { workspaceViewState } from "./workspace-view-state";
 import type { WorkspaceTab } from "./workspace-chrome";
-import { normalizeWorkspaceMode, persistWorkspaceMode, readWorkspaceMode } from "./workspace-mode";
-
-function browserStorage() {
-  return typeof window === "undefined" ? undefined : window.localStorage;
-}
 
 export function useVibeWorkspace({ selectedProject }: { selectedProject: CreatorProjectView }) {
   const [promptDraft, setPromptDraft] = useState("");
@@ -28,16 +22,12 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
   );
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
   const [vibeTab, setVibeTab] = useState<WorkspaceTab>("preview");
-  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceAgentMode>(() =>
-    readWorkspaceMode(browserStorage(), selectedProject.id)
-  );
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const projectFiles = useProjectFiles(selectedProject.id);
   const vibeChat = useVibeChat({
     selectedProjectId: selectedProject.id,
     promptDraft,
     setPromptDraft,
-    workspaceMode,
     selectedAttachmentIds: projectFiles.selectedAttachmentIds
   });
   const view = workspaceViewState({
@@ -53,23 +43,12 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     setPreviewOverride(undefined);
   }
 
-  function setWorkspaceMode(mode: WorkspaceAgentMode) {
-    const nextMode = normalizeWorkspaceMode(mode);
-    persistWorkspaceMode(browserStorage(), selectedProject.id, nextMode);
-    setWorkspaceModeState(nextMode);
-  }
-
-  useEffect(() => {
-    setWorkspaceModeState(readWorkspaceMode(browserStorage(), selectedProject.id));
-  }, [selectedProject.id]);
-
   async function handleSubmitPrompt() {
     setIsSubmittingPrompt(true);
     try {
       const result = await createCreatorPlatformClient().submitWorkspacePrompt(selectedProject.id, {
         prompt: promptDraft,
-        attachmentIds: projectFiles.selectedAttachmentIds,
-        agentMode: workspaceMode
+        attachmentIds: projectFiles.selectedAttachmentIds
       });
       setWorkspaceResult(result);
       setPreviewOverride(undefined);
@@ -124,8 +103,6 @@ export function useVibeWorkspace({ selectedProject }: { selectedProject: Creator
     ...vibeChat,
     vibeTab,
     setVibeTab,
-    workspaceMode,
-    setWorkspaceMode,
     isRefreshingPreview,
     setIsRefreshingPreview,
     ...projectFiles,

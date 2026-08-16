@@ -11,7 +11,6 @@ type VibeChatOptions = {
   selectedProjectId: string;
   promptDraft: string;
   setPromptDraft: (prompt: string) => void;
-  workspaceMode: WorkspaceAgentMode;
   selectedAttachmentIds: string[];
 };
 
@@ -19,7 +18,6 @@ export function useVibeChat({
   selectedProjectId,
   promptDraft,
   setPromptDraft,
-  workspaceMode,
   selectedAttachmentIds
 }: VibeChatOptions) {
   const [vibeMessages, setVibeMessages] = useState<VibeMessage[]>([]);
@@ -60,7 +58,7 @@ export function useVibeChat({
   }) {
     const projectId = overrides?.projectId ?? selectedProjectId;
     const prompt = (overrides?.prompt ?? promptDraft).trim();
-    const mode = overrides?.mode ?? workspaceMode;
+    const mode = overrides?.mode ?? "auto";
     if (!projectId || !prompt) return;
     // Busy = the request waits its turn in the queue instead of being rejected. It becomes a
     // real chat message only when the drain effect picks it up. (Approve-plan turns carry
@@ -100,7 +98,7 @@ export function useVibeChat({
     activeStreamAbort.current?.abort();
     activeStreamAbort.current = streamController;
     try {
-      if (mode === "build") await ensureVibeWorkspace(projectId, streamController.signal);
+      if (mode !== "plan") await ensureVibeWorkspace(projectId, streamController.signal);
       setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "AI is working…");
       await streamVibeChat(
         projectId,

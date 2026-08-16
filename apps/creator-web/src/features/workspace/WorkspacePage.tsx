@@ -16,7 +16,7 @@ import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
 import { extractQuestions, stripQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
-import { MODE_OPTIONS, TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
+import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
 import { usePreviewGuards } from "./use-preview-guards";
 import { usePreviewAuthorization } from "./use-preview-authorization";
@@ -48,8 +48,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     projectFileMessage,
     toggleProjectFileAttachment,
     handleUploadProjectFiles,
-    workspaceMode,
-    setWorkspaceMode,
     hasPreview,
     promptQueue,
     removeQueuedPrompt,
@@ -80,7 +78,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   const isPreviewAuthorized = previewAuth.isAuthorized;
   const liveLines = turnLineTotal(vibeMessages.at(-1)?.actions ?? []);
   const quickMessages = buildQuickMessages({
-    mode: workspaceMode,
     project: selectedProject,
     prdSummary: currentPrdVersion?.changeSummary,
     prdSections: currentPrdVersion?.sections,
@@ -143,7 +140,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             variant="primary"
             type="button"
             title="Publish to staging or production"
-            disabled={workspaceMode === "plan"}
             onClick={() => setShowPublish(true)}
           >
             Publish
@@ -155,12 +151,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && (
               <div className="vibe-live-empty">
-                <div className="vibe-live-empty-title">
-                  {workspaceMode === "plan" ? "Plan with AI" : "Build with AI"}
-                </div>
-                {workspaceMode === "plan"
-                  ? "Ask analysis, tradeoffs, and implementation steps before changes are applied."
-                  : "Describe what you want. The AI writes code into your live app, runs it, and commits each change."}
+                <div className="vibe-live-empty-title">Create and understand your app with Pi</div>
+                <p>
+                  {
+                    "Ask Pi about the app or describe a change. Files change only when your request asks for it."
+                  }
+                </p>
               </div>
             )}
             {vibeMessages.map((message, messageIndex) =>
@@ -195,9 +191,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}
                       disabled={isVibing}
-                      onSubmit={(answer) =>
-                        void handleVibeChat({ prompt: answer, mode: workspaceMode })
-                      }
+                      onSubmit={(answer) => void handleVibeChat({ prompt: answer })}
                     />
                   )}
                   <VibeActionSummary actions={message.actions} />
@@ -225,7 +219,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               items={quickMessages}
               disabled={isVibing}
               onSubmit={(prompt) => {
-                void handleVibeChat({ prompt, mode: workspaceMode });
+                void handleVibeChat({ prompt });
               }}
             />
           )}
@@ -268,7 +262,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <Textarea
-                aria-label={workspaceMode === "plan" ? "Ask AI to plan" : "Ask AI to build"}
+                aria-label="Ask Pi about the app or describe a change"
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -280,9 +274,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 placeholder={
                   isVibing
                     ? "พิมพ์สั่งต่อได้เลย — งานจะเข้าคิวรอ"
-                    : workspaceMode === "plan"
-                      ? "Ask for plan or review..."
-                      : "Ask AI to build…"
+                    : "Ask Pi about the app or describe a change…"
                 }
                 rows={1}
               />
@@ -301,21 +293,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   <Plus size={18} />
                 </label>
                 <div className="vibe-composer-right">
-                  <div className="vibe-mode-switch" role="group" aria-label="Workspace mode">
-                    {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
-                      <Button
-                        key={value}
-                        variant={workspaceMode === value ? "primary" : "secondary"}
-                        type="button"
-                        onClick={() => setWorkspaceMode(value)}
-                        aria-pressed={workspaceMode === value}
-                        title={description}
-                      >
-                        <Icon size={13} />
-                        <span>{label}</span>
-                      </Button>
-                    ))}
-                  </div>
                   {isVibing ? (
                     <Button
                       variant="secondary"
