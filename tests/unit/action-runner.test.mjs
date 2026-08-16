@@ -123,10 +123,10 @@ test("writes a non-locked file via a base64-encoded shell write", async () => {
   assert.equal(result.ok, true);
   // the drift guard runs a `wc -c` size check first, then the base64 write; find the write call
   const call = docker.state.execCalls.find((c) =>
-    /mkdir -p .*app.*&&.*base64 -d.*app\/page\.tsx/s.test(c.cmd[2] ?? "")
+    /mkdir -p .*app.*&&.*base64 -d.*app\/page\.tsx/s.test(c.cmd.at(-1) ?? "")
   );
   assert.ok(call, "expected a base64 write to app/page.tsx");
-  assert.equal(call.cmd[0], "sh");
+  assert.deepEqual(call.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
 });
 
 test("runs a shell action and reports failure with stdout/stderr/exitCode on non-zero exit", async () => {

@@ -11,6 +11,10 @@ import { workspaceShellCommand } from "./workspace-shell-command";
 export { applyFindReplace };
 export type { ActionResult, ActionRunner, RunnableAction } from "./action-runner-types";
 
+function workspaceWriteCommand(script: string): string[] {
+  return ["su", "-s", "/bin/sh", "evcp", "-c", script];
+}
+
 // Read the CURRENT file (base64, byte-safe), apply the fuzzy find/replace so untouched regions
 // stay byte-for-byte identical, and write it back. Shared by the edit action and by the recovery
 // path that reinterprets a leaked SEARCH/REPLACE block wrapped in a type="file" action.
@@ -52,11 +56,10 @@ async function applyEditToFile(
     };
   }
   const encoded = Buffer.from(edited.content, "utf8").toString("base64");
-  const result = await docker.execInContainer(containerId, [
-    "sh",
-    "-c",
-    `echo ${encoded} | base64 -d > ${filePath}`
-  ]);
+  const result = await docker.execInContainer(
+    containerId,
+    workspaceWriteCommand(`echo ${encoded} | base64 -d > ${filePath}`)
+  );
   if (result.exitCode !== 0) {
     return {
       ok: false,
@@ -118,11 +121,10 @@ export function createActionRunner(deps: {
           `mkdir -p prisma/migrations/${name} && echo ${encoded} | base64 -d > prisma/migrations/${name}/migration.sql`
         );
       }
-      const result = await deps.docker.execInContainer(input.containerId, [
-        "sh",
-        "-c",
-        scripts.join(" && ")
-      ]);
+      const result = await deps.docker.execInContainer(
+        input.containerId,
+        workspaceWriteCommand(scripts.join(" && "))
+      );
       if (result.exitCode !== 0) {
         return {
           ok: false,
@@ -265,7 +267,10 @@ export function createActionRunner(deps: {
         if (!input.containerId) {
           return { ok: false, error: "missing containerId", stdout: "", stderr: "", exitCode: -1 };
         }
-        const result = await deps.docker.execInContainer(input.containerId, ["sh", "-c", script]);
+        const result = await deps.docker.execInContainer(
+          input.containerId,
+          workspaceWriteCommand(script)
+        );
         if (result.exitCode !== 0) {
           return {
             ok: false,

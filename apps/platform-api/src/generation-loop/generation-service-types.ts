@@ -25,6 +25,7 @@ export interface GenerationServiceDeps {
   readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
   workspaceGuard: {
     prepare(projectId: string): Promise<string>;
+    hasChanges(projectId: string): Promise<boolean>;
     validate(projectId: string): Promise<void>;
     restore(projectId: string, commitSha: string): Promise<void>;
   };

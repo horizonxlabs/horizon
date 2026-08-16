@@ -12,11 +12,10 @@ if [ ! -e /workspace/node_modules ]; then
 fi
 
 # Files the platform injects (tar/exec run as root) drift ownership, which must be repaired
-# before running untrusted/generated app code as the non-root user. A blanket chown -R walks
-# AND rewrites every node_modules entry on every start and dominated cold-start time; scanning
-# with find touches only entries that actually drifted (fallback to the blanket repair if the
-# scan itself fails), then privileges drop immediately for the long-lived app process.
-find /workspace -xdev ! -user evcp -exec chown evcp:evcp {} + || chown -R evcp:evcp /workspace
+# before running untrusted/generated app code as the non-root user. The physical, same-device
+# scan touches only wrong-owned entries; chown -h prevents an attacker-controlled symlink from
+# changing the ownership of a target outside /workspace.
+find /workspace -xdev ! -user evcp -exec chown -h evcp:evcp {} +
 
 exec su -s /bin/sh evcp -c '
   cd /workspace

@@ -27,11 +27,13 @@ test("commit initializes the repo, stages all, commits, and returns the HEAD sha
   assert.equal(sha, "abc123def456");
   // one combined shell invocation into the right container
   assert.equal(docker.calls[0].containerId, "container-1");
+  assert.deepEqual(docker.calls[0].cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
   const script = docker.calls.map((c) => c.cmd.join(" ")).join(" | ");
   // Subcommands are present (each git call is prefixed with -c safe.directory=/workspace).
   assert.match(script, / init -q/);
   assert.match(script, / add -A/);
   assert.match(script, / commit /);
+  assert.doesNotMatch(script, /commit --allow-empty/);
   // commit message is passed (shell-safe)
   assert.match(script, /AI: add a home page/);
   // every git call guards against "dubious ownership" (exit 128) on differently-owned mounts
@@ -55,11 +57,75 @@ test("prepare creates an initial baseline without discarding failed-turn repair 
   const sha = await workspace.prepare("c1");
 
   assert.equal(sha, "base123");
-  const script = docker.calls[0].cmd.join(" ");
+  assert.equal(docker.calls.length, 2);
+  assert.deepEqual(docker.calls[0].cmd.slice(0, 2), ["sh", "-c"]);
+  assert.match(
+    docker.calls[0].cmd[2],
+    /find \/workspace -xdev ! -user evcp -exec chown -h evcp:evcp \{\} \+/
+  );
+  assert.doesNotMatch(docker.calls[0].cmd[2], /chown -R|chown evcp:evcp/);
+  assert.deepEqual(docker.calls[1].cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  const script = docker.calls[1].cmd.join(" ");
   assert.match(script, /rev-parse --verify HEAD/);
   assert.doesNotMatch(script, /reset --hard HEAD/);
   assert.doesNotMatch(script, /clean -fd/);
   assert.match(script, /EVCP initial workspace/);
+  assert.match(script, /commit --allow-empty/);
+});
+
+test("prepare reports a clear error when ownership repair fails", async () => {
+  const docker = fakeDocker([
+    ["find /workspace", { stdout: "", stderr: "permission denied", exitCode: 1 }]
+  ]);
+  const workspace = createContainerGitCommitter(docker);
+
+  await assert.rejects(
+    () => workspace.prepare("c1"),
+    /workspace ownership repair failed \(exit 1\).*permission denied/i
+  );
+  assert.equal(docker.calls.length, 1);
+});
+
+test("hasChanges returns false for a clean workspace", async () => {
+  const docker = fakeDocker([["status --porcelain", { stdout: "\n", stderr: "", exitCode: 0 }]]);
+  const workspace = createContainerGitCommitter(docker);
+
+  assert.equal(await workspace.hasChanges("c1"), false);
+
+  const script = docker.calls[0].cmd.join(" ");
+  assert.deepEqual(docker.calls[0].cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  assert.match(
+    script,
+    /git -c safe\.directory=\/workspace status --porcelain --untracked-files=normal/
+  );
+});
+
+test("hasChanges returns true for tracked and untracked workspace changes", async () => {
+  const docker = fakeDocker([
+    [
+      "status --porcelain",
+      { stdout: " M app/page.tsx\n?? public/logo.svg\n", stderr: "", exitCode: 0 }
+    ]
+  ]);
+  const workspace = createContainerGitCommitter(docker);
+
+  assert.equal(await workspace.hasChanges("c1"), true);
+
+  const script = docker.calls[0].cmd.join(" ");
+  assert.match(script, /--untracked-files=normal/);
+  assert.match(script, /status --porcelain/);
+});
+
+test("hasChanges reports a clear error when git status fails", async () => {
+  const docker = fakeDocker([
+    ["status --porcelain", { stdout: "", stderr: "fatal: not a git repository", exitCode: 128 }]
+  ]);
+  const workspace = createContainerGitCommitter(docker);
+
+  await assert.rejects(
+    () => workspace.hasChanges("c1"),
+    /workspace status failed \(exit 128\).*not a git repository/i
+  );
 });
 
 test("validate builds from a disposable source tree and always cleans it", async () => {

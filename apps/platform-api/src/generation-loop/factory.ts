@@ -107,6 +107,9 @@ export async function createDefaultGenerationService(opts: {
         opts.orchestrator.markActivity(projectId);
         return gitCommitter.prepare(workspaceContainerId(opts.orchestrator, projectId));
       },
+      hasChanges: async (projectId) => {
+        return gitCommitter.hasChanges(workspaceContainerId(opts.orchestrator, projectId));
+      },
       validate: async (projectId) => {
         await gitCommitter.validate(workspaceContainerId(opts.orchestrator, projectId));
       },

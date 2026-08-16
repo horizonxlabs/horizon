@@ -10,9 +10,10 @@ test("workspace image repairs mounted workspace ownership before dropping privil
     dockerfile,
     /COPY docker\/workspace-entrypoint\.sh \/usr\/local\/bin\/workspace-entrypoint/
   );
-  // Selective repair: only wrong-owned entries are touched, with the blanket chown as fallback.
-  assert.match(entrypoint, /! -user evcp/);
-  assert.match(entrypoint, /\|\| chown -R evcp:evcp \/workspace/);
+  // Selective physical repair stays within the workspace device and never dereferences a
+  // workspace-controlled symlink to change ownership of its target.
+  assert.match(entrypoint, /find \/workspace -xdev ! -user evcp -exec chown -h evcp:evcp \{\} \+/);
+  assert.doesNotMatch(entrypoint, /chown -R|chown evcp:evcp/);
   assert.match(entrypoint, /exec su -s \/bin\/sh evcp -c/);
 });
 
