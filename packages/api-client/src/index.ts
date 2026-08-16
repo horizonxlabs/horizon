@@ -263,7 +263,7 @@ export type WorkspaceTokenBudgetDto = {
   requestEstimate: number;
 };
 
-export type WorkspaceAgentMode = "plan" | "build";
+export type WorkspaceAgentMode = "auto" | "plan" | "build";
 
 export type WorkspacePromptInput = {
   prompt: string;

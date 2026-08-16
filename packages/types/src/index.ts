@@ -104,7 +104,7 @@ export interface EnvironmentRecord {
 
 // --- MVP Plan 4: AI Generation Loop ---
 
-export type WorkspaceAgentMode = "plan" | "build";
+export type WorkspaceAgentMode = "auto" | "plan" | "build";
 
 export type ChatMessageRole = "user" | "assistant" | "system";
 
