@@ -12,7 +12,7 @@ import { resolvePiAgentLimits } from "./pi-limits";
 import { createHorizonPiSession } from "./pi-session-context";
 import { PiSessionEventQueue } from "./pi-session-event-queue";
 import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
-import { buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
+import { buildAutoSystemPrompt, buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
@@ -53,7 +53,8 @@ async function* runLockedTurn(
     yield { type: "done" };
     return;
   }
-  const mode: WorkspaceAgentMode = input.agentMode === "plan" ? "plan" : "build";
+  const mode: WorkspaceAgentMode =
+    input.agentMode === "plan" || input.agentMode === "build" ? input.agentMode : "auto";
   const userMessage = createUserChatMessage(input.projectId, input.prompt, mode);
   await deps.chatHistory.appendMessage(userMessage);
   const history = await deps.chatHistory.listMessages(input.projectId);
@@ -84,7 +85,11 @@ async function* runLockedTurn(
     approvedPlan: input.approvedPlan
   };
   const systemPrompt =
-    mode === "plan" ? buildPlanSystemPrompt(systemInput) : buildSystemPrompt(systemInput);
+    mode === "plan"
+      ? buildPlanSystemPrompt(systemInput)
+      : mode === "auto"
+        ? buildAutoSystemPrompt(systemInput)
+        : buildSystemPrompt(systemInput);
   if (mode === "build") await deps.workspaceGuard.prepare(input.projectId);
   const timeoutSignal = AbortSignal.timeout(limits.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;

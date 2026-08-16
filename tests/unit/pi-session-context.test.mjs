@@ -7,6 +7,7 @@ import test from "node:test";
 import { createHorizonPiRuntime } from "../../apps/platform-api/src/generation-loop/pi-provider.ts";
 import { createHorizonPiSession } from "../../apps/platform-api/src/generation-loop/pi-session-context.ts";
 import {
+  buildAutoSystemPrompt,
   buildPlanSystemPrompt,
   buildSystemPrompt
 } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
@@ -149,4 +150,29 @@ test("Build session enables seven Horizon tools and approved plan context", asyn
   assert.deepEqual(session.getActiveToolNames(), toolNames);
   assert.match(session.systemPrompt, /Step 1: add a sales dashboard/);
   assert.doesNotMatch(session.systemPrompt, /<artifact>|<action/);
+});
+
+test("Auto session enables all Horizon custom tools while Pi built-ins stay disabled", async () => {
+  const { modelRuntime, model } = await runtime();
+  const systemPrompt = buildAutoSystemPrompt({
+    template,
+    contextFiles: [],
+    rollingSummary: null
+  });
+  const session = await createHorizonPiSession({
+    modelRuntime,
+    model,
+    turnId: "turn-auto",
+    mode: "auto",
+    systemPrompt,
+    customTools: toolNames.map(customTool),
+    messages: []
+  });
+
+  assert.deepEqual(session.getActiveToolNames(), toolNames);
+  assert.equal(session.getActiveToolNames().length, 7);
+  assert.equal(
+    session.getActiveToolNames().some((name) => ["bash", "read", "write", "edit"].includes(name)),
+    false
+  );
 });

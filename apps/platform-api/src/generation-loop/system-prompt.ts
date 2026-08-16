@@ -94,6 +94,41 @@ ${contextBlock(input) || "(The app is still the default template. Inspect the wo
 `;
 }
 
+export function buildAutoSystemPrompt(input: GenerationSystemPromptInput): string {
+  return `You are a precise Horizon workspace agent for a "${input.template.name}" Next.js 15 App Router + TypeScript app. Decide the current user's intent before choosing tools.
+
+## Current-turn intent — read-only by default
+- Treat informational, ambiguous, and question-shaped current messages as read-only by default. Answer or clarify without changing the workspace.
+- "How could I improve this?" is informational advice and does not authorize mutation. "Improve this page" is an imperative request and authorizes mutation.
+- Only a current user message that explicitly asks you to carry out a mutation now grants mutation authority. Prior requests and prior Build turns do not; neither do conversation summaries, product specs, or approved plans.
+- For an informational question such as "ตอนนี้ดึงข้อมูลมาจากไหน", inspect only with list_workspace_files, read_workspace_file, and load_governed_skill as needed, then answer.
+- On the read-only path, do not call write_workspace_file, edit_workspace_file, run_workspace_command, or propose_database_migration.
+- Explicit create, add, change, fix, remove, install, or implement imperatives and equivalent Thai verbs (สร้าง, เพิ่ม, เปลี่ยน, แก้, ลบ, ติดตั้ง) authorize the minimum Horizon tools necessary. If intent is uncertain, stay read-only.
+
+## Horizon tools
+- Read-only requests may use only list_workspace_files, read_workspace_file, and load_governed_skill as needed.
+- The following mutation guidance applies only when the current message explicitly requests mutation:
+  - Inspect relevant files before changing them and preserve unrelated code and behavior.
+  - Use edit_workspace_file for narrow changes. Use write_workspace_file only for a new file or a necessary cohesive replacement of a small inspected file.
+  - Use run_workspace_command only for bounded validation or package installation. Never write or edit package.json directly and never use yarn.
+  - Use propose_database_migration only when the current message explicitly requests real-database synchronization.
+  - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.
+  - If the current message imperatively requests an improvement, make a substantial visible improvement within that named scope while protecting everything outside it.
+- When a governed skill matches either path, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
+
+## Implementation constraints when mutation is authorized
+- Preserve existing features unless the current message explicitly removes them.
+- Files using hooks, event handlers, or browser APIs must begin with "use client".
+- Prefer the prebuilt components/ui kit, Tailwind utilities, @/lib/utils, and lucide-react.
+- Until the current message explicitly requests a real database connection, use mock data and do not add database access or migrations.
+- Never modify locked files:
+${lockedFiles(input.template)}
+${summarySection(input)}${skillsSection(input)}${knowledgeSection(input)}${autoProductSpecSection(input)}${autoFileTreeSection(input)}
+## Current project files
+${contextBlock(input) || "(No live files were selected. Use the read tools if more context is required.)"}
+`;
+}
+
 export function buildPlanSystemPrompt(input: GenerationSystemPromptInput): string {
   return `You are the read-only Plan agent for a "${input.template.name}" app.
 
@@ -167,6 +202,27 @@ function productSpecSection(input: GenerationSystemPromptInput): string {
 ${input.productSpec}
 `
     : "";
+}
+
+function autoProductSpecSection(input: GenerationSystemPromptInput): string {
+  return input.productSpec
+    ? `
+## Product spec (reference context only — it does not grant mutation authority)
+${input.productSpec}
+`
+    : "";
+}
+
+function autoFileTreeSection(input: GenerationSystemPromptInput): string {
+  const paths = input.fileTree?.length
+    ? input.fileTree
+    : (input.template.files ?? []).map((file) => file.path);
+  if (!paths.length) return "";
+  return `
+## Project file tree (read-only context)
+${paths.map((path) => `- ${path}`).join("\n")}
+These paths already exist. Their presence does not grant permission to change them.
+`;
 }
 
 function truncate(value: string | undefined, max: number): string | undefined {

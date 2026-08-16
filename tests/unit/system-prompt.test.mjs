@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSystemPrompt } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
+import {
+  buildAutoSystemPrompt,
+  buildSystemPrompt
+} from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
 
 test("system prompt lists locked files and embeds context file contents and rolling summary", () => {
   const template = {
@@ -29,4 +32,59 @@ test("omits the rolling summary section when there is no summary yet", () => {
   const template = { name: "nextjs-base", lockedFiles: [], files: [] };
   const prompt = buildSystemPrompt({ template, contextFiles: [], rollingSummary: null });
   assert.doesNotMatch(prompt, /Conversation summary so far/);
+});
+
+test("Auto prompt answers informational questions without mutation authority", () => {
+  const template = { name: "nextjs-base", lockedFiles: [], files: [] };
+  const prompt = buildAutoSystemPrompt({ template, contextFiles: [], rollingSummary: null });
+
+  assert.match(prompt, /informational, ambiguous, and question-shaped.*read-only by default/is);
+  assert.match(prompt, /How could I improve this\?.*does not authorize mutation/is);
+  assert.match(prompt, /Improve this page.*authorizes mutation/is);
+  assert.match(
+    prompt,
+    /only a current user message that explicitly asks.*carry out a mutation now grants mutation authority/is
+  );
+  assert.match(prompt, /prior requests and prior Build turns do not/i);
+  assert.match(prompt, /ตอนนี้ดึงข้อมูลมาจากไหน/);
+  assert.match(
+    prompt,
+    /do not call.*write_workspace_file.*edit_workspace_file.*run_workspace_command.*propose_database_migration/is
+  );
+  assert.match(prompt, /Explicit create, add, change, fix, remove, install, or implement/i);
+  assert.match(prompt, /สร้าง|เพิ่ม|เปลี่ยน|แก้|ลบ|ติดตั้ง/);
+  assert.doesNotMatch(prompt, /Make the smallest complete change/i);
+  assert.doesNotMatch(prompt, /Improvement requests — go deep/i);
+  assert.doesNotMatch(prompt, /Continue using tools until/i);
+});
+
+test("Auto excludes prior build authority while explicit Build retains it", () => {
+  const template = { name: "nextjs-base", lockedFiles: [], files: [] };
+  const input = {
+    template,
+    contextFiles: [],
+    rollingSummary: null,
+    productSpec: "Keep the existing informational page architecture.",
+    approvedPlan: "Step 1: replace the informational page with a dashboard."
+  };
+
+  const autoPrompt = buildAutoSystemPrompt(input);
+  const buildPrompt = buildSystemPrompt(input);
+
+  assert.match(autoPrompt, /read-only by default/i);
+  assert.doesNotMatch(
+    autoPrompt,
+    /Approved plan|implement exactly it|replace the informational page/
+  );
+  assert.doesNotMatch(autoPrompt, /Product spec.*build toward it/is);
+  assert.doesNotMatch(autoPrompt, /Make the smallest complete change/i);
+  assert.doesNotMatch(autoPrompt, /Improvement requests — go deep/i);
+  assert.doesNotMatch(autoPrompt, /Continue using tools until/i);
+  assert.match(autoPrompt, /Product spec.*reference context only/is);
+  assert.match(buildPrompt, /Approved plan.*implement exactly it/is);
+  assert.match(buildPrompt, /replace the informational page/);
+  assert.match(buildPrompt, /Product spec.*build toward it/is);
+  assert.match(buildPrompt, /Make the smallest complete change/i);
+  assert.match(buildPrompt, /Improvement requests — go deep/i);
+  assert.match(buildPrompt, /Continue using tools until/i);
 });
