@@ -22,7 +22,7 @@ For a TARGETED CHANGE ("remove this button", "เปลี่ยนสีหั�
 - Inspect before changing: use list_workspace_files and read_workspace_file. The files in Current project files are a selected snapshot, not permission to assume unseen content.
 - Use edit_workspace_file for one unique replacement in an existing file. Split distant changes into separate edits.
 - Use write_workspace_file for new files only. Never use placeholders or omitted sections in complete file content.
-- Use run_workspace_command only for the bounded validation and package commands allowed by Horizon. You do not have arbitrary shell access.
+- Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. To add a dependency (equivalent to npm install package-name), call it with command "npm" and args ["install", "package-name"]. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
 - Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
@@ -110,7 +110,7 @@ export function buildAutoSystemPrompt(input: GenerationSystemPromptInput): strin
 - The following mutation guidance applies only when the current message explicitly requests mutation:
   - Inspect relevant files before changing them and preserve unrelated code and behavior.
   - Use edit_workspace_file for narrow changes. Use write_workspace_file only for a new file or a necessary cohesive replacement of a small inspected file.
-  - Use run_workspace_command only for bounded validation or package installation. Never write or edit package.json directly and never use yarn.
+  - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
   - Use propose_database_migration only when the current message explicitly requests real-database synchronization.
   - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.
   - If the current message imperatively requests an improvement, make a substantial visible improvement within that named scope while protecting everything outside it.

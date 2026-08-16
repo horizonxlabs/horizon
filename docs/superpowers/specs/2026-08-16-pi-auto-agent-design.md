@@ -101,7 +101,8 @@ Read-only answers therefore remain fast and do not start unnecessary Next.js bui
 
 - A read-only tool failure may be reported in the answer without changing or restoring source.
 - Any mutation tool failure remains available to Pi for correction within the configured round/tool budgets.
-- Failed validation, cancellation, timeout, persistence failure, or migration failure after preparation restores the captured base commit.
+- Recovery is phase-aware. During the reversible phase—before a database migration can apply and before checkpoint creation is invoked—an abort or failure restores the exact prepared workspace snapshot. A migration result of `not_applied` remains in this phase. The turn creates no checkpoint and emits no `commit` evidence, even if a candidate Git commit had already been created.
+- Finalization becomes irreversible or effect-unknown as soon as a migration result is `may_have_applied` or `applied`, or checkpoint creation has been invoked and may have persisted. A late cancellation, evidence-persistence failure, or other finalization error then preserves the candidate Git commit, completes the remaining safe finalization work, persists one warning with the candidate SHA, and emits `commit` → `error` → `done`. Horizon must not claim that this phase was rolled back; operators reconcile the database, checkpoint, and evidence state from the preserved SHA.
 - If Pi attempts a mutation while answering an informational request, tests and the prompt contract treat that as a product defect. Horizon's locked-file, shell, Docker, path, quota, and audit policies still constrain the attempted action.
 - Existing explicit Plan mode remains server-enforced read-only for compatibility and approved-plan workflows.
 
@@ -117,7 +118,7 @@ Implementation follows red-green development at public seams.
 - Auto system prompt terminates informational requests without mutation and ignores prior-turn mutation authority.
 - Git change detection distinguishes clean, dirty, and migration-bearing turns.
 - Clean Auto turns append an assistant response without validate, commit, checkpoint, or commit event.
-- Dirty Auto turns retain validate, repair, commit, migration, checkpoint, and rollback behavior.
+- Dirty Auto turns retain validate, repair, commit, migration, checkpoint, and phase-aware recovery behavior.
 - Creator refreshes preview on `commit`, not merely on `done`.
 
 ### Integration tests
@@ -152,4 +153,3 @@ Using the configured Gemma model through LM Studio:
 - Adding a second intent-classifier model call.
 - Automatically reverting historical workspace commits. The accidental `b2d4bba` commit is handled only with explicit user authorization.
 - Rewriting existing chat history rows.
-

@@ -45,11 +45,16 @@ async function memoryWorkspace() {
   const originalExec = docker.execInContainer.bind(docker);
   docker.execInContainer = async (id, command) => {
     await originalExec(id, command);
-    if (command[0] !== "sh" || command[1] !== "-c") {
+    const script =
+      command[0] === "sh" && command[1] === "-c"
+        ? command[2]
+        : command[0] === "su" && command[4] === "-c"
+          ? command[5]
+          : undefined;
+    if (script === undefined) {
       return { stdout: command[0] === "pnpm" ? "checks passed\n" : "", stderr: "", exitCode: 0 };
     }
-    const script = command[2] ?? "";
-    const sizePath = script.match(/^wc -c < ([^ ]+)/)?.[1];
+    const sizePath = script.match(/^wc -c < '([^']+)'/)?.[1];
     if (sizePath) {
       const content = files.get(sizePath);
       return {
@@ -58,7 +63,7 @@ async function memoryWorkspace() {
         exitCode: 0
       };
     }
-    const readPath = script.match(/^base64 ([^ ]+)/)?.[1];
+    const readPath = script.match(/^base64 < '([^']+)'/)?.[1];
     if (readPath) {
       const content = files.get(readPath);
       return {
@@ -70,7 +75,7 @@ async function memoryWorkspace() {
         exitCode: 0
       };
     }
-    for (const match of script.matchAll(/echo ([A-Za-z0-9+/=]+) \| base64 -d > ([^ &]+)/g)) {
+    for (const match of script.matchAll(/echo ([A-Za-z0-9+/=]+) \| base64 -d > '([^']+)'/g)) {
       files.set(match[2], Buffer.from(match[1], "base64").toString("utf8"));
     }
     return { stdout: "", stderr: "", exitCode: 0 };
@@ -176,12 +181,19 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
         lifecycle.push("prepare:base");
         return "base-sha";
       },
+      async hasChanges(_projectId, snapshot) {
+        assert.equal(snapshot, "base-sha");
+        lifecycle.push("git:changes");
+        return true;
+      },
       async validate() {
         lifecycle.push("validate");
       },
-      async restore() {
+      async restore() {},
+      async restoreSnapshot() {
         lifecycle.push("restore");
-      }
+      },
+      async releaseSnapshot() {}
     },
     async commitAllChanges() {
       lifecycle.push("commit:candidate");
@@ -201,7 +213,11 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
       productSpec: "Build a governed sales pipeline."
     }),
     onAudit(event) {
-      lifecycle.push(`audit:${event.metadata.toolName}`);
+      lifecycle.push(
+        event.action === "workspace_snapshot_release"
+          ? `audit:snapshot-release:${event.metadata.ok}`
+          : `audit:${event.metadata.toolName}`
+      );
     },
     limits: {
       maxModelRounds: 8,
@@ -250,12 +266,15 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     "audit:run_workspace_command",
     "audit:propose_database_migration",
     "audit:propose_database_migration",
+    "git:changes",
     "validate",
     "sync:migrations",
+    "git:changes",
     "commit:candidate",
     "migrate:batch",
     "checkpoint",
-    "append:assistant"
+    "append:assistant",
+    "audit:snapshot-release:true"
   ]);
   assert.match(files.get("app/page.tsx"), /Pipeline/);
   assert.match(files.get("components/Pipeline.tsx"), /function Pipeline/);

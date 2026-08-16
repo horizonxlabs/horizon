@@ -10,6 +10,7 @@ import {
   assertSafeCommand,
   clipUtf8,
   filterAgentWorkspaceFiles,
+  hardenSafeCommandArgs,
   normalizeProjectPath,
   safeToolError,
   type PiAgentToolLimits
@@ -129,7 +130,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     context,
     "run_workspace_command",
     "Run workspace command",
-    "Run one allowlisted command with direct arguments in the project container.",
+    "Install packages or run only the build, test, typecheck, or lint project script.",
     Type.Object(
       {
         command: Type.String(),
@@ -140,13 +141,14 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     ),
     async (id, params, onUpdate) => {
       assertSafeCommand(params.command, params.args);
+      const controlledArgs = hardenSafeCommandArgs(params.args);
       const timeoutMs = Math.min(
         positiveInteger(params.timeoutMs ?? context.limits.shellTimeoutMs, "timeoutMs"),
         context.limits.shellTimeoutMs
       );
       return runAction(
         context,
-        { id, type: "shell", command: params.command, args: params.args },
+        { id, type: "shell", command: params.command, args: controlledArgs },
         timeoutMs,
         onUpdate
       );

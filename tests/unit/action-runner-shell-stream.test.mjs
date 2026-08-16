@@ -85,7 +85,7 @@ test("Pi shell actions run as the unprivileged workspace owner, bound output, an
   assert.equal(result.ok, true);
   assert.equal(result.stdout.length, 12);
   assert.deepEqual(calls[0].command.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
-  assert.match(calls[0].command[5], /cd \/workspace && exec 'pnpm' 'test'/);
+  assert.match(calls[0].command[5], /cd \/workspace && exec timeout -s TERM -k 5 60 'pnpm' 'test'/);
 
   const controller = new AbortController();
   controller.abort();
@@ -130,3 +130,55 @@ test("npm build validates in a disposable tree without replacing the live previe
   assert.match(script, /EVCP_VALIDATION_DIST_DIR=\.next/);
   assert.doesNotMatch(script, /cd \/workspace && exec 'npm' 'run' 'build'/);
 });
+
+for (const boundary of ["abort", "timeout"]) {
+  test(`shell ${boundary} waits for the underlying Docker mutation to settle`, async () => {
+    let resolveExecution;
+    let commandSettled = false;
+    const execution = new Promise((resolve) => {
+      resolveExecution = (value) => {
+        commandSettled = true;
+        resolve(value);
+      };
+    });
+    const calls = [];
+    const docker = {
+      execInContainer(containerId, command) {
+        calls.push({ containerId, command });
+        return execution;
+      }
+    };
+    const runner = createActionRunner({
+      docker,
+      checkpoints: createMemoryCheckpointStore(),
+      migrations: createMemoryMigrationStore()
+    });
+    const controller = new AbortController();
+    let returned = false;
+    const resultPromise = runner
+      .runAction({
+        containerId: "c1",
+        projectId: "p1",
+        template,
+        action: { id: "mutation", type: "shell", command: "pnpm", args: ["install"] },
+        signal: controller.signal,
+        timeoutMs: boundary === "timeout" ? 5 : 5_000
+      })
+      .then((result) => {
+        returned = true;
+        return result;
+      });
+
+    if (boundary === "abort") controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(commandSettled, false);
+    assert.equal(returned, false, "rollback/release must not advance while Docker still mutates");
+    resolveExecution({ stdout: "", stderr: "", exitCode: 0 });
+    const result = await resultPromise;
+
+    assert.equal(commandSettled, true);
+    assert.equal(result.ok, false);
+    assert.match(result.error, new RegExp(boundary === "abort" ? "aborted" : "timed out", "i"));
+    assert.match(calls[0].command.at(-1), /timeout -s TERM -k 5/);
+  });
+}

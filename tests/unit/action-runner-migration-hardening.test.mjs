@@ -18,6 +18,46 @@ async function createContainer(docker) {
   });
 }
 
+test("empty migration batch is a no-op even when database and evidence stores are unavailable", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await createContainer(docker);
+  let evidenceReads = 0;
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: {
+      async recordMigration() {
+        throw new Error("not expected");
+      },
+      async recordMigrations() {
+        throw new Error("database unavailable");
+      },
+      async listMigrations() {
+        evidenceReads += 1;
+        throw new Error("database unavailable");
+      }
+    },
+    async runMigrationBatchSql() {
+      throw new Error("Postgres unavailable");
+    }
+  });
+
+  const result = await runner.runMigrationBatch({
+    containerId,
+    projectId: "p1",
+    commitSha: "deadbeef",
+    actions: []
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    stdout: "",
+    databaseMigrationOutcome: "not_applied"
+  });
+  assert.equal(evidenceReads, 0);
+  assert.deepEqual(docker.state.execCalls, []);
+});
+
 test("migration batch rejects transaction-control SQL before Docker or database execution", async () => {
   const docker = createMemoryDockerEngine();
   const { containerId } = await createContainer(docker);
@@ -54,6 +94,7 @@ test("migration batch rejects transaction-control SQL before Docker or database 
       actions: [{ id: `m${index}`, type: "migration", name: `unsafe_${index}`, sql }]
     });
     assert.equal(result.ok, false);
+    assert.equal(result.databaseMigrationOutcome, "not_applied");
     assert.match(result.error, /transaction control.*not allowed/i);
     assert.doesNotMatch(JSON.stringify(result), /TOP_SECRET/);
   }
@@ -99,4 +140,76 @@ test("migration evidence uses one atomic batch write", async () => {
   assert.match(result.error, /second evidence record failed/);
   assert.equal(batchWrites, 1);
   assert.equal(singleWrites, 0);
+});
+
+test("migration failure reports when SQL applied before evidence persistence failed", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await createContainer(docker);
+  docker.execInContainer = async () => ({
+    stdout: "postgresql://project@postgres/evcp?schema=app_project",
+    stderr: "",
+    exitCode: 0
+  });
+  let sqlBatches = 0;
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: {
+      async recordMigration() {
+        throw new Error("not expected");
+      },
+      async recordMigrations() {
+        throw new Error("evidence acknowledgement lost");
+      },
+      async listMigrations() {
+        return [];
+      }
+    },
+    async runMigrationBatchSql() {
+      sqlBatches += 1;
+    }
+  });
+
+  const result = await runner.runMigrationBatch({
+    containerId,
+    projectId: "p1",
+    commitSha: "deadbeef",
+    actions: [
+      { id: "m1", type: "migration", name: "create_items", sql: "CREATE TABLE items(id text)" }
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.databaseMigrationOutcome, "applied");
+  assert.match(result.error, /evidence acknowledgement lost/);
+  assert.equal(sqlBatches, 1);
+});
+
+test("migration SQL rejection is conservatively reported as may_have_applied", async () => {
+  const docker = createMemoryDockerEngine();
+  const { containerId } = await createContainer(docker);
+  docker.execInContainer = async () => ({
+    stdout: "postgresql://project@postgres/evcp?schema=app_project",
+    stderr: "",
+    exitCode: 0
+  });
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore(),
+    async runMigrationBatchSql() {
+      throw new Error("SQL acknowledgement lost");
+    }
+  });
+
+  const result = await runner.runMigrationBatch({
+    containerId,
+    projectId: "p1",
+    commitSha: "deadbeef",
+    actions: [{ id: "m1", type: "migration", name: "items", sql: "CREATE TABLE items(id text)" }]
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.databaseMigrationOutcome, "may_have_applied");
+  assert.match(result.error, /acknowledgement lost/);
 });

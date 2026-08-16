@@ -80,7 +80,21 @@ WHERE project_id IN ('<todo-project-id>', '<sales-project-id>')
 ORDER BY created_at;
 ```
 
-The migration records must reference the committed source revision, and each successful turn must have a checkpoint created after its migration batch. Failed or aborted turns must have no new checkpoint and must restore their base commit.
+The migration records must reference the committed source revision, and each successful turn must have a checkpoint created after its migration batch. A successful source-only turn has a migration outcome of `not_applied` but still creates a checkpoint and emits `commit`; the migration outcome alone does not imply rollback.
+
+### Rollback and cancellation checks
+
+- For a cancellation or failure that occurs before irreversible finalization while the migration outcome remains `not_applied`, verify that the exact prepared workspace snapshot was restored, no checkpoint was created, and the SSE stream contains no `commit` event. A candidate commit created before the failure is not durable evidence and must not remain as the workspace HEAD.
+- For late cancellation, a migration outcome of `may_have_applied` or `applied`, checkpoint uncertainty, or evidence-persistence failure, verify that the candidate Git commit remains the workspace HEAD. The persisted assistant warning must include its SHA, and the SSE tail must be `commit` → `error` → `done`. Do not retry or describe the turn as rolled back until the database, migration records, checkpoint, and assistant evidence have been investigated and reconciled against that SHA.
+- Workspace rollback snapshots and their single active lock live outside `/workspace` under `/var/lib/evcp/turn-snapshots`. They are root-owned, inaccessible to workspace commands, and may be restored or released only by the matching lock token. Treat ownership, restrictive permissions, and lock-token validation failures as safety incidents; do not manually edit or delete the snapshot state.
+- Lock-state transitions use the permanent root-owned `0600` inode at `/var/lock/evcp-turn-reclaim.lock`; never delete, replace, or recreate that file. During rollout, the Platform API safely initializes this lock when it is missing, so existing workspace containers do not need recreation solely for this invariant. A pre-existing symlink, nonregular path, attacker-owned file, or group/world-writable file still fails closed. During a rolling upgrade, drain or restart every old Platform API process that can operate on the same workspace container before enabling the new version. Old versions do not honor the permanent lock. A fresh legacy `/var/lib/evcp/turn-snapshots/reclaim.lock` therefore fails closed; only stale residue is quarantined under the permanent lock. Do not manually remove fresh residue to bypass this protection.
+- On cancellation, the current Docker command must settle or reach its bounded timeout before snapshot restore or release begins. If logs show restore/release racing a still-running command, stop retries and investigate the command-settlement boundary.
+
+### Unsupported hard-linked source baselines
+
+Regular files in supported source paths must have a link count of one. Prepare and workspace startup reject source-to-source and source-to-`.git` hard links before source ownership repair, without copying, chowning, or otherwise modifying either pathname.
+
+To remediate, stop the workspace and use an admin-controlled maintenance session to copy each affected source file to a new inode on the workspace filesystem, preserve the intended mode, and atomically replace only the source pathname. Confirm the replacement has link count one and that Git metadata, ownership, history, and external files are unchanged before restarting. Never perform this repair while workspace processes are running, and never make the rejected source writable merely to bypass the guard.
 
 ## Failure triage
 
@@ -89,6 +103,7 @@ The migration records must reference the committed source revision, and each suc
 - Provider failure: verify the active `frontend_coding` route, OpenBao secret reference, LiteLLM health, and fallback evidence.
 - Tool rejection: confirm the model used only project-relative paths under `app/`, `components/`, `lib/`, or `public/` and a direct allowlisted command.
 - Preview timeout after `commit`: verify the workspace container state and preview health separately; keep the committed checkpoint for diagnosis.
-- Migration failure: verify the database transaction rolled back and the source returned to its base commit before retrying.
+- Migration or other failure before irreversible finalization with outcome `not_applied`: verify the database transaction rolled back, the exact snapshot was restored, and no checkpoint or `commit` event exists before retrying.
+- Migration or finalization failure with an effect-unknown/applied outcome: preserve the candidate and collect its `commit`/`error` evidence. Reconcile database and migration records, checkpoint state, assistant warning, and workspace HEAD before deciding whether a repair or retry is safe.
 
 Never enable Pi built-in tools, point Pi at a generated project as its working directory, expose the Docker socket to Pi, or add a legacy agent fallback as an incident workaround.

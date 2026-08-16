@@ -1,4 +1,4 @@
-import type { WorkspaceAgentMode, WorkspaceChatAction } from "@evcp/types";
+import type { WorkspaceAgentMode, WorkspaceChatAction, WorkspaceChatMessage } from "@evcp/types";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 
 import { selectContextFiles } from "./context-selector";
@@ -11,6 +11,9 @@ import { adaptPiEvent, assistantTextDelta } from "./pi-event-adapter";
 import { resolvePiAgentLimits } from "./pi-limits";
 import { createHorizonPiSession } from "./pi-session-context";
 import { PiSessionEventQueue } from "./pi-session-event-queue";
+import { persistPiTurnErrorAssistant } from "./pi-turn-error-persistence";
+import { finalizePiCandidate } from "./pi-turn-finalization";
+import { releasePiTurnSnapshot } from "./pi-turn-snapshot-lifecycle";
 import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
 import { buildAutoSystemPrompt, buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
@@ -90,7 +93,7 @@ async function* runLockedTurn(
       : mode === "auto"
         ? buildAutoSystemPrompt(systemInput)
         : buildSystemPrompt(systemInput);
-  if (mode === "build") await deps.workspaceGuard.prepare(input.projectId);
+  const mutationCapable = mode !== "plan";
   const timeoutSignal = AbortSignal.timeout(limits.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
   const migrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
@@ -106,8 +109,15 @@ async function* runLockedTurn(
   const actions: WorkspaceChatAction[] = [];
   const writtenPaths = new Set<string>();
   let failedTool: HorizonPiToolDetails | undefined;
+  let preparedSnapshotToken: string | undefined;
+  let assistantMessage: WorkspaceChatMessage | undefined;
+  let candidateSha: string | undefined;
+  let irreversibleFinalizationMayHaveTakenEffect = false;
+  let commitEventEmitted = false;
 
   try {
+    if (mutationCapable) preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId);
+    signal.throwIfAborted();
     const { modelRuntime, model } = await createHorizonPiRuntime({
       executor: deps.governedAiExecutor,
       actor: input.actor,
@@ -159,8 +169,17 @@ async function* runLockedTurn(
     }
     signal.throwIfAborted();
     ensureNoFailedTool(failedTool);
+    const snapshotToken = preparedSnapshotToken;
+    if (mutationCapable && !snapshotToken) {
+      throw new Error("workspace mutation snapshot is unavailable");
+    }
+    const hasCandidateWorkspaceChanges =
+      mutationCapable &&
+      (await deps.workspaceGuard.hasChanges(input.projectId, snapshotToken as string));
+    const hasCandidateMutation =
+      mutationCapable && (hasCandidateWorkspaceChanges || migrations.length > 0);
 
-    if (mode === "build") {
+    if (hasCandidateMutation) {
       const writeIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
       if (writeIssues.length > 0) {
         for await (const event of queue.prompt(buildWriteFeedback(writeIssues))) {
@@ -202,50 +221,87 @@ async function* runLockedTurn(
       actions,
       tokenUsage: { promptTokens, completionTokens }
     });
-    if (mode === "build") {
-      const synced = await deps.actionRunner.syncMigrationArtifacts?.({
+    assistantMessage = assistant;
+    if (hasCandidateMutation) {
+      const syncMigrationArtifacts = deps.actionRunner.syncMigrationArtifacts;
+      if (migrations.length > 0 && !syncMigrationArtifacts) {
+        throw new Error("migration artifact sync is required before committing migrations");
+      }
+      const synced = await syncMigrationArtifacts?.({
         containerId,
         projectId: input.projectId,
         actions: migrations
       });
       if (synced && !synced.ok) throw new Error(synced.error);
-      const sha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
-      const migrated = await deps.actionRunner.runMigrationBatch({
-        containerId,
-        projectId: input.projectId,
-        actions: migrations,
-        commitSha: sha
-      });
-      if (!migrated.ok) throw new Error(migrated.error);
-      await deps.checkpoints?.createCheckpoint({
-        projectId: input.projectId,
-        tag: `checkpoint/${sha.slice(0, 12)}`,
-        commitSha: sha,
-        label: input.prompt.slice(0, 120)
-      });
-      assistant.commitSha = sha;
-      await deps.chatHistory.appendMessage(assistant);
-      yield { type: "commit", sha };
+      signal.throwIfAborted();
+      const hasFinalWorkspaceChanges = await deps.workspaceGuard.hasChanges(
+        input.projectId,
+        snapshotToken as string
+      );
+      signal.throwIfAborted();
+      if (migrations.length > 0 && !hasFinalWorkspaceChanges) {
+        throw new Error(
+          "migration artifact sync produced no changes; refusing unversioned migration"
+        );
+      }
+      if (hasFinalWorkspaceChanges) {
+        candidateSha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
+        signal.throwIfAborted();
+        await finalizePiCandidate({
+          deps,
+          signal,
+          containerId,
+          projectId: input.projectId,
+          migrations,
+          candidateSha,
+          assistant,
+          prompt: input.prompt,
+          markIrreversible() {
+            irreversibleFinalizationMayHaveTakenEffect = true;
+          }
+        });
+        commitEventEmitted = true;
+        yield { type: "commit", sha: candidateSha };
+      } else {
+        await deps.chatHistory.appendMessage(assistant);
+      }
     } else {
       await deps.chatHistory.appendMessage(assistant);
     }
   } catch (error) {
     await session?.abort().catch(() => undefined);
-    const errorMessage = safeToolError(error);
-    const persistedContent = input.signal?.aborted
-      ? assistantText
-      : `${assistantText}\n\n⚠️ ${errorMessage}`;
-    const assistant = createAssistantChatMessage({
+    let errorMessage = safeToolError(error);
+    const preserveCandidate = irreversibleFinalizationMayHaveTakenEffect && candidateSha;
+    if (preparedSnapshotToken && !preserveCandidate) {
+      try {
+        await deps.workspaceGuard.restoreSnapshot(input.projectId, preparedSnapshotToken);
+      } catch (restoreError) {
+        errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}`;
+      }
+    }
+    if (preserveCandidate) {
+      errorMessage = `Commit ${preserveCandidate} was preserved after finalization: ${errorMessage}`;
+    }
+    errorMessage = await persistPiTurnErrorAssistant({
+      chatHistory: deps.chatHistory,
       projectId: input.projectId,
-      content: persistedContent,
-      agentMode: mode,
+      mode,
+      assistantText,
+      errorMessage,
+      inputAborted: input.signal?.aborted ?? false,
+      preservedCommitSha: preserveCandidate || undefined,
+      assistantMessage,
       artifactActionIds: actionIds,
       actions,
       tokenUsage: { promptTokens, completionTokens }
     });
-    await deps.chatHistory.appendMessage(assistant);
+    if (preserveCandidate && !commitEventEmitted) {
+      commitEventEmitted = true;
+      yield { type: "commit", sha: preserveCandidate };
+    }
     yield { type: "error", message: errorMessage };
   } finally {
+    await releasePiTurnSnapshot(deps, input.projectId, preparedSnapshotToken);
     detachSessionAbort?.();
     queue?.close();
     session?.dispose();

@@ -12,7 +12,7 @@ test("writes edit results as evcp", async () => {
   const docker = {
     async execInContainer(containerId, cmd) {
       calls.push({ containerId, cmd });
-      if ((cmd.at(-1) ?? "").startsWith("base64 app/page.tsx")) {
+      if ((cmd.at(-1) ?? "").startsWith("base64 < 'app/page.tsx'")) {
         return {
           stdout: Buffer.from("const x = 1;", "utf8").toString("base64"),
           stderr: "",
@@ -42,7 +42,9 @@ test("writes edit results as evcp", async () => {
   });
 
   assert.equal(result.ok, true);
-  const write = calls.find((call) => (call.cmd.at(-1) ?? "").includes("base64 -d > app/page.tsx"));
+  const write = calls.find((call) =>
+    (call.cmd.at(-1) ?? "").includes("base64 -d > 'app/page.tsx'")
+  );
   assert.ok(write, "expected edit writeback");
   assert.deepEqual(write.cmd.slice(0, 5), evcpCommand);
 });
@@ -70,6 +72,6 @@ test("materializes migration artifacts as evcp", async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.match(calls[0].cmd.at(-1), /mkdir -p prisma\/migrations\/add_users/);
+  assert.match(calls[0].cmd.at(-1), /mkdir -p 'prisma\/migrations\/add_users'/);
   assert.deepEqual(calls[0].cmd.slice(0, 5), evcpCommand);
 });

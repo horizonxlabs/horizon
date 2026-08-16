@@ -8,7 +8,26 @@ export type RunnableAction =
 
 export type ActionResult =
   | { ok: true; stdout: string }
-  | { ok: false; error: string; stdout: string; stderr: string; exitCode: number };
+  | {
+      ok: false;
+      error: string;
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+    };
+
+export type DatabaseMigrationOutcome = "not_applied" | "may_have_applied" | "applied";
+
+export type DatabaseMigrationResult =
+  | { ok: true; stdout: string; databaseMigrationOutcome: DatabaseMigrationOutcome }
+  | {
+      ok: false;
+      error: string;
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      databaseMigrationOutcome: DatabaseMigrationOutcome;
+    };
 
 export interface ActionRunner {
   runAction(input: {
@@ -27,7 +46,7 @@ export interface ActionRunner {
     projectId: string;
     actions: Array<Extract<RunnableAction, { type: "migration" }>>;
     commitSha: string;
-  }): Promise<ActionResult>;
+  }): Promise<DatabaseMigrationResult>;
   syncMigrationArtifacts?(input: {
     containerId: string;
     projectId: string;

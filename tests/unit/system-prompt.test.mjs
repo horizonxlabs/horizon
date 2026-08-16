@@ -34,6 +34,20 @@ test("omits the rolling summary section when there is no summary yet", () => {
   assert.doesNotMatch(prompt, /Conversation summary so far/);
 });
 
+test("Build and Auto prompts expose only the controlled package command boundary", () => {
+  const input = {
+    template: { name: "nextjs-base", lockedFiles: [], files: [] },
+    contextFiles: [],
+    rollingSummary: null
+  };
+
+  for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
+    assert.match(prompt, /npm or pnpm.*install\/add.*build, test, typecheck, or lint/is);
+    assert.match(prompt, /lifecycle scripts are disabled/i);
+    assert.match(prompt, /Never use node, npx, git.*exec\/dlx\/x.*arbitrary package scripts/is);
+  }
+});
+
 test("Auto prompt answers informational questions without mutation authority", () => {
   const template = { name: "nextjs-base", lockedFiles: [], files: [] };
   const prompt = buildAutoSystemPrompt({ template, contextFiles: [], rollingSummary: null });
