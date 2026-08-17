@@ -165,6 +165,117 @@ test("Plan streams guidance without mutable events", async () => {
   }
 });
 
+test("approve-plan turn with no net mutation skips PRD recording and post-turn scanning", async () => {
+  let prdRecorded = 0;
+  let postTurnScans = 0;
+  const generationService = {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async probeRuntime() {
+      postTurnScans += 1;
+      return { status: 200, errors: [] };
+    },
+    async *runTurn() {
+      // No commit event — the turn produced zero net diff (e.g. the plan was already applied).
+      yield { type: "token", content: "Nothing to change." };
+      yield { type: "done" };
+    }
+  };
+  const { server, port } = await setup(() => auth, {
+    generationService,
+    recordPrdVersionFromPlan: async () => {
+      prdRecorded += 1;
+      return { id: "prd-1", version: "1.0", changeSummary: "Approved home page" };
+    }
+  });
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "add home page",
+      agentMode: "build",
+      approvedPlan: "Build the approved home page"
+    });
+    const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
+    assert.equal(prdRecorded, 0);
+    assert.equal(postTurnScans, 0);
+    assert.equal(eventNames.some((name) => name === "prd_version"), false);
+    assert.equal(eventNames.some((name) => name === "bug_report"), false);
+    assert.equal(eventNames.at(-1), "done");
+  } finally {
+    server.close();
+  }
+});
+
+test("Auto turns that stream no commit emit no commit event and skip post-turn scanning", async () => {
+  let postTurnScans = 0;
+  const generationService = {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async probeRuntime() {
+      postTurnScans += 1;
+      return { status: 200, errors: [] };
+    },
+    async *runTurn() {
+      yield { type: "token", content: "Sure, here's what this app does." };
+      yield { type: "done" };
+    }
+  };
+  const { server, port } = await setup(() => auth, { generationService });
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "what does this app do?",
+      agentMode: "auto"
+    });
+    const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
+    assert.equal(eventNames.some((name) => name === "commit"), false);
+    assert.equal(eventNames.some((name) => name === "bug_report"), false);
+    assert.equal(postTurnScans, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test("Auto turns that land a commit run post-turn scanning regardless of mode", async () => {
+  let postTurnScans = 0;
+  const generationService = {
+    async history() {
+      return [];
+    },
+    async listWorkspaceFiles() {
+      return [];
+    },
+    async probeRuntime() {
+      postTurnScans += 1;
+      return { status: 200, errors: [] };
+    },
+    async *runTurn() {
+      yield { type: "token", content: "Added the home page." };
+      yield { type: "commit", sha: "commit-sha-auto" };
+      yield { type: "done" };
+    }
+  };
+  const { server, port } = await setup(() => auth, { generationService });
+  try {
+    const raw = await postChat(port, "/projects/p1/chat", {
+      prompt: "add a home page",
+      agentMode: "auto"
+    });
+    const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
+    assert.ok(eventNames.includes("commit"));
+    assert.ok(eventNames.includes("bug_report"));
+    assert.equal(postTurnScans, 1);
+  } finally {
+    server.close();
+  }
+});
+
 test("rejects missing session and non-member", async () => {
   const missing = await setup(() => null);
   const forbidden = await setup(() => auth);

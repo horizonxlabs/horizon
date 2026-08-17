@@ -280,6 +280,7 @@ export function createChatSseHandler(deps: {
     try {
       const turnErrors: string[] = [];
       let generationDone = false;
+      let committed = false;
       for await (const event of deps.generationService.runTurn({
         projectId,
         prompt,
@@ -292,12 +293,19 @@ export function createChatSseHandler(deps: {
           generationDone = true;
           continue;
         }
+        if (event.type === "commit") committed = true;
         if (event.type === "error")
           turnErrors.push(String((event as { message?: string }).message ?? ""));
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
       }
       if (!generationDone) throw new Error("Generation stream ended before the done event");
-      if (approvedPlan && agentMode === "build" && deps.recordPrdVersionFromPlan && auth.actor) {
+      if (
+        approvedPlan &&
+        agentMode === "build" &&
+        committed &&
+        deps.recordPrdVersionFromPlan &&
+        auth.actor
+      ) {
         try {
           const created = await deps.recordPrdVersionFromPlan(auth.actor, projectId, approvedPlan);
           res.write(
@@ -307,10 +315,11 @@ export function createChatSseHandler(deps: {
           // Recording the spec change is best-effort — never disturb the generation stream.
         }
       }
-      // Bug report (user-in-command): detection still runs after every build turn, but the
-      // findings go to the client's Bug Report box — the USER decides when to fix, and the
-      // fix message travels through the normal chat so it lives in history.
-      if (agentMode === "build") {
+      // Bug report (user-in-command): detection runs after any turn that actually landed a
+      // commit — a no-op turn (nothing mutated) has nothing new to scan. Findings go to the
+      // client's Bug Report box — the USER decides when to fix, and the fix message travels
+      // through the normal chat so it lives in history.
+      if (committed) {
         const tags = await collectPostTurnTags(deps.generationService, projectId, turnErrors);
         for (const tag of tags) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
         res.write(

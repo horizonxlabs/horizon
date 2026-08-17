@@ -26,6 +26,18 @@ test("Creator exposes one Auto Pi composer without persistent Plan Build state",
   assert.match(hook, /mode\s*=\s*overrides\?\.mode\s*\?\?\s*"auto"/);
   assert.match(hook, /if \(mode !== "plan"\) await ensureVibeWorkspace/);
   assert.match(hook, /enqueuePrompt\(queue, \{ prompt, mode \}\)/);
+  // Preview refresh is driven by commit evidence from the stream, not by the request mode.
+  assert.match(
+    hook,
+    /else if \(type === "commit"\) \{[\s\S]*?setVibePreviewKey\(\(key\) => key \+ 1\);[\s\S]*?\} else if \(type === "error"\)/
+  );
+  assert.doesNotMatch(hook, /if \(mode === "build"\) setVibePreviewKey/);
+  // Auto status starts as "Thinking…" through provisioning and only becomes real per-action
+  // text once the existing action_start handler fires an action — no mode-based placeholders.
+  assert.match(hook, /setVibeStatus\(mode === "plan" \? "Planning…" : "Thinking…"\)/);
+  assert.match(hook, /setVibeStatus\(mode === "plan" \? "Plan mode: read-only" : "Thinking…"\)/);
+  assert.doesNotMatch(hook, /Provisioning workspace…/);
+  assert.doesNotMatch(hook, /"AI is working…"/);
   assert.match(stream, /mode:\s*"build"/);
   assert.match(page, /Create and understand your app with Pi/);
   assert.match(
