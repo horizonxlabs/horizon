@@ -16,6 +16,12 @@ function shellEscapeDouble(value: string): string {
   return value.replace(/(["\\$`])/g, "\\$1");
 }
 
+// Wraps a raw POSIX sh script so it can be passed as a single-quoted `sh -c`
+// argument from within another single-quoted (or unquoted) shell context.
+function shSingleQuoted(script: string): string {
+  return `'${script.replace(/'/g, "'\\''")}'`;
+}
+
 function assertCommitSha(commitSha: string): void {
   if (!/^[0-9a-f]{4,64}$/i.test(commitSha)) throw new Error("invalid workspace commit SHA");
 }
@@ -50,18 +56,23 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
     gitCommand(
       `GIT_INDEX_FILE="${directory}/index" GIT_OBJECT_DIRECTORY="${directory}/objects" GIT_ALTERNATE_OBJECT_DIRECTORIES=/workspace/.git/objects`
     );
-  const capturePermissionManifest = (manifestPath: string) =>
-    [
-      `${supportedSourceFind} | LC_ALL=C sort -z | while IFS= read -r -d '' source_path; do`,
+  const capturePermissionManifest = (manifestPath: string) => {
+    const perSourceScript = [
       'if [ "$source_path" = /workspace ]; then relative_path=.; else relative_path="${source_path#/workspace/}"; fi;',
       `if printf '%s' "$relative_path" | LC_ALL=C od -An -tu1 | awk '{ for (i = 1; i <= NF; i += 1) if ($i < 32 || $i == 127) found = 1 } END { exit found ? 0 : 1 }'; then echo "workspace paths containing control characters are not supported: $relative_path" >&2; exit 2; fi;`,
       'if [ -L "$source_path" ]; then entry_type=l; entry_mode=000;',
       'elif [ -f "$source_path" ]; then entry_type=f; entry_mode="$(stat -c %a "$source_path" 2>/dev/null || stat -f %Lp "$source_path")";',
       'elif [ -d "$source_path" ]; then entry_type=d; entry_mode="$(stat -c %a "$source_path" 2>/dev/null || stat -f %Lp "$source_path")";',
       'else echo "unsupported workspace source type: $relative_path" >&2; exit 2; fi;',
-      `printf '%s\\t%s\\t%s\\n' "$entry_type" "$entry_mode" "$relative_path";`,
-      `done > "${manifestPath}"`
+      `printf '%s\\t%s\\t%s\\n' "$entry_type" "$entry_mode" "$relative_path";`
     ].join(" ");
+    // dash (Ubuntu's default /bin/sh) rejects the bash-only `read -r -d ''`
+    // NUL delimiter outright, so a `while read -r -d ''` loop silently runs
+    // zero iterations and exits 0 instead of iterating. xargs -0 hands each
+    // NUL-delimited path to a POSIX `for name do ... done` loop as real argv
+    // (defaults to iterating "$@"), which every POSIX shell supports.
+    return `${supportedSourceFind} | LC_ALL=C sort -z | xargs -0 sh -c ${shSingleQuoted(`for source_path do ${perSourceScript} done`)} _ > "${manifestPath}"`;
+  };
   const captureRestoreArchive = (archivePath: string) =>
     `tar -C /workspace --exclude=./.git --exclude=./node_modules --exclude=./.next --exclude=./.next-* -cf "${archivePath}" .`;
   const stageGitVisibleSource = [
@@ -87,14 +98,15 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
     }
     return result.stdout.trim();
   };
-  const rejectHardlinkedSupportedSource = [
-    `${supportedSourceFind} | while IFS= read -r -d '' source_path; do`,
+  const rejectHardlinkedSupportedSourcePerEntry = [
     'if [ -f "$source_path" ] && [ ! -L "$source_path" ]; then',
     'link_count="$(stat -c %h "$source_path" 2>/dev/null || stat -f %l "$source_path")";',
-    'case "$link_count" in \'\'|*[!0-9]*) echo "cannot read workspace source link count: $source_path" >&2; exit 2;; esac;',
+    `case "$link_count" in ''|*[!0-9]*) echo "cannot read workspace source link count: $source_path" >&2; exit 2;; esac;`,
     'if [ "$link_count" -gt 1 ]; then echo "supported source hard links are not supported: $source_path" >&2; exit 2; fi;',
-    "fi; done"
+    "fi;"
   ].join(" ");
+  // Same dash/bash `read -r -d ''` incompatibility as capturePermissionManifest above.
+  const rejectHardlinkedSupportedSource = `${supportedSourceFind} | xargs -0 sh -c ${shSingleQuoted(`for source_path do ${rejectHardlinkedSupportedSourcePerEntry} done`)} _`;
   const secureWorkspaceSource = [
     "chown root:root /workspace",
     "chmod 1777 /workspace",
@@ -176,10 +188,28 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
       } rm -rf "$lock_dir"; fi`,
       ...releaseTransitionLock
     ].join("; ");
+  const reconcileActiveLock = (transitionOwner: string) =>
+    [
+      `quarantine_dir="$snapshot_root/active.stale.${transitionOwner}";`,
+      'if [ -e "$lock_dir" ] || [ -L "$lock_dir" ]; then',
+      'if [ -L "$lock_dir" ] || [ ! -d "$lock_dir" ] || [ -L "$lock_dir/token" ] || [ -L "$lock_dir/timestamp" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi;',
+      'if [ -e "$lock_dir/recovery-required" ] || [ -L "$lock_dir/recovery-required" ]; then echo "workspace snapshot recovery is required" >&2; exit 2; fi;',
+      'if [ -e "$lock_dir/token" ] && [ ! -f "$lock_dir/token" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi;',
+      'if [ -e "$lock_dir/timestamp" ] && [ ! -f "$lock_dir/timestamp" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi;',
+      'stale_token=""; if [ -f "$lock_dir/token" ]; then stale_token="$(cat "$lock_dir/token")"; fi;',
+      'case "$stale_token" in ????????-????-????-????-????????????) if [ -e "$snapshot_root/snapshots/$stale_token/recovery-required" ] || [ -L "$snapshot_root/snapshots/$stale_token/recovery-required" ]; then echo "workspace snapshot recovery is required" >&2; exit 2; fi;; esac;',
+      'lock_timestamp=""; if [ -f "$lock_dir/timestamp" ]; then lock_timestamp="$(cat "$lock_dir/timestamp")"; fi;',
+      'case "$lock_timestamp" in \'\' ) lock_timestamp="$(stat -c %Y "$lock_dir" 2>/dev/null || stat -f %m "$lock_dir" 2>/dev/null)";; *[!0-9]*) echo "workspace snapshot lock is active" >&2; exit 2;; esac;',
+      'now="$(date +%s)"; lock_age="$((now - lock_timestamp))";',
+      `if [ "$lock_age" -le ${staleLockSeconds} ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi;`,
+      'rm -rf "$quarantine_dir"; mv "$lock_dir" "$quarantine_dir";',
+      'case "$stale_token" in ????????-????-????-????-????????????) rm -rf "$snapshot_root/snapshots/$stale_token";; esac;',
+      'rm -rf "$quarantine_dir";',
+      "fi"
+    ].join(" ");
   const acquireTurnLock = (token: string, transitionOwner: string) => [
     ...acquireTransitionLock(transitionOwner),
-    `quarantine_dir="$snapshot_root/active.stale.${transitionOwner}"`,
-    `if [ -e "$lock_dir" ] || [ -L "$lock_dir" ]; then if [ -L "$lock_dir" ] || [ ! -d "$lock_dir" ] || [ -L "$lock_dir/token" ] || [ -L "$lock_dir/timestamp" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi; if [ -e "$lock_dir/token" ] && [ ! -f "$lock_dir/token" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi; if [ -e "$lock_dir/timestamp" ] && [ ! -f "$lock_dir/timestamp" ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi; lock_timestamp=""; if [ -f "$lock_dir/timestamp" ]; then lock_timestamp="$(cat "$lock_dir/timestamp")"; fi; case "$lock_timestamp" in '' ) lock_timestamp="$(stat -c %Y "$lock_dir" 2>/dev/null || stat -f %m "$lock_dir" 2>/dev/null)";; *[!0-9]*) echo "workspace snapshot lock is active" >&2; exit 2;; esac; now="$(date +%s)"; lock_age="$((now - lock_timestamp))"; if [ "$lock_age" -le ${staleLockSeconds} ]; then echo "workspace snapshot lock is active" >&2; exit 2; fi; stale_token=""; if [ -f "$lock_dir/token" ]; then stale_token="$(cat "$lock_dir/token")"; fi; rm -rf "$quarantine_dir"; mv "$lock_dir" "$quarantine_dir"; case "$stale_token" in ????????-????-????-????-????????????) rm -rf "$snapshot_root/snapshots/$stale_token";; esac; rm -rf "$quarantine_dir"; fi`,
+    reconcileActiveLock(transitionOwner),
     'mkdir "$lock_dir"',
     'chmod 700 "$lock_dir"',
     'token_tmp="$(mktemp "$lock_dir/.token.XXXXXX")"',
@@ -311,6 +341,10 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
       const script = [
         "set -eu",
         ...verifyOwnedSnapshot(snapshotToken),
+        'mark_recovery_required() { set +e; umask 077; lock_recovery_tmp="$(mktemp "$lock_dir/.recovery-required.XXXXXX" 2>/dev/null)"; if [ -n "$lock_recovery_tmp" ]; then printf "recovery-required\\n" > "$lock_recovery_tmp" && chmod 600 "$lock_recovery_tmp" && chown root:root "$lock_recovery_tmp" && mv -f "$lock_recovery_tmp" "$lock_dir/recovery-required"; fi; snapshot_recovery_tmp="$(mktemp "$snapshot_dir/.recovery-required.XXXXXX" 2>/dev/null)"; if [ -n "$snapshot_recovery_tmp" ]; then printf "recovery-required\\n" > "$snapshot_recovery_tmp" && chmod 600 "$snapshot_recovery_tmp" && chown root:root "$snapshot_recovery_tmp" && mv -f "$snapshot_recovery_tmp" "$snapshot_dir/recovery-required"; fi; }',
+        'restore_exit() { restore_status=$?; trap - EXIT HUP INT TERM; if [ "$restore_status" -ne 0 ]; then mark_recovery_required; fi; exit "$restore_status"; }',
+        "trap restore_exit EXIT",
+        "trap 'exit 2' HUP INT TERM",
         sanitizeRepository,
         'original_head="$(cat "$snapshot_dir/head")"',
         `find /workspace -xdev -mindepth 1 \\( -path /workspace/.git -o -path /workspace/node_modules -o -path /workspace/.next -o -path '/workspace/.next-*' \\) -prune -o -exec rm -rf {} +`,
@@ -318,7 +352,8 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         "cd /workspace",
         `${g} reset --mixed "$original_head" >/dev/null`,
         secureSanitizedRepository,
-        applyPermissionManifest("$snapshot_dir/manifest")
+        applyPermissionManifest("$snapshot_dir/manifest"),
+        "trap - EXIT HUP INT TERM"
       ].join(" && ");
       await runRoot(containerId, script, "workspace snapshot restore");
     },
@@ -332,6 +367,7 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         `snapshot_dir="$snapshot_root/snapshots/${snapshotToken}"`,
         ...acquireTransitionLock(transitionOwner),
         ...verifyOwnedSnapshot(snapshotToken),
+        'if [ -e "$lock_dir/recovery-required" ] || [ -L "$lock_dir/recovery-required" ] || [ -e "$snapshot_dir/recovery-required" ] || [ -L "$snapshot_dir/recovery-required" ]; then echo "workspace snapshot recovery is required; refusing release" >&2; exit 2; fi',
         'rm -rf "$snapshot_dir"',
         'rm -rf "$lock_dir"',
         ...releaseTransitionLock

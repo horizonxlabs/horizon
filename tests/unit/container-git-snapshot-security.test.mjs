@@ -115,7 +115,7 @@ test("prepare rejects hard links before normalizing supported source ownership",
   assert.equal(await committer.hasChanges("c1", token), false);
 
   const prepareScript = docker.calls[0].cmd.at(-1);
-  assert.match(prepareScript, /-print0 \| while IFS= read -r -d '' source_path/);
+  assert.match(prepareScript, /-print0 \| xargs -0 sh -c/);
   assert.match(prepareScript, /supported source hard links are not supported/);
   assert.doesNotMatch(prepareScript, /\.evcp-inode|cp "\$source_path"/);
   assert.ok(
@@ -342,4 +342,41 @@ test("snapshot rollback leaves excluded runtime and dependency directories untou
     assert.equal(await readFile(join(workspace, directory, "state.txt"), "utf8"), "after\n");
   }
   assert.match(await git("status", "--porcelain"), /state\.txt/);
+});
+
+test("failed snapshot restore retains a recovery-required lease that blocks every transition", async (t) => {
+  const { workspace, snapshotStore, git, committer } = await localGitWorkspace(t);
+  const snapshot = await committer.prepare("c1");
+  await writeFile(join(workspace, "app/page.tsx"), "broken model output\n");
+  await writeFile(join(snapshotStore, "snapshots", snapshot, "archive"), "not a tar archive\n");
+
+  await assert.rejects(
+    () => committer.restoreSnapshot("c1", snapshot),
+    /workspace snapshot restore failed/i
+  );
+  assert.equal(
+    await readFile(join(snapshotStore, "active.lock/recovery-required"), "utf8"),
+    "recovery-required\n"
+  );
+  assert.equal(
+    await readFile(join(snapshotStore, "snapshots", snapshot, "recovery-required"), "utf8"),
+    "recovery-required\n"
+  );
+
+  const staleTime = new Date(Date.now() - 8_000_000);
+  await writeFile(
+    join(snapshotStore, "active.lock/timestamp"),
+    `${Math.floor(staleTime.getTime() / 1000)}\n`
+  );
+  await utimes(join(snapshotStore, "active.lock"), staleTime, staleTime);
+  await rm(join(snapshotStore, "active.lock/recovery-required"));
+  await assert.rejects(() => committer.prepare("c1"), /snapshot recovery is required/i);
+  const head = await git("rev-parse", "HEAD");
+  await assert.rejects(() => committer.restore("c1", head), /snapshot recovery is required/i);
+  await assert.rejects(
+    () => committer.releaseSnapshot("c1", snapshot),
+    /snapshot recovery is required/i
+  );
+  assert.equal((await stat(join(snapshotStore, "active.lock"))).isDirectory(), true);
+  assert.equal((await stat(join(snapshotStore, "snapshots", snapshot))).isDirectory(), true);
 });
