@@ -68,5 +68,5 @@ test("fresh no-copy workspaces hydrate source without copying baseline node_modu
   assert.match(dockerfile, /WORKDIR \/workspace/);
   assert.match(entrypoint, /\/opt\/evcp-template/);
   assert.match(entrypoint, /--exclude=['"]?node_modules/);
-  assert.match(entrypoint, /ln -s \/opt\/evcp-template\/node_modules \/workspace\/node_modules/);
+  assert.match(entrypoint, /ln -sfn \/opt\/evcp-template\/node_modules \/workspace\/node_modules/);
 });

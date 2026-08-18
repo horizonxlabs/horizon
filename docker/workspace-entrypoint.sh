@@ -7,8 +7,13 @@ template=/opt/evcp-template
 if [ ! -f /workspace/package.json ]; then
   tar -C "$template" --exclude='node_modules' -cf - . | tar -C /workspace -xf -
 fi
-if [ ! -e /workspace/node_modules ]; then
-  ln -s /opt/evcp-template/node_modules /workspace/node_modules
+# `-e` dereferences symlinks, so a symlink whose target has gone missing (e.g. after an
+# image rebuild moved the template) reads as "does not exist" here even though the path
+# itself is occupied — a plain `ln -s` then fails "File exists" and, under set -eu, kills
+# the container on every restart. Skip only when node_modules is a real directory (a
+# project's persisted custom dependency tree); otherwise (re)point the symlink atomically.
+if [ ! -d /workspace/node_modules ] || [ -L /workspace/node_modules ]; then
+  ln -sfn /opt/evcp-template/node_modules /workspace/node_modules
 fi
 
 # Keep the volume root and Git metadata platform-owned. The sticky parent lets evcp replace its
