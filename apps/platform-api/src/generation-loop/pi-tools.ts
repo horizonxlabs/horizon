@@ -109,7 +109,15 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       if (!file) throw new Error(`workspace file '${path}' was not found`);
       const count = file.content.split(params.find).length - 1;
       if (count !== 1) {
-        throw new Error(
+        // Fails before runAction, so the generic tool()-wrapper catch (which only keeps the
+        // error message) never sees find/replace — return the diff Pi attempted directly so a
+        // failed edit stays inspectable in the UI, not just "it failed" with no context.
+        return failure(
+          id,
+          "edit",
+          path,
+          context,
+          { find: params.find, replace: params.replace },
           count === 0 ? "edit find text was not found" : "edit find text is not unique"
         );
       }
@@ -296,6 +304,30 @@ function success(
   };
 }
 
+// Mirrors success(), but for a known failure that still has an attempted find/replace or body to
+// show — keeps a failed action's diff inspectable in the UI instead of just an error string.
+function failure(
+  id: string,
+  actionType: HorizonPiToolDetails["actionType"],
+  label: string,
+  context: HorizonPiToolContext,
+  preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
+  error: string
+): ToolResult {
+  const message = clipUtf8(error, context.limits.maxToolOutputBytes);
+  return {
+    content: [{ type: "text", text: message }],
+    details: {
+      actionId: id,
+      actionType,
+      label,
+      ok: false,
+      error: message,
+      ...boundedPreview(preview, context)
+    }
+  };
+}
+
 async function runAction(
   context: HorizonPiToolContext,
   action: Exclude<RunnableAction, { type: "migration" }>,
@@ -324,7 +356,13 @@ async function runAction(
         details
       })
   });
-  if (!result.ok) throw new Error(result.error);
+  if (!result.ok) {
+    // details already carries the attempted find/replace (edit) or body (file write) — return it
+    // instead of throwing, so a failed action stays inspectable in the UI (what Pi tried, not
+    // just that it failed). Throwing here would drop straight into the generic tool()-wrapper
+    // catch, which only keeps the error message.
+    return failure(action.id, action.type, details.label, context, details, result.error);
+  }
   const text = action.type === "shell" ? result.stdout : "ok";
   return success(action.id, action.type, details.label, context, details, text);
 }

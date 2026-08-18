@@ -33,9 +33,10 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
       </button>
       {open && hasBody && (
         <div className="vibe-action-details">
-          {action.error ? (
-            <pre className="vibe-action-error">{action.error}</pre>
-          ) : isDiff ? (
+          {/* Show the error AND what Pi attempted (diff/body), when both are known — a failed
+              edit is only debuggable if you can see the snippet it tried alongside why it failed. */}
+          {action.error && <pre className="vibe-action-error">{action.error}</pre>}
+          {isDiff ? (
             <pre className="vibe-action-diff">
               {(action.find ?? "").split("\n").map((line, i) => (
                 <div className="vibe-action-diff-remove" key={`f${i}`}>
@@ -49,7 +50,7 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
               ))}
             </pre>
           ) : (
-            <pre className="vibe-action-body">{action.body}</pre>
+            action.body && <pre className="vibe-action-body">{action.body}</pre>
           )}
         </div>
       )}

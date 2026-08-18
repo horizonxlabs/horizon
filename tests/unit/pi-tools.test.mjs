@@ -160,3 +160,49 @@ test("migration proposals are buffered and skills load progressively", async () 
   assert.equal(skill.details.actionType, "skill");
   assert.match(skill.content[0].text, /deliberate visual hierarchy/);
 });
+
+test("a failed edit still reports the attempted find/replace, not just the error", async () => {
+  const { tools, actionRunnerCalls } = fixture();
+
+  const result = await execute(tools, "edit_workspace_file", {
+    path: "app/page.tsx",
+    find: "<h1>Does not exist</h1>",
+    replace: "<h1>New</h1>"
+  });
+
+  assert.equal(result.details.ok, false);
+  assert.match(result.details.error, /find text was not found/);
+  assert.equal(result.details.find, "<h1>Does not exist</h1>");
+  assert.equal(result.details.replace, "<h1>New</h1>");
+  // Fails before the action runner is ever called — no action was attempted.
+  assert.equal(actionRunnerCalls.length, 0);
+});
+
+test("an action runner failure still reports the attempted body/find, not just the error", async () => {
+  const { tools } = fixture({
+    actionRunner: {
+      async runAction() {
+        return { ok: false, error: "drift guard rejected: file changed since last read" };
+      }
+    }
+  });
+
+  const write = await execute(tools, "write_workspace_file", {
+    path: "components/Card.tsx",
+    content: "export function Card() { return null; }"
+  });
+  const edit = await execute(tools, "edit_workspace_file", {
+    path: "app/page.tsx",
+    find: "<h1>Old</h1>",
+    replace: "<h1>New</h1>"
+  });
+
+  assert.equal(write.details.ok, false);
+  assert.match(write.details.error, /drift guard rejected/);
+  assert.equal(write.details.body, "export function Card() { return null; }");
+
+  assert.equal(edit.details.ok, false);
+  assert.match(edit.details.error, /drift guard rejected/);
+  assert.equal(edit.details.find, "<h1>Old</h1>");
+  assert.equal(edit.details.replace, "<h1>New</h1>");
+});
