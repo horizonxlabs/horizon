@@ -47,7 +47,7 @@ function baseDeps(executor, lifecycle, hasWorkspaceChanges) {
         lifecycle.push("prepare:base");
         return "base-sha";
       },
-      async hasChanges(_projectId, snapshot) {
+      async hasChanges(_projectId, _containerId, snapshot) {
         assert.equal(snapshot, "base-sha");
         assert.equal(typeof hasWorkspaceChanges, "boolean", "fixture must declare mutation state");
         lifecycle.push("git:changes");

@@ -97,10 +97,14 @@ test("round-final evaluation: imports satisfied by later files in the artifact n
 });
 
 test("Pi generation performs round-final write checks before full validation", async () => {
-  const source = await readFile(
+  const serviceSource = await readFile(
     "apps/platform-api/src/generation-loop/pi-generation-service.ts",
     "utf8"
   );
-  assert.match(source, /collectRoundIssues/);
-  assert.match(source, /collectPiWriteIssues/);
+  assert.match(serviceSource, /collectPiWriteIssues/);
+  const checksSource = await readFile(
+    "apps/platform-api/src/generation-loop/turn-checks.ts",
+    "utf8"
+  );
+  assert.match(checksSource, /collectRoundIssues/);
 });

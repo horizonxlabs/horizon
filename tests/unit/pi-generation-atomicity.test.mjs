@@ -64,7 +64,7 @@ function transactionDeps(executor, lifecycle, mutationStates) {
         lifecycle.push("prepare:base");
         return "base-sha";
       },
-      async hasChanges(_projectId, snapshot) {
+      async hasChanges(_projectId, _containerId, snapshot) {
         assert.equal(snapshot, "base-sha");
         assert.ok(changeChecks < mutationStates.length, "unexpected Git status check");
         lifecycle.push("git:changes");
@@ -74,7 +74,7 @@ function transactionDeps(executor, lifecycle, mutationStates) {
         lifecycle.push("validate");
       },
       async restore() {},
-      async restoreSnapshot(_projectId, sha) {
+      async restoreSnapshot(_projectId, _containerId, sha) {
         lifecycle.push(`restore:${sha}`);
       },
       async releaseSnapshot() {}
@@ -133,7 +133,7 @@ test("failed Build restores the last good workspace and creates no checkpoint", 
         lifecycle.push("prepare");
         return "base-sha";
       },
-      async hasChanges(_projectId, snapshot) {
+      async hasChanges(_projectId, _containerId, snapshot) {
         assert.equal(snapshot, "base-sha");
         lifecycle.push("git:changes");
         return true;
@@ -142,7 +142,7 @@ test("failed Build restores the last good workspace and creates no checkpoint", 
         lifecycle.push("validate");
       },
       async restore() {},
-      async restoreSnapshot(_projectId, sha) {
+      async restoreSnapshot(_projectId, _containerId, sha) {
         lifecycle.push(`restore:${sha}`);
       },
       async releaseSnapshot() {}

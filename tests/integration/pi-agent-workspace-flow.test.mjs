@@ -107,7 +107,7 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
         lifecycle.push("prepare:base");
         return "base-sha";
       },
-      async hasChanges(_projectId, snapshot) {
+      async hasChanges(_projectId, _containerId, snapshot) {
         assert.equal(snapshot, "base-sha");
         lifecycle.push("git:changes");
         return true;

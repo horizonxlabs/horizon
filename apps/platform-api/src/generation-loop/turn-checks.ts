@@ -2,6 +2,10 @@
 // the moment a file lands — the model fixes them in the SAME turn via the round-retry
 // feedback, long before the full build validation (and before the user sees anything).
 
+import type { PiGenerationServiceDeps } from "./generation-service-types";
+import type { PiAgentLimits } from "./pi-limits";
+import { filterAgentWorkspaceFiles } from "./pi-tool-policy";
+
 const IMPORT_PATTERN = /import\s[^'"]*['"]([^'"]+)['"]/g;
 const SAFE_PATH = /^[\w@./-]+$/;
 
@@ -80,4 +84,29 @@ export async function collectWriteIssues(
     );
   }
   return issues;
+}
+
+export function assertFileLimits(
+  files: Array<{ path: string; content: string }>,
+  maxFileBytes: number
+): void {
+  const oversized = files.find((file) => Buffer.byteLength(file.content, "utf8") > maxFileBytes);
+  if (oversized) throw new Error(`workspace file '${oversized.path}' exceeds the file-size limit`);
+}
+
+// Reads back whatever the round just wrote (post-write, so it sees the container's real
+// state) and runs both checks above against it — the single entry point runLockedTurn calls
+// after a mutation round to decide whether to feed the model retry guidance.
+export async function collectPiWriteIssues(
+  deps: PiGenerationServiceDeps,
+  containerId: string,
+  writtenPaths: Set<string>,
+  limits: PiAgentLimits
+): Promise<string[]> {
+  if (!writtenPaths.size || !deps.readWorkspaceFiles) return [];
+  const files = filterAgentWorkspaceFiles(await deps.readWorkspaceFiles(containerId));
+  assertFileLimits(files, limits.maxFileBytes);
+  const knownPaths = new Set(files.map((file) => file.path));
+  const writes = files.filter((file) => writtenPaths.has(file.path));
+  return collectRoundIssues(deps, containerId, writes, knownPaths);
 }
