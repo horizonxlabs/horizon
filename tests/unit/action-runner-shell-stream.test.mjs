@@ -35,6 +35,34 @@ test("shell action streams merged output via onShellOutput and returns the accum
   assert.equal(result.stdout, "Installing...\nadded 1 package\n");
 });
 
+test("failed streamed shell action returns its output so the model can recover", async () => {
+  const docker = {
+    async execInContainer() {
+      return { stdout: "", stderr: "", exitCode: 0 };
+    },
+    async execInContainerStream(_containerId, _cmd, onChunk) {
+      onChunk("npm error EACCES: package.json is not writable\n");
+      return { exitCode: 243 };
+    }
+  };
+  const runner = createActionRunner({
+    docker,
+    checkpoints: createMemoryCheckpointStore(),
+    migrations: createMemoryMigrationStore()
+  });
+
+  const result = await runner.runAction({
+    containerId: "c1",
+    projectId: "p1",
+    template,
+    action: { id: "a1", type: "shell", command: "npm", args: ["install", "example"] },
+    onShellOutput() {}
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /EACCES: package\.json is not writable/);
+});
+
 test("shell action falls back to buffered execInContainer when no onShellOutput is given", async () => {
   let streamedUsed = false;
   const docker = {
@@ -84,8 +112,13 @@ test("Pi shell actions run as the unprivileged workspace owner, bound output, an
   });
   assert.equal(result.ok, true);
   assert.equal(result.stdout.length, 12);
-  assert.deepEqual(calls[0].command.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
-  assert.match(calls[0].command[5], /cd \/workspace && exec timeout -s TERM -k 5 60 'pnpm' 'test'/);
+  assert.deepEqual(calls[0].command.slice(0, 2), ["sh", "-c"]);
+  assert.match(calls[0].command[2], /setsid --wait sh -c/);
+  assert.match(calls[0].command[2], /su -s \/bin\/sh evcp/);
+  assert.match(calls[0].command[2], /sleep 60.*kill -TERM/);
+  assert.match(calls[0].command[2], /cd \/workspace && exec/);
+  assert.match(calls[1].command[2], /kill -TERM/);
+  assert.match(calls[1].command[2], /kill -KILL/);
 
   const controller = new AbortController();
   controller.abort();
@@ -98,7 +131,7 @@ test("Pi shell actions run as the unprivileged workspace owner, bound output, an
   });
   assert.equal(aborted.ok, false);
   assert.match(aborted.error, /aborted/);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
 });
 
 test("npm build validates in a disposable tree without replacing the live preview cache", async () => {
@@ -123,8 +156,8 @@ test("npm build validates in a disposable tree without replacing the live previe
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(calls[0].command.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
-  const script = calls[0].command[5];
+  assert.deepEqual(calls[0].command.slice(0, 2), ["sh", "-c"]);
+  const script = calls[0].command[2];
   assert.match(script, /mktemp -d \/tmp\/evcp-agent-validation/);
   assert.match(script, /--exclude=\.next/);
   assert.match(script, /EVCP_VALIDATION_DIST_DIR=\.next/);
@@ -145,6 +178,9 @@ for (const boundary of ["abort", "timeout"]) {
     const docker = {
       execInContainer(containerId, command) {
         calls.push({ containerId, command });
+        if (calls.length > 1) {
+          return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+        }
         return execution;
       }
     };
@@ -179,6 +215,8 @@ for (const boundary of ["abort", "timeout"]) {
     assert.equal(commandSettled, true);
     assert.equal(result.ok, false);
     assert.match(result.error, new RegExp(boundary === "abort" ? "aborted" : "timed out", "i"));
-    assert.match(calls[0].command.at(-1), /timeout -s TERM -k 5/);
+    assert.match(calls[0].command.at(-1), /setsid --wait sh -c/);
+    assert.match(calls[0].command.at(-1), /kill -TERM/);
+    assert.match(calls[0].command.at(-1), /kill -KILL/);
   });
 }

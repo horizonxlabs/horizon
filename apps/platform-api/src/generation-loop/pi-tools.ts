@@ -77,16 +77,12 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     context,
     "write_workspace_file",
     "Write workspace file",
-    "Create one new file in an allowed project root.",
+    "Create or replace one file in an allowed project root. Existing large files are protected by the drift guard.",
     Type.Object({ path: Type.String(), content: Type.String() }, { additionalProperties: false }),
     async (id, params) => {
       assertUnlocked(context.template, params.path.trim());
       const path = normalizeProjectPath(params.path);
       assertUnlocked(context.template, path);
-      const files = await workspaceFiles(context);
-      if (files.some((file) => file.path === path)) {
-        throw new Error(`workspace file '${path}' already exists; use edit_workspace_file`);
-      }
       return runAction(context, {
         id,
         type: "file",
@@ -146,12 +142,22 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
         positiveInteger(params.timeoutMs ?? context.limits.shellTimeoutMs, "timeoutMs"),
         context.limits.shellTimeoutMs
       );
-      return runAction(
+      const result = await runAction(
         context,
         { id, type: "shell", command: params.command, args: controlledArgs },
         timeoutMs,
         onUpdate
       );
+      if (result.details.ok && isBuildValidation(params.command, params.args)) {
+        result.terminate = true;
+        result.content = [
+          {
+            type: "text",
+            text: "Build validation passed. Send the final response now with no more tool calls."
+          }
+        ];
+      }
+      return result;
     }
   );
   const migration = tool(
@@ -239,7 +245,11 @@ function tool<TParams extends TSchema>(
   };
 }
 
-type ToolResult = { content: Array<{ type: "text"; text: string }>; details: HorizonPiToolDetails };
+type ToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  details: HorizonPiToolDetails;
+  terminate?: boolean;
+};
 
 function actionTypeFor(name: string): HorizonPiToolDetails["actionType"] {
   if (name === "edit_workspace_file") return "edit";
@@ -262,6 +272,13 @@ function assertUnlocked(template: GoldenTemplate, path: string): void {
 function positiveInteger(value: number, name: string): number {
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
   return value;
+}
+
+function isBuildValidation(command: string, args: string[]): boolean {
+  const joined = args.join(" ");
+  return (
+    (command === "npm" || command === "pnpm") && (joined === "build" || joined === "run build")
+  );
 }
 
 function success(

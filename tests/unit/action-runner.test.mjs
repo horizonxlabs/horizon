@@ -193,6 +193,7 @@ test("runs a shell action and reports failure with stdout/stderr/exitCode on non
 
   assert.equal(result.ok, false);
   assert.equal(result.exitCode, 1);
+  assert.match(result.error, /type error on line 3/);
   assert.match(result.stderr, /type error/);
 });
 

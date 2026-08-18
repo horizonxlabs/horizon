@@ -49,11 +49,21 @@ test("aborted package mutation settles before snapshot restore and release advan
   const controller = new AbortController();
   let resolveDocker;
   let commandStarted;
+  let dockerCalls = 0;
   const started = new Promise((resolve) => {
     commandStarted = resolve;
   });
   const docker = {
-    execInContainer() {
+    execInContainer(_containerId, command) {
+      dockerCalls += 1;
+      if (dockerCalls >= 2) {
+        lifecycle.push(
+          command.at(-1).includes('rm -f "$action_pgid_file"')
+            ? "process-group:cleaned"
+            : "process-group:terminated"
+        );
+        return Promise.resolve({ stdout: "", stderr: "", exitCode: 0 });
+      }
       lifecycle.push("docker:started");
       commandStarted();
       return new Promise((resolve) => {
@@ -122,10 +132,16 @@ test("aborted package mutation settles before snapshot restore and release advan
   resolveDocker();
   const events = await running;
   const settledAt = lifecycle.indexOf("docker:settled");
+  const terminatedAt = lifecycle.indexOf("process-group:terminated");
+  const cleanedAt = lifecycle.indexOf("process-group:cleaned");
   const restoredAt = lifecycle.indexOf("restore:base-sha");
   const releasedAt = lifecycle.indexOf("release:base-sha");
   assert.ok(
-    settledAt >= 0 && restoredAt > settledAt && releasedAt > restoredAt,
+    terminatedAt >= 0 &&
+      settledAt > terminatedAt &&
+      cleanedAt > settledAt &&
+      restoredAt > cleanedAt &&
+      releasedAt > restoredAt,
     lifecycle.join(",")
   );
   assert.deepEqual(

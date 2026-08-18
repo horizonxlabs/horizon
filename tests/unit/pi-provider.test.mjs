@@ -191,3 +191,110 @@ test("Pi bridge streams final reasoning when the governed provider emitted no de
     "Final-only reasoning"
   );
 });
+
+test("Pi bridge exposes governed provider fallback as streamed reasoning", async () => {
+  const { modelRuntime, model } = await createHorizonPiRuntime({
+    executor: {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "fallback",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Fallback answer" }],
+            timestamp: 2
+          },
+          usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
+          evidence: {
+            requestId: input.requestId,
+            failureReason: "AI provider returned HTTP 402"
+          }
+        };
+      }
+    },
+    actor,
+    projectId: "p1",
+    scenario: "frontend_coding",
+    turnId: "turn-fallback",
+    maxModelRounds: 1
+  });
+  const events = [];
+
+  for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+
+  assert.equal(
+    events.find((event) => event.type === "thinking_delta")?.delta,
+    "Using fallback AI provider: AI provider returned HTTP 402"
+  );
+  assert.equal(events.at(-1).type, "done");
+});
+
+test("Pi bridge reports provider degradation once per turn instead of once per model round", async () => {
+  const { modelRuntime, model } = await createHorizonPiRuntime({
+    executor: {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "fallback",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Fallback answer" }],
+            timestamp: 2
+          },
+          usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
+          evidence: { requestId: input.requestId, failureReason: "primary unavailable" }
+        };
+      }
+    },
+    actor,
+    projectId: "p1",
+    scenario: "frontend_coding",
+    turnId: "turn-fallback-once",
+    maxModelRounds: 2
+  });
+  const events = [];
+
+  for (let index = 0; index < 2; index += 1) {
+    for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+  }
+
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "thinking_delta")
+      .map((event) => event.delta),
+    ["Using fallback AI provider: primary unavailable"]
+  );
+});
+
+test("Pi bridge aborts a governed model round that exceeds its own deadline", async () => {
+  let receivedSignal;
+  const { modelRuntime, model } = await createHorizonPiRuntime({
+    executor: {
+      async executeAgentRound(_actor, input) {
+        receivedSignal = input.signal;
+        if (!input.signal) {
+          return {
+            status: "failed",
+            evidence: { requestId: input.requestId, failureReason: "missing timeout signal" }
+          };
+        }
+        await new Promise((resolve) => input.signal.addEventListener("abort", resolve, { once: true }));
+        return {
+          status: "failed",
+          evidence: { requestId: input.requestId, failureReason: "aborted" }
+        };
+      }
+    },
+    actor,
+    projectId: "p1",
+    scenario: "frontend_coding",
+    turnId: "turn-round-timeout",
+    maxModelRounds: 1,
+    modelRoundTimeoutMs: 20
+  });
+  const events = [];
+
+  for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+
+  assert.equal(receivedSignal?.aborted, true);
+  assert.equal(events.at(-1).type, "error");
+  assert.match(events.at(-1).error.errorMessage, /model round timed out/i);
+});

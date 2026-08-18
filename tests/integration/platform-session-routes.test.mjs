@@ -5,9 +5,9 @@ const { registerKeycloakOidcRoutes } = await import("../../apps/platform-api/src
 const { PlatformSessionService } = await import("../../apps/platform-api/src/auth/platform-session-service.ts");
 const { MemoryPlatformSessionRepository } = await import("../../apps/platform-api/src/persistence/platform-session-repository.ts");
 
-function harness() {
+function harness(sessionService) {
   const routes = new Map();
-  const service = new PlatformSessionService(new MemoryPlatformSessionRepository(), "test-secret");
+  const service = sessionService ?? new PlatformSessionService(new MemoryPlatformSessionRepository(), "test-secret");
   registerKeycloakOidcRoutes({ get: (path, handler) => routes.set(`GET ${path}`, handler), post: (path, handler) => routes.set(`POST ${path}`, handler), put: () => undefined }, {}, service);
   return { service, call: async (path, request = {}) => {
     let status; let body;
@@ -34,4 +34,14 @@ test("refresh endpoint rejects malformed credentials without issuing a token", a
   const response = await api.call("/auth/refresh", { body: { refreshToken: "not-a-real-token" } });
   assert.equal(response.status, 401);
   assert.equal(response.body.ok, false);
+});
+
+test("refresh endpoint reports transient session-service failures as unavailable", async () => {
+  const api = harness({ refresh: async () => { throw new Error("database unavailable"); } });
+
+  const response = await api.call("/auth/refresh", { body: { refreshToken: "opaque-refresh-token" } });
+
+  assert.equal(response.status, 503);
+  assert.equal(response.body.ok, false);
+  assert.equal(response.body.error.code, "SESSION_SERVICE_UNAVAILABLE");
 });
