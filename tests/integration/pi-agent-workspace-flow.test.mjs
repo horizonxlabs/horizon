@@ -208,10 +208,20 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     (await migrations.listMigrations("project-flow")).map((migration) => migration.name),
     ["001_create_leads", "002_create_stages"]
   );
+  // Shell actions now route through the process-group-tracking wrapper, so the exec call
+  // is `sh -c <root script>` and the actual `su -s /bin/sh evcp -c 'cd /workspace && exec pnpm test' &`
+  // invocation lives (nested-quoted) inside that root script's text rather than being the
+  // exec argv itself.
   const directCommand = docker.state.execCalls.find(
-    ({ cmd }) => cmd[0] === "su" && cmd.at(-1)?.includes("'pnpm' 'test'")
+    ({ cmd }) =>
+      cmd[0] === "sh" &&
+      cmd[1] === "-c" &&
+      /su -s \/bin\/sh evcp -c/.test(cmd[2] ?? "") &&
+      /cd \/workspace && exec/.test(cmd[2] ?? "") &&
+      /pnpm/.test(cmd[2] ?? "") &&
+      /test/.test(cmd[2] ?? "")
   );
-  assert.deepEqual(directCommand?.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  assert.ok(directCommand, "expected a process-group-wrapped pnpm test invocation");
 });
 
 test("Auto mode informational turn makes no commit, validate, or checkpoint calls", async () => {
