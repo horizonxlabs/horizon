@@ -108,6 +108,35 @@ test("chat transport rejects data frames sent after the terminal done event", as
   }
 });
 
+test("chat transport forwards commit events with sha to the caller", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const received = [];
+  globalThis.window = browserWindow();
+  globalThis.fetch = async () =>
+    new Response(
+      [
+        'event: commit\ndata: {"type":"commit","sha":"abc123"}\n\n',
+        'event: done\ndata: {"type":"done"}\n\n'
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+
+  try {
+    await streamVibeChat("p1", "add a home page", [], "auto", (type, data) => {
+      received.push({ type, data });
+    });
+    assert.deepEqual(
+      received.map((event) => event.type),
+      ["commit", "done"]
+    );
+    assert.equal(received[0].data.sha, "abc123");
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.window = originalWindow;
+  }
+});
+
 test("chat transport parses CRLF frames split across network chunks", async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;

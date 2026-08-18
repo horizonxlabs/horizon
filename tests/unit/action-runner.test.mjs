@@ -55,6 +55,35 @@ async function makeRunner() {
   return { docker, containerId, runner };
 }
 
+test("rejects shell-unsafe file and edit paths before any Docker exec", async () => {
+  const { docker, containerId, runner } = await makeRunner();
+  const unsafePaths = [
+    "app/x; id",
+    "app/x'quote.tsx",
+    "app/$(id).tsx",
+    "app/white space.tsx",
+    "app/x\nname.tsx"
+  ];
+
+  for (const filePath of unsafePaths) {
+    const write = await runner.runAction({
+      containerId,
+      projectId: "p1",
+      template,
+      action: { id: "write", type: "file", filePath, content: "safe" }
+    });
+    const edit = await runner.runAction({
+      containerId,
+      projectId: "p1",
+      template,
+      action: { id: "edit", type: "edit", filePath, find: "a", replace: "b" }
+    });
+    assert.equal(write.ok, false, filePath);
+    assert.equal(edit.ok, false, filePath);
+  }
+  assert.deepEqual(docker.state.execCalls, []);
+});
+
 test("rejects a file write whose content carries a git conflict marker", async () => {
   const { docker, containerId, runner } = await makeRunner();
   const result = await runner.runAction({
@@ -123,10 +152,15 @@ test("writes a non-locked file via a base64-encoded shell write", async () => {
   assert.equal(result.ok, true);
   // the drift guard runs a `wc -c` size check first, then the base64 write; find the write call
   const call = docker.state.execCalls.find((c) =>
-    /mkdir -p .*app.*&&.*base64 -d.*app\/page\.tsx/s.test(c.cmd[2] ?? "")
+    /mkdir -p .*app.*&&.*base64 -d.*app\/page\.tsx/s.test(c.cmd.at(-1) ?? "")
   );
   assert.ok(call, "expected a base64 write to app/page.tsx");
-  assert.equal(call.cmd[0], "sh");
+  assert.deepEqual(call.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  assert.match(call.cmd.at(-1), /mkdir -p 'app'/);
+  assert.match(call.cmd.at(-1), /> 'app\/page\.tsx'/);
+  const probe = docker.state.execCalls.find((c) => /wc -c/.test(c.cmd.at(-1) ?? ""));
+  assert.deepEqual(probe.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+  assert.match(probe.cmd.at(-1), /< 'app\/page\.tsx'/);
 });
 
 test("runs a shell action and reports failure with stdout/stderr/exitCode on non-zero exit", async () => {
@@ -255,7 +289,7 @@ function stubDockerWithSizes(sizeByPath) {
     async execInContainer(containerId, cmd) {
       execCalls.push({ containerId, cmd });
       const script = cmd[cmd.length - 1] || "";
-      const m = script.match(/wc -c < (\S+)/);
+      const m = script.match(/wc -c < '([^']+)'/);
       if (m) return { stdout: String(sizeByPath[m[1]] ?? -1), stderr: "", exitCode: 0 };
       return { stdout: "", stderr: "", exitCode: 0 };
     }

@@ -7,81 +7,12 @@ import { createMemoryCheckpointStore } from "../../apps/platform-api/src/generat
 import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
 import { createPiGenerationService } from "../../apps/platform-api/src/generation-loop/pi-generation-service.ts";
 import {
-  buildDevContainerSpec,
-  createMemoryDockerEngine
-} from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
-
-const actor = {
-  id: "creator-integration",
-  email: "creator@example.test",
-  name: "Creator",
-  role: "creator"
-};
-
-async function drain(iterable) {
-  const events = [];
-  for await (const event of iterable) events.push(event);
-  return events;
-}
-
-async function memoryWorkspace() {
-  const docker = createMemoryDockerEngine();
-  const { containerId } = await docker.createContainer(
-    buildDevContainerSpec({
-      projectId: "project-flow",
-      slug: "pi-flow",
-      image: "workspace:test",
-      env: {},
-      cpuCores: 1,
-      memoryMb: 512,
-      network: "test"
-    })
-  );
-  await docker.startContainer(containerId);
-  const files = new Map([
-    ["app/page.tsx", "export default function Page() { return <h1>Old</h1>; }"],
-    ["lib/mock-data.ts", "export const rows = [];\n"]
-  ]);
-  const originalExec = docker.execInContainer.bind(docker);
-  docker.execInContainer = async (id, command) => {
-    await originalExec(id, command);
-    if (command[0] !== "sh" || command[1] !== "-c") {
-      return { stdout: command[0] === "pnpm" ? "checks passed\n" : "", stderr: "", exitCode: 0 };
-    }
-    const script = command[2] ?? "";
-    const sizePath = script.match(/^wc -c < ([^ ]+)/)?.[1];
-    if (sizePath) {
-      const content = files.get(sizePath);
-      return {
-        stdout: `${content === undefined ? -1 : Buffer.byteLength(content, "utf8")}\n`,
-        stderr: "",
-        exitCode: 0
-      };
-    }
-    const readPath = script.match(/^base64 ([^ ]+)/)?.[1];
-    if (readPath) {
-      const content = files.get(readPath);
-      return {
-        stdout:
-          content === undefined
-            ? "__EVCP_MISSING__\n"
-            : `${Buffer.from(content).toString("base64")}\n`,
-        stderr: "",
-        exitCode: 0
-      };
-    }
-    for (const match of script.matchAll(/echo ([A-Za-z0-9+/=]+) \| base64 -d > ([^ &]+)/g)) {
-      files.set(match[2], Buffer.from(match[1], "base64").toString("utf8"));
-    }
-    return { stdout: "", stderr: "", exitCode: 0 };
-  };
-  docker.execInContainerStream = async (id, command, onChunk) => {
-    await originalExec(id, command);
-    onChunk("checks passed\n");
-    return { exitCode: 0 };
-  };
-  return { docker, containerId, files };
-}
+  actor,
+  drain,
+  instrumentedCheckpoints,
+  memoryWorkspace,
+  scriptedGovernedAiExecutor
+} from "./helpers/pi-agent-workspace-flow-fixtures.mjs";
 
 test("native Pi tools preserve Creator SSE and the outer build transaction", async () => {
   const lifecycle = [];
@@ -176,12 +107,19 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
         lifecycle.push("prepare:base");
         return "base-sha";
       },
+      async hasChanges(_projectId, snapshot) {
+        assert.equal(snapshot, "base-sha");
+        lifecycle.push("git:changes");
+        return true;
+      },
       async validate() {
         lifecycle.push("validate");
       },
-      async restore() {
+      async restore() {},
+      async restoreSnapshot() {
         lifecycle.push("restore");
-      }
+      },
+      async releaseSnapshot() {}
     },
     async commitAllChanges() {
       lifecycle.push("commit:candidate");
@@ -201,7 +139,11 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
       productSpec: "Build a governed sales pipeline."
     }),
     onAudit(event) {
-      lifecycle.push(`audit:${event.metadata.toolName}`);
+      lifecycle.push(
+        event.action === "workspace_snapshot_release"
+          ? `audit:snapshot-release:${event.metadata.ok}`
+          : `audit:${event.metadata.toolName}`
+      );
     },
     limits: {
       maxModelRounds: 8,
@@ -250,12 +192,15 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     "audit:run_workspace_command",
     "audit:propose_database_migration",
     "audit:propose_database_migration",
+    "git:changes",
     "validate",
     "sync:migrations",
+    "git:changes",
     "commit:candidate",
     "migrate:batch",
     "checkpoint",
-    "append:assistant"
+    "append:assistant",
+    "audit:snapshot-release:true"
   ]);
   assert.match(files.get("app/page.tsx"), /Pipeline/);
   assert.match(files.get("components/Pipeline.tsx"), /function Pipeline/);
@@ -267,4 +212,178 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     ({ cmd }) => cmd[0] === "su" && cmd.at(-1)?.includes("'pnpm' 'test'")
   );
   assert.deepEqual(directCommand?.cmd.slice(0, 5), ["su", "-s", "/bin/sh", "evcp", "-c"]);
+});
+
+test("Auto mode informational turn makes no commit, validate, or checkpoint calls", async () => {
+  const { docker, containerId, files } = await memoryWorkspace();
+  const migrations = createMemoryMigrationStore();
+  const checkpointStore = createMemoryCheckpointStore();
+  const actionRunner = createActionRunner({ docker, migrations, checkpoints: checkpointStore });
+  const chatHistory = createMemoryChatHistoryStore();
+
+  const workspaceGuard = {
+    validateCalls: 0,
+    async prepare() {
+      return "base-sha";
+    },
+    async hasChanges() {
+      return false;
+    },
+    async validate() {
+      workspaceGuard.validateCalls += 1;
+    },
+    async restore() {},
+    async restoreSnapshot() {},
+    async releaseSnapshot() {}
+  };
+  let commitCalls = 0;
+  let checkpointCalls = 0;
+
+  const service = createPiGenerationService({
+    governedAiExecutor: scriptedGovernedAiExecutor(
+      [["read_workspace_file", { path: "app/page.tsx" }]],
+      "This reads directly from the in-memory workspace files."
+    ),
+    chatHistory,
+    actionRunner,
+    template: { name: "Web App", lockedFiles: ["package.json"], files: [] },
+    getContainerId: () => containerId,
+    readContextFiles: async () => [...files].map(([path, content]) => ({ path, content })),
+    readWorkspaceFiles: async () => [...files].map(([path, content]) => ({ path, content })),
+    workspaceGuard,
+    async commitAllChanges() {
+      commitCalls += 1;
+      return "should-not-be-called-sha";
+    },
+    checkpoints: instrumentedCheckpoints(checkpointStore, () => {
+      checkpointCalls += 1;
+    }),
+    resolveGovernedContext: async () => ({
+      availableSkills: [],
+      skillInstructions: {},
+      knowledgeExcerpts: [],
+      productSpec: "Build a governed sales pipeline."
+    }),
+    limits: {
+      maxModelRounds: 8,
+      maxToolCalls: 12,
+      shellTimeoutMs: 5_000,
+      maxToolOutputBytes: 4_096,
+      maxFileBytes: 20_000,
+      maxToolInputBytes: 20_000,
+      turnTimeoutMs: 30_000,
+      validationRetries: 0
+    }
+  });
+
+  const events = await drain(
+    service.runTurn({
+      projectId: "project-flow-info",
+      prompt: "Where does this data come from right now?",
+      agentMode: "auto",
+      actor
+    })
+  );
+
+  assert.equal(
+    events.some((event) => event.type === "error"),
+    false
+  );
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  assert.equal(events.at(-1)?.type, "done");
+  assert.equal(workspaceGuard.validateCalls, 0);
+  assert.equal(commitCalls, 0);
+  assert.equal(checkpointCalls, 0);
+});
+
+test("Auto mode mutation turn validates once, commits once, and checkpoints once", async () => {
+  const { docker, containerId, files } = await memoryWorkspace();
+  const migrations = createMemoryMigrationStore();
+  const checkpointStore = createMemoryCheckpointStore();
+  const actionRunner = createActionRunner({ docker, migrations, checkpoints: checkpointStore });
+  const chatHistory = createMemoryChatHistoryStore();
+
+  const workspaceGuard = {
+    validateCalls: 0,
+    async prepare() {
+      return "base-sha";
+    },
+    async hasChanges() {
+      // The scripted mutation always leaves the workspace Git tree dirty.
+      return true;
+    },
+    async validate() {
+      workspaceGuard.validateCalls += 1;
+    },
+    async restore() {},
+    async restoreSnapshot() {},
+    async releaseSnapshot() {}
+  };
+  let commitCalls = 0;
+  let checkpointCalls = 0;
+
+  const service = createPiGenerationService({
+    governedAiExecutor: scriptedGovernedAiExecutor(
+      [
+        [
+          "write_workspace_file",
+          { path: "components/AutoNote.tsx", content: "export const AutoNote = 1;\n" }
+        ]
+      ],
+      "Added the AutoNote component."
+    ),
+    chatHistory,
+    actionRunner,
+    template: { name: "Web App", lockedFiles: ["package.json"], files: [] },
+    getContainerId: () => containerId,
+    readContextFiles: async () => [...files].map(([path, content]) => ({ path, content })),
+    readWorkspaceFiles: async () => [...files].map(([path, content]) => ({ path, content })),
+    workspaceGuard,
+    async commitAllChanges() {
+      commitCalls += 1;
+      return "auto-mutation-sha";
+    },
+    checkpoints: instrumentedCheckpoints(checkpointStore, () => {
+      checkpointCalls += 1;
+    }),
+    resolveGovernedContext: async () => ({
+      availableSkills: [],
+      skillInstructions: {},
+      knowledgeExcerpts: [],
+      productSpec: "Build a governed sales pipeline."
+    }),
+    limits: {
+      maxModelRounds: 8,
+      maxToolCalls: 12,
+      shellTimeoutMs: 5_000,
+      maxToolOutputBytes: 4_096,
+      maxFileBytes: 20_000,
+      maxToolInputBytes: 20_000,
+      turnTimeoutMs: 30_000,
+      validationRetries: 0
+    }
+  });
+
+  const events = await drain(
+    service.runTurn({
+      projectId: "project-flow-mutation",
+      prompt: "Add an AutoNote component",
+      agentMode: "auto",
+      actor
+    })
+  );
+
+  assert.equal(
+    events.some((event) => event.type === "error"),
+    false
+  );
+  assert.deepEqual(events.slice(-2).map((event) => event.type), ["commit", "done"]);
+  assert.equal(events.filter((event) => event.type === "commit").length, 1);
+  assert.equal(workspaceGuard.validateCalls, 1);
+  assert.equal(commitCalls, 1);
+  assert.equal(checkpointCalls, 1);
+  assert.match(files.get("components/AutoNote.tsx"), /AutoNote/);
 });

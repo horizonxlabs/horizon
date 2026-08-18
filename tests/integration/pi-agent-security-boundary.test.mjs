@@ -62,8 +62,13 @@ test("generated workspace Pi resources never enter the Platform API session", as
       async prepare() {
         throw new Error("not expected");
       },
+      async hasChanges() {
+        throw new Error("not expected");
+      },
       async validate() {},
-      async restore() {}
+      async restore() {},
+      async restoreSnapshot() {},
+      async releaseSnapshot() {}
     },
     async commitAllChanges() {
       throw new Error("not expected");

@@ -11,7 +11,6 @@ type VibeChatOptions = {
   selectedProjectId: string;
   promptDraft: string;
   setPromptDraft: (prompt: string) => void;
-  workspaceMode: WorkspaceAgentMode;
   selectedAttachmentIds: string[];
 };
 
@@ -19,7 +18,6 @@ export function useVibeChat({
   selectedProjectId,
   promptDraft,
   setPromptDraft,
-  workspaceMode,
   selectedAttachmentIds
 }: VibeChatOptions) {
   const [vibeMessages, setVibeMessages] = useState<VibeMessage[]>([]);
@@ -60,7 +58,7 @@ export function useVibeChat({
   }) {
     const projectId = overrides?.projectId ?? selectedProjectId;
     const prompt = (overrides?.prompt ?? promptDraft).trim();
-    const mode = overrides?.mode ?? workspaceMode;
+    const mode = overrides?.mode ?? "auto";
     if (!projectId || !prompt) return;
     // Busy = the request waits its turn in the queue instead of being rejected. It becomes a
     // real chat message only when the drain effect picks it up. (Approve-plan turns carry
@@ -91,7 +89,7 @@ export function useVibeChat({
     ]);
     setPromptDraft("");
     setIsVibing(true);
-    setVibeStatus(mode === "plan" ? "Planning…" : "Provisioning workspace…");
+    setVibeStatus(mode === "plan" ? "Planning…" : "Thinking…");
     const patchAssistant = (fn: (message: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) =>
         prev.map((message) => (message.id === assistantId ? fn(message) : message))
@@ -100,8 +98,8 @@ export function useVibeChat({
     activeStreamAbort.current?.abort();
     activeStreamAbort.current = streamController;
     try {
-      if (mode === "build") await ensureVibeWorkspace(projectId, streamController.signal);
-      setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "AI is working…");
+      if (mode !== "plan") await ensureVibeWorkspace(projectId, streamController.signal);
+      setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "Thinking…");
       await streamVibeChat(
         projectId,
         prompt,
@@ -129,6 +127,7 @@ export function useVibeChat({
             setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
           } else if (type === "commit") {
             setVibeStatus(`Committed ${field("sha").slice(0, 8)}`);
+            setVibePreviewKey((key) => key + 1);
           } else if (type === "error") {
             setVibeStatus(`Error: ${field("message")}`);
           } else if (type === "done") {
@@ -141,7 +140,6 @@ export function useVibeChat({
                     ? previous
                     : "Done"
             );
-            if (mode === "build") setVibePreviewKey((key) => key + 1);
           }
         },
         overrides?.approvedPlan,

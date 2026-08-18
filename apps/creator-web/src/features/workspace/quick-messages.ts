@@ -1,4 +1,4 @@
-import type { PrdSectionDto, WorkspaceAgentMode } from "@evcp/api-client";
+import type { PrdSectionDto } from "@evcp/api-client";
 import type { CreatorProjectView } from "@/shared/types";
 import { extractSuggestions } from "./vibe-suggest";
 import type { VibeMessage } from "./vibe-stream";
@@ -13,7 +13,6 @@ export type QuickMessage = {
 };
 
 export type QuickMessageContext = {
-  mode: WorkspaceAgentMode;
   project: Pick<CreatorProjectView, "name" | "appType">;
   prdSummary?: string;
   prdSections?: PrdSectionDto[];
@@ -84,73 +83,43 @@ export function buildQuickMessages(context: QuickMessageContext): QuickMessage[]
     });
   }
 
-  if (context.mode === "plan") {
-    candidates.push(
-      {
-        id: "review-prd",
-        label: `Review ${shortProjectName} against PRD`,
-        prompt: `Review ${projectName} against the current PRD without changing files. Identify gaps and use this product context: ${productContext}`,
-        intent: "product"
-      },
-      {
-        id: "prioritize-next",
-        label: "Prioritize the next improvement",
-        prompt: `Identify and prioritize the next highest-impact improvement for ${projectName}. Explain trade-offs and do not change files.`,
-        intent: "product"
-      },
-      context.hasPreview
-        ? {
-            id: "assess-release-risks",
-            label: "Check release risks",
-            prompt: `Assess data, permission, usability, and release risks for ${projectName} without changing files.`,
-            intent: "release"
+  candidates.push(
+    context.hasPreview
+      ? {
+          id: "next-prd-improvement",
+          label: `Improve ${shortProjectName}`,
+          prompt: `Implement the next highest-impact PRD improvement for ${projectName}. Use this product context: ${productContext}. Preserve current working behavior and verify the preview.`,
+          intent: "product"
+        }
+      : {
+          id: "build-first-preview",
+          label: "Build first preview",
+          prompt: `Build the smallest useful first preview for ${projectName}, a ${appType}. Use this product context: ${productContext}. Verify it renders successfully.`,
+          intent: "product"
+        },
+    {
+      id: "review-prd",
+      label: `Review ${shortProjectName} against PRD`,
+      prompt: `Review ${projectName} against the current PRD without changing files. Identify gaps and use this product context: ${productContext}`,
+      intent: "product"
+    },
+    ...(context.hasProjectFiles
+      ? [
+          {
+            id: "use-project-files",
+            label: "Improve with project files",
+            prompt: `Improve ${projectName} using the attached project files. Keep the implementation aligned with the current PRD and verify the preview.`,
+            intent: "continue" as const
           }
-        : {
-            id: "plan-first-preview",
-            label: "Plan first preview",
-            prompt: `Plan the smallest useful first preview for ${projectName} without changing files. Base the plan on: ${productContext}`,
-            intent: "product"
-          }
-    );
-  } else {
-    candidates.push(
-      context.hasPreview
-        ? {
-            id: "next-prd-improvement",
-            label: `Improve ${shortProjectName}`,
-            prompt: `Implement the next highest-impact PRD improvement for ${projectName}. Use this product context: ${productContext}. Preserve current working behavior and verify the preview.`,
-            intent: "product"
-          }
-        : {
-            id: "build-first-preview",
-            label: "Build first preview",
-            prompt: `Build the smallest useful first preview for ${projectName}, a ${appType}. Use this product context: ${productContext}. Verify it renders successfully.`,
-            intent: "product"
-          },
-      ...(context.hasProjectFiles
-        ? [
-            {
-              id: "use-project-files",
-              label: "Use attached project files",
-              prompt: `Use the attached project files to improve ${projectName}. Keep the implementation aligned with the current PRD and verify the preview.`,
-              intent: "continue" as const
-            }
-          ]
-        : []),
-      {
-        id: "polish-edge-states",
-        label: "Polish loading & error states",
-        prompt: `Improve loading, empty, error, and retry states in ${projectName}. Keep the existing visual direction and verify each state.`,
-        intent: "quality"
-      },
-      {
-        id: "mobile-ready",
-        label: `Make ${shortProjectName} mobile-ready`,
-        prompt: `Make ${projectName} responsive for narrow mobile screens while preserving desktop behavior. Verify keyboard focus and touch targets.`,
-        intent: "quality"
-      }
-    );
-  }
+        ]
+      : []),
+    {
+      id: "polish-edge-states",
+      label: "Improve loading & error states",
+      prompt: `Improve loading, empty, error, and retry states in ${projectName}. Keep the existing visual direction and verify each state.`,
+      intent: "quality"
+    }
+  );
 
   return uniqueFirstThree(candidates);
 }

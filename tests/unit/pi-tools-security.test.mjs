@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createHorizonPiTools } from "../../apps/platform-api/src/generation-loop/pi-tools.ts";
+import { normalizeProjectPath } from "../../apps/platform-api/src/generation-loop/pi-tool-policy.ts";
 
 function securedFixture(overrides = {}) {
   const calls = [];
@@ -57,6 +58,11 @@ test("rejects unsafe paths, locked writes, and non-unique edits before action ru
     "/etc/passwd",
     "app\\page.tsx",
     "app/../secret",
+    "app/.git/config",
+    "app/x; id",
+    "app/x'quote.tsx",
+    "app/$(id).tsx",
+    "app/white space.tsx",
     "app/\u0000x"
   ]) {
     const result = await run(tools, "read_workspace_file", { path });
@@ -119,7 +125,7 @@ test("rejects oversized inputs and clips workspace output by UTF-8 bytes", async
   assert.equal(calls.length, 0);
 });
 
-test("allows only direct safe commands and arguments", async () => {
+test("Pi tool boundary rejects interpreters, Git, file mutators, and package-manager escapes", async () => {
   const { tools, calls } = securedFixture();
   const invalid = [
     { command: "curl", args: ["https://example.test"] },
@@ -128,14 +134,90 @@ test("allows only direct safe commands and arguments", async () => {
     { command: "node", args: ["/etc/passwd"] },
     { command: "node", args: ["-e", "console.log(process.env)"] },
     { command: "git", args: ["remote", "-v"] },
+    { command: "find", args: ["."] },
+    { command: "mkdir", args: ["app/new"] },
+    { command: "cp", args: ["app/a", "app/b"] },
+    { command: "mv", args: ["app/a", "app/b"] },
+    { command: "sed", args: ["-i", "s/a/b/", "app/page.tsx"] },
+    { command: "npx", args: ["next", "build"] },
     { command: "npm", args: ["view", "react"] },
-    { command: "ls", args: ["bad\u0000arg"] }
+    { command: "npm", args: ["exec", "node", "-e", "process.exit()"] },
+    { command: "npm", args: ["run", "arbitrary-script"] },
+    { command: "npm", args: ["run", "build", "--", "--config", "../unsafe.js"] },
+    { command: "npm", args: ["install", "--prefix", "../outside", "react"] },
+    { command: "npm", args: ["install", "file:../host-package"] },
+    { command: "pnpm", args: ["dlx", "tsx", "script.ts"] },
+    { command: "pnpm", args: ["exec", "node", "script.js"] },
+    { command: "pnpm", args: ["x", "node", "script.js"] },
+    { command: "pnpm", args: ["lint", "--fix"] }
   ];
   for (const params of invalid) {
     const result = await run(tools, "run_workspace_command", params);
     assert.equal(result.details.ok, false, JSON.stringify(params));
   }
   assert.equal(calls.length, 0);
+});
+
+test("workspace paths cannot target Git metadata", () => {
+  assert.throws(() => normalizeProjectPath("app/.git/config"), /\.git|unsafe/i);
+});
+
+test("workspace path segments use a conservative shell-safe filename grammar", () => {
+  for (const path of [
+    "app/x; id",
+    "app/x'quote.tsx",
+    "app/$(id).tsx",
+    "app/white space.tsx",
+    "app/x\tname.tsx",
+    'app/x"name.tsx',
+    "app/x`id`.tsx",
+    "app/x|id.tsx",
+    "app/x&y.tsx",
+    " app/page.tsx",
+    "app/page.tsx "
+  ]) {
+    assert.throws(() => normalizeProjectPath(path), /unsafe/i, path);
+  }
+  assert.equal(
+    normalizeProjectPath("app/@scope/card-view_v2+.tsx"),
+    "app/@scope/card-view_v2+.tsx"
+  );
+});
+
+test("Pi tool boundary permits only controlled installs and approved scripts", async () => {
+  const { tools, calls } = securedFixture({
+    limits: {
+      maxToolCalls: 50,
+      maxToolInputBytes: 4_096,
+      maxToolOutputBytes: 256,
+      shellTimeoutMs: 1_000
+    }
+  });
+  const valid = [
+    { command: "npm", args: ["install"] },
+    { command: "npm", args: ["install", "--save-dev", "typescript@^5.9.0"] },
+    { command: "npm", args: ["add", "@types/node@latest"] },
+    { command: "pnpm", args: ["install"] },
+    { command: "pnpm", args: ["add", "-D", "vitest@3.2.4"] },
+    { command: "npm", args: ["run", "build"] },
+    { command: "npm", args: ["test"] },
+    { command: "pnpm", args: ["typecheck"] },
+    { command: "pnpm", args: ["run", "lint"] }
+  ];
+
+  for (const params of valid) {
+    const result = await run(tools, "run_workspace_command", params);
+    assert.equal(result.details.ok, true, JSON.stringify(params));
+  }
+  assert.equal(calls.length, valid.length);
+  assert.deepEqual(calls[0].action.args, ["install", "--ignore-scripts"]);
+  assert.deepEqual(calls[1].action.args, [
+    "install",
+    "--ignore-scripts",
+    "--save-dev",
+    "typescript@^5.9.0"
+  ]);
+  assert.deepEqual(calls[4].action.args, ["add", "--ignore-scripts", "-D", "vitest@3.2.4"]);
 });
 
 test("rejects transaction control, invalid migration names, aborts, and tool-budget overflow", async () => {

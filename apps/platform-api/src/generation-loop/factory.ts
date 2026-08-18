@@ -107,11 +107,29 @@ export async function createDefaultGenerationService(opts: {
         opts.orchestrator.markActivity(projectId);
         return gitCommitter.prepare(workspaceContainerId(opts.orchestrator, projectId));
       },
+      hasChanges: async (projectId, snapshotToken) => {
+        return gitCommitter.hasChanges(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
+      },
       validate: async (projectId) => {
         await gitCommitter.validate(workspaceContainerId(opts.orchestrator, projectId));
       },
       restore: async (projectId, commitSha) => {
         await gitCommitter.restore(workspaceContainerId(opts.orchestrator, projectId), commitSha);
+      },
+      restoreSnapshot: async (projectId, snapshotToken) => {
+        await gitCommitter.restoreSnapshot(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
+      },
+      releaseSnapshot: async (projectId, snapshotToken) => {
+        await gitCommitter.releaseSnapshot(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
       }
     },
     commitAllChanges: async (projectId, message) => {

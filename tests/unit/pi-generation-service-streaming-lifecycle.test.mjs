@@ -13,7 +13,7 @@ async function drain(iterable) {
   return events;
 }
 
-function baseDeps(executor, lifecycle) {
+function baseDeps(executor, lifecycle, hasWorkspaceChanges) {
   const memory = createMemoryChatHistoryStore();
   return {
     governedAiExecutor: executor,
@@ -47,12 +47,20 @@ function baseDeps(executor, lifecycle) {
         lifecycle.push("prepare:base");
         return "base-sha";
       },
+      async hasChanges(_projectId, snapshot) {
+        assert.equal(snapshot, "base-sha");
+        assert.equal(typeof hasWorkspaceChanges, "boolean", "fixture must declare mutation state");
+        lifecycle.push("git:changes");
+        return hasWorkspaceChanges;
+      },
       async validate() {
         lifecycle.push("validate");
       },
-      async restore() {
-        lifecycle.push("restore");
-      }
+      async restore() {},
+      async restoreSnapshot(_projectId, commitSha) {
+        lifecycle.push(`restore:${commitSha}`);
+      },
+      async releaseSnapshot() {}
     },
     async commitAllChanges() {
       lifecycle.push("commit:candidate");
@@ -128,7 +136,7 @@ test("a corrected tool retry clears the earlier failure and allows commit", asyn
       };
     }
   };
-  const deps = baseDeps(executor, lifecycle);
+  const deps = baseDeps(executor, lifecycle, true);
   deps.readWorkspaceFiles = async () => [{ path: "app/page.tsx", content: "old page" }];
   deps.actionRunner.runAction = async (input) => {
     lifecycle.push(`tool:${input.action.type}`);
@@ -180,7 +188,7 @@ test("cancelling a turn aborts the in-flight Pi model round", async () => {
       };
     }
   };
-  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, true));
   const running = drain(
     service.runTurn({
       projectId: "p1",
@@ -213,7 +221,7 @@ test("server-side stream errors persist the same warning sent to the client", as
       };
     }
   };
-  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, false));
   const events = await drain(
     service.runTurn({ projectId: "p1", prompt: "Plan", agentMode: "plan", actor })
   );

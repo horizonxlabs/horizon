@@ -9,24 +9,35 @@ export async function boundedExecution<T>(
   signal?: AbortSignal,
   timeoutMs?: number
 ): Promise<{ ok: true; value: T } | { ok: false; result: Extract<ActionResult, { ok: false }> }> {
-  if (signal?.aborted) return { ok: false, result: boundedExecutionError("action aborted") };
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let abortListener: (() => void) | undefined;
-  const boundary = new Promise<never>((_, reject) => {
-    if (timeoutMs) timeout = setTimeout(() => reject(new Error("action timed out")), timeoutMs);
+  type Boundary = { kind: "boundary"; message: "action timed out" | "action aborted" };
+  type Settled = { kind: "value"; value: T } | { kind: "error"; error: unknown };
+  const settled: Promise<Settled> = execution.then(
+    (value) => ({ kind: "value", value }),
+    (error: unknown) => ({ kind: "error", error })
+  );
+  const boundary = new Promise<Boundary>((resolve) => {
+    if (timeoutMs) {
+      timeout = setTimeout(
+        () => resolve({ kind: "boundary", message: "action timed out" }),
+        timeoutMs
+      );
+    }
     if (signal) {
-      abortListener = () => reject(new Error("action aborted"));
+      abortListener = () => resolve({ kind: "boundary", message: "action aborted" });
       signal.addEventListener("abort", abortListener, { once: true });
+      if (signal.aborted) abortListener();
     }
   });
   try {
-    return { ok: true, value: await Promise.race([execution, boundary]) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "action failed";
-    if (message === "action timed out" || message === "action aborted") {
-      return { ok: false, result: boundedExecutionError(message) };
+    const first = await Promise.race([settled, boundary]);
+    if (first.kind === "boundary") {
+      await settled;
+      return { ok: false, result: boundedExecutionError(first.message) };
     }
-    throw error;
+    if (first.kind === "error") throw first.error;
+    return { ok: true, value: first.value };
   } finally {
     if (timeout) clearTimeout(timeout);
     if (signal && abortListener) signal.removeEventListener("abort", abortListener);

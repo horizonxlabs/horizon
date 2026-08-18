@@ -23,6 +23,14 @@ type ChatSummaryRecord = {
 export interface ChatHistoryPersistenceClient {
   chatMessage: {
     create(args: { data: ChatMessageRecord }): Promise<ChatMessageRecord>;
+    findUnique(args: { where: { id: string } }): Promise<ChatMessageRecord | null>;
+    updateMany(args: {
+      where: Pick<ChatMessageRecord, "id" | "projectId" | "role">;
+      data: Pick<
+        ChatMessageRecord,
+        "agentMode" | "content" | "artifactActionIds" | "actions" | "commitSha" | "tokenUsage"
+      >;
+    }): Promise<{ count: number }>;
     findMany(args: {
       where: { projectId: string };
       orderBy: { createdAt: "asc" };
@@ -49,8 +57,7 @@ function toWorkspaceChatMessage(record: ChatMessageRecord): WorkspaceChatMessage
     actions: record.actions as WorkspaceChatMessage["actions"],
     commitSha: record.commitSha,
     tokenUsage: record.tokenUsage as WorkspaceChatMessage["tokenUsage"],
-    createdAt:
-      record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt
+    createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt
   };
 }
 
@@ -58,20 +65,52 @@ export class ChatHistoryRepositoryBackedStore implements ChatHistoryStore {
   constructor(private readonly client: ChatHistoryPersistenceClient) {}
 
   async appendMessage(message: WorkspaceChatMessage): Promise<void> {
-    await this.client.chatMessage.create({
+    const create = {
+      id: message.id,
+      projectId: message.projectId,
+      role: message.role,
+      agentMode: message.agentMode ?? null,
+      content: message.content,
+      artifactActionIds: message.artifactActionIds,
+      actions: message.actions ?? null,
+      commitSha: message.commitSha,
+      tokenUsage: message.tokenUsage,
+      createdAt: new Date(message.createdAt)
+    };
+    const existing = await this.client.chatMessage.findUnique({ where: { id: message.id } });
+    if (existing) {
+      assertMessageIdentity(existing, message);
+      await this.updateExistingMessage(message, create);
+      return;
+    }
+
+    try {
+      await this.client.chatMessage.create({ data: create });
+    } catch (createError) {
+      // A concurrent insert or a lost create acknowledgement may leave the intended row present.
+      const recovered = await this.client.chatMessage.findUnique({ where: { id: message.id } });
+      if (!recovered) throw createError;
+      assertMessageIdentity(recovered, message);
+      await this.updateExistingMessage(message, create);
+    }
+  }
+
+  private async updateExistingMessage(
+    message: WorkspaceChatMessage,
+    record: ChatMessageRecord
+  ): Promise<void> {
+    const result = await this.client.chatMessage.updateMany({
+      where: { id: message.id, projectId: message.projectId, role: message.role },
       data: {
-        id: message.id,
-        projectId: message.projectId,
-        role: message.role,
-        agentMode: message.agentMode ?? null,
-        content: message.content,
-        artifactActionIds: message.artifactActionIds,
-        actions: message.actions ?? null,
-        commitSha: message.commitSha,
-        tokenUsage: message.tokenUsage,
-        createdAt: new Date(message.createdAt)
+        agentMode: record.agentMode,
+        content: record.content,
+        artifactActionIds: record.artifactActionIds,
+        actions: record.actions,
+        commitSha: record.commitSha,
+        tokenUsage: record.tokenUsage
       }
     });
+    if (result.count !== 1) throw new Error("chat message identity conflict during update");
   }
 
   async listMessages(projectId: string): Promise<WorkspaceChatMessage[]> {
@@ -100,6 +139,15 @@ export class ChatHistoryRepositoryBackedStore implements ChatHistoryStore {
       updatedAt:
         record.updatedAt instanceof Date ? record.updatedAt.toISOString() : record.updatedAt
     };
+  }
+}
+
+function assertMessageIdentity(
+  existing: Pick<ChatMessageRecord, "projectId" | "role">,
+  candidate: Pick<WorkspaceChatMessage, "projectId" | "role">
+): void {
+  if (existing.projectId !== candidate.projectId || existing.role !== candidate.role) {
+    throw new Error("chat message identity conflict");
   }
 }
 

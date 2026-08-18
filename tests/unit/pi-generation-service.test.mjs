@@ -13,7 +13,7 @@ async function drain(iterable) {
   return events;
 }
 
-function baseDeps(executor, lifecycle) {
+function baseDeps(executor, lifecycle, hasWorkspaceChanges) {
   const memory = createMemoryChatHistoryStore();
   return {
     governedAiExecutor: executor,
@@ -47,12 +47,20 @@ function baseDeps(executor, lifecycle) {
         lifecycle.push("prepare:base");
         return "base-sha";
       },
+      async hasChanges(_projectId, snapshot) {
+        assert.equal(snapshot, "base-sha");
+        assert.equal(typeof hasWorkspaceChanges, "boolean", "fixture must declare mutation state");
+        lifecycle.push("git:changes");
+        return hasWorkspaceChanges;
+      },
       async validate() {
         lifecycle.push("validate");
       },
-      async restore() {
+      async restore() {},
+      async restoreSnapshot() {
         lifecycle.push("restore");
-      }
+      },
+      async releaseSnapshot() {}
     },
     async commitAllChanges() {
       lifecycle.push("commit:candidate");
@@ -82,6 +90,23 @@ function baseDeps(executor, lifecycle) {
   };
 }
 
+function textExecutor(text) {
+  return {
+    async executeAgentRound(_actor, input) {
+      return {
+        status: "succeeded",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text }],
+          timestamp: 2
+        },
+        usage: { input: 1, output: 1, totalTokens: 2, costUsd: 0 },
+        evidence: { requestId: input.requestId }
+      };
+    }
+  };
+}
+
 test("Plan mode streams Pi text/reasoning and persists without mutable lifecycle", async () => {
   const lifecycle = [];
   const executor = {
@@ -103,7 +128,7 @@ test("Plan mode streams Pi text/reasoning and persists without mutable lifecycle
       };
     }
   };
-  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, false));
   const events = await drain(
     service.runTurn({ projectId: "p1", prompt: "Plan dashboard", agentMode: "plan", actor })
   );
@@ -116,6 +141,106 @@ test("Plan mode streams Pi text/reasoning and persists without mutable lifecycle
   const history = await service.history("p1");
   assert.equal(history.at(-1).content, "Plan ready");
   assert.equal(history.at(-1).content.includes("Inspecting"), false);
+});
+
+test("Auto informational turn skips mutation lifecycle when Git stays clean", async () => {
+  const lifecycle = [];
+  const service = createPiGenerationService(
+    baseDeps(textExecutor("The chart uses local mock data."), lifecycle, false)
+  );
+
+  const events = await drain(
+    service.runTurn({
+      projectId: "p1",
+      prompt: "ตอนนี้ดึงข้อมูลมาจากไหน",
+      agentMode: "auto",
+      actor
+    })
+  );
+
+  assert.deepEqual(lifecycle, ["append:user", "prepare:base", "git:changes", "append:assistant"]);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  const assistant = (await service.history("p1")).at(-1);
+  assert.equal(assistant.content, "The chart uses local mock data.");
+  assert.equal(assistant.commitSha, null);
+});
+
+test("Auto mutation runs the full transaction lifecycle exactly once", async () => {
+  const lifecycle = [];
+  let round = 0;
+  const executor = {
+    async executeAgentRound(_actor, input) {
+      round += 1;
+      const message =
+        round === 1
+          ? {
+              role: "assistant",
+              content: [
+                {
+                  type: "toolCall",
+                  id: "call-auto-write",
+                  name: "write_workspace_file",
+                  arguments: { path: "app/page.tsx", content: "export default function Page(){}" }
+                }
+              ],
+              timestamp: 2
+            }
+          : {
+              role: "assistant",
+              content: [{ type: "text", text: "Built dashboard" }],
+              timestamp: 3
+            };
+      return {
+        status: "succeeded",
+        message,
+        usage: { input: 10, output: 5, totalTokens: 15, costUsd: 0 },
+        evidence: { requestId: input.requestId }
+      };
+    }
+  };
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, true));
+
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Create a dashboard", agentMode: "auto", actor })
+  );
+
+  assert.deepEqual(lifecycle, [
+    "append:user",
+    "prepare:base",
+    "tool:file",
+    "git:changes",
+    "validate",
+    "sync:migrations",
+    "git:changes",
+    "commit:candidate",
+    "migrate:batch",
+    "checkpoint",
+    "append:assistant"
+  ]);
+  const commitEvents = events.filter((event) => event.type === "commit");
+  assert.deepEqual(commitEvents, [{ type: "commit", sha: "candidate-sha" }]);
+  assert.equal((await service.history("p1")).at(-1).commitSha, "candidate-sha");
+});
+
+test("explicit Build skips empty commits when Git stays clean", async () => {
+  const lifecycle = [];
+  const service = createPiGenerationService(
+    baseDeps(textExecutor("No workspace changes were needed."), lifecycle, false)
+  );
+
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Check the dashboard", agentMode: "build", actor })
+  );
+
+  assert.deepEqual(lifecycle, ["append:user", "prepare:base", "git:changes", "append:assistant"]);
+  assert.equal(
+    events.some((event) => event.type === "commit"),
+    false
+  );
+  assert.equal((await service.history("p1")).at(-1).commitSha, null);
 });
 
 test("Build mode coordinates native Pi tool and outer transaction in order", async () => {
@@ -151,7 +276,7 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
       };
     }
   };
-  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, true));
   const events = await drain(
     service.runTurn({ projectId: "p1", prompt: "Build dashboard", agentMode: "build", actor })
   );
@@ -161,8 +286,10 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
     "append:user",
     "prepare:base",
     "tool:file",
+    "git:changes",
     "validate",
     "sync:migrations",
+    "git:changes",
     "commit:candidate",
     "migrate:batch",
     "checkpoint",
@@ -202,7 +329,7 @@ test("validation feedback self-heals on the same Pi session before commit", asyn
       };
     }
   };
-  const deps = baseDeps(executor, lifecycle);
+  const deps = baseDeps(executor, lifecycle, true);
   deps.workspaceGuard.validate = async () => {
     validations += 1;
     lifecycle.push("validate");
@@ -249,7 +376,7 @@ test("Pi turns are FIFO per project but independent across projects", async () =
       };
     }
   };
-  const service = createPiGenerationService(baseDeps(executor, lifecycle));
+  const service = createPiGenerationService(baseDeps(executor, lifecycle, false));
   const first = drain(
     service.runTurn({ projectId: "p1", prompt: "first", agentMode: "plan", actor })
   );

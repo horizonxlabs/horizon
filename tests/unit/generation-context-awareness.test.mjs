@@ -27,8 +27,8 @@ test("prompt exposes only bounded native Horizon workspace tools", () => {
   assert.match(prompt, /list_workspace_files/);
   assert.match(prompt, /read_workspace_file/);
   assert.match(prompt, /run_workspace_command/);
-  assert.match(prompt, /bounded validation and package commands/i);
-  assert.match(prompt, /do not have arbitrary shell access/i);
+  assert.match(prompt, /npm or pnpm.*install\/add.*build, test, typecheck, or lint/is);
+  assert.match(prompt, /Never use node, npx, git.*exec\/dlx\/x.*arbitrary package scripts/is);
 });
 
 test("context file contents prioritize app and lib before the large ui kit", async () => {

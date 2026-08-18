@@ -1,25 +1,25 @@
 import { posix } from "node:path";
 
 const PROJECT_ROOTS = ["app", "components", "lib", "public"] as const;
-const DIRECT_COMMANDS = new Set([
-  "node",
-  "npm",
-  "npx",
-  "pnpm",
-  "git",
-  "ls",
-  "find",
-  "rg",
-  "grep",
-  "sed",
-  "head",
-  "tail",
-  "wc",
-  "mkdir",
-  "cp",
-  "mv"
-]);
+const DIRECT_COMMANDS = new Set(["npm", "pnpm"]);
 const SHELL_META = /[;&|`$<>\n\r]/;
+const APPROVED_SCRIPTS = new Set(["build", "test", "typecheck", "lint"]);
+const PACKAGE_ACTIONS = new Set(["install", "add"]);
+const PACKAGE_OPTIONS = new Set([
+  "-D",
+  "--save-dev",
+  "-E",
+  "--save-exact",
+  "-P",
+  "--save-prod",
+  "-O",
+  "--save-optional",
+  "--no-save",
+  "--ignore-scripts",
+  "--frozen-lockfile"
+]);
+const PACKAGE_SPEC = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9*^~.+_-]+)?$/i;
+const SAFE_PROJECT_SEGMENT = /^[A-Za-z0-9._@+-]+$/;
 
 export type PiAgentToolLimits = {
   maxToolCalls: number;
@@ -43,6 +43,7 @@ export function filterAgentWorkspaceFiles(
 export function normalizeProjectPath(path: string, options?: { allowRoot?: boolean }): string {
   const trimmed = path.trim();
   if (!trimmed) throw new Error("workspace path is required");
+  if (trimmed !== path) throw new Error("workspace path contains unsafe characters");
   if (hasControlCharacter(trimmed) || trimmed.includes("\\")) {
     throw new Error("workspace path contains unsafe characters");
   }
@@ -50,7 +51,16 @@ export function normalizeProjectPath(path: string, options?: { allowRoot?: boole
     throw new Error("workspace path must be project-relative");
   }
   const segments = trimmed.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+  if (
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === "." ||
+        segment === ".." ||
+        segment.toLowerCase() === ".git" ||
+        !SAFE_PROJECT_SEGMENT.test(segment)
+    )
+  ) {
     throw new Error("workspace path contains an unsafe segment");
   }
   const normalized = posix.normalize(trimmed);
@@ -79,19 +89,44 @@ export function assertSafeCommand(command: string, args: string[]): void {
     if (arg.startsWith("/") || /^[A-Za-z]:[\\/]/.test(arg) || arg.includes("docker.sock")) {
       throw new Error("workspace command argument references an unsafe host path");
     }
+    if (targetsGitMetadata(arg)) {
+      throw new Error("workspace command argument may not target .git metadata");
+    }
   }
-  const joined = args.join(" ").toLowerCase();
-  if (/\b(process\.env|printenv|env\b|set\b)/.test(joined)) {
-    throw new Error("workspace command may not dump environment values");
+  assertSafePackageManagerInvocation(args);
+}
+
+export function hardenSafeCommandArgs(args: string[]): string[] {
+  return PACKAGE_ACTIONS.has(args[0]) && !args.includes("--ignore-scripts")
+    ? [args[0], "--ignore-scripts", ...args.slice(1)]
+    : [...args];
+}
+
+function targetsGitMetadata(value: string): boolean {
+  return /(^|[\\/=:])\.git(?:$|[\\/]|(?=[^A-Za-z0-9._-]))/i.test(value);
+}
+
+function assertSafePackageManagerInvocation(args: string[]): void {
+  const [action, ...rest] = args;
+  if (!action || action.startsWith("-")) {
+    throw new Error("workspace package command requires an approved action");
   }
-  if (command === "git" && /^(clone|fetch|pull|push|remote|ls-remote)\b/.test(joined)) {
-    throw new Error("workspace command may not access a network remote");
+  if (APPROVED_SCRIPTS.has(action) && rest.length === 0) return;
+  if (action === "run" && rest.length === 1 && APPROVED_SCRIPTS.has(rest[0])) return;
+  if (!PACKAGE_ACTIONS.has(action)) {
+    throw new Error("workspace package command is not allowlisted");
   }
-  if (
-    (command === "npm" || command === "pnpm") &&
-    /^(view|info|search|ping|login|publish)\b/.test(joined)
-  ) {
-    throw new Error("workspace command may not query or publish to a network service");
+
+  let packageCount = 0;
+  for (const argument of rest) {
+    if (PACKAGE_OPTIONS.has(argument)) continue;
+    if (!PACKAGE_SPEC.test(argument)) {
+      throw new Error("workspace package command contains an unsafe package or option");
+    }
+    packageCount += 1;
+  }
+  if (action === "add" && packageCount === 0) {
+    throw new Error("workspace package add command requires a package name");
   }
 }
 

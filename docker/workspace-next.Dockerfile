@@ -3,8 +3,14 @@
 # EXPOSE only (the orchestrator never publishes host ports).
 FROM node:22.22.0-alpine
 
-# git is needed for the checkpoint/version-control layer (Plan 7); curl/wget for health checks.
-RUN apk add --no-cache git curl
+# git is needed for checkpoint/version control, util-linux provides the kernel-backed flock
+# transition lock, and curl is used for health checks.
+RUN apk add --no-cache git curl util-linux && command -v flock >/dev/null
+
+# All lock-state transitions flock this one image-owned inode. Runtime code must never replace it.
+RUN touch /var/lock/evcp-turn-reclaim.lock && \
+    chown root:root /var/lock/evcp-turn-reclaim.lock && \
+    chmod 600 /var/lock/evcp-turn-reclaim.lock
 
 # Non-root user for the workspace.
 RUN addgroup -S evcp && adduser -S evcp -G evcp

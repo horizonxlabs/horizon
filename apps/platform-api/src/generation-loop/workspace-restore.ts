@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { WorkspaceChatMessage } from "@evcp/types";
 
 // Turn-level code rollback: restore the workspace to a previous turn's commit. Serialized
@@ -23,7 +25,7 @@ export async function restoreWorkspaceCommit(
   try {
     await deps.guard.restore(projectId, commitSha);
     await deps.chatHistory.appendMessage({
-      id: `msg_restore_${Date.now()}`,
+      id: `msg_restore_${randomUUID()}`,
       projectId,
       role: "assistant",
       content: `⏪ Rolled the code back to commit ${commitSha.slice(0, 8)}. Everything built after that commit was removed from the app — treat this commit as the app's current state in later turns.`,
