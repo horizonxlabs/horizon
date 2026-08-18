@@ -182,7 +182,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     {message.text ? (
                       <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
                     ) : isVibing && !message.reasoning ? (
-                      "▋"
+                      <span className="vibe-cursor-blink" aria-hidden="true">
+                        ▋
+                      </span>
                     ) : (
                       ""
                     )}
