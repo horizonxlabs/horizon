@@ -4,11 +4,12 @@ import { safeToolError } from "./pi-tool-policy";
 export async function releasePiTurnSnapshot(
   deps: Pick<PiGenerationServiceDeps, "workspaceGuard" | "onAudit">,
   projectId: string,
+  containerId: string,
   snapshotToken: string | undefined
 ): Promise<void> {
   if (!snapshotToken) return;
   try {
-    await deps.workspaceGuard.releaseSnapshot(projectId, snapshotToken);
+    await deps.workspaceGuard.releaseSnapshot(projectId, containerId, snapshotToken);
     deps.onAudit?.({
       action: "workspace_snapshot_release",
       projectId,

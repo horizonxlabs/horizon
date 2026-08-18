@@ -128,7 +128,7 @@ function transactionDeps(executor, lifecycle, mutationStates, state, history = u
         lifecycle.push("git:snapshot");
         return snapshotToken;
       },
-      async hasChanges(_projectId, baseline) {
+      async hasChanges(_projectId, _containerId, baseline) {
         assert.equal(baseline, snapshotToken);
         assert.ok(changeCheck < mutationStates.length, "unexpected comparison");
         lifecycle.push(`git:changes:${baseline}`);
@@ -138,14 +138,14 @@ function transactionDeps(executor, lifecycle, mutationStates, state, history = u
         lifecycle.push("validate");
       },
       async restore() {},
-      async restoreSnapshot(_projectId, baseline) {
+      async restoreSnapshot(_projectId, _containerId, baseline) {
         assert.equal(baseline, snapshotToken);
         lifecycle.push(`restore:${baseline}`);
         state.head = "original-head";
         state.repair = "pre-turn repair";
         state.modelFile = false;
       },
-      async releaseSnapshot(_projectId, baseline) {
+      async releaseSnapshot(_projectId, _containerId, baseline) {
         assert.equal(baseline, snapshotToken);
         lifecycle.push(`release:${baseline}`);
       }
