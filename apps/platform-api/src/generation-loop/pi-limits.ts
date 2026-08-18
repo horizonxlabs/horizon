@@ -25,7 +25,12 @@ const defaults: PiAgentLimits = {
 const maximums: PiAgentLimits = {
   maxModelRounds: 64,
   maxTurnTokens: 1_000_000,
-  modelRoundTimeoutMs: 300_000,
+  // Equal to the default until here: EVCP_PI_MODEL_ROUND_TIMEOUT_MS could never raise the
+  // per-round deadline past the platform's own 5-minute default, which starves slow (e.g.
+  // local/self-hosted) models that legitimately take longer than 5 minutes to answer a
+  // single round. Raised to match maximums.turnTimeoutMs: a round still can't outlive the
+  // turn it belongs to, but operators can now trade round budget for slow-model headroom.
+  modelRoundTimeoutMs: 1_800_000,
   maxToolCalls: 200,
   shellTimeoutMs: 300_000,
   maxToolOutputBytes: 1_048_576,
