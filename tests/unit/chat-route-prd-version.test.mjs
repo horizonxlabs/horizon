@@ -20,12 +20,17 @@ function fakeRes() {
   };
 }
 const runTurnOnce = async function* () {
+  yield { type: "commit", sha: "abc123" };
   yield { type: "done" };
 };
 
-function deps(captured, record = true) {
+const runTurnNoCommit = async function* () {
+  yield { type: "done" };
+};
+
+function deps(captured, record = true, runTurn = runTurnOnce) {
   return {
-    generationService: { runTurn: () => runTurnOnce(), history: async () => [] },
+    generationService: { runTurn: () => runTurn(), history: async () => [] },
     resolveAuth: async () => ({
       userId: "u1",
       roles: ["creator"],
@@ -70,6 +75,21 @@ test("does not record when there is no approved plan", async () => {
     method: "POST",
     headers: {},
     body: { prompt: "go", agentMode: "build" },
+    once() {},
+    off() {}
+  };
+  await handler(req, fakeRes());
+  assert.equal(captured.call, undefined);
+});
+
+test("does not record when an approved plan is present but the turn never commits", async () => {
+  const captured = {};
+  const handler = createChatSseHandler(deps(captured, true, runTurnNoCommit));
+  const req = {
+    url: "/projects/p1/chat",
+    method: "POST",
+    headers: {},
+    body: { prompt: "go", agentMode: "build", approvedPlan: "Step 1: add reports" },
     once() {},
     off() {}
   };
