@@ -257,44 +257,58 @@ test("Pi bridge reports provider degradation once per turn instead of once per m
   }
 
   assert.deepEqual(
-    events
-      .filter((event) => event.type === "thinking_delta")
-      .map((event) => event.delta),
+    events.filter((event) => event.type === "thinking_delta").map((event) => event.delta),
     ["Using fallback AI provider: primary unavailable"]
   );
 });
 
 test("Pi bridge aborts a governed model round that exceeds its own deadline", async () => {
-  let receivedSignal;
-  const { modelRuntime, model } = await createHorizonPiRuntime({
-    executor: {
-      async executeAgentRound(_actor, input) {
-        receivedSignal = input.signal;
-        if (!input.signal) {
+  // AbortSignal.timeout()'s internal timer is unref'd by design (it must never keep a real
+  // process alive on its own) — in production that's fine because the platform-api process
+  // always has other refs (its HTTP server, etc). In this isolated test, though, if nothing
+  // else happens to be pending in the shared unit-test process's event loop at the moment the
+  // signal awaits below, Node can decide the event loop has nothing left to do and start
+  // exiting before the unref'd timer ever fires, failing the test with "Promise resolution is
+  // still pending but the event loop has already resolved" (cancelledByParent). Hold an
+  // explicit ref'd timer for the duration of this test so the process can't consider itself
+  // idle while the abort is still pending.
+  const keepAlive = setInterval(() => {}, 1_000);
+  try {
+    let receivedSignal;
+    const { modelRuntime, model } = await createHorizonPiRuntime({
+      executor: {
+        async executeAgentRound(_actor, input) {
+          receivedSignal = input.signal;
+          if (!input.signal) {
+            return {
+              status: "failed",
+              evidence: { requestId: input.requestId, failureReason: "missing timeout signal" }
+            };
+          }
+          await new Promise((resolve) =>
+            input.signal.addEventListener("abort", resolve, { once: true })
+          );
           return {
             status: "failed",
-            evidence: { requestId: input.requestId, failureReason: "missing timeout signal" }
+            evidence: { requestId: input.requestId, failureReason: "aborted" }
           };
         }
-        await new Promise((resolve) => input.signal.addEventListener("abort", resolve, { once: true }));
-        return {
-          status: "failed",
-          evidence: { requestId: input.requestId, failureReason: "aborted" }
-        };
-      }
-    },
-    actor,
-    projectId: "p1",
-    scenario: "frontend_coding",
-    turnId: "turn-round-timeout",
-    maxModelRounds: 1,
-    modelRoundTimeoutMs: 20
-  });
-  const events = [];
+      },
+      actor,
+      projectId: "p1",
+      scenario: "frontend_coding",
+      turnId: "turn-round-timeout",
+      maxModelRounds: 1,
+      modelRoundTimeoutMs: 20
+    });
+    const events = [];
 
-  for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
+    for await (const event of modelRuntime.streamSimple(model, context)) events.push(event);
 
-  assert.equal(receivedSignal?.aborted, true);
-  assert.equal(events.at(-1).type, "error");
-  assert.match(events.at(-1).error.errorMessage, /model round timed out/i);
+    assert.equal(receivedSignal?.aborted, true);
+    assert.equal(events.at(-1).type, "error");
+    assert.match(events.at(-1).error.errorMessage, /model round timed out/i);
+  } finally {
+    clearInterval(keepAlive);
+  }
 });
