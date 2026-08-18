@@ -78,8 +78,11 @@ export function registerKeycloakOidcRoutes(
     try {
       response.status(200).json(success(await sessions.refresh(request.body.refreshToken)));
     } catch (error) {
-      const message = error instanceof PlatformSessionError ? "Session refresh rejected" : "Session refresh failed";
-      response.status(401).json(failure("UNAUTHORIZED", message));
+      if (error instanceof PlatformSessionError) {
+        response.status(401).json(failure("UNAUTHORIZED", "Session refresh rejected"));
+        return;
+      }
+      response.status(503).json(failure("SESSION_SERVICE_UNAVAILABLE", "Session refresh failed"));
     }
   });
   routes.post("/auth/logout", async (request, response) => {

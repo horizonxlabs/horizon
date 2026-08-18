@@ -7,7 +7,8 @@ export function boundedExecutionError(message: string): Extract<ActionResult, { 
 export async function boundedExecution<T>(
   execution: Promise<T>,
   signal?: AbortSignal,
-  timeoutMs?: number
+  timeoutMs?: number,
+  onBoundary?: () => Promise<void>
 ): Promise<{ ok: true; value: T } | { ok: false; result: Extract<ActionResult, { ok: false }> }> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let abortListener: (() => void) | undefined;
@@ -33,7 +34,14 @@ export async function boundedExecution<T>(
   try {
     const first = await Promise.race([settled, boundary]);
     if (first.kind === "boundary") {
+      let boundaryError: unknown;
+      try {
+        await onBoundary?.();
+      } catch (error) {
+        boundaryError = error;
+      }
       await settled;
+      if (boundaryError) throw boundaryError;
       return { ok: false, result: boundedExecutionError(first.message) };
     }
     if (first.kind === "error") throw first.error;

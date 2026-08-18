@@ -12,6 +12,7 @@ import { resolvePiAgentLimits } from "./pi-limits";
 import { createHorizonPiSession } from "./pi-session-context";
 import { PiSessionEventQueue } from "./pi-session-event-queue";
 import { persistPiTurnErrorAssistant } from "./pi-turn-error-persistence";
+import * as turnFeedback from "./pi-turn-feedback";
 import { finalizePiCandidate } from "./pi-turn-finalization";
 import { releasePiTurnSnapshot } from "./pi-turn-snapshot-lifecycle";
 import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
@@ -114,6 +115,7 @@ async function* runLockedTurn(
   let candidateSha: string | undefined;
   let irreversibleFinalizationMayHaveTakenEffect = false;
   let commitEventEmitted = false;
+  let rollbackRecoveryRequired = false;
 
   try {
     if (mutationCapable) preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId);
@@ -124,7 +126,8 @@ async function* runLockedTurn(
       projectId: input.projectId,
       scenario: "frontend_coding",
       turnId: userMessage.id,
-      maxModelRounds: limits.maxModelRounds
+      maxModelRounds: limits.maxModelRounds,
+      modelRoundTimeoutMs: limits.modelRoundTimeoutMs
     });
     const tools = createHorizonPiTools({
       projectId: input.projectId,
@@ -168,7 +171,7 @@ async function* runLockedTurn(
       for (const adapted of adaptPiEvent(event)) yield adapted;
     }
     signal.throwIfAborted();
-    ensureNoFailedTool(failedTool);
+    turnFeedback.ensureNoFailedTool(failedTool);
     const snapshotToken = preparedSnapshotToken;
     if (mutationCapable && !snapshotToken) {
       throw new Error("workspace mutation snapshot is unavailable");
@@ -182,12 +185,12 @@ async function* runLockedTurn(
     if (hasCandidateMutation) {
       const writeIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
       if (writeIssues.length > 0) {
-        for await (const event of queue.prompt(buildWriteFeedback(writeIssues))) {
+        for await (const event of queue.prompt(turnFeedback.buildWriteFeedback(writeIssues))) {
           collectEvent(event);
           for (const adapted of adaptPiEvent(event)) yield adapted;
         }
         signal.throwIfAborted();
-        ensureNoFailedTool(failedTool);
+        turnFeedback.ensureNoFailedTool(failedTool);
         const remainingIssues = await collectPiWriteIssues(deps, containerId, writtenPaths, limits);
         if (remainingIssues.length > 0) throw new Error(remainingIssues.join("\n"));
       }
@@ -201,12 +204,12 @@ async function* runLockedTurn(
         } catch (error) {
           validationFailure = error;
           if (attempt >= limits.validationRetries) break;
-          for await (const event of queue.prompt(buildValidationFeedback(error))) {
+          for await (const event of queue.prompt(turnFeedback.buildValidationFeedback(error))) {
             collectEvent(event);
             for (const adapted of adaptPiEvent(event)) yield adapted;
           }
           signal.throwIfAborted();
-          ensureNoFailedTool(failedTool);
+          turnFeedback.ensureNoFailedTool(failedTool);
         }
       }
       if (validationFailure) throw validationFailure;
@@ -276,7 +279,13 @@ async function* runLockedTurn(
       try {
         await deps.workspaceGuard.restoreSnapshot(input.projectId, preparedSnapshotToken);
       } catch (restoreError) {
-        errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}`;
+        rollbackRecoveryRequired = true;
+        errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}. Workspace snapshot recovery is required; an operator must inspect the protected recovery state before any new turn.`;
+        deps.onAudit?.({
+          action: "workspace_snapshot_recovery_required",
+          projectId: input.projectId,
+          metadata: { ok: false, reason: "rollback_failed" }
+        });
       }
     }
     if (preserveCandidate) {
@@ -301,7 +310,9 @@ async function* runLockedTurn(
     }
     yield { type: "error", message: errorMessage };
   } finally {
-    await releasePiTurnSnapshot(deps, input.projectId, preparedSnapshotToken);
+    if (!rollbackRecoveryRequired) {
+      await releasePiTurnSnapshot(deps, input.projectId, preparedSnapshotToken);
+    }
     detachSessionAbort?.();
     queue?.close();
     session?.dispose();
@@ -331,10 +342,20 @@ async function* runLockedTurn(
       }
       promptTokens += event.message.usage.input;
       completionTokens += event.message.usage.output;
+      if (promptTokens + completionTokens > limits.maxTurnTokens) {
+        throw new Error(`Pi turn token budget (${limits.maxTurnTokens}) exceeded`);
+      }
     }
     if (event.type === "tool_execution_end") {
       const details = event.result?.details as HorizonPiToolDetails | undefined;
       if (!details) return;
+      const terminalValidationPassed =
+        details.ok &&
+        !event.isError &&
+        typeof event.result === "object" &&
+        event.result !== null &&
+        (event.result as { terminate?: unknown }).terminate === true;
+      if (terminalValidationPassed) failedTool = undefined;
       if (
         details.ok &&
         !event.isError &&
@@ -375,20 +396,4 @@ function assertFileLimits(
 ): void {
   const oversized = files.find((file) => Buffer.byteLength(file.content, "utf8") > maxFileBytes);
   if (oversized) throw new Error(`workspace file '${oversized.path}' exceeds the file-size limit`);
-}
-
-function buildValidationFeedback(error: unknown): string {
-  const message = safeToolError(error)
-    .replaceAll(String.fromCodePoint(27), "")
-    .replace(/\[[0-9;]*m/g, "")
-    .slice(0, 4_000);
-  return `Validation failed. Fix only these errors with Horizon tools, then stop:\n${message}`;
-}
-
-function buildWriteFeedback(issues: string[]): string {
-  return `The files were saved, but Horizon detected these write issues. Repair only these issues in place; do not recreate working files:\n${issues.join("\n")}`;
-}
-
-function ensureNoFailedTool(details: HorizonPiToolDetails | undefined): void {
-  if (details) throw new Error(details.error ?? `${details.label} failed`);
 }

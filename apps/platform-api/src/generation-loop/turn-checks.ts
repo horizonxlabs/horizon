@@ -67,7 +67,11 @@ export async function collectWriteIssues(
 ): Promise<string[]> {
   const issues: string[] = [];
   if (deps.checkFileSyntax) {
-    const syntaxOutput = (await deps.checkFileSyntax(containerId, written.path).catch(() => "")).trim();
+    const syntaxOutput = (await deps.checkFileSyntax(containerId, written.path).catch(() => ""))
+      .split("\n")
+      .filter((line) => !/error TS2307:/.test(line))
+      .join("\n")
+      .trim();
     if (syntaxOutput) issues.push(`Syntax check failed for ${written.path}:\n${syntaxOutput}`);
   }
   for (const missing of findMissingImports(written.path, written.content, knownPaths)) {

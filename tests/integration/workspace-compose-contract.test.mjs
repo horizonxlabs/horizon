@@ -52,6 +52,15 @@ test("platform-api can reach docker socket and litellm", () => {
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
 });
 
+test("development and release compose expose Pi reliability budgets", () => {
+  for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
+    const joined = environmentEntries(api).join("\n");
+    assert.match(joined, /EVCP_PI_MAX_MODEL_ROUNDS=.*:-12/);
+    assert.match(joined, /EVCP_PI_MAX_TURN_TOKENS=.*:-160000/);
+    assert.match(joined, /EVCP_PI_MODEL_ROUND_TIMEOUT_MS=.*:-300000/);
+  }
+});
+
 test("dev Node services isolate Linux dependencies from the host bind mount", () => {
   for (const name of ["platform-api", "admin-web", "creator-web", "app-store-pwa"]) {
     const volumes = compose.services[name].volumes ?? [];

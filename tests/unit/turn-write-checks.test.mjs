@@ -62,6 +62,23 @@ test("collectWriteIssues merges syntax and import findings", async () => {
   assert.deepEqual(clean, []);
 });
 
+test("syntax-only checks ignore package-resolution diagnostics and leave them to the full build", async () => {
+  const issues = await collectWriteIssues(
+    {
+      checkFileSyntax: async () =>
+        "components/chart.tsx(4,55): error TS2307: Cannot find module 'lightweight-charts' or its corresponding type declarations."
+    },
+    "c1",
+    {
+      path: "components/chart.tsx",
+      content: 'import { createChart } from "lightweight-charts";'
+    },
+    KNOWN
+  );
+
+  assert.deepEqual(issues, []);
+});
+
 test("round-final evaluation: imports satisfied by later files in the artifact never flag", async () => {
   // page.tsx (written first) imports CertForm (written after) — evaluated at round end
   // against the FINAL file set, this is clean. The per-action version of this check once

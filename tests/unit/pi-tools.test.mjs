@@ -114,6 +114,37 @@ test("write, edit, and direct command tools delegate bound actions", async () =>
   assert.match(updates[0].content[0].text, /streamed output/);
 });
 
+test("whole-file writes to existing unlocked files reach the action runner drift guard", async () => {
+  const { tools, actionRunnerCalls } = fixture();
+
+  const result = await execute(tools, "write_workspace_file", {
+    path: "app/page.tsx",
+    content: "export default function Page() { return <h1>Replaced</h1>; }"
+  });
+
+  assert.equal(result.details.ok, true);
+  assert.deepEqual(actionRunnerCalls[0].action, {
+    id: "call-write_workspace_file",
+    type: "file",
+    filePath: "app/page.tsx",
+    content: "export default function Page() { return <h1>Replaced</h1>; }"
+  });
+});
+
+test("successful build validation tells a local model to stop calling tools", async () => {
+  const { tools } = fixture();
+
+  const result = await execute(tools, "run_workspace_command", {
+    command: "npm",
+    args: ["run", "build"]
+  });
+
+  assert.equal(result.details.ok, true);
+  assert.match(result.content[0].text, /validation passed/i);
+  assert.match(result.content[0].text, /final response/i);
+  assert.doesNotMatch(result.content[0].text, /command output/);
+});
+
 test("migration proposals are buffered and skills load progressively", async () => {
   const { tools, actionRunnerCalls, migrationBuffer } = fixture();
   const migration = await execute(tools, "propose_database_migration", {

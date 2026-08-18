@@ -31,6 +31,7 @@ export type CreateHorizonPiRuntimeInput = {
   scenario: AiScenario;
   turnId: string;
   maxModelRounds: number;
+  modelRoundTimeoutMs?: number;
 };
 
 export async function createHorizonPiRuntime(
@@ -39,9 +40,21 @@ export async function createHorizonPiRuntime(
   if (!Number.isInteger(input.maxModelRounds) || input.maxModelRounds < 1) {
     throw new Error("Pi maxModelRounds must be a positive integer");
   }
+  if (
+    input.modelRoundTimeoutMs !== undefined &&
+    (!Number.isInteger(input.modelRoundTimeoutMs) || input.modelRoundTimeoutMs < 1)
+  ) {
+    throw new Error("Pi modelRoundTimeoutMs must be a positive integer");
+  }
 
   const model = createGovernedModel();
   let roundNumber = 0;
+  let fallbackWarningEmitted = false;
+  const claimFallbackWarning = () => {
+    if (fallbackWarningEmitted) return false;
+    fallbackWarningEmitted = true;
+    return true;
+  };
   const streamRound = (
     selectedModel: Model<string>,
     context: Context,
@@ -49,7 +62,15 @@ export async function createHorizonPiRuntime(
   ) => {
     const stream = createAssistantMessageEventStream();
     const currentRound = ++roundNumber;
-    void produceRound(stream, selectedModel, context, options, input, currentRound);
+    void produceRound(
+      stream,
+      selectedModel,
+      context,
+      options,
+      input,
+      currentRound,
+      claimFallbackWarning
+    );
     return stream;
   };
   const provider: Provider<string> = {
@@ -81,7 +102,8 @@ async function produceRound(
   context: Context,
   options: SimpleStreamOptions | undefined,
   input: CreateHorizonPiRuntimeInput,
-  roundNumber: number
+  roundNumber: number,
+  claimFallbackWarning: () => boolean
 ): Promise<void> {
   const partial = emptyAssistantMessage(model);
   stream.push({ type: "start", partial });
@@ -92,6 +114,14 @@ async function produceRound(
 
   try {
     const state = createEventState(stream, partial);
+    const roundTimeoutSignal = input.modelRoundTimeoutMs
+      ? AbortSignal.timeout(input.modelRoundTimeoutMs)
+      : undefined;
+    const signal = roundTimeoutSignal
+      ? options?.signal
+        ? AbortSignal.any([options.signal, roundTimeoutSignal])
+        : roundTimeoutSignal
+      : options?.signal;
     const result = await input.executor.executeAgentRound(
       input.actor,
       {
@@ -105,29 +135,44 @@ async function produceRound(
           description: tool.description,
           parameters: tool.parameters as unknown as Record<string, unknown>
         })),
-        signal: options?.signal
+        signal
       },
       state.onEvent
     );
     if ((result.status !== "succeeded" && result.status !== "fallback") || !result.message) {
+      const roundTimedOut = roundTimeoutSignal?.aborted === true && options?.signal?.aborted !== true;
       const aborted =
-        options?.signal?.aborted === true || result.evidence.failureReason === "aborted";
+        !roundTimedOut &&
+        (options?.signal?.aborted === true || result.evidence.failureReason === "aborted");
       pushError(
         stream,
         partial,
         aborted ? "aborted" : "error",
-        result.evidence.failureReason ?? `Governed AI round ${result.status}`
+        roundTimedOut
+          ? `Pi model round timed out after ${input.modelRoundTimeoutMs}ms`
+          : (result.evidence.failureReason ?? `Governed AI round ${result.status}`)
       );
       return;
     }
+    if (result.status === "fallback" && claimFallbackWarning()) {
+      state.warnFallback(result.evidence.failureReason);
+    }
     state.finish(result);
   } catch (error) {
-    const aborted = options?.signal?.aborted === true;
+    const roundTimedOut =
+      input.modelRoundTimeoutMs !== undefined &&
+      options?.signal?.aborted !== true &&
+      safeErrorMessage(error).toLowerCase().includes("timeout");
+    const aborted = !roundTimedOut && options?.signal?.aborted === true;
     pushError(
       stream,
       partial,
       aborted ? "aborted" : "error",
-      aborted ? "Pi model round aborted" : safeErrorMessage(error)
+      roundTimedOut
+        ? `Pi model round timed out after ${input.modelRoundTimeoutMs}ms`
+        : aborted
+          ? "Pi model round aborted"
+          : safeErrorMessage(error)
     );
   }
 }
@@ -186,6 +231,20 @@ function createEventState(stream: AssistantMessageEventStream, partial: Assistan
 
   return {
     onEvent,
+    warnFallback(reason: string | undefined) {
+      const warning = `Using fallback AI provider: ${reason ?? "primary provider unavailable"}`;
+      if (thinkingIndex === undefined) {
+        thinkingIndex = partial.content.length;
+        partial.content.push({ type: "thinking", thinking: "" });
+        stream.push({ type: "thinking_start", contentIndex: thinkingIndex, partial });
+      }
+      const block = partial.content[thinkingIndex];
+      if (block?.type === "thinking") {
+        const delta = block.thinking ? `\n${warning}` : warning;
+        block.thinking += delta;
+        stream.push({ type: "thinking_delta", contentIndex: thinkingIndex, delta, partial });
+      }
+    },
     finish(result: GovernedAiAgentRoundResult) {
       for (const block of result.message!.content) {
         if (block.type === "text" && textIndex === undefined && block.text) {

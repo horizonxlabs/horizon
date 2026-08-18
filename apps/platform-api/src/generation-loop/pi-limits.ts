@@ -2,6 +2,8 @@ import type { PiAgentToolLimits } from "./pi-tool-policy";
 
 export type PiAgentLimits = PiAgentToolLimits & {
   maxModelRounds: number;
+  maxTurnTokens: number;
+  modelRoundTimeoutMs: number;
   maxFileBytes: number;
   turnTimeoutMs: number;
   validationRetries: number;
@@ -9,6 +11,8 @@ export type PiAgentLimits = PiAgentToolLimits & {
 
 const defaults: PiAgentLimits = {
   maxModelRounds: 12,
+  maxTurnTokens: 160_000,
+  modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
   maxToolOutputBytes: 65_536,
@@ -20,6 +24,8 @@ const defaults: PiAgentLimits = {
 
 const maximums: PiAgentLimits = {
   maxModelRounds: 64,
+  maxTurnTokens: 1_000_000,
+  modelRoundTimeoutMs: 300_000,
   maxToolCalls: 200,
   shellTimeoutMs: 300_000,
   maxToolOutputBytes: 1_048_576,
@@ -32,6 +38,12 @@ const maximums: PiAgentLimits = {
 export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): PiAgentLimits {
   return {
     maxModelRounds: limit(overrides.maxModelRounds, "EVCP_PI_MAX_MODEL_ROUNDS", "maxModelRounds"),
+    maxTurnTokens: limit(overrides.maxTurnTokens, "EVCP_PI_MAX_TURN_TOKENS", "maxTurnTokens"),
+    modelRoundTimeoutMs: limit(
+      overrides.modelRoundTimeoutMs,
+      "EVCP_PI_MODEL_ROUND_TIMEOUT_MS",
+      "modelRoundTimeoutMs"
+    ),
     maxToolCalls: limit(overrides.maxToolCalls, "EVCP_PI_MAX_TOOL_CALLS", "maxToolCalls"),
     shellTimeoutMs: limit(overrides.shellTimeoutMs, "EVCP_PI_SHELL_TIMEOUT_MS", "shellTimeoutMs"),
     maxToolOutputBytes: limit(
