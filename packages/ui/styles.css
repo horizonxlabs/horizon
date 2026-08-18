@@ -4072,8 +4072,41 @@ th {
 }
 
 .vibe-live-status.is-running .vibe-live-status-dot {
+  animation: vibe-live-status-pulse 1s ease-in-out infinite alternate;
   background: var(--evcp-color-warning-text);
   box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.16);
+}
+
+/*
+ * Pi's own console (@earendil-works/pi-tui Loader) animates its spinner on a client-side
+ * interval independent of incoming stream events, so it never goes still during a long gap
+ * between tokens (e.g. a slow local model "thinking" before its first chunk). This dot must
+ * do the same: a plain CSS animation, not something re-triggered by React state updates, so
+ * it keeps moving through silent stretches instead of reading as frozen.
+ */
+@keyframes vibe-live-status-pulse {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.vibe-cursor-blink {
+  animation: vibe-cursor-blink 1s step-end infinite;
+}
+
+@keyframes vibe-cursor-blink {
+  from,
+  to {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 .vibe-live-tabs {
