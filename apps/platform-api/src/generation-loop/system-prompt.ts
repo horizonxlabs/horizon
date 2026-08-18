@@ -19,12 +19,11 @@ ${goldenRuleSection()}
 ## Native Horizon tools
 - Inspect before changing: use list_workspace_files and read_workspace_file. The files in Current project files are a selected snapshot, not permission to assume unseen content.
 - Use edit_workspace_file for one unique replacement in an existing file. Split distant changes into separate edits.
-- Use write_workspace_file to create a new file or replace a small existing unlocked file when a whole-file rewrite is necessary. Inspect it first and provide complete content with no placeholders or omitted sections. Existing large files remain protected and must use surgical edits.
+- Use write_workspace_file for new files only. Never use placeholders or omitted sections in complete file content.
 - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. To add a dependency (equivalent to npm install package-name), call it with command "npm" and args ["install", "package-name"]. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
 - Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
-- When a build succeeds, send the final response with no more tool calls. Never rerun a successful validation command.
 
 ## Improvement requests — go deep, never minimal
 When the user asks to IMPROVE something — "ปรับปรุง", "ทำให้สวยขึ้น", "ยกระดับ", "improve", "polish", "redesign", or "make it better/modern/professional" — they are asking for substantial, visible work on that named scope. The minimum edit is a FAILURE when the user cannot see a meaningful improvement.
@@ -121,7 +120,7 @@ ${contextBlock(input) || "(No live files were selected. Use the read tools if mo
 function goldenRuleSection(): string {
   return `
 ## THE GOLDEN RULE — surgical outside the request
-For a TARGETED CHANGE ("remove this button", "เปลี่ยนสีหัวข้อ"), change only the requested region. On every turn, keep unrelated code and behavior outside the requested scope BYTE-FOR-BYTE identical. Use edit_workspace_file for narrow changes. Use write_workspace_file for genuinely new files, the untouched starter homepage, or a cohesive replacement of a small existing unlocked file after inspecting it. Never improve unrelated code or rewrite an existing file merely because generating it again is easier.`;
+For a TARGETED CHANGE ("remove this button", "เปลี่ยนสีหัวข้อ"), change only the requested region. On every turn, keep unrelated code and behavior outside the requested scope BYTE-FOR-BYTE identical. Use edit_workspace_file for existing files and write_workspace_file only for genuinely new files or the untouched starter homepage. Never improve unrelated code or rewrite an existing file merely because generating it again is easier.`;
 }
 
 function projectLogSection(): string {
@@ -200,7 +199,7 @@ function fileTreeSection(input: GenerationSystemPromptInput): string {
   return `
 ## Project file tree (every file that exists now)
 ${paths.map((path) => `- ${path}`).join("\n")}
-Every path above already exists. Never recreate an existing path without inspecting it first, even when its contents are not included below. Prefer surgical edits; replace the whole file only when necessary and allowed by the tool.
+Every path above already exists. Never recreate an existing path; inspect and edit it instead, even when its contents are not included below.
 `;
 }
 

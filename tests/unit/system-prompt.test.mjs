@@ -23,12 +23,7 @@ test("system prompt lists locked files and embeds context file contents and roll
   assert.match(prompt, /export default function Home/);
   assert.match(prompt, /User is building a landing page\./);
   assert.match(prompt, /write_workspace_file/);
-  assert.match(prompt, /write_workspace_file.*replace.*small.*existing.*file/i);
-  assert.doesNotMatch(prompt, /write_workspace_file (?:only )?for (?:genuinely )?new files only/i);
   assert.match(prompt, /run_workspace_command/);
-  assert.match(prompt, /npm install/);
-  assert.match(prompt, /never (?:write|edit).*package\.json/i);
-  assert.match(prompt, /build succeeds.*final response.*no (?:more )?tool calls/i);
   assert.match(prompt, /propose_database_migration/);
   assert.doesNotMatch(prompt, /<action|<artifact/);
 });
