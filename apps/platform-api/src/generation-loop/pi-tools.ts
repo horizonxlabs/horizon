@@ -314,7 +314,7 @@ function failure(
   preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
   error: string
 ): ToolResult {
-  const message = clipUtf8(error, context.limits.maxToolOutputBytes);
+  const message = clipUtf8(safeToolError(error), context.limits.maxToolOutputBytes);
   return {
     content: [{ type: "text", text: message }],
     details: {
