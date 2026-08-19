@@ -19,7 +19,9 @@ const PACKAGE_OPTIONS = new Set([
   "--frozen-lockfile"
 ]);
 const PACKAGE_SPEC = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9*^~.+_-]+)?$/i;
-const SAFE_PROJECT_SEGMENT = /^[A-Za-z0-9._@+-]+$/;
+// Plain filenames, or a Next.js dynamic-route segment: [id], [...slug], [[...slug]].
+const SAFE_PROJECT_SEGMENT =
+  /^(?:[A-Za-z0-9._@+-]+|\[\.\.\.[A-Za-z0-9_-]+\]|\[[A-Za-z0-9_-]+\]|\[\[\.\.\.[A-Za-z0-9_-]+\]\])$/;
 
 export type PiAgentToolLimits = {
   maxToolCalls: number;
