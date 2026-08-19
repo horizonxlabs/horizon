@@ -179,6 +179,23 @@ async function* runLockedTurn(
       for (const adapted of adaptPiEvent(event)) yield adapted;
     }
     signal.throwIfAborted();
+    for (let attempt = 0; failedTool && attempt < limits.toolFailureRetries; attempt += 1) {
+      const priorFailure = failedTool;
+      const toolCallsBeforeRetry = toolCalls;
+      const feedback = turnFeedback.buildToolFailureFeedback(priorFailure);
+      failedTool = undefined;
+      for await (const event of queue.prompt(feedback)) {
+        collectEvent(event);
+        for (const adapted of adaptPiEvent(event)) yield adapted;
+      }
+      signal.throwIfAborted();
+      // A model can ignore the feedback entirely and just narrate instead of calling a
+      // tool — no new tool_execution_end event fires, so failedTool never gets set again
+      // and this would otherwise read as "resolved" with nothing actually retried.
+      if (!failedTool && toolCalls === toolCallsBeforeRetry) {
+        failedTool = priorFailure;
+      }
+    }
     turnFeedback.ensureNoFailedTool(failedTool);
     const snapshotToken = preparedSnapshotToken;
     if (mutationCapable && !snapshotToken) {

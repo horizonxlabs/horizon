@@ -7,6 +7,7 @@ export type PiAgentLimits = PiAgentToolLimits & {
   maxFileBytes: number;
   turnTimeoutMs: number;
   validationRetries: number;
+  toolFailureRetries: number;
   maxReasoningChars: number;
 };
 
@@ -21,6 +22,14 @@ const defaults: PiAgentLimits = {
   maxFileBytes: 120_000,
   turnTimeoutMs: 600_000,
   validationRetries: 2,
+  // A model that hits one disallowed/failed tool call (e.g. tries to rewrite package.json
+  // directly instead of using the install tool) but otherwise wrote real, working files can
+  // still declare victory and stop instead of self-correcting within its own session. Without
+  // this nudge, that one lingering failure aborts the whole turn and rolls back every file it
+  // DID write successfully — observed in production as a fully working feature silently
+  // vanishing over one unrelated tool error. Giving it one explicit round of feedback lets it
+  // route around the failure (or fix it) before the turn is abandoned.
+  toolFailureRetries: 1,
   // A model that never converges on a tool call or a final answer keeps streaming
   // "thinking" text for the full modelRoundTimeoutMs (up to 5 minutes) before the round
   // even ends — observed in practice as the agent oscillating between two plans forever.
@@ -45,6 +54,7 @@ const maximums: PiAgentLimits = {
   maxFileBytes: 1_048_576,
   turnTimeoutMs: 1_800_000,
   validationRetries: 5,
+  toolFailureRetries: 3,
   maxReasoningChars: 200_000
 };
 
@@ -75,6 +85,11 @@ export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): Pi
       overrides.validationRetries,
       "EVCP_PI_VALIDATION_RETRIES",
       "validationRetries"
+    ),
+    toolFailureRetries: limit(
+      overrides.toolFailureRetries,
+      "EVCP_PI_TOOL_FAILURE_RETRIES",
+      "toolFailureRetries"
     ),
     maxReasoningChars: limit(
       overrides.maxReasoningChars,
