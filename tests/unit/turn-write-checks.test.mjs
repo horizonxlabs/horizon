@@ -41,6 +41,20 @@ test("syntax check command is safe, single-file, and resolution-free", () => {
   assert.throws(() => buildSyntaxCheckCommand("app/$(rm -rf).tsx"), /path/i);
 });
 
+// Regression: SAFE_PATH here didn't allow [ ], so the in-turn syntax check silently no-opped
+// (swallowed by collectWriteIssues' .catch) for any Next.js dynamic route, even though
+// pi-tool-policy.ts's SAFE_PROJECT_SEGMENT already allows writing those files.
+test("syntax check command accepts Next.js dynamic-route paths", () => {
+  for (const path of [
+    "app/api/tasks/[id]/route.ts",
+    "app/blog/[...slug]/page.tsx",
+    "app/shop/[[...slug]]/page.tsx"
+  ]) {
+    assert.doesNotThrow(() => buildSyntaxCheckCommand(path));
+    assert.match(buildSyntaxCheckCommand(path), new RegExp(path.replace(/[.[\]]/g, "\\$&")));
+  }
+});
+
 test("collectWriteIssues merges syntax and import findings", async () => {
   const issues = await collectWriteIssues(
     {

@@ -7,7 +7,11 @@ import type { PiAgentLimits } from "./pi-limits";
 import { filterAgentWorkspaceFiles } from "./pi-tool-policy";
 
 const IMPORT_PATTERN = /import\s[^'"]*['"]([^'"]+)['"]/g;
-const SAFE_PATH = /^[\w@./-]+$/;
+// Matches pi-tool-policy.ts's SAFE_PROJECT_SEGMENT bracket allowance: without [ ] here,
+// this quietly no-ops the in-turn syntax check for any Next.js dynamic route (the failure
+// is swallowed by collectWriteIssues' .catch(() => ""), so it never surfaces as an error —
+// it just silently stops catching syntax mistakes in those files).
+const SAFE_PATH = /^[\w@./[\]-]+$/;
 
 function normalizeImport(fromFile: string, specifier: string): string | null {
   if (specifier.startsWith("@/")) return specifier.slice(2);

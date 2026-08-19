@@ -184,6 +184,26 @@ test("workspace path segments use a conservative shell-safe filename grammar", (
   );
 });
 
+// Regression: Pi kept hitting "workspace path contains an unsafe segment" on any Next.js
+// dynamic route, then burned its reasoning budget thrashing over the false rejection instead
+// of ever writing the file.
+test("workspace paths allow Next.js dynamic-route segments", () => {
+  for (const path of [
+    "app/api/tasks/[id]/route.ts",
+    "app/blog/[...slug]/page.tsx",
+    "app/shop/[[...slug]]/page.tsx"
+  ]) {
+    assert.equal(normalizeProjectPath(path), path);
+  }
+  for (const path of [
+    "app/api/tasks/[;id]/route.ts",
+    "app/api/tasks/[[id]/route.ts",
+    "app/api/tasks/[id]]/route.ts"
+  ]) {
+    assert.throws(() => normalizeProjectPath(path), /unsafe/i, path);
+  }
+});
+
 test("Pi tool boundary permits only controlled installs and approved scripts", async () => {
   const { tools, calls } = securedFixture({
     limits: {
