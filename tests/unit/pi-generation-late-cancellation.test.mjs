@@ -93,7 +93,7 @@ function lateCancellationFixture(kind, abortAt) {
         lifecycle.push("prepare:snapshot-token");
         return "snapshot-token";
       },
-      async hasChanges(_projectId, _containerId, snapshotToken) {
+      async hasChanges(_projectId, snapshotToken) {
         assert.equal(snapshotToken, "snapshot-token");
         return mutationStates[changeCheck++];
       },

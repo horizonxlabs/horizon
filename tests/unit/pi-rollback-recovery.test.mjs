@@ -41,11 +41,11 @@ test("rollback failure retains the recovery snapshot and emits an operator warni
       },
       async validate() {},
       async restore() {},
-      async restoreSnapshot(_projectId, _containerId, baseline) {
+      async restoreSnapshot(_projectId, baseline) {
         lifecycle.push(`restore-failed:${baseline}`);
         throw new Error("archive extraction failed");
       },
-      async releaseSnapshot(_projectId, _containerId, baseline) {
+      async releaseSnapshot(_projectId, baseline) {
         lifecycle.push(`release:${baseline}`);
       }
     },

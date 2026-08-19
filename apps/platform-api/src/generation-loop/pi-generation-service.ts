@@ -20,7 +20,7 @@ import { buildAutoSystemPrompt, buildPlanSystemPrompt, buildSystemPrompt } from 
 import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
-import { assertFileLimits, collectPiWriteIssues } from "./turn-checks";
+import { collectRoundIssues } from "./turn-checks";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
@@ -118,9 +118,7 @@ async function* runLockedTurn(
   let rollbackRecoveryRequired = false;
 
   try {
-    if (mutationCapable) {
-      preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId, containerId);
-    }
+    if (mutationCapable) preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId);
     signal.throwIfAborted();
     const { modelRuntime, model } = await createHorizonPiRuntime({
       executor: deps.governedAiExecutor,
@@ -180,7 +178,7 @@ async function* runLockedTurn(
     }
     const hasCandidateWorkspaceChanges =
       mutationCapable &&
-      (await deps.workspaceGuard.hasChanges(input.projectId, containerId, snapshotToken as string));
+      (await deps.workspaceGuard.hasChanges(input.projectId, snapshotToken as string));
     const hasCandidateMutation =
       mutationCapable && (hasCandidateWorkspaceChanges || migrations.length > 0);
 
@@ -200,7 +198,7 @@ async function* runLockedTurn(
       let validationFailure: unknown;
       for (let attempt = 0; attempt <= limits.validationRetries; attempt += 1) {
         try {
-          await deps.workspaceGuard.validate(input.projectId, containerId);
+          await deps.workspaceGuard.validate(input.projectId);
           validationFailure = undefined;
           break;
         } catch (error) {
@@ -241,7 +239,6 @@ async function* runLockedTurn(
       signal.throwIfAborted();
       const hasFinalWorkspaceChanges = await deps.workspaceGuard.hasChanges(
         input.projectId,
-        containerId,
         snapshotToken as string
       );
       signal.throwIfAborted();
@@ -251,11 +248,7 @@ async function* runLockedTurn(
         );
       }
       if (hasFinalWorkspaceChanges) {
-        candidateSha = await deps.commitAllChanges(
-          input.projectId,
-          containerId,
-          `AI: ${input.prompt}`
-        );
+        candidateSha = await deps.commitAllChanges(input.projectId, `AI: ${input.prompt}`);
         signal.throwIfAborted();
         await finalizePiCandidate({
           deps,
@@ -284,7 +277,7 @@ async function* runLockedTurn(
     const preserveCandidate = irreversibleFinalizationMayHaveTakenEffect && candidateSha;
     if (preparedSnapshotToken && !preserveCandidate) {
       try {
-        await deps.workspaceGuard.restoreSnapshot(input.projectId, containerId, preparedSnapshotToken);
+        await deps.workspaceGuard.restoreSnapshot(input.projectId, preparedSnapshotToken);
       } catch (restoreError) {
         rollbackRecoveryRequired = true;
         errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}. Workspace snapshot recovery is required; an operator must inspect the protected recovery state before any new turn.`;
@@ -318,7 +311,7 @@ async function* runLockedTurn(
     yield { type: "error", message: errorMessage };
   } finally {
     if (!rollbackRecoveryRequired) {
-      await releasePiTurnSnapshot(deps, input.projectId, containerId, preparedSnapshotToken);
+      await releasePiTurnSnapshot(deps, input.projectId, preparedSnapshotToken);
     }
     detachSessionAbort?.();
     queue?.close();
@@ -381,4 +374,26 @@ async function* runLockedTurn(
       if (!details.ok || event.isError) failedTool = details;
     }
   }
+}
+
+async function collectPiWriteIssues(
+  deps: PiGenerationServiceDeps,
+  containerId: string,
+  writtenPaths: Set<string>,
+  limits: ReturnType<typeof resolvePiAgentLimits>
+): Promise<string[]> {
+  if (!writtenPaths.size || !deps.readWorkspaceFiles) return [];
+  const files = filterAgentWorkspaceFiles(await deps.readWorkspaceFiles(containerId));
+  assertFileLimits(files, limits.maxFileBytes);
+  const knownPaths = new Set(files.map((file) => file.path));
+  const writes = files.filter((file) => writtenPaths.has(file.path));
+  return collectRoundIssues(deps, containerId, writes, knownPaths);
+}
+
+function assertFileLimits(
+  files: Array<{ path: string; content: string }>,
+  maxFileBytes: number
+): void {
+  const oversized = files.find((file) => Buffer.byteLength(file.content, "utf8") > maxFileBytes);
+  if (oversized) throw new Error(`workspace file '${oversized.path}' exceeds the file-size limit`);
 }

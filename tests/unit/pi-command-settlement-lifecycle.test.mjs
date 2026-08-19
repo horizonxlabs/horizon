@@ -96,10 +96,10 @@ test("aborted package mutation settles before snapshot restore and release advan
       },
       async validate() {},
       async restore() {},
-      async restoreSnapshot(_projectId, _containerId, snapshot) {
+      async restoreSnapshot(_projectId, snapshot) {
         lifecycle.push(`restore:${snapshot}`);
       },
-      async releaseSnapshot(_projectId, _containerId, snapshot) {
+      async releaseSnapshot(_projectId, snapshot) {
         lifecycle.push(`release:${snapshot}`);
       }
     },

@@ -102,33 +102,39 @@ export async function createDefaultGenerationService(opts: {
       return (result.stdout ?? "").replace(/\r\n/g, "\n");
     },
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
-    // These take the caller's already-resolved `containerId` as-is instead of re-resolving
-    // it from `projectId` — see the doc comment on `workspaceGuard` in
-    // generation-service-types.ts for why that consistency matters mid-turn.
     workspaceGuard: {
-      prepare: async (projectId, containerId) => {
+      prepare: async (projectId) => {
         opts.orchestrator.markActivity(projectId);
-        return gitCommitter.prepare(containerId);
+        return gitCommitter.prepare(workspaceContainerId(opts.orchestrator, projectId));
       },
-      hasChanges: async (_projectId, containerId, snapshotToken) => {
-        return gitCommitter.hasChanges(containerId, snapshotToken);
+      hasChanges: async (projectId, snapshotToken) => {
+        return gitCommitter.hasChanges(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
       },
-      validate: async (_projectId, containerId) => {
-        await gitCommitter.validate(containerId);
+      validate: async (projectId) => {
+        await gitCommitter.validate(workspaceContainerId(opts.orchestrator, projectId));
       },
       restore: async (projectId, commitSha) => {
         await gitCommitter.restore(workspaceContainerId(opts.orchestrator, projectId), commitSha);
       },
-      restoreSnapshot: async (_projectId, containerId, snapshotToken) => {
-        await gitCommitter.restoreSnapshot(containerId, snapshotToken);
+      restoreSnapshot: async (projectId, snapshotToken) => {
+        await gitCommitter.restoreSnapshot(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
       },
-      releaseSnapshot: async (_projectId, containerId, snapshotToken) => {
-        await gitCommitter.releaseSnapshot(containerId, snapshotToken);
+      releaseSnapshot: async (projectId, snapshotToken) => {
+        await gitCommitter.releaseSnapshot(
+          workspaceContainerId(opts.orchestrator, projectId),
+          snapshotToken
+        );
       }
     },
-    commitAllChanges: async (projectId, containerId, message) => {
+    commitAllChanges: async (projectId, message) => {
       opts.orchestrator.markActivity(projectId);
-      return gitCommitter.commit(containerId, message);
+      return gitCommitter.commit(workspaceContainerId(opts.orchestrator, projectId), message);
     },
     onAudit: opts.onAudit
   });
