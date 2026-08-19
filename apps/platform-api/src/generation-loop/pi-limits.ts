@@ -7,6 +7,7 @@ export type PiAgentLimits = PiAgentToolLimits & {
   maxFileBytes: number;
   turnTimeoutMs: number;
   validationRetries: number;
+  maxReasoningChars: number;
 };
 
 const defaults: PiAgentLimits = {
@@ -19,7 +20,13 @@ const defaults: PiAgentLimits = {
   maxToolInputBytes: 120_000,
   maxFileBytes: 120_000,
   turnTimeoutMs: 600_000,
-  validationRetries: 2
+  validationRetries: 2,
+  // A model that never converges on a tool call or a final answer keeps streaming
+  // "thinking" text for the full modelRoundTimeoutMs (up to 5 minutes) before the round
+  // even ends — observed in practice as the agent oscillating between two plans forever.
+  // Cutting a round short once its reasoning alone passes this budget turns that into a
+  // fast, legible error instead of a multi-minute silent stall.
+  maxReasoningChars: 12_000
 };
 
 const maximums: PiAgentLimits = {
@@ -37,7 +44,8 @@ const maximums: PiAgentLimits = {
   maxToolInputBytes: 1_048_576,
   maxFileBytes: 1_048_576,
   turnTimeoutMs: 1_800_000,
-  validationRetries: 5
+  validationRetries: 5,
+  maxReasoningChars: 200_000
 };
 
 export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): PiAgentLimits {
@@ -67,6 +75,11 @@ export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): Pi
       overrides.validationRetries,
       "EVCP_PI_VALIDATION_RETRIES",
       "validationRetries"
+    ),
+    maxReasoningChars: limit(
+      overrides.maxReasoningChars,
+      "EVCP_PI_MAX_REASONING_CHARS",
+      "maxReasoningChars"
     )
   };
 }

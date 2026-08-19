@@ -60,6 +60,8 @@ test("Auto prompt answers informational questions without mutation authority", (
     /only a current user message that explicitly asks.*carry out a mutation now grants mutation authority/is
   );
   assert.match(prompt, /prior requests and prior Build turns do not/i);
+  assert.match(prompt, /Decide once, from the current message alone, and act/i);
+  assert.match(prompt, /never keep reasoning back and forth between two interpretations/i);
   assert.match(prompt, /ตอนนี้ดึงข้อมูลมาจากไหน/);
   assert.match(
     prompt,

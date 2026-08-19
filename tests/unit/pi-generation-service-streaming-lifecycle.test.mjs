@@ -356,3 +356,38 @@ test("the turn token budget stops a runaway Pi loop and restores the workspace",
   );
   assert.equal(lifecycle.includes("restore:base-sha"), true);
 });
+
+// Mimics the observed failure: the model oscillates between two plans forever instead of
+// ever converging on a tool call, which used to burn the full 5-minute round timeout.
+test("a round that deliberates without ever calling a tool is cut off by the reasoning budget", async () => {
+  const lifecycle = [];
+  const thinking = "Actually, I'll do the DB migration first. Actually, BTC real-time first. ".repeat(20);
+  const message = { role: "assistant", content: [{ type: "thinking", thinking }], timestamp: 1 };
+  const deps = baseDeps(
+    {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "succeeded",
+          message,
+          usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
+          evidence: { requestId: input.requestId }
+        };
+      }
+    },
+    lifecycle,
+    true
+  );
+  deps.limits.maxReasoningChars = 50;
+  const service = createPiGenerationService(deps);
+
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Build a chart", agentMode: "build", actor })
+  );
+
+  assert.match(
+    events.find((event) => event.type === "error")?.message ?? "",
+    /deliberating without acting/i
+  );
+  assert.equal(events.some((event) => event.type === "commit"), false);
+  assert.equal(lifecycle.includes("restore:base-sha"), true);
+});

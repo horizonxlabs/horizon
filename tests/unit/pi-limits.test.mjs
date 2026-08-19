@@ -33,3 +33,24 @@ test("EVCP_PI_MODEL_ROUND_TIMEOUT_MS lets slow local models raise the per-round 
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;
   }
 });
+
+test("a runaway-deliberation round is bounded by a reasoning character budget, not just the round timeout", () => {
+  const previous = process.env.EVCP_PI_MAX_REASONING_CHARS;
+  delete process.env.EVCP_PI_MAX_REASONING_CHARS;
+
+  try {
+    // Default is well short of the 5-minute round timeout's worst case, so an oscillating
+    // model gets cut off with a legible error long before it burns the full round budget.
+    assert.equal(resolvePiAgentLimits().maxReasoningChars, 12_000);
+
+    process.env.EVCP_PI_MAX_REASONING_CHARS = "5000";
+    assert.equal(resolvePiAgentLimits().maxReasoningChars, 5_000);
+
+    // Clamped at maximums.maxReasoningChars.
+    process.env.EVCP_PI_MAX_REASONING_CHARS = "10000000";
+    assert.equal(resolvePiAgentLimits().maxReasoningChars, 200_000);
+  } finally {
+    if (previous === undefined) delete process.env.EVCP_PI_MAX_REASONING_CHARS;
+    else process.env.EVCP_PI_MAX_REASONING_CHARS = previous;
+  }
+});
