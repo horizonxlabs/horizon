@@ -7,7 +7,12 @@ import type { GenerationService, PiGenerationServiceDeps } from "./generation-se
 import type { ChatStreamEvent } from "./generation-types";
 import { createHorizonPiRuntime } from "./pi-provider";
 import { createProjectTurnLock } from "./project-turn-lock";
-import { adaptPiEvent, assistantTextDelta } from "./pi-event-adapter";
+import {
+  adaptPiEvent,
+  assistantReasoningDelta,
+  assistantTextDelta,
+  collectToolExecutionEnd
+} from "./pi-event-adapter";
 import { resolvePiAgentLimits } from "./pi-limits";
 import { createHorizonPiSession } from "./pi-session-context";
 import { PiSessionEventQueue } from "./pi-session-event-queue";
@@ -101,6 +106,7 @@ async function* runLockedTurn(
   let toolCalls = 0;
   let assistantText = "";
   let currentAssistantDeltaText = "";
+  let currentRoundReasoningChars = 0;
   let promptTokens = 0;
   let completionTokens = 0;
   let session: Awaited<ReturnType<typeof createHorizonPiSession>> | undefined;
@@ -322,11 +328,25 @@ async function* runLockedTurn(
   function collectEvent(event: AgentSessionEvent): void {
     if (event.type === "message_start" && event.message.role === "assistant") {
       currentAssistantDeltaText = "";
+      currentRoundReasoningChars = 0;
     }
     const delta = assistantTextDelta(event);
     if (delta) {
       assistantText += delta;
       currentAssistantDeltaText += delta;
+    }
+    const reasoningDelta = assistantReasoningDelta(event);
+    if (reasoningDelta) {
+      currentRoundReasoningChars += reasoningDelta.length;
+      // A model that never converges on a tool call or a final answer would otherwise
+      // keep streaming "thinking" text for the full modelRoundTimeoutMs (up to 5 minutes)
+      // before this round even ends — surfacing as the agent silently oscillating between
+      // plans. Cut it short here with a specific, actionable error instead.
+      if (currentRoundReasoningChars > limits.maxReasoningChars) {
+        throw new Error(
+          `Pi spent too long deliberating without acting (reasoning budget ${limits.maxReasoningChars} characters exceeded) — commit to one plan and act, or ask one clarifying question`
+        );
+      }
     }
     if (event.type === "message_end" && event.message.role === "assistant") {
       if (event.message.stopReason === "error" || event.message.stopReason === "aborted") {
@@ -347,31 +367,7 @@ async function* runLockedTurn(
       }
     }
     if (event.type === "tool_execution_end") {
-      const details = event.result?.details as HorizonPiToolDetails | undefined;
-      if (!details) return;
-      const terminalValidationPassed =
-        details.ok &&
-        !event.isError &&
-        typeof event.result === "object" &&
-        event.result !== null &&
-        (event.result as { terminate?: unknown }).terminate === true;
-      if (terminalValidationPassed) failedTool = undefined;
-      if (
-        details.ok &&
-        !event.isError &&
-        (details.actionType === "file" || details.actionType === "edit")
-      ) {
-        writtenPaths.add(details.label);
-        if (failedTool?.label === details.label) failedTool = undefined;
-      }
-      actionIds.push(event.toolCallId);
-      actions.push({
-        id: event.toolCallId,
-        type: details.actionType,
-        label: details.label,
-        ok: details.ok && !event.isError
-      });
-      if (!details.ok || event.isError) failedTool = details;
+      failedTool = collectToolExecutionEnd(event, actionIds, actions, writtenPaths, failedTool);
     }
   }
 }

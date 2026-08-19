@@ -1,4 +1,5 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { WorkspaceChatAction } from "@evcp/types";
 
 import type { ChatStreamEvent } from "./generation-types";
 import type { HorizonPiToolDetails } from "./pi-tools";
@@ -19,6 +20,47 @@ export function assistantTextDelta(event: AgentSessionEvent): string | undefined
     return event.assistantMessageEvent.delta;
   }
   return undefined;
+}
+
+export function assistantReasoningDelta(event: AgentSessionEvent): string | undefined {
+  if (event.type === "message_update" && event.assistantMessageEvent.type === "thinking_delta") {
+    return event.assistantMessageEvent.delta;
+  }
+  return undefined;
+}
+
+// Folds a tool_execution_end event into the turn's running action ledger, returning the
+// updated failedTool (the reassignment can't happen through the parameter itself since
+// primitive `let` bindings aren't passed by reference).
+export function collectToolExecutionEnd(
+  event: Extract<AgentSessionEvent, { type: "tool_execution_end" }>,
+  actionIds: string[],
+  actions: WorkspaceChatAction[],
+  writtenPaths: Set<string>,
+  failedTool: HorizonPiToolDetails | undefined
+): HorizonPiToolDetails | undefined {
+  const details = event.result?.details as HorizonPiToolDetails | undefined;
+  if (!details) return failedTool;
+  const terminalValidationPassed =
+    details.ok &&
+    !event.isError &&
+    typeof event.result === "object" &&
+    event.result !== null &&
+    (event.result as { terminate?: unknown }).terminate === true;
+  let next = terminalValidationPassed ? undefined : failedTool;
+  if (details.ok && !event.isError && (details.actionType === "file" || details.actionType === "edit")) {
+    writtenPaths.add(details.label);
+    if (next?.label === details.label) next = undefined;
+  }
+  actionIds.push(event.toolCallId);
+  actions.push({
+    id: event.toolCallId,
+    type: details.actionType,
+    label: details.label,
+    ok: details.ok && !event.isError
+  });
+  if (!details.ok || event.isError) next = details;
+  return next;
 }
 
 export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {

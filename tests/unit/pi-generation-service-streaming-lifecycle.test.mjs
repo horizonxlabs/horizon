@@ -1,94 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createMemoryChatHistoryStore } from "../../apps/platform-api/src/generation-loop/chat-history-store.ts";
 import { createPiGenerationService } from "../../apps/platform-api/src/generation-loop/pi-generation-service.ts";
-
-const actor = { id: "creator-1", email: "creator@example.test", name: "Creator", role: "creator" };
-const template = { name: "Web App", lockedFiles: ["package.json"], files: [] };
-
-async function drain(iterable) {
-  const events = [];
-  for await (const event of iterable) events.push(event);
-  return events;
-}
-
-function baseDeps(executor, lifecycle, hasWorkspaceChanges) {
-  const memory = createMemoryChatHistoryStore();
-  return {
-    governedAiExecutor: executor,
-    chatHistory: {
-      ...memory,
-      async appendMessage(message) {
-        lifecycle.push(`append:${message.role}`);
-        return memory.appendMessage(message);
-      }
-    },
-    actionRunner: {
-      async runAction(input) {
-        lifecycle.push(`tool:${input.action.type}`);
-        return { ok: true, stdout: "" };
-      },
-      async syncMigrationArtifacts() {
-        lifecycle.push("sync:migrations");
-        return { ok: true, stdout: "" };
-      },
-      async runMigrationBatch() {
-        lifecycle.push("migrate:batch");
-        return { ok: true, stdout: "" };
-      }
-    },
-    template,
-    getContainerId: () => "container-1",
-    readContextFiles: async () => [],
-    readWorkspaceFiles: async () => [],
-    workspaceGuard: {
-      async prepare() {
-        lifecycle.push("prepare:base");
-        return "base-sha";
-      },
-      async hasChanges(_projectId, snapshot) {
-        assert.equal(snapshot, "base-sha");
-        assert.equal(typeof hasWorkspaceChanges, "boolean", "fixture must declare mutation state");
-        lifecycle.push("git:changes");
-        return hasWorkspaceChanges;
-      },
-      async validate() {
-        lifecycle.push("validate");
-      },
-      async restore() {},
-      async restoreSnapshot(_projectId, commitSha) {
-        lifecycle.push(`restore:${commitSha}`);
-      },
-      async releaseSnapshot() {}
-    },
-    async commitAllChanges() {
-      lifecycle.push("commit:candidate");
-      return "candidate-sha";
-    },
-    checkpoints: {
-      async createCheckpoint() {
-        lifecycle.push("checkpoint");
-      }
-    },
-    resolveGovernedContext: async () => ({
-      availableSkills: [],
-      skillInstructions: {},
-      knowledgeExcerpts: [],
-      productSpec: "Confirmed PRD baseline"
-    }),
-    limits: {
-      maxModelRounds: 4,
-      maxToolCalls: 8,
-      shellTimeoutMs: 5_000,
-      maxToolOutputBytes: 4_096,
-      maxFileBytes: 10_000,
-      turnTimeoutMs: 30_000,
-      validationRetries: 1,
-      maxToolInputBytes: 10_000
-    }
-  };
-}
+import { actor, baseDeps, drain } from "./helpers/pi-generation-service-streaming-lifecycle-fixtures.mjs";
 
 test("a corrected tool retry clears the earlier failure and allows commit", async () => {
   const lifecycle = [];
@@ -440,5 +354,40 @@ test("the turn token budget stops a runaway Pi loop and restores the workspace",
     events.some((event) => event.type === "commit"),
     false
   );
+  assert.equal(lifecycle.includes("restore:base-sha"), true);
+});
+
+// Mimics the observed failure: the model oscillates between two plans forever instead of
+// ever converging on a tool call, which used to burn the full 5-minute round timeout.
+test("a round that deliberates without ever calling a tool is cut off by the reasoning budget", async () => {
+  const lifecycle = [];
+  const thinking = "Actually, I'll do the DB migration first. Actually, BTC real-time first. ".repeat(20);
+  const message = { role: "assistant", content: [{ type: "thinking", thinking }], timestamp: 1 };
+  const deps = baseDeps(
+    {
+      async executeAgentRound(_actor, input) {
+        return {
+          status: "succeeded",
+          message,
+          usage: { input: 2, output: 2, totalTokens: 4, costUsd: 0 },
+          evidence: { requestId: input.requestId }
+        };
+      }
+    },
+    lifecycle,
+    true
+  );
+  deps.limits.maxReasoningChars = 50;
+  const service = createPiGenerationService(deps);
+
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Build a chart", agentMode: "build", actor })
+  );
+
+  assert.match(
+    events.find((event) => event.type === "error")?.message ?? "",
+    /deliberating without acting/i
+  );
+  assert.equal(events.some((event) => event.type === "commit"), false);
   assert.equal(lifecycle.includes("restore:base-sha"), true);
 });
