@@ -41,26 +41,33 @@ export function baseDeps(executor, lifecycle, hasWorkspaceChanges) {
     readContextFiles: async () => [],
     readWorkspaceFiles: async () => [],
     workspaceGuard: {
-      async prepare() {
+      async prepare(_projectId, containerId) {
+        assert.equal(containerId, "container-1");
         lifecycle.push("prepare:base");
         return "base-sha";
       },
-      async hasChanges(_projectId, snapshot) {
+      async hasChanges(_projectId, containerId, snapshot) {
+        assert.equal(containerId, "container-1");
         assert.equal(snapshot, "base-sha");
         assert.equal(typeof hasWorkspaceChanges, "boolean", "fixture must declare mutation state");
         lifecycle.push("git:changes");
         return hasWorkspaceChanges;
       },
-      async validate() {
+      async validate(_projectId, containerId) {
+        assert.equal(containerId, "container-1");
         lifecycle.push("validate");
       },
       async restore() {},
-      async restoreSnapshot(_projectId, commitSha) {
+      async restoreSnapshot(_projectId, containerId, commitSha) {
+        assert.equal(containerId, "container-1");
         lifecycle.push(`restore:${commitSha}`);
       },
-      async releaseSnapshot() {}
+      async releaseSnapshot(_projectId, containerId) {
+        assert.equal(containerId, "container-1");
+      }
     },
-    async commitAllChanges() {
+    async commitAllChanges(_projectId, containerId) {
+      assert.equal(containerId, "container-1");
       lifecycle.push("commit:candidate");
       return "candidate-sha";
     },
