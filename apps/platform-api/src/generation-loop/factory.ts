@@ -20,7 +20,11 @@ import type { GenerationServiceDeps } from "./generation-service-types";
 import { createMemoryMigrationStore, type MigrationStore } from "./migration-store";
 import { createPgMigrationRunner } from "./migration-runner";
 import { createPiGenerationService } from "./pi-generation-service";
-import { buildSyntaxCheckCommand } from "./turn-checks";
+import {
+  buildSyntaxCheckCommand,
+  isWorkspaceNodeModulesAccessError,
+  WORKSPACE_NODE_MODULES_REPAIR_COMMAND
+} from "./turn-checks";
 
 export async function createDefaultGenerationService(opts: {
   orchestrator: WorkspaceOrchestrator;
@@ -94,12 +98,21 @@ export async function createDefaultGenerationService(opts: {
     readContextFiles: (containerId) => fileReader.read(containerId),
     listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
     checkFileSyntax: async (containerId, path) => {
-      const result = await docker.execInContainer(containerId, [
-        "sh",
-        "-c",
-        buildSyntaxCheckCommand(path)
-      ]);
-      return (result.stdout ?? "").replace(/\r\n/g, "\n");
+      const run = async () => {
+        const result = await docker.execInContainer(containerId, [
+          "sh",
+          "-c",
+          buildSyntaxCheckCommand(path)
+        ]);
+        return (result.stdout ?? "").replace(/\r\n/g, "\n");
+      };
+      const output = await run();
+      if (!isWorkspaceNodeModulesAccessError(output)) return output;
+      // Self-heal the host filesystem quirk documented on
+      // isWorkspaceNodeModulesAccessError and retry once before giving up — this is not a
+      // real syntax error and shouldn't cost the model a feedback round or a rollback.
+      await docker.execInContainer(containerId, ["sh", "-c", WORKSPACE_NODE_MODULES_REPAIR_COMMAND]);
+      return run();
     },
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
     // These take the caller's already-resolved `containerId` as-is instead of re-resolving

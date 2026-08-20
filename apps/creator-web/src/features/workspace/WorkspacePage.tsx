@@ -179,15 +179,22 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     />
                   )}
                   <div className="vibe-message-text">
-                    {message.text ? (
+                    {message.text && (
                       <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
-                    ) : isVibing && messageIndex === vibeMessages.length - 1 && !message.reasoning ? (
-                      <span className="vibe-cursor-blink" aria-hidden="true">
-                        ▋
-                      </span>
-                    ) : (
-                      ""
                     )}
+                    {/* Cursor stays lit through the whole active streaming window, not just the
+                        instant before the first token: previously it vanished the moment
+                        `message.text` went truthy, so a 400-line response looked "done" (no
+                        loading affordance at all) for the rest of its own generation. When
+                        reasoning is still live, its own shimmer already covers this — skip the
+                        cursor only in that one case. */}
+                    {isVibing &&
+                      messageIndex === vibeMessages.length - 1 &&
+                      (message.text || !message.reasoning) && (
+                        <span className="vibe-cursor-blink" aria-hidden="true">
+                          ▋
+                        </span>
+                      )}
                   </div>
                   {messageIndex === vibeMessages.length - 1 && !isVibing && (
                     <VibeQuestionBlock

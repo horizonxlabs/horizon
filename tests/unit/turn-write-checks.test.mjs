@@ -2,8 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const { findMissingImports, buildSyntaxCheckCommand, collectWriteIssues, collectRoundIssues } =
-  await import("../../apps/platform-api/src/generation-loop/turn-checks.ts");
+const {
+  findMissingImports,
+  buildSyntaxCheckCommand,
+  collectWriteIssues,
+  collectRoundIssues,
+  isWorkspaceNodeModulesAccessError,
+  WORKSPACE_NODE_MODULES_REPAIR_COMMAND
+} = await import("../../apps/platform-api/src/generation-loop/turn-checks.ts");
 
 const KNOWN = new Set([
   "app/page.tsx",
@@ -53,6 +59,39 @@ test("syntax check command accepts Next.js dynamic-route paths", () => {
     assert.doesNotThrow(() => buildSyntaxCheckCommand(path));
     assert.match(buildSyntaxCheckCommand(path), new RegExp(path.replace(/[.[\]]/g, "\\$&")));
   }
+});
+
+// Regression: a host filesystem quirk (observed in production on Docker Desktop for Mac)
+// occasionally makes /workspace/node_modules' symlink target return EACCES from stat(),
+// even for root. tsc then crashes with a Node stack trace instead of reporting a real
+// syntax error, and the model burns its feedback round fighting a phantom problem. This
+// must be recognized so the caller can self-heal instead of surfacing it as a syntax error.
+test("recognizes the workspace node_modules EACCES filesystem quirk", () => {
+  const output = [
+    "node:fs:2822",
+    "        binding.stat(base, false, undefined, true);",
+    "                ^",
+    "",
+    "Error: EACCES: permission denied, stat '/workspace/node_modules'",
+    "    at Object.realpathSync (node:fs:2822:17)",
+    "    at toRealPath (node:internal/modules/helpers:61:13)",
+    "    at Function._findPath (node:internal/modules/cjs/loader:746:22)",
+    "    at resolveMainPath (node:internal/modules/run_main:39:23)"
+  ].join("\n");
+  assert.equal(isWorkspaceNodeModulesAccessError(output), true);
+});
+
+test("a real tsc syntax error is not mistaken for the node_modules quirk", () => {
+  const output = "app/page.tsx(1,23): error TS2307: Cannot find module '@/components/ui/badge'";
+  assert.equal(isWorkspaceNodeModulesAccessError(output), false);
+});
+
+test("the node_modules repair command recreates the symlink in place", () => {
+  assert.match(WORKSPACE_NODE_MODULES_REPAIR_COMMAND, /rm -f \/workspace\/node_modules/);
+  assert.match(
+    WORKSPACE_NODE_MODULES_REPAIR_COMMAND,
+    /ln -s \/opt\/evcp-template\/node_modules \/workspace\/node_modules/
+  );
 });
 
 test("collectWriteIssues merges syntax and import findings", async () => {

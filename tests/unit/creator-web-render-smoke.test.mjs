@@ -290,6 +290,21 @@ test("WorkspacePage offers an accessible stop control during generation", () => 
   assert.match(html, /aria-label="Stop generation"/);
 });
 
+// Regression: the blinking cursor was gated on `!message.text`, so it vanished forever the
+// instant the first token landed — a long, still-streaming response then looked finished
+// with no loading affordance at all for the rest of its own generation.
+test("WorkspacePage keeps the loading cursor lit only while a turn is still streaming", () => {
+  const messages = [{ id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }];
+  const streaming = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, isVibing: true, vibeMessages: messages } })
+  );
+  assert.match(streaming, /vibe-cursor-blink/);
+  const done = renderWithHook((app) =>
+    React.createElement(WorkspacePage, { app: { ...app, isVibing: false, vibeMessages: messages } })
+  );
+  assert.doesNotMatch(done, /vibe-cursor-blink/);
+});
+
 test("UsersPage visibly presents access decision feedback with alert semantics", () => {
   const html = renderWithHook((app) =>
     React.createElement(UsersPage, {
