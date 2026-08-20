@@ -39,9 +39,9 @@ test("a runaway-deliberation round is bounded by a reasoning character budget, n
   delete process.env.EVCP_PI_MAX_REASONING_CHARS;
 
   try {
-    // Default is well short of the 5-minute round timeout's worst case, so an oscillating
-    // model gets cut off with a legible error long before it burns the full round budget.
-    assert.equal(resolvePiAgentLimits().maxReasoningChars, 12_000);
+    // Local models may need a longer private deliberation before their first tool call;
+    // the default still remains far below the hard maximum for a genuinely stuck round.
+    assert.equal(resolvePiAgentLimits().maxReasoningChars, 60_000);
 
     process.env.EVCP_PI_MAX_REASONING_CHARS = "5000";
     assert.equal(resolvePiAgentLimits().maxReasoningChars, 5_000);

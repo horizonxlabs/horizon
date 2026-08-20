@@ -117,3 +117,91 @@ test("runtime memory persistence keeps workspace task preview and usage across s
   );
   assert.equal(refreshed.body.data.id, snapshot.body.data.preview.id);
 });
+
+test("first workspace build bootstraps its PRD baseline before accepting the prompt", async () => {
+  const coreClient = new MemoryCorePersistenceClient();
+  const aiClient = new MemoryAiGovernancePersistenceClient();
+  const prdClient = new MemoryPrdPersistenceClient();
+  const workspaceClient = new MemoryWorkspacePersistenceClient();
+  const services = await createPersistentServices(coreClient, aiClient, prdClient, workspaceClient);
+  const created = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/projects",
+    headers: creatorHeaders,
+    body: {
+      name: "First Build Project",
+      slug: "first-build-project",
+      appType: "Workflow App",
+      businessProblem: "Track internal equipment requests",
+      targetDepartment: "Operations",
+      intendedUsers: ["Requester", "Approver"],
+      dataSensitivity: "internal"
+    }
+  });
+
+  const prompt = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${created.body.data.id}/workspace/prompts`,
+    headers: creatorHeaders,
+    body: { prompt: "Build the equipment request dashboard" }
+  });
+  const baseline = await prdClient.prdDocument.findUnique({
+    where: { projectId: created.body.data.id },
+    include: { versions: { include: { sections: true }, orderBy: { createdAt: "asc" } } }
+  });
+
+  assert.equal(created.status, 201);
+  assert.equal(prompt.status, 201);
+  assert.equal(prompt.body.data.task.status, "ready");
+  assert.equal(baseline.baselineVersionId, `prdver_${created.body.data.id}_baseline_v1_0`);
+});
+
+// Regression: getCurrent() throws "No current PRD version..." (not "No PRD document...")
+// when a document row already exists but nothing has been confirmed as current — a state a
+// partially-completed PRD wizard can leave behind. The bootstrap catch in app-factory.ts
+// once matched only a "No PRD document" prefix and let this second message escape as a
+// 4xx, blocking the very first build for that project.
+test("first workspace build still bootstraps a baseline when a PRD document exists with no current version", async () => {
+  const coreClient = new MemoryCorePersistenceClient();
+  const aiClient = new MemoryAiGovernancePersistenceClient();
+  const prdClient = new MemoryPrdPersistenceClient();
+  const workspaceClient = new MemoryWorkspacePersistenceClient();
+  const services = await createPersistentServices(coreClient, aiClient, prdClient, workspaceClient);
+  const created = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/projects",
+    headers: creatorHeaders,
+    body: {
+      name: "Stalled PRD Project",
+      slug: "stalled-prd-project",
+      appType: "Workflow App",
+      businessProblem: "Track internal equipment requests",
+      targetDepartment: "Operations",
+      intendedUsers: ["Requester", "Approver"],
+      dataSensitivity: "internal"
+    }
+  });
+  const projectId = created.body.data.id;
+  await prdClient.prdDocument.upsert({
+    where: { projectId },
+    update: {},
+    create: {
+      id: `prddoc_${projectId}`,
+      projectId,
+      status: "draft",
+      currentVersionId: null,
+      updatedAt: new Date().toISOString()
+    }
+  });
+
+  const prompt = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${projectId}/workspace/prompts`,
+    headers: creatorHeaders,
+    body: { prompt: "Build the equipment request dashboard" }
+  });
+
+  assert.equal(created.status, 201);
+  assert.equal(prompt.status, 201);
+  assert.equal(prompt.body.data.task.status, "ready");
+});

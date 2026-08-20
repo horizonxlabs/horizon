@@ -35,7 +35,10 @@ const defaults: PiAgentLimits = {
   // even ends — observed in practice as the agent oscillating between two plans forever.
   // Cutting a round short once its reasoning alone passes this budget turns that into a
   // fast, legible error instead of a multi-minute silent stall.
-  maxReasoningChars: 12_000
+  // Small local models often produce a long hidden deliberation before their first
+  // tool call. 12k cuts off legitimate first builds; keep a finite default so a
+  // genuinely stalled turn still ends well before the hard maximum.
+  maxReasoningChars: 60_000
 };
 
 const maximums: PiAgentLimits = {

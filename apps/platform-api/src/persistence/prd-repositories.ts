@@ -93,6 +93,33 @@ export interface GeneratePrdDraftInput {
 export class PrdRepositoryBackedService {
   constructor(private readonly client: PrdPersistenceClient) {}
 
+  /** Bootstrap a deterministic baseline from a prompt-first project's own brief. */
+  async ensureInitialBaseline(actor: PlatformUser, project: PlatformProject, input: { sourcePrompt: string }): Promise<PrdVersion> {
+    requireProjectAccess(actor, project);
+    const existing = await this.client.prdDocument.findUnique({
+      where: { projectId: project.id },
+      include: { versions: { include: { sections: true }, orderBy: { createdAt: "asc" } } }
+    });
+    const current = existing?.versions?.find((version) => version.id === existing.currentVersionId);
+    if (current?.isBaseline) return mapVersion(current, project.id);
+    if (current) {
+      throw new ValidationError(`PRD draft must be confirmed before building project ${project.id}`);
+    }
+
+    const sourcePrompt = input.sourcePrompt.trim() || project.businessProblem;
+    const draft = await this.generateDraft(actor, {
+      project,
+      sourcePrompt,
+      generatedBy: {
+        scenario: "prd_generation",
+        providerId: "project-bootstrap",
+        model: "deterministic-initial-baseline"
+      },
+      aiSummary: `Initial app brief: ${sourcePrompt}`
+    });
+    return this.confirmBaseline(actor, project, draft.id);
+  }
+
   async generateDraft(actor: PlatformUser, input: GeneratePrdDraftInput): Promise<PrdVersion> {
     requireProjectAccess(actor, input.project);
     const now = new Date();
