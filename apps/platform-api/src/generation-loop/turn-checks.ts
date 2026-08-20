@@ -51,6 +51,24 @@ export function buildSyntaxCheckCommand(path: string): string {
   return `cd /workspace && ./node_modules/.bin/tsc --noEmit --noResolve --skipLibCheck --allowJs --jsx preserve --module esnext --target es2022 --moduleResolution bundler '${path}' 2>&1 | head -20`;
 }
 
+// Observed in production (self-hosted Docker Desktop for Mac): the container's
+// `/workspace/node_modules` symlink into the shared golden-template package cache
+// occasionally starts returning EACCES from `stat()` on the symlink target — even for
+// root, even right after the container is (re)created — which is a host filesystem
+// quirk, not an application bug. It breaks every syntax check in that container until the
+// symlink entry itself is deleted and recreated. Detect that exact signature so the caller
+// can self-heal instead of surfacing a scary Node stack trace as if it were a real syntax
+// error.
+export function isWorkspaceNodeModulesAccessError(output: string): boolean {
+  return /EACCES.*stat.*['"]\/workspace\/node_modules['"]/.test(output);
+}
+
+// Recreates the node_modules symlink in place. Cheap, idempotent, and — per production
+// observation — reliably clears the stat() failure above without needing to recreate the
+// whole container.
+export const WORKSPACE_NODE_MODULES_REPAIR_COMMAND =
+  "rm -f /workspace/node_modules && ln -s /opt/evcp-template/node_modules /workspace/node_modules";
+
 // Round-final evaluation: imports are checked ONLY after the whole round's files landed,
 // so "page.tsx imports a component created later in the same artifact" never false-positives
 // (that false alarm once made the model rebuild a healthy 767-line app from scratch).
