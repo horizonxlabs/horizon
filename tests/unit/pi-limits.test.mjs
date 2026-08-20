@@ -11,7 +11,7 @@ test("Pi gives slow local-model rounds the same default deadline as governed com
     const limits = resolvePiAgentLimits();
     assert.equal(limits.maxModelRounds, 12);
     assert.equal(limits.modelRoundTimeoutMs, 300_000);
-    assert.equal(limits.maxTurnTokens, 160_000);
+    assert.equal(limits.maxTurnTokens, 600_000);
   } finally {
     if (previous === undefined) delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;

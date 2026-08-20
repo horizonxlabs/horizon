@@ -56,7 +56,7 @@ test("development and release compose expose Pi reliability budgets", () => {
   for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
     const joined = environmentEntries(api).join("\n");
     assert.match(joined, /EVCP_PI_MAX_MODEL_ROUNDS=.*:-12/);
-    assert.match(joined, /EVCP_PI_MAX_TURN_TOKENS=.*:-160000/);
+    assert.match(joined, /EVCP_PI_MAX_TURN_TOKENS=.*:-600000/);
     assert.match(joined, /EVCP_PI_MODEL_ROUND_TIMEOUT_MS=.*:-300000/);
   }
 });

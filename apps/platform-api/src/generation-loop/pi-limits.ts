@@ -13,7 +13,6 @@ export type PiAgentLimits = PiAgentToolLimits & {
 
 const defaults: PiAgentLimits = {
   maxModelRounds: 12,
-  maxTurnTokens: 160_000,
   modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
@@ -30,6 +29,18 @@ const defaults: PiAgentLimits = {
   // vanishing over one unrelated tool error. Giving it one explicit round of feedback lets it
   // route around the failure (or fix it) before the turn is abandoned.
   toolFailureRetries: 1,
+  // promptTokens/completionTokens accumulate across every round of the turn (each round's
+  // reported input tokens are summed, not deduped against the shared history/context they
+  // repeat) — so this is nowhere near comparable to a single round's context window. A
+  // legitimate multi-round build (e.g. wiring up a real database: read schema, write
+  // migration files, update several app files, re-validate) routinely spans 5-8 rounds and
+  // blew past the old 160k default well before doing anything runaway, discarding real,
+  // working mutations via the same rollback path used for genuine stalls (see
+  // workspaceGuard.restoreSnapshot in the catch block) — observed in production as a
+  // completed feature (e.g. "app now uses real PostgreSQL...") vanishing on the next line.
+  // Raised with real headroom under maximums.maxTurnTokens while still catching a turn that
+  // never converges at all.
+  maxTurnTokens: 600_000,
   // A model that never converges on a tool call or a final answer keeps streaming
   // "thinking" text for the full modelRoundTimeoutMs (up to 5 minutes) before the round
   // even ends — observed in practice as the agent oscillating between two plans forever.
