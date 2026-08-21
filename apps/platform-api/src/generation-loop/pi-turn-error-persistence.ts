@@ -1,4 +1,9 @@
-import type { WorkspaceAgentMode, WorkspaceChatAction, WorkspaceChatMessage } from "@evcp/types";
+import type {
+  WorkspaceAgentMode,
+  WorkspaceChatAction,
+  WorkspaceChatMessage,
+  WorkspaceChatTurnPart
+} from "@evcp/types";
 
 import type { ChatHistoryStore } from "./chat-history-store";
 import { createAssistantChatMessage } from "./generation-message-factory";
@@ -15,6 +20,7 @@ export async function persistPiTurnErrorAssistant(input: {
   assistantMessage?: WorkspaceChatMessage;
   artifactActionIds: string[];
   actions: WorkspaceChatAction[];
+  parts?: WorkspaceChatTurnPart[];
   tokenUsage: { promptTokens: number; completionTokens: number };
 }): Promise<string> {
   const persistedContent =
@@ -29,6 +35,7 @@ export async function persistPiTurnErrorAssistant(input: {
       agentMode: input.mode,
       artifactActionIds: input.artifactActionIds,
       actions: input.actions,
+      parts: input.parts,
       tokenUsage: input.tokenUsage
     });
   assistant.content = persistedContent;

@@ -769,6 +769,7 @@ model ChatMessage {
   content           String
   artifactActionIds String[] @default([]) @map("artifact_action_ids")
   actions           Json?
+  parts             Json?
   commitSha         String?  @map("commit_sha")
   tokenUsage        Json?    @map("token_usage")
   project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

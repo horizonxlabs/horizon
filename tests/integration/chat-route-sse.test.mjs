@@ -343,6 +343,13 @@ test("client disconnect preserves the active generation turn for a refreshed Cre
     },
     async *runTurn(input) {
       capturedSignal = input.signal;
+      yield { type: "token", content: "Drafting the update." };
+      yield {
+        type: "action_start",
+        actionId: "call-active-1",
+        actionType: "file",
+        label: "app/page.tsx"
+      };
       await turnCanFinish;
       yield { type: "done" };
     }
@@ -366,6 +373,15 @@ test("client disconnect preserves the active generation turn for a refreshed Cre
     assert.equal(active.statusCode, 200);
     assert.equal(active.body.active, true);
     assert.equal(active.body.prompt, "Build");
+    assert.deepEqual(active.body.parts, [
+      { id: "text-1", type: "text", sequence: 1, text: "Drafting the update." },
+      {
+        id: "call-active-1",
+        type: "tool",
+        sequence: 2,
+        tool: { actionType: "file", label: "app/page.tsx", status: "running" }
+      }
+    ]);
     resolveTurn();
   } finally {
     server.close();

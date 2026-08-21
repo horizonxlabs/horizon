@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import type { WorkspaceAgentMode, WorkspaceChatAction, WorkspaceChatMessage } from "@evcp/types";
+import type {
+  WorkspaceAgentMode,
+  WorkspaceChatAction,
+  WorkspaceChatMessage,
+  WorkspaceChatTurnPart
+} from "@evcp/types";
 
 function nextMessageId(): string {
   return `msg-${randomUUID()}`;
@@ -30,6 +35,7 @@ export function createAssistantChatMessage(input: {
   agentMode: WorkspaceAgentMode;
   artifactActionIds: string[];
   actions: WorkspaceChatAction[];
+  parts?: WorkspaceChatTurnPart[];
   tokenUsage?: { promptTokens: number; completionTokens: number };
 }): WorkspaceChatMessage {
   return {
@@ -40,6 +46,7 @@ export function createAssistantChatMessage(input: {
     agentMode: input.agentMode,
     artifactActionIds: input.artifactActionIds,
     actions: input.actions,
+    parts: input.parts,
     commitSha: null,
     tokenUsage: input.tokenUsage ?? null,
     createdAt: new Date().toISOString()

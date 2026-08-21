@@ -305,7 +305,48 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
   assert.equal(assistant.actions[0].type, "file");
   assert.equal(assistant.commitSha, "candidate-sha");
   assert.deepEqual(assistant.tokenUsage, { promptTokens: 20, completionTokens: 10 });
+  assert.deepEqual(assistant.parts, [
+    {
+      id: "call-write",
+      type: "tool",
+      sequence: 1,
+      tool: {
+        actionType: "file",
+        label: "app/page.tsx",
+        status: "done",
+        result: "export default function Page(){}"
+      }
+    },
+    { id: "text-2", type: "text", sequence: 2, text: "Built dashboard" },
+    { id: "commit-3", type: "commit", sequence: 3, sha: "candidate-sha" }
+  ]);
   assert.equal(JSON.stringify(assistant).includes("sk-"), false);
+});
+
+test("failed turns persist the display-safe parts collected before the error", async () => {
+  const lifecycle = [];
+  const deps = baseDeps(textExecutor("Draft summary"), lifecycle, true);
+  deps.limits.validationRetries = 0;
+  deps.workspaceGuard.validate = async () => {
+    lifecycle.push("validate");
+    throw new Error("validation blocked");
+  };
+  const service = createPiGenerationService(deps);
+
+  const events = await drain(
+    service.runTurn({ projectId: "p1", prompt: "Build dashboard", agentMode: "build", actor })
+  );
+
+  assert.equal(events.at(-2)?.type, "error");
+  const assistant = (await service.history("p1")).at(-1);
+  assert.equal(assistant.parts?.[0]?.type, "text");
+  assert.equal(assistant.parts?.[0]?.type === "text" && assistant.parts[0].text, "Draft summary");
+  const errorPart = assistant.parts?.at(-1);
+  assert.equal(errorPart?.type, "error");
+  if (errorPart?.type === "error") {
+    assert.equal(errorPart.sequence, assistant.parts?.length);
+    assert.equal(errorPart.message, "validation blocked");
+  }
 });
 
 test("validation feedback self-heals on the same Pi session before commit", async () => {

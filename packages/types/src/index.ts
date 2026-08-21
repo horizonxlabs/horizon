@@ -115,6 +115,40 @@ export interface WorkspaceChatAction {
   ok: boolean;
 }
 
+/**
+ * The bounded, ordered projection of a workspace turn used by history and
+ * replay.  Parts intentionally contain display-safe strings only; callers
+ * should redact and bound tool output before constructing them.
+ */
+export type WorkspaceChatTurnPart =
+  | { id: string; type: "reasoning"; sequence: number; text: string }
+  | { id: string; type: "text"; sequence: number; text: string }
+  | { id: string; type: "tool"; sequence: number; tool: WorkspaceChatToolPart }
+  | { id: string; type: "commit"; sequence: number; sha: string }
+  | { id: string; type: "error"; sequence: number; message: string };
+
+export type WorkspaceChatToolPart =
+  | {
+      actionType: WorkspaceChatAction["type"];
+      label: string;
+      status: "pending" | "running";
+      progress?: string;
+    }
+  | {
+      actionType: WorkspaceChatAction["type"];
+      label: string;
+      status: "done";
+      progress?: string;
+      result?: string;
+    }
+  | {
+      actionType: WorkspaceChatAction["type"];
+      label: string;
+      status: "failed";
+      progress?: string;
+      error: string;
+    };
+
 export interface WorkspaceChatMessage {
   id: string;
   projectId: string;
@@ -123,6 +157,7 @@ export interface WorkspaceChatMessage {
   content: string;
   artifactActionIds: string[];
   actions?: WorkspaceChatAction[];
+  parts?: WorkspaceChatTurnPart[];
   commitSha: string | null;
   tokenUsage: { promptTokens: number; completionTokens: number } | null;
   createdAt: string;

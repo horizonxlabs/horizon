@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { WorkspaceChatTurnPart } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { GenerationService } from "./generation-service-types";
 import type { ChatStreamEvent } from "./generation-types";
+import { reduceTurnPart } from "./turn-parts";
 
 type ReplayableTurnEvent = ChatStreamEvent | { type: "prd_version"; id: string; version: string; changeSummary: string } | { type: "bug_report"; bugs: unknown[] };
 
@@ -12,6 +14,7 @@ type ActiveTurn = {
   prompt: string;
   agentMode: string;
   events: ReplayableTurnEvent[];
+  parts: WorkspaceChatTurnPart[];
   controller: AbortController;
   subscribers: Map<ServerResponse, () => void>;
   completion: Promise<void>;
@@ -125,6 +128,9 @@ export function createChatSseHandler(deps: {
   }
 
   function publish(turn: ActiveTurn, event: ReplayableTurnEvent) {
+    if (event.type !== "prd_version" && event.type !== "bug_report") {
+      turn.parts = reduceTurnPart(turn.parts, event);
+    }
     turn.events.push(event);
     for (const res of turn.subscribers.keys()) writeEvent(res, event);
   }
@@ -142,6 +148,7 @@ export function createChatSseHandler(deps: {
       prompt: input.prompt,
       agentMode: input.agentMode,
       events: [],
+      parts: [],
       controller,
       subscribers: new Map<ServerResponse, () => void>(),
       completion: Promise.resolve()
@@ -256,7 +263,13 @@ export function createChatSseHandler(deps: {
       res.end(
         JSON.stringify(
           turn
-            ? { active: true, prompt: turn.prompt, agentMode: turn.agentMode, events: turn.events }
+            ? {
+                active: true,
+                prompt: turn.prompt,
+                agentMode: turn.agentMode,
+                events: turn.events,
+                parts: turn.parts
+              }
             : { active: false }
         )
       );
