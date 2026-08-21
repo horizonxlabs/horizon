@@ -10,6 +10,7 @@ import type { AiScenario, PlatformUser } from "../platform-services";
 import { MemoryAiSecretStore, type AiSecretStore } from "./secret-store";
 import { invokeAgentRoundWithCircuitBreaker } from "./agent-provider-runtime";
 import { invokeWithCircuitBreaker } from "./completion-provider-runtime";
+import { invokeImageWithCircuitBreaker } from "./image-provider-runtime";
 
 export function createPersistedGovernedAiExecutor(
   client: AiGovernancePersistenceClient,
@@ -49,7 +50,16 @@ export function createPersistedGovernedAiExecutor(
         timeoutMs:
           options.timeoutMs ?? (Number(process.env.EVCP_AI_COMPLETION_TIMEOUT_MS) || 30_000),
         circuit
-      })
+      }),
+    // Image generation is slower than chat completions — its own timeout knob (60s default).
+    invokeImage: async ({ provider, request }) =>
+      invokeImageWithCircuitBreaker(
+        provider,
+        request,
+        options.fetcher ?? globalThis.fetch,
+        Number(process.env.EVCP_AI_IMAGE_TIMEOUT_MS) || 60_000,
+        circuit
+      )
   });
 }
 
@@ -69,36 +79,41 @@ async function resolvePlan(
     client,
     route.primaryProviderId,
     route.primaryModel,
-    secretStore
+    secretStore,
+    scenario
   );
   const fallback = route.fallbackProviderId
     ? await resolveProvider(
         client,
         route.fallbackProviderId,
         route.fallbackModel ?? route.primaryModel,
-        secretStore
+        secretStore,
+        scenario
       )
     : undefined;
   return { provider, ...(fallback ? { fallback } : {}) };
 }
 
+// Adapter support is per-modality: the image runtime speaks google/openai image APIs,
+// while text scenarios must never route to google (the completion runtime would send a
+// Gemini key to /chat/completions). Scenario decides which allowlist applies.
+const TEXT_ADAPTERS = ["openai", "openrouter", "lm_studio", "anthropic"];
+const IMAGE_ADAPTERS = ["google", "openai"];
+
 async function resolveProvider(
   client: AiGovernancePersistenceClient,
   providerId: string,
   model: string,
-  secretStore: AiSecretStore
+  secretStore: AiSecretStore,
+  scenario: AiScenario
 ): Promise<ResolvedAiProvider> {
   const provider = await client.aiProvider.findUnique({ where: { id: providerId } });
   if (!provider || provider.status !== "active")
     throw new Error(`AI provider ${providerId} is not active`);
-  if (
-    provider.adapter !== "openai" &&
-    provider.adapter !== "openrouter" &&
-    provider.adapter !== "lm_studio" &&
-    provider.adapter !== "anthropic"
-  )
+  const allowedAdapters = scenario === "image_generation" ? IMAGE_ADAPTERS : TEXT_ADAPTERS;
+  if (!allowedAdapters.includes(provider.adapter))
     throw new Error(
-      `AI provider adapter ${provider.adapter} is not supported by the live executor`
+      `AI provider adapter ${provider.adapter} is not supported by the live executor for ${scenario}`
     );
   if (!provider.models.includes(model))
     throw new Error(`AI provider ${providerId} does not support model ${model}`);

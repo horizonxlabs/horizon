@@ -9,6 +9,11 @@ import type {
   GovernedAiAgentRoundResult
 } from "./agent-execution-types";
 import { executeGovernedAgentRound } from "./agent-execution-service";
+import {
+  executeGovernedImageGeneration,
+  type GovernedAiImageInput,
+  type GovernedAiImageResult
+} from "./image-execution-service";
 
 export type GovernedAiExecutionStatus = "succeeded" | "blocked" | "failed" | "fallback";
 
@@ -131,6 +136,18 @@ export type GovernedAiExecutorDependencies = {
     signal?: AbortSignal;
     onEvent?: (event: AgentRoundEvent) => void;
   }) => Promise<AgentRoundInvocationResult>;
+  invokeImage?: (input: {
+    provider: ResolvedAiProvider;
+    request: { prompt: string; aspectRatio?: string };
+  }) => Promise<{
+    base64: string;
+    mimeType: string;
+    tokensUsed: number;
+    latencyMs: number;
+    costUsd: number;
+    providerId: string;
+    model: string;
+  }>;
   now?: () => Date;
 };
 
@@ -288,6 +305,24 @@ export class GovernedAiExecutor {
       actor,
       input,
       onEvent
+    );
+  }
+
+  async generateImage(
+    actor: PlatformUser,
+    input: GovernedAiImageInput
+  ): Promise<GovernedAiImageResult> {
+    return executeGovernedImageGeneration(
+      this.dependencies,
+      (provider, result) =>
+        this.persist(
+          { scenario: "image_generation", projectId: input.projectId, requestId: input.requestId },
+          actor,
+          provider,
+          result
+        ),
+      actor,
+      input
     );
   }
 
