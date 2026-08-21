@@ -6,8 +6,8 @@ import type { HorizonPiToolDetails } from "./pi-tools";
 import { safeToolError } from "./pi-tool-policy";
 
 const actionTypeByTool = {
-  read_workspace_file: "file",
-  list_workspace_files: "file",
+  read_workspace_file: "read",
+  list_workspace_files: "list",
   write_workspace_file: "file",
   edit_workspace_file: "edit",
   run_workspace_command: "shell",
@@ -90,7 +90,7 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
   }
   if (event.type === "tool_execution_end") {
     const details = toolDetails(event.result);
-    const actionType = details?.actionType ?? actionTypeFor(event.toolName);
+    const actionType = actionTypeFor(event.toolName) ?? details?.actionType;
     if (!actionType) return [];
     const error = details?.error ? safeToolError(details.error) : undefined;
     return [

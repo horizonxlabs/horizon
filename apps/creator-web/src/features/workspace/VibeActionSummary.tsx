@@ -12,7 +12,7 @@ export function VibeActionSummary({ actions }: { actions: VibeAction[] }): React
   const summary = summarizeActions(actions);
   const runningActions = actions.filter((action) => action.status === "running");
   const label =
-    `${summary.done > 0 ? `สร้าง/แก้ ${summary.done} รายการ` : ""}` +
+    `${summary.done > 0 ? `ดำเนินการ ${summary.done} รายการ` : ""}` +
     `${summary.lines > 0 ? ` · ${summary.lines} lines` : ""}` +
     `${summary.failed > 0 ? ` · ล้มเหลว ${summary.failed}` : ""}`;
 

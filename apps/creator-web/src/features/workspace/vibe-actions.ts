@@ -14,6 +14,7 @@ export type VibeAction = {
 // Live progress: lines of code this action has produced so far (streamed body for
 // file/shell/migration actions, the REPLACE side for edits). Powers the running counters.
 export function actionLineCount(action: VibeAction): number {
+  if (action.type === "read" || action.type === "list") return 0;
   const content = action.type === "edit" ? action.replace : action.body;
   if (!content) return 0;
   return content.split("\n").filter((line) => line.length > 0).length;
@@ -42,6 +43,8 @@ export function summarizeActions(actions: VibeAction[]): {
 }
 
 export const VIBE_ACTION_VERBS: Record<string, [string, string]> = {
+  read: ["Inspecting", "Inspected"],
+  list: ["Listing", "Listed"],
   file: ["Creating", "Created"],
   edit: ["Editing", "Edited"],
   shell: ["Running", "Ran"],
@@ -55,7 +58,11 @@ export function vibeActionVerb(type: string, status: string): string {
 }
 
 export function vibeActionIcon(type: string): string {
-  return type === "file"
+  return type === "read"
+    ? "🔍"
+    : type === "list"
+      ? "📂"
+      : type === "file"
     ? "📄"
     : type === "edit"
       ? "✏️"

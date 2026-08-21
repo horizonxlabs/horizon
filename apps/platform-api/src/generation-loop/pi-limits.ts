@@ -12,14 +12,23 @@ export type PiAgentLimits = PiAgentToolLimits & {
 };
 
 const defaults: PiAgentLimits = {
-  maxModelRounds: 12,
+  // Pi uses one governed model round per tool-response cycle. A normal continuation can
+  // legitimately need to inspect several prior files, write several components, then
+  // finish its response and pass workspace validation. Twelve rounds truncated that
+  // healthy path during real Creator builds and rolled back all successful writes.
+  // Keep a firm cap (and the separate token, tool-call, reasoning, and time budgets),
+  // but leave sufficient room for a multi-file continuation to reach finalization.
+  maxModelRounds: 20,
   modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
   maxToolOutputBytes: 65_536,
   maxToolInputBytes: 120_000,
   maxFileBytes: 120_000,
-  turnTimeoutMs: 600_000,
+  // The entire turn needs to outlive a sequence of slow local-model rounds. Ten minutes
+  // aborted a real build after it had only inspected the UI kit; retain a finite ceiling
+  // while permitting a complete inspect → implement → validate cycle.
+  turnTimeoutMs: 1_800_000,
   validationRetries: 2,
   // A model that hits one disallowed/failed tool call (e.g. tries to rewrite package.json
   // directly instead of using the install tool) but otherwise wrote real, working files can
