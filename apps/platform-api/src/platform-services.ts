@@ -1319,7 +1319,7 @@ export type AiScenario =
   | "frontend_coding"
   | "backend_coding"
   | "review"
-  | "documentation";
+  | "documentation" | "image_generation";
 export type AgentRoleKey =
   | "requirement_analyst"
   | "database_designer"
