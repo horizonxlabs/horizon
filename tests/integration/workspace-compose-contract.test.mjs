@@ -52,11 +52,11 @@ test("platform-api can reach docker socket and litellm", () => {
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
 });
 
-test("development and release compose expose Pi reliability budgets", () => {
+test("development and release compose leave Pi cumulative token caps opt-in", () => {
   for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
     const joined = environmentEntries(api).join("\n");
     assert.match(joined, /EVCP_PI_MAX_MODEL_ROUNDS=.*:-20/);
-    assert.match(joined, /EVCP_PI_MAX_TURN_TOKENS=.*:-600000/);
+    assert.doesNotMatch(joined, /EVCP_PI_MAX_TURN_TOKENS/);
     assert.match(joined, /EVCP_PI_MODEL_ROUND_TIMEOUT_MS=.*:-300000/);
     assert.match(joined, /EVCP_PI_TURN_TIMEOUT_MS=.*:-1800000/);
   }

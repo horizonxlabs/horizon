@@ -343,6 +343,13 @@ test("client disconnect preserves the active generation turn for a refreshed Cre
     },
     async *runTurn(input) {
       capturedSignal = input.signal;
+      yield { type: "token", content: "Drafting the update." };
+      yield {
+        type: "action_start",
+        actionId: "call-active-1",
+        actionType: "file",
+        label: "app/page.tsx"
+      };
       await turnCanFinish;
       yield { type: "done" };
     }
@@ -366,6 +373,26 @@ test("client disconnect preserves the active generation turn for a refreshed Cre
     assert.equal(active.statusCode, 200);
     assert.equal(active.body.active, true);
     assert.equal(active.body.prompt, "Build");
+    assert.deepEqual(active.body.parts[0], {
+      id: "text-1",
+      type: "text",
+      sequence: 1,
+      text: "Drafting the update."
+    });
+    assert.equal(active.body.parts[1].id, "call-active-1");
+    assert.deepEqual(
+      { ...active.body.parts[1].tool, startedAt: "timestamp" },
+      {
+        callId: "call-active-1",
+        actionType: "file",
+        label: "Write workspace file",
+        inputSummary: "Write workspace file requested",
+        startedAt: "timestamp",
+        status: "running"
+      }
+    );
+    assert.match(active.body.parts[1].tool.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.doesNotMatch(JSON.stringify(active.body.parts), /app\/page\.tsx/);
     resolveTurn();
   } finally {
     server.close();

@@ -157,11 +157,11 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
         onUpdate
       );
       if (result.details.ok && isBuildValidation(params.command, params.args)) {
-        result.terminate = true;
         result.content = [
           {
             type: "text",
-            text: "Build validation passed. Send the final response now with no more tool calls."
+            text:
+              "Build validation passed. Continue any remaining requested work, including database migrations and API wiring, before sending the final response."
           }
         ];
       }
@@ -256,7 +256,6 @@ function tool<TParams extends TSchema>(
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   details: HorizonPiToolDetails;
-  terminate?: boolean;
 };
 
 function actionTypeFor(name: string): HorizonPiToolDetails["actionType"] {

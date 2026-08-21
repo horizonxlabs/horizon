@@ -182,3 +182,29 @@ test("does not mutate the input message object", () => {
   assert.equal(message.text, "Hello");
   assert.equal(message.actions, frozenActions);
 });
+
+test("keeps reasoning, tools, text, and commit in their original stream order", () => {
+  let message = baseMessage();
+  message = applyVibeEvent(message, "reasoning", { content: "I will inspect the app." });
+  message = applyVibeEvent(message, "action_start", {
+    actionId: "inspect-ui",
+    actionType: "read",
+    label: "Inspecting src/App.tsx"
+  });
+  message = applyVibeEvent(message, "action_result", {
+    actionId: "inspect-ui",
+    actionType: "read",
+    label: "Inspected src/App.tsx",
+    ok: true,
+    body: "Found the dashboard."
+  });
+  message = applyVibeEvent(message, "token", { content: "The dashboard is ready." });
+  message = applyVibeEvent(message, "commit", { sha: "abc123def456" });
+
+  assert.deepEqual(
+    message.parts.map((part) => part.type),
+    ["reasoning", "tool", "text", "commit"]
+  );
+  assert.equal(message.parts[1].tool.callId, "inspect-ui");
+  assert.equal(message.parts[1].tool.status, "done");
+});

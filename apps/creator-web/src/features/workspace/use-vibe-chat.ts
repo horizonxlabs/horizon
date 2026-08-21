@@ -44,7 +44,7 @@ export function useVibeChat({
     let poll: ReturnType<typeof setInterval> | undefined;
     const activeMessageId = `active-${selectedProjectId}`;
     const renderActiveTurn = (restored: VibeMessage[], active: ActiveChatTurn) => {
-      const liveMessage = active.events.reduce<VibeMessage>(
+      const replayed = active.events.reduce<VibeMessage>(
         (message, event) => applyVibeEvent(message, String(event.type ?? ""), event),
         {
           id: activeMessageId,
@@ -55,6 +55,9 @@ export function useVibeChat({
           sourcePrompt: active.prompt
         }
       );
+      // The server-normalized snapshot retains the original event ordering and safe summaries.
+      // Events remain only as a compatibility replay fallback during rolling deployments.
+      const liveMessage = active.parts?.length ? { ...replayed, parts: active.parts } : replayed;
       const withoutPriorLive = restored.filter((message) => message.id !== activeMessageId);
       return [...withoutPriorLive, liveMessage];
     };

@@ -4457,6 +4457,28 @@ body.vibe-is-resizing * {
   gap: 6px;
 }
 
+/* A turn is a chronological activity feed: thought, tool invocation, response, then commit.
+   It deliberately avoids a separate post-response tool summary, which used to reorder Pi's work. */
+.vibe-turn-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vibe-turn-timeline > .vibe-action-row {
+  margin-left: 2px;
+}
+
+.vibe-turn-error {
+  background: var(--evcp-color-danger-bg);
+  border: 1px solid #fecaca;
+  border-radius: var(--evcp-radius-control);
+  color: var(--evcp-color-danger-text);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
 .vibe-message-actions {
   margin-top: var(--evcp-space-2);
 }
