@@ -187,7 +187,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   )}
                   <div className="vibe-message-text">
                     {message.text && (
-                      <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
+                      <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} imageBase={previewSrc} />
                     )}
                     {/* Cursor stays lit through the whole active streaming window, not just the
                         instant before the first token: previously it vanished the moment

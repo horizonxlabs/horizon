@@ -4471,6 +4471,16 @@ body.vibe-is-resizing * {
   padding: 1px 5px;
 }
 
+/* AI-generated image thumbnail in chat (from the recap's markdown image line). */
+.vibe-md-img {
+  border: 1px solid var(--evcp-color-border);
+  border-radius: 8px;
+  display: block;
+  margin: 8px 0;
+  max-height: 280px;
+  max-width: 100%;
+}
+
 .vibe-md-pre {
   background: var(--evcp-color-surface-muted);
   border: 1px solid var(--evcp-color-border-soft);
