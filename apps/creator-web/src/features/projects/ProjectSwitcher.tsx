@@ -1,6 +1,5 @@
-import { Check, ChevronDown, FolderKanban, Grid2X2, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { projectSwitchTargetPage, type CreatorPage } from "@/app/routes";
 import type { CreatorProjectView } from "@/shared/types";
 
 function projectInitials(name: string): string {
@@ -22,20 +21,19 @@ function projectTone(projectId: string): number {
 export function ProjectSwitcher({
   projects,
   selectedProject,
-  currentPage,
   onSelectProject,
-  onViewAllProjects,
   onCreateProject
 }: {
   projects: CreatorProjectView[];
   selectedProject: CreatorProjectView;
-  currentPage: CreatorPage;
-  onSelectProject: (project: CreatorProjectView, targetPage: CreatorPage) => void;
-  onViewAllProjects: () => void;
+  onSelectProject: (project: CreatorProjectView) => void;
   onCreateProject: () => void;
 }) {
-  const isAllProjects = currentPage === "projects" || !selectedProject.id;
-  const currentLabel = isAllProjects ? "All Projects" : selectedProject.name;
+  // The picker represents the selected project context, not the current route. This lets a
+  // creator switch projects while staying on the current page, then open any sidebar section
+  // for the newly selected project.
+  const hasSelectedProject = Boolean(selectedProject.id);
+  const currentLabel = hasSelectedProject ? selectedProject.name : "Select a project";
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -79,12 +77,7 @@ export function ProjectSwitcher({
 
   function selectProject(project: CreatorProjectView) {
     closeMenu();
-    onSelectProject(project, projectSwitchTargetPage(currentPage));
-  }
-
-  function viewAllProjects() {
-    closeMenu();
-    onViewAllProjects();
+    onSelectProject(project);
   }
 
   function createProject() {
@@ -107,10 +100,10 @@ export function ProjectSwitcher({
       >
         <span
           className="creator-project-switcher-mark"
-          data-tone={isAllProjects ? "all" : projectTone(selectedProject.id)}
+          data-tone={hasSelectedProject ? projectTone(selectedProject.id) : "all"}
           aria-hidden="true"
         >
-          {isAllProjects ? <Grid2X2 size={17} /> : projectInitials(selectedProject.name)}
+          {hasSelectedProject ? projectInitials(selectedProject.name) : <FolderKanban size={17} />}
         </span>
         <span className="creator-project-switcher-copy">
           <span>Project</span>
@@ -139,29 +132,8 @@ export function ProjectSwitcher({
             role="listbox"
             aria-label="Projects"
           >
-            <button
-              type="button"
-              role="option"
-              aria-selected={isAllProjects}
-              className="creator-project-switcher-option"
-              onClick={viewAllProjects}
-            >
-              <span
-                className="creator-project-switcher-option-mark"
-                data-tone="all"
-                aria-hidden="true"
-              >
-                <Grid2X2 size={16} />
-              </span>
-              <span className="creator-project-switcher-option-copy">
-                <strong>All Projects</strong>
-                <span>Browse and manage your projects</span>
-              </span>
-              {isAllProjects ? <Check size={16} aria-hidden="true" /> : null}
-            </button>
-
             {filteredProjects.map((project) => {
-              const isSelected = !isAllProjects && project.id === selectedProject.id;
+              const isSelected = hasSelectedProject && project.id === selectedProject.id;
               return (
                 <button
                   type="button"

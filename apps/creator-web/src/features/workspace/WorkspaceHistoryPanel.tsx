@@ -20,14 +20,14 @@ export function WorkspaceHistoryPanel({
   if (versions.length === 0) {
     return (
       <div className="hz-db-empty" role="status">
-        ยังไม่มีเวอร์ชัน — ทุกครั้งที่ AI build สำเร็จจะบันทึกเป็นเวอร์ชันให้ย้อนกลับได้ที่นี่
+        No versions yet. Each successful AI build is saved here so you can restore it later.
       </div>
     );
   }
   return (
     <div className="vibe-history-panel" aria-label="Version history">
       <p className="vibe-history-hint">
-        เลือกเวอร์ชันจาก prompt ที่สั่งไว้ — ย้อนกลับแล้วงานหลังจากเวอร์ชันนั้นจะถูกลบออกจากแอป
+        Choose a version created from a previous prompt. Restoring it removes all later changes.
       </p>
       <ol className="vibe-history-list">
         {versions.map((version) => (
@@ -46,7 +46,7 @@ export function WorkspaceHistoryPanel({
               <span className="vibe-history-sha">⑂ {version.commitSha.slice(0, 8)}</span>
             </div>
             {version.isCurrent ? (
-              <span className="vibe-history-current">ปัจจุบัน</span>
+              <span className="vibe-history-current">Current</span>
             ) : (
               <VibeRestorePoint
                 projectId={projectId}

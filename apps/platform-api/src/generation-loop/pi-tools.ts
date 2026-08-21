@@ -18,7 +18,7 @@ import {
 
 export type HorizonPiToolDetails = {
   actionId: string;
-  actionType: "file" | "edit" | "shell" | "migration" | "skill";
+  actionType: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill";
   label: string;
   ok: boolean;
   body?: string;
@@ -52,7 +52,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       const path = normalizeProjectPath(params.path);
       const file = (await workspaceFiles(context)).find((candidate) => candidate.path === path);
       if (!file) throw new Error(`workspace file '${path}' was not found`);
-      return success(id, "file", path, context, { body: file.content }, file.content);
+      return success(id, "read", path, context, { body: file.content }, file.content);
     }
   );
   const list = tool(
@@ -70,7 +70,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
         .filter((path) => !prefix || path === prefix || path.startsWith(`${prefix}/`))
         .sort();
       const body = paths.join("\n") || "(no matching workspace files)";
-      return success(id, "file", prefix ?? "workspace files", context, { body }, body);
+      return success(id, "list", prefix ?? "workspace files", context, { body }, body);
     }
   );
   const write = tool(
@@ -260,6 +260,8 @@ type ToolResult = {
 };
 
 function actionTypeFor(name: string): HorizonPiToolDetails["actionType"] {
+  if (name === "read_workspace_file") return "read";
+  if (name === "list_workspace_files") return "list";
   if (name === "edit_workspace_file") return "edit";
   if (name === "run_workspace_command") return "shell";
   if (name === "propose_database_migration") return "migration";

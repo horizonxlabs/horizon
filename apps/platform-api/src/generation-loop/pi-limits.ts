@@ -12,15 +12,23 @@ export type PiAgentLimits = PiAgentToolLimits & {
 };
 
 const defaults: PiAgentLimits = {
-  maxModelRounds: 12,
-  maxTurnTokens: 160_000,
+  // Pi uses one governed model round per tool-response cycle. A normal continuation can
+  // legitimately need to inspect several prior files, write several components, then
+  // finish its response and pass workspace validation. Twelve rounds truncated that
+  // healthy path during real Creator builds and rolled back all successful writes.
+  // Keep a firm cap (and the separate token, tool-call, reasoning, and time budgets),
+  // but leave sufficient room for a multi-file continuation to reach finalization.
+  maxModelRounds: 20,
   modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
   maxToolOutputBytes: 65_536,
   maxToolInputBytes: 120_000,
   maxFileBytes: 120_000,
-  turnTimeoutMs: 600_000,
+  // The entire turn needs to outlive a sequence of slow local-model rounds. Ten minutes
+  // aborted a real build after it had only inspected the UI kit; retain a finite ceiling
+  // while permitting a complete inspect → implement → validate cycle.
+  turnTimeoutMs: 1_800_000,
   validationRetries: 2,
   // A model that hits one disallowed/failed tool call (e.g. tries to rewrite package.json
   // directly instead of using the install tool) but otherwise wrote real, working files can
@@ -30,6 +38,18 @@ const defaults: PiAgentLimits = {
   // vanishing over one unrelated tool error. Giving it one explicit round of feedback lets it
   // route around the failure (or fix it) before the turn is abandoned.
   toolFailureRetries: 1,
+  // promptTokens/completionTokens accumulate across every round of the turn (each round's
+  // reported input tokens are summed, not deduped against the shared history/context they
+  // repeat) — so this is nowhere near comparable to a single round's context window. A
+  // legitimate multi-round build (e.g. wiring up a real database: read schema, write
+  // migration files, update several app files, re-validate) routinely spans 5-8 rounds and
+  // blew past the old 160k default well before doing anything runaway, discarding real,
+  // working mutations via the same rollback path used for genuine stalls (see
+  // workspaceGuard.restoreSnapshot in the catch block) — observed in production as a
+  // completed feature (e.g. "app now uses real PostgreSQL...") vanishing on the next line.
+  // Raised with real headroom under maximums.maxTurnTokens while still catching a turn that
+  // never converges at all.
+  maxTurnTokens: 600_000,
   // A model that never converges on a tool call or a final answer keeps streaming
   // "thinking" text for the full modelRoundTimeoutMs (up to 5 minutes) before the round
   // even ends — observed in practice as the agent oscillating between two plans forever.

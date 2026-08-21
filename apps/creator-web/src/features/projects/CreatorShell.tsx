@@ -40,11 +40,11 @@ export function CreatorShell({
         <ProjectSwitcher
           projects={bootstrap.projects}
           selectedProject={selectedProject}
-          currentPage={creatorPage}
-          onSelectProject={(project, targetPage) => {
-            void handleSelectProject(project, targetPage);
+          onSelectProject={(project) => {
+            // Project selection only changes Creator context. Navigation happens only when a
+            // sidebar item is clicked, so the picker never redirects to a workspace URL.
+            void handleSelectProject(project, app.creatorPage, { push: false });
           }}
-          onViewAllProjects={() => onNavigate("/creator/")}
           onCreateProject={() => setIsCreateProjectDialogOpen(true)}
         />
       }
@@ -59,8 +59,8 @@ export function CreatorShell({
         <div className="hz-loading-backdrop" role="status" aria-live="polite">
           <div className="hz-loading-card">
             <span className="hz-spinner" aria-hidden="true" />
-            <strong>กำลังเริ่ม workspace</strong>
-            <span>กำลัง start sandbox/container ของโปรเจกต์ — อาจใช้เวลาสักครู่</span>
+            <strong>Starting workspace</strong>
+            <span>Starting this project's sandbox container. This may take a moment.</span>
           </div>
         </div>
       ) : null}

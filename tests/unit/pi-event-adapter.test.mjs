@@ -83,8 +83,8 @@ test("maps native tool lifecycle with stable Pi call IDs", () => {
 
 test("maps all Horizon tools and sanitized failures", () => {
   const expected = {
-    read_workspace_file: "file",
-    list_workspace_files: "file",
+    read_workspace_file: "read",
+    list_workspace_files: "list",
     write_workspace_file: "file",
     edit_workspace_file: "edit",
     run_workspace_command: "shell",

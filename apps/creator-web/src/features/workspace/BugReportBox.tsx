@@ -19,7 +19,7 @@ export function BugReportBox({
     <section className="vibe-bug-box" aria-label="Bug reports">
       <div className="vibe-bug-box-head">
         <Bug size={13} aria-hidden="true" />
-        <span>พบปัญหา ({bugs.length})</span>
+        <span>Issues found ({bugs.length})</span>
       </div>
       <ul className="vibe-bug-list">
         {bugs.map((bug) => (
@@ -45,7 +45,7 @@ export function BugReportBox({
             <button
               type="button"
               className="vibe-bug-dismiss"
-              aria-label={`ปิดรายงาน: ${bug.message}`}
+              aria-label={`Dismiss report: ${bug.message}`}
               onClick={() => onDismiss(bug.signature)}
             >
               <X size={13} />

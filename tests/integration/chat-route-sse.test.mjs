@@ -83,6 +83,20 @@ function postChat(port, path, body) {
   });
 }
 
+function getJson(port, path) {
+  return new Promise((resolve, reject) => {
+    http
+      .get({ host: "127.0.0.1", port, path }, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () =>
+          resolve({ statusCode: res.statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) })
+        );
+      })
+      .on("error", reject);
+  });
+}
+
 test("authorized Build streams Creator SSE events", async () => {
   const { server, port } = await setup(() => auth);
   try {
@@ -314,11 +328,11 @@ test("adds validated attachment excerpts to the governed prompt", async () => {
   }
 });
 
-test("client disconnect aborts the active generation turn", async () => {
+test("client disconnect preserves the active generation turn for a refreshed Creator UI", async () => {
   let capturedSignal;
-  let resolveAborted;
-  const aborted = new Promise((resolve) => {
-    resolveAborted = resolve;
+  let resolveTurn;
+  const turnCanFinish = new Promise((resolve) => {
+    resolveTurn = resolve;
   });
   const generationService = {
     async history() {
@@ -329,9 +343,7 @@ test("client disconnect aborts the active generation turn", async () => {
     },
     async *runTurn(input) {
       capturedSignal = input.signal;
-      if (input.signal.aborted) resolveAborted();
-      else input.signal.addEventListener("abort", resolveAborted, { once: true });
-      await aborted;
+      await turnCanFinish;
       yield { type: "done" };
     }
   };
@@ -349,8 +361,12 @@ test("client disconnect aborts the active generation turn", async () => {
       req.on("error", reject);
       req.end(JSON.stringify({ prompt: "Build" }));
     });
-    await aborted;
-    assert.equal(capturedSignal.aborted, true);
+    const active = await getJson(port, "/projects/p1/chat/active");
+    assert.equal(capturedSignal.aborted, false);
+    assert.equal(active.statusCode, 200);
+    assert.equal(active.body.active, true);
+    assert.equal(active.body.prompt, "Build");
+    resolveTurn();
   } finally {
     server.close();
   }

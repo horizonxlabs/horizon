@@ -20,6 +20,17 @@ test("Creator workspace exposes project file upload controls and status chips", 
   assert.match(workspacePage, /type="file"/);
   // The attach control is a "+" icon button in the composer footer (was a labelled "Attach files").
   assert.match(workspacePage, /vibe-composer-attach/);
+  assert.match(workspacePage, /vibe-composer-textarea/);
+  assert.match(workspacePage, /vibe-composer-shortcuts/);
+  assert.match(workspacePage, /vibe-live-resizer/);
+  assert.match(workspacePage, /onPointerDown/);
+  assert.match(workspacePage, /evcp_creator_chat_pane_width/);
+  assert.match(workspacePage, /requestAnimationFrame/);
+  assert.match(workspacePage, /style\.setProperty/);
+  assert.match(workspacePage, /is-chat-collapsed/);
+  assert.match(workspacePage, /CHAT_PANE_COLLAPSE_THRESHOLD/);
+  assert.match(workspacePage, /setPointerCapture/);
+  assert.match(workspacePage, /onPointerCancel/);
   assert.match(workspacePage, /handleUploadProjectFiles/);
   assert.match(workspacePage, /projectFiles/);
   assert.match(workspacePage, /selectedAttachmentIds/);

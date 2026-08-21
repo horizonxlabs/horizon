@@ -5,16 +5,21 @@ import { resolvePiAgentLimits } from "../../apps/platform-api/src/generation-loo
 
 test("Pi gives slow local-model rounds the same default deadline as governed completions", () => {
   const previous = process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
+  const previousTurn = process.env.EVCP_PI_TURN_TIMEOUT_MS;
   delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
+  delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
 
   try {
     const limits = resolvePiAgentLimits();
-    assert.equal(limits.maxModelRounds, 12);
+    assert.equal(limits.maxModelRounds, 20);
     assert.equal(limits.modelRoundTimeoutMs, 300_000);
-    assert.equal(limits.maxTurnTokens, 160_000);
+    assert.equal(limits.turnTimeoutMs, 1_800_000);
+    assert.equal(limits.maxTurnTokens, 600_000);
   } finally {
     if (previous === undefined) delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;
+    if (previousTurn === undefined) delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
+    else process.env.EVCP_PI_TURN_TIMEOUT_MS = previousTurn;
   }
 });
 

@@ -12,16 +12,16 @@ export function PromptQueue({
 }) {
   if (!items.length) return null;
   return (
-    <section className="vibe-prompt-queue" aria-label="งานที่รอคิว">
+    <section className="vibe-prompt-queue" aria-label="Queued requests">
       <div className="vibe-prompt-queue-head">
         <ListOrdered size={13} aria-hidden="true" />
-        <span>คิวงาน ({items.length})</span>
+        <span>Queued requests ({items.length})</span>
       </div>
       <ol className="vibe-prompt-queue-list">
         {items.map((item, index) => (
           <li key={item.id} className="vibe-prompt-queue-item">
             <span className={`vibe-prompt-queue-status${index === 0 ? " is-next" : ""}`}>
-              {index === 0 ? "ถัดไป" : `คิวที่ ${index + 1}`}
+              {index === 0 ? "Next" : `Queue ${index + 1}`}
             </span>
             <span className="vibe-prompt-queue-text" title={item.prompt}>
               {item.prompt}
@@ -30,7 +30,7 @@ export function PromptQueue({
             <button
               type="button"
               className="vibe-prompt-queue-remove"
-              aria-label={`ลบออกจากคิว: ${item.prompt}`}
+              aria-label={`Remove from queue: ${item.prompt}`}
               onClick={() => onRemove(item.id)}
             >
               <X size={13} />

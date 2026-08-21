@@ -120,29 +120,29 @@ export const creatorPageCopy: Record<
   projects: {
     eyebrow: "Creator Projects",
     title: "Projects",
-    description: "เลือก project หรือเริ่มสร้างแอปใหม่จาก business problem"
+    description: "Select a project or start a new app from a business problem."
   },
   workspace: {
     eyebrow: "Creator Workspace",
     title: "Creator Workspace: Leave Management",
     description:
-      "ใช้ prompt เพื่อสร้างหรือแก้ frontend preview หลังจากมี PRD draft/baseline ของ project ที่เลือก"
+      "Use prompts to build or update the selected project's frontend preview."
   },
   prd: {
     eyebrow: "PRD Baseline",
     title: "PRD Review: Leave Management",
-    description: "ตรวจ PRD sections, version history และ confirm baseline ก่อน generate app"
+    description: "Review PRD sections and version history, then confirm a baseline when ready."
   },
   database: {
     eyebrow: "Project Data",
     title: "Database",
-    description: "ตรวจ schema, tables และ records จากฐานข้อมูลของ project ที่เลือก"
+    description: "Inspect the selected project's database schema, tables, and records."
   },
   versions: {
     eyebrow: "Frontend History",
     title: "Frontend Versions",
     description:
-      "ตรวจ checkpoint history และ restore เฉพาะ frontend โดยไม่เปลี่ยน backend หรือข้อมูล"
+      "Review frontend checkpoints and restore a version without changing backend services or data."
   },
   users: {
     eyebrow: "Access Management",
@@ -152,26 +152,26 @@ export const creatorPageCopy: Record<
   publish: {
     eyebrow: "Publish & Registry",
     title: "Publish & Registry",
-    description: "ตรวจ manifest, readiness checklist และลงทะเบียนแอปก่อนเปิดให้ end user ใช้งาน"
+    description: "Review the manifest and readiness checklist, then register the app for end users."
   },
   deployments: {
     eyebrow: "Deployment History",
     title: "Deployments",
-    description: "ตรวจ environment, commit, health และเวลาของ deployment ที่ Platform API ส่งกลับ"
+    description: "Review environments, commits, health, and deployment times reported by the Platform API."
   },
   tickets: {
     eyebrow: "Feedback Loop",
     title: "Tickets & Changes",
-    description: "รับ bug/feedback จาก Horizon Store แล้วแปลงเป็น PRD change หรือ AI prompt"
+    description: "Turn bug reports and Horizon Store feedback into PRD changes or AI prompts."
   },
   "ticket-detail": {
     eyebrow: "Feedback Detail",
     title: "Ticket Detail",
-    description: "ตรวจรายละเอียด ticket และ action ที่ Platform API รองรับ"
+    description: "Review ticket details and actions supported by the Platform API."
   },
   "not-found": {
     eyebrow: "Creator",
     title: "Page not found",
-    description: "เลือก destination จาก Creator navigation"
+    description: "Choose a destination from Creator navigation."
   }
 };
