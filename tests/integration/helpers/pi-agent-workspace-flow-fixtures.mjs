@@ -70,6 +70,16 @@ export async function memoryWorkspace() {
     for (const match of script.matchAll(/echo ([A-Za-z0-9+/=]+) \| base64 -d > '([^']+)'/g)) {
       files.set(match[2], Buffer.from(match[1], "base64").toString("utf8"));
     }
+    // Binary asset writes (generate_image): truncate → chunked printf appends → decode.
+    const truncatePath = script.match(/: > '([^']+)'$/)?.[1];
+    if (truncatePath) files.set(truncatePath, "");
+    const append = script.match(/^printf %s '([A-Za-z0-9+/=]+)' >> '([^']+)'$/);
+    if (append) files.set(append[2], (files.get(append[2]) ?? "") + append[1]);
+    const decode = script.match(/^base64 -d < '([^']+)' > '([^']+)' && rm -f '\1'$/);
+    if (decode) {
+      files.set(decode[2], Buffer.from(files.get(decode[1]) ?? "", "base64"));
+      files.delete(decode[1]);
+    }
     return { stdout: "", stderr: "", exitCode: 0 };
   };
   docker.execInContainerStream = async (id, command, onChunk) => {
