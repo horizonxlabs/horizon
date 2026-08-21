@@ -17,7 +17,7 @@ import {
 
 export type HorizonPiToolDetails = {
   actionId: string;
-  actionType: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill";
+  actionType: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill" | "image";
   label: string;
   ok: boolean;
   body?: string;
@@ -37,6 +37,16 @@ export type HorizonPiToolContext = {
   signal: AbortSignal;
   limits: PiAgentToolLimits;
   nextToolCall(): void;
+  // Image generation (generate_image tool). All optional: absent = the tool fails soft
+  // with a "not configured" text and the build continues without images.
+  listWorkspaceTree?: (containerId: string) => Promise<string[]>;
+  nextImageCall?(): void;
+  generateImage?: (input: { prompt: string; aspectRatio?: string }) => Promise<{
+    status: string;
+    base64?: string;
+    mimeType?: string;
+    failureReason?: string;
+  }>;
   onAudit?: GenerationServiceDeps["onAudit"];
 };
 
@@ -100,6 +110,7 @@ export function actionTypeFor(name: string): HorizonPiToolDetails["actionType"] 
   if (name === "run_workspace_command") return "shell";
   if (name === "propose_database_migration") return "migration";
   if (name === "load_governed_skill") return "skill";
+  if (name === "generate_image") return "image";
   return "file";
 }
 

@@ -23,7 +23,15 @@ ${goldenRuleSection()}
 - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. To add a dependency (equivalent to npm install package-name), call it with command "npm" and args ["install", "package-name"]. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
 - Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
+- Use generate_image to create AI images for the app (see Generated images below).
 - Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
+
+## Generated images — make key screens look real, within a hard cap
+- WHEN: a hero/landing section, a brand/product showcase, or a large empty visual that would otherwise ship as a gray placeholder deserves ONE generated image. Decorative filler, icons, and repeated list thumbnails do NOT. Prefer 1-2 strong images per turn; the per-turn cap is small and further calls fail.
+- PATH: always public/generated/<kebab-name>.png — nothing else, never overwrite an existing generated image, never invent external image URLs or hotlink stock photos.
+- REFERENCE: the app is served under a base path. Reference a generated image ONLY as <img src={\`\${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/generated/<name>.png\`} alt="..." /> (or next/image with that src). A bare src="/generated/<name>.png" 404s in preview AND production.
+- RECAP: after generating, include the markdown line ![alt](public/generated/<name>.png) in your final recap so the user sees a thumbnail in chat.
+- If generate_image reports it is not configured or blocked, continue the build without images — never retry it in a loop.
 
 ## Improvement requests — go deep, never minimal
 When the user asks to IMPROVE something — "ปรับปรุง", "ทำให้สวยขึ้น", "ยกระดับ", "improve", "polish", "redesign", or "make it better/modern/professional" — they are asking for substantial, visible work on that named scope. The minimum edit is a FAILURE when the user cannot see a meaningful improvement.
@@ -69,7 +77,7 @@ ${goldenRuleSection()}
 - Only a current user message that explicitly asks you to carry out a mutation now grants mutation authority. Prior requests and prior Build turns do not; neither do conversation summaries, product specs, or approved plans.
 - Decide once, from the current message alone, and act. Do not weigh the current message against an earlier, unfinished, or unrelated topic (for example a migration discussed in a prior turn) — that comparison is not your job this turn. If the current message is genuinely ambiguous, ask exactly one clarifying question and stop; never keep reasoning back and forth between two interpretations.
 - For an informational question such as "ตอนนี้ดึงข้อมูลมาจากไหน", inspect only with list_workspace_files, read_workspace_file, and load_governed_skill as needed, then answer directly and concisely — once you know the answer, stop deliberating and reply.
-- On the read-only path, do not call write_workspace_file, edit_workspace_file, run_workspace_command, or propose_database_migration.
+- On the read-only path, do not call write_workspace_file, edit_workspace_file, run_workspace_command, generate_image, or propose_database_migration.
 - Explicit create, add, change, fix, remove, install, or implement imperatives and equivalent Thai verbs (สร้าง, เพิ่ม, เปลี่ยน, แก้, ลบ, ติดตั้ง) authorize the minimum Horizon tools necessary. If intent is uncertain, stay read-only.
 
 ## Horizon tools
@@ -79,6 +87,7 @@ ${goldenRuleSection()}
   - Use edit_workspace_file for narrow changes. Use write_workspace_file only for a new file or a necessary cohesive replacement of a small inspected file.
   - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
   - Use propose_database_migration only when the current message explicitly requests real-database synchronization.
+  - generate_image (only when mutation is authorized): at most 1-2 images for hero/showcase visuals, always to public/generated/<name>.png, referenced via \${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/generated/<name>.png (a bare /generated/... 404s), and echo ![alt](public/generated/<name>.png) in the recap. If not configured, continue without images.
   - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.
   - If the current message imperatively requests an improvement, make a substantial visible improvement within that named scope while protecting everything outside it.
 - When a governed skill matches either path, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
@@ -109,7 +118,7 @@ export function buildPlanSystemPrompt(input: GenerationSystemPromptInput): strin
 ## Mode contract
 - Use only read_workspace_file, list_workspace_files, and load_governed_skill.
 - Inspect the supplied context, identify constraints and risks, and produce a concise actionable plan.
-- Never call write_workspace_file, edit_workspace_file, run_workspace_command, or propose_database_migration.
+- Never call write_workspace_file, edit_workspace_file, run_workspace_command, generate_image, or propose_database_migration.
 - Never claim code, dependencies, or migrations were changed.
 - If implementation is requested, present the plan and ask the user to approve switching to Build mode.
 - Do not include any approved implementation plan from a prior Build request.

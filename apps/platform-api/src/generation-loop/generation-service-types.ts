@@ -63,6 +63,7 @@ export interface GenerationService {
 }
 
 export type PiGenerationServiceDeps = GenerationServiceDeps & {
-  governedAiExecutor: Pick<GovernedAiExecutor, "executeAgentRound">;
+  governedAiExecutor: Pick<GovernedAiExecutor, "executeAgentRound"> &
+    Partial<Pick<GovernedAiExecutor, "generateImage">>;
   limits?: Partial<PiAgentLimits>;
 };

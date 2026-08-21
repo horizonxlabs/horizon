@@ -1,4 +1,4 @@
-export type ActionActionType = "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill";
+export type ActionActionType = "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill" | "image";
 
 export type ChatStreamEvent =
   | { type: "token"; content: string }

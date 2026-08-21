@@ -46,7 +46,7 @@ async function execute(tools, name, params, onUpdate) {
   return tool.execute(`call-${name}`, params, undefined, onUpdate, {});
 }
 
-test("exposes exactly seven project-bound Horizon tools", () => {
+test("exposes exactly eight project-bound Horizon tools", () => {
   const { tools } = fixture();
   assert.deepEqual(
     tools.map((tool) => tool.name),
@@ -57,7 +57,8 @@ test("exposes exactly seven project-bound Horizon tools", () => {
       "edit_workspace_file",
       "run_workspace_command",
       "propose_database_migration",
-      "load_governed_skill"
+      "load_governed_skill",
+      "generate_image"
     ]
   );
   for (const tool of tools) {

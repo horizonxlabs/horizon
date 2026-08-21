@@ -138,3 +138,15 @@ test("ignores Pi bookkeeping and surfaces terminal retry errors only", () => {
     [{ type: "error", message: "provider unavailable" }]
   );
 });
+
+test("generate_image tool events adapt to the \"image\" action type", () => {
+  const start = adaptPiEvent({
+    type: "tool_execution_start",
+    toolCallId: "img-1",
+    toolName: "generate_image",
+    args: { path: "public/generated/hero.png" }
+  });
+  assert.equal(start.length, 1);
+  assert.equal(start[0].type, "action_start");
+  assert.equal(start[0].actionType, "image");
+});

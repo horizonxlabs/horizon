@@ -5,6 +5,8 @@ export type PiAgentLimits = PiAgentToolLimits & {
   maxTurnTokens: number;
   modelRoundTimeoutMs: number;
   maxFileBytes: number;
+  maxImageCalls: number;
+  maxImageBytes: number;
   turnTimeoutMs: number;
   validationRetries: number;
   toolFailureRetries: number;
@@ -25,6 +27,10 @@ const defaults: PiAgentLimits = {
   maxToolOutputBytes: 65_536,
   maxToolInputBytes: 120_000,
   maxFileBytes: 120_000,
+  // Auto image generation is capped per turn (prompt guidance says 1-2 strong images);
+  // the byte cap keeps git history and publish tarballs from ballooning.
+  maxImageCalls: 4,
+  maxImageBytes: 4_194_304,
   // The entire turn needs to outlive a sequence of slow local-model rounds. Ten minutes
   // aborted a real build after it had only inspected the UI kit; retain a finite ceiling
   // while permitting a complete inspect → implement → validate cycle.
@@ -75,6 +81,8 @@ const maximums: PiAgentLimits = {
   maxToolOutputBytes: 1_048_576,
   maxToolInputBytes: 1_048_576,
   maxFileBytes: 1_048_576,
+  maxImageCalls: 8,
+  maxImageBytes: 8_388_608,
   turnTimeoutMs: 1_800_000,
   validationRetries: 5,
   toolFailureRetries: 3,
@@ -103,6 +111,8 @@ export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): Pi
       "maxToolInputBytes"
     ),
     maxFileBytes: limit(overrides.maxFileBytes, "EVCP_PI_MAX_FILE_BYTES", "maxFileBytes"),
+    maxImageCalls: limit(overrides.maxImageCalls, "EVCP_PI_MAX_IMAGE_CALLS", "maxImageCalls"),
+    maxImageBytes: limit(overrides.maxImageBytes, "EVCP_PI_IMAGE_MAX_BYTES", "maxImageBytes"),
     turnTimeoutMs: limit(overrides.turnTimeoutMs, "EVCP_PI_TURN_TIMEOUT_MS", "turnTimeoutMs"),
     validationRetries: limit(
       overrides.validationRetries,

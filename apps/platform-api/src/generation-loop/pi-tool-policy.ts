@@ -28,6 +28,8 @@ export type PiAgentToolLimits = {
   maxToolInputBytes: number;
   maxToolOutputBytes: number;
   shellTimeoutMs: number;
+  maxImageCalls?: number;
+  maxImageBytes?: number;
 };
 
 export function filterAgentWorkspaceFiles(

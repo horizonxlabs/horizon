@@ -12,7 +12,8 @@ const actionTypeByTool = {
   edit_workspace_file: "edit",
   run_workspace_command: "shell",
   propose_database_migration: "migration",
-  load_governed_skill: "skill"
+  load_governed_skill: "skill",
+  generate_image: "image"
 } as const;
 
 export function assistantTextDelta(event: AgentSessionEvent): string | undefined {

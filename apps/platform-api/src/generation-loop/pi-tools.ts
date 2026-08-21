@@ -11,6 +11,7 @@ import {
   hardenSafeCommandArgs,
   normalizeProjectPath
 } from "./pi-tool-policy";
+import { createGenerateImageTool } from "./pi-image-tool";
 import {
   failure,
   success,
@@ -184,7 +185,8 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       return success(id, "skill", params.name, context, { body: instruction }, instruction);
     }
   );
-  return [read, list, write, edit, shell, migration, skill];
+  const image = createGenerateImageTool(context);
+  return [read, list, write, edit, shell, migration, skill, image];
 }
 
 function assertUnlocked(template: GoldenTemplate, path: string): void {

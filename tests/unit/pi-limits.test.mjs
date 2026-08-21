@@ -59,3 +59,29 @@ test("a runaway-deliberation round is bounded by a reasoning character budget, n
     else process.env.EVCP_PI_MAX_REASONING_CHARS = previous;
   }
 });
+
+test("image generation gets its own per-turn call and byte budgets, env-tunable and clamped", () => {
+  const previousCalls = process.env.EVCP_PI_MAX_IMAGE_CALLS;
+  const previousBytes = process.env.EVCP_PI_IMAGE_MAX_BYTES;
+  delete process.env.EVCP_PI_MAX_IMAGE_CALLS;
+  delete process.env.EVCP_PI_IMAGE_MAX_BYTES;
+
+  try {
+    const limits = resolvePiAgentLimits();
+    assert.equal(limits.maxImageCalls, 4);
+    assert.equal(limits.maxImageBytes, 4_194_304);
+
+    process.env.EVCP_PI_MAX_IMAGE_CALLS = "6";
+    assert.equal(resolvePiAgentLimits().maxImageCalls, 6);
+    // clamped at the hard maximum
+    process.env.EVCP_PI_MAX_IMAGE_CALLS = "50";
+    assert.equal(resolvePiAgentLimits().maxImageCalls, 8);
+    process.env.EVCP_PI_IMAGE_MAX_BYTES = "99999999";
+    assert.equal(resolvePiAgentLimits().maxImageBytes, 8_388_608);
+  } finally {
+    if (previousCalls === undefined) delete process.env.EVCP_PI_MAX_IMAGE_CALLS;
+    else process.env.EVCP_PI_MAX_IMAGE_CALLS = previousCalls;
+    if (previousBytes === undefined) delete process.env.EVCP_PI_IMAGE_MAX_BYTES;
+    else process.env.EVCP_PI_IMAGE_MAX_BYTES = previousBytes;
+  }
+});
