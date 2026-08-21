@@ -17,6 +17,6 @@ export function mergeBugReports(current: BugReport[], incoming: BugReport[]): Bu
 }
 
 export function buildFixMessage(bug: BugReport): string {
-  const location = bug.file ? ` (ไฟล์ ${bug.file})` : "";
-  return `แก้ bug นี้โดยแก้เฉพาะจุดที่เกี่ยวข้อง ไม่กระทบส่วนอื่น: ${bug.message}${location}`;
+  const location = bug.file ? ` (file: ${bug.file})` : "";
+  return `Fix this bug by changing only the relevant code. Do not affect unrelated functionality: ${bug.message}${location}`;
 }

@@ -9,7 +9,7 @@ export function VibeUserBubble({ text }: { text: string }): ReactNode {
     const summary = text.slice(AUTO_DEBUG_PREFIX.length).split("\n")[0].trim();
     return (
       <div className="vibe-autodebug-chip" role="status">
-        🔧 ระบบสั่งแก้อัตโนมัติ
+        🔧 Automatic fix requested
         <span title={text}>{summary.slice(0, 120)}</span>
       </div>
     );

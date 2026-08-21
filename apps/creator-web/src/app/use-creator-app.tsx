@@ -1,6 +1,6 @@
 import { navigateBrowserPath, useBrowserPath, usePageHeadingFocus } from "@evcp/ui";
 import { RotateCcw } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   initialCreateProjectForm,
   initialCreatorBootstrap,
@@ -35,9 +35,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
-  const [createProjectMessage, setCreateProjectMessage] = useState(
-    "กรอกข้อมูลแอป แล้วระบบจะสร้าง project และเริ่ม build ให้ทันที"
-  );
+  const [createProjectMessage, setCreateProjectMessage] = useState("");
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   const selectedProject = bootstrap.selectedProject;
@@ -60,6 +58,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   usePageHeadingFocus(pathname);
   const creatorRoute = creatorRouteFromPath(pathname);
   const creatorPage = creatorRoute.page;
+  const lastResolvedProjectRouteRef = useRef<string | undefined>(undefined);
   const requestedProjectUnavailable =
     bootstrap.status === "ready" &&
     creatorPage !== "not-found" &&
@@ -136,6 +135,13 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   useEffect(() => {
+    if (bootstrap.status !== "ready") return;
+    // A route controls initial loads and browser navigation. A selection from the project
+    // picker deliberately keeps the pathname unchanged, so it must not be overwritten by the
+    // project id still present in the old URL.
+    const routeChanged = lastResolvedProjectRouteRef.current !== pathname;
+    if (!routeChanged) return;
+    lastResolvedProjectRouteRef.current = pathname;
     const match = creatorRoute.projectId
       ? bootstrap.projects.find((project) => project.id === creatorRoute.projectId)
       : undefined;
@@ -189,9 +195,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleSelectProject(
     project: CreatorProjectView,
     targetPage: CreatorPage = creatorPage,
-    options: { push?: boolean } = {}
+    options: { push?: boolean; provisionWorkspace?: boolean } = {}
   ) {
-    const { push = true } = options;
+    const { push = true, provisionWorkspace = push } = options;
     const selectableTargetPage = projectSwitchTargetPage(targetPage);
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
@@ -200,7 +206,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
-    const enteringWorkspace = selectableTargetPage === "workspace";
+    const enteringWorkspace = selectableTargetPage === "workspace" && provisionWorkspace;
     if (enteringWorkspace) setIsEnteringWorkspace(true);
     try {
       try {
@@ -249,7 +255,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       await vibeWorkspace.handleVibeChat({ prompt: trimmed, projectId: project.id, mode: "build" });
     } catch (error) {
       setCreateProjectMessage(
-        error instanceof Error ? error.message : "สร้างโปรเจกต์ไม่สำเร็จ ลองอีกครั้ง"
+        error instanceof Error ? error.message : "Could not create the project. Please try again."
       );
     } finally {
       setIsEnteringWorkspace(false);
@@ -285,7 +291,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       // PRD is out of the loop for now — the chat log is the project's memory. The PRD tab
       // still offers manual generation whenever the user wants a document.
       setCreateProjectMessage(
-        `สร้าง ${project.name} แล้ว — AI กำลัง build ร่างแรกจาก business problem ของคุณ`
+        `${project.name} was created. AI is building the first version from your business problem.`
       );
       // The form's business problem becomes the FIRST build immediately — the user's words
       // must never vanish into a background PRD. Same pattern as handleCreateFromPrompt:

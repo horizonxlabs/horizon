@@ -40,19 +40,19 @@ export function VibeQuestionBlock({
             }
           >
             <option value="" disabled>
-              เลือกคำตอบ…
+              Select an answer…
             </option>
             {question.options.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
-            <option value={OTHER}>อื่นๆ — พิมพ์เอง</option>
+            <option value={OTHER}>Other — enter your own</option>
           </Select>
           {choices[question.id] === OTHER && (
             <Input
-              aria-label={`คำตอบของคุณ: ${question.question}`}
-              placeholder="พิมพ์คำตอบของคุณ"
+              aria-label={`Your answer: ${question.question}`}
+              placeholder="Enter your answer"
               value={customs[question.id] ?? ""}
               disabled={disabled}
               onChange={(event) =>
@@ -79,7 +79,7 @@ export function VibeQuestionBlock({
         }
       >
         <Send size={14} />
-        ส่งคำตอบ ({questions.length} ข้อ)
+        Submit answers ({questions.length})
       </Button>
     </div>
   );

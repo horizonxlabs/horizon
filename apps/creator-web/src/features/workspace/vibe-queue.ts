@@ -1,6 +1,6 @@
 import type { WorkspaceAgentMode } from "@evcp/api-client";
 
-// Prompt queue ("ถังงาน"): requests submitted while the AI is busy wait here in order.
+// Prompt queue: requests submitted while the AI is busy wait here in order.
 // The chat hook drains it one item per finished turn; each item leaves the queue the
 // moment it becomes a real chat message, and the ✕ removes one before it runs.
 

@@ -66,7 +66,7 @@ test("Creator sidebar identifies the active project in a project switcher", () =
   assert.match(html, /aria-haspopup="listbox"/);
 });
 
-test("Creator project landing identifies the unscoped All Projects context", () => {
+test("Creator project landing keeps a selected project as the active context", () => {
   const html = renderToStaticMarkup(
     React.createElement(CreatorShell, {
       app: creatorApp({ creatorPage: "projects", pathname: "/creator/" }),
@@ -74,11 +74,11 @@ test("Creator project landing identifies the unscoped All Projects context", () 
     })
   );
 
-  assert.match(html, /aria-label="Switch project\. Current project: All Projects"/);
-  assert.match(html, />All Projects</);
+  assert.match(html, /aria-label="Switch project\. Current project: Alpha Operations"/);
+  assert.match(html, />Alpha Operations</);
 });
 
-test("project switching preserves scoped sections and enters Workspace from All Projects", async () => {
+test("project switching preserves the selected project context until navigation", async () => {
   const routeModule = await import("../../apps/creator-web/src/app/routes.ts");
   const targetPage = routeModule.projectSwitchTargetPage;
 

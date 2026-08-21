@@ -11,6 +11,13 @@ export type ServerChatMessage = {
   commitSha?: string | null;
 };
 
+export type ActiveChatTurn = {
+  active: true;
+  prompt: string;
+  agentMode: string;
+  events: Array<Record<string, unknown>>;
+};
+
 // Pure transform: server chat rows -> the VibeMessage shape the workspace renders.
 // Only user/assistant turns are surfaced; unknown action results default to "done".
 export function mapChatHistoryToVibeMessages(messages: ServerChatMessage[]): VibeMessage[] {
@@ -48,4 +55,43 @@ export async function fetchChatHistory(projectId: string): Promise<VibeMessage[]
   } catch {
     return [];
   }
+}
+
+// A browser refresh can happen while the server-owned Pi turn is still running. This endpoint
+// returns its replay buffer so the UI can rebuild the live assistant bubble and keep polling.
+export async function fetchActiveChatTurn(projectId: string): Promise<ActiveChatTurn | false | undefined> {
+  const base = apiBaseUrl() ?? "/api";
+  try {
+    const res = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat/active`, {
+      headers: vibeAuthHeaders()
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      active?: unknown;
+      prompt?: unknown;
+      agentMode?: unknown;
+      events?: unknown;
+    };
+    if (data.active !== true) return false;
+    return {
+      active: true,
+      prompt: String(data.prompt ?? ""),
+      agentMode: String(data.agentMode ?? "auto"),
+      events: Array.isArray(data.events)
+        ? data.events.filter(
+            (event): event is Record<string, unknown> => Boolean(event && typeof event === "object")
+          )
+        : []
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function cancelActiveChatTurn(projectId: string): Promise<void> {
+  const base = apiBaseUrl() ?? "/api";
+  await fetch(`${base}/projects/${encodeURIComponent(projectId)}/chat/cancel`, {
+    method: "POST",
+    headers: vibeAuthHeaders()
+  });
 }

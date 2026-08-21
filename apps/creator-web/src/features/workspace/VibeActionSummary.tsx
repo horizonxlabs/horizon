@@ -12,9 +12,9 @@ export function VibeActionSummary({ actions }: { actions: VibeAction[] }): React
   const summary = summarizeActions(actions);
   const runningActions = actions.filter((action) => action.status === "running");
   const label =
-    `${summary.done > 0 ? `ดำเนินการ ${summary.done} รายการ` : ""}` +
+    `${summary.done > 0 ? `${summary.done} actions completed` : ""}` +
     `${summary.lines > 0 ? ` · ${summary.lines} lines` : ""}` +
-    `${summary.failed > 0 ? ` · ล้มเหลว ${summary.failed}` : ""}`;
+    `${summary.failed > 0 ? ` · ${summary.failed} failed` : ""}`;
 
   if (actions.length <= 2 && runningActions.length === 0) {
     return (
@@ -36,7 +36,7 @@ export function VibeActionSummary({ actions }: { actions: VibeAction[] }): React
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>
-          {summary.running > 0 ? "⚙ กำลังทำงาน" : summary.failed > 0 ? "⚠" : "✓"} {label.trim()}
+          {summary.running > 0 ? "⚙ Working" : summary.failed > 0 ? "⚠" : "✓"} {label.trim()}
         </span>
       </button>
       {open &&

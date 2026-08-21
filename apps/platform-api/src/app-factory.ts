@@ -2362,6 +2362,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
+  rawApp.all("/projects/:projectId/chat/active", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
+  rawApp.all("/projects/:projectId/chat/cancel", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/restore", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
 
   await registerPublishHttpRoutes({

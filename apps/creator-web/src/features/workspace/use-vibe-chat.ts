@@ -1,6 +1,6 @@
 import { type WorkspaceAgentMode } from "@evcp/api-client";
 import { useEffect, useRef, useState } from "react";
-import { fetchChatHistory } from "./chat-history";
+import { cancelActiveChatTurn, fetchActiveChatTurn, fetchChatHistory, type ActiveChatTurn } from "./chat-history";
 import { vibeActionVerb } from "./vibe-actions";
 import { ensureVibeWorkspace, streamVibeChat } from "./api";
 import { enqueuePrompt, removeQueued, takeNext, type QueuedPrompt } from "./vibe-queue";
@@ -41,12 +41,56 @@ export function useVibeChat({
     setBugReports([]);
     if (!selectedProjectId) return;
     let ignore = false;
-    fetchChatHistory(selectedProjectId).then((restored) => {
-      if (ignore || restored.length === 0) return;
-      setVibeMessages(restored);
-    });
+    let poll: ReturnType<typeof setInterval> | undefined;
+    const activeMessageId = `active-${selectedProjectId}`;
+    const renderActiveTurn = (restored: VibeMessage[], active: ActiveChatTurn) => {
+      const liveMessage = active.events.reduce<VibeMessage>(
+        (message, event) => applyVibeEvent(message, String(event.type ?? ""), event),
+        {
+          id: activeMessageId,
+          role: "assistant",
+          text: "",
+          actions: [],
+          isPlan: active.agentMode === "plan",
+          sourcePrompt: active.prompt
+        }
+      );
+      const withoutPriorLive = restored.filter((message) => message.id !== activeMessageId);
+      return [...withoutPriorLive, liveMessage];
+    };
+    const reconcile = async (initial = false) => {
+      const active = await fetchActiveChatTurn(selectedProjectId);
+      if (ignore || active === undefined) return;
+      if (active) {
+        setVibeMessages((current) => renderActiveTurn(current, active));
+        setIsVibing(true);
+        setVibeStatus("AI is working…");
+        return;
+      }
+      if (!initial) {
+        const restored = await fetchChatHistory(selectedProjectId);
+        if (!ignore && restored.length > 0) setVibeMessages(restored);
+        if (!ignore) {
+          setIsVibing(false);
+          setVibeStatus("Done");
+        }
+      }
+    };
+    void Promise.all([fetchChatHistory(selectedProjectId), fetchActiveChatTurn(selectedProjectId)]).then(
+      ([restored, active]) => {
+        if (ignore) return;
+        if (restored.length > 0) setVibeMessages(restored);
+        if (active) {
+          setVibeMessages(renderActiveTurn(restored, active));
+          setIsVibing(true);
+          setVibeStatus("AI is working…");
+          poll = setInterval(() => void reconcile(), 1500);
+        }
+      }
+    );
     return () => {
       ignore = true;
+      if (poll) clearInterval(poll);
     };
   }, [selectedProjectId]);
 
@@ -165,9 +209,9 @@ export function useVibeChat({
   }
 
   function cancelVibe() {
-    if (!activeStreamAbort.current) return;
     setVibeStatus("Stopping…");
-    activeStreamAbort.current.abort();
+    activeStreamAbort.current?.abort();
+    if (selectedProjectId) void cancelActiveChatTurn(selectedProjectId);
   }
 
   // Drain the queue one item per finished turn: when the AI goes idle and work is waiting,
