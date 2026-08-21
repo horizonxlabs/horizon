@@ -406,7 +406,10 @@ async function* runLockedTurn(
       }
       promptTokens += event.message.usage.input;
       completionTokens += event.message.usage.output;
-      if (promptTokens + completionTokens > limits.maxTurnTokens) {
+      if (
+        limits.maxTurnTokens !== undefined &&
+        promptTokens + completionTokens > limits.maxTurnTokens
+      ) {
         throw new Error(`Pi turn token budget (${limits.maxTurnTokens}) exceeded`);
       }
     }

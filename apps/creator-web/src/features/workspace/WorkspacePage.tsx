@@ -5,16 +5,13 @@ import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
 import { BugReportBox } from "./BugReportBox";
 import { QuickMessages } from "./QuickMessages";
-import { VibeActionSummary } from "./VibeActionSummary";
 import { WorkspaceHistoryPanel } from "./WorkspaceHistoryPanel";
 import { VibeUserBubble } from "./VibeUserBubble";
-import { VibeReasoning } from "./VibeReasoning";
-import { VibeMarkdown } from "./VibeMarkdown";
+import { VibeTurnTimeline } from "./VibeTurnTimeline";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { buildQuickMessages } from "./quick-messages";
-import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
-import { extractQuestions, stripQuestions } from "./vibe-questions";
+import { extractQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
@@ -260,50 +257,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 <VibeUserBubble key={message.id} text={message.text} />
               ) : (
                 <div key={message.id} className="vibe-message vibe-message-assistant">
-                  {message.reasoning && (
-                    <VibeReasoning
-                      reasoning={message.reasoning}
-                      // "Thinking" only while this is the active turn AND the answer has not started
-                      // yet (no answer text, no actions) — once output begins, the model is done
-                      // reasoning, so it relabels to "Thought process" and collapses.
-                      live={
-                        isVibing &&
-                        messageIndex === vibeMessages.length - 1 &&
-                        !message.text &&
-                        message.actions.length === 0
-                      }
-                    />
-                  )}
-                  <div className="vibe-message-text">
-                    {message.text && (
-                      <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
-                    )}
-                    {/* Cursor stays lit through the whole active streaming window, not just the
-                        instant before the first token: previously it vanished the moment
-                        `message.text` went truthy, so a 400-line response looked "done" (no
-                        loading affordance at all) for the rest of its own generation. When
-                        reasoning is still live, its own shimmer already covers this — skip the
-                        cursor only in that one case. */}
-                    {isVibing &&
-                      messageIndex === vibeMessages.length - 1 &&
-                      (message.text || !message.reasoning) && (
-                        <span className="vibe-cursor-blink" aria-hidden="true">
-                          ▋
-                        </span>
-                      )}
-                  </div>
+                  <VibeTurnTimeline
+                    parts={message.parts}
+                    legacy={message}
+                    live={isVibing && messageIndex === vibeMessages.length - 1}
+                  />
                   {messageIndex === vibeMessages.length - 1 && !isVibing && (
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}
                       disabled={isVibing}
                       onSubmit={(answer) => void handleVibeChat({ prompt: answer })}
                     />
-                  )}
-                  <VibeActionSummary actions={message.actions} />
-                  {message.commitSha && (
-                    <div className="vibe-commit-chip">
-                      ⑂ committed {message.commitSha.slice(0, 8)} — restore it from History
-                    </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (
                     <Button

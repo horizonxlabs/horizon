@@ -1,5 +1,6 @@
 import { apiBaseUrl } from "@/shared/runtime-config";
 import { vibeAuthHeaders } from "@/shared/session";
+import type { WorkspaceChatTurnPart } from "@evcp/types";
 import type { VibeAction } from "./vibe-actions";
 import type { VibeMessage } from "./vibe-stream";
 
@@ -8,6 +9,7 @@ export type ServerChatMessage = {
   role: string;
   content: string;
   actions?: Array<{ id: string; type: string; label: string; ok?: boolean }>;
+  parts?: WorkspaceChatTurnPart[];
   commitSha?: string | null;
 };
 
@@ -16,6 +18,7 @@ export type ActiveChatTurn = {
   prompt: string;
   agentMode: string;
   events: Array<Record<string, unknown>>;
+  parts?: WorkspaceChatTurnPart[];
 };
 
 // Pure transform: server chat rows -> the VibeMessage shape the workspace renders.
@@ -35,6 +38,7 @@ export function mapChatHistoryToVibeMessages(messages: ServerChatMessage[]): Vib
             status: (a.ok === false ? "failed" : "done") as VibeAction["status"]
           }))
         : [],
+      parts: Array.isArray(message.parts) ? message.parts : undefined,
       commitSha: message.commitSha ?? undefined
     }));
 }
@@ -71,6 +75,7 @@ export async function fetchActiveChatTurn(projectId: string): Promise<ActiveChat
       prompt?: unknown;
       agentMode?: unknown;
       events?: unknown;
+      parts?: unknown;
     };
     if (data.active !== true) return false;
     return {
@@ -81,7 +86,8 @@ export async function fetchActiveChatTurn(projectId: string): Promise<ActiveChat
         ? data.events.filter(
             (event): event is Record<string, unknown> => Boolean(event && typeof event === "object")
           )
-        : []
+        : [],
+      parts: Array.isArray(data.parts) ? (data.parts as WorkspaceChatTurnPart[]) : undefined
     };
   } catch {
     return undefined;

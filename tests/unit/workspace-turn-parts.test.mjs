@@ -6,8 +6,11 @@ function isValidToolPart(part) {
   if (
     !part ||
     typeof part !== "object" ||
+    typeof part.callId !== "string" ||
     typeof part.actionType !== "string" ||
-    typeof part.label !== "string"
+    typeof part.label !== "string" ||
+    typeof part.inputSummary !== "string" ||
+    typeof part.startedAt !== "string"
   ) {
     return false;
   }
@@ -15,10 +18,14 @@ function isValidToolPart(part) {
     return !("result" in part) && !("error" in part);
   }
   if (part.status === "done") {
-    return !("error" in part) && (part.result === undefined || typeof part.result === "string");
+    return (
+      typeof part.endedAt === "string" &&
+      !("error" in part) &&
+      (part.result === undefined || typeof part.result === "string")
+    );
   }
   if (part.status === "failed") {
-    return typeof part.error === "string" && !("result" in part);
+    return typeof part.endedAt === "string" && typeof part.error === "string" && !("result" in part);
   }
   return false;
 }
@@ -32,8 +39,12 @@ test("workspace turn parts define a serializable ordered projection", () => {
       type: "tool",
       sequence: 3,
       tool: {
+        callId: "tool-call-1",
         actionType: "file",
-        label: "apps/creator-web/src/app/routes.ts",
+        label: "Write workspace file",
+        inputSummary: "Write workspace file requested",
+        startedAt: "2026-08-22T10:00:00.000Z",
+        endedAt: "2026-08-22T10:00:01.000Z",
         status: "done",
         progress: "Reading file",
         result: "File loaded"
@@ -47,15 +58,37 @@ test("workspace turn parts define a serializable ordered projection", () => {
   assert.ok(isValidToolPart(parts[2].tool));
   assert.ok(
     isValidToolPart({
+      callId: "call-running",
       actionType: "shell",
-      label: "pnpm test",
+      label: "Run workspace command",
+      inputSummary: "Approved workspace command requested",
+      startedAt: "2026-08-22T10:00:00.000Z",
       status: "running",
       progress: "Testing"
     })
   );
-  assert.ok(isValidToolPart({ actionType: "shell", label: "pnpm test", status: "done" }));
   assert.ok(
-    isValidToolPart({ actionType: "shell", label: "pnpm test", status: "failed", error: "exit 1" })
+    isValidToolPart({
+      callId: "call-done",
+      actionType: "shell",
+      label: "Run workspace command",
+      inputSummary: "Approved workspace command requested",
+      startedAt: "2026-08-22T10:00:00.000Z",
+      endedAt: "2026-08-22T10:00:01.000Z",
+      status: "done"
+    })
+  );
+  assert.ok(
+    isValidToolPart({
+      callId: "call-failed",
+      actionType: "shell",
+      label: "Run workspace command",
+      inputSummary: "Approved workspace command requested",
+      startedAt: "2026-08-22T10:00:00.000Z",
+      endedAt: "2026-08-22T10:00:01.000Z",
+      status: "failed",
+      error: "exit 1"
+    })
   );
   assert.equal(
     isValidToolPart({
@@ -103,7 +136,9 @@ test("reduceTurnPart preserves event order and replaces tool progress snapshots"
     type: "action_start",
     actionId: "tool-1",
     actionType: "file",
-    label: "Read route"
+    label: "Read route",
+    inputSummary: "Write workspace file requested",
+    startedAt: "2026-08-22T10:00:00.000Z"
   });
   const afterUpdate = reduceTurnPart(afterStart, {
     type: "action_chunk",
@@ -121,7 +156,8 @@ test("reduceTurnPart preserves event order and replaces tool progress snapshots"
     actionType: "file",
     label: "Read route",
     ok: true,
-    body: "Route loaded"
+    body: "Route loaded",
+    endedAt: "2026-08-22T10:00:01.000Z"
   });
   const afterToken = reduceTurnPart(afterResult, { type: "token", content: "Done." });
   const afterCommit = reduceTurnPart(afterToken, { type: "commit", sha: "abc1234" });
@@ -135,8 +171,12 @@ test("reduceTurnPart preserves event order and replaces tool progress snapshots"
       type: "tool",
       sequence: 2,
       tool: {
+        callId: "tool-1",
         actionType: "file",
-        label: "Read route",
+        label: "Write workspace file",
+        inputSummary: "Write workspace file requested",
+        startedAt: "2026-08-22T10:00:00.000Z",
+        endedAt: "2026-08-22T10:00:01.000Z",
         status: "done",
         progress: "80%",
         result: "Route loaded"
@@ -154,7 +194,9 @@ test("reduceTurnPart records failed actions without result fields", () => {
     type: "action_start",
     actionId: "tool-1",
     actionType: "shell",
-    label: "Run tests"
+    label: "Run tests",
+    inputSummary: "Run workspace command requested",
+    startedAt: "2026-08-22T10:00:00.000Z"
   });
   const parts = reduceTurnPart(afterStart, {
     type: "action_result",
@@ -163,13 +205,96 @@ test("reduceTurnPart records failed actions without result fields", () => {
     label: "Run tests",
     ok: false,
     body: "partial output",
-    error: "exit 1"
+    error: "exit 1",
+    endedAt: "2026-08-22T10:00:01.000Z"
   });
 
   assert.deepEqual(parts[0], {
     id: "tool-1",
     type: "tool",
     sequence: 1,
-    tool: { actionType: "shell", label: "Run tests", status: "failed", error: "exit 1" }
+    tool: {
+      callId: "tool-1",
+      actionType: "shell",
+      label: "Run workspace command",
+      inputSummary: "Run workspace command requested",
+      startedAt: "2026-08-22T10:00:00.000Z",
+      endedAt: "2026-08-22T10:00:01.000Z",
+      status: "failed",
+      error: "exit 1"
+    }
   });
+});
+
+test("reduceTurnPart coalesces adjacent deltas into bounded durable content", () => {
+  const afterFirstText = reduceTurnPart([], { type: "token", content: "Hello " });
+  const afterSecondText = reduceTurnPart(afterFirstText, { type: "token", content: "world" });
+  const afterReasoning = reduceTurnPart(afterSecondText, {
+    type: "reasoning",
+    content: "Inspecting "
+  });
+  const afterSecondReasoning = reduceTurnPart(afterReasoning, {
+    type: "reasoning",
+    content: "the route"
+  });
+  const afterTool = reduceTurnPart(afterSecondReasoning, {
+    type: "action_start",
+    actionId: "tool-1",
+    actionType: "read",
+    label: "app/private.ts",
+    inputSummary: "Read workspace file requested",
+    startedAt: "2026-08-22T10:00:00.000Z"
+  });
+  const afterLaterText = reduceTurnPart(afterTool, { type: "token", content: "Done." });
+  const fullPart = reduceTurnPart([], { type: "token", content: "x".repeat(8_192) });
+  const overflow = reduceTurnPart(fullPart, { type: "token", content: "tail" });
+  const oversizedDelta = reduceTurnPart([], { type: "token", content: "y".repeat(9_000) });
+
+  assert.deepEqual(
+    afterLaterText.map((part) => [part.type, part.sequence, part.type === "text" || part.type === "reasoning" ? part.text : ""]),
+    [
+      ["text", 1, "Hello world"],
+      ["reasoning", 2, "Inspecting the route"],
+      ["tool", 3, ""],
+      ["text", 4, "Done."]
+    ]
+  );
+  assert.deepEqual(
+    overflow.map((part) => [part.id, part.sequence, part.text]),
+    [
+      ["text-1", 1, "x".repeat(8_192)],
+      ["text-2", 2, "tail"]
+    ]
+  );
+  assert.equal(overflow.map((part) => part.text).join(""), `${"x".repeat(8_192)}tail`);
+  assert.equal(oversizedDelta.length, 2);
+  assert.ok(oversizedDelta.every((part) => Buffer.byteLength(part.text, "utf8") <= 8_192));
+  assert.equal(oversizedDelta.map((part) => part.text).join(""), "y".repeat(9_000));
+});
+
+test("reduceTurnPart bounds and redacts error and commit display data", () => {
+  const errorParts = reduceTurnPart([], {
+    type: "error",
+    message: `DATABASE_URL=postgresql://user:password@db/private ${"x".repeat(2_000)}`
+  });
+  const withLongCommit = reduceTurnPart(errorParts, { type: "commit", sha: "a".repeat(200) });
+  const withInvalidCommit = reduceTurnPart(withLongCommit, {
+    type: "commit",
+    sha: "sk-private-token"
+  });
+
+  assert.equal(errorParts[0].type, "error");
+  if (errorParts[0].type === "error") {
+    assert.ok(Buffer.byteLength(errorParts[0].message, "utf8") <= 1_024);
+    assert.match(errorParts[0].message, /\[redacted-secret\]/);
+    assert.doesNotMatch(errorParts[0].message, /password|private/);
+  }
+  assert.deepEqual(
+    withInvalidCommit.map((part) => [part.type, part.sequence, part.type === "commit" ? part.sha : ""]),
+    [
+      ["error", 1, ""],
+      ["commit", 2, "a".repeat(64)],
+      ["commit", 3, "unavailable"]
+    ]
+  );
 });

@@ -129,21 +129,32 @@ export type WorkspaceChatTurnPart =
 
 export type WorkspaceChatToolPart =
   | {
+      callId: string;
       actionType: WorkspaceChatAction["type"];
       label: string;
+      inputSummary: string;
+      startedAt: string;
       status: "pending" | "running";
       progress?: string;
     }
   | {
+      callId: string;
       actionType: WorkspaceChatAction["type"];
       label: string;
+      inputSummary: string;
+      startedAt: string;
+      endedAt: string;
       status: "done";
       progress?: string;
       result?: string;
     }
   | {
+      callId: string;
       actionType: WorkspaceChatAction["type"];
       label: string;
+      inputSummary: string;
+      startedAt: string;
+      endedAt: string;
       status: "failed";
       progress?: string;
       error: string;

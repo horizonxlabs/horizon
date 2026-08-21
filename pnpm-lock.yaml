@@ -131,6 +131,9 @@ importers:
       '@evcp/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@evcp/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@evcp/ui':
         specifier: workspace:*
         version: link:../../packages/ui

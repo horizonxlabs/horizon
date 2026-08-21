@@ -1,3 +1,4 @@
+import type { WorkspaceChatToolPart, WorkspaceChatTurnPart } from "@evcp/types";
 import type { VibeAction } from "./vibe-actions";
 
 export type VibeMessage = {
@@ -5,6 +6,9 @@ export type VibeMessage = {
   role: "user" | "assistant";
   text: string;
   actions: VibeAction[];
+  // Ordered, display-safe Pi events. This is the source of truth for a current turn and for
+  // restored history; the fields above remain for old chat rows and surrounding legacy UI.
+  parts?: WorkspaceChatTurnPart[];
   // Streamed chain-of-thought (reasoning models). Shown as a separate, collapsible "thinking"
   // block — never mixed into `text` or parsed as actions.
   reasoning?: string;
@@ -41,12 +45,53 @@ export function applyVibeEvent(
         ? data
         : "";
 
+  const appendPart = (
+    type: "reasoning" | "text",
+    text: string
+  ): WorkspaceChatTurnPart[] => {
+    const parts = message.parts ?? [];
+    const last = parts.at(-1);
+    if (last?.type === type) {
+      return [...parts.slice(0, -1), { ...last, text: last.text + text }];
+    }
+    return [...parts, { id: `live-${type}-${parts.length}`, type, sequence: parts.length, text }];
+  };
+  const appendOrUpdateToolPart = (
+    actionId: string,
+    patch: Partial<WorkspaceChatToolPart>
+  ): WorkspaceChatTurnPart[] => {
+    const parts = message.parts ?? [];
+    const index = parts.findIndex((part) => part.type === "tool" && part.tool.callId === actionId);
+    const current = index >= 0 ? parts[index] : undefined;
+    const tool = {
+      actionType: field("actionType") || "file",
+      label: field("label"),
+      callId: actionId,
+      inputSummary: field("inputSummary") || "Tool requested",
+      ...((current?.type === "tool" ? current.tool : {})),
+      ...patch
+    } as WorkspaceChatToolPart;
+    const part: WorkspaceChatTurnPart = {
+      id: current?.id ?? `live-tool-${actionId}`,
+      type: "tool",
+      sequence: current?.sequence ?? parts.length,
+      tool
+    };
+    return index >= 0 ? parts.map((item, itemIndex) => (itemIndex === index ? part : item)) : [...parts, part];
+  };
+
   if (type === "token") {
-    return { ...message, text: message.text + field("content") };
+    const content = field("content");
+    return { ...message, text: message.text + content, parts: appendPart("text", content) };
   }
 
   if (type === "reasoning") {
-    return { ...message, reasoning: (message.reasoning ?? "") + field("content") };
+    const content = field("content");
+    return {
+      ...message,
+      reasoning: (message.reasoning ?? "") + content,
+      parts: appendPart("reasoning", content)
+    };
   }
 
   if (type === "action_start") {
@@ -63,7 +108,8 @@ export function applyVibeEvent(
               label: field("label"),
               status: "running" as const
             }
-          ]
+          ],
+      parts: appendOrUpdateToolPart(id, { status: "running", startedAt: new Date().toISOString() })
     };
   }
 
@@ -74,7 +120,8 @@ export function applyVibeEvent(
       ...message,
       actions: message.actions.map((a) =>
         a.id === id ? { ...a, body: (a.body ?? "") + content } : a
-      )
+      ),
+      parts: appendOrUpdateToolPart(id, { status: "running", progress: content })
     };
   }
 
@@ -97,16 +144,33 @@ export function applyVibeEvent(
       ...message,
       actions: message.actions.some((a) => a.id === id)
         ? message.actions.map((a) => (a.id === id ? { ...a, ...patch } : a))
-        : [...message.actions, { id, ...patch }]
+        : [...message.actions, { id, ...patch }],
+      parts: appendOrUpdateToolPart(id, {
+        status: ok ? "done" : "failed",
+        result: ok ? field("body") || undefined : undefined,
+        error: ok ? undefined : field("error") || field("body") || "Tool failed",
+        endedAt: new Date().toISOString()
+      })
     };
   }
 
   if (type === "commit") {
-    return { ...message, commitSha: field("sha") };
+    const parts = message.parts ?? [];
+    return {
+      ...message,
+      commitSha: field("sha"),
+      parts: [...parts, { id: `live-commit-${parts.length}`, type: "commit", sequence: parts.length, sha: field("sha") }]
+    };
   }
 
   if (type === "error") {
-    return { ...message, text: message.text + `\n\n⚠️ ${field("message")}` };
+    const error = field("message");
+    const parts = message.parts ?? [];
+    return {
+      ...message,
+      text: message.text + `\n\n⚠️ ${error}`,
+      parts: [...parts, { id: `live-error-${parts.length}`, type: "error", sequence: parts.length, message: error }]
+    };
   }
 
   return message;
