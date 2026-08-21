@@ -332,7 +332,7 @@ function failure(
 
 async function runAction(
   context: HorizonPiToolContext,
-  action: Exclude<RunnableAction, { type: "migration" }>,
+  action: Exclude<RunnableAction, { type: "migration" } | { type: "asset" }>,
   timeoutMs?: number,
   onUpdate?: (result: ToolResult) => void
 ): Promise<ToolResult> {
