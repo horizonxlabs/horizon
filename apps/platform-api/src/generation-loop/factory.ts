@@ -123,6 +123,10 @@ export async function createDefaultGenerationService(opts: {
         opts.orchestrator.markActivity(projectId);
         return gitCommitter.prepare(containerId);
       },
+      renewSnapshot: async (projectId, containerId, snapshotToken) => {
+        opts.orchestrator.markActivity(projectId);
+        await gitCommitter.renewSnapshot(containerId, snapshotToken);
+      },
       hasChanges: async (_projectId, containerId, snapshotToken) => {
         return gitCommitter.hasChanges(containerId, snapshotToken);
       },

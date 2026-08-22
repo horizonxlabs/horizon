@@ -124,6 +124,8 @@ async function* runLockedTurn(
   const writtenPaths = new Set<string>();
   let failedTool: HorizonPiToolDetails | undefined;
   let preparedSnapshotToken: string | undefined;
+  let snapshotLeaseTimer: ReturnType<typeof setInterval> | undefined;
+  let snapshotLeaseError: Error | undefined;
   let assistantMessage: WorkspaceChatMessage | undefined;
   let candidateSha: string | undefined;
   let irreversibleFinalizationMayHaveTakenEffect = false;
@@ -139,6 +141,16 @@ async function* runLockedTurn(
   try {
     if (mutationCapable) {
       preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId, containerId);
+      if (deps.workspaceGuard.renewSnapshot) {
+        snapshotLeaseTimer = setInterval(() => {
+          void deps.workspaceGuard
+            .renewSnapshot?.(input.projectId, containerId, preparedSnapshotToken!)
+            .catch((error) => {
+              snapshotLeaseError = error instanceof Error ? error : new Error(String(error));
+            });
+        }, 10_000);
+        snapshotLeaseTimer.unref?.();
+      }
     }
     signal.throwIfAborted();
     const { modelRuntime, model } = await createHorizonPiRuntime({
@@ -360,6 +372,7 @@ async function* runLockedTurn(
     if (preservedCommitEvent) yield preservedCommitEvent;
     yield errorMessage === initialErrorMessage ? errorEvent : { type: "error", message: errorMessage };
   } finally {
+    if (snapshotLeaseTimer) clearInterval(snapshotLeaseTimer);
     if (!rollbackRecoveryRequired) {
       await releasePiTurnSnapshot(deps, input.projectId, containerId, preparedSnapshotToken);
     }
@@ -370,6 +383,9 @@ async function* runLockedTurn(
   yield { type: "done" };
 
   function collectEvent(event: AgentSessionEvent): void {
+    if (snapshotLeaseError) {
+      throw new Error(`workspace snapshot lease renewal failed: ${snapshotLeaseError.message}`);
+    }
     if (event.type === "message_start" && event.message.role === "assistant") {
       currentAssistantDeltaText = "";
       currentRoundReasoningChars = 0;
