@@ -3,12 +3,17 @@ import assert from "node:assert/strict";
 
 const {
   creatorRouteFromPath,
+  creatorPathForPage,
   projectRouteSegmentFromPath,
   slugifyProjectName,
   createCreatorNavigation
 } = await import("../../apps/creator-web/src/app/routes.ts");
 
 test("creatorRouteFromPath resolves project lifecycle pages", () => {
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/project"), {
+    page: "project",
+    projectId: "proj_1"
+  });
   assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/database"), {
     page: "database",
     projectId: "proj_1"
@@ -19,6 +24,10 @@ test("creatorRouteFromPath resolves project lifecycle pages", () => {
   });
   assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/deployments"), {
     page: "deployments",
+    projectId: "proj_1"
+  });
+  assert.deepEqual(creatorRouteFromPath("/creator/projects/proj_1/settings"), {
+    page: "settings",
     projectId: "proj_1"
   });
 });
@@ -67,6 +76,7 @@ test("creatorRouteFromPath rejects extra path segments on every project route sh
     "/creator/projects/proj_1/users/extra",
     "/creator/projects/proj_1/publish/extra",
     "/creator/projects/proj_1/deployments/extra",
+    "/creator/projects/proj_1/settings/extra",
     "/creator/projects/proj_1/tickets/extra/more"
   ]) {
     assert.equal(creatorRouteFromPath(pathname).page, "not-found", `${pathname} must fail closed`);
@@ -138,6 +148,16 @@ test("creator navigation enables every lifecycle entry for the selected project"
   assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/database"));
   assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/versions"));
   assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/deployments"));
+  assert.ok(nav.some((item) => item.route === "/creator/projects/proj_1/settings"));
+  assert.deepEqual(nav[0], {
+    label: "Project",
+    route: "/creator/projects/proj_1/project",
+    icon: "dashboard"
+  });
+});
+
+test("creatorPathForPage builds the selected project dashboard route", () => {
+  assert.equal(creatorPathForPage("project/one", "project"), "/creator/projects/project%2Fone/project");
 });
 
 test("creator navigation encodes the selected project ID", () => {
@@ -157,4 +177,10 @@ test("createCreatorNavigation: omits the redundant Creator Workspace entry", () 
     false,
     "Creator Workspace is reachable from a project card and should not appear in the sidebar"
   );
+});
+
+test("createCreatorNavigation: omits the Projects dashboard entry", () => {
+  const project = { id: "proj_expense_approval" };
+  const labels = createCreatorNavigation(project).map((item) => item.label);
+  assert.equal(labels.includes("Projects"), false);
 });

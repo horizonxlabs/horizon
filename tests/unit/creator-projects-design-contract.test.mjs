@@ -107,7 +107,7 @@ test("shared shell has a concrete mobile off-canvas drawer contract", () => {
     assert.ok(declarationBlock(selector), `missing mobile drawer declaration: ${selector}`);
   }
 
-  const mobile = mediaBlock("max-width: 760px");
+  const mobile = mediaBlock("max-width: 760px", ".sidebar {");
   const sidebar = declarationBlock(".sidebar", mobile);
   assert.match(sidebar, /position:\s*fixed/);
   assert.match(sidebar, /transform:\s*translateX\(-100%\)/);

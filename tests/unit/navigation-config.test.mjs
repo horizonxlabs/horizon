@@ -3,6 +3,9 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+const { navigation } = await import("../../packages/config/src/index.ts");
+const { createCreatorNavigation } = await import("../../apps/creator-web/src/app/routes.ts");
+
 function readAllSourceFiles(dir) {
   const entries = readdirSync(dir);
   let combined = "";
@@ -19,36 +22,32 @@ function readAllSourceFiles(dir) {
 }
 
 test("creator navigation matches the real app creation lifecycle", () => {
-  const configSource = readFileSync("packages/config/src/index.ts", "utf8");
+  const project = { id: "expense-approval" };
+  const configuredLabels = navigation.creator.map((item) => item.label);
+  const sidebarItems = createCreatorNavigation(project);
 
-  const expectedOrder = [
-    "Projects",
-    "PRD Review",
-    "Creator Workspace",
-    "Database",
-    "Versions",
-    "Users & Roles",
-    "Publish & Registry",
-    "Deployments",
-    "Tickets & Changes"
-  ];
-
-  let previousIndex = -1;
-  for (const label of expectedOrder) {
-    const index = configSource.indexOf(`label: "${label}"`);
-    assert.ok(index > previousIndex, `${label} should appear after the previous creator menu item`);
-    previousIndex = index;
-  }
-
-  assert.match(configSource, /route: "\/creator\/"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/prd"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/database"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/versions"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/users"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/publish"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/deployments"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
+  assert.deepEqual(navigation.creator[0], {
+    label: "Project",
+    route: "/creator/projects/leave-management/project",
+    icon: "dashboard"
+  });
+  assert.equal(configuredLabels.includes("Projects"), false);
+  assert.deepEqual(
+    sidebarItems.map((item) => item.label),
+    [
+      "Project",
+      "Database",
+      "Versions",
+      "Users & Roles",
+      "Publish & Registry",
+      "Deployments",
+      "Tickets & Changes",
+      "Project Settings"
+    ]
+  );
+  assert.equal(sidebarItems.some((item) => item.label === "Creator Workspace"), false);
+  assert.equal(sidebarItems.some((item) => item.label === "PRD Review"), false);
+  assert.equal(sidebarItems[0].route, "/creator/projects/expense-approval/project");
 });
 
 test("admin navigation includes readiness pages", () => {

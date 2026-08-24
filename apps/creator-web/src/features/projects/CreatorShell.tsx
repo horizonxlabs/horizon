@@ -32,10 +32,12 @@ export function CreatorShell({
     onNavigate,
     pathname
   } = app;
+  const pageTitle = pageCopy.title.replace("Leave Management", selectedProject.name);
+  const pageEyebrow = pageCopy.eyebrow === pageCopy.title ? undefined : pageCopy.eyebrow;
   return (
     <AppShell
       title="Horizon"
-      logo={<HorizonLogo />}
+      logo={<HorizonLogo className="creator-sidebar-logo" />}
       sidebarContext={
         <ProjectSwitcher
           projects={bootstrap.projects}
@@ -44,7 +46,6 @@ export function CreatorShell({
           onSelectProject={(project, targetPage) => {
             void handleSelectProject(project, targetPage);
           }}
-          onViewAllProjects={() => onNavigate("/creator/")}
           onCreateProject={() => setIsCreateProjectDialogOpen(true)}
         />
       }
@@ -59,16 +60,16 @@ export function CreatorShell({
         <div className="hz-loading-backdrop" role="status" aria-live="polite">
           <div className="hz-loading-card">
             <span className="hz-spinner" aria-hidden="true" />
-            <strong>กำลังเริ่ม workspace</strong>
-            <span>กำลัง start sandbox/container ของโปรเจกต์ — อาจใช้เวลาสักครู่</span>
+            <strong>Preparing workspace</strong>
+            <span>Starting this project's sandbox. This may take a moment.</span>
           </div>
         </div>
       ) : null}
       {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"
-          eyebrow={pageCopy.eyebrow}
-          title={pageCopy.title.replace("Leave Management", selectedProject.name)}
+          eyebrow={pageEyebrow}
+          title={pageTitle}
           description={pageCopy.description}
           actions={creatorPageActions}
         />

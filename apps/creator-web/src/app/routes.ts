@@ -3,6 +3,7 @@ import type { CreatorProjectView } from "@/shared/types";
 
 export type CreatorPage =
   | "projects"
+  | "project"
   | "workspace"
   | "prd"
   | "database"
@@ -11,6 +12,7 @@ export type CreatorPage =
   | "publish"
   | "deployments"
   | "tickets"
+  | "settings"
   | "ticket-detail"
   | "not-found";
 
@@ -53,13 +55,15 @@ export function creatorRouteFromPath(pathname: string): CreatorRoute {
   }
   if (segments.length !== 4) return { page: "not-found", projectId };
   const pageBySuffix = {
+    project: "project",
     prd: "prd",
     database: "database",
     versions: "versions",
     users: "users",
     publish: "publish",
     deployments: "deployments",
-    tickets: "tickets"
+    tickets: "tickets",
+    settings: "settings"
   } as const;
   return pageBySuffix[suffix as keyof typeof pageBySuffix]
     ? { page: pageBySuffix[suffix as keyof typeof pageBySuffix], projectId }
@@ -70,13 +74,15 @@ export function creatorPathForPage(projectId: string, page: CreatorSelectablePag
   if (page === "projects") return "/creator/";
   const base = `/creator/projects/${encodeURIComponent(projectId)}`;
   const suffix: Partial<Record<CreatorSelectablePage, string>> = {
+    project: "project",
     prd: "prd",
     database: "database",
     versions: "versions",
     users: "users",
     publish: "publish",
     deployments: "deployments",
-    tickets: "tickets"
+    tickets: "tickets",
+    settings: "settings"
   };
   return page === "workspace" ? base : `${base}/${suffix[page]}`;
 }
@@ -120,58 +126,66 @@ export const creatorPageCopy: Record<
   projects: {
     eyebrow: "Creator Projects",
     title: "Projects",
-    description: "เลือก project หรือเริ่มสร้างแอปใหม่จาก business problem"
+    description: "Choose a project or start a new application from a business problem."
+  },
+  project: {
+    eyebrow: "Project overview",
+    title: "Project: Leave Management",
+    description: "Review project status, key information, and common actions."
   },
   workspace: {
     eyebrow: "Creator Workspace",
     title: "Creator Workspace: Leave Management",
-    description:
-      "ใช้ prompt เพื่อสร้างหรือแก้ frontend preview หลังจากมี PRD draft/baseline ของ project ที่เลือก"
+    description: "Build and refine the application through guided AI changes."
   },
   prd: {
     eyebrow: "PRD Baseline",
     title: "PRD Review: Leave Management",
-    description: "ตรวจ PRD sections, version history และ confirm baseline ก่อน generate app"
+    description: "Review requirements, version history, and the confirmed product baseline."
   },
   database: {
     eyebrow: "Project Data",
     title: "Database",
-    description: "ตรวจ schema, tables และ records จากฐานข้อมูลของ project ที่เลือก"
+    description: "Review project schema, tables, and records."
   },
   versions: {
     eyebrow: "Frontend History",
     title: "Frontend Versions",
-    description:
-      "ตรวจ checkpoint history และ restore เฉพาะ frontend โดยไม่เปลี่ยน backend หรือข้อมูล"
+    description: "Review checkpoints and restore the frontend without changing backend data."
   },
   users: {
     eyebrow: "Access Management",
     title: "Users & Roles",
-    description: "Manage app members, invitations, access requests, and the role permission matrix."
+    description: "Manage members, invitations, access requests, and role permissions."
   },
   publish: {
     eyebrow: "Publish & Registry",
     title: "Publish & Registry",
-    description: "ตรวจ manifest, readiness checklist และลงทะเบียนแอปก่อนเปิดให้ end user ใช้งาน"
+    description: "Review readiness and register the application for end users."
   },
   deployments: {
     eyebrow: "Deployment History",
     title: "Deployments",
-    description: "ตรวจ environment, commit, health และเวลาของ deployment ที่ Platform API ส่งกลับ"
+    description: "Review deployment environments, versions, health, and timestamps."
   },
   tickets: {
     eyebrow: "Feedback Loop",
     title: "Tickets & Changes",
-    description: "รับ bug/feedback จาก Horizon Store แล้วแปลงเป็น PRD change หรือ AI prompt"
+    description: "Turn Store feedback into tracked product changes."
+  },
+  settings: {
+    eyebrow: "Project Administration",
+    title: "Project Settings",
+    description: "Manage project information and permanent deletion."
   },
   "ticket-detail": {
     eyebrow: "Feedback Detail",
     title: "Ticket Detail",
-    description: "ตรวจรายละเอียด ticket และ action ที่ Platform API รองรับ"
+    description: "Review ticket details and available Platform API actions."
   },
   "not-found": {
     eyebrow: "Creator",
     title: "Page not found",
-    description: "เลือก destination จาก Creator navigation"
+    description: "Choose a destination from Creator navigation."
   }
 };

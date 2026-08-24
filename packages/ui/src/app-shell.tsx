@@ -199,7 +199,7 @@ export function AppShell({
             className={cn(
               "app-shell-sidebar-toggle",
               "rounded-control ml-auto inline-flex h-[30px] min-h-[30px] flex-none items-center justify-center p-0 transition-colors max-md:hidden",
-              collapsed ? "ml-0 w-10" : "w-[30px]",
+              collapsed ? "ml-0 h-11 min-h-11 w-11" : "w-[30px]",
               isLight
                 ? "border-border bg-surface-muted text-muted hover:border-primary hover:bg-primary-soft hover:text-primary-strong border"
                 : "border border-[rgba(226,232,240,0.1)] bg-transparent text-[#94a3b8] hover:border-[rgba(226,232,240,0.2)] hover:bg-white/[0.06] hover:text-[#f8fafc]"
@@ -254,7 +254,7 @@ export function AppShell({
               </>
             );
             const base = cn(
-              "relative flex min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[13.5px] font-semibold no-underline transition-colors",
+              "relative flex min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[14px] font-semibold no-underline transition-colors",
               "before:absolute before:left-[-14px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-[0_3px_3px_0] before:opacity-0 before:transition-opacity before:content-['']",
               isLight ? "before:bg-primary" : "before:bg-accent",
               collapsed &&
