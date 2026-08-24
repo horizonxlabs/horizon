@@ -4809,7 +4809,7 @@ th {
   color: var(--evcp-color-text);
 }
 
-.vibe-composer-attach input {
+.vibe-composer-file-input {
   display: none;
 }
 
@@ -5041,6 +5041,12 @@ th {
 }
 
 @media (max-width: 899px) {
+  .vibe-live-shell
+    :is(button, a[href], summary, select, input:not(.vibe-composer-file-input), textarea) {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
   .vibe-live-header {
     flex-wrap: wrap;
     height: auto;

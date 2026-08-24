@@ -6,6 +6,7 @@ import { enqueuePrompt, removeQueued, takeNext, type QueuedPrompt } from "./vibe
 import { mergeBugReports, type BugReport } from "./vibe-bugs";
 import { extractQuestions } from "./vibe-questions";
 import { applyVibeEvent, buildApproveTurn, type VibeMessage } from "./vibe-stream";
+import { latestUserMessageIndex } from "./workspace-turn";
 
 type VibeChatOptions = {
   selectedProjectId: string;
@@ -33,6 +34,23 @@ export function workspaceOutcomeForEvent({
   return "Working";
 }
 
+export function workspaceOutcomeForHistory(messages: VibeMessage[]): WorkspaceOutcome | "" {
+  const latestUserIndex = latestUserMessageIndex(messages);
+  const latestTurn = messages.slice(latestUserIndex >= 0 ? latestUserIndex : -1);
+  const latest = latestTurn.at(-1);
+  if (!latest) return "";
+  if (latest.role === "user") return "Working";
+  if (extractQuestions(latest.text).questions.length > 0) return "Waiting for input";
+  if (
+    latest.actions.some((action) => action.status === "failed") ||
+    /(?:^|\n)⚠️/.test(latest.text)
+  ) {
+    return "Failed";
+  }
+  if (latest.actions.some((action) => action.status === "running")) return "Working";
+  return "Completed";
+}
+
 export function useVibeChat({
   selectedProjectId,
   promptDraft,
@@ -46,6 +64,7 @@ export function useVibeChat({
   const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([]);
   const [bugReports, setBugReports] = useState<BugReport[]>([]);
   const activeStreamAbort = useRef<AbortController | undefined>(undefined);
+  const historyRevisionRef = useRef(0);
   // Refs so the busy-check and the drain effect never act on stale closures.
   const isVibingRef = useRef(false);
   isVibingRef.current = isVibing;
@@ -59,10 +78,12 @@ export function useVibeChat({
     setPromptQueue([]);
     setBugReports([]);
     if (!selectedProjectId) return;
+    const revision = ++historyRevisionRef.current;
     let ignore = false;
     fetchChatHistory(selectedProjectId).then((restored) => {
-      if (ignore || restored.length === 0) return;
+      if (ignore || revision !== historyRevisionRef.current || restored.length === 0) return;
       setVibeMessages(restored);
+      setVibeStatus(workspaceOutcomeForHistory(restored));
     });
     return () => {
       ignore = true;
@@ -87,6 +108,7 @@ export function useVibeChat({
       setPromptDraft("");
       return;
     }
+    historyRevisionRef.current += 1;
     const attachmentIds = overrides?.projectId ? [] : [...selectedAttachmentIds];
     const assistantId = `a-${Date.now()}`;
     setVibeMessages((prev) => [
@@ -149,17 +171,33 @@ export function useVibeChat({
             applyVibeEvent(message, type, data as Record<string, unknown>)
           );
           if (type === "action_start") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           } else if (type === "commit") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
             setVibePreviewKey((key) => key + 1);
           } else if (type === "error") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           } else if (type === "done") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           }
         },
@@ -219,8 +257,11 @@ export function useVibeChat({
   // Re-pull persisted history (used after a code rollback appends its note server-side).
   async function reloadChatHistory() {
     if (!selectedProjectId) return;
+    const revision = ++historyRevisionRef.current;
     const restored = await fetchChatHistory(selectedProjectId).catch(() => []);
-    if (restored.length > 0) setVibeMessages(restored);
+    if (revision !== historyRevisionRef.current || restored.length === 0) return;
+    setVibeMessages(restored);
+    setVibeStatus(workspaceOutcomeForHistory(restored));
   }
 
   return {

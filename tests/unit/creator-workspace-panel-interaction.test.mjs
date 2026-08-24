@@ -7,30 +7,70 @@ globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const storage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.window ??= {
-  location: { pathname: "/creator/projects/project-1", href: "http://localhost/creator/projects/project-1" },
-  localStorage: storage, addEventListener() {}, removeEventListener() {}
+  location: {
+    pathname: "/creator/projects/project-1",
+    href: "http://localhost/creator/projects/project-1"
+  },
+  localStorage: storage,
+  addEventListener() {},
+  removeEventListener() {}
 };
 globalThis.window.localStorage ??= storage;
 globalThis.document ??= {
-  getElementById: () => null, createElement: () => ({ style: {} }),
-  addEventListener() {}, removeEventListener() {}
+  getElementById: () => null,
+  createElement: () => ({ style: {} }),
+  addEventListener() {},
+  removeEventListener() {}
 };
-globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => "" });
+globalThis.fetch = async () => ({
+  ok: false,
+  status: 401,
+  json: async () => ({}),
+  text: async () => ""
+});
 
-const requireFromStore = createRequire(new URL("../../apps/app-store-pwa/package.json", import.meta.url));
+const requireFromStore = createRequire(
+  new URL("../../apps/app-store-pwa/package.json", import.meta.url)
+);
 const { act, create } = requireFromStore("react-test-renderer");
-const { WorkspacePage } = await import("../../apps/creator-web/src/features/workspace/WorkspacePage.tsx");
+const { WorkspacePage } =
+  await import("../../apps/creator-web/src/features/workspace/WorkspacePage.tsx");
 
 function appFor(vibeTab, setVibeTab) {
   return {
     selectedProject: { id: "project_1", name: "Project One", appType: "Internal app" },
-    currentPrdVersion: undefined, isVibing: false, vibeStatus: "Completed",
-    vibeTab, setVibeTab, setVibePreviewKey() {}, vibeMessages: [], promptDraft: "",
-    setPromptDraft() {}, cancelVibe() {}, handleVibeChat() {}, approveAndImplement() {},
-    vibePreviewKey: 0, projectFiles: [], selectedAttachmentIds: [], isUploadingProjectFile: false,
-    projectFileMessage: "", toggleProjectFileAttachment() {}, handleUploadProjectFiles() {},
-    hasPreview: false, promptQueue: [], removeQueuedPrompt() {}, bugReports: [], addBugReport() {},
-    dismissBugReport() {}, reloadChatHistory() {}
+    currentPrdVersion: undefined,
+    isVibing: false,
+    vibeStatus: "Completed",
+    vibeTab,
+    setVibeTab,
+    setVibePreviewKey() {},
+    vibeMessages: [],
+    promptDraft: "",
+    setPromptDraft() {},
+    cancelVibe() {},
+    handleVibeChat() {},
+    approveAndImplement() {},
+    vibePreviewKey: 0,
+    projectFiles: [],
+    selectedAttachmentIds: [],
+    isUploadingProjectFile: false,
+    projectFileMessage: "",
+    toggleProjectFileAttachment() {},
+    handleUploadProjectFiles() {},
+    hasPreview: false,
+    promptQueue: [],
+    removeQueuedPrompt() {},
+    bugReports: [],
+    addBugReport() {},
+    dismissBugReport() {},
+    reloadChatHistory() {},
+    visiblePrdSections: [],
+    visibleVersionRows: [],
+    prdMessage: "",
+    handleConfirmPrdBaseline() {},
+    handleGeneratePrdDraft() {},
+    isGeneratingPrdDraft: false
   };
 }
 
@@ -40,15 +80,128 @@ test("mobile selection and desktop tabs keep the selected Workspace panel synchr
     return React.createElement(WorkspacePage, { app: appFor(vibeTab, setVibeTab) });
   }
   let renderer;
-  await act(async () => { renderer = create(React.createElement(Harness)); });
+  await act(async () => {
+    renderer = create(React.createElement(Harness));
+  });
   const workspaceBody = () => renderer.root.findByProps({ className: "vibe-live-body" });
   const switcher = renderer.root.findByProps({ "aria-label": "Workspace panels" });
-  const codeButton = switcher.findAllByType("button").find((button) => button.children.includes("Code"));
+  const codeButton = switcher
+    .findAllByType("button")
+    .find((button) => button.children.includes("Code"));
   await act(async () => codeButton.props.onClick());
   assert.equal(workspaceBody().props["data-workspace-view"], "code");
   assert.equal(codeButton.props["aria-pressed"], true);
 
-  const databaseTab = renderer.root.findAll((node) => node.props.role === "tab").find((tab) => tab.children.includes("Database"));
+  const databaseTab = renderer.root
+    .findAll((node) => node.props.role === "tab")
+    .find((tab) => tab.children.includes("Database"));
   await act(async () => databaseTab.props.onClick());
   assert.equal(workspaceBody().props["data-workspace-view"], "database");
+});
+
+test("PRD and History do not announce Preview as selected and Preview remains selectable", async () => {
+  function Harness() {
+    const [vibeTab, setVibeTab] = useState("preview");
+    return React.createElement(WorkspacePage, { app: appFor(vibeTab, setVibeTab) });
+  }
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(Harness));
+  });
+  const tabNamed = (name) =>
+    renderer.root
+      .findAll((node) => node.props.role === "tab")
+      .find((tab) => tab.children.includes(name));
+  const switcherButtons = () =>
+    renderer.root.findByProps({ "aria-label": "Workspace panels" }).findAllByType("button");
+  const pressedLabels = () =>
+    switcherButtons()
+      .filter((button) => button.props["aria-pressed"])
+      .flatMap((button) => button.children);
+
+  await act(async () => tabNamed("PRD").props.onClick());
+  assert.deepEqual(pressedLabels(), []);
+  assert.ok(renderer.root.findByProps({ className: "vibe-prd-panel" }));
+
+  await act(async () => tabNamed("History").props.onClick());
+  assert.deepEqual(pressedLabels(), []);
+  assert.match(renderer.root.findByProps({ role: "status" }).children.join(""), /No versions yet/);
+
+  const previewButton = switcherButtons().find((button) => button.children.includes("Preview"));
+  await act(async () => previewButton.props.onClick());
+  assert.deepEqual(pressedLabels(), ["Preview"]);
+});
+
+test("a detected bug creates an English fix draft through BugReportBox and the composer", async () => {
+  const bug = {
+    signature: "runtime:save",
+    source: "preview-runtime",
+    file: "src/features/save.ts",
+    message: "Save button throws when the title is empty"
+  };
+  function Harness() {
+    const [draft, setDraft] = useState("");
+    const [messages, setMessages] = useState([]);
+    const app = {
+      ...appFor("preview", () => {}),
+      promptDraft: draft,
+      setPromptDraft: setDraft,
+      vibeMessages: messages,
+      bugReports: [bug],
+      handleVibeChat() {
+        setMessages([{ id: "bug-request", role: "user", text: draft, actions: [] }]);
+        setDraft("");
+      }
+    };
+    return React.createElement(WorkspacePage, { app });
+  }
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(Harness));
+  });
+  const fixButton = renderer.root
+    .findAllByType("button")
+    .find((button) => button.children.some((child) => child === "Fix bug"));
+  await act(async () => fixButton.props.onClick());
+  const composer = renderer.root.findByProps({
+    "aria-label": "Describe the change you want to make"
+  });
+  assert.match(composer.props.value, /^Fix this bug/);
+  assert.match(composer.props.value, /Save button throws when the title is empty/);
+  assert.match(composer.props.value, /preview-runtime/);
+  assert.match(composer.props.value, /src\/features\/save\.ts/);
+  assert.doesNotMatch(composer.props.value, /[\u0E00-\u0E7F]/);
+
+  const send = renderer.root.findByProps({ "aria-label": "Send prompt" });
+  await act(async () => send.props.onClick());
+  const userBubble = renderer.root.findByProps({
+    className: "vibe-message vibe-message-user vibe-turn-current"
+  });
+  assert.match(userBubble.children.join(""), /Fix this bug/);
+  assert.doesNotMatch(userBubble.children.join(""), /[\u0E00-\u0E7F]/);
+});
+
+test("the attachment control is a keyboard-reachable native button wired to its file input", async () => {
+  let inputClicks = 0;
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(WorkspacePage, { app: appFor("preview", () => {}) }), {
+      createNodeMock(element) {
+        if (element.type === "input" && element.props.type === "file") {
+          return {
+            click() {
+              inputClicks += 1;
+            }
+          };
+        }
+        return null;
+      }
+    });
+  });
+  const attach = renderer.root.findByProps({ "aria-label": "Attach files" });
+  assert.equal(attach.type, "button");
+  assert.equal(attach.props.type, "button");
+  assert.notEqual(attach.props.tabIndex, -1);
+  await act(async () => attach.props.onClick());
+  assert.equal(inputClicks, 1);
 });

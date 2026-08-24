@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { mergeBugReports, buildFixMessage } = await import(
-  "../../apps/creator-web/src/features/workspace/vibe-bugs.ts"
-);
+const { mergeBugReports, buildFixMessage } =
+  await import("../../apps/creator-web/src/features/workspace/vibe-bugs.ts");
 
 test("bug reports merge by signature — a repeat updates instead of duplicating", () => {
   const current = [{ signature: "s1", source: "runtime", message: "boom" }];
@@ -22,10 +21,13 @@ test("Fix bug pre-fills a scoped, history-friendly fix request", () => {
     message: "Cannot read properties of undefined",
     file: "app/page.tsx"
   });
-  assert.match(message, /แก้ bug/);
+  assert.match(message, /Fix this bug/);
   assert.match(message, /Cannot read properties of undefined/);
   assert.match(message, /app\/page\.tsx/);
-  assert.match(message, /ไม่กระทบส่วนอื่น/);
+  assert.match(message, /relay/);
+  assert.match(message, /avoiding unrelated changes/);
+  assert.doesNotMatch(message, /[\u0E00-\u0E7F]/);
   const noFile = buildFixMessage({ signature: "s3", source: "build", message: "TS1005" });
-  assert.doesNotMatch(noFile, /ไฟล์ undefined/);
+  assert.match(noFile, /build/);
+  assert.doesNotMatch(noFile, /undefined/);
 });

@@ -16,7 +16,11 @@ export function mergeBugReports(current: BugReport[], incoming: BugReport[]): Bu
   return [...merged.values()];
 }
 
-export function buildFixMessage(bug: BugReport): string {
-  const location = bug.file ? ` (ไฟล์ ${bug.file})` : "";
-  return `แก้ bug นี้โดยแก้เฉพาะจุดที่เกี่ยวข้อง ไม่กระทบส่วนอื่น: ${bug.message}${location}`;
+export function createBugFixPrompt(bug: BugReport): string {
+  const context = [`source: ${bug.source}`, bug.file ? `file: ${bug.file}` : ""]
+    .filter(Boolean)
+    .join("; ");
+  return `Fix this bug by changing only the relevant code and avoiding unrelated changes: ${bug.message} (${context})`;
 }
+
+export const buildFixMessage = createBugFixPrompt;

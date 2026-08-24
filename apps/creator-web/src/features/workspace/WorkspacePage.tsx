@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronLeft, Plus, RotateCw, Send, Square } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, RotateCw, Send, Square } from "lucide-react";
 import { Button, Tabs, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
@@ -11,6 +11,7 @@ import { VibeUserBubble } from "./VibeUserBubble";
 import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
+import { WorkspaceAttachmentButton } from "./WorkspaceAttachmentButton";
 import { buildQuickMessages } from "./quick-messages";
 import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
@@ -18,6 +19,7 @@ import { extractQuestions, stripQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
+import { currentWorkspaceTurnStart } from "./workspace-turn";
 import { usePreviewGuards } from "./use-preview-guards";
 import { usePreviewAuthorization } from "./use-preview-authorization";
 import type { useCreatorApp } from "@/app/use-creator-app";
@@ -57,7 +59,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     reloadChatHistory
   } = app;
   const [showPublish, setShowPublish] = useState(false);
-  const [mobileView, setMobileView] = useState<WorkspaceView>("conversation");
+  const [mobileView, setMobileView] = useState<WorkspaceView | null>("conversation");
   const threadRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const handleThreadScroll = () => {
@@ -90,13 +92,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   });
   const selectTab = (tab: typeof vibeTab) => {
     setVibeTab(tab);
-    setMobileView(tab === "code" || tab === "database" ? tab : "preview");
+    setMobileView(tab === "prd" || tab === "history" ? null : tab);
   };
   const selectMobileView = (view: WorkspaceView) => {
     setMobileView(view);
     if (view !== "conversation") setVibeTab(view);
   };
-  const currentTurnStart = Math.max(0, vibeMessages.length - 2);
+  const currentTurnStart = currentWorkspaceTurnStart(vibeMessages);
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
@@ -168,7 +170,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </Button>
         ))}
       </nav>
-      <div className="vibe-live-body" data-workspace-view={mobileView}>
+      <div className="vibe-live-body" data-workspace-view={mobileView ?? "supporting"}>
         <div className="vibe-live-chat-panel">
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && (
@@ -186,7 +188,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 <VibeUserBubble
                   key={message.id}
                   text={message.text}
-                  className={messageIndex >= currentTurnStart ? "vibe-turn-current" : "vibe-turn-compact"}
+                  className={
+                    messageIndex >= currentTurnStart ? "vibe-turn-current" : "vibe-turn-compact"
+                  }
                 />
               ) : (
                 <div
@@ -309,19 +313,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 rows={1}
               />
               <div className="vibe-composer-footer">
-                <label className="vibe-composer-attach" title="Attach files" aria-label="Attach files">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(event) => {
-                      if (event.currentTarget.files)
-                        void handleUploadProjectFiles(event.currentTarget.files);
-                      event.currentTarget.value = "";
-                    }}
-                    disabled={isUploadingProjectFile}
-                  />
-                  <Plus size={18} />
-                </label>
+                <WorkspaceAttachmentButton
+                  disabled={isUploadingProjectFile}
+                  onFiles={(files) => void handleUploadProjectFiles(files)}
+                />
                 <div className="vibe-composer-right">
                   {isVibing ? (
                     <Button
