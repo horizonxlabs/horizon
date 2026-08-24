@@ -44,7 +44,10 @@ export function DataTable<Row extends Record<string, ReactNode>>({
   emptyMessage?: ReactNode;
 }) {
   return (
-    <div className="table-wrap ds-table-wrap" role="region" aria-label={ariaLabel} tabIndex={0}>
+    <div
+      className="table-wrap ds-table-wrap"
+      {...(ariaLabel ? { role: "region", "aria-label": ariaLabel, tabIndex: 0 } : {})}
+    >
       <table className="ds-data-table">
         <thead>
           <tr>

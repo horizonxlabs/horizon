@@ -48,10 +48,22 @@ test("DataTable exposes a labeled scroll region and contextual empty state", () 
   assert.match(html, /No members have access yet/);
 });
 
+test("DataTable leaves existing unlabeled callers out of the tab order", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DataTable, {
+      columns: [{ key: "name", label: "Name" }],
+      rows: []
+    })
+  );
+  assert.doesNotMatch(html, /role="region"/);
+  assert.doesNotMatch(html, /tabindex="0"/);
+});
+
 test("Button supports a danger-outline action hierarchy", () => {
   const html = renderToStaticMarkup(
     React.createElement(Button, { variant: "dangerOutline" }, "Reject")
   );
   assert.match(html, /text-danger/);
   assert.match(html, /border-danger/);
+  assert.match(html, /max-md:min-h-\[44px\]/);
 });

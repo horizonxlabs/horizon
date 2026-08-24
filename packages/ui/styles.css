@@ -207,20 +207,17 @@ body {
 }
 
 @media (min-width: 769px) {
-  aside > div:has(.creator-sidebar-logo) {
+  .app-shell-brand:has(.creator-sidebar-logo) {
     justify-content: center;
     position: relative;
   }
 
-  aside > div:has(.creator-sidebar-logo) > button[aria-label="Collapse sidebar"] {
+  .app-shell-brand:has(.creator-sidebar-logo) > .app-shell-sidebar-toggle {
     position: absolute;
     right: 4px;
   }
 
-  .app-shell-collapsed
-    aside
-    > div:has(.creator-sidebar-logo)
-    > button[aria-label="Expand sidebar"] {
+  .app-shell-collapsed .app-shell-brand:has(.creator-sidebar-logo) > .app-shell-sidebar-toggle {
     position: static;
   }
 }

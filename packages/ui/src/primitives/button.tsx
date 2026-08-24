@@ -11,7 +11,8 @@ const button = cva(
         secondary: "bg-surface text-body border border-border shadow-button hover:bg-surface-muted",
         ghost: "bg-transparent text-primary hover:bg-primary-soft",
         danger: "bg-danger-strong text-on-primary shadow-button hover:opacity-90",
-        dangerOutline: "border border-danger bg-surface text-danger hover:bg-danger-bg focus-visible:ring-danger-bg"
+        dangerOutline:
+          "border border-danger bg-surface text-danger hover:bg-danger-bg focus-visible:ring-danger-bg max-md:min-h-[44px]"
       },
       size: {
         sm: "h-8 px-3 text-sm",

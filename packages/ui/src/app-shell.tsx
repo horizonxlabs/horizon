@@ -153,6 +153,7 @@ export function AppShell({
         {/* Brand header */}
         <div
           className={cn(
+            "app-shell-brand",
             "flex items-center gap-[10px] px-1",
             logo ? (sidebarContext ? "pt-1.5 pb-1" : "pt-1.5 pb-[18px]") : "pt-1 pb-4",
             collapsed &&
@@ -196,6 +197,7 @@ export function AppShell({
           <button
             type="button"
             className={cn(
+              "app-shell-sidebar-toggle",
               "rounded-control ml-auto inline-flex h-[30px] min-h-[30px] flex-none items-center justify-center p-0 transition-colors max-md:hidden",
               collapsed ? "ml-0 w-10" : "w-[30px]",
               isLight
