@@ -1,11 +1,25 @@
-import { DecisionPanel, SectionCard, ToneBadge } from "@evcp/ui";
+import { Button, SectionCard, ToneBadge } from "@evcp/ui";
 import { RotateCcw } from "lucide-react";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorShell } from "@/features/projects";
-import { useFrontendVersions } from "./use-frontend-versions";
+import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { useFrontendVersions, type FrontendVersionsClient } from "./use-frontend-versions";
 
-export function VersionsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
-  const versions = useFrontendVersions(app.selectedProject.id);
+const checkpointDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
+
+function formatCheckpointDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : checkpointDate.format(date);
+}
+
+export function VersionsPage({
+  app,
+  client
+}: {
+  app: ReturnType<typeof useCreatorApp>;
+  client?: FrontendVersionsClient;
+}) {
+  const versions = useFrontendVersions(app.selectedProject.id, client);
   return (
     <CreatorShell
       app={app}
@@ -15,54 +29,88 @@ export function VersionsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
             eyebrow="Frontend Checkpoints"
             title={`Versions: ${app.selectedProject.name}`}
             action={
-              <button
+              <Button
                 type="button"
-                className="ghost-button"
+                variant="ghost"
+                className="max-md:min-h-11"
                 onClick={() => void versions.refresh()}
                 disabled={versions.status === "loading"}
               >
                 <RotateCcw size={14} /> Refresh
-              </button>
+              </Button>
             }
           >
-            <p role="status">{versions.message}</p>
-            {versions.status === "error" ? (
-              <DecisionPanel
-                tone="warning"
-                badge="Platform API unavailable"
-                title="Frontend history is unavailable"
-                lines={["No local or demo checkpoints are shown."]}
-              />
-            ) : null}
-            <div className="creator-ticket-list">
-              {versions.timeline?.checkpoints.map((checkpoint) => (
-                <article key={checkpoint.id}>
-                  <div>
-                    <strong>{checkpoint.version}</strong>
-                    <span>{checkpoint.changeSummary}</span>
-                    <span>
-                      {checkpoint.changedAreas.join(", ") || "No changed areas reported"} ·{" "}
-                      {checkpoint.createdAt}
-                    </span>
-                  </div>
-                  <ToneBadge tone={checkpoint.status === "current" ? "success" : "info"}>
-                    {checkpoint.status}
-                  </ToneBadge>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => void versions.restoreCheckpoint(checkpoint.id)}
-                    disabled={
-                      checkpoint.status === "current" ||
-                      versions.restoringCheckpointId !== undefined
+            {versions.status === "loading" ? (
+              <CreatorState kind="loading" title="Loading checkpoints" />
+            ) : versions.status === "error" ? (
+              <CreatorState
+                kind="unavailable"
+                title={
+                  versions.failedRestoreCheckpointId
+                    ? "Checkpoint could not be restored"
+                    : "Checkpoints could not be loaded"
+                }
+                description="Existing frontend versions are unchanged."
+                action={
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      void (versions.failedRestoreCheckpointId
+                        ? versions.restoreCheckpoint(versions.failedRestoreCheckpointId)
+                        : versions.refresh())
                     }
                   >
-                    <RotateCcw size={14} />
-                    {versions.restoringCheckpointId === checkpoint.id ? "Restoring…" : "Restore"}
-                  </button>
-                </article>
-              ))}
-            </div>
+                    Retry
+                  </Button>
+                }
+                technicalDetails={versions.message}
+              />
+            ) : versions.timeline ? (
+              <>
+                {versions.lastRestore ? (
+                  <CreatorStatusMessage tone="success">
+                    Frontend restored from {versions.lastRestore.restoredFrom.version}.
+                  </CreatorStatusMessage>
+                ) : null}
+                <div className="creator-ticket-list">
+                  {versions.timeline.checkpoints.map((checkpoint) => (
+                    <article key={checkpoint.id}>
+                      <div>
+                        <strong>{checkpoint.version}</strong>
+                        <span>{checkpoint.changeSummary}</span>
+                        <span>
+                          {checkpoint.changedAreas.join(", ") || "No changed areas reported"} ·{" "}
+                          {formatCheckpointDate(checkpoint.createdAt)}
+                        </span>
+                      </div>
+                      <ToneBadge tone={checkpoint.status === "current" ? "success" : "info"}>
+                        {checkpoint.status === "current" ? "Current" : "Available"}
+                      </ToneBadge>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => void versions.restoreCheckpoint(checkpoint.id)}
+                        disabled={
+                          checkpoint.status === "current" ||
+                          versions.restoringCheckpointId !== undefined
+                        }
+                      >
+                        <RotateCcw size={14} />
+                        {versions.restoringCheckpointId === checkpoint.id
+                          ? "Restoring…"
+                          : "Restore"}
+                      </Button>
+                    </article>
+                  ))}
+                </div>
+              </>
+            ) : versions.lastRestore ? (
+              <CreatorStatusMessage tone="warning" technicalDetails={versions.message}>
+                Frontend restored. Checkpoint history could not be refreshed.
+              </CreatorStatusMessage>
+            ) : (
+              <CreatorState kind="empty" title="No checkpoints yet" />
+            )}
           </SectionCard>
         </section>
       }

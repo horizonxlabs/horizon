@@ -2,15 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FrontendCheckpointTimelineDto, FrontendRestoreResultDto } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
-type FrontendVersionsState = {
+export type FrontendVersionsState = {
   status: "loading" | "ready" | "error";
   message: string;
   timeline?: FrontendCheckpointTimelineDto;
   restoringCheckpointId?: string;
+  failedRestoreCheckpointId?: string;
   lastRestore?: FrontendRestoreResultDto;
 };
 
-type FrontendVersionsClient = {
+export type FrontendVersionsClient = {
   getFrontendCheckpoints(projectId: string): Promise<FrontendCheckpointTimelineDto>;
   restoreFrontendCheckpoint(
     projectId: string,
@@ -65,7 +66,8 @@ export async function restoreFrontendVersion(
     const detail = errorMessage(error);
     return {
       status: "error",
-      message: detail ? `Frontend restore failed: ${detail}` : "Frontend restore failed."
+      message: detail ? `Frontend restore failed: ${detail}` : "Frontend restore failed.",
+      failedRestoreCheckpointId: checkpointId
     };
   }
 

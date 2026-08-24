@@ -1,18 +1,27 @@
-import { Button, DataTable, DecisionPanel, Markdown, SectionCard, WorkflowRail } from "@evcp/ui";
+import { Button, DataTable, Markdown, SectionCard, WorkflowRail } from "@evcp/ui";
 import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { CreatorState, CreatorStatusMessage } from "@/shared";
 
 export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     visiblePrdSections,
     visibleVersionRows,
     prdMessage,
+    prdStatus,
+    prdTechnicalDetails,
+    prdErrorSource,
+    prdFeedbackTone,
     currentPrdVersion,
     handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
     isGeneratingPrdDraft
   } = app;
+  const retryPrd = () =>
+    prdErrorSource === "generation"
+      ? handleGeneratePrdDraft()
+      : app.refreshPrdState(app.selectedProject.id);
   return (
     <CreatorShell
       app={app}
@@ -32,57 +41,104 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
             <SectionCard
               eyebrow="PRD Viewer"
               title="Structured PRD Sections"
-              action={currentPrdVersion ? (
-                <Button
-                  variant="primary"
-                  type="button"
-                  disabled={currentPrdVersion.status === "baseline"}
-                  onClick={() => { void handleConfirmPrdBaseline(); }}
-                >
-                  Confirm Baseline
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  type="button"
-                  disabled={isGeneratingPrdDraft}
-                  onClick={() => { void handleGeneratePrdDraft(); }}
-                >
-                  {isGeneratingPrdDraft ? "Generating PRD" : "Generate PRD Draft"}
-                </Button>
-              )}
+              action={
+                currentPrdVersion && prdStatus === "ready" ? (
+                  <Button
+                    variant="primary"
+                    type="button"
+                    disabled={currentPrdVersion.status === "baseline"}
+                    onClick={() => {
+                      void handleConfirmPrdBaseline();
+                    }}
+                  >
+                    Confirm Baseline
+                  </Button>
+                ) : null
+              }
             >
-              <p>{prdMessage}</p>
-              <div className="creator-prd-sections">
-                {visiblePrdSections.map((section) => (
-                  <article id={section.key} key={section.key}>
-                    <span>{section.order}</span>
-                    <div>
-                      <h3>{section.title}</h3>
-                      <div className="creator-prd-markdown">
-                        <Markdown text={section.body} />
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              {!visiblePrdSections.length && <DecisionPanel tone="warning" badge="API required" title="No local PRD fallback" lines={["The platform did not return a PRD record for this project."]} />}
+              {isGeneratingPrdDraft ? (
+                <CreatorState
+                  kind="loading"
+                  title="Generating PRD draft"
+                  description="This can take a few minutes."
+                />
+              ) : prdStatus === "loading" ? (
+                <CreatorState kind="loading" title="Loading PRD" />
+              ) : prdStatus === "error" ? (
+                <CreatorState
+                  kind={prdErrorSource === "generation" ? "error" : "unavailable"}
+                  title={prdMessage}
+                  description={
+                    prdErrorSource === "generation"
+                      ? "No draft was created."
+                      : "Existing PRD versions are unchanged."
+                  }
+                  action={
+                    <Button
+                      variant="secondary"
+                      onClick={() => void retryPrd().catch(() => undefined)}
+                    >
+                      Retry
+                    </Button>
+                  }
+                  technicalDetails={prdTechnicalDetails}
+                />
+              ) : prdStatus === "empty" ? (
+                <CreatorState
+                  kind="empty"
+                  title="No PRD draft yet"
+                  description="Generate a draft to review requirements and confirm a baseline."
+                  action={
+                    <Button variant="primary" onClick={() => void handleGeneratePrdDraft()}>
+                      Generate PRD Draft
+                    </Button>
+                  }
+                />
+              ) : (
+                <>
+                  {prdFeedbackTone ? (
+                    <CreatorStatusMessage
+                      tone={prdFeedbackTone}
+                      technicalDetails={prdTechnicalDetails}
+                    >
+                      {prdMessage}
+                    </CreatorStatusMessage>
+                  ) : null}
+                  <div className="creator-prd-sections">
+                    {visiblePrdSections.map((section) => (
+                      <article id={section.key} key={section.key}>
+                        <span>{section.order}</span>
+                        <div>
+                          <h3>{section.title}</h3>
+                          <div className="creator-prd-markdown">
+                            <Markdown text={section.body} />
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
             </SectionCard>
-            <SectionCard eyebrow="Version History" title="PRD Version History">
-              <DataTable
-                columns={[
-                  { key: "version", label: "Version" },
-                  {
-                    key: "status",
-                    label: "Status",
-                    tone: (value) => (value === "baseline" ? "success" : "warning")
-                  },
-                  { key: "summary", label: "Summary" },
-                  { key: "author", label: "Author" }
-                ]}
-                rows={visibleVersionRows}
-              />
-            </SectionCard>
+            {prdStatus === "ready" ? (
+              <SectionCard eyebrow="Version History" title="PRD Version History">
+                <DataTable
+                  ariaLabel="PRD version history"
+                  columns={[
+                    { key: "version", label: "Version" },
+                    {
+                      key: "status",
+                      label: "Status",
+                      tone: (value) => (value === "baseline" ? "success" : "warning")
+                    },
+                    { key: "summary", label: "Summary" },
+                    { key: "author", label: "Author" }
+                  ]}
+                  rows={visibleVersionRows}
+                  emptyMessage="No earlier PRD versions."
+                />
+              </SectionCard>
+            ) : null}
           </div>
         </section>
       }

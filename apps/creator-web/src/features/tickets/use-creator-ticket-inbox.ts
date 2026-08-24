@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import { refreshCreatorTicketInbox } from "./ticket-actions";
 
+export type CreatorTicketInboxClient = {
+  request<T>(path: string): Promise<T>;
+};
+
 export type CreatorTicketInboxItem = {
   id: string;
   ticketNumber: string;
@@ -26,10 +30,11 @@ export type CreatorTicketInboxItem = {
   actions: Array<"reply" | "convert_to_prd_change" | "convert_to_ai_prompt" | "resolve">;
 };
 
-export function useCreatorTicketInbox(projectId: string) {
+export function useCreatorTicketInbox(projectId: string, client?: CreatorTicketInboxClient) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [items, setItems] = useState<CreatorTicketInboxItem[]>([]);
   const [message, setMessage] = useState("Loading ticket inbox from Platform API.");
+  const [technicalDetails, setTechnicalDetails] = useState<string>();
   const requestId = useRef(0);
   const refresh = useCallback(async (): Promise<void> => {
     const activeRequest = ++requestId.current;
@@ -37,12 +42,17 @@ export function useCreatorTicketInbox(projectId: string) {
       setStatus("error");
       setItems([]);
       setMessage("Select a project to view its ticket inbox.");
+      setTechnicalDetails(undefined);
       return;
     }
     setStatus("loading");
     setItems([]);
+    setTechnicalDetails(undefined);
     try {
-      const result = await refreshCreatorTicketInbox(projectId, createCreatorPlatformClient());
+      const result = await refreshCreatorTicketInbox(
+        projectId,
+        client ?? createCreatorPlatformClient()
+      );
       if (activeRequest !== requestId.current) return;
       setItems(result);
       setStatus("ready");
@@ -55,10 +65,11 @@ export function useCreatorTicketInbox(projectId: string) {
       if (activeRequest !== requestId.current) return;
       setItems([]);
       setStatus("error");
-      setMessage("Ticket inbox is unavailable. No local ticket records are shown.");
+      setMessage("Ticket service is unavailable.");
+      setTechnicalDetails(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [projectId]);
+  }, [client, projectId]);
 
   useEffect(() => {
     void refresh().catch(() => undefined);
@@ -67,5 +78,5 @@ export function useCreatorTicketInbox(projectId: string) {
     };
   }, [refresh]);
 
-  return { status, items, message, refresh };
+  return { status, items, message, technicalDetails, refresh };
 }
