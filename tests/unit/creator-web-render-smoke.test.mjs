@@ -122,7 +122,7 @@ const ROUTE_CASES = [
   ["project", "/creator/projects/project-1/project", /Project: Project One/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
   ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
-  ["database", "/creator/projects/project-1/database", /Project database/],
+  ["database", "/creator/projects/project-1/database", /Schema and records/],
   ["versions", "/creator/projects/project-1/versions", /Frontend versions/],
   ["users", "/creator/projects/project-1/users", /App users roles/],
   ["publish", "/creator/projects/project-1/publish", /Publish app/],
@@ -386,4 +386,11 @@ test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
     })
   );
   assert.equal(typeof html, "string");
+});
+
+test("DatabasePage uses the available width without repeating the project name", () => {
+  const html = renderWithHook((app) => React.createElement(DatabasePage, { app }));
+  assert.match(html, /creator-database-page/);
+  assert.match(html, /Schema and records/);
+  assert.doesNotMatch(html, /Database: Project One/);
 });

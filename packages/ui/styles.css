@@ -8215,6 +8215,21 @@ button:disabled {
   overflow: hidden;
 }
 
+.creator-database-page {
+  max-width: none;
+  width: 100%;
+}
+
+.creator-database-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.creator-database-card > :last-child {
+  min-height: 560px;
+  padding: 0;
+}
+
 .hz-db-empty {
   align-items: center;
   color: var(--evcp-color-muted, #64748b);
@@ -8234,6 +8249,13 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   padding: 10px 8px;
+}
+
+.hz-db-tables:focus-visible,
+.hz-db-scroll:focus-visible,
+.hz-db-table-item:focus-visible {
+  outline: 2px solid var(--evcp-color-primary, #2563eb);
+  outline-offset: -2px;
 }
 
 .hz-db-schema {
@@ -8311,6 +8333,8 @@ button:disabled {
 }
 
 .hz-db-scroll {
+  display: flex;
+  flex: 1;
   min-height: 0;
   overflow: auto;
 }
@@ -8377,12 +8401,9 @@ button:disabled {
   font-size: 11.5px;
 }
 
-.hz-db-error {
-  background: var(--evcp-color-danger-bg, #fee2e2);
-  border-bottom: 1px solid var(--evcp-color-border, #e2e8f0);
-  color: var(--evcp-color-danger-text, #991b1b);
-  font-size: 12.5px;
-  padding: 8px 16px;
+.hz-db-data > .creator-state,
+.hz-db-data > .creator-status-message {
+  margin: 16px;
 }
 
 .hz-db-rdg {
@@ -8390,6 +8411,19 @@ button:disabled {
   border: 0;
   flex: 1;
   min-height: 0;
+}
+
+.hz-db-rdg .rdg-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.hz-db-object-value {
+  color: var(--evcp-color-text, #0f172a);
+  font-family: var(--evcp-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
 }
 
 .hz-db-addrow {
@@ -8425,6 +8459,64 @@ button:disabled {
   display: flex;
   gap: 6px;
   margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .creator-database-card > :last-child {
+    min-height: 520px;
+  }
+
+  .hz-db {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .hz-db-tables {
+    border-bottom: 1px solid var(--evcp-color-border, #e2e8f0);
+    border-right: 0;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: inline proximity;
+  }
+
+  .hz-db-schema,
+  .hz-db-table-item {
+    flex: 0 0 auto;
+  }
+
+  .hz-db-schema {
+    align-content: center;
+    max-width: 150px;
+    padding-block: 8px;
+  }
+
+  .hz-db-table-item {
+    min-height: 44px;
+    min-width: 132px;
+    scroll-snap-align: start;
+  }
+
+  .hz-db-data-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .hz-db-actions {
+    margin-left: 0;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .hz-db-actions button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .hz-db-addrow input,
+  .hz-db-addrow-actions button {
+    min-height: 44px;
+  }
 }
 
 /* --- Creator native login (Creator Sign In) --- */

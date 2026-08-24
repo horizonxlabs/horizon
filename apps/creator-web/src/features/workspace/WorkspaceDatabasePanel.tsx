@@ -8,6 +8,8 @@ import {
   type Column,
   type RowsChangeData
 } from "react-data-grid";
+import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { formatDatabaseValue } from "./format-database-value";
 import {
   fetchProjectDbSchema,
   fetchProjectDbTable,
@@ -17,13 +19,6 @@ import {
 } from "./project-db";
 
 type Row = Record<string, unknown>;
-
-function formatCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
 
 export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [schema, setSchema] = useState<ProjectDbSchema | undefined>(undefined);
@@ -38,6 +33,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [adding, setAdding] = useState(false);
   const [newRow, setNewRow] = useState<Record<string, string>>({});
+  const [schemaRetryKey, setSchemaRetryKey] = useState(0);
 
   const pkColumns = useMemo(
     () => columns.filter((c) => c.isPrimaryKey).map((c) => c.name),
@@ -90,7 +86,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, schemaRetryKey]);
 
   useEffect(() => {
     if (activeTable) void loadTable(activeTable);
@@ -103,7 +99,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
       resizable: true,
       editable: editable && !column.isPrimaryKey,
       renderEditCell: editable && !column.isPrimaryKey ? renderTextEditor : undefined,
-      renderCell: ({ row }) => formatCell(row[column.name])
+      renderCell: ({ row }) => formatDatabaseValue(row[column.name])
     }));
     return editable ? [SelectColumn, ...dataColumns] : dataColumns;
   }, [columns, editable]);
@@ -145,7 +141,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
       if (value !== "") values[key] = value;
     }
     if (Object.keys(values).length === 0) {
-      setWriteError("Fill in at least one field");
+      setWriteError("Fill in at least one field.");
       return;
     }
     try {
@@ -158,21 +154,50 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     }
   }
 
-  if (schemaError) return <div className="hz-db-empty">Couldn't load schema: {schemaError}</div>;
-  if (!schema) return <div className="hz-db-empty">Loading schema…</div>;
+  if (schemaError) {
+    return (
+      <CreatorState
+        kind="unavailable"
+        title="Database could not be loaded"
+        description="The database schema is temporarily unavailable. Your project data is unchanged."
+        action={
+          <Button variant="secondary" type="button" onClick={() => setSchemaRetryKey((key) => key + 1)}>
+            Retry
+          </Button>
+        }
+        technicalDetails={schemaError}
+      />
+    );
+  }
+  if (!schema) {
+    return (
+      <CreatorState
+        kind="loading"
+        title="Loading database schema"
+        description="Preparing the tables available to this project."
+      />
+    );
+  }
   if (schema.tables.length === 0) {
-    return <div className="hz-db-empty">No tables in schema “{schema.schema}”</div>;
+    return (
+      <CreatorState
+        kind="empty"
+        title="No tables yet"
+        description="Create a database table in Workspace to start storing project records."
+      />
+    );
   }
 
   return (
     <div className="hz-db">
-      <aside className="hz-db-tables" aria-label="Tables">
+      <aside className="hz-db-tables" aria-label="Database tables" role="region" tabIndex={0}>
         <div className="hz-db-schema">{schema.schema}</div>
         {schema.tables.map((table) => (
           <button
             type="button"
             key={table.name}
             className={`hz-db-table-item ${table.name === activeTable ? "is-active" : ""}`.trim()}
+            aria-pressed={table.name === activeTable}
             onClick={() => setActiveTable(table.name)}
           >
             <strong>{table.name}</strong>
@@ -244,23 +269,56 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
             </div>
           </div>
         ) : null}
-        {writeError ? <div className="hz-db-error">Write failed: {writeError}</div> : null}
+        {writeError ? (
+          <CreatorStatusMessage tone="danger" technicalDetails={writeError}>
+            <strong>Write failed.</strong> Your existing records remain available.
+          </CreatorStatusMessage>
+        ) : null}
         {dataError ? (
-          <div className="hz-db-empty">Couldn't load data: {dataError}</div>
-        ) : loadingRows ? (
-          <div className="hz-db-empty">Loading {activeTable}…</div>
-        ) : rows.length === 0 ? (
-          <div className="hz-db-empty">No rows in this table</div>
-        ) : (
-          <DataGrid
-            className="hz-db-rdg rdg-light"
-            columns={gridColumns}
-            rows={rows}
-            rowKeyGetter={rowKeyGetter}
-            onRowsChange={handleRowsChange}
-            selectedRows={selected}
-            onSelectedRowsChange={setSelected}
+          <CreatorState
+            kind="unavailable"
+            title="Database could not be loaded"
+            description="Records for this table are temporarily unavailable."
+            action={
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => activeTable && void loadTable(activeTable)}
+              >
+                Retry
+              </Button>
+            }
+            technicalDetails={dataError}
           />
+        ) : loadingRows ? (
+          <CreatorState
+            kind="loading"
+            title="Loading records"
+            description={`Retrieving records from ${activeTable}.`}
+          />
+        ) : rows.length === 0 ? (
+          <CreatorState
+            kind="empty"
+            title="No records yet"
+            description="Add the first record when this table is ready for project data."
+          />
+        ) : (
+          <div
+            className="hz-db-scroll"
+            role="region"
+            aria-label={`Records in ${activeTable}`}
+            tabIndex={0}
+          >
+            <DataGrid
+              className="hz-db-rdg rdg-light"
+              columns={gridColumns}
+              rows={rows}
+              rowKeyGetter={rowKeyGetter}
+              onRowsChange={handleRowsChange}
+              selectedRows={selected}
+              onSelectedRowsChange={setSelected}
+            />
+          </div>
         )}
       </div>
     </div>
