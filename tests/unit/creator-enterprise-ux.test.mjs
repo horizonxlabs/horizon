@@ -228,6 +228,7 @@ test("Projects landing renders readable metadata and an English creation wizard"
   assert.match(html, /In review/);
   assert.match(html, /Created/);
   assert.match(html, /Jan 2, 2026/);
+  assert.match(html, /class="hz-card-app-type">Workflow/);
   assert.match(html, /Application type/);
   assert.match(html, /Business problem/);
   assert.match(html, /Create project/);

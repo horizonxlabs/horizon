@@ -7709,8 +7709,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.hz-card-meta span {
-  color: #94a3b8;
+.hz-card-app-type {
+  color: #475569;
   display: block;
   font-size: 12px;
   overflow: hidden;
@@ -8115,6 +8115,10 @@ button:disabled {
   .hz-prompt-cta,
   .hz-search {
     transition: none;
+  }
+
+  .hz-card:hover {
+    transform: none;
   }
 
   .hz-spinner {

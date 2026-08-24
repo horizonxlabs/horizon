@@ -28,6 +28,13 @@ function fakeClient({ createError } = {}) {
         if (!row) throw new Error(`missing revision '${where.id}'`);
         Object.assign(row, data);
         return row;
+      },
+      async deleteMany({ where }) {
+        calls.push({ operation: "deleteMany", projectId: where.projectId });
+        const retained = rows.filter((row) => row.projectId !== where.projectId);
+        const count = rows.length - retained.length;
+        rows.splice(0, rows.length, ...retained);
+        return { count };
       }
     },
     async $transaction(operation) {
@@ -114,6 +121,23 @@ test("Prisma deployment queue accepts new ordered writes after flush observes a 
     client.calls.map((call) => call.operation),
     ["create", "create", "update"]
   );
+});
+
+test("Prisma deployment deletion remains gone after flush and reconstruction", async () => {
+  const client = fakeClient();
+  const store = await createPrismaDeploymentStore(undefined, client);
+  const created = store.create(deploymentInput("sha1"));
+  store.updateHealth(created.id, "healthy");
+  await store.flush();
+
+  store.removeProject("p1");
+  assert.deepEqual(store.list("p1"), []);
+  await store.flush();
+
+  const restartedStore = await createPrismaDeploymentStore(undefined, client);
+  assert.deepEqual(restartedStore.list("p1"), []);
+  assert.equal(restartedStore.getCurrent("app", "production"), null);
+  assert.equal(client.calls.at(-1).operation, "deleteMany");
 });
 
 function deploymentInput(commitSha) {

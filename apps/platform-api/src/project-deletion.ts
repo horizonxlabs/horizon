@@ -2,6 +2,30 @@ import { PermissionError, type PlatformUser } from "./platform-services";
 import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
 import type { PlatformRequest, HeaderBag } from "./platform-http-types";
 
+export async function deleteProjectResources(
+  cleanups: Array<() => Promise<void>>
+): Promise<void> {
+  const failures: Error[] = [];
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch (error) {
+      if (error instanceof AggregateError) {
+        failures.push(
+          ...error.errors.map((cause) =>
+            cause instanceof Error ? cause : new Error(String(cause))
+          )
+        );
+      } else {
+        failures.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Project resource cleanup did not finish");
+  }
+}
+
 export async function deletePersistedProject(input: {
   actor: PlatformUser;
   encodedProjectId: string;
@@ -15,15 +39,24 @@ export async function deletePersistedProject(input: {
   if (!project)
     throw new PermissionError(`Role ${input.actor.role} cannot delete project ${projectId}`);
 
-  await input.cleanup(projectId);
-  await input.persistence.deleteProject(input.actor, projectId);
   await input.persistence.recordAudit({
     actorId: input.actor.id,
-    action: "project.deleted",
+    action: "project.deletion_requested",
     resourceType: "project",
     resourceId: projectId,
     metadata: { projectId }
   });
+  await input.cleanup(projectId);
+  await input.persistence.deleteProject(input.actor, projectId);
+  await input.persistence
+    .recordAudit({
+      actorId: input.actor.id,
+      action: "project.deleted",
+      resourceType: "project",
+      resourceId: projectId,
+      metadata: { projectId }
+    })
+    .catch(() => undefined);
   return { id: projectId, deleted: true };
 }
 

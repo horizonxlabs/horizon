@@ -11,6 +11,7 @@ test("project file uploads use a short-lived browser-reachable MinIO presigned U
     clientFactory: () => ({
       async bucketExists() { return false; },
       async makeBucket(bucket) { calls.push({ makeBucket: bucket }); },
+      async removeObject(bucket, objectKey) { calls.push({ removeObject: { bucket, objectKey } }); },
       async presignedPutObject() { throw new Error("internal endpoint must not sign browser URL"); }
     }),
     signingClientFactory: (options) => ({
@@ -30,4 +31,12 @@ test("project file uploads use a short-lived browser-reachable MinIO presigned U
   assert.equal(calls[2].expiry, 900);
   assert.equal(calls[0].makeBucket, "project-file-uploads");
   assert.equal(upload.expiresAt.getTime() - Date.now() > 14 * 60_000, true);
+
+  await issuer.remove("project-file-uploads", "projects/prj_001/requirements.md");
+  assert.deepEqual(calls.at(-1), {
+    removeObject: {
+      bucket: "project-file-uploads",
+      objectKey: "projects/prj_001/requirements.md"
+    }
+  });
 });

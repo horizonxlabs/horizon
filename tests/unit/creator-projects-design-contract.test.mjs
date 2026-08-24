@@ -22,6 +22,15 @@ function mediaBlock(query, requiredSelector) {
   );
 }
 
+function contrastAgainstWhite(hex) {
+  const channels = hex.match(/[\da-f]{2}/gi).map((channel) => Number.parseInt(channel, 16) / 255);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  return 1.05 / (luminance + 0.05);
+}
+
 test("creator projects B1 styles cover studio, status, focus, and responsive layouts", () => {
   for (const selector of [
     ".hz-projects-studio",
@@ -74,6 +83,17 @@ test("creator project status uses neutral shared tokens", () => {
   assert.match(statusRule, /border:\s*1px solid var\(--evcp-color-border\)/);
   assert.match(statusRule, /color:\s*var\(--evcp-color-muted\)/);
   assert.doesNotMatch(statusRule, /--evcp-color-(?:success|warning|danger)/);
+});
+
+test("project-card application metadata meets WCAG AA contrast on white", () => {
+  const metadataRule = declarationBlock(".hz-card-app-type");
+  assert.ok(metadataRule, "missing application metadata declaration block");
+  const color = metadataRule.match(/color:\s*(#[\da-f]{6})/i)?.[1];
+  assert.ok(color, "application metadata must resolve to a concrete color token fallback");
+  assert.ok(
+    contrastAgainstWhite(color) >= 4.5,
+    `${color} application metadata must meet 4.5:1 contrast on white`
+  );
 });
 
 test("creator light sidebar variant has concrete shared declarations", () => {

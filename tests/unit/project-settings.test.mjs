@@ -85,7 +85,7 @@ test("project deletion confirmation is English and preserves failure details", (
         confirmation: "Payroll",
         setConfirmation() {},
         isDeleting: false,
-        errorMessage: "Unable to delete this project. Your project remains unchanged.",
+        errorMessage: "Project deletion did not finish. Some project resources may already have been removed. Retry to complete deletion.",
         errorTechnicalDetails: "Database cleanup timed out"
       }
     })
@@ -93,7 +93,7 @@ test("project deletion confirmation is English and preserves failure details", (
 
   assert.match(html, /Type <strong>Payroll<\/strong> to confirm/);
   assert.match(html, /role="alert"/);
-  assert.match(html, /Unable to delete this project\. Your project remains unchanged\./);
+  assert.match(html, /Project deletion did not finish\. Some project resources may already have been removed\. Retry to complete deletion\./);
   assert.match(html, /Technical details/);
   assert.match(html, /Database cleanup timed out/);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
@@ -133,7 +133,7 @@ test("project deletion failure keeps the project and exposes raw API details", a
 
     assert.equal(
       deletion.errorMessage,
-      "Unable to delete this project. Your project remains unchanged."
+      "Project deletion did not finish. Some project resources may already have been removed. Retry to complete deletion."
     );
     assert.equal(deletion.errorTechnicalDetails, "Database cleanup timed out");
     assert.equal(deletedCount, 0);

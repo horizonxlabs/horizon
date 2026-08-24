@@ -243,14 +243,39 @@ export function createPublishService(deps: PublishServiceDeps) {
     async deleteProject(projectId: string): Promise<void> {
       await withProjectLock(projectId, async () => {
         const deployments = deps.deployments.list(projectId);
+        const failures: Error[] = [];
+        const attempt = async (cleanup: () => Promise<void>): Promise<void> => {
+          try {
+            await cleanup();
+          } catch (error) {
+            failures.push(error instanceof Error ? error : new Error(String(error)));
+          }
+        };
         for (const deployment of deployments) {
-          if (!deployment.containerId) continue;
-          await deps.docker.stopContainer(deployment.containerId).catch(() => undefined);
-          await deps.docker.removeContainer(deployment.containerId);
+          let container: Awaited<ReturnType<typeof deps.docker.inspectContainer>> | undefined;
+          await attempt(async () => {
+            container = await deps.docker.inspectContainer(deployment.containerName);
+          });
+          const containerId =
+            container?.containerId ??
+            (container === undefined ? deployment.containerId : null);
+          if (!containerId) continue;
+          await attempt(() => deps.docker.stopContainer(containerId));
+          await attempt(() => deps.docker.removeContainer(containerId));
+        }
+        if (failures.length > 0) {
+          throw new AggregateError(
+            failures,
+            `Deployment cleanup did not finish for project '${projectId}'`
+          );
         }
         deps.deployments.removeProject(projectId);
         await deps.deployments.flush?.();
-        audit("workspace.deployments_deleted", projectId, { count: deployments.length });
+        try {
+          audit("workspace.deployments_deleted", projectId, { count: deployments.length });
+        } catch {
+          // Deployment cleanup and persistence have completed; audit failure is best effort here.
+        }
       });
     },
 

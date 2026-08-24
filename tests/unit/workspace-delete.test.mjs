@@ -54,17 +54,29 @@ test("deleteWorkspace on unknown project is a no-op (idempotent)", async () => {
   assert.equal(orchestrator.getWorkspace("nope"), null);
 });
 
-test("deleteWorkspace is best-effort: one failing release does not abort the rest", async () => {
+test("deleteWorkspace aggregates failures, attempts every release, and remains retryable", async () => {
   const { orchestrator, deps } = makeOrchestrator();
   await orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
+  const releaseSchema = deps.postgres.releaseSchema;
   deps.postgres.releaseSchema = async () => {
     throw new Error("pg down");
   };
-  await orchestrator.deleteWorkspace("prj-leave-tracker"); // must not throw
+  await assert.rejects(
+    orchestrator.deleteWorkspace("prj-leave-tracker"),
+    (error) =>
+      error instanceof AggregateError &&
+      error.errors.some((cause) => cause instanceof Error && cause.message === "pg down")
+  );
   assert.deepEqual(
     deps.objectStorage.state.buckets,
     [],
     "bucket still released despite pg failure"
   );
-  assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null, "record still dropped");
+  assert.deepEqual(deps.docker.state.containers, [], "container release was still attempted");
+  assert.deepEqual(deps.docker.state.volumes, [], "volume release was still attempted");
+  assert.equal(orchestrator.getWorkspace("prj-leave-tracker")?.projectId, "prj-leave-tracker");
+
+  deps.postgres.releaseSchema = releaseSchema;
+  await orchestrator.deleteWorkspace("prj-leave-tracker");
+  assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null, "retry completed deletion");
 });

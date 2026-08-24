@@ -25,9 +25,10 @@ export type PersistedProjectFile = {
 export interface ProjectFilePersistenceClient {
   projectFileUpload: {
     create(args: { data: PersistedProjectFile }): Promise<PersistedProjectFile>;
-    findMany(args: { where: { projectId: string; archivedAt: null }; orderBy?: { createdAt: "asc" } }): Promise<PersistedProjectFile[]>;
+    findMany(args: { where: { projectId: string; archivedAt?: null }; orderBy?: { createdAt: "asc" } }): Promise<PersistedProjectFile[]>;
     findUnique(args: { where: { id: string } }): Promise<PersistedProjectFile | null>;
     update(args: { where: { id: string }; data: Partial<PersistedProjectFile> }): Promise<PersistedProjectFile>;
+    deleteMany(args: { where: { projectId: string } }): Promise<{ count: number }>;
   };
 }
 
@@ -41,6 +42,15 @@ export class PrismaProjectFileRepository {
 
   async list(projectId: string): Promise<PersistedProjectFile[]> {
     return this.client.projectFileUpload.findMany({ where: { projectId, archivedAt: null }, orderBy: { createdAt: "asc" } });
+  }
+
+  async listAll(projectId: string): Promise<PersistedProjectFile[]> {
+    return this.client.projectFileUpload.findMany({ where: { projectId }, orderBy: { createdAt: "asc" } });
+  }
+
+  async deleteProject(projectId: string): Promise<number> {
+    const result = await this.client.projectFileUpload.deleteMany({ where: { projectId } });
+    return result.count;
   }
 
   async get(id: string): Promise<PersistedProjectFile> {

@@ -35,7 +35,9 @@ export function useProjectDeletion({
       await createCreatorPlatformClient().deleteProject(projectId);
       onDeleted(projectId);
     } catch (error) {
-      setErrorMessage("Unable to delete this project. Your project remains unchanged.");
+      setErrorMessage(
+        "Project deletion did not finish. Some project resources may already have been removed. Retry to complete deletion."
+      );
       setErrorTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
       setIsDeleting(false);

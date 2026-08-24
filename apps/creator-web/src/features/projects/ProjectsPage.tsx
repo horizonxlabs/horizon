@@ -113,7 +113,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                         <span className="hz-avatar">{initials(project.owner)}</span>
                         <div>
                           <strong>{project.name}</strong>
-                          <span>{project.appType}</span>
+                          <span className="hz-card-app-type">{project.appType}</span>
                         </div>
                       </div>
                       <dl className="hz-card-details">

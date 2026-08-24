@@ -16,6 +16,7 @@ export interface DeploymentRevisionClient {
       where: { id: string };
       data: { healthStatus: string };
     }): Promise<RevisionRecord>;
+    deleteMany(args: { where: { projectId: string } }): Promise<{ count: number }>;
   };
   $transaction<T>(
     operation: (
@@ -118,17 +119,36 @@ export async function createPrismaDeploymentStore(
       for (const operation of discarded.reverse()) operation.rollback();
     },
     removeProject(projectId) {
-      operations = operations.filter((operation) => {
-        const deployment = byId.get(operation.deploymentId);
-        if (deployment?.projectId !== projectId) return true;
-        operation.rollback();
-        return false;
+      const projectDeploymentIds = new Set(
+        order.filter((id) => byId.get(id)?.projectId === projectId)
+      );
+      const discarded = operations.filter((operation) =>
+        projectDeploymentIds.has(operation.deploymentId)
+      );
+      operations = operations.filter(
+        (operation) => !projectDeploymentIds.has(operation.deploymentId)
+      );
+      for (const operation of discarded.reverse()) operation.rollback();
+
+      const removed = order.flatMap((id, index) => {
+        const deployment = byId.get(id);
+        return deployment?.projectId === projectId ? [{ id, index, deployment }] : [];
       });
-      const projectDeploymentIds = order.filter((id) => byId.get(id)?.projectId === projectId);
-      for (const id of projectDeploymentIds) {
+      for (const { id } of removed) {
         byId.delete(id);
         order.splice(order.indexOf(id), 1);
       }
+      enqueue(
+        `project:${projectId}`,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.deleteMany({ where: { projectId } }),
+        () => {
+          for (const { id, index, deployment } of removed) {
+            byId.set(id, deployment);
+            order.splice(Math.min(index, order.length), 0, id);
+          }
+        }
+      );
     },
     list(projectId) {
       return order

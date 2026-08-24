@@ -16,6 +16,7 @@ import {
   persistWorkspaceSecrets,
   provisionIndependentWorkspaceResources
 } from "./workspace-provisioning";
+import { deleteWorkspaceResources } from "./workspace-deletion";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -358,23 +359,19 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       if (!record) {
         return;
       }
-      if (record.containerId) {
-        await deps.docker.stopContainer(record.containerId).catch(() => undefined);
-        await deps.docker.removeContainer(record.containerId).catch(() => undefined);
-      }
-      const releaseKey = resourceKeyForProject(record.projectId);
-      await deps.docker.removeVolume(workspaceVolumeName(releaseKey)).catch(() => undefined);
-      await deps.postgres.releaseSchema(releaseKey).catch(() => undefined);
-      await deps.objectStorage.releaseBucket(releaseKey).catch(() => undefined);
-      const keyId = llmKeyIds.get(projectId);
-      if (keyId) {
-        await deps.llmGateway.revokeVirtualKey(keyId).catch(() => undefined);
-      }
-      await deps.secrets.removeAll(projectId);
+      await deleteWorkspaceResources({
+        record,
+        deps,
+        llmGatewayKeyId: llmKeyIds.get(projectId),
+        runtimeRecords
+      });
       records.delete(projectId);
       llmKeyIds.delete(projectId);
-      await runtimeRecords?.remove(projectId);
-      audit({ action: "workspace.deleted", projectId });
+      try {
+        audit({ action: "workspace.deleted", projectId });
+      } catch {
+        // Cleanup has completed; audit transport failure must not make a retry target live resources.
+      }
     },
 
     async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {

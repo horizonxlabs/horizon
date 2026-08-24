@@ -17,11 +17,13 @@ export interface MinioLike {
 interface MinioPresignLike {
   bucketExists(bucket: string): Promise<boolean>;
   makeBucket(bucket: string): Promise<void>;
+  removeObject(bucket: string, objectKey: string): Promise<void>;
   presignedPutObject(bucket: string, objectKey: string, expirySeconds: number): Promise<string>;
 }
 
 export interface ProjectFileUploadUrlIssuer {
   issue(bucket: string, objectKey: string): Promise<{ url: string; expiresAt: Date }>;
+  remove(bucket: string, objectKey: string): Promise<void>;
 }
 
 /**
@@ -71,6 +73,9 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
       if (!(await managementClient.bucketExists(bucket))) await managementClient.makeBucket(bucket);
       const signed = await signingClient.presignedPutObject(bucket, objectKey, expiresInSeconds);
       return { url: signed, expiresAt: new Date(Date.now() + expiresInSeconds * 1_000) };
+    },
+    async remove(bucket, objectKey) {
+      await managementClient.removeObject(bucket, objectKey);
     }
   };
 }
