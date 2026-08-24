@@ -170,6 +170,16 @@ function readyPublishState() {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((accept, decline) => {
+    resolve = accept;
+    reject = decline;
+  });
+  return { promise, resolve, reject };
+}
+
 test("a failed refresh disables a retained ready review at the real hook and page boundary", async () => {
   let publishLoads = 0;
   let renderer;
@@ -219,6 +229,90 @@ test("a first-load access failure renders exactly one visible readiness warning"
   assert.match(json, /Publish readiness is unavailable/);
   assert.doesNotMatch(json, /creator-status-message-danger/);
   assert.equal(publishButton(renderer).props.disabled, true);
+  await act(async () => renderer.unmount());
+});
+
+test("an older same-project success cannot replace a newer failed refresh", async () => {
+  const olderPublish = deferred();
+  let publishLoads = 0;
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(HookPage, {
+      loadAccessState: async () => ({ members: [], invitations: [], accessRequests: [], roles: [] }),
+      loadPublishState: async () => {
+        publishLoads += 1;
+        if (publishLoads === 1) return readyPublishState();
+        if (publishLoads === 2) return olderPublish.promise;
+        throw new Error("newer publish review failed");
+      }
+    }));
+  });
+  await act(async () => latestPublish.refreshCreatorPublishState(project.id));
+  assert.equal(publishButton(renderer).props.disabled, false);
+
+  let olderRefresh;
+  await act(async () => {
+    olderRefresh = latestPublish.refreshCreatorPublishState(project.id);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    await assert.rejects(
+      () => latestPublish.refreshCreatorPublishState(project.id),
+      /newer publish review failed/
+    );
+  });
+  olderPublish.resolve({
+    ...readyPublishState(),
+    review: { ...readyPublishState().review, manifest: { ...manifest, manifestVersion: "stale" } }
+  });
+  await act(async () => olderRefresh);
+
+  assert.equal(latestPublish.publishReview.manifest.manifestVersion, "3");
+  assert.equal(latestPublish.publishReadinessState, "unavailable");
+  const publish = publishButton(renderer);
+  assert.equal(publish.props.disabled, true);
+  assert.doesNotMatch(publish.props.className, /bg-primary/);
+  assert.equal(statusPanels(renderer).length, 1);
+  assert.match(statusPanels(renderer)[0].props.className, /warning/);
+  await act(async () => renderer.unmount());
+});
+
+test("an older same-project failure cannot replace a newer successful refresh", async () => {
+  const olderPublish = deferred();
+  let publishLoads = 0;
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(HookPage, {
+      loadAccessState: async () => ({ members: [], invitations: [], accessRequests: [], roles: [] }),
+      loadPublishState: async () => {
+        publishLoads += 1;
+        if (publishLoads === 1) return olderPublish.promise;
+        return {
+          ...readyPublishState(),
+          review: { ...readyPublishState().review, manifest: { ...manifest, manifestVersion: "latest" } }
+        };
+      }
+    }));
+  });
+
+  let olderRefresh;
+  await act(async () => {
+    olderRefresh = latestPublish.refreshCreatorPublishState(project.id);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => latestPublish.refreshCreatorPublishState(project.id));
+  olderPublish.reject(new Error("older publish review failed"));
+  await act(async () => olderRefresh);
+
+  assert.equal(latestPublish.publishReview.manifest.manifestVersion, "latest");
+  assert.equal(latestPublish.publishReadinessState, "ready");
+  assert.equal(latestPublish.publishMessageTone, "success");
+  assert.equal(latestPublish.publishMessageTechnicalDetails, undefined);
+  assert.equal(publishButton(renderer).props.disabled, false);
+  assert.equal(statusPanels(renderer).length, 1);
+  assert.match(statusPanels(renderer)[0].props.className, /success/);
   await act(async () => renderer.unmount());
 });
 

@@ -33,9 +33,8 @@ export function usePublishAccess({
     "loading"
   );
   const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
-  const [publishReadinessState, setPublishReadinessState] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
+  const [publishReadinessState, setPublishReadinessState] =
+    useState<"loading" | "ready" | "unavailable">("loading");
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [runtimeDeployments, setRuntimeDeployments] = useState<WorkspaceDeploymentDto[]>([]);
@@ -54,6 +53,7 @@ export function usePublishAccess({
   const accessDecisionRequests = useRef(new Map<string, AccessDecisionRequest>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
   const requestGuard = useProjectRequestGuard(selectedProject.id || undefined);
+  const publishRefreshId = useRef(0);
 
   function setPublishMessage(message: string) {
     setPublishMessageState(message);
@@ -115,6 +115,7 @@ export function usePublishAccess({
       : undefined;
 
   function resetPublishAccess() {
+    publishRefreshId.current += 1;
     requestGuard.reset();
     accessDecisionRequests.current.clear();
     setAppAccessSnapshot(undefined);
@@ -129,17 +130,21 @@ export function usePublishAccess({
     setPublishFeedback("Loading access and publish information.", "info");
   }
 
-  async function loadAccessForRefresh(projectId: string, guard: ProjectRequestGuard) {
-    if (!appAccessSnapshotRef.current && requestGuard.isCurrent(guard)) {
+  async function loadAccessForRefresh(
+    projectId: string,
+    guard: ProjectRequestGuard,
+    isCurrent = () => requestGuard.isCurrent(guard)
+  ) {
+    if (!appAccessSnapshotRef.current && isCurrent()) {
       setAccessLoadState("loading");
     }
     try {
       const access = await loadAccessState(projectId);
-      if (!requestGuard.isCurrent(guard)) return undefined;
+      if (!isCurrent()) return undefined;
       setAppAccessSnapshot(access);
       return access;
     } catch (error) {
-      if (!requestGuard.isCurrent(guard)) return undefined;
+      if (!isCurrent()) return undefined;
       if (!appAccessSnapshotRef.current) setAccessLoadState("unavailable");
       throw error;
     }
@@ -154,12 +159,16 @@ export function usePublishAccess({
   async function refreshCreatorPublishState(projectId: string) {
     const guard = requestGuard.capture(projectId);
     if (!guard) return;
+    const refreshId = ++publishRefreshId.current;
+    const isCurrentRefresh = () =>
+      requestGuard.isCurrent(guard) && publishRefreshId.current === refreshId;
+    if (!isCurrentRefresh()) return;
     setPublishReadinessState("loading");
     try {
-      const access = await loadAccessForRefresh(projectId, guard);
-      if (!access || !requestGuard.isCurrent(guard)) return;
+      const access = await loadAccessForRefresh(projectId, guard, isCurrentRefresh);
+      if (!access || !isCurrentRefresh()) return;
     } catch (error) {
-      if (!requestGuard.isCurrent(guard)) return;
+      if (!isCurrentRefresh()) return;
       setPublishReadinessState("unavailable");
       setPublishFeedback(
         "Access information could not be loaded. Retry to view the latest members and requests.",
@@ -170,14 +179,14 @@ export function usePublishAccess({
     }
     try {
       const publishState = await loadPublishState(projectId);
-      if (!requestGuard.isCurrent(guard)) return;
+      if (!isCurrentRefresh()) return;
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setRuntimeDeployments(publishState.deployments);
       setPublishReadinessState("ready");
       setPublishFeedback("Access information and publish readiness are up to date.", "success");
     } catch (error) {
-      if (!requestGuard.isCurrent(guard)) return;
+      if (!isCurrentRefresh()) return;
       setPublishReadinessState("unavailable");
       setPublishFeedback(
         "Access information loaded. Publish readiness is unavailable.",
