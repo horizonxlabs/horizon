@@ -25,9 +25,8 @@ const requireFromStore = createRequire(
 );
 const { act, create } = requireFromStore("react-test-renderer");
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { WorkspaceDatabasePanel } = await import(
-  "../../apps/creator-web/src/features/workspace/WorkspaceDatabasePanel.tsx"
-);
+const { WorkspaceDatabasePanel } =
+  await import("../../apps/creator-web/src/features/workspace/WorkspaceDatabasePanel.tsx");
 
 function deferred() {
   let resolve;
@@ -94,9 +93,8 @@ async function renderPanel(fetchImpl) {
 }
 
 test("database formatter preserves plain strings and renders readable scalar values", async () => {
-  const { formatDatabaseValue } = await import(
-    "../../apps/creator-web/src/features/workspace/format-database-value.tsx"
-  );
+  const { formatDatabaseValue } =
+    await import("../../apps/creator-web/src/features/workspace/format-database-value.tsx");
 
   assert.equal(formatDatabaseValue(null), "Not set");
   assert.equal(formatDatabaseValue(undefined), "Not set");
@@ -172,7 +170,9 @@ test("database record loading and healthy empty records are distinct states", as
     assert.doesNotMatch(json(view.renderer), /No records yet/);
 
     await act(async () => {
-      tablePage.resolve(response({ table: "notes", columns, rows: [], total: 0, limit: 100, offset: 0 }));
+      tablePage.resolve(
+        response({ table: "notes", columns, rows: [], total: 0, limit: 100, offset: 0 })
+      );
       await tablePage.promise;
       await Promise.resolve();
     });
@@ -213,9 +213,7 @@ test("record load failure retries without changing the selected table", async ()
 
 test("populated database keeps raw edit values while formatting display-only cells", async () => {
   const rawCssText = "flex gap-4 text-red-500";
-  const rows = [
-    { id: 1234567, content: rawCssText, createdAt: "2026-08-24T12:30:00.000Z" }
-  ];
+  const rows = [{ id: 1234567, content: rawCssText, createdAt: "2026-08-24T12:30:00.000Z" }];
   const view = await renderPanel(async (url) =>
     String(url).endsWith("/db/schema")
       ? response(schema)
@@ -241,16 +239,21 @@ test("populated database keeps raw edit values while formatting display-only cel
     const idColumn = grid.props.columns.find((column) => column.key === "id");
     assert.equal(idColumn.renderCell({ row: rows[0] }), "1,234,567");
 
-    const overflow = view.renderer.root.find(
-      (node) => node.props.className === "hz-db-scroll"
+    const scrollOwner = view.renderer.root.find(
+      (node) =>
+        node.type === "div" &&
+        node.props.role === "grid" &&
+        node.props.className?.includes?.("hz-db-rdg")
     );
-    assert.equal(overflow.props.role, "region");
-    assert.equal(overflow.props["aria-label"], "Records in notes");
-    assert.equal(overflow.props.tabIndex, 0);
+    assert.equal(scrollOwner.props["aria-label"], "Records in notes");
+    assert.equal(scrollOwner.props.tabIndex, -1);
+    assert.ok(
+      scrollOwner.findAll((node) => node.props.role === "columnheader" && node.props.tabIndex === 0)
+        .length > 0,
+      "the real scroll owner keeps react-data-grid's roving keyboard focus"
+    );
 
-    const tableStrip = view.renderer.root.find(
-      (node) => node.props.className === "hz-db-tables"
-    );
+    const tableStrip = view.renderer.root.find((node) => node.props.className === "hz-db-tables");
     assert.equal(tableStrip.props.role, "region");
     assert.equal(tableStrip.props["aria-label"], "Database tables");
     assert.equal(tableStrip.props.tabIndex, 0);
@@ -263,7 +266,7 @@ test("populated database keeps raw edit values while formatting display-only cel
   }
 });
 
-test("a failed row update keeps existing records visible and reports technical details", async () => {
+test("a failed row update restores the prior value and reports that changes were not saved", async () => {
   const rows = [{ id: 1, content: "Original", createdAt: "2026-08-24T12:30:00.000Z" }];
   const view = await renderPanel(async (url, init) => {
     if (String(url).endsWith("/db/schema")) return response(schema);
@@ -277,21 +280,21 @@ test("a failed row update keeps existing records visible and reports technical d
       (node) => node.props.className?.includes?.("hz-db-rdg") && Array.isArray(node.props.rows)
     );
     await act(async () => {
-      grid.props.onRowsChange(
-        [{ ...rows[0], content: "Changed" }],
-        { indexes: [0], column: { key: "content" } }
-      );
+      grid.props.onRowsChange([{ ...rows[0], content: "Changed" }], {
+        indexes: [0],
+        column: { key: "content" }
+      });
       await Promise.resolve();
       await Promise.resolve();
     });
-    assert.match(json(view.renderer), /Write failed/);
+    const rolledBackGrid = view.renderer.root.find(
+      (node) => node.props.className?.includes?.("hz-db-rdg") && Array.isArray(node.props.rows)
+    );
+    assert.equal(rolledBackGrid.props.rows[0].content, "Original");
+    assert.match(json(view.renderer), /Changes were not saved/);
     assert.match(json(view.renderer), /Technical details/);
     assert.match(json(view.renderer), /write conflict/);
-    assert.ok(
-      view.renderer.root.findAll(
-        (node) => node.props.className?.includes?.("hz-db-rdg") && Array.isArray(node.props.rows)
-      ).length > 0
-    );
+    assert.doesNotMatch(json(view.renderer), /Changed/);
   } finally {
     await view.cleanup();
   }

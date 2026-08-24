@@ -7901,8 +7901,7 @@ button:disabled {
 .creator-danger-zone {
   align-items: center;
   background: var(--evcp-color-danger-bg);
-  border: 1px solid
-    color-mix(in srgb, var(--evcp-color-danger-text) 30%, var(--evcp-color-border));
+  border: 1px solid color-mix(in srgb, var(--evcp-color-danger-text) 30%, var(--evcp-color-border));
   border-radius: var(--evcp-radius-control);
   display: flex;
   gap: var(--evcp-space-5);
@@ -8252,7 +8251,6 @@ button:disabled {
 }
 
 .hz-db-tables:focus-visible,
-.hz-db-scroll:focus-visible,
 .hz-db-table-item:focus-visible {
   outline: 2px solid var(--evcp-color-primary, #2563eb);
   outline-offset: -2px;
@@ -8332,13 +8330,6 @@ button:disabled {
   font-size: 12px;
 }
 
-.hz-db-scroll {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
 .hz-db-grid {
   border-collapse: collapse;
   font-size: 12.5px;
@@ -8411,6 +8402,13 @@ button:disabled {
   border: 0;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+}
+
+.hz-db-rdg:focus-visible,
+.hz-db-rdg:focus-within {
+  outline: 2px solid var(--evcp-color-primary, #2563eb);
+  outline-offset: -2px;
 }
 
 .hz-db-rdg .rdg-header-row {
