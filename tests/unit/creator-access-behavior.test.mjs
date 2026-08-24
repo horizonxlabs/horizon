@@ -222,8 +222,10 @@ test("the pending invitations view excludes accepted and revoked invitations", a
 test("two access-request rows remain independently pending until each completion", async () => {
   const first = deferred();
   const second = deferred();
+  const decisionCalls = [];
   const client = {
-    decideAppAccessRequest(_projectId, input) {
+    decideAppAccessRequest(projectId, input) {
+      decisionCalls.push([projectId, input]);
       return input.requestId === "request-1" ? first.promise : second.promise;
     }
   };
@@ -249,6 +251,10 @@ test("two access-request rows remain independently pending until each completion
       ? [latest.decidingAccessRequestId]
       : [];
   assert.deepEqual(pendingIds.sort(), ["request-1", "request-2"]);
+  assert.deepEqual(decisionCalls, [
+    ["project-1", { requestId: "request-1", decision: "approved" }],
+    ["project-1", { requestId: "request-2", decision: "rejected" }]
+  ]);
 
   await act(async () => {
     first.resolve({ id: "request-1", status: "approved" });
@@ -369,10 +375,7 @@ test("publish readiness load failure replaces the indefinite loading message", a
   });
   assert.match(latest.publishMessage, /Publish readiness is unavailable/i);
   assert.equal(latest.publishMessageTone, "warning");
-  assert.equal(
-    latest.publishMessageTechnicalDetails,
-    "Confirm a PRD baseline before publishing"
-  );
+  assert.equal(latest.publishMessageTechnicalDetails, "Confirm a PRD baseline before publishing");
   assert.doesNotMatch(latest.publishMessage, /baseline|Loading publish state/);
   await act(async () => renderer.unmount());
 });

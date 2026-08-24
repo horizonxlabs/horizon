@@ -23,8 +23,12 @@ export function usePublishAccess({
   loadAccessState?: typeof loadCreatorAccessState;
   loadPublishState?: typeof loadCreatorPublishState;
 }) {
-  const [appAccessSnapshot, setAppAccessSnapshot] = useState<AppAccessSnapshotResponse | undefined>(
-    undefined
+  const [appAccessSnapshot, setAppAccessSnapshotState] = useState<
+    AppAccessSnapshotResponse | undefined
+  >(undefined);
+  const appAccessSnapshotRef = useRef<AppAccessSnapshotResponse | undefined>(undefined);
+  const [accessLoadState, setAccessLoadState] = useState<"loading" | "ready" | "unavailable">(
+    "loading"
   );
   const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
@@ -50,11 +54,7 @@ export function usePublishAccess({
     setPublishMessageTechnicalDetails(undefined);
   }
 
-  function setPublishFeedback(
-    message: string,
-    tone: CreatorStatusTone,
-    technicalDetails?: string
-  ) {
+  function setPublishFeedback(message: string, tone: CreatorStatusTone, technicalDetails?: string) {
     setPublishMessageState(message);
     setPublishMessageTone(tone);
     setPublishMessageTechnicalDetails(technicalDetails);
@@ -62,6 +62,12 @@ export function usePublishAccess({
 
   function technicalDetails(error: unknown): string | undefined {
     return error instanceof Error ? error.message : undefined;
+  }
+
+  function setAppAccessSnapshot(snapshot: AppAccessSnapshotResponse | undefined) {
+    appAccessSnapshotRef.current = snapshot;
+    setAppAccessSnapshotState(snapshot);
+    setAccessLoadState(snapshot ? "ready" : "loading");
   }
 
   const visibleAppMembers =
@@ -140,12 +146,19 @@ export function usePublishAccess({
     setPublishResult(undefined);
     setRegistryEntries([]);
     setRuntimeDeployments([]);
+    setPublishFeedback("Loading access and publish information.", "info");
   }
 
   async function refreshCreatorAccessState(projectId: string) {
-    const access = await loadAccessState(projectId);
-    setAppAccessSnapshot(access);
-    return access;
+    if (!appAccessSnapshotRef.current) setAccessLoadState("loading");
+    try {
+      const access = await loadAccessState(projectId);
+      setAppAccessSnapshot(access);
+      return access;
+    } catch (error) {
+      if (!appAccessSnapshotRef.current) setAccessLoadState("unavailable");
+      throw error;
+    }
   }
 
   async function refreshCreatorPublishState(projectId: string) {
@@ -207,7 +220,10 @@ export function usePublishAccess({
 
     try {
       await refreshCreatorAccessState(selectedProject.id);
-      setPublishFeedback(`Invitation sent to ${email}. Access information is up to date.`, "success");
+      setPublishFeedback(
+        `Invitation sent to ${email}. Access information is up to date.`,
+        "success"
+      );
     } catch (error) {
       setPublishFeedback(
         `Invitation sent to ${email}, but access information could not be refreshed.`,
@@ -248,7 +264,10 @@ export function usePublishAccess({
 
         try {
           await refreshCreatorAccessState(selectedProject.id);
-          setPublishFeedback(`Access request ${decision}. Access information is up to date.`, "success");
+          setPublishFeedback(
+            `Access request ${decision}. Access information is up to date.`,
+            "success"
+          );
         } catch (error) {
           setPublishFeedback(
             `Access request ${decision}, but access information could not be refreshed.`,
@@ -300,6 +319,7 @@ export function usePublishAccess({
   return {
     appAccessSnapshot,
     setAppAccessSnapshot,
+    accessLoadState,
     publishReview,
     setPublishReview,
     publishResult,

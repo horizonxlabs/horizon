@@ -5,8 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 globalThis.React = React;
 
-const { UsersPage } =
-  await import("../../apps/creator-web/src/features/users/UsersPage.tsx");
+const { UsersPage } = await import("../../apps/creator-web/src/features/users/UsersPage.tsx");
 
 const project = {
   id: "project-1",
@@ -19,8 +18,8 @@ const project = {
   tokenUsedThisMonth: 0
 };
 
-function renderUsers(overrides = {}) {
-  const app = {
+function createUsersApp(overrides = {}) {
+  return {
     selectedProject: project,
     handleInviteUser: async () => true,
     handleAccessRequestDecision() {},
@@ -29,6 +28,8 @@ function renderUsers(overrides = {}) {
     publishMessage: "Access information is up to date.",
     publishMessageTone: "success",
     publishMessageTechnicalDetails: undefined,
+    accessLoadState: "ready",
+    refreshCreatorPublishState: async () => undefined,
     visibleAppMembers: [],
     visiblePendingInvites: [],
     visibleAccessRequests: [],
@@ -52,8 +53,43 @@ function renderUsers(overrides = {}) {
     pathname: "/creator/projects/project-1/users",
     ...overrides
   };
-  return renderToStaticMarkup(React.createElement(UsersPage, { app }));
 }
+
+function renderUsers(overrides = {}) {
+  return renderToStaticMarkup(React.createElement(UsersPage, { app: createUsersApp(overrides) }));
+}
+
+test("access loading is exclusive of healthy-empty table states", () => {
+  const html = renderUsers({
+    accessLoadState: "loading",
+    publishMessage: "Loading access and publish information.",
+    publishMessageTone: "info"
+  });
+
+  assert.match(html, /Loading access information/);
+  assert.match(html, /creator-state-loading/);
+  assert.doesNotMatch(html, /role="region" aria-label="Project members"/);
+  assert.doesNotMatch(html, /No members have access yet\./);
+  assert.doesNotMatch(html, /No invitations are pending\./);
+});
+
+test("first-load access failure renders one unavailable state without healthy-empty tables", () => {
+  const html = renderUsers({
+    accessLoadState: "unavailable",
+    publishMessage:
+      "Access information could not be loaded. Retry to view the latest members and requests.",
+    publishMessageTone: "danger",
+    publishMessageTechnicalDetails: "access service returned HTTP 503"
+  });
+
+  assert.match(html, /creator-state-unavailable/);
+  assert.match(html, /Access information is unavailable/);
+  assert.match(html, /Technical details/);
+  assert.match(html, /access service returned HTTP 503/);
+  assert.match(html, />Retry</);
+  assert.doesNotMatch(html, /role="region" aria-label="Project members"/);
+  assert.doesNotMatch(html, /No access requests are waiting for review\./);
+});
 
 test("each access table remains keyboard reachable and explains its healthy empty state", () => {
   const html = renderUsers();

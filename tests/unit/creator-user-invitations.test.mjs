@@ -55,12 +55,9 @@ test("the invitation form preserves each invitation field through its change bou
   function collectControls(node) {
     if (!React.isValidElement(node)) return;
     if (
-      [
-        "invite-user-email",
-        "invite-user-role",
-        "invite-user-type",
-        "invite-user-note"
-      ].includes(node.props.id)
+      ["invite-user-email", "invite-user-role", "invite-user-type", "invite-user-note"].includes(
+        node.props.id
+      )
     ) {
       controls.push(node);
     }
@@ -83,6 +80,28 @@ test("the invitation form preserves each invitation field through its change bou
     ["userType", "external"],
     ["note", "Quarterly approval access"]
   ]);
+});
+
+test("the invitation form disables dismissal and submit actions while sending", () => {
+  const html = renderToStaticMarkup(
+    usersModule.InviteUserForm({
+      value: {
+        email: "new.user@company.com",
+        roleKey: "manager",
+        userType: "internal",
+        note: "Quarterly approval access"
+      },
+      onChange() {},
+      onSubmit() {},
+      onCancel() {},
+      isSubmitting: true
+    })
+  );
+
+  assert.match(html, /<button[^>]*disabled=""[^>]*>Cancel<\/button>/);
+  const submitButton = html.match(/<button[^>]*type="submit"[^>]*>.*?<\/button>/)?.[0];
+  assert.ok(submitButton?.includes('disabled=""'));
+  assert.ok(submitButton?.includes("Sending invitation…"));
 });
 
 test("the Users page shows pending invitations from app access state", () => {
