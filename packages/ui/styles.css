@@ -192,6 +192,39 @@ body {
   width: 38px;
 }
 
+.creator-sidebar-logo.horizon-logo-full .horizon-brand-mark {
+  height: 28px;
+  width: 44px;
+}
+
+.creator-sidebar-logo.horizon-logo-full .horizon-brand-name {
+  font-size: 20px;
+}
+
+.creator-sidebar-logo.horizon-logo-icon .horizon-brand-mark {
+  height: 24px;
+  width: 32px;
+}
+
+@media (min-width: 769px) {
+  aside > div:has(.creator-sidebar-logo) {
+    justify-content: center;
+    position: relative;
+  }
+
+  aside > div:has(.creator-sidebar-logo) > button[aria-label="Collapse sidebar"] {
+    position: absolute;
+    right: 4px;
+  }
+
+  .app-shell-collapsed
+    aside
+    > div:has(.creator-sidebar-logo)
+    > button[aria-label="Expand sidebar"] {
+    position: static;
+  }
+}
+
 .app-shell-collapsed .horizon-logo-full {
   display: none;
 }
@@ -2835,6 +2868,131 @@ th {
 
 .ds-data-table tr:hover td {
   background: var(--evcp-color-surface-muted);
+}
+
+.ds-table-wrap {
+  max-width: 100%;
+  position: relative;
+}
+
+.ds-table-wrap:focus-visible {
+  outline: 2px solid var(--evcp-color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.ds-data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ds-data-table-empty {
+  border-top: 1px solid var(--evcp-color-border, #e2e8f0);
+  color: var(--evcp-color-muted, #64748b);
+  padding: 20px 16px;
+}
+
+.creator-state,
+.creator-status-message {
+  align-items: flex-start;
+  border: 1px solid var(--evcp-color-border, #e2e8f0);
+  border-radius: var(--evcp-radius-control, 8px);
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+}
+
+.creator-state-icon {
+  color: var(--evcp-color-primary, #2563eb);
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.creator-state-icon svg {
+  height: 20px;
+  width: 20px;
+}
+
+.creator-state-copy,
+.creator-status-message > div {
+  min-width: 0;
+}
+
+.creator-state-copy strong {
+  color: var(--evcp-color-text, #0f172a);
+}
+
+.creator-state-copy p {
+  color: var(--evcp-color-muted, #64748b);
+  margin: 4px 0 0;
+}
+
+.creator-state-action {
+  margin-top: 12px;
+}
+
+.creator-state details,
+.creator-status-message details {
+  color: var(--evcp-color-muted, #64748b);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.creator-state summary,
+.creator-status-message summary {
+  cursor: pointer;
+}
+
+.creator-state pre,
+.creator-status-message pre {
+  margin: 8px 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.creator-state-error,
+.creator-status-message-danger {
+  background: var(--evcp-color-danger-bg, #fef2f2);
+  border-color: var(--evcp-color-danger-text, #b91c1c);
+}
+
+.creator-state-error .creator-state-icon {
+  color: var(--evcp-color-danger-text, #b91c1c);
+}
+
+.creator-status-message-info {
+  background: var(--evcp-color-info-bg, #eff6ff);
+}
+
+.creator-status-message-success {
+  background: var(--evcp-color-success-bg, #f0fdf4);
+}
+
+.creator-status-message-warning,
+.creator-state-unavailable {
+  background: var(--evcp-color-warning-bg, #fffbeb);
+}
+
+.creator-state-spinner {
+  animation: creator-state-spin 1s linear infinite;
+}
+
+@keyframes creator-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creator-state-spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .creator-state-action :is(button, a) {
+    min-height: 44px;
+  }
 }
 
 .ds-summary-row {
