@@ -40,6 +40,51 @@ test("the invitation form collects email, role, user type, and note", () => {
   assert.match(html, />Send invitation</);
 });
 
+test("the invitation form preserves each invitation field through its change boundary", () => {
+  const changes = [];
+  const element = usersModule.InviteUserForm({
+    value: { email: "", roleKey: "employee", userType: "internal", note: "" },
+    onChange(field, value) {
+      changes.push([field, value]);
+    },
+    onSubmit() {},
+    isSubmitting: false
+  });
+
+  const controls = [];
+  function collectControls(node) {
+    if (!React.isValidElement(node)) return;
+    if (
+      [
+        "invite-user-email",
+        "invite-user-role",
+        "invite-user-type",
+        "invite-user-note"
+      ].includes(node.props.id)
+    ) {
+      controls.push(node);
+    }
+    React.Children.forEach(node.props.children, collectControls);
+  }
+  collectControls(element);
+
+  for (const [id, value] of [
+    ["invite-user-email", "new.user@company.com"],
+    ["invite-user-role", "manager"],
+    ["invite-user-type", "external"],
+    ["invite-user-note", "Quarterly approval access"]
+  ]) {
+    controls.find((control) => control.props.id === id).props.onChange({ target: { value } });
+  }
+
+  assert.deepEqual(changes, [
+    ["email", "new.user@company.com"],
+    ["roleKey", "manager"],
+    ["userType", "external"],
+    ["note", "Quarterly approval access"]
+  ]);
+});
+
 test("the Users page shows pending invitations from app access state", () => {
   const project = {
     id: "project-1",
@@ -91,6 +136,8 @@ test("the Users page shows pending invitations from app access state", () => {
 
   const html = renderToStaticMarkup(React.createElement(usersModule.UsersPage, { app }));
 
+  assert.match(html, /horizon-logo-full creator-sidebar-logo/);
+  assert.match(html, /<section class="admin-page-stack" aria-label="App users roles">/);
   assert.match(html, />Pending Invitations</);
   assert.match(html, />new\.user@company\.com</);
   assert.match(html, />pending</);

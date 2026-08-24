@@ -2585,6 +2585,44 @@ th {
   gap: var(--evcp-space-5);
 }
 
+.creator-access-page {
+  display: grid;
+  gap: var(--evcp-space-4);
+}
+
+.creator-permission-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--evcp-space-2);
+  min-width: 180px;
+}
+
+.creator-permission-chip {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-pill);
+  color: var(--evcp-color-body);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 4px 8px;
+}
+
+.creator-access-actions {
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .creator-access-page .ds-table-wrap {
+    overscroll-behavior-inline: contain;
+  }
+
+  .creator-access-actions > button {
+    min-height: 44px;
+  }
+}
+
 .creator-ticket-inbox-shell {
   margin: var(--evcp-space-5) 0;
 }

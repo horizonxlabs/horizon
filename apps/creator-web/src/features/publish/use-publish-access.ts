@@ -9,6 +9,7 @@ import {
 import { useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
+import type { CreatorStatusTone } from "@/shared";
 import { loadCreatorAccessState, loadCreatorPublishState } from "./api";
 
 export function usePublishAccess({
@@ -29,13 +30,39 @@ export function usePublishAccess({
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [runtimeDeployments, setRuntimeDeployments] = useState<WorkspaceDeploymentDto[]>([]);
-  const [publishMessage, setPublishMessage] = useState("Loading publish state from Platform API.");
+  const [publishMessage, setPublishMessageState] = useState(
+    "Loading access and publish information."
+  );
+  const [publishMessageTone, setPublishMessageTone] = useState<CreatorStatusTone>("info");
+  const [publishMessageTechnicalDetails, setPublishMessageTechnicalDetails] = useState<
+    string | undefined
+  >(undefined);
   const [isInvitingUser, setIsInvitingUser] = useState(false);
   const [decidingAccessRequestIds, setDecidingAccessRequestIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
   const accessDecisionRequests = useRef(new Map<string, Promise<void>>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
+
+  function setPublishMessage(message: string) {
+    setPublishMessageState(message);
+    setPublishMessageTone("info");
+    setPublishMessageTechnicalDetails(undefined);
+  }
+
+  function setPublishFeedback(
+    message: string,
+    tone: CreatorStatusTone,
+    technicalDetails?: string
+  ) {
+    setPublishMessageState(message);
+    setPublishMessageTone(tone);
+    setPublishMessageTechnicalDetails(technicalDetails);
+  }
+
+  function technicalDetails(error: unknown): string | undefined {
+    return error instanceof Error ? error.message : undefined;
+  }
 
   const visibleAppMembers =
     appAccessSnapshot?.members.map((member) => ({
@@ -125,8 +152,11 @@ export function usePublishAccess({
     try {
       await refreshCreatorAccessState(projectId);
     } catch (error) {
-      const detail = error instanceof Error ? ` ${error.message}` : "";
-      setPublishMessage(`App access unavailable.${detail || " Retry to load project access."}`);
+      setPublishFeedback(
+        "Access information could not be loaded. Retry to view the latest members and requests.",
+        "danger",
+        technicalDetails(error)
+      );
       throw error;
     }
     try {
@@ -134,10 +164,13 @@ export function usePublishAccess({
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setRuntimeDeployments(publishState.deployments);
-      setPublishMessage("Creator app users and publish readiness loaded from Platform API.");
+      setPublishFeedback("Access information and publish readiness are up to date.", "success");
     } catch (error) {
-      const detail = error instanceof Error ? ` ${error.message}` : "";
-      setPublishMessage(`App access loaded. Publish readiness unavailable.${detail}`);
+      setPublishFeedback(
+        "Access information loaded. Publish readiness is unavailable.",
+        "warning",
+        technicalDetails(error)
+      );
       throw error;
     }
   }
@@ -150,7 +183,7 @@ export function usePublishAccess({
         ["pending", "approval_required"].includes(invitation.status)
     );
     if (duplicate) {
-      setPublishMessage(`${email} already has a pending invitation for this app.`);
+      setPublishFeedback(`${email} already has a pending invitation for this app.`, "warning");
       return false;
     }
 
@@ -163,10 +196,10 @@ export function usePublishAccess({
         note: input.note?.trim() || undefined
       });
     } catch (error) {
-      setPublishMessage(
-        error instanceof Error
-          ? `Invitation failed. Existing app access state was preserved. ${error.message}`
-          : "Invitation failed. Existing app access state was preserved."
+      setPublishFeedback(
+        "Invitation could not be sent. Existing access was unchanged.",
+        "danger",
+        technicalDetails(error)
       );
       setIsInvitingUser(false);
       return false;
@@ -174,10 +207,13 @@ export function usePublishAccess({
 
     try {
       await refreshCreatorAccessState(selectedProject.id);
-      setPublishMessage(`Invitation sent to ${email}. App access state refreshed.`);
+      setPublishFeedback(`Invitation sent to ${email}. Access information is up to date.`, "success");
     } catch (error) {
-      const detail = error instanceof Error ? ` ${error.message}` : "";
-      setPublishMessage(`Invitation sent to ${email}. App access refresh failed.${detail}`);
+      setPublishFeedback(
+        `Invitation sent to ${email}, but access information could not be refreshed.`,
+        "warning",
+        technicalDetails(error)
+      );
     } finally {
       setIsInvitingUser(false);
     }
@@ -202,21 +238,22 @@ export function usePublishAccess({
             decision
           });
         } catch (error) {
-          setPublishMessage(
-            error instanceof Error
-              ? `Access decision failed: ${error.message}`
-              : "Access decision failed."
+          setPublishFeedback(
+            `Access request could not be ${decision}. No access changes were applied.`,
+            "danger",
+            technicalDetails(error)
           );
           return;
         }
 
         try {
           await refreshCreatorAccessState(selectedProject.id);
-          setPublishMessage(`Access request ${decision} through Platform API.`);
+          setPublishFeedback(`Access request ${decision}. Access information is up to date.`, "success");
         } catch (error) {
-          const detail = error instanceof Error ? `: ${error.message}` : ".";
-          setPublishMessage(
-            `Access request ${decision} through Platform API. Governed state refresh failed${detail}`
+          setPublishFeedback(
+            `Access request ${decision}, but access information could not be refreshed.`,
+            "warning",
+            technicalDetails(error)
           );
         }
       } finally {
@@ -245,14 +282,15 @@ export function usePublishAccess({
       ]);
       setRegistryEntries(registry);
       setRuntimeDeployments(deployments);
-      setPublishMessage(
-        "Published through Platform API. Deployment and App Store registry evidence updated."
+      setPublishFeedback(
+        "Project published. Deployment and registry information is up to date.",
+        "success"
       );
     } catch (error) {
-      setPublishMessage(
-        error instanceof Error
-          ? `Publish blocked: ${error.message}`
-          : "Publish blocked. Existing deployment evidence was preserved."
+      setPublishFeedback(
+        "Project could not be published. Existing deployment information was preserved.",
+        "danger",
+        technicalDetails(error)
       );
     } finally {
       setIsPublishingProject(false);
@@ -272,6 +310,8 @@ export function usePublishAccess({
     setRuntimeDeployments,
     publishMessage,
     setPublishMessage,
+    publishMessageTone,
+    publishMessageTechnicalDetails,
     isInvitingUser,
     setIsInvitingUser,
     decidingAccessRequestIds,

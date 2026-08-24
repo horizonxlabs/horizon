@@ -4,6 +4,7 @@ import { UserPlus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { CreatorStatusMessage } from "@/shared";
 
 const initialInvitation: AppInvitationInput = {
   email: "",
@@ -11,6 +12,27 @@ const initialInvitation: AppInvitationInput = {
   userType: "internal",
   note: ""
 };
+
+function formatPermission(value: string): string {
+  return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function PermissionList({ value }: { value: string }) {
+  const permissions = value
+    .split(",")
+    .map((permission) => permission.trim())
+    .filter(Boolean);
+
+  return (
+    <span className="creator-permission-list">
+      {permissions.map((permission) => (
+        <span className="creator-permission-chip" key={permission}>
+          {formatPermission(permission)}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export function InviteUserForm({
   value,
@@ -119,6 +141,8 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
     decidingAccessRequestIds,
     isInvitingUser,
     publishMessage,
+    publishMessageTone,
+    publishMessageTechnicalDetails,
     visibleAppMembers,
     visiblePendingInvites,
     visibleAccessRequests,
@@ -149,14 +173,19 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       <CreatorShell
         app={app}
         content={
-          <section className="sprint6-shell" aria-label="App users roles">
-            <div className="sprint6-main-panel">
-              <p
-                role={/failed|blocked|unavailable/i.test(publishMessage) ? "alert" : "status"}
-                aria-live="polite"
+          <section className="admin-page-stack" aria-label="App users roles">
+            <div className="creator-access-page">
+              <CreatorStatusMessage
+                tone={
+                  /failed|blocked/i.test(publishMessage)
+                    ? "danger"
+                    : (publishMessageTone ??
+                      (/unavailable/i.test(publishMessage) ? "danger" : "info"))
+                }
+                technicalDetails={publishMessageTechnicalDetails}
               >
                 {publishMessage}
-              </p>
+              </CreatorStatusMessage>
               <SectionCard
                 eyebrow="App Users"
                 title={`App Users: ${selectedProject.name}`}
@@ -179,6 +208,8 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     { key: "lastAccess", label: "Last Access" }
                   ]}
                   rows={visibleAppMembers}
+                  ariaLabel="Project members"
+                  emptyMessage="No members have access yet."
                 />
               </SectionCard>
               <SectionCard eyebrow="Invitations" title="Pending Invitations">
@@ -197,6 +228,8 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   ]}
                   rows={visiblePendingInvites}
                   rowKey={(invite, index) => `${invite.email}-${invite.status}-${index}`}
+                  ariaLabel="Pending invitations"
+                  emptyMessage="No invitations are pending."
                 />
               </SectionCard>
               <SectionCard eyebrow="Access Requests" title="Request Review">
@@ -224,26 +257,32 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     return {
                       ...request,
                       actions: (
-                        <div className="actions">
-                          <button
+                        <div className="creator-access-actions flex flex-wrap gap-2">
+                          <Button
                             type="button"
+                            size="sm"
+                            className="max-md:min-h-11"
                             disabled={!isPending || isDeciding}
                             onClick={() => handleAccessRequestDecision(request.id, "approved")}
                           >
                             Approve
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            size="sm"
+                            variant="dangerOutline"
                             disabled={!isPending || isDeciding}
                             onClick={() => handleAccessRequestDecision(request.id, "rejected")}
                           >
                             Reject
-                          </button>
+                          </Button>
                         </div>
                       )
                     };
                   })}
                   rowKey={(request) => request.id}
+                  ariaLabel="Access requests"
+                  emptyMessage="No access requests are waiting for review."
                 />
               </SectionCard>
               <SectionCard eyebrow="App Roles" title="Role Permission Matrix">
@@ -258,7 +297,12 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                       tone: (value) => (value === "active" ? "success" : "info")
                     }
                   ]}
-                  rows={visibleAppRoles}
+                  rows={visibleAppRoles.map((role) => ({
+                    ...role,
+                    permissions: <PermissionList value={String(role.permissions)} />
+                  }))}
+                  ariaLabel="Application roles"
+                  emptyMessage="No application roles are available."
                 />
               </SectionCard>
             </div>
