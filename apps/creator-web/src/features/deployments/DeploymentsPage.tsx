@@ -6,6 +6,20 @@ import { CreatorShell } from "@/features/projects";
 import { CreatorState } from "@/shared";
 import { useDeployments, type DeploymentsClient } from "./use-deployments";
 
+const deploymentDate = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short"
+});
+
+function readableDeploymentLabel(value: string): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatDeploymentDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : deploymentDate.format(date);
+}
+
 export function DeploymentsPage({
   app,
   client
@@ -15,10 +29,11 @@ export function DeploymentsPage({
 }) {
   const deployments = useDeployments(app.selectedProject.id, client);
   const rows = deployments.deployments.map((deployment) => ({
-    environment: deployment.environment,
+    environment: readableDeploymentLabel(deployment.environment),
+    version: deployment.imageTag,
     commit: deployment.commitSha,
-    health: deployment.healthStatus,
-    timestamp: deployment.createdAt
+    status: readableDeploymentLabel(deployment.healthStatus),
+    deployed: formatDeploymentDate(deployment.createdAt)
   }));
 
   return (
@@ -60,14 +75,15 @@ export function DeploymentsPage({
                 ariaLabel="Project deployments"
                 columns={[
                   { key: "environment", label: "Environment" },
+                  { key: "version", label: "Version / Image" },
                   { key: "commit", label: "Commit" },
                   {
-                    key: "health",
-                    label: "Health",
+                    key: "status",
+                    label: "Status",
                     tone: (value) =>
-                      value === "healthy" ? "success" : value === "failed" ? "danger" : "warning"
+                      value === "Healthy" ? "success" : value === "Failed" ? "danger" : "warning"
                   },
-                  { key: "timestamp", label: "Timestamp" }
+                  { key: "deployed", label: "Deployed" }
                 ]}
                 rows={rows}
               />

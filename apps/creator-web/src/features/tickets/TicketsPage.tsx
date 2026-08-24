@@ -3,6 +3,7 @@ import { MessageSquare, RotateCcw } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorState } from "@/shared";
+import { formatTicketLabel } from "./ticket-format";
 import { useCreatorTicketInbox, type CreatorTicketInboxClient } from "./use-creator-ticket-inbox";
 
 export function TicketsPage({
@@ -76,10 +77,11 @@ export function TicketsPage({
                         {ticket.ticketNumber} · {ticket.title}
                       </strong>
                       <span>
-                        {ticket.appName} · {ticket.submittedByEmail} · priority {ticket.priority}
+                        {ticket.appName} · {ticket.submittedByEmail} ·{" "}
+                        {`Priority: ${formatTicketLabel(ticket.priority)}`}
                       </span>
                     </div>
-                    <ToneBadge tone="warning">{ticket.status}</ToneBadge>
+                    <ToneBadge tone="warning">{formatTicketLabel(ticket.status)}</ToneBadge>
                   </button>
                 ))}
               </div>

@@ -10,6 +10,7 @@ import {
   getTicketPrdChangeActionState,
   subscribeTicketPrdChangeAction
 } from "./ticket-actions";
+import { formatTicketDate, formatTicketLabel } from "./ticket-format";
 import { TicketDetailConversionButton } from "./TicketDetailConversionButton";
 import { useCreatorTicketInbox, type CreatorTicketInboxClient } from "./use-creator-ticket-inbox";
 
@@ -103,36 +104,45 @@ export function TicketDetailPage({
                   <div>
                     <strong>{ticket.appName}</strong>
                     <span>
-                      {ticket.submittedByEmail} · {ticket.type} · {ticket.deviceInfo}
+                      {ticket.submittedByEmail} · {formatTicketLabel(ticket.type)} ·{" "}
+                      {ticket.deviceInfo}
                     </span>
                   </div>
-                  <ToneBadge tone="warning">{ticket.status}</ToneBadge>
+                  <ToneBadge tone="warning">{formatTicketLabel(ticket.status)}</ToneBadge>
                 </div>
                 <p>{ticket.description || "No ticket description was submitted."}</p>
                 <dl>
                   <div>
                     <dt>Priority</dt>
-                    <dd>{ticket.priority}</dd>
+                    <dd>{formatTicketLabel(ticket.priority)}</dd>
                   </div>
                   <div>
                     <dt>Created</dt>
-                    <dd>{ticket.createdAt}</dd>
+                    <dd>{formatTicketDate(ticket.createdAt)}</dd>
                   </div>
                 </dl>
               </div>
             ) : null}
           </SectionCard>
           <SectionCard eyebrow="Governed action" title="Create an auditable PRD change">
-            {conversionState.message ? (
+            {conversionState.outcome ? (
               <CreatorStatusMessage
-                tone={conversionState.message.includes("failed") ? "danger" : "success"}
+                tone={
+                  conversionState.outcome.kind === "pending"
+                    ? "info"
+                    : conversionState.outcome.kind === "partial-success"
+                      ? "warning"
+                      : conversionState.outcome.kind === "failure"
+                        ? "danger"
+                        : "success"
+                }
                 technicalDetails={
-                  conversionState.message.includes("failed") ? conversionState.message : undefined
+                  "technicalDetails" in conversionState.outcome
+                    ? conversionState.outcome.technicalDetails
+                    : undefined
                 }
               >
-                {conversionState.message.includes("failed")
-                  ? "PRD change could not be created."
-                  : conversionState.message}
+                {conversionState.outcome.message}
               </CreatorStatusMessage>
             ) : null}
             <TicketDetailConversionButton
@@ -143,7 +153,7 @@ export function TicketDetailPage({
                 conversionState.pending ||
                 !ticket.actions.includes("convert_to_prd_change")
               }
-              onMessage={() => undefined}
+              onOutcome={() => undefined}
               onPendingChange={() => undefined}
             />
             <p>

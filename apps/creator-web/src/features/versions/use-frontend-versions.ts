@@ -131,11 +131,13 @@ export function useFrontendVersions(projectId: string, client?: FrontendVersions
 
   async function restoreCheckpoint(checkpointId: string) {
     const generation = ++requestGeneration.current;
+    const retainedTimeline = state.timeline;
     setScopedState((current) => ({
       projectId,
       state: {
         ...(current.projectId === projectId ? current.state : initialFrontendVersionsState),
         restoringCheckpointId: checkpointId,
+        failedRestoreCheckpointId: undefined,
         message: "Restoring the selected frontend checkpoint."
       }
     }));
@@ -149,7 +151,13 @@ export function useFrontendVersions(projectId: string, client?: FrontendVersions
       generation === requestGeneration.current &&
       activeProjectId.current === projectId
     ) {
-      setScopedState({ projectId, state: nextState });
+      setScopedState({
+        projectId,
+        state:
+          nextState.status === "error" && retainedTimeline
+            ? { ...nextState, status: "ready", timeline: retainedTimeline }
+            : nextState
+      });
     }
   }
 

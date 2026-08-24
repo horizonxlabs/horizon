@@ -67,42 +67,58 @@ export function VersionsPage({
               />
             ) : versions.timeline ? (
               <>
-                {versions.lastRestore ? (
+                {versions.failedRestoreCheckpointId ? (
+                  <CreatorStatusMessage tone="danger" technicalDetails={versions.message}>
+                    Checkpoint could not be restored. Existing frontend versions are unchanged.
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        void versions.restoreCheckpoint(versions.failedRestoreCheckpointId!)
+                      }
+                    >
+                      Retry restore
+                    </Button>
+                  </CreatorStatusMessage>
+                ) : versions.lastRestore ? (
                   <CreatorStatusMessage tone="success">
                     Frontend restored from {versions.lastRestore.restoredFrom.version}.
                   </CreatorStatusMessage>
                 ) : null}
-                <div className="creator-ticket-list">
-                  {versions.timeline.checkpoints.map((checkpoint) => (
-                    <article key={checkpoint.id}>
-                      <div>
-                        <strong>{checkpoint.version}</strong>
-                        <span>{checkpoint.changeSummary}</span>
-                        <span>
-                          {checkpoint.changedAreas.join(", ") || "No changed areas reported"} ·{" "}
-                          {formatCheckpointDate(checkpoint.createdAt)}
-                        </span>
-                      </div>
-                      <ToneBadge tone={checkpoint.status === "current" ? "success" : "info"}>
-                        {checkpoint.status === "current" ? "Current" : "Available"}
-                      </ToneBadge>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => void versions.restoreCheckpoint(checkpoint.id)}
-                        disabled={
-                          checkpoint.status === "current" ||
-                          versions.restoringCheckpointId !== undefined
-                        }
-                      >
-                        <RotateCcw size={14} />
-                        {versions.restoringCheckpointId === checkpoint.id
-                          ? "Restoring…"
-                          : "Restore"}
-                      </Button>
-                    </article>
-                  ))}
-                </div>
+                {versions.timeline.checkpoints.length ? (
+                  <div className="creator-ticket-list">
+                    {versions.timeline.checkpoints.map((checkpoint) => (
+                      <article key={checkpoint.id}>
+                        <div>
+                          <strong>{checkpoint.version}</strong>
+                          <span>{checkpoint.changeSummary}</span>
+                          <span>
+                            {checkpoint.changedAreas.join(", ") || "No changed areas reported"} ·{" "}
+                            {formatCheckpointDate(checkpoint.createdAt)}
+                          </span>
+                        </div>
+                        <ToneBadge tone={checkpoint.status === "current" ? "success" : "info"}>
+                          {checkpoint.status === "current" ? "Current" : "Available"}
+                        </ToneBadge>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => void versions.restoreCheckpoint(checkpoint.id)}
+                          disabled={
+                            checkpoint.status === "current" ||
+                            versions.restoringCheckpointId !== undefined
+                          }
+                        >
+                          <RotateCcw size={14} />
+                          {versions.restoringCheckpointId === checkpoint.id
+                            ? "Restoring…"
+                            : "Restore"}
+                        </Button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <CreatorState kind="empty" title="No checkpoints yet" />
+                )}
               </>
             ) : versions.lastRestore ? (
               <CreatorStatusMessage tone="warning" technicalDetails={versions.message}>

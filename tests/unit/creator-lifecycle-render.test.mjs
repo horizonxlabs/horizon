@@ -179,6 +179,27 @@ test("Versions labels current and restorable checkpoints with English dates", as
   );
 });
 
+test("Versions renders a healthy empty state for an empty checkpoint timeline", async () => {
+  await withRenderedPage(
+    VersionsPage,
+    {
+      app: appFor("versions"),
+      client: {
+        getFrontendCheckpoints: async () => ({
+          ...timeline,
+          activeCheckpoint: undefined,
+          checkpoints: []
+        })
+      }
+    },
+    async (_renderer, json) => {
+      assert.match(json(), /creator-state-empty/);
+      assert.match(json(), /No checkpoints yet/);
+      assert.doesNotMatch(json(), /creator-ticket-list/);
+    }
+  );
+});
+
 test("Versions preserves a failed restore as its own retryable outcome", async () => {
   let restoreCalls = 0;
   await withRenderedPage(
@@ -198,12 +219,15 @@ test("Versions preserves a failed restore as its own retryable outcome", async (
         (node) => node.type === "button" && node.children.includes("Restore")
       )[1];
       await act(async () => restore.props.onClick());
+      assert.match(json(), /creator-status-message-danger/);
       assert.match(json(), /Checkpoint could not be restored/);
       assert.match(json(), /Existing frontend versions are unchanged/);
       assert.match(json(), /restore policy rejected/);
+      assert.match(json(), /Current UI/);
+      assert.match(json(), /Initial UI/);
       assert.doesNotMatch(json(), /Checkpoints could not be loaded/);
       const retry = renderer.root.find(
-        (node) => node.type === "button" && node.children.includes("Retry")
+        (node) => node.type === "button" && node.children.includes("Retry restore")
       );
       await act(async () => retry.props.onClick());
       assert.equal(restoreCalls, 2);
@@ -250,6 +274,39 @@ test("Deployments renders one retryable unavailable state", async () => {
       assert.match(json(), /Retry/);
       assert.match(json(), /deployments offline/);
       assert.doesNotMatch(json(), /No deployments yet/);
+    }
+  );
+});
+
+test("Deployments renders readable populated deployment evidence", async () => {
+  await withRenderedPage(
+    DeploymentsPage,
+    {
+      app: appFor("deployments"),
+      client: {
+        listDeployments: async () => [
+          {
+            id: "deployment-1",
+            projectId: project.id,
+            slug: "operations-hub",
+            environment: "production",
+            commitSha: "abc123def",
+            imageTag: "operations-hub:2026.08.24",
+            containerId: "container-1",
+            publishedByUserId: "creator-1",
+            healthStatus: "healthy",
+            createdAt: "2026-08-24T12:30:00.000Z"
+          }
+        ]
+      }
+    },
+    async (_renderer, json) => {
+      assert.match(json(), /Version \/ Image/);
+      assert.match(json(), /operations-hub:2026\.08\.24/);
+      assert.match(json(), /Production/);
+      assert.match(json(), /Healthy/);
+      assert.match(json(), /Aug 24, 2026/);
+      assert.doesNotMatch(json(), /2026-08-24T12:30:00\.000Z/);
     }
   );
 });

@@ -42,21 +42,26 @@ function conversionInput(ticket: CreatorTicketInboxItem): ConvertTicketToPrdChan
 
 export type TicketPrdChangeAction = {
   isPending: () => boolean;
-  run: () => Promise<string | undefined>;
+  run: () => Promise<TicketPrdChangeOutcome | undefined>;
 };
+
+export type TicketPrdChangeOutcome =
+  | { kind: "pending"; message: string }
+  | { kind: "success"; message: string }
+  | { kind: "partial-success"; message: string; technicalDetails: string }
+  | { kind: "failure"; message: string; technicalDetails: string };
 
 export type TicketPrdChangeActionState = {
   pending: boolean;
-  message: string;
+  outcome?: TicketPrdChangeOutcome;
 };
 
 const idleTicketPrdChangeActionState: TicketPrdChangeActionState = {
-  pending: false,
-  message: ""
+  pending: false
 };
 const ticketPrdChangeActionStates = new Map<string, TicketPrdChangeActionState>();
 const ticketPrdChangeActionListeners = new Map<string, Set<() => void>>();
-const ticketPrdChangeRequests = new Map<string, Promise<string | undefined>>();
+const ticketPrdChangeRequests = new Map<string, Promise<TicketPrdChangeOutcome | undefined>>();
 
 function ticketPrdChangeKey(projectId: string, ticketId: string): string {
   return `${encodeURIComponent(projectId)}:${encodeURIComponent(ticketId)}`;
@@ -103,7 +108,7 @@ export function createTicketPrdChangeAction({
 
   return {
     isPending: () => getTicketPrdChangeActionState(projectId, ticket.id).pending,
-    run(): Promise<string | undefined> {
+    run(): Promise<TicketPrdChangeOutcome | undefined> {
       const existing = ticketPrdChangeRequests.get(key);
       if (existing) return existing;
       if (!ticket.actions.includes("convert_to_prd_change")) {
@@ -112,33 +117,40 @@ export function createTicketPrdChangeAction({
 
       updateTicketPrdChangeActionState(key, {
         pending: true,
-        message: "Creating PRD change through Platform API."
+        outcome: { kind: "pending", message: "Creating PRD change." }
       });
-      let resolveRequest: (message: string | undefined) => void = () => undefined;
-      const request = new Promise<string | undefined>((resolve) => {
+      let resolveRequest: (outcome: TicketPrdChangeOutcome | undefined) => void = () => undefined;
+      const request = new Promise<TicketPrdChangeOutcome | undefined>((resolve) => {
         resolveRequest = resolve;
       });
       ticketPrdChangeRequests.set(key, request);
       void (async () => {
-        let message: string;
+        let outcome: TicketPrdChangeOutcome;
         try {
           await client.convertTicketToPrdChange(projectId, conversionInput(ticket));
           try {
             await Promise.all([refreshInbox(), refreshPrdState(projectId)]);
-            message = "PRD change created through Platform API.";
-          } catch {
-            message = "PRD change created through Platform API. Refreshing governed state failed.";
+            outcome = { kind: "success", message: "PRD change created." };
+          } catch (error) {
+            outcome = {
+              kind: "partial-success",
+              message: "PRD change was created, but the latest governed state could not be loaded.",
+              technicalDetails:
+                error instanceof Error ? error.message : "Governed state refresh failed."
+            };
           }
         } catch (error) {
-          message =
-            error instanceof Error
-              ? `PRD change creation failed: ${error.message}`
-              : "PRD change creation failed. No local success record was created.";
+          outcome = {
+            kind: "failure",
+            message: "PRD change could not be created.",
+            technicalDetails:
+              error instanceof Error ? error.message : "The conversion request failed."
+          };
         } finally {
           ticketPrdChangeRequests.delete(key);
         }
-        updateTicketPrdChangeActionState(key, { pending: false, message });
-        resolveRequest(message);
+        updateTicketPrdChangeActionState(key, { pending: false, outcome });
+        resolveRequest(outcome);
       })();
       return request;
     }
