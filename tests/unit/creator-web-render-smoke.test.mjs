@@ -291,6 +291,7 @@ test("PublishPage fail-closes readiness when access information is unavailable",
     ...app,
     bootstrap: { ...app.bootstrap, status: "ready" },
     accessLoadState: "unavailable",
+    publishReadinessState: "unavailable",
     publishReview: {
       manifest: {
         appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },

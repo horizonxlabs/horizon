@@ -299,7 +299,7 @@ test("Publish renders five accessible ready stages and an enabled primary action
     selectedProject: { id: "ops", name: "Operations" }, creatorPageActions: null,
     isCreateProjectDialogOpen: false, setIsCreateProjectDialogOpen() {}, isEnteringWorkspace: false,
     onNavigate() {}, pathname: "/creator/projects/ops/publish", handlePublishProject() {},
-    isPublishingProject: false, accessLoadState: "ready",
+    isPublishingProject: false, accessLoadState: "ready", publishReadinessState: "ready",
     publishReview: { manifest, checklist: [], ready: true }, publishResult: undefined,
     visibleRegistryEntry: undefined, visiblePublishChecklist: [], visibleDeployment: undefined,
     visiblePreview: { id: "preview-3", version: "3" }, publishMessage: "Ready",

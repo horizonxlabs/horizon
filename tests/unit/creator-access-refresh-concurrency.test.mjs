@@ -86,6 +86,7 @@ function AccessProbe({ client, loadAccessState, loadPublishState }) {
 
 function assertProjectBState() {
   assert.equal(latest.accessLoadState, "ready");
+  assert.equal(latest.publishReadinessState, "ready");
   assert.deepEqual(latest.visibleAppRoles, [
     {
       role: "B Manager",

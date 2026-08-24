@@ -16,6 +16,24 @@ function readableStatus(value: string): string {
   return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+type ReadinessStage = "manifest" | "route" | "permissions" | "preview" | "registry";
+
+const READINESS_STAGE_BY_KEY: Record<string, ReadinessStage> = {
+  prd_baseline: "manifest",
+  active_frontend: "preview",
+  app_roles: "permissions",
+  app_owner: "permissions",
+  blocking_guardrail: "registry"
+};
+
+const READINESS_LABEL_BY_KEY: Record<string, string> = {
+  prd_baseline: "PRD baseline",
+  active_frontend: "Active frontend checkpoint",
+  app_roles: "App roles",
+  app_owner: "Project owner",
+  blocking_guardrail: "Publish guardrail"
+};
+
 export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     accessLoadState,
@@ -24,57 +42,74 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     publishMessage,
     publishMessageTechnicalDetails,
     publishMessageTone,
+    publishReadinessState,
     publishResult,
     publishReview,
     refreshCreatorPublishState,
     selectedProject,
     visibleDeployment,
     visiblePreview,
-    visiblePublishChecklist,
     visibleRegistryEntry
   } = app;
   const manifest = publishReview?.manifest ?? publishResult?.manifest;
   const resolvedAccessState = accessLoadState ?? (publishReview ? "ready" : "loading");
   const accessReady = resolvedAccessState === "ready";
-  const readinessAvailable = accessReady && Boolean(publishReview);
-  const canPublish = readinessAvailable && publishReview?.ready === true;
-  const failedChecks = visiblePublishChecklist.filter((item) => item.state === "fail");
-  const permissionChecks = visiblePublishChecklist.filter((item) =>
-    /access|auth|owner|permission|role/i.test(item.check)
-  );
-  const previewChecks = visiblePublishChecklist.filter((item) =>
-    /frontend|preview/i.test(item.check)
-  );
+  const resolvedReadinessState =
+    publishReadinessState ??
+    (resolvedAccessState === "loading"
+      ? "loading"
+      : resolvedAccessState === "unavailable" || !publishReview
+        ? "unavailable"
+        : "ready");
+  const readinessAvailable =
+    resolvedReadinessState === "ready" && accessReady && Boolean(publishReview);
+  const stageBlockers: Record<ReadinessStage, string[]> = {
+    manifest: [], route: [], permissions: [], preview: [], registry: []
+  };
+  const failedChecklist = publishReview?.checklist.filter((item) => item.status === "fail") ?? [];
+  for (const item of failedChecklist) {
+    const stage = READINESS_STAGE_BY_KEY[item.key] ?? "registry";
+    stageBlockers[stage].push(
+      READINESS_LABEL_BY_KEY[item.key] ?? "Additional publish requirement"
+    );
+  }
+  if (publishReview && !publishReview.ready && failedChecklist.length === 0) {
+    stageBlockers.registry.push("Additional publish requirement");
+  }
+  const failedChecks = Object.values(stageBlockers).flat();
   const manifestVersion = manifest?.manifestVersion;
   const route = manifest?.app?.route;
   const permissionsReady =
     readinessAvailable &&
     Boolean(manifest?.auth?.mode) &&
     Boolean(manifest?.roles?.length) &&
-    permissionChecks.every((item) => item.state === "pass");
+    stageBlockers.permissions.length === 0;
   const previewReady =
     readinessAvailable &&
     Boolean(manifest?.frontend?.checkpointId || visiblePreview.id) &&
-    previewChecks.every((item) => item.state === "pass");
-  const registryReady = readinessAvailable;
+    stageBlockers.preview.length === 0;
+  const registryReady = readinessAvailable && stageBlockers.registry.length === 0;
   const unavailableDetail =
-    resolvedAccessState === "loading"
+    resolvedReadinessState === "loading"
       ? "Waiting for access and publish information."
       : "Readiness information is currently unavailable.";
   const readinessSteps = [
     {
       label: "Manifest",
-      ready: readinessAvailable && Boolean(manifestVersion),
+      ready:
+        readinessAvailable && Boolean(manifestVersion) && stageBlockers.manifest.length === 0,
       detail: readinessAvailable
-        ? manifestVersion
-          ? `Version ${manifestVersion}`
-          : "Generate a manifest before publishing."
+        ? stageBlockers.manifest.length
+          ? `Resolve: ${stageBlockers.manifest.join(", ")}.`
+          : manifestVersion
+            ? `Version ${manifestVersion}`
+            : "Generate a manifest before publishing."
         : unavailableDetail,
       icon: FileCheck2
     },
     {
       label: "Route",
-      ready: readinessAvailable && Boolean(route),
+      ready: readinessAvailable && Boolean(route) && stageBlockers.route.length === 0,
       detail: readinessAvailable
         ? route || "Configure an application route before publishing."
         : unavailableDetail,
@@ -84,9 +119,11 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
       label: "Permissions",
       ready: permissionsReady,
       detail: readinessAvailable
-        ? permissionsReady
-          ? "Access roles and ownership are configured."
-          : "Resolve access requirements before publishing."
+        ? stageBlockers.permissions.length
+          ? `Resolve: ${stageBlockers.permissions.join(", ")}.`
+          : permissionsReady
+            ? "Access roles and ownership are configured."
+            : "Resolve access requirements before publishing."
         : unavailableDetail,
       icon: LockKeyhole
     },
@@ -94,9 +131,11 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
       label: "Preview",
       ready: previewReady,
       detail: readinessAvailable
-        ? previewReady
-          ? `Frontend ${manifest?.frontend?.version ?? visiblePreview.version} is available.`
-          : "Generate or restore an active frontend preview."
+        ? stageBlockers.preview.length
+          ? `Resolve: ${stageBlockers.preview.join(", ")}.`
+          : previewReady
+            ? `Frontend ${manifest?.frontend?.version ?? visiblePreview.version} is available.`
+            : "Generate or restore an active frontend preview."
         : unavailableDetail,
       icon: MonitorCheck
     },
@@ -104,22 +143,39 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
       label: "Registry",
       ready: registryReady,
       detail: readinessAvailable
-        ? visibleRegistryEntry
-          ? `Registry entry ${visibleRegistryEntry.slug} is available.`
-          : "The registry entry will be created during publish."
+        ? stageBlockers.registry.length
+          ? `Resolve: ${stageBlockers.registry.join(", ")}.`
+          : visibleRegistryEntry
+            ? `Registry entry ${visibleRegistryEntry.slug} is available.`
+            : "The registry entry will be created during publish."
         : unavailableDetail,
       icon: Store
     }
   ];
+  const canPublish =
+    readinessAvailable &&
+    publishReview?.ready === true &&
+    readinessSteps.every((step) => step.ready);
   const blockerSummary =
-    resolvedAccessState === "loading"
+    resolvedReadinessState === "loading"
       ? "Publish readiness is loading. Wait for the latest access information before publishing."
-      : resolvedAccessState === "unavailable" || !publishReview
+      : resolvedReadinessState === "unavailable" || !publishReview
         ? "Publish readiness is unavailable. Retry loading access and publish information."
         : failedChecks.length
           ? `Resolve ${failedChecks.length} readiness ${failedChecks.length === 1 ? "requirement" : "requirements"} before publishing.`
           : "Resolve the remaining readiness requirements before publishing.";
-  const showPublishOutcome = publishMessageTone === "danger" || Boolean(publishResult);
+  const statusTone =
+    resolvedReadinessState === "loading"
+      ? "info"
+      : !canPublish
+        ? "warning"
+        : publishMessageTone === "danger"
+          ? "danger"
+          : "success";
+  const statusTechnicalDetails =
+    resolvedReadinessState === "unavailable" || (canPublish && publishMessageTone === "danger")
+      ? publishMessageTechnicalDetails
+      : undefined;
 
   return (
     <CreatorShell
@@ -143,15 +199,6 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
               </Button>
             }
           >
-            {showPublishOutcome ? (
-              <CreatorStatusMessage
-                tone={publishMessageTone === "danger" ? "danger" : "success"}
-                technicalDetails={publishMessageTechnicalDetails}
-              >
-                {publishMessage}
-              </CreatorStatusMessage>
-            ) : null}
-
             <ol className="creator-readiness-list" aria-label="Publish readiness">
               {readinessSteps.map((step) => {
                 const Icon = step.icon;
@@ -180,33 +227,34 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
               })}
             </ol>
 
-            {!canPublish ? (
-              <CreatorStatusMessage
-                tone="warning"
-                technicalDetails={showPublishOutcome ? undefined : publishMessageTechnicalDetails}
-              >
-                <strong>{blockerSummary}</strong>
-                {failedChecks.length ? (
-                  <span className="creator-publish-blocker-list">
-                    {failedChecks.map((item) => item.check).join(", ")}
-                  </span>
-                ) : null}
-                {resolvedAccessState === "unavailable" || !publishReview ? (
-                  <span className="creator-publish-retry">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        void refreshCreatorPublishState(selectedProject.id).catch(() => undefined);
-                      }}
-                    >
-                      Retry readiness
-                    </Button>
-                  </span>
-                ) : null}
-              </CreatorStatusMessage>
-            ) : null}
+            <CreatorStatusMessage tone={statusTone} technicalDetails={statusTechnicalDetails}>
+              {canPublish ? (
+                publishMessageTone === "danger" || publishResult
+                  ? publishMessage
+                  : "All readiness requirements are complete. This project can be published."
+              ) : (
+                <>
+                  <strong>{blockerSummary}</strong>
+                  {failedChecks.length ? (
+                    <span className="creator-publish-blocker-list">{failedChecks.join(", ")}</span>
+                  ) : null}
+                  {resolvedReadinessState === "unavailable" ? (
+                    <span className="creator-publish-retry">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          void refreshCreatorPublishState(selectedProject.id).catch(() => undefined);
+                        }}
+                      >
+                        Retry readiness
+                      </Button>
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </CreatorStatusMessage>
           </SectionCard>
 
           <SectionCard eyebrow="Published output" title="Latest deployment">

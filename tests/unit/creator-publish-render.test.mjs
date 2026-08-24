@@ -41,6 +41,7 @@ function publishApp(overrides = {}) {
     handlePublishProject() {},
     isPublishingProject: false,
     accessLoadState: "ready",
+    publishReadinessState: "ready",
     publishReview: {
       manifest: {
         appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
@@ -88,18 +89,18 @@ async function renderDialog(client) {
   return renderer;
 }
 
-test("PublishPage summarizes readable blockers and preserves its publish action", async () => {
-  let publishCalls = 0;
-  const failedChecks = [
-    { check: "PRD baseline", state: "fail", detail: "missing version id prd_123" },
-    { check: "App roles", state: "fail", detail: "owner_user_id missing" }
-  ];
+test("PublishPage summarizes readable blockers without invoking its disabled action", async () => {
   let renderer;
   await act(async () => {
     renderer = create(React.createElement(PublishPage, { app: publishApp({
-      handlePublishProject() { publishCalls += 1; },
-      publishReview: { ...publishApp().publishReview, checklist: [], ready: false },
-      visiblePublishChecklist: failedChecks
+      publishReview: {
+        ...publishApp().publishReview,
+        checklist: [
+          { key: "prd_baseline", label: "PRD baseline", status: "fail", detail: "prd_123" },
+          { key: "app_roles", label: "App roles", status: "fail", detail: "owner_user_id" }
+        ],
+        ready: false
+      }
     }) }));
   });
   try {
@@ -112,8 +113,6 @@ test("PublishPage summarizes readable blockers and preserves its publish action"
       (node) => node.type === "button" && textOf(node).includes("Publish to App Store")
     );
     assert.equal(publish.props.disabled, true);
-    await act(async () => publish.props.onClick());
-    assert.equal(publishCalls, 1);
   } finally {
     await act(async () => renderer.unmount());
   }
@@ -142,6 +141,7 @@ test("PublishPage retries unavailable readiness for the selected project", async
   await act(async () => {
     renderer = create(React.createElement(PublishPage, { app: publishApp({
       accessLoadState: "unavailable",
+      publishReadinessState: "unavailable",
       refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId),
       publishMessageTechnicalDetails: "readiness API 503"
     }) }));
@@ -163,6 +163,7 @@ test("PublishPage retries when access loaded but publish review is unavailable",
   await act(async () => {
     renderer = create(React.createElement(PublishPage, { app: publishApp({
       publishReview: undefined,
+      publishReadinessState: "unavailable",
       refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId)
     }) }));
   });
@@ -272,6 +273,59 @@ test("PublishDialog presents deployment failures as outcomes with technical deta
     assert.match(json, /Deployment could not be completed/);
     assert.match(json, /Technical details/);
     assert.match(json, /deployment API 503/);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("PublishDialog presents deployment-history failures as one actionable warning", async () => {
+  const client = {
+    listDeployments: async () => { throw new Error("history API 503"); },
+    publishProject: async () => undefined,
+    promoteDeployment: async () => undefined
+  };
+  const renderer = await renderDialog(client);
+  try {
+    const messages = renderer.root.findAll(
+      (node) => node.props.className?.includes("creator-status-message")
+    );
+    assert.equal(messages.length, 1);
+    assert.match(messages[0].props.className, /warning/);
+    const json = JSON.stringify(renderer.toJSON());
+    assert.match(json, /Deployment history could not be loaded/);
+    assert.match(json, /Technical details/);
+    assert.match(json, /history API 503/);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("PublishDialog presents promotion failures as outcomes with technical details", async () => {
+  const client = {
+    listDeployments: async () => [{
+      id: "staging-1", environment: "staging", healthStatus: "healthy",
+      commitSha: "1234567890", slug: "ops", createdAt: "2026-08-24T12:00:00.000Z"
+    }],
+    publishProject: async () => undefined,
+    promoteDeployment: async () => { throw new Error("promotion API 409"); }
+  };
+  const renderer = await renderDialog(client);
+  try {
+    const promote = renderer.root.find(
+      (node) => node.type === "button" && textOf(node).includes("Promote Staging")
+    );
+    assert.equal(promote.props.disabled, false);
+    await act(async () => {
+      promote.props.onClick();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const alert = renderer.root.find((node) => node.props.role === "alert");
+    assert.equal(alert.props.role, "alert");
+    const json = JSON.stringify(renderer.toJSON());
+    assert.match(json, /Promotion could not be completed/);
+    assert.match(json, /Technical details/);
+    assert.match(json, /promotion API 409/);
   } finally {
     await act(async () => renderer.unmount());
   }

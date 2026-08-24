@@ -33,6 +33,9 @@ export function usePublishAccess({
     "loading"
   );
   const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
+  const [publishReadinessState, setPublishReadinessState] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [runtimeDeployments, setRuntimeDeployments] = useState<WorkspaceDeploymentDto[]>([]);
@@ -116,6 +119,7 @@ export function usePublishAccess({
     accessDecisionRequests.current.clear();
     setAppAccessSnapshot(undefined);
     setPublishReview(undefined);
+    setPublishReadinessState("loading");
     setPublishResult(undefined);
     setRegistryEntries([]);
     setRuntimeDeployments([]);
@@ -150,11 +154,13 @@ export function usePublishAccess({
   async function refreshCreatorPublishState(projectId: string) {
     const guard = requestGuard.capture(projectId);
     if (!guard) return;
+    setPublishReadinessState("loading");
     try {
       const access = await loadAccessForRefresh(projectId, guard);
       if (!access || !requestGuard.isCurrent(guard)) return;
     } catch (error) {
       if (!requestGuard.isCurrent(guard)) return;
+      setPublishReadinessState("unavailable");
       setPublishFeedback(
         "Access information could not be loaded. Retry to view the latest members and requests.",
         "danger",
@@ -168,9 +174,11 @@ export function usePublishAccess({
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setRuntimeDeployments(publishState.deployments);
+      setPublishReadinessState("ready");
       setPublishFeedback("Access information and publish readiness are up to date.", "success");
     } catch (error) {
       if (!requestGuard.isCurrent(guard)) return;
+      setPublishReadinessState("unavailable");
       setPublishFeedback(
         "Access information loaded. Publish readiness is unavailable.",
         "warning",
@@ -349,6 +357,7 @@ export function usePublishAccess({
     setAppAccessSnapshot,
     accessLoadState,
     publishReview,
+    publishReadinessState,
     setPublishReview,
     publishResult,
     setPublishResult,

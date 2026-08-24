@@ -353,6 +353,7 @@ test("a stale decision failure cannot replace Project B feedback or clear its pe
 
 function assertProjectBState() {
   assert.equal(latest.accessLoadState, "ready");
+  assert.equal(latest.publishReadinessState, "ready");
   assert.deepEqual(latest.visibleAppRoles, [
     {
       role: "B Manager",

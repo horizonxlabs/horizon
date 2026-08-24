@@ -47,6 +47,7 @@ test("reset clears prior-project access feedback and restores a neutral loading 
     await assert.rejects(() => latest.refreshCreatorPublishState("project-a"), /access offline/);
   });
   assert.equal(latest.accessLoadState, "unavailable");
+  assert.equal(latest.publishReadinessState, "unavailable");
   assert.equal(latest.publishMessageTone, "danger");
   assert.equal(latest.publishMessageTechnicalDetails, "project-a access offline");
 
@@ -54,6 +55,7 @@ test("reset clears prior-project access feedback and restores a neutral loading 
 
   assert.equal(latest.appAccessSnapshot, undefined);
   assert.equal(latest.accessLoadState, "loading");
+  assert.equal(latest.publishReadinessState, "loading");
   assert.equal(latest.publishMessage, "Loading access and publish information.");
   assert.equal(latest.publishMessageTone, "info");
   assert.equal(latest.publishMessageTechnicalDetails, undefined);
