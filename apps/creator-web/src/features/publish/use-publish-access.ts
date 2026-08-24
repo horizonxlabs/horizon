@@ -47,6 +47,23 @@ export function usePublishAccess({
   );
   const accessDecisionRequests = useRef(new Map<string, Promise<void>>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
+  const refreshGenerationRef = useRef(0);
+  const activeProjectIdRef = useRef<string | undefined>(selectedProject.id || undefined);
+
+  type RefreshGuard = { generation: number; projectId: string };
+
+  function createRefreshGuard(projectId: string): RefreshGuard | undefined {
+    if (activeProjectIdRef.current && activeProjectIdRef.current !== projectId) return undefined;
+    activeProjectIdRef.current = projectId;
+    return { generation: refreshGenerationRef.current, projectId };
+  }
+
+  function isCurrentRefresh(guard: RefreshGuard): boolean {
+    return (
+      guard.generation === refreshGenerationRef.current &&
+      guard.projectId === activeProjectIdRef.current
+    );
+  }
 
   function setPublishMessage(message: string) {
     setPublishMessageState(message);
@@ -141,30 +158,45 @@ export function usePublishAccess({
       : undefined;
 
   function resetPublishAccess() {
+    refreshGenerationRef.current += 1;
+    activeProjectIdRef.current = undefined;
     setAppAccessSnapshot(undefined);
     setPublishReview(undefined);
     setPublishResult(undefined);
     setRegistryEntries([]);
     setRuntimeDeployments([]);
+    setIsPublishingProject(false);
     setPublishFeedback("Loading access and publish information.", "info");
   }
 
-  async function refreshCreatorAccessState(projectId: string) {
-    if (!appAccessSnapshotRef.current) setAccessLoadState("loading");
+  async function loadAccessForRefresh(projectId: string, guard: RefreshGuard) {
+    if (!appAccessSnapshotRef.current && isCurrentRefresh(guard)) setAccessLoadState("loading");
     try {
       const access = await loadAccessState(projectId);
+      if (!isCurrentRefresh(guard)) return undefined;
       setAppAccessSnapshot(access);
       return access;
     } catch (error) {
+      if (!isCurrentRefresh(guard)) return undefined;
       if (!appAccessSnapshotRef.current) setAccessLoadState("unavailable");
       throw error;
     }
   }
 
+  async function refreshCreatorAccessState(projectId: string) {
+    const guard = createRefreshGuard(projectId);
+    if (!guard) return undefined;
+    return loadAccessForRefresh(projectId, guard);
+  }
+
   async function refreshCreatorPublishState(projectId: string) {
+    const guard = createRefreshGuard(projectId);
+    if (!guard) return;
     try {
-      await refreshCreatorAccessState(projectId);
+      const access = await loadAccessForRefresh(projectId, guard);
+      if (!access || !isCurrentRefresh(guard)) return;
     } catch (error) {
+      if (!isCurrentRefresh(guard)) return;
       setPublishFeedback(
         "Access information could not be loaded. Retry to view the latest members and requests.",
         "danger",
@@ -174,11 +206,13 @@ export function usePublishAccess({
     }
     try {
       const publishState = await loadPublishState(projectId);
+      if (!isCurrentRefresh(guard)) return;
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setRuntimeDeployments(publishState.deployments);
       setPublishFeedback("Access information and publish readiness are up to date.", "success");
     } catch (error) {
+      if (!isCurrentRefresh(guard)) return;
       setPublishFeedback(
         "Access information loaded. Publish readiness is unavailable.",
         "warning",
@@ -290,15 +324,19 @@ export function usePublishAccess({
   }
 
   async function handlePublishProject() {
+    const guard = createRefreshGuard(selectedProject.id);
+    if (!guard) return;
     setIsPublishingProject(true);
     try {
       const client = clientFactory();
       const result = await client.publishProject(selectedProject.id);
+      if (!isCurrentRefresh(guard)) return;
       setPublishResult(result);
       const [registry, deployments] = await Promise.all([
         client.listAppStoreRegistry(),
         client.listDeployments(selectedProject.id)
       ]);
+      if (!isCurrentRefresh(guard)) return;
       setRegistryEntries(registry);
       setRuntimeDeployments(deployments);
       setPublishFeedback(
@@ -306,13 +344,14 @@ export function usePublishAccess({
         "success"
       );
     } catch (error) {
+      if (!isCurrentRefresh(guard)) return;
       setPublishFeedback(
         "Project could not be published. Existing deployment information was preserved.",
         "danger",
         technicalDetails(error)
       );
     } finally {
-      setIsPublishingProject(false);
+      if (isCurrentRefresh(guard)) setIsPublishingProject(false);
     }
   }
 
