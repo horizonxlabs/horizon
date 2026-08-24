@@ -240,6 +240,20 @@ export function createPublishService(deps: PublishServiceDeps) {
   };
 
   return {
+    async deleteProject(projectId: string): Promise<void> {
+      await withProjectLock(projectId, async () => {
+        const deployments = deps.deployments.list(projectId);
+        for (const deployment of deployments) {
+          if (!deployment.containerId) continue;
+          await deps.docker.stopContainer(deployment.containerId).catch(() => undefined);
+          await deps.docker.removeContainer(deployment.containerId);
+        }
+        deps.deployments.removeProject(projectId);
+        await deps.deployments.flush?.();
+        audit("workspace.deployments_deleted", projectId, { count: deployments.length });
+      });
+    },
+
     async deactivate(deployment: WorkspaceDeployment): Promise<void> {
       deps.deployments.updateHealth(deployment.id, "failed");
       await deps.deployments.flush?.();

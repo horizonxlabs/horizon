@@ -5,6 +5,7 @@ import { PrdPage } from "@/features/prd";
 import { ProjectsPage } from "@/features/projects";
 import { PublishPage } from "@/features/publish";
 import { ProjectOverviewPage } from "@/features/project-overview";
+import { ProjectSettingsPage } from "@/features/project-settings";
 import { TicketDetailPage, TicketsPage } from "@/features/tickets";
 import { UsersPage } from "@/features/users";
 import { VersionsPage } from "@/features/versions";
@@ -61,6 +62,7 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
   if (app.creatorPage === "users") return <UsersPage app={app} />;
   if (app.creatorPage === "publish") return <PublishPage app={app} />;
   if (app.creatorPage === "deployments") return <DeploymentsPage app={app} />;
+  if (app.creatorPage === "settings") return <ProjectSettingsPage app={app} />;
   if (app.creatorPage === "tickets") return <TicketsPage app={app} />;
   if (app.creatorPage === "ticket-detail") return <TicketDetailPage app={app} />;
   return <DefaultPage app={app} />;

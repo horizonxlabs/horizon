@@ -117,6 +117,19 @@ export async function createPrismaDeploymentStore(
       operations = operations.filter((operation) => operation.deploymentId !== id);
       for (const operation of discarded.reverse()) operation.rollback();
     },
+    removeProject(projectId) {
+      operations = operations.filter((operation) => {
+        const deployment = byId.get(operation.deploymentId);
+        if (deployment?.projectId !== projectId) return true;
+        operation.rollback();
+        return false;
+      });
+      const projectDeploymentIds = order.filter((id) => byId.get(id)?.projectId === projectId);
+      for (const id of projectDeploymentIds) {
+        byId.delete(id);
+        order.splice(order.indexOf(id), 1);
+      }
+    },
     list(projectId) {
       return order
         .map((id) => byId.get(id)!)

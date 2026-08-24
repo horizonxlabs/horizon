@@ -23,9 +23,10 @@ export function CreateProjectWizard({
       <form className="creator-project-dialog" onSubmit={onSubmit} aria-label="Create project wizard">
         <header>
           <div>
-            <span className="eyebrow">Create Project Wizard</span>
-            <h2>สร้าง Project ใหม่</h2>
-            <p>ระบบจะสร้าง project แล้วพาเข้า workspace — AI เริ่ม build จาก business problem ทันที</p>
+            <h2>Create project</h2>
+            <p>
+              Describe the business need. Horizon will create the project and open its workspace.
+            </p>
           </div>
           <Button variant="ghost" type="button" onClick={onClose} disabled={isCreating}>
             Close
@@ -40,7 +41,7 @@ export function CreateProjectWizard({
               onChange={(event) => onField("name", event.target.value)}
             />
           </Field>
-          <Field label="App type" htmlFor="cpw-app-type">
+          <Field label="Application type" htmlFor="cpw-app-type">
             <Input
               id="cpw-app-type"
               value={form.appType}
@@ -90,9 +91,9 @@ export function CreateProjectWizard({
           badge={isCreating ? "Creating" : "Ready"}
           title={message}
           lines={[
-            "POST /projects — แล้วเข้า workspace ทันที",
-            "AI เริ่ม build ร่างแรกจาก business problem ให้เอง",
-            "chat history คือบันทึกโครงการ — สร้าง PRD ได้ทีหลังที่ tab PRD"
+            "The project opens in its workspace after creation.",
+            "Horizon uses the business problem to prepare the first draft.",
+            "Project history remains available for later PRD review."
           ]}
         />
         <footer>
@@ -101,7 +102,7 @@ export function CreateProjectWizard({
           </Button>
           <Button variant="primary" type="submit" disabled={isCreating}>
             <WandSparkles size={16} />
-            {isCreating ? "Creating Project" : "Create Project"}
+            {isCreating ? "Creating project…" : "Create project"}
           </Button>
         </footer>
       </form>

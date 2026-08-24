@@ -1,6 +1,7 @@
 import { Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Button, Input } from "@evcp/ui";
+import { CreatorState } from "@/shared";
 import { CreatorShell } from "./CreatorShell";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import type { CreatorProjectView } from "@/shared/types";
@@ -19,6 +20,18 @@ function initials(text: string): string {
   const parts = text.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+export function formatProjectStatus(status: string): string {
+  const readable = status.trim().replace(/[_-]+/g, " ");
+  if (!readable) return "Unknown";
+  return readable.charAt(0).toUpperCase() + readable.slice(1).toLowerCase();
+}
+
+function formatCreatedAt(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
 }
 
 export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
@@ -42,39 +55,44 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
               <Sparkles size={14} aria-hidden="true" />
               Horizon AI Builder
             </span>
-            <h1 className="hz-hero-title">เริ่มสร้างแอปภายในองค์กร</h1>
+            <h1 className="hz-hero-title">Create your next internal application</h1>
             <p className="hz-hero-sub">
-              สร้าง project ใหม่ — ระบุรายละเอียดแอป แล้วระบบจะสร้าง PRD draft ให้ก่อน เพื่อยืนยัน spec ก่อนเริ่มพัฒนา
+              Start with a business need. Horizon will prepare a PRD draft for review before
+              development begins.
             </p>
             <Button variant="primary" onClick={() => setIsCreateProjectDialogOpen(true)}>
               <Plus size={16} aria-hidden="true" />
-              <span>สร้าง Project ใหม่</span>
+              <span>Create project</span>
             </Button>
           </section>
 
-          <section className="hz-projects" aria-label="รายการโปรเจกต์">
+          <section className="hz-projects" aria-label="Project list">
             <div className="hz-projects-head">
               <h2>
-                โปรเจกต์ล่าสุด <span className="hz-count">{projects.length}</span>
+                Recent projects <span className="hz-count">{projects.length}</span>
               </h2>
               <div className="hz-projects-tools">
                 <Input
-                  placeholder="ค้นหาโปรเจกต์…"
+                  placeholder="Search projects"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  aria-label="ค้นหาโปรเจกต์"
+                  aria-label="Search projects"
                 />
               </div>
             </div>
 
             {projects.length === 0 ? (
-              <div className="hz-empty">
-                {normalized
-                  ? `ไม่พบโปรเจกต์ที่ตรงกับ “${query.trim()}” ลองใช้คำค้นอื่น`
-                  : "ยังไม่มีโปรเจกต์ กด “สร้าง Project ใหม่” ด้านบนเพื่อเริ่ม"}
-              </div>
+              <CreatorState
+                kind="empty"
+                title={normalized ? "No matching projects" : "No projects yet"}
+                description={
+                  normalized
+                    ? `No projects match “${query.trim()}”. Try a different search.`
+                    : "Create a project to turn your next business need into a reviewed application plan."
+                }
+              />
             ) : (
-              <div className="hz-grid" aria-label="รายการโปรเจกต์">
+              <div className="hz-grid" aria-label="Project list">
                 {projects.map((project) => {
                   const isActive = project.id === selectedProject.id;
                   return (
@@ -86,18 +104,28 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
                       aria-current={isActive ? "true" : undefined}
                     >
                       <div className={`hz-thumb ${projectToneClass(project.id)}`}>
-                        <span className="hz-project-status">{project.status}</span>
+                        <span className="hz-project-status">
+                          {formatProjectStatus(project.status)}
+                        </span>
                         <span className="hz-thumb-glyph">{initials(project.name)}</span>
                       </div>
                       <div className="hz-card-meta">
                         <span className="hz-avatar">{initials(project.owner)}</span>
                         <div>
                           <strong>{project.name}</strong>
-                          <span>
-                            {project.appType} · {project.owner}
-                          </span>
+                          <span>{project.appType}</span>
                         </div>
                       </div>
+                      <dl className="hz-card-details">
+                        <div>
+                          <dt>Owner</dt>
+                          <dd>{project.owner}</dd>
+                        </div>
+                        <div>
+                          <dt>Created</dt>
+                          <dd>{formatCreatedAt(project.createdAt)}</dd>
+                        </div>
+                      </dl>
                     </button>
                   );
                 })}

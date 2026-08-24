@@ -58,6 +58,23 @@ test("happy path: checks pass, image built, prod container started, healthy depl
   assert.ok(!JSON.stringify(deps._audits).includes("postgres://x"));
 });
 
+test("deleteProject removes every published container and deployment for only that project", async () => {
+  const deps = buildDeps();
+  const service = createPublishService(deps);
+  await service.publish({ projectId: "p1", slug: "app", environment: "staging", publishedByUserId: "u1" });
+  await service.publish({ projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1" });
+
+  await service.deleteProject("p1");
+
+  assert.deepEqual(deps.deployments.list("p1"), []);
+  assert.equal(
+    deps.docker.state.containers.some(
+      (container) => container.spec.labels?.["evcp.project-id"] === "p1"
+    ),
+    false
+  );
+});
+
 test("staging image is built with a Next base path that keeps navigation behind the staging proxy", async () => {
   const deps = buildDeps();
   const service = createPublishService(deps);

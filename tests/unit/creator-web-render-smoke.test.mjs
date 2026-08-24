@@ -3,10 +3,7 @@ import assert from "node:assert/strict";
 
 // Render-smoke harness for creator-web.
 //
-// tsc and `vite build` both PASS on code that crashes at render time — e.g. a dropped
-// `import { appMembers }` surfaces only as a runtime `ReferenceError: appMembers is not defined`
-// once React actually renders the component. A prior refactor shipped exactly that class of bug
-// past the static checks; the only thing that caught it was opening a browser. This harness closes
+// Static checks can pass code that crashes at render time. This harness closes
 // that gap: it renders the real `useCreatorApp` hook and every page component via
 // `renderToStaticMarkup`, so any bare-undefined reference or render-time throw fails a test.
 //
@@ -71,6 +68,7 @@ const { PublishPage } = await import(`${base}/features/publish`);
 const { DeploymentsPage } = await import(`${base}/features/deployments`);
 const { TicketsPage } = await import(`${base}/features/tickets`);
 const { TicketDetailPage } = await import(`${base}/features/tickets`);
+const { ProjectSettingsPage } = await import(`${base}/features/project-settings`);
 const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
@@ -84,6 +82,7 @@ const PAGES = {
   DeploymentsPage,
   TicketsPage,
   TicketDetailPage,
+  ProjectSettingsPage,
   DefaultPage
 };
 
@@ -119,7 +118,8 @@ test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
 });
 
 const ROUTE_CASES = [
-  ["projects", "/creator", /รายการโปรเจกต์/],
+  ["projects", "/creator", /Recent projects/],
+  ["project", "/creator/projects/project-1/project", /Project: Project One/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
   ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
   ["database", "/creator/projects/project-1/database", /Project database/],
@@ -127,10 +127,10 @@ const ROUTE_CASES = [
   ["users", "/creator/projects/project-1/users", /App users roles/],
   ["publish", "/creator/projects/project-1/publish", /Publish app/],
   ["deployments", "/creator/projects/project-1/deployments", /Project deployments/],
+  ["settings", "/creator/projects/project-1/settings", /Delete project/],
   ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/],
   ["ticket detail", "/creator/projects/project-1/tickets/ticket-1", /Ticket detail/]
 ];
-
 for (const [page, pathname, expected] of ROUTE_CASES) {
   test(`CreatorRoutes maps ${page} to its capability screen`, () => {
     window.location.pathname = pathname;
@@ -202,10 +202,9 @@ test("CreatorRoutes keeps the first-project state inside the shared Creator shel
       app: { ...app, bootstrap: { ...app.bootstrap, status: "empty" } }
     })
   );
-  // Light tone is applied to the shared shell (utilities replaced the legacy app-shell-light class).
   assert.match(html, /<aside[^>]*bg-surface text-body/);
-  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
-  assert.match(html, /สร้าง Project ใหม่/);
+  assert.match(html, /Create your next internal application/);
+  assert.match(html, /Create project/);
 });
 
 for (const [name, Page] of Object.entries(PAGES)) {
@@ -251,8 +250,6 @@ test("ProjectsPage renders the create-first landing inside the shared Creator sh
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
   assert.match(html, /class="[^"]*hz-projects-studio/);
-  // Shared AppShell chrome, restyled onto token utilities but structurally unchanged:
-  // light tone, mobile open/close controls (by aria), backdrop, and the sidebar aside id.
   assert.match(html, /<aside[^>]*bg-surface text-body/);
   assert.match(
     html,
@@ -262,18 +259,19 @@ test("ProjectsPage renders the create-first landing inside the shared Creator sh
   assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
   assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
   assert.match(html, /<aside[^>]*id="app-shell-sidebar-[^"]+"/);
-  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
-  assert.match(html, /สร้าง Project ใหม่/);
-  assert.match(html, /โปรเจกต์ล่าสุด/);
-  assert.match(html, /aria-label="ค้นหาโปรเจกต์"/);
-  assert.match(html, /aria-label="รายการโปรเจกต์"/);
+  assert.match(html, /Create your next internal application/);
+  assert.match(html, /Create project/);
+  assert.match(html, /Recent projects/);
+  assert.match(html, /aria-label="Search projects"/);
+  assert.match(html, /aria-label="Project list"/);
+  assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
   assert.doesNotMatch(html, /Updated \d|อัปเดตเมื่อ/);
 });
 
 test("ProjectsPage is create-first: shows the create CTA and no free-text prompt box", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
-  assert.match(html, /สร้าง Project ใหม่/);
-  assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
+  assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Describe the application you want to build/);
 });
 
 test("WorkspacePage offers an accessible stop control during generation", () => {
@@ -323,9 +321,9 @@ test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
   assert.match(
     html,
-    /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/
+    /aria-label="Search projects"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="Search projects"/
   );
-  assert.match(html, /สร้าง Project ใหม่/);
+  assert.match(html, /Create project/);
   assert.doesNotMatch(html, /hz-prompt-cta/);
 });
 

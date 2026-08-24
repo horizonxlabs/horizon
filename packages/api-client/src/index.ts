@@ -86,6 +86,8 @@ export type * from "./system-types";
 import type { SystemUpdateResponseDto, SystemVersionDto } from "./system-types";
 export type * from "./domain-types";
 import type { DomainStatusDto, SetDomainResponseDto } from "./domain-types";
+import type { CreateProjectInput, PlatformProjectDto } from "./project-types";
+export type * from "./project-types";
 export type * from "./installer-types";
 import type {
   InstallerPreflightInput,
@@ -133,30 +135,6 @@ export type CurrentUserResponse = {
   user: PlatformUserDto;
   permissions: string[];
   auth: PlatformAuthEvidenceDto;
-};
-
-export type PlatformProjectDto = {
-  id: string;
-  name: string;
-  status: string;
-  ownerUserId: string;
-  appType: string;
-  businessProblem: string;
-  targetDepartment: string;
-  intendedUsers: string[];
-  dataSensitivity: "public" | "internal" | "confidential" | "restricted";
-  appId?: string;
-  activeFrontendCheckpointId?: string;
-  createdAt: string;
-};
-
-export type CreateProjectInput = {
-  name: string;
-  appType?: string;
-  businessProblem?: string;
-  targetDepartment?: string;
-  intendedUsers?: string[];
-  dataSensitivity?: "public" | "internal" | "confidential" | "restricted";
 };
 
 export type PrdSectionDto = {
@@ -571,6 +549,12 @@ export class PlatformApiClient {
 
   createProject(input: CreateProjectInput): Promise<PlatformProjectDto> {
     return this.postJson<PlatformProjectDto>("/projects", input);
+  }
+
+  deleteProject(projectId: string): Promise<{ id: string; deleted: true }> {
+    return this.request<{ id: string; deleted: true }>(`/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE"
+    });
   }
 
   generatePrdDraft(projectId: string): Promise<PrdVersionDto> {

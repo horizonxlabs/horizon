@@ -1,4 +1,4 @@
-import { Check, ChevronDown, FolderKanban, Grid2X2, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { projectSwitchTargetPage, type CreatorPage } from "@/app/routes";
 import type { CreatorProjectView } from "@/shared/types";
@@ -24,18 +24,16 @@ export function ProjectSwitcher({
   selectedProject,
   currentPage,
   onSelectProject,
-  onViewAllProjects,
   onCreateProject
 }: {
   projects: CreatorProjectView[];
   selectedProject: CreatorProjectView;
   currentPage: CreatorPage;
   onSelectProject: (project: CreatorProjectView, targetPage: CreatorPage) => void;
-  onViewAllProjects: () => void;
   onCreateProject: () => void;
 }) {
-  const isAllProjects = currentPage === "projects" || !selectedProject.id;
-  const currentLabel = isAllProjects ? "All Projects" : selectedProject.name;
+  const isAllProjects = !selectedProject.id;
+  const currentLabel = isAllProjects ? "Select project" : selectedProject.name;
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -82,11 +80,6 @@ export function ProjectSwitcher({
     onSelectProject(project, projectSwitchTargetPage(currentPage));
   }
 
-  function viewAllProjects() {
-    closeMenu();
-    onViewAllProjects();
-  }
-
   function createProject() {
     closeMenu();
     onCreateProject();
@@ -110,7 +103,7 @@ export function ProjectSwitcher({
           data-tone={isAllProjects ? "all" : projectTone(selectedProject.id)}
           aria-hidden="true"
         >
-          {isAllProjects ? <Grid2X2 size={17} /> : projectInitials(selectedProject.name)}
+          {isAllProjects ? "PR" : projectInitials(selectedProject.name)}
         </span>
         <span className="creator-project-switcher-copy">
           <span>Project</span>
@@ -139,27 +132,6 @@ export function ProjectSwitcher({
             role="listbox"
             aria-label="Projects"
           >
-            <button
-              type="button"
-              role="option"
-              aria-selected={isAllProjects}
-              className="creator-project-switcher-option"
-              onClick={viewAllProjects}
-            >
-              <span
-                className="creator-project-switcher-option-mark"
-                data-tone="all"
-                aria-hidden="true"
-              >
-                <Grid2X2 size={16} />
-              </span>
-              <span className="creator-project-switcher-option-copy">
-                <strong>All Projects</strong>
-                <span>Browse and manage your projects</span>
-              </span>
-              {isAllProjects ? <Check size={16} aria-hidden="true" /> : null}
-            </button>
-
             {filteredProjects.map((project) => {
               const isSelected = !isAllProjects && project.id === selectedProject.id;
               return (
@@ -198,7 +170,7 @@ export function ProjectSwitcher({
           <div className="creator-project-switcher-actions">
             <button type="button" onClick={createProject}>
               <Plus size={15} aria-hidden="true" />
-              Create new project
+              Create project
             </button>
           </div>
         </div>

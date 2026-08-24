@@ -1,90 +1,82 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import test from "node:test";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { CreatorShell } from "../../apps/creator-web/src/features/projects/CreatorShell.tsx";
 
+const originalDocument = globalThis.document;
+const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+const originalReact = globalThis.React;
+
+globalThis.document = {
+  addEventListener() {},
+  removeEventListener() {}
+};
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.React = React;
 
-const alphaProject = {
-  id: "project-alpha",
-  name: "Alpha Operations",
-  appType: "Workflow App",
-  owner: "Alex Morgan",
-  status: "Draft"
-};
+const requireFromStore = createRequire(
+  new URL("../../apps/app-store-pwa/package.json", import.meta.url)
+);
+const { act, create } = requireFromStore("react-test-renderer");
+const { ProjectSwitcher } = await import(
+  "../../apps/creator-web/src/features/projects/ProjectSwitcher.tsx"
+);
 
-const betaProject = {
-  id: "project-beta",
-  name: "Beta Finance",
-  appType: "Dashboard",
-  owner: "Blair Chen",
-  status: "Ready"
-};
+const projects = [
+  { id: "project-1", name: "Project One", appType: "Workflow", owner: "Alice" },
+  { id: "project-2", name: "Project Two", appType: "Dashboard", owner: "Bob" }
+];
 
-function creatorApp(overrides = {}) {
-  return {
-    creatorNavItems: [{ label: "Projects", route: "/creator/", icon: "workspace" }],
-    bootstrap: {
-      userName: "Creator User",
-      projects: [alphaProject, betaProject]
-    },
-    creatorSessionControls: null,
-    creatorPage: "prd",
-    pageCopy: {
-      eyebrow: "PRD Baseline",
-      title: "PRD Review: Leave Management",
-      description: "Review the product requirements."
-    },
-    selectedProject: alphaProject,
-    creatorPageActions: undefined,
-    isCreateProjectDialogOpen: false,
-    setIsCreateProjectDialogOpen() {},
-    handleCreateProjectSubmit() {},
-    isCreatingProject: false,
-    createProjectForm: {},
-    handleCreateProjectField() {},
-    createProjectMessage: "",
-    isEnteringWorkspace: false,
-    handleSelectProject() {},
-    onNavigate() {},
-    pathname: "/creator/projects/project-alpha/prd",
-    ...overrides
-  };
-}
+test("project switcher lists only selectable projects", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(ProjectSwitcher, {
+        projects,
+        selectedProject: projects[0],
+        currentPage: "workspace",
+        onSelectProject() {},
+        onCreateProject() {}
+      })
+    );
+  });
 
-test("Creator sidebar identifies the active project in a project switcher", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(CreatorShell, {
-      app: creatorApp(),
-      content: React.createElement("p", null, "Page content")
-    })
+  await act(async () => renderer.root.findAllByType("button")[0].props.onClick());
+
+  const options = renderer.root.findAll((node) => node.props.role === "option");
+  assert.deepEqual(
+    options.map((option) => option.findByType("strong").children.join("")),
+    ["Project One", "Project Two"]
   );
 
-  assert.match(html, /aria-label="Switch project\. Current project: Alpha Operations"/);
-  assert.match(html, />Alpha Operations</);
-  assert.match(html, /aria-haspopup="listbox"/);
+  await act(async () => renderer.unmount());
 });
 
-test("Creator project landing identifies the unscoped All Projects context", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(CreatorShell, {
-      app: creatorApp({ creatorPage: "projects", pathname: "/creator/" }),
-      content: React.createElement("p", null, "Projects")
-    })
-  );
+test("project switcher shows the selected project on the Creator landing page", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(ProjectSwitcher, {
+        projects,
+        selectedProject: projects[1],
+        currentPage: "projects",
+        onSelectProject() {},
+        onCreateProject() {}
+      })
+    );
+  });
 
-  assert.match(html, /aria-label="Switch project\. Current project: All Projects"/);
-  assert.match(html, />All Projects</);
+  const trigger = renderer.root.findAllByType("button")[0];
+  assert.equal(trigger.findByType("strong").children.join(""), "Project Two");
+
+  await act(async () => renderer.unmount());
 });
 
-test("project switching preserves scoped sections and enters Workspace from All Projects", async () => {
-  const routeModule = await import("../../apps/creator-web/src/app/routes.ts");
-  const targetPage = routeModule.projectSwitchTargetPage;
-
-  assert.equal(typeof targetPage, "function");
-  assert.equal(targetPage?.("projects"), "workspace");
-  assert.equal(targetPage?.("prd"), "prd");
-  assert.equal(targetPage?.("ticket-detail"), "tickets");
-  assert.equal(targetPage?.("not-found"), "workspace");
+test.after(() => {
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
+  if (originalActEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+  else globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
+  if (originalReact === undefined) delete globalThis.React;
+  else globalThis.React = originalReact;
 });

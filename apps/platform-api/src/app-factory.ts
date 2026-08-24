@@ -9,6 +9,7 @@ import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-se
 import { registerProjectDbRoutes } from "./project-database";
 import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
+import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver, createPlatformBugAuditor } from "./generation-loop/governed-context";
@@ -63,6 +64,7 @@ import { isNativeAuthRoute, isPersistenceAiGovernanceRoute, isPersistenceCoreRou
 import type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
 export type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
 import { errorResponse } from "./error-response";
+import { deletePersistedProject, registerProjectDeletionRoute } from "./project-deletion";
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
@@ -76,6 +78,7 @@ type RouteRegistry = {
   get: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
   post: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
   put: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
+  delete: (path: string, handler: (request: HttpRequest, response: HttpResponse) => void | Promise<void>) => void;
 };
 export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   keycloakUserManagement?: KeycloakUserService;
@@ -95,6 +98,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   projectFileUploadUrlIssuer?: ProjectFileUploadUrlIssuer;
   knowledgeSkillWriter?: KnowledgeSkillWriter;
   platformSessions?: PlatformSessionService;
+  projectResourceCleanup?: (projectId: string) => Promise<void>;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
@@ -343,7 +347,7 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
 
   try {
     if (useKnowledgeSkill && services.knowledgeSkillWriter) return await handleKnowledgeSkillWithPersistence((r) => executePlatformApiRequest(services, r), request, services, services.knowledgeSkillWriter);
-    const persistentProjectFileResponse = await handlePersistentProjectFilesRoute({
+    const persistentProjectFileResponse = request.method === "DELETE" ? null : await handlePersistentProjectFilesRoute({
       method: request.method,
       path: request.path,
       body: request.body,
@@ -518,6 +522,14 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
         metadata: { projectId: project.id }
       });
       return { status: HttpStatus.CREATED, body: success(project) };
+    }
+
+    const projectDeleteMatch = request.path.match(/^\/projects\/([^/]+)$/);
+    if (corePersistence && request.method === "DELETE" && projectDeleteMatch) {
+      const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
+      const cleanup = services.projectResourceCleanup ?? ((id: string) => services.workspaceOrchestrator.deleteWorkspace(id));
+      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup });
+      return { status: HttpStatus.OK, body: success(data) };
     }
 
     if (corePersistence && request.method === "GET" && request.path === "/audit-logs") {
@@ -2067,6 +2079,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       })
     )
   );
+  registerProjectDeletionRoute(routes, (response, request) => sendPlatformResponseAsync(response as HttpResponse, executePlatformApiRequestAsync(services, request)));
   routes.post("/admin/users", (request, response) =>
     sendPlatformResponseAsync(
       response,
@@ -2341,10 +2354,18 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/restore", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
 
+  const recordPublishAudit = (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) =>
+    services.audit.record({ actorId: "system", action: event.action, resourceType: "workspace_container", resourceId: event.projectId, metadata: event.metadata });
+  const publishStack = await createDefaultPublishStack({ orchestrator: services.workspaceOrchestrator, migrations: sharedMigrationStore, env: process.env, onAudit: recordPublishAudit });
+  services.projectResourceCleanup = async (projectId) => {
+    await publishStack.publishService.deleteProject(projectId);
+    await services.workspaceOrchestrator.deleteWorkspace(projectId);
+  };
   await registerPublishHttpRoutes({
     rawApp,
     orchestrator: services.workspaceOrchestrator,
     migrations: sharedMigrationStore,
+    publishStack,
     nodeHttp,
     resolvePublishAuth: async (headers) => {
       try {
@@ -2361,14 +2382,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         headers,
         body: { runtimeDeployment: deployment }
       }),
-    recordAudit: (event) =>
-      services.audit.record({
-        actorId: "system",
-        action: event.action,
-        resourceType: "workspace_container",
-        resourceId: event.projectId,
-        metadata: event.metadata
-      })
+    recordAudit: recordPublishAudit
   });
 
   routes.get("/creator/projects/:projectId/files", (request, response) =>

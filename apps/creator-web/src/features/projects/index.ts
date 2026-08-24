@@ -1,2 +1,2 @@
 export { CreatorShell } from "./CreatorShell";
-export { ProjectsPage } from "./ProjectsPage";
+export { formatProjectStatus, ProjectsPage } from "./ProjectsPage";

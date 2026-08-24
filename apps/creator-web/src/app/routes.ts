@@ -129,7 +129,7 @@ export const creatorPageCopy: Record<
     description: "Choose a project or start a new application from a business problem."
   },
   project: {
-    eyebrow: "Project overview",
+    eyebrow: "Project: Leave Management",
     title: "Project: Leave Management",
     description: "Review project status, key information, and common actions."
   },

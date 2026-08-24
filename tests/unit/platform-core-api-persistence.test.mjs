@@ -71,6 +71,35 @@ test("persistence-backed project routes create list and audit through repositori
   assert.equal(audit.body.data[0].metadata.projectId, createdId);
 });
 
+test("persistence-backed project delete cleans the workspace and removes the project", async () => {
+  const services = createPersistenceServices();
+  const headers = { "x-mock-user-email": "creator@company.com" };
+  const created = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: "/projects",
+    headers,
+    body: { name: "Temporary Project" }
+  });
+  const projectId = created.body.data.id;
+  await services.workspaceOrchestrator.provisionWorkspace({ projectId, slug: "temporary-project" });
+
+  const deleted = await executePlatformApiRequestAsync(services, {
+    method: "DELETE",
+    path: `/projects/${projectId}`,
+    headers
+  });
+  const listed = await executePlatformApiRequestAsync(services, {
+    method: "GET",
+    path: "/projects",
+    headers
+  });
+
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(deleted.body.data, { id: projectId, deleted: true });
+  assert.equal(services.workspaceOrchestrator.getWorkspace(projectId), null);
+  assert.deepEqual(listed.body.data, []);
+});
+
 test("persistence-backed core routes preserve legacy role and auth failures", async () => {
   const services = createPersistenceServices();
 

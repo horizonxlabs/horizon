@@ -36,7 +36,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
   const [createProjectMessage, setCreateProjectMessage] = useState(
-    "กรอกข้อมูลแอป แล้วระบบจะสร้าง project และเริ่ม build ให้ทันที"
+    "Complete the project details to prepare the first workspace draft."
   );
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
@@ -227,6 +227,20 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
   }
 
+  function handleProjectDeleted(projectId: string) {
+    setBootstrap((current) => {
+      const projects = current.projects.filter((project) => project.id !== projectId);
+      return {
+        ...current,
+        status: projects.length ? "ready" : "empty",
+        projects,
+        selectedProject: unselectedProject
+      };
+    });
+    resetProjectRuntimeState();
+    navigateBrowserPath("/creator/");
+  }
+
   // Prompt-first flow: create a project from the home prompt box, enter its workspace, and
   // immediately submit the prompt as the first AI build.
   async function handleCreateFromPrompt(prompt: string) {
@@ -249,7 +263,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       await vibeWorkspace.handleVibeChat({ prompt: trimmed, projectId: project.id, mode: "build" });
     } catch (error) {
       setCreateProjectMessage(
-        error instanceof Error ? error.message : "สร้างโปรเจกต์ไม่สำเร็จ ลองอีกครั้ง"
+        error instanceof Error ? error.message : "Unable to create the project. Try again."
       );
     } finally {
       setIsEnteringWorkspace(false);
@@ -285,7 +299,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       // PRD is out of the loop for now — the chat log is the project's memory. The PRD tab
       // still offers manual generation whenever the user wants a document.
       setCreateProjectMessage(
-        `สร้าง ${project.name} แล้ว — AI กำลัง build ร่างแรกจาก business problem ของคุณ`
+        `${project.name} was created. Horizon is preparing the first workspace draft.`
       );
       // The form's business problem becomes the FIRST build immediately — the user's words
       // must never vanish into a background PRD. Same pattern as handleCreateFromPrompt:
@@ -349,6 +363,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleLogoutBridge,
     handleCreateProjectField,
     handleSelectProject,
+    handleProjectDeleted,
     handleCreateFromPrompt,
     handleCreateProjectSubmit,
     // Client-side sidebar nav: AppShell calls with a route; navigateBrowserPath pushes history so useBrowserPath re-derives the page.

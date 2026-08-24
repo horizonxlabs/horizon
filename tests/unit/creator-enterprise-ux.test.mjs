@@ -12,6 +12,8 @@ const { CreatorShell } =
   await import("../../apps/creator-web/src/features/projects/CreatorShell.tsx");
 const { ProjectOverviewPage } =
   await import("../../apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx");
+const { ProjectsPage } =
+  await import("../../apps/creator-web/src/features/projects/ProjectsPage.tsx");
 const { AppShell, Button, DataTable } = await import("../../packages/ui/src/index.tsx");
 const { creatorPageCopy } = await import("../../apps/creator-web/src/app/routes.ts");
 const requireFromStore = createRequire(
@@ -190,12 +192,54 @@ test("Creator shell uses English provisioning feedback and omits duplicate page 
   assert.equal((html.match(/Publish &amp; Registry/g) ?? []).length, 1);
 });
 
+test("Projects landing renders readable metadata and an English creation wizard", () => {
+  const project = {
+    id: "operations-hub",
+    name: "Operations Hub",
+    appType: "Workflow",
+    status: "in_review",
+    owner: "Creator",
+    prdVersion: "v1",
+    frontendVersion: "v2",
+    tokenUsedThisMonth: 0,
+    createdAt: "2026-01-02T00:00:00.000Z"
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(ProjectsPage, {
+      app: {
+        creatorNavItems: [], bootstrap: { projects: [project], userName: "Creator" },
+        creatorSessionControls: null, creatorPage: "projects",
+        pageCopy: { title: "Projects", description: "Create and select a project." },
+        selectedProject: project, creatorPageActions: null, isCreateProjectDialogOpen: true,
+        setIsCreateProjectDialogOpen: () => undefined, handleCreateProjectSubmit: () => undefined,
+        isCreatingProject: false,
+        createProjectForm: {
+          name: "", appType: "", targetDepartment: "", businessProblem: "",
+          intendedUsers: "", dataSensitivity: "internal"
+        },
+        handleCreateProjectField: () => undefined,
+        createProjectMessage: "Complete the project details to prepare the first workspace draft.",
+        isEnteringWorkspace: false, handleSelectProject: async () => undefined,
+        onNavigate: () => undefined, pathname: "/creator"
+      }
+    })
+  );
+
+  assert.match(html, /In review/);
+  assert.match(html, /Created/);
+  assert.match(html, /Jan 2, 2026/);
+  assert.match(html, /Application type/);
+  assert.match(html, /Business problem/);
+  assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
+});
+
 test("Project dashboard renders English details, actions, and an English-locale created date", () => {
   const selectedProject = {
     id: "leave-management",
     name: "Leave Management",
     appType: "Workflow",
-    status: "active",
+    status: "in_review",
     owner: "Creator",
     prdVersion: "v3",
     frontendVersion: "v7",
@@ -227,11 +271,15 @@ test("Project dashboard renders English details, actions, and an English-locale 
   );
 
   assert.match(html, /Key project information and shortcuts for managing this project\./);
-  assert.match(html, />Status</);
+  assert.match(html, /creator-project-summary/);
+  assert.match(html, /creator-project-overview-grid/);
+  assert.match(html, /In review/);
   assert.match(html, /Project information/);
-  assert.match(html, /Open Creator Workspace/);
-  assert.match(html, /Manage Database/);
+  assert.match(html, /Quick actions/);
+  assert.match(html, /Open workspace/);
+  assert.match(html, /Manage database/);
   assert.match(html, /Jan 2, 2026/);
+  assert.doesNotMatch(html, />Project overview</);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
 });
 

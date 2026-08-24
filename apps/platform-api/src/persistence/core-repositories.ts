@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { getMockPermissions } from "@evcp/auth-sdk";
 import type { PlatformRole } from "@evcp/types";
 import type {
@@ -9,8 +7,9 @@ import type {
   PlatformProject,
   PlatformUser
 } from "../platform-services";
-import { PermissionError, ValidationError } from "../platform-services";
+import { ValidationError } from "../platform-services";
 import { getPlatformUserById } from "./platform-user-lookup";
+import { ProjectRepository } from "./project-repository";
 
 type JsonRecord = Record<string, unknown>;
 type UserStatus = PlatformUser["status"];
@@ -38,7 +37,7 @@ export interface PlatformUserRecord {
   mustChangePassword?: boolean;
 }
 
-interface ProjectRecord {
+export interface ProjectRecord {
   id: string;
   name: string;
   status: ProjectStatus;
@@ -144,6 +143,7 @@ export interface CorePersistenceClient {
   project: {
     findMany(args: FindManyProjectArgs): Promise<ProjectRecord[]>;
     create(args: CreateProjectArgs): Promise<ProjectRecord>;
+    delete(args: { where: { id: string } }): Promise<ProjectRecord>;
   };
   auditLog: {
     create(args: CreateAuditArgs): Promise<AuditLogRecord>;
@@ -170,50 +170,6 @@ export class PlatformUserRepository {
   }
   async getById(id: string): Promise<PlatformUser> { return getPlatformUserById(this.client, id, mapPlatformUser); }
 }
-export class ProjectRepository {
-  constructor(private readonly client: CorePersistenceClient) {}
-
-  async listForActor(actor: PlatformUser): Promise<PlatformProject[]> {
-    const records = await this.client.project.findMany({
-      where: actor.role === "admin" ? undefined : { ownerUserId: actor.id },
-      include: { apps: true },
-      orderBy: { createdAt: "asc" }
-    });
-    return records.map(mapProject);
-  }
-
-  async createOrReplace(input: CreateProjectInput): Promise<PlatformProject> {
-    if (!["admin", "creator"].includes(input.actor.role)) {
-      throw new PermissionError(`Role ${input.actor.role} cannot create projects`);
-    }
-    if (!input.name.trim()) throw new ValidationError("Project name is required");
-
-    const id = `prj_${randomUUID().replaceAll("-", "")}`;
-    const now = new Date();
-    const data = {
-      id,
-      name: input.name,
-      status: "draft" as const,
-      ownerUserId: input.actor.id,
-      appType: input.appType ?? "Workflow App",
-      businessProblem:
-        input.businessProblem ?? "Capture the business problem before PRD generation.",
-      targetDepartment: input.targetDepartment ?? "Business Team",
-      intendedUsers: input.intendedUsers ?? ["Business User"],
-      dataSensitivity: input.dataSensitivity ?? "internal",
-      activeFrontendCheckpointId: null,
-      createdAt: now
-    };
-
-    const record = await this.client.project.create({
-      data,
-      include: { apps: true }
-    });
-
-    return mapProject(record);
-  }
-}
-
 export class AuditLogRepository {
   constructor(private readonly client: CorePersistenceClient) {}
 
@@ -280,6 +236,10 @@ export class CoreRepositoryBackedService {
 
   listProjects(actor: PlatformUser): Promise<PlatformProject[]> {
     return this.repositories.projects.listForActor(actor);
+  }
+
+  deleteProject(actor: PlatformUser, projectId: string): Promise<void> {
+    return this.repositories.projects.deleteForActor(actor, projectId);
   }
 
   recordAudit(
@@ -362,6 +322,11 @@ export class MemoryCorePersistenceClient implements CorePersistenceClient {
       create: async ({ data }) => {
         this.projects.push(data);
         return data;
+      },
+      delete: async ({ where }) => {
+        const index = this.projects.findIndex((project) => project.id === where.id);
+        if (index < 0) throw new ValidationError(`Unknown project: ${where.id}`);
+        return this.projects.splice(index, 1)[0];
       }
     };
     this.auditLog = {
@@ -423,7 +388,7 @@ export function mapPlatformUser(record: PlatformUserRecord): PlatformUser {
   };
 }
 
-function mapProject(record: ProjectRecord): PlatformProject {
+export function mapProject(record: ProjectRecord): PlatformProject {
   return {
     id: record.id,
     name: record.name,

@@ -9,6 +9,7 @@ export type CreatorProjectView = {
   prdVersion: string;
   frontendVersion: string;
   tokenUsedThisMonth: number;
+  createdAt: string;
 };
 
 export type CreatorBootstrapState = {

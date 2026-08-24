@@ -23,7 +23,14 @@ export function selectCreatorProjectForRequest(
   projects: CreatorBootstrapState["projects"],
   selectedProjectKey?: string
 ): CreatorBootstrapState["selectedProject"] {
-  if (!selectedProjectKey) return projects[0] ?? unselectedProject;
+  if (!selectedProjectKey) {
+    return (
+      projects.reduce<CreatorBootstrapState["selectedProject"] | undefined>(
+        (latest, project) => (!latest || project.createdAt > latest.createdAt ? project : latest),
+        undefined
+      ) ?? unselectedProject
+    );
+  }
   return projects.find((project) => project.id === selectedProjectKey) ?? unselectedProject;
 }
 

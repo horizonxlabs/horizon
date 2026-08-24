@@ -13,9 +13,7 @@
 
 .creator-project-switcher-trigger {
   align-items: center;
-  background:
-    linear-gradient(135deg, rgba(77, 87, 236, 0.07), rgba(96, 165, 250, 0.025)),
-    var(--evcp-color-surface, #fff);
+  background: var(--evcp-color-surface, #fff);
   border: 1px solid
     color-mix(in srgb, var(--evcp-color-primary, #4f46e5) 18%, var(--evcp-color-border, #dbe3ee));
   border-radius: 12px;
@@ -28,9 +26,8 @@
   padding: 7px 9px 7px 7px;
   text-align: left;
   transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    background-color 150ms ease,
+    border-color 150ms ease;
   width: 100%;
 }
 
@@ -40,8 +37,7 @@
     var(--evcp-color-primary, #4f46e5) 42%,
     var(--evcp-color-border, #dbe3ee)
   );
-  box-shadow: 0 7px 20px rgba(31, 41, 87, 0.08);
-  transform: translateY(-1px);
+  background: var(--evcp-color-primary-soft, #eef2ff);
 }
 
 .creator-project-switcher-trigger:focus-visible,
@@ -55,7 +51,7 @@
 .creator-project-switcher-mark,
 .creator-project-switcher-option-mark {
   align-items: center;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: #334e7d;
   border-radius: 9px;
   color: #fff;
   display: inline-flex;
@@ -70,32 +66,32 @@
 
 .creator-project-switcher-mark[data-tone="all"],
 .creator-project-switcher-option-mark[data-tone="all"] {
-  background: linear-gradient(135deg, #172554, #2563eb);
+  background: #1e3a5f;
 }
 
 .creator-project-switcher-mark[data-tone="1"],
 .creator-project-switcher-option-mark[data-tone="1"] {
-  background: linear-gradient(135deg, #0369a1, #0891b2);
+  background: #245a91;
 }
 
 .creator-project-switcher-mark[data-tone="2"],
 .creator-project-switcher-option-mark[data-tone="2"] {
-  background: linear-gradient(135deg, #047857, #0d9488);
+  background: #3f5f82;
 }
 
 .creator-project-switcher-mark[data-tone="3"],
 .creator-project-switcher-option-mark[data-tone="3"] {
-  background: linear-gradient(135deg, #b45309, #ea580c);
+  background: #4b6480;
 }
 
 .creator-project-switcher-mark[data-tone="4"],
 .creator-project-switcher-option-mark[data-tone="4"] {
-  background: linear-gradient(135deg, #be185d, #db2777);
+  background: #36598b;
 }
 
 .creator-project-switcher-mark[data-tone="5"],
 .creator-project-switcher-option-mark[data-tone="5"] {
-  background: linear-gradient(135deg, #5b21b6, #7c3aed);
+  background: #526a87;
 }
 
 .creator-project-switcher-copy {
