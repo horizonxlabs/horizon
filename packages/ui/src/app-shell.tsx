@@ -114,7 +114,7 @@ export function AppShell({
         ref={mobileTriggerRef}
         className={cn(
           "focus-visible:outline-primary hidden focus-visible:outline-2 focus-visible:outline-offset-2",
-          "max-md:rounded-control max-md:border-border max-md:bg-surface max-md:text-body max-md:shadow-card max-md:fixed max-md:top-4 max-md:left-4 max-md:z-30 max-md:inline-flex max-md:h-[42px] max-md:w-[42px] max-md:items-center max-md:justify-center max-md:border"
+          "max-md:rounded-control max-md:border-border max-md:bg-surface max-md:text-body max-md:shadow-card max-md:fixed max-md:top-4 max-md:left-4 max-md:z-30 max-md:inline-flex max-md:h-[44px] max-md:w-[44px] max-md:items-center max-md:justify-center max-md:border"
         )}
         aria-expanded={isMobileMenuOpen}
         aria-controls={sidebarId}
@@ -218,7 +218,7 @@ export function AppShell({
             ref={closeControlRef}
             className={cn(
               "focus-visible:outline-primary hidden focus-visible:outline-2 focus-visible:outline-offset-2",
-              "max-md:rounded-control max-md:border-border max-md:bg-surface-muted max-md:text-muted max-md:ml-auto max-md:inline-flex max-md:h-[30px] max-md:w-[30px] max-md:flex-none max-md:items-center max-md:justify-center max-md:border max-md:text-[20px]"
+              "max-md:rounded-control max-md:border-border max-md:bg-surface-muted max-md:text-muted max-md:ml-auto max-md:inline-flex max-md:h-[44px] max-md:w-[44px] max-md:flex-none max-md:items-center max-md:justify-center max-md:border max-md:text-[20px]"
             )}
             aria-label="Close navigation"
             onClick={() => setIsMobileMenuOpen(false)}

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -9,8 +10,14 @@ const { CreatorState, CreatorStatusMessage } =
   await import("../../apps/creator-web/src/shared/index.ts");
 const { CreatorShell } =
   await import("../../apps/creator-web/src/features/projects/CreatorShell.tsx");
+const { ProjectOverviewPage } =
+  await import("../../apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx");
 const { AppShell, Button, DataTable } = await import("../../packages/ui/src/index.tsx");
 const { creatorPageCopy } = await import("../../apps/creator-web/src/app/routes.ts");
+const requireFromStore = createRequire(
+  new URL("../../apps/app-store-pwa/package.json", import.meta.url)
+);
+const { act, create } = requireFromStore("react-test-renderer");
 
 test("CreatorState renders a recoverable error with optional technical details", () => {
   const html = renderToStaticMarkup(
@@ -181,4 +188,120 @@ test("Creator shell uses English provisioning feedback and omits duplicate page 
   assert.match(html, /Preparing workspace/);
   assert.match(html, /Starting this project&#x27;s sandbox\. This may take a moment\./);
   assert.equal((html.match(/Publish &amp; Registry/g) ?? []).length, 1);
+});
+
+test("Project dashboard renders English details, actions, and an English-locale created date", () => {
+  const selectedProject = {
+    id: "leave-management",
+    name: "Leave Management",
+    appType: "Workflow",
+    status: "active",
+    owner: "Creator",
+    prdVersion: "v3",
+    frontendVersion: "v7",
+    createdAt: "2026-01-02T00:00:00.000Z"
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(ProjectOverviewPage, {
+      app: {
+        creatorNavItems: [],
+        bootstrap: { projects: [selectedProject], userName: "Creator" },
+        creatorSessionControls: null,
+        creatorPage: "project",
+        pageCopy: creatorPageCopy.project,
+        selectedProject,
+        creatorPageActions: null,
+        isCreateProjectDialogOpen: false,
+        setIsCreateProjectDialogOpen: () => undefined,
+        handleCreateProjectSubmit: () => undefined,
+        isCreatingProject: false,
+        createProjectForm: {},
+        handleCreateProjectField: () => undefined,
+        createProjectMessage: "",
+        isEnteringWorkspace: false,
+        handleSelectProject: async () => undefined,
+        onNavigate: () => undefined,
+        pathname: "/creator/projects/leave-management/project"
+      }
+    })
+  );
+
+  assert.match(html, /Key project information and shortcuts for managing this project\./);
+  assert.match(html, />Status</);
+  assert.match(html, /Project information/);
+  assert.match(html, /Open Creator Workspace/);
+  assert.match(html, /Manage Database/);
+  assert.match(html, /Jan 2, 2026/);
+  assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
+});
+
+test("AppShell opens and closes the real mobile drawer with 44px controls", async () => {
+  const originalWindow = globalThis.window;
+  const originalDocument = globalThis.document;
+  const originalActEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  globalThis.window = {
+    location: { pathname: "/creator" },
+    localStorage: { getItem: () => null, setItem: () => undefined },
+    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
+  };
+  globalThis.document = { addEventListener() {}, removeEventListener() {} };
+
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        React.createElement(
+          AppShell,
+          {
+            title: "Horizon",
+            navItems: [{ label: "Project", route: "/creator", icon: "dashboard" }],
+            userName: "Creator"
+          },
+          "Creator content"
+        )
+      );
+    });
+
+    const findOpenTrigger = () =>
+      renderer.root.find(
+        (node) => node.type === "button" && node.props["aria-label"] === "Open navigation"
+      );
+    const findCloseControl = () =>
+      renderer.root.find(
+        (node) =>
+          node.type === "button" &&
+          node.props["aria-label"] === "Close navigation" &&
+          node.props.className.includes("max-md:ml-auto")
+      );
+    let openTrigger = findOpenTrigger();
+    let closeControl = findCloseControl();
+    let sidebar = renderer.root.findByType("aside");
+    assert.equal(openTrigger.props["aria-expanded"], false);
+    assert.match(openTrigger.props.className, /max-md:h-\[44px\].*max-md:w-\[44px\]/);
+    assert.match(closeControl.props.className, /max-md:h-\[44px\].*max-md:w-\[44px\]/);
+    assert.match(sidebar.props.className, /max-md:-translate-x-full/);
+
+    await act(async () => openTrigger.props.onClick());
+
+    openTrigger = findOpenTrigger();
+    closeControl = findCloseControl();
+    sidebar = renderer.root.findByType("aside");
+    assert.equal(openTrigger.props["aria-expanded"], true);
+    assert.equal(closeControl.props["aria-label"], "Close navigation");
+    assert.match(sidebar.props.className, /max-md:translate-x-0/);
+
+    await act(async () => closeControl.props.onClick());
+
+    sidebar = renderer.root.findByType("aside");
+    assert.match(sidebar.props.className, /max-md:-translate-x-full/);
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalActEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+    else globalThis.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
+  }
 });

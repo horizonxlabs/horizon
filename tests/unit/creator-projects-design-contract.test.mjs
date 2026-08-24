@@ -97,27 +97,3 @@ test("creator light sidebar variant has concrete shared declarations", () => {
     assert.ok(declarationBlock(selector), `missing light sidebar declaration: ${selector}`);
   }
 });
-
-test("shared shell has a concrete mobile off-canvas drawer contract", () => {
-  for (const selector of [
-    ".app-shell-mobile-trigger",
-    ".app-shell-mobile-backdrop",
-    ".sidebar-mobile-close"
-  ]) {
-    assert.ok(declarationBlock(selector), `missing mobile drawer declaration: ${selector}`);
-  }
-
-  const mobile = mediaBlock("max-width: 760px", ".sidebar {");
-  const sidebar = declarationBlock(".sidebar", mobile);
-  assert.match(sidebar, /position:\s*fixed/);
-  assert.match(sidebar, /transform:\s*translateX\(-100%\)/);
-
-  const openSidebar = declarationBlock(".app-shell-mobile-open .sidebar", mobile);
-  assert.match(openSidebar, /transform:\s*translateX\(0\)/);
-
-  const openBackdrop = declarationBlock(
-    ".app-shell-mobile-open .app-shell-mobile-backdrop",
-    mobile
-  );
-  assert.match(openBackdrop, /display:\s*block/);
-});

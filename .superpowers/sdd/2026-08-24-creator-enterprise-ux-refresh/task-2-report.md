@@ -84,7 +84,7 @@ Completed with 1,100 passed, 1 failed, 1 skipped (1,102 total). The only failure
 
 - The semantic class hooks previously reviewed in Task 1 are preserved and no CSS uses ARIA-label selectors.
 - The navigation lifecycle test observes exported configuration and `createCreatorNavigation` output rather than source text.
-- The mobile-drawer contract now identifies the CSS media block containing the sidebar, so it cannot accidentally assert against a preceding unrelated breakpoint.
+- The mobile-drawer contract is now covered through an interactive AppShell render rather than legacy CSS selectors.
 - Workspace provisioning remains a blocking status overlay; only visible copy changed.
 - The page header still shows contextual eyebrows, except when the eyebrow repeats its title.
 - No API, business, or non-approved routing behavior was changed.
@@ -92,3 +92,49 @@ Completed with 1,100 passed, 1 failed, 1 skipped (1,102 total). The only failure
 ## Concerns
 
 - The full unit suite retains only the cursor assertion explicitly assigned to Task 8.
+
+## Fix Round 1
+
+### Scope
+
+- Localized the visible Project dashboard content to English, including the project summary, Status metric, project-information and quick-action titles, action labels, and the `en-US` creation date.
+- Updated actual AppShell mobile open and close controls to 44px square targets.
+- Removed the dead legacy mobile-drawer CSS assertion and added an interactive rendered AppShell test that observes its closed and open states.
+
+### RED evidence
+
+```bash
+TSX_TSCONFIG_PATH=$PWD/tsconfig.test.json node --import tsx --test tests/unit/creator-enterprise-ux.test.mjs tests/unit/creator-projects-design-contract.test.mjs
+```
+
+Result: 13 passed, 2 failed.
+
+- The dashboard rendered Thai summary, Status label, information and quick-action text, and a `th-TH` date.
+- The actual mobile open control rendered at 42px and the in-drawer close control at 30px; the interactive test initially also exposed the two `Close navigation` controls, so the test selected the visible drawer close control by its distinct mobile layout class.
+
+### GREEN evidence
+
+```bash
+TSX_TSCONFIG_PATH=$PWD/tsconfig.test.json node --import tsx --test tests/unit/creator-enterprise-ux.test.mjs tests/unit/creator-web-routing.test.mjs tests/unit/navigation-config.test.mjs tests/unit/creator-projects-design-contract.test.mjs tests/unit/app-shell-accessibility-contract.test.mjs tests/unit/creator-web-render-smoke.test.mjs
+```
+
+Result: 85 passed, 0 failed.
+
+```bash
+pnpm --filter @evcp/creator-web typecheck
+pnpm --filter @evcp/creator-web build
+```
+
+Both passed (exit 0); the build retained only the existing unresolved-at-build-time LINE Seed font warnings.
+
+```bash
+pnpm test:unit
+```
+
+Result: 1,101 passed, 1 failed, 1 skipped (1,103 total). The sole failure remains the cursor assertion assigned to Task 8.
+
+```bash
+git diff --check
+```
+
+Passed (no whitespace errors).
