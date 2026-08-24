@@ -4,6 +4,7 @@ import { DeploymentsPage } from "@/features/deployments";
 import { PrdPage } from "@/features/prd";
 import { ProjectsPage } from "@/features/projects";
 import { PublishPage } from "@/features/publish";
+import { ProjectOverviewPage } from "@/features/project-overview";
 import { TicketDetailPage, TicketsPage } from "@/features/tickets";
 import { UsersPage } from "@/features/users";
 import { VersionsPage } from "@/features/versions";
@@ -52,6 +53,7 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
     );
   }
   if (app.creatorPage === "projects") return <ProjectsPage app={app} />;
+  if (app.creatorPage === "project") return <ProjectOverviewPage app={app} />;
   if (app.creatorPage === "workspace") return <WorkspacePage app={app} />;
   if (app.creatorPage === "prd") return <PrdPage app={app} />;
   if (app.creatorPage === "database") return <DatabasePage app={app} />;

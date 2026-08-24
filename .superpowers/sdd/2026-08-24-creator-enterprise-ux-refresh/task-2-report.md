@@ -74,6 +74,44 @@ git diff --check
 
 Passed (no whitespace errors).
 
+## Fix Round 2
+
+### Scope
+
+- Connected the approved Project dashboard route through the ProjectOverview feature barrel and `CreatorRoutes`.
+- Added a route-level rendered behavior test for `/creator/projects/project-1/project`; it proves the English dashboard is selected instead of the default fallback.
+- Deliberately excluded the separate Project Settings import, branch, and feature files from this fix.
+
+### RED evidence
+
+```bash
+TSX_TSCONFIG_PATH=$PWD/tsconfig.test.json node --import tsx --test tests/unit/creator-web-render-smoke.test.mjs
+```
+
+Result: 43 passed, 1 failed. With only the Project import and branch temporarily absent, `CreatorRoutes selects the English Project dashboard instead of the fallback` rendered the default page and could not find `Key project information and shortcuts for managing this project.`
+
+### GREEN evidence
+
+```bash
+TSX_TSCONFIG_PATH=$PWD/tsconfig.test.json node --import tsx --test tests/unit/creator-project-route.test.mjs tests/unit/creator-web-render-smoke.test.mjs tests/unit/creator-web-routing.test.mjs tests/unit/creator-enterprise-ux.test.mjs
+```
+
+Result: 71 passed, 0 failed.
+
+```bash
+pnpm --filter @evcp/creator-web typecheck
+pnpm --filter @evcp/creator-web build
+pnpm check:staged
+```
+
+All passed. The Creator build retained only the existing unresolved-at-build-time LINE Seed font warnings.
+
+```bash
+pnpm test:unit
+```
+
+Result: 1,102 passed, 1 failed, 1 skipped (1,104 total). The sole failure remains the cursor assertion assigned to Task 8.
+
 ```bash
 pnpm test:unit
 ```
