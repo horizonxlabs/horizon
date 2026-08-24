@@ -63,8 +63,8 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
           <DecisionPanel
             tone="info"
             badge="PRD"
-            title="ยังไม่มี PRD สำหรับโปรเจคนี้"
-            lines={["PRD จะถูกร่างให้อัตโนมัติหลังสร้างโปรเจค หรือกด Generate PRD Draft ได้เลย"]}
+            title="No PRD is available for this project"
+            lines={["Generate a PRD draft to define the product baseline for this project."]}
           />
         )}
       </SectionCard>

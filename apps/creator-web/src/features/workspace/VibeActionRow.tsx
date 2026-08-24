@@ -6,6 +6,7 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
   const hasBody = Boolean(action.find || action.replace || action.body || action.error);
   const running = action.status === "running";
   const failed = action.status === "failed";
+  const expanded = running || open;
   const statusClass = running ? "running" : failed ? "failed" : "complete";
   const isDiff = action.find !== undefined || action.replace !== undefined;
   const lineCount = actionLineCount(action);
@@ -14,9 +15,9 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
     <div className={`vibe-action-row vibe-action-row-${statusClass}`}>
       <button
         type="button"
-        onClick={() => hasBody && setOpen((o) => !o)}
+        onClick={() => hasBody && !running && setOpen((o) => !o)}
         className="vibe-action-summary"
-        aria-expanded={hasBody ? open : undefined}
+        aria-expanded={hasBody ? expanded : undefined}
       >
         <span aria-hidden>{vibeActionIcon(action.type)}</span>
         <span className={`vibe-action-verb ${running ? "vibe-shimmer" : ""}`.trim()}>
@@ -29,9 +30,9 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
             {lineCount} lines
           </span>
         )}
-        {hasBody && <span className="vibe-action-toggle">{open ? "▾" : "▸"}</span>}
+        {hasBody && <span className="vibe-action-toggle">{expanded ? "▾" : "▸"}</span>}
       </button>
-      {open && hasBody && (
+      {expanded && hasBody && (
         <div className="vibe-action-details">
           {/* Show the error AND what Pi attempted (diff/body), when both are known — a failed
               edit is only debuggable if you can see the snippet it tried alongside why it failed. */}

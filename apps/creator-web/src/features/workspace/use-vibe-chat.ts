@@ -1,10 +1,10 @@
 import { type WorkspaceAgentMode } from "@evcp/api-client";
 import { useEffect, useRef, useState } from "react";
 import { fetchChatHistory } from "./chat-history";
-import { vibeActionVerb } from "./vibe-actions";
 import { ensureVibeWorkspace, streamVibeChat } from "./api";
 import { enqueuePrompt, removeQueued, takeNext, type QueuedPrompt } from "./vibe-queue";
 import { mergeBugReports, type BugReport } from "./vibe-bugs";
+import { extractQuestions } from "./vibe-questions";
 import { applyVibeEvent, buildApproveTurn, type VibeMessage } from "./vibe-stream";
 
 type VibeChatOptions = {
@@ -13,6 +13,25 @@ type VibeChatOptions = {
   setPromptDraft: (prompt: string) => void;
   selectedAttachmentIds: string[];
 };
+
+export type WorkspaceOutcome = "Working" | "Waiting for input" | "Completed" | "Stopped" | "Failed";
+
+export function workspaceOutcomeForEvent({
+  type,
+  current,
+  assistantText
+}: {
+  type: "start" | "action_start" | "commit" | "error" | "done" | "cancelled";
+  current: WorkspaceOutcome | "";
+  assistantText: string;
+}): WorkspaceOutcome {
+  if (type === "cancelled") return "Stopped";
+  if (type === "error" || (type === "done" && current === "Failed")) return "Failed";
+  if (type === "done") {
+    return extractQuestions(assistantText).questions.length > 0 ? "Waiting for input" : "Completed";
+  }
+  return "Working";
+}
 
 export function useVibeChat({
   selectedProjectId,
@@ -89,7 +108,13 @@ export function useVibeChat({
     ]);
     setPromptDraft("");
     setIsVibing(true);
-    setVibeStatus(mode === "plan" ? "Planning…" : "Thinking…");
+    let assistantText = "";
+    let outcomeStatus: WorkspaceOutcome = workspaceOutcomeForEvent({
+      type: "start",
+      current: "",
+      assistantText
+    });
+    setVibeStatus(outcomeStatus);
     const patchAssistant = (fn: (message: VibeMessage) => VibeMessage) =>
       setVibeMessages((prev) =>
         prev.map((message) => (message.id === assistantId ? fn(message) : message))
@@ -99,7 +124,6 @@ export function useVibeChat({
     activeStreamAbort.current = streamController;
     try {
       if (mode !== "plan") await ensureVibeWorkspace(projectId, streamController.signal);
-      setVibeStatus(mode === "plan" ? "Plan mode: read-only" : "Thinking…");
       await streamVibeChat(
         projectId,
         prompt,
@@ -112,6 +136,7 @@ export function useVibeChat({
               : typeof data === "string"
                 ? data
                 : "";
+          if (type === "token") assistantText += field("content");
           if (type === "bug_report") {
             const bugs = Array.isArray((data as { bugs?: unknown })?.bugs)
               ? (data as { bugs: BugReport[] }).bugs
@@ -124,22 +149,18 @@ export function useVibeChat({
             applyVibeEvent(message, type, data as Record<string, unknown>)
           );
           if (type === "action_start") {
-            setVibeStatus(`${vibeActionVerb(field("actionType") || "file", "running")}…`);
+            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            setVibeStatus(outcomeStatus);
           } else if (type === "commit") {
-            setVibeStatus(`Committed ${field("sha").slice(0, 8)}`);
+            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            setVibeStatus(outcomeStatus);
             setVibePreviewKey((key) => key + 1);
           } else if (type === "error") {
-            setVibeStatus(`Error: ${field("message")}`);
+            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            setVibeStatus(outcomeStatus);
           } else if (type === "done") {
-            setVibeStatus((previous) =>
-              previous.startsWith("Error:")
-                ? previous
-                : mode === "plan"
-                  ? "Plan ready"
-                  : previous.startsWith("Committed")
-                    ? previous
-                    : "Done"
-            );
+            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            setVibeStatus(outcomeStatus);
           }
         },
         overrides?.approvedPlan,
@@ -154,7 +175,12 @@ export function useVibeChat({
         }));
       }
       if (activeStreamAbort.current === streamController) {
-        setVibeStatus(cancelled ? "Stopped" : `Error: ${(error as Error).message}`);
+        outcomeStatus = workspaceOutcomeForEvent({
+          type: cancelled ? "cancelled" : "error",
+          current: outcomeStatus,
+          assistantText
+        });
+        setVibeStatus(outcomeStatus);
       }
     } finally {
       if (activeStreamAbort.current === streamController) {
@@ -166,7 +192,7 @@ export function useVibeChat({
 
   function cancelVibe() {
     if (!activeStreamAbort.current) return;
-    setVibeStatus("Stopping…");
+    setVibeStatus("Stopped");
     activeStreamAbort.current.abort();
   }
 

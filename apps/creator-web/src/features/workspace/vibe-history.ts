@@ -25,7 +25,7 @@ export function buildVersionHistory(messages: VibeMessage[]): WorkspaceVersion[]
     versions.push({
       version: versions.length + 1,
       commitSha: message.commitSha,
-      prompt: isAutoDebug ? "แก้ไขอัตโนมัติโดยระบบ (self-debug)" : lastUserPrompt,
+      prompt: isAutoDebug ? "Automated system fix (self-debug)" : lastUserPrompt,
       isAutoDebug,
       isCurrent: false
     });

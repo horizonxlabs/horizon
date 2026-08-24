@@ -32,10 +32,10 @@ test("Creator exposes one Auto Pi composer without persistent Plan Build state",
     /else if \(type === "commit"\) \{[\s\S]*?setVibePreviewKey\(\(key\) => key \+ 1\);[\s\S]*?\} else if \(type === "error"\)/
   );
   assert.doesNotMatch(hook, /if \(mode === "build"\) setVibePreviewKey/);
-  // Auto status starts as "Thinking…" through provisioning and only becomes real per-action
-  // text once the existing action_start handler fires an action — no mode-based placeholders.
-  assert.match(hook, /setVibeStatus\(mode === "plan" \? "Planning…" : "Thinking…"\)/);
-  assert.match(hook, /setVibeStatus\(mode === "plan" \? "Plan mode: read-only" : "Thinking…"\)/);
+  // Outcome status is independent of the hidden request mode; detailed action evidence remains in
+  // the streamed action collection rather than changing the header to implementation jargon.
+  assert.match(hook, /workspaceOutcomeForEvent/);
+  assert.doesNotMatch(hook, /"Planning…"|"Thinking…"|"Plan mode: read-only"/);
   assert.doesNotMatch(hook, /Provisioning workspace…/);
   assert.doesNotMatch(hook, /"AI is working…"/);
   assert.match(stream, /mode:\s*"build"/);

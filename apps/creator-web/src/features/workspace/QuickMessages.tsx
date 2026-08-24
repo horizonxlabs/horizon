@@ -17,7 +17,12 @@ export function QuickMessages({
         <Sparkles size={13} aria-hidden="true" />
         <span>Suggested next</span>
       </div>
-      <div className="vibe-live-suggestion-track">
+      <div
+        className="vibe-live-suggestion-track"
+        role="region"
+        aria-label="Suggested prompts"
+        tabIndex={0}
+      >
         {items.map((item, index) => (
           <Button
             key={item.id}

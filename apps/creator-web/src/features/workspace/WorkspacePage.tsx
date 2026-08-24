@@ -22,9 +22,9 @@ import { usePreviewGuards } from "./use-preview-guards";
 import { usePreviewAuthorization } from "./use-preview-authorization";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
-// react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
-// Node test environments (render-smoke) never pulls in the CSS/grid module.
 const WorkspaceDatabasePanel = lazy(() => import("./WorkspaceDatabasePanel"));
+export type WorkspaceView = "conversation" | "preview" | "code" | "database";
+const MOBILE_VIEWS: WorkspaceView[] = ["conversation", "preview", "code", "database"];
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -57,7 +57,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     reloadChatHistory
   } = app;
   const [showPublish, setShowPublish] = useState(false);
-  // Auto-scroll to the newest output, but never yank the user back down while they scroll up.
+  const [mobileView, setMobileView] = useState<WorkspaceView>("conversation");
   const threadRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const handleThreadScroll = () => {
@@ -68,8 +68,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     const el = threadRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [vibeMessages, isVibing, vibeStatus]);
-  // Preview is addressed by the id-derived resource key (matches the container name), not the
-  // public slug, so it survives a rename. Project ids never contain hyphens.
   const previewSrc = `/preview/${selectedProject.id.replaceAll("_", "-")}`;
   const previewAuth = usePreviewAuthorization({
     projectId: selectedProject.id,
@@ -90,6 +88,15 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     enabled: previewAuth.state === "ready",
     onBug: addBugReport
   });
+  const selectTab = (tab: typeof vibeTab) => {
+    setVibeTab(tab);
+    setMobileView(tab === "code" || tab === "database" ? tab : "preview");
+  };
+  const selectMobileView = (view: WorkspaceView) => {
+    setMobileView(view);
+    if (view !== "conversation") setVibeTab(view);
+  };
+  const currentTurnStart = Math.max(0, vibeMessages.length - 2);
   return (
     <div className="vibe-live-shell">
       <header className="vibe-live-header">
@@ -102,17 +109,19 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <strong className="vibe-live-project-name">{selectedProject.name}</strong>
           <span className={`vibe-live-status ${isVibing ? "is-running" : "is-ready"}`.trim()}>
             <span className="vibe-live-status-dot" />
-            {vibeStatus || "ready"}
+            {vibeStatus || "Completed"}
             {isVibing && liveLines > 0 ? ` · ${liveLines} lines` : ""}
           </span>
         </div>
         <div className="vibe-live-header-right">
-          <Tabs
-            items={WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
-            active={vibeTab}
-            onSelect={setVibeTab}
-            aria-label="Workspace view"
-          />
+          <div className="workspace-desktop-tabs">
+            <Tabs
+              items={WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
+              active={vibeTab}
+              onSelect={selectTab}
+              aria-label="Workspace view"
+            />
+          </div>
           <div className="vibe-live-divider" />
           <Button
             variant="ghost"
@@ -146,7 +155,20 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </Button>
         </div>
       </header>
-      <div className="vibe-live-body">
+      <nav className="workspace-mobile-switcher" aria-label="Workspace panels">
+        {MOBILE_VIEWS.map((view) => (
+          <Button
+            key={view}
+            variant="ghost"
+            type="button"
+            aria-pressed={mobileView === view}
+            onClick={() => selectMobileView(view)}
+          >
+            {view[0].toUpperCase() + view.slice(1)}
+          </Button>
+        ))}
+      </nav>
+      <div className="vibe-live-body" data-workspace-view={mobileView}>
         <div className="vibe-live-chat-panel">
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && (
@@ -161,9 +183,18 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             )}
             {vibeMessages.map((message, messageIndex) =>
               message.role === "user" ? (
-                <VibeUserBubble key={message.id} text={message.text} />
+                <VibeUserBubble
+                  key={message.id}
+                  text={message.text}
+                  className={messageIndex >= currentTurnStart ? "vibe-turn-current" : "vibe-turn-compact"}
+                />
               ) : (
-                <div key={message.id} className="vibe-message vibe-message-assistant">
+                <div
+                  key={message.id}
+                  className={`vibe-message vibe-message-assistant ${
+                    messageIndex >= currentTurnStart ? "vibe-turn-current" : "vibe-turn-compact"
+                  }`}
+                >
                   {message.reasoning && (
                     <VibeReasoning
                       reasoning={message.reasoning}
@@ -182,12 +213,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     {message.text && (
                       <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
                     )}
-                    {/* Cursor stays lit through the whole active streaming window, not just the
-                        instant before the first token: previously it vanished the moment
-                        `message.text` went truthy, so a 400-line response looked "done" (no
-                        loading affordance at all) for the rest of its own generation. When
-                        reasoning is still live, its own shimmer already covers this — skip the
-                        cursor only in that one case. */}
                     {isVibing &&
                       messageIndex === vibeMessages.length - 1 &&
                       (message.text || !message.reasoning) && (
@@ -206,7 +231,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   <VibeActionSummary actions={message.actions} />
                   {message.commitSha && (
                     <div className="vibe-commit-chip">
-                      ⑂ committed {message.commitSha.slice(0, 8)} — ย้อนได้ที่ tab History
+                      ⑂ committed {message.commitSha.slice(0, 8)} — available in History
                     </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (
@@ -271,7 +296,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <Textarea
-                aria-label="Ask Pi about the app or describe a change"
+                aria-label="Describe the change you want to make"
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
                 onKeyDown={(event) => {
@@ -280,15 +305,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder={
-                  isVibing
-                    ? "พิมพ์สั่งต่อได้เลย — งานจะเข้าคิวรอ"
-                    : "Ask Pi about the app or describe a change…"
-                }
+                placeholder="Describe the change you want to make"
                 rows={1}
               />
               <div className="vibe-composer-footer">
-                <label className="vibe-composer-attach" title="แนบไฟล์">
+                <label className="vibe-composer-attach" title="Attach files" aria-label="Attach files">
                   <input
                     type="file"
                     multiple
@@ -347,7 +368,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               ) : null}
             </div>
           ) : vibeTab === "database" ? (
-            <Suspense fallback={<div className="hz-db-empty">กำลังโหลด Database…</div>}>
+            <Suspense fallback={<div className="hz-db-empty">Loading database…</div>}>
               <WorkspaceDatabasePanel projectId={selectedProject.id} />
             </Suspense>
           ) : vibeTab === "prd" ? (

@@ -36,13 +36,13 @@ export function VibeRestorePoint({
 
   if (confirming) {
     return (
-      <span className="vibe-restore-confirm" role="alertdialog" aria-label="ยืนยันการย้อนกลับ">
-        <span>ย้อนโค้ดกลับมาที่จุดนี้? งานหลังจากนี้จะถูกลบ</span>
+      <span className="vibe-restore-confirm" role="alertdialog" aria-label="Confirm restore">
+        <span>Restore the code to this point? Later work will be removed.</span>
         <button type="button" disabled={busy} onClick={() => void runRestore()}>
-          {busy ? "กำลังย้อน…" : "ยืนยัน"}
+          {busy ? "Restoring…" : "Confirm"}
         </button>
         <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
-          ยกเลิก
+          Cancel
         </button>
         {error && <span className="vibe-restore-error">{error}</span>}
       </span>
@@ -53,11 +53,11 @@ export function VibeRestorePoint({
       type="button"
       className="vibe-restore-button"
       disabled={disabled}
-      title="ย้อนโค้ดกลับมาที่เวอร์ชันนี้"
+      title="Restore code to this version"
       onClick={() => setConfirming(true)}
     >
       <Undo2 size={12} />
-      ย้อนกลับมาจุดนี้
+      Restore to this point
     </button>
   );
 }
