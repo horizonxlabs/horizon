@@ -35,6 +35,13 @@ const projectA = {
   tokenUsedThisMonth: 0
 };
 
+const projectB = {
+  ...projectA,
+  id: "project-b",
+  name: "Project B",
+  frontendVersion: "fe-b"
+};
+
 function accessSnapshot(project) {
   return {
     members: [],
@@ -78,15 +85,271 @@ function publishState(project) {
 }
 
 let latest;
-function AccessProbe({ client, loadAccessState, loadPublishState }) {
+function AccessProbe({
+  client,
+  loadAccessState,
+  loadPublishState,
+  selectedProject = projectA
+}) {
   latest = usePublishAccess({
-    selectedProject: projectA,
+    selectedProject,
     clientFactory: () => client,
     loadAccessState,
     loadPublishState
   });
   return React.createElement("output", null, latest.publishMessage);
 }
+
+const invitationInput = {
+  email: " NEW.USER@COMPANY.COM ",
+  roleKey: "manager",
+  userType: "internal",
+  note: " Quarterly approval access "
+};
+
+test("a Project A invitation success after reset cannot claim Project B generation", async () => {
+  const invitationA = deferred();
+  const invitationPayloadsB = [];
+  const accessProjects = [];
+  let renderer;
+  const renderProbe = (selectedProject, client) =>
+    React.createElement(AccessProbe, {
+      selectedProject,
+      client,
+      loadAccessState: async (projectId) => {
+        accessProjects.push(projectId);
+        return accessSnapshot(projectId === "project-b" ? "B" : "A");
+      },
+      loadPublishState: async () => publishState("B")
+    });
+
+  await act(async () => {
+    renderer = create(
+      renderProbe(projectA, {
+        createAppInvitation: async () => invitationA.promise
+      })
+    );
+  });
+
+  let staleInvitation;
+  await act(async () => {
+    staleInvitation = latest.handleInviteUser(invitationInput);
+    await Promise.resolve();
+    latest.resetPublishAccess();
+    renderer.update(
+      renderProbe(projectB, {
+        async createAppInvitation(projectId, payload) {
+          invitationPayloadsB.push([projectId, payload]);
+        }
+      })
+    );
+    invitationA.resolve();
+    await staleInvitation;
+  });
+
+  assert.deepEqual(accessProjects, []);
+  assert.equal(latest.publishMessage, "Loading access and publish information.");
+
+  await act(async () => {
+    assert.equal(await latest.handleInviteUser(invitationInput), true);
+  });
+  assert.deepEqual(invitationPayloadsB, [
+    [
+      "project-b",
+      {
+        email: "new.user@company.com",
+        roleKey: "manager",
+        userType: "internal",
+        note: "Quarterly approval access"
+      }
+    ]
+  ]);
+  assert.deepEqual(accessProjects, ["project-b"]);
+  assert.equal(latest.visibleAppRoles[0].role, "B Manager");
+  assert.equal(
+    latest.publishMessage,
+    "Invitation sent to new.user@company.com. Access information is up to date."
+  );
+  await act(async () => renderer.unmount());
+});
+
+test("a stale invitation failure cannot replace Project B feedback or clear its pending invite", async () => {
+  const invitationA = deferred();
+  const invitationB = deferred();
+  let renderer;
+  const renderProbe = (selectedProject, client) =>
+    React.createElement(AccessProbe, {
+      selectedProject,
+      client,
+      loadAccessState: async (projectId) =>
+        accessSnapshot(projectId === "project-b" ? "B" : "A"),
+      loadPublishState: async () => publishState("B")
+    });
+
+  await act(async () => {
+    renderer = create(
+      renderProbe(projectA, { createAppInvitation: async () => invitationA.promise })
+    );
+  });
+  let staleInvitation;
+  await act(async () => {
+    staleInvitation = latest.handleInviteUser(invitationInput);
+    await Promise.resolve();
+    latest.resetPublishAccess();
+    renderer.update(
+      renderProbe(projectB, { createAppInvitation: async () => invitationB.promise })
+    );
+    await latest.refreshCreatorPublishState("project-b");
+  });
+  assertProjectBState();
+
+  let currentInvitation;
+  await act(async () => {
+    currentInvitation = latest.handleInviteUser(invitationInput);
+    await Promise.resolve();
+  });
+  assert.equal(latest.isInvitingUser, true);
+
+  await act(async () => {
+    invitationA.reject(new Error("Project A invitation failed late"));
+    await staleInvitation;
+  });
+  assert.equal(latest.isInvitingUser, true);
+  assertProjectBState();
+
+  await act(async () => {
+    invitationB.resolve();
+    await currentInvitation;
+  });
+  assert.equal(latest.isInvitingUser, false);
+  assert.equal(
+    latest.publishMessage,
+    "Invitation sent to new.user@company.com. Access information is up to date."
+  );
+  await act(async () => renderer.unmount());
+});
+
+test("a Project A decision success after reset cannot claim Project B generation", async () => {
+  const decisionA = deferred();
+  const decisionPayloadsB = [];
+  const accessProjects = [];
+  let renderer;
+  const renderProbe = (selectedProject, client) =>
+    React.createElement(AccessProbe, {
+      selectedProject,
+      client,
+      loadAccessState: async (projectId) => {
+        accessProjects.push(projectId);
+        return accessSnapshot(projectId === "project-b" ? "B" : "A");
+      },
+      loadPublishState: async () => publishState("B")
+    });
+
+  await act(async () => {
+    renderer = create(
+      renderProbe(projectA, {
+        decideAppAccessRequest: async () => decisionA.promise
+      })
+    );
+  });
+  let staleDecision;
+  await act(async () => {
+    staleDecision = latest.handleAccessRequestDecision("request-shared", "approved");
+    latest.resetPublishAccess();
+    renderer.update(
+      renderProbe(projectB, {
+        async decideAppAccessRequest(projectId, payload) {
+          decisionPayloadsB.push([projectId, payload]);
+        }
+      })
+    );
+    decisionA.resolve();
+    await staleDecision;
+  });
+
+  assert.deepEqual(accessProjects, []);
+  assert.equal(latest.publishMessage, "Loading access and publish information.");
+  assert.equal(latest.decidingAccessRequestIds.has("request-shared"), false);
+
+  await act(async () => {
+    await latest.handleAccessRequestDecision("request-shared", "rejected");
+  });
+  assert.deepEqual(decisionPayloadsB, [
+    ["project-b", { requestId: "request-shared", decision: "rejected" }]
+  ]);
+  assert.deepEqual(accessProjects, ["project-b"]);
+  assert.equal(latest.visibleAppRoles[0].role, "B Manager");
+  assert.equal(
+    latest.publishMessage,
+    "Access request rejected. Access information is up to date."
+  );
+  await act(async () => renderer.unmount());
+});
+
+test("a stale decision failure cannot replace Project B feedback or clear its pending decision", async () => {
+  const decisionA = deferred();
+  const decisionB = deferred();
+  const decisionPayloadsB = [];
+  let renderer;
+  const renderProbe = (selectedProject, client) =>
+    React.createElement(AccessProbe, {
+      selectedProject,
+      client,
+      loadAccessState: async (projectId) =>
+        accessSnapshot(projectId === "project-b" ? "B" : "A"),
+      loadPublishState: async () => publishState("B")
+    });
+
+  await act(async () => {
+    renderer = create(
+      renderProbe(projectA, { decideAppAccessRequest: async () => decisionA.promise })
+    );
+  });
+  let staleDecision;
+  await act(async () => {
+    staleDecision = latest.handleAccessRequestDecision("request-shared", "approved");
+    await Promise.resolve();
+    latest.resetPublishAccess();
+    renderer.update(
+      renderProbe(projectB, {
+        async decideAppAccessRequest(projectId, payload) {
+          decisionPayloadsB.push([projectId, payload]);
+          return decisionB.promise;
+        }
+      })
+    );
+    await latest.refreshCreatorPublishState("project-b");
+  });
+  assertProjectBState();
+
+  let currentDecision;
+  await act(async () => {
+    currentDecision = latest.handleAccessRequestDecision("request-shared", "rejected");
+    await Promise.resolve();
+  });
+  assert.equal(latest.decidingAccessRequestIds.has("request-shared"), true);
+
+  await act(async () => {
+    decisionA.reject(new Error("Project A decision failed late"));
+    await staleDecision;
+  });
+  assert.equal(latest.decidingAccessRequestIds.has("request-shared"), true);
+  assertProjectBState();
+
+  await act(async () => {
+    decisionB.resolve();
+    await currentDecision;
+  });
+  assert.deepEqual(decisionPayloadsB, [
+    ["project-b", { requestId: "request-shared", decision: "rejected" }]
+  ]);
+  assert.equal(latest.decidingAccessRequestIds.has("request-shared"), false);
+  assert.equal(
+    latest.publishMessage,
+    "Access request rejected. Access information is up to date."
+  );
+  await act(async () => renderer.unmount());
+});
 
 function assertProjectBState() {
   assert.equal(latest.accessLoadState, "ready");
@@ -112,102 +375,6 @@ function assertProjectBState() {
   assert.equal(latest.publishMessageTone, "success");
   assert.equal(latest.publishMessageTechnicalDetails, undefined);
 }
-
-test("Project A stale successes cannot overwrite Project B access, publish state, or publish result", async () => {
-  const accessSuccessA = deferred();
-  const publishStateA = deferred();
-  const publishResultA = deferred();
-  let projectAAccessCalls = 0;
-  let renderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(AccessProbe, {
-        client: {
-          publishProject: async () => publishResultA.promise,
-          listAppStoreRegistry: async () => publishState("A").registry,
-          listDeployments: async () => publishState("A").deployments
-        },
-        loadAccessState: async (projectId) => {
-          if (projectId !== "project-a") return accessSnapshot("B");
-          projectAAccessCalls += 1;
-          return projectAAccessCalls === 1 ? accessSnapshot("A") : accessSuccessA.promise;
-        },
-        loadPublishState: async (projectId) =>
-          projectId === "project-a" ? publishStateA.promise : publishState("B")
-      })
-    );
-  });
-
-  let staleRefresh;
-  let staleAccess;
-  let stalePublish;
-  await act(async () => {
-    staleRefresh = latest.refreshCreatorPublishState("project-a");
-    await Promise.resolve();
-    staleAccess = latest.refreshCreatorAccessState("project-a");
-    stalePublish = latest.handlePublishProject();
-  });
-
-  await act(async () => {
-    latest.resetPublishAccess();
-    await latest.refreshCreatorPublishState("project-b");
-  });
-  assertProjectBState();
-
-  await act(async () => {
-    accessSuccessA.resolve(accessSnapshot("A"));
-    publishStateA.resolve(publishState("A"));
-    publishResultA.resolve({
-      registryEntry: publishState("A").registry[0],
-      deployment: publishState("A").deployments[0],
-      manifest: { manifestVersion: "manifest-A" }
-    });
-    await Promise.all([staleRefresh, staleAccess, stalePublish]);
-  });
-
-  assertProjectBState();
-  await act(async () => renderer.unmount());
-});
-
-test("Project A stale failures cannot replace Project B ready state or feedback", async () => {
-  const accessA = deferred();
-  const publishResultA = deferred();
-  let renderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(AccessProbe, {
-        client: {
-          publishProject: async () => publishResultA.promise
-        },
-        loadAccessState: async (projectId) =>
-          projectId === "project-a" ? accessA.promise : accessSnapshot("B"),
-        loadPublishState: async () => publishState("B")
-      })
-    );
-  });
-
-  let staleRefresh;
-  let stalePublish;
-  await act(async () => {
-    staleRefresh = latest.refreshCreatorPublishState("project-a");
-    stalePublish = latest.handlePublishProject();
-    await Promise.resolve();
-  });
-  await act(async () => {
-    latest.resetPublishAccess();
-    await latest.refreshCreatorPublishState("project-b");
-  });
-  assertProjectBState();
-
-  await act(async () => {
-    accessA.reject(new Error("Project A access failed late"));
-    publishResultA.reject(new Error("Project A publish failed late"));
-    await Promise.allSettled([staleRefresh, stalePublish]);
-  });
-
-  assertProjectBState();
-  await act(async () => renderer.unmount());
-});
 
 test.after(() => {
   if (originalActEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT;

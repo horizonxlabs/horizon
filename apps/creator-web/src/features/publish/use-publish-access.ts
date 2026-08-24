@@ -10,7 +10,9 @@ import { useRef, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
 import type { CreatorStatusTone } from "@/shared";
+import { createAccessView } from "./access-view";
 import { loadCreatorAccessState, loadCreatorPublishState } from "./api";
+import { type ProjectRequestGuard, useProjectRequestGuard } from "./project-request-guard";
 
 export function usePublishAccess({
   selectedProject,
@@ -45,25 +47,10 @@ export function usePublishAccess({
   const [decidingAccessRequestIds, setDecidingAccessRequestIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
-  const accessDecisionRequests = useRef(new Map<string, Promise<void>>());
+  type AccessDecisionRequest = { promise: Promise<void> };
+  const accessDecisionRequests = useRef(new Map<string, AccessDecisionRequest>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
-  const refreshGenerationRef = useRef(0);
-  const activeProjectIdRef = useRef<string | undefined>(selectedProject.id || undefined);
-
-  type RefreshGuard = { generation: number; projectId: string };
-
-  function createRefreshGuard(projectId: string): RefreshGuard | undefined {
-    if (activeProjectIdRef.current && activeProjectIdRef.current !== projectId) return undefined;
-    activeProjectIdRef.current = projectId;
-    return { generation: refreshGenerationRef.current, projectId };
-  }
-
-  function isCurrentRefresh(guard: RefreshGuard): boolean {
-    return (
-      guard.generation === refreshGenerationRef.current &&
-      guard.projectId === activeProjectIdRef.current
-    );
-  }
+  const requestGuard = useProjectRequestGuard(selectedProject.id || undefined);
 
   function setPublishMessage(message: string) {
     setPublishMessageState(message);
@@ -87,41 +74,8 @@ export function usePublishAccess({
     setAccessLoadState(snapshot ? "ready" : "loading");
   }
 
-  const visibleAppMembers =
-    appAccessSnapshot?.members.map((member) => ({
-      user: member.name || member.email,
-      type: member.userType,
-      role: member.roleName,
-      status: member.status,
-      lastAccess: member.lastAccessAt ? member.lastAccessAt.slice(0, 10) : "pending"
-    })) ?? [];
-  const visiblePendingInvites =
-    appAccessSnapshot?.invitations
-      .filter((invite) => ["pending", "approval_required"].includes(invite.status))
-      .map((invite) => ({
-        email: invite.email,
-        type: invite.userType,
-        role: invite.roleKey,
-        invitedBy: "Creator User",
-        expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
-        status: invite.status
-      })) ?? [];
-  const visibleAccessRequests =
-    appAccessSnapshot?.accessRequests.map((request) => ({
-      id: request.id,
-      requester: request.requesterEmail,
-      role: request.requestedRoleKey,
-      reason: request.reason,
-      submitted: request.createdAt.slice(0, 10),
-      status: request.status
-    })) ?? [];
-  const visibleAppRoles =
-    appAccessSnapshot?.roles.map((role) => ({
-      role: role.name,
-      permissions: role.permissions.join(", "),
-      members: String(role.memberCount),
-      status: role.memberCount > 0 ? "active" : "ready"
-    })) ?? [];
+  const { visibleAppMembers, visiblePendingInvites, visibleAccessRequests, visibleAppRoles } =
+    createAccessView(appAccessSnapshot);
   const visiblePublishChecklist =
     publishReview?.checklist.map((item) => ({
       check: item.label,
@@ -158,45 +112,49 @@ export function usePublishAccess({
       : undefined;
 
   function resetPublishAccess() {
-    refreshGenerationRef.current += 1;
-    activeProjectIdRef.current = undefined;
+    requestGuard.reset();
+    accessDecisionRequests.current.clear();
     setAppAccessSnapshot(undefined);
     setPublishReview(undefined);
     setPublishResult(undefined);
     setRegistryEntries([]);
     setRuntimeDeployments([]);
+    setIsInvitingUser(false);
+    setDecidingAccessRequestIds(new Set());
     setIsPublishingProject(false);
     setPublishFeedback("Loading access and publish information.", "info");
   }
 
-  async function loadAccessForRefresh(projectId: string, guard: RefreshGuard) {
-    if (!appAccessSnapshotRef.current && isCurrentRefresh(guard)) setAccessLoadState("loading");
+  async function loadAccessForRefresh(projectId: string, guard: ProjectRequestGuard) {
+    if (!appAccessSnapshotRef.current && requestGuard.isCurrent(guard)) {
+      setAccessLoadState("loading");
+    }
     try {
       const access = await loadAccessState(projectId);
-      if (!isCurrentRefresh(guard)) return undefined;
+      if (!requestGuard.isCurrent(guard)) return undefined;
       setAppAccessSnapshot(access);
       return access;
     } catch (error) {
-      if (!isCurrentRefresh(guard)) return undefined;
+      if (!requestGuard.isCurrent(guard)) return undefined;
       if (!appAccessSnapshotRef.current) setAccessLoadState("unavailable");
       throw error;
     }
   }
 
   async function refreshCreatorAccessState(projectId: string) {
-    const guard = createRefreshGuard(projectId);
+    const guard = requestGuard.capture(projectId);
     if (!guard) return undefined;
     return loadAccessForRefresh(projectId, guard);
   }
 
   async function refreshCreatorPublishState(projectId: string) {
-    const guard = createRefreshGuard(projectId);
+    const guard = requestGuard.capture(projectId);
     if (!guard) return;
     try {
       const access = await loadAccessForRefresh(projectId, guard);
-      if (!access || !isCurrentRefresh(guard)) return;
+      if (!access || !requestGuard.isCurrent(guard)) return;
     } catch (error) {
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setPublishFeedback(
         "Access information could not be loaded. Retry to view the latest members and requests.",
         "danger",
@@ -206,13 +164,13 @@ export function usePublishAccess({
     }
     try {
       const publishState = await loadPublishState(projectId);
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setPublishReview(publishState.review);
       setRegistryEntries(publishState.registry);
       setRuntimeDeployments(publishState.deployments);
       setPublishFeedback("Access information and publish readiness are up to date.", "success");
     } catch (error) {
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setPublishFeedback(
         "Access information loaded. Publish readiness is unavailable.",
         "warning",
@@ -223,6 +181,9 @@ export function usePublishAccess({
   }
 
   async function handleInviteUser(input: AppInvitationInput): Promise<boolean> {
+    const projectId = selectedProject.id;
+    const guard = requestGuard.capture(projectId);
+    if (!guard) return false;
     const email = input.email.trim().toLowerCase();
     const duplicate = appAccessSnapshot?.invitations.find(
       (invitation) =>
@@ -236,45 +197,62 @@ export function usePublishAccess({
 
     setIsInvitingUser(true);
     try {
-      const client = clientFactory();
-      await client.createAppInvitation(selectedProject.id, {
-        ...input,
-        email,
-        note: input.note?.trim() || undefined
-      });
-    } catch (error) {
-      setPublishFeedback(
-        "Invitation could not be sent. Existing access was unchanged.",
-        "danger",
-        technicalDetails(error)
-      );
-      setIsInvitingUser(false);
-      return false;
-    }
+      try {
+        const client = clientFactory();
+        await client.createAppInvitation(projectId, {
+          ...input,
+          email,
+          note: input.note?.trim() || undefined
+        });
+      } catch (error) {
+        if (requestGuard.isCurrent(guard)) {
+          setPublishFeedback(
+            "Invitation could not be sent. Existing access was unchanged.",
+            "danger",
+            technicalDetails(error)
+          );
+        }
+        return false;
+      }
 
-    try {
-      await refreshCreatorAccessState(selectedProject.id);
-      setPublishFeedback(
-        `Invitation sent to ${email}. Access information is up to date.`,
-        "success"
-      );
-    } catch (error) {
-      setPublishFeedback(
-        `Invitation sent to ${email}, but access information could not be refreshed.`,
-        "warning",
-        technicalDetails(error)
-      );
+      if (!requestGuard.isCurrent(guard)) return false;
+      try {
+        const access = await loadAccessForRefresh(projectId, guard);
+        if (!access || !requestGuard.isCurrent(guard)) return false;
+        setPublishFeedback(
+          `Invitation sent to ${email}. Access information is up to date.`,
+          "success"
+        );
+      } catch (error) {
+        if (!requestGuard.isCurrent(guard)) return false;
+        setPublishFeedback(
+          `Invitation sent to ${email}, but access information could not be refreshed.`,
+          "warning",
+          technicalDetails(error)
+        );
+      }
+      return true;
     } finally {
-      setIsInvitingUser(false);
+      if (requestGuard.isCurrent(guard)) setIsInvitingUser(false);
     }
-    return true;
   }
 
   async function handleAccessRequestDecision(requestId: string, decision: "approved" | "rejected") {
+    const projectId = selectedProject.id;
+    const guard = requestGuard.capture(projectId);
+    if (!guard) return;
     const existing = accessDecisionRequests.current.get(requestId);
-    if (existing) return existing;
+    if (existing) return existing.promise;
 
+    const requestRecord = {} as AccessDecisionRequest;
     const request = (async () => {
+      await Promise.resolve();
+      if (
+        !requestGuard.isCurrent(guard) ||
+        accessDecisionRequests.current.get(requestId) !== requestRecord
+      ) {
+        return;
+      }
       setDecidingAccessRequestIds((current) => {
         const next = new Set(current);
         next.add(requestId);
@@ -283,26 +261,31 @@ export function usePublishAccess({
       try {
         try {
           const client = clientFactory();
-          await client.decideAppAccessRequest(selectedProject.id, {
+          await client.decideAppAccessRequest(projectId, {
             requestId,
             decision
           });
         } catch (error) {
-          setPublishFeedback(
-            `Access request could not be ${decision}. No access changes were applied.`,
-            "danger",
-            technicalDetails(error)
-          );
+          if (requestGuard.isCurrent(guard)) {
+            setPublishFeedback(
+              `Access request could not be ${decision}. No access changes were applied.`,
+              "danger",
+              technicalDetails(error)
+            );
+          }
           return;
         }
 
+        if (!requestGuard.isCurrent(guard)) return;
         try {
-          await refreshCreatorAccessState(selectedProject.id);
+          const access = await loadAccessForRefresh(projectId, guard);
+          if (!access || !requestGuard.isCurrent(guard)) return;
           setPublishFeedback(
             `Access request ${decision}. Access information is up to date.`,
             "success"
           );
         } catch (error) {
+          if (!requestGuard.isCurrent(guard)) return;
           setPublishFeedback(
             `Access request ${decision}, but access information could not be refreshed.`,
             "warning",
@@ -310,33 +293,39 @@ export function usePublishAccess({
           );
         }
       } finally {
-        setDecidingAccessRequestIds((current) => {
-          const next = new Set(current);
-          next.delete(requestId);
-          return next;
-        });
-        accessDecisionRequests.current.delete(requestId);
+        if (
+          requestGuard.isCurrent(guard) &&
+          accessDecisionRequests.current.get(requestId) === requestRecord
+        ) {
+          setDecidingAccessRequestIds((current) => {
+            const next = new Set(current);
+            next.delete(requestId);
+            return next;
+          });
+          accessDecisionRequests.current.delete(requestId);
+        }
       }
     })();
 
-    accessDecisionRequests.current.set(requestId, request);
+    requestRecord.promise = request;
+    accessDecisionRequests.current.set(requestId, requestRecord);
     return request;
   }
 
   async function handlePublishProject() {
-    const guard = createRefreshGuard(selectedProject.id);
+    const guard = requestGuard.capture(selectedProject.id);
     if (!guard) return;
     setIsPublishingProject(true);
     try {
       const client = clientFactory();
       const result = await client.publishProject(selectedProject.id);
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setPublishResult(result);
       const [registry, deployments] = await Promise.all([
         client.listAppStoreRegistry(),
         client.listDeployments(selectedProject.id)
       ]);
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setRegistryEntries(registry);
       setRuntimeDeployments(deployments);
       setPublishFeedback(
@@ -344,14 +333,14 @@ export function usePublishAccess({
         "success"
       );
     } catch (error) {
-      if (!isCurrentRefresh(guard)) return;
+      if (!requestGuard.isCurrent(guard)) return;
       setPublishFeedback(
         "Project could not be published. Existing deployment information was preserved.",
         "danger",
         technicalDetails(error)
       );
     } finally {
-      if (isCurrentRefresh(guard)) setIsPublishingProject(false);
+      if (requestGuard.isCurrent(guard)) setIsPublishingProject(false);
     }
   }
 
