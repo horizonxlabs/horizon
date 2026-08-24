@@ -14,6 +14,8 @@ const { ProjectOverviewPage } =
   await import("../../apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx");
 const { ProjectsPage } =
   await import("../../apps/creator-web/src/features/projects/ProjectsPage.tsx");
+const { PublishPage } =
+  await import("../../apps/creator-web/src/features/publish/PublishPage.tsx");
 const { AppShell, Button, DataTable } = await import("../../packages/ui/src/index.tsx");
 const { creatorPageCopy } = await import("../../apps/creator-web/src/app/routes.ts");
 const requireFromStore = createRequire(
@@ -282,6 +284,34 @@ test("Project dashboard renders English details, actions, and an English-locale 
   assert.match(html, /Jan 2, 2026/);
   assert.doesNotMatch(html, />Project overview</);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
+});
+
+test("Publish renders five accessible ready stages and an enabled primary action", () => {
+  const manifest = {
+    appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
+    frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
+    auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
+    roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
+  };
+  const html = renderToStaticMarkup(React.createElement(PublishPage, { app: {
+    creatorNavItems: [], bootstrap: { projects: [], userName: "Creator", status: "ready" },
+    creatorSessionControls: null, creatorPage: "publish", pageCopy: creatorPageCopy.publish,
+    selectedProject: { id: "ops", name: "Operations" }, creatorPageActions: null,
+    isCreateProjectDialogOpen: false, setIsCreateProjectDialogOpen() {}, isEnteringWorkspace: false,
+    onNavigate() {}, pathname: "/creator/projects/ops/publish", handlePublishProject() {},
+    isPublishingProject: false, accessLoadState: "ready",
+    publishReview: { manifest, checklist: [], ready: true }, publishResult: undefined,
+    visibleRegistryEntry: undefined, visiblePublishChecklist: [], visibleDeployment: undefined,
+    visiblePreview: { id: "preview-3", version: "3" }, publishMessage: "Ready",
+    publishMessageTone: "success", publishMessageTechnicalDetails: undefined
+  }}));
+  assert.equal((html.match(/creator-readiness-item/g) ?? []).length, 5);
+  for (const label of ["Manifest", "Route", "Permissions", "Preview", "Registry"])
+    assert.match(html, new RegExp(`>${label}<`));
+  assert.equal((html.match(/>Ready<\/span>/g) ?? []).length, 5);
+  assert.match(html, /aria-label="Publish readiness"/);
+  assert.match(html, /bg-primary[^>]*>.*Publish to App Store/s);
+  assert.doesNotMatch(html, /Publish to App Store[^>]*disabled/);
 });
 
 test("AppShell opens and closes the real mobile drawer with 44px controls", async () => {

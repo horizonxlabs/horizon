@@ -277,12 +277,39 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
       app: {
         ...app,
         bootstrap: { ...app.bootstrap, status: "ready" },
+        accessLoadState: "ready",
         publishMessage: "Access decision failed: approval offline"
       }
     })
   );
   assert.match(html, /role="alert"/);
   assert.match(html, /Access decision failed: approval offline/);
+});
+
+test("PublishPage fail-closes readiness when access information is unavailable", () => {
+  const html = renderWithHook((app) => React.createElement(PublishPage, { app: {
+    ...app,
+    bootstrap: { ...app.bootstrap, status: "ready" },
+    accessLoadState: "unavailable",
+    publishReview: {
+      manifest: {
+        appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
+        frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
+        auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
+        roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
+      },
+      checklist: [], ready: true
+    },
+    visiblePublishChecklist: [], visiblePreview: { id: "preview-3", version: "3" },
+    publishMessage: "Access information loaded. Publish readiness is unavailable.",
+    publishMessageTone: "warning", publishMessageTechnicalDetails: "access API 503"
+  }}));
+  assert.match(html, /Publish readiness is unavailable/);
+  assert.match(html, /Publish to App Store/);
+  assert.match(html, /disabled/);
+  assert.match(html, /Retry readiness/);
+  assert.match(html, /Technical details/);
+  assert.match(html, /access API 503/);
 });
 
 test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
