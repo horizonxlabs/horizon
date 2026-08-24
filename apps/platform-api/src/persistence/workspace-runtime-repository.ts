@@ -18,7 +18,7 @@ export interface WorkspaceRuntimePersistenceClient {
       update: Omit<RuntimeRecord, "id" | "projectId" | "createdAt">;
       create: RuntimeRecord;
     }): Promise<RuntimeRecord>;
-    delete(args: { where: { projectId: string } }): Promise<RuntimeRecord>;
+    deleteMany(args: { where: { projectId: string } }): Promise<{ count: number }>;
   };
 }
 
@@ -43,8 +43,7 @@ export class WorkspaceRuntimeRepositoryBackedStore implements WorkspaceRuntimeRe
   }
 
   async remove(projectId: string): Promise<void> {
-    try { await this.client.workspaceRuntimeRecord.delete({ where: { projectId } }); }
-    catch { /* deletion is idempotent for recovery cleanup */ }
+    await this.client.workspaceRuntimeRecord.deleteMany({ where: { projectId } });
   }
 }
 

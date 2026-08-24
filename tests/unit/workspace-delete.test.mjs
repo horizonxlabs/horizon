@@ -17,8 +17,11 @@ const { createProjectSecretStore } = await import(
 const { createMemoryDockerEngine } = await import(
   "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts"
 );
+const { WorkspaceRuntimeRepositoryBackedStore } = await import(
+  "../../apps/platform-api/src/persistence/workspace-runtime-repository.ts"
+);
 
-function makeOrchestrator() {
+function makeOrchestrator(runtimeRecords) {
   const released = [];
   const deps = {
     postgres: createPgClientPostgresProvisioner(async () => {}),
@@ -26,7 +29,8 @@ function makeOrchestrator() {
     llmGateway: createMemoryLlmGatewayAdmin(),
     secrets: createProjectSecretStore({ encryptionKeyHex: randomBytes(32).toString("hex") }),
     docker: createMemoryDockerEngine(),
-    onAudit: (e) => released.push(e.action)
+    onAudit: (e) => released.push(e.action),
+    runtimeRecords
   };
   return { orchestrator: createWorkspaceOrchestrator(deps), deps, audits: released };
 }
@@ -79,4 +83,47 @@ test("deleteWorkspace aggregates failures, attempts every release, and remains r
   deps.postgres.releaseSchema = releaseSchema;
   await orchestrator.deleteWorkspace("prj-leave-tracker");
   assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null, "retry completed deletion");
+});
+
+test("deleteWorkspace aggregates runtime persistence failure and retains retry state", async () => {
+  const rows = new Map();
+  const databaseError = new Error("runtime database unavailable");
+  let removeError = databaseError;
+  const runtimeRecords = new WorkspaceRuntimeRepositoryBackedStore({
+    workspaceRuntimeRecord: {
+      async findMany() { return [...rows.values()]; },
+      async upsert({ where, update, create }) {
+        const next = rows.has(where.projectId) ? { ...rows.get(where.projectId), ...update } : create;
+        rows.set(where.projectId, next);
+        return next;
+      },
+      async deleteMany({ where }) {
+        if (removeError) throw removeError;
+        return { count: rows.delete(where.projectId) ? 1 : 0 };
+      }
+    }
+  });
+  const { orchestrator } = makeOrchestrator(runtimeRecords);
+  await orchestrator.provisionWorkspace({
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker"
+  });
+
+  await assert.rejects(
+    orchestrator.deleteWorkspace("prj-leave-tracker"),
+    (error) =>
+      error instanceof AggregateError &&
+      error.errors.some((cause) => cause === databaseError)
+  );
+  assert.equal(
+    orchestrator.getWorkspace("prj-leave-tracker")?.projectId,
+    "prj-leave-tracker",
+    "in-process retry state is retained"
+  );
+  assert.equal(rows.has("prj-leave-tracker"), true, "durable retry state is retained");
+
+  removeError = undefined;
+  await orchestrator.deleteWorkspace("prj-leave-tracker");
+  assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null);
+  assert.equal(rows.has("prj-leave-tracker"), false);
 });
