@@ -105,7 +105,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         vibeWorkspace.setWorkspaceMessage(unavailableMessage);
       },
       onSettled: () => {
-        if (enteringWorkspace) setIsEnteringWorkspace(false);
+        setIsEnteringWorkspace(false);
       }
     });
   }
@@ -225,7 +225,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
     const enteringWorkspace = selectableTargetPage === "workspace";
-    if (enteringWorkspace) setIsEnteringWorkspace(true);
+    setIsEnteringWorkspace(enteringWorkspace);
     await loadProjectRuntime(
       request,
       enteringWorkspace,

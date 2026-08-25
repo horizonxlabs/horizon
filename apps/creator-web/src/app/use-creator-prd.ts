@@ -35,6 +35,22 @@ export function useCreatorPrd(
   const selectedProjectIdRef = useRef(selectedProject.id);
   selectedProjectIdRef.current = selectedProject.id;
   const refreshGenerationRef = useRef(0);
+  const manualActionRef = useRef({ projectId: selectedProject.id, generation: 0 });
+  if (manualActionRef.current.projectId !== selectedProject.id) {
+    manualActionRef.current = {
+      projectId: selectedProject.id,
+      generation: manualActionRef.current.generation + 1
+    };
+  }
+
+  function beginManualAction(projectId: string) {
+    const generation = manualActionRef.current.generation + 1;
+    manualActionRef.current = { projectId, generation };
+    return () =>
+      manualActionRef.current.projectId === projectId &&
+      manualActionRef.current.generation === generation &&
+      selectedProjectIdRef.current === projectId;
+  }
 
   const visiblePrdSections =
     currentPrdVersion?.sections?.map((section) => ({
@@ -92,10 +108,13 @@ export function useCreatorPrd(
       setPrdFeedbackTone("warning");
       return;
     }
+    const projectId = selectedProject.id;
+    const isCurrent = beginManualAction(projectId);
     try {
-      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, {
+      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(projectId, {
         versionId: currentPrdVersion.id
       });
+      if (!isCurrent()) return;
       setCurrentPrdVersion(baseline);
       setPrdVersionList((current) => [
         baseline,
@@ -106,6 +125,7 @@ export function useCreatorPrd(
       setPrdFeedbackTone("success");
       setPrdTechnicalDetails(undefined);
     } catch (error) {
+      if (!isCurrent()) return;
       setPrdMessage("Baseline could not be confirmed. The current PRD is unchanged.");
       setPrdFeedbackTone("danger");
       setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
@@ -118,13 +138,16 @@ export function useCreatorPrd(
       setPrdFeedbackTone("warning");
       return;
     }
+    const projectId = selectedProject.id;
+    const isCurrent = beginManualAction(projectId);
     setIsGeneratingPrdDraft(true);
     setPrdMessage("Generating PRD draft.");
     setPrdFeedbackTone(undefined);
     setPrdTechnicalDetails(undefined);
     setPrdErrorSource(undefined);
     try {
-      const draft = await createCreatorPlatformClient().generatePrdDraft(selectedProject.id);
+      const draft = await createCreatorPlatformClient().generatePrdDraft(projectId);
+      if (!isCurrent()) return;
       setCurrentPrdVersion(draft);
       setPrdVersionList((current) => [
         draft,
@@ -134,17 +157,22 @@ export function useCreatorPrd(
       setPrdMessage(`PRD draft v${draft.version} generated.`);
       setPrdFeedbackTone("success");
     } catch (error) {
+      if (!isCurrent()) return;
       setPrdStatus("error");
       setPrdErrorSource("generation");
       setPrdMessage("PRD draft could not be generated.");
       setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
-      setIsGeneratingPrdDraft(false);
+      if (isCurrent()) setIsGeneratingPrdDraft(false);
     }
   }
 
   function resetPrdState() {
     refreshGenerationRef.current += 1;
+    manualActionRef.current = {
+      projectId: selectedProjectIdRef.current,
+      generation: manualActionRef.current.generation + 1
+    };
     pendingRef.current = undefined;
     setPendingGeneration(undefined);
     setIsGeneratingPrdDraft(false);
