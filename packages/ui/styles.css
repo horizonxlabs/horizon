@@ -2583,11 +2583,17 @@ th {
 .admin-page-stack {
   display: grid;
   gap: var(--evcp-space-5);
+  min-width: 0;
 }
 
 .creator-access-page {
   display: grid;
   gap: var(--evcp-space-4);
+  min-width: 0;
+}
+
+.creator-access-page > * {
+  min-width: 0;
 }
 
 .creator-permission-list {
@@ -2615,10 +2621,12 @@ th {
 
 @media (max-width: 768px) {
   .creator-access-page .ds-table-wrap {
+    overflow-x: auto;
     overscroll-behavior-inline: contain;
+    width: 100%;
   }
 
-  .creator-access-actions > button {
+  .creator-access-page button {
     min-height: 44px;
   }
 }
@@ -2932,9 +2940,17 @@ th {
   align-items: flex-start;
   border: 1px solid var(--evcp-color-border, #e2e8f0);
   border-radius: var(--evcp-radius-control, 8px);
-  display: flex;
   gap: 12px;
   padding: 16px;
+}
+
+.creator-state {
+  display: flex;
+}
+
+.creator-status-message {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .creator-state-icon {
@@ -3026,6 +3042,17 @@ th {
 
 @media (max-width: 760px) {
   .creator-state-action :is(button, a) {
+    min-height: 44px;
+  }
+
+  .creator-state summary,
+  .creator-status-message summary {
+    align-items: center;
+    display: inline-flex;
+    min-height: 44px;
+  }
+
+  .creator-publish-retry button {
     min-height: 44px;
   }
 }
@@ -8235,6 +8262,11 @@ button:disabled {
     min-height: 44px;
   }
 
+  .hz-projects-studio .hz-hero button,
+  .hz-projects-tools input {
+    min-height: 44px;
+  }
+
   .hz-prompt {
     align-items: stretch;
     grid-template-columns: auto minmax(0, 1fr);
@@ -8538,6 +8570,18 @@ button:disabled {
   min-width: 0;
 }
 
+.hz-db-rdg .rdg-cell:first-child {
+  padding-inline: 0;
+}
+
+.hz-db-selection-target {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  margin: auto;
+}
+
 .hz-db-rdg:focus-visible,
 .hz-db-rdg:focus-within {
   outline: 2px solid var(--evcp-color-primary, #2563eb);
@@ -8626,6 +8670,11 @@ button:disabled {
     min-height: 44px;
     min-width: 132px;
     scroll-snap-align: start;
+  }
+
+  .hz-db-selection-target {
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .hz-db-data-head {

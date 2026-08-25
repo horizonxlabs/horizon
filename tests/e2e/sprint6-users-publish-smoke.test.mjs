@@ -236,12 +236,11 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
     "Invite user",
     "Access Requests",
     "App Roles",
-    "Publish Review",
-    "Readiness checklist",
+    "Publish readiness",
     "Publish to App Store",
-    "Deployment Record",
-    "No deployment record",
-    "No registry entry returned"
+    "Latest deployment",
+    "No published deployment yet",
+    "The registry entry will be created during publish"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
@@ -249,8 +248,8 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
   for (const component of [
     "SectionCard",
     "DataTable",
-    "DefinitionGrid",
-    "DecisionPanel",
+    "CreatorState",
+    "CreatorStatusMessage",
     "ToneBadge"
   ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));

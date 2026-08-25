@@ -23,7 +23,7 @@ const requireFromStore = createRequire(
   new URL("../../apps/app-store-pwa/package.json", import.meta.url)
 );
 const { act, create } = requireFromStore("react-test-renderer");
-const { WorkspaceDatabasePanel } =
+const { default: WorkspaceDatabasePanel } =
   await import("../../apps/creator-web/src/features/workspace/WorkspaceDatabasePanel.tsx");
 
 function deferred() {

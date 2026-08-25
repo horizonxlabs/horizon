@@ -275,9 +275,9 @@ test("Sprint 8 UI exposes fail-closed ticket changes and API-backed operational 
     "Creator Ticket Inbox",
     "Convert to PRD Change",
     "Platform API support required",
-    "PRD Change Requests",
-    "No local PRD change records",
-    "Convert a ticket through the governed API"
+    "Create an auditable PRD change",
+    "Ticket service is unavailable",
+    "Creates a governed PRD change from this ticket"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }

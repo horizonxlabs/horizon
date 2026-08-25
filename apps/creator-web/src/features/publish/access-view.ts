@@ -18,7 +18,7 @@ export function createAccessView(snapshot?: AppAccessSnapshotResponse) {
           type: invite.userType,
           role: invite.roleKey,
           invitedBy: "Creator User",
-          expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "not set",
+          expires: invite.expiresAt ? invite.expiresAt.slice(0, 10) : "No expiration date",
           status: invite.status
         })) ?? [],
     visibleAccessRequests:

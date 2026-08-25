@@ -25,7 +25,7 @@ const requireFromStore = createRequire(
 );
 const { act, create } = requireFromStore("react-test-renderer");
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { WorkspaceDatabasePanel } =
+const { default: WorkspaceDatabasePanel } =
   await import("../../apps/creator-web/src/features/workspace/WorkspaceDatabasePanel.tsx");
 
 function deferred() {
@@ -311,4 +311,48 @@ test("database responsive contract keeps the table strip and record region reach
   assert.match(narrowDatabaseRules, /\.hz-db-tables \{[\s\S]*?overflow-x:\s*auto/);
   assert.match(css, /\.hz-db-rdg \.rdg-header-row \{[\s\S]*?position:\s*sticky/);
   assert.match(css, /\.hz-db-table-item:focus-visible/);
+});
+
+test("narrow database selection controls expose a 44px checkbox hit target", async () => {
+  const originalMatchMedia = globalThis.window.matchMedia;
+  globalThis.window.matchMedia = () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {}
+  });
+  const view = await renderPanel(async (url) =>
+    String(url).endsWith("/db/schema")
+      ? response(schema)
+      : response({
+          table: "notes",
+          columns,
+          rows: [{ id: 1, content: "Ready", createdAt: "2026-08-24T12:30:00.000Z" }],
+          total: 1,
+          limit: 100,
+          offset: 0
+        })
+  );
+  try {
+    const grid = view.renderer.root.find(
+      (node) => node.props.className?.includes?.("hz-db-rdg") && Array.isArray(node.props.rows)
+    );
+    const selectionColumn = grid.props.columns[0];
+    assert.equal(selectionColumn.width, 44);
+    assert.equal(selectionColumn.minWidth, 44);
+    assert.equal(selectionColumn.maxWidth, 44);
+    assert.equal(grid.props.rowHeight, 44);
+    assert.equal(grid.props.headerRowHeight, 44);
+
+    const target = grid.props.renderers.renderCheckbox({
+      "aria-label": "Select",
+      checked: false,
+      onChange() {},
+      tabIndex: 0
+    });
+    assert.equal(target.type, "label");
+    assert.equal(target.props.className, "hz-db-selection-target");
+  } finally {
+    await view.cleanup();
+    globalThis.window.matchMedia = originalMatchMedia;
+  }
 });

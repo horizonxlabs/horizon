@@ -9,6 +9,7 @@ import {
   type RowsChangeData
 } from "react-data-grid";
 import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { databaseGridRenderers, useNarrowDatabaseTargets } from "./database-selection";
 import { formatDatabaseValue } from "./format-database-value";
 import {
   fetchProjectDbSchema,
@@ -17,10 +18,8 @@ import {
   type ProjectDbColumn,
   type ProjectDbSchema
 } from "./project-db";
-
 type Row = Record<string, unknown>;
-
-export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
+export default function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [schema, setSchema] = useState<ProjectDbSchema | undefined>(undefined);
   const [schemaError, setSchemaError] = useState<string | undefined>(undefined);
   const [activeTable, setActiveTable] = useState<string | undefined>(undefined);
@@ -35,6 +34,7 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
   const [adding, setAdding] = useState(false);
   const [newRow, setNewRow] = useState<Record<string, string>>({});
   const [schemaRetryKey, setSchemaRetryKey] = useState(0);
+  const isNarrowViewport = useNarrowDatabaseTargets();
   const tableRequestIdRef = useRef(0);
 
   const pkColumns = useMemo(
@@ -141,8 +141,11 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
       renderEditCell: editable && !column.isPrimaryKey ? renderTextEditor : undefined,
       renderCell: ({ row }) => formatDatabaseValue(row[column.name])
     }));
-    return editable ? [SelectColumn, ...dataColumns] : dataColumns;
-  }, [columns, editable]);
+    const selectionColumn = isNarrowViewport
+      ? { ...SelectColumn, width: 44, minWidth: 44, maxWidth: 44 }
+      : SelectColumn;
+    return editable ? [selectionColumn, ...dataColumns] : dataColumns;
+  }, [columns, editable, isNarrowViewport]);
 
   function handleRowsChange(nextRows: Row[], data: RowsChangeData<Row>) {
     if (!activeTable || !tableReady) return;
@@ -381,6 +384,9 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
             className="hz-db-rdg rdg-light"
             aria-label={`Records in ${activeTable}`}
             columns={gridColumns}
+            rowHeight={editable && isNarrowViewport ? 44 : undefined}
+            headerRowHeight={editable && isNarrowViewport ? 44 : undefined}
+            renderers={databaseGridRenderers}
             rows={rows}
             rowKeyGetter={rowKeyGetter}
             onRowsChange={handleRowsChange}
@@ -392,5 +398,3 @@ export function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
     </div>
   );
 }
-
-export default WorkspaceDatabasePanel;
