@@ -10,6 +10,10 @@ const authenticatedCreatorFiles = [
   "apps/creator-web/src/features/projects/ProjectsPage.tsx",
   "apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx",
   "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
+  "apps/creator-web/src/features/workspace/WorkspaceCodePanel.tsx",
+  "apps/creator-web/src/features/workspace/VibeRestorePoint.tsx",
+  "apps/creator-web/src/features/workspace/use-project-files.ts",
+  "apps/creator-web/src/features/workspace/use-vibe-chat.ts",
   "apps/creator-web/src/features/workspace/QuickMessages.tsx",
   "apps/creator-web/src/features/workspace/workspace-chrome.ts",
   "apps/creator-web/src/features/prd/PrdPage.tsx",
@@ -30,6 +34,29 @@ async function readRepoFile(file) {
 test("authenticated Creator route sources contain no Thai user-facing copy", async () => {
   for (const file of authenticatedCreatorFiles) {
     assert.doesNotMatch(await readRepoFile(file), /[\u0E00-\u0E7F]/, file);
+  }
+});
+
+test("Workspace failures keep service exceptions out of primary authenticated copy", async () => {
+  const vibeChat = await readRepoFile(
+    "apps/creator-web/src/features/workspace/use-vibe-chat.ts"
+  );
+  const codePanel = await readRepoFile(
+    "apps/creator-web/src/features/workspace/WorkspaceCodePanel.tsx"
+  );
+  const restorePoint = await readRepoFile(
+    "apps/creator-web/src/features/workspace/VibeRestorePoint.tsx"
+  );
+  const projectFiles = await readRepoFile(
+    "apps/creator-web/src/features/workspace/use-project-files.ts"
+  );
+
+  assert.doesNotMatch(vibeChat, /text:\s*message\.text\s*\+[\s\S]{0,160}\.message/);
+  assert.doesNotMatch(codePanel, /<span>\{errorText\}<\/span>/);
+  assert.doesNotMatch(restorePoint, /vibe-restore-error[^>]*>\{error\}/);
+  assert.doesNotMatch(projectFiles, /setProjectFileMessage\([^)]*\.message/);
+  for (const source of [vibeChat, codePanel, restorePoint, projectFiles]) {
+    assert.match(source, /[Tt]echnicalDetails/);
   }
 });
 

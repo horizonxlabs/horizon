@@ -2583,6 +2583,9 @@ th {
 .admin-page-stack {
   display: grid;
   gap: var(--evcp-space-5);
+}
+
+.creator-access-stack {
   min-width: 0;
 }
 

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Undo2 } from "lucide-react";
+import { CreatorStatusMessage } from "@/shared";
 import { restoreWorkspaceCommit } from "./api";
 
 // Every committed turn is a restore point. Click ⏪ → inline confirm → the workspace code
@@ -18,17 +19,19 @@ export function VibeRestorePoint({
 }): ReactNode {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [restoreTechnicalDetails, setRestoreTechnicalDetails] = useState("");
 
   async function runRestore() {
     setBusy(true);
-    setError("");
+    setRestoreTechnicalDetails("");
     try {
       await restoreWorkspaceCommit(projectId, commitSha);
       setConfirming(false);
       onRestored();
     } catch (restoreError) {
-      setError(restoreError instanceof Error ? restoreError.message : "Restore failed");
+      setRestoreTechnicalDetails(
+        restoreError instanceof Error ? restoreError.message : "Unknown restore failure."
+      );
     } finally {
       setBusy(false);
     }
@@ -44,7 +47,11 @@ export function VibeRestorePoint({
         <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
           Cancel
         </button>
-        {error && <span className="vibe-restore-error">{error}</span>}
+        {restoreTechnicalDetails ? (
+          <CreatorStatusMessage tone="danger" technicalDetails={restoreTechnicalDetails}>
+            Restore failed. Try again.
+          </CreatorStatusMessage>
+        ) : null}
       </span>
     );
   }

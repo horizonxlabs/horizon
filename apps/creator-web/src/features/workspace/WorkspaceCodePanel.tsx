@@ -12,6 +12,7 @@ import {
 import { Highlight, themes } from "prism-react-renderer";
 import { Button } from "@evcp/ui";
 import { useEffect, useMemo, useState } from "react";
+import { CreatorState } from "@/shared";
 import { ensureVibeWorkspace } from "./api";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
@@ -147,14 +148,14 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
   const [activePath, setActivePath] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-  const [errorText, setErrorText] = useState<string | undefined>(undefined);
+  const [errorTechnicalDetails, setErrorTechnicalDetails] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
-    setErrorText(undefined);
+    setErrorTechnicalDetails(undefined);
     ensureVibeWorkspace(projectId)
       .then(() => getWorkspaceFiles(createCreatorPlatformClient(), projectId))
       .then((snapshot) => {
@@ -168,7 +169,9 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
       .catch((error: unknown) => {
         if (cancelled) return;
         const detail = error as { status?: number; message?: string };
-        setErrorText(`${detail?.status ?? "?"} · ${detail?.message ?? "network error"}`);
+        setErrorTechnicalDetails(
+          `${detail?.status ?? "?"} · ${detail?.message ?? "Unknown workspace file failure."}`
+        );
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -198,16 +201,23 @@ export function WorkspaceCodePanel({ projectId }: { projectId: string }) {
       return next;
     });
 
-  if (errorText) {
+  if (errorTechnicalDetails) {
     return (
-      <div className="hz-code-empty">
-        <FileCode2 size={28} aria-hidden="true" />
-        <strong>Couldn't load workspace files</strong>
-        <span>{errorText}</span>
-        <Button variant="secondary" type="button" onClick={() => setReloadKey((key) => key + 1)}>
-          Retry
-        </Button>
-      </div>
+      <CreatorState
+        kind="unavailable"
+        title="Workspace files unavailable"
+        description="We couldn't load the source files. Try again."
+        technicalDetails={errorTechnicalDetails}
+        action={
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+          >
+            Retry
+          </Button>
+        }
+      />
     );
   }
   if (isLoading && files.length === 0) {

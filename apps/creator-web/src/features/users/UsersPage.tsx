@@ -176,7 +176,7 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       <CreatorShell
         app={app}
         content={
-          <section className="admin-page-stack" aria-label="App users roles">
+          <section className="admin-page-stack creator-access-stack" aria-label="App users roles">
             <div className="creator-access-page">
               {resolvedAccessLoadState === "loading" ? (
                 <CreatorState

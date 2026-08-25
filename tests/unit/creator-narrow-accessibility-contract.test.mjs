@@ -10,7 +10,8 @@ function declarationsFor(selector, source = css) {
 }
 
 test("Users & Roles contains intrinsic widths and owns table overflow", () => {
-  assert.match(declarationsFor(".admin-page-stack"), /min-width:\s*0/);
+  assert.doesNotMatch(declarationsFor(".admin-page-stack"), /min-width:\s*0/);
+  assert.match(declarationsFor(".creator-access-stack"), /min-width:\s*0/);
   assert.match(declarationsFor(".creator-access-page"), /min-width:\s*0/);
   assert.match(declarationsFor(".creator-access-page > *"), /min-width:\s*0/);
 

@@ -138,3 +138,34 @@ test("a delayed history response cannot replace a newer live turn or regress Wor
   assert.equal(latest.vibeStatus, "Completed");
   await act(async () => renderer.unmount());
 });
+
+test("a failed live request keeps the service exception out of the chat transcript", async () => {
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.endsWith("/chat/history")) return historyResponse([]);
+    if (url.endsWith("/chat") && init.method === "POST") {
+      return new Response("", { status: 503 });
+    }
+    return new Response("", { status: 404 });
+  };
+  let latest;
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(HookHarness, {
+        onValue(value) {
+          latest = value;
+        }
+      })
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  await act(async () => {
+    await latest.handleVibeChat({ prompt: "Build the dashboard", mode: "plan" });
+  });
+  assert.equal(latest.vibeStatus, "Failed");
+  assert.equal(latest.vibeTechnicalDetails, "Chat request failed (503)");
+  assert.doesNotMatch(JSON.stringify(latest.vibeMessages), /Chat request failed \(503\)/);
+  await act(async () => renderer.unmount());
+});

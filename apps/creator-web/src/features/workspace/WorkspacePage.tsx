@@ -12,6 +12,7 @@ import { VibeReasoning } from "./VibeReasoning";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { WorkspaceAttachmentButton } from "./WorkspaceAttachmentButton";
+import { ProjectFileStatus, WorkspaceRequestFailure } from "./WorkspaceFailureMessages";
 import { buildQuickMessages } from "./quick-messages";
 import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
@@ -34,6 +35,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     currentPrdVersion,
     isVibing,
     vibeStatus,
+    vibeTechnicalDetails,
     vibeTab,
     setVibeTab,
     setVibePreviewKey,
@@ -48,6 +50,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     selectedAttachmentIds,
     isUploadingProjectFile,
     projectFileMessage,
+    projectFileTechnicalDetails,
     toggleProjectFileAttachment,
     handleUploadProjectFiles,
     hasPreview,
@@ -173,7 +176,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       <div className="vibe-live-body" data-workspace-view={mobileView ?? "supporting"}>
         <div className="vibe-live-chat-panel">
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
-            {vibeMessages.length === 0 && !isVibing && (
+            {vibeMessages.length === 0 && !isVibing && !vibeTechnicalDetails && (
               <div className="vibe-live-empty">
                 <div className="vibe-live-empty-title">Create and understand your app with Pi</div>
                 <p>
@@ -250,6 +253,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 </div>
               )
             )}
+            <WorkspaceRequestFailure technicalDetails={vibeTechnicalDetails} />
           </div>
           {/* Hidden mid-turn (stale); re-derives from the model's <suggest> lines when done. */}
           {!isVibing && quickMessages.length > 0 && (
@@ -262,9 +266,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             />
           )}
           <div className="vibe-live-files">
-            {projectFileMessage && (
-              <span className="vibe-live-file-message">{projectFileMessage}</span>
-            )}
+            <ProjectFileStatus
+              message={projectFileMessage}
+              technicalDetails={projectFileTechnicalDetails}
+            />
             {projectFiles.length > 0 && (
               <div className="vibe-live-file-list" aria-label="Project files">
                 {projectFiles.map((file) => {

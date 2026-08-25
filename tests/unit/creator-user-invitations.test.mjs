@@ -156,7 +156,10 @@ test("the Users page shows pending invitations from app access state", () => {
   const html = renderToStaticMarkup(React.createElement(usersModule.UsersPage, { app }));
 
   assert.match(html, /horizon-logo-full creator-sidebar-logo/);
-  assert.match(html, /<section class="admin-page-stack" aria-label="App users roles">/);
+  assert.match(
+    html,
+    /<section class="admin-page-stack creator-access-stack" aria-label="App users roles">/
+  );
   assert.match(html, />Pending Invitations</);
   assert.match(html, />new\.user@company\.com</);
   assert.match(html, />pending</);

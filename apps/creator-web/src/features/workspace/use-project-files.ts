@@ -8,10 +8,14 @@ export function useProjectFiles(selectedProjectId: string) {
   const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<string[]>([]);
   const [isUploadingProjectFile, setIsUploadingProjectFile] = useState(false);
   const [projectFileMessage, setProjectFileMessage] = useState("");
+  const [projectFileTechnicalDetails, setProjectFileTechnicalDetails] = useState<
+    string | undefined
+  >(undefined);
 
   useEffect(() => {
     if (!selectedProjectId) return;
     setSelectedAttachmentIds([]);
+    setProjectFileTechnicalDetails(undefined);
     try {
       createCreatorPlatformClient()
         .listProjectFiles(selectedProjectId)
@@ -40,6 +44,7 @@ export function useProjectFiles(selectedProjectId: string) {
     if (!selectedFiles.length) return;
     setIsUploadingProjectFile(true);
     setProjectFileMessage("Uploading project files...");
+    setProjectFileTechnicalDetails(undefined);
     try {
       const client = createCreatorPlatformClient();
       const completedFiles: ProjectFileUploadDto[] = [];
@@ -79,7 +84,10 @@ export function useProjectFiles(selectedProjectId: string) {
       ]);
       setProjectFileMessage("Project files ready for AI context.");
     } catch (error) {
-      setProjectFileMessage(error instanceof Error ? error.message : "Project file upload failed.");
+      setProjectFileMessage("Project file upload failed. Try again.");
+      setProjectFileTechnicalDetails(
+        error instanceof Error ? error.message : "Unknown project file upload failure."
+      );
     } finally {
       setIsUploadingProjectFile(false);
     }
@@ -94,6 +102,8 @@ export function useProjectFiles(selectedProjectId: string) {
     setIsUploadingProjectFile,
     projectFileMessage,
     setProjectFileMessage,
+    projectFileTechnicalDetails,
+    setProjectFileTechnicalDetails,
     toggleProjectFileAttachment,
     handleUploadProjectFiles
   };

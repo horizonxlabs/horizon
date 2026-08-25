@@ -59,6 +59,7 @@ export function useVibeChat({
 }: VibeChatOptions) {
   const [vibeMessages, setVibeMessages] = useState<VibeMessage[]>([]);
   const [vibeStatus, setVibeStatus] = useState("");
+  const [vibeTechnicalDetails, setVibeTechnicalDetails] = useState<string | undefined>(undefined);
   const [isVibing, setIsVibing] = useState(false);
   const [vibePreviewKey, setVibePreviewKey] = useState(0);
   const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([]);
@@ -75,6 +76,7 @@ export function useVibeChat({
     setIsVibing(false);
     setVibeMessages([]);
     setVibeStatus("");
+    setVibeTechnicalDetails(undefined);
     setPromptQueue([]);
     setBugReports([]);
     if (!selectedProjectId) return;
@@ -130,6 +132,7 @@ export function useVibeChat({
     ]);
     setPromptDraft("");
     setIsVibing(true);
+    setVibeTechnicalDetails(undefined);
     let assistantText = "";
     let outcomeStatus: WorkspaceOutcome = workspaceOutcomeForEvent({
       type: "start",
@@ -207,10 +210,9 @@ export function useVibeChat({
     } catch (error) {
       const cancelled = streamController.signal.aborted;
       if (!cancelled) {
-        patchAssistant((message) => ({
-          ...message,
-          text: message.text + `\n\n⚠️ ${(error as Error).message}`
-        }));
+        setVibeTechnicalDetails(
+          error instanceof Error ? error.message : "Unknown workspace request failure."
+        );
       }
       if (activeStreamAbort.current === streamController) {
         outcomeStatus = workspaceOutcomeForEvent({
@@ -269,6 +271,8 @@ export function useVibeChat({
     setVibeMessages,
     vibeStatus,
     setVibeStatus,
+    vibeTechnicalDetails,
+    setVibeTechnicalDetails,
     isVibing,
     setIsVibing,
     vibePreviewKey,

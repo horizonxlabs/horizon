@@ -98,6 +98,25 @@ test("Workspace renders a labeled four-view mobile switcher with one pressed vie
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
 });
 
+test("Workspace renders service failures as user copy with disclosed technical details", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(WorkspacePage, {
+      app: baseApp({
+        vibeTechnicalDetails: "Chat request failed (503)",
+        projectFileMessage: "Project file upload failed. Try again.",
+        projectFileTechnicalDetails: "object storage credentials rejected"
+      })
+    })
+  );
+
+  assert.match(html, /complete the workspace request\. Try again\./);
+  assert.doesNotMatch(html, /Create and understand your app with Pi/);
+  assert.match(html, /Project file upload failed\. Try again\./);
+  assert.equal((html.match(/<summary>Technical details<\/summary>/g) ?? []).length, 2);
+  assert.match(html, /<pre>Chat request failed \(503\)<\/pre>/);
+  assert.match(html, /<pre>object storage credentials rejected<\/pre>/);
+});
+
 test("completed technical actions are closed while active work stays expanded", () => {
   const completed = renderToStaticMarkup(
     React.createElement(VibeActionSummary, {
