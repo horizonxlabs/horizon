@@ -184,7 +184,7 @@ test("CreatorRoutes renders project unavailable instead of another project's rou
     })
   );
   assert.match(html, /Project unavailable/);
-  assert.match(html, /Return to Projects/);
+  assert.match(html, /Open latest project/);
   assert.doesNotMatch(html, /Versions: First Project/);
 });
 

@@ -79,7 +79,7 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
           The requested project is not available in the current Platform API project list.
         </p>
         <button type="button" onClick={() => navigateBrowserPath("/creator/")}>
-          Return to Projects
+          Open latest project
         </button>
       </main>
     );

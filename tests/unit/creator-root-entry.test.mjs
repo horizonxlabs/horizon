@@ -10,9 +10,11 @@ const requireFromStore = createRequire(
   new URL("../../apps/app-store-pwa/package.json", import.meta.url)
 );
 const { act, create } = requireFromStore("react-test-renderer");
+const { useBrowserPath } = await import("../../packages/ui/src/browser-navigation.ts");
 const { selectCreatorProjectForRequest } =
   await import("../../apps/creator-web/src/app/creator-app-helpers.ts");
-const { creatorPageCopy } = await import("../../apps/creator-web/src/app/routes.ts");
+const { creatorPageCopy, creatorRouteFromPath } =
+  await import("../../apps/creator-web/src/app/routes.ts");
 const { CreatorRoutes } = await import("../../apps/creator-web/src/routes/CreatorRoutes.tsx");
 
 const olderProject = {
@@ -68,11 +70,14 @@ function appForRoot(projects) {
 }
 
 function browserFor(pathname, navigations) {
+  const listeners = new Map();
+  const location = { pathname };
   return {
-    location: { pathname },
+    location,
     history: {
       replaceState(_state, _unused, path) {
         navigations.push(path);
+        location.pathname = path;
       },
       pushState() {
         assert.fail("Unexpected push navigation");
@@ -80,10 +85,36 @@ function browserFor(pathname, navigations) {
     },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {}
+    addEventListener(type, listener) {
+      const registered = listeners.get(type) ?? new Set();
+      registered.add(listener);
+      listeners.set(type, registered);
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+    dispatchEvent(event) {
+      for (const listener of listeners.get(event.type) ?? []) listener(event);
+    }
   };
+}
+
+function RoutedCreator({ app }) {
+  const pathname = useBrowserPath();
+  const creatorRoute = creatorRouteFromPath(pathname);
+  const selectedProject =
+    app.bootstrap.projects.find((project) => project.id === creatorRoute.projectId) ??
+    app.selectedProject;
+  return React.createElement(CreatorRoutes, {
+    app: {
+      ...app,
+      pathname,
+      creatorRoute,
+      creatorPage: creatorRoute.page,
+      pageCopy: creatorPageCopy[creatorRoute.page],
+      selectedProject
+    }
+  });
 }
 
 async function renderRoute(app) {
@@ -100,9 +131,24 @@ test("Creator root replaces the URL with the newest project's encoded dashboard 
   const navigations = [];
   globalThis.window = browserFor("/creator/", navigations);
 
-  const renderer = await renderRoute(appForRoot([latestProject, olderProject]));
+  const readyApp = appForRoot([latestProject, olderProject]);
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(RoutedCreator, {
+        app: { ...readyApp, bootstrap: { ...readyApp.bootstrap, status: "loading" } }
+      })
+    );
+  });
+  await act(async () => {
+    renderer.update(React.createElement(RoutedCreator, { app: readyApp }));
+    await Promise.resolve();
+  });
   assert.deepEqual(navigations, ["/creator/projects/latest%2Fproject%20%231/project"]);
-  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Recent projects|Search projects/);
+  assert.equal(window.location.pathname, "/creator/projects/latest%2Fproject%20%231/project");
+  const output = JSON.stringify(renderer.toJSON());
+  assert.match(output, /Project: Latest Project/);
+  assert.doesNotMatch(output, /Opening latest project|Recent projects|Search projects/);
 
   await act(async () => renderer.unmount());
   globalThis.window = originalWindow;
@@ -135,6 +181,29 @@ test("Creator root keeps a create-first empty state without the retired project 
   assert.match(output, /Create your first project/);
   assert.match(output, /Create project/);
   assert.doesNotMatch(output, /Recent projects|Search projects|Project list/);
+  assert.equal(renderer.root.findAll((node) => node.type === "h1").length, 1);
+
+  await act(async () => renderer.unmount());
+  globalThis.window = originalWindow;
+});
+
+test("Unavailable project recovery describes the latest-project outcome", async () => {
+  const originalWindow = globalThis.window;
+  const navigations = [];
+  globalThis.window = browserFor("/creator/projects/missing-project/versions", navigations);
+  const app = {
+    ...appForRoot([olderProject, latestProject]),
+    creatorPage: "versions",
+    creatorRoute: { page: "versions", projectId: "missing-project" },
+    requestedProjectUnavailable: true,
+    pathname: "/creator/projects/missing-project/versions"
+  };
+
+  const renderer = await renderRoute(app);
+  const recovery = renderer.root.find(
+    (node) => node.type === "button" && node.children.includes("Open latest project")
+  );
+  assert.equal(recovery.children.join(""), "Open latest project");
 
   await act(async () => renderer.unmount());
   globalThis.window = originalWindow;

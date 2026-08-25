@@ -18,6 +18,7 @@ export function ProjectsPage({ app }: { app: ReturnType<typeof useCreatorApp> })
       app={app}
       content={
         <div className="hz-home">
+          <h1 className="sr-only">Create your first project</h1>
           <CreatorState
             kind="empty"
             title="Create your first project"
