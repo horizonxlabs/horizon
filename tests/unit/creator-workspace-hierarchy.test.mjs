@@ -297,6 +297,12 @@ test("rendered Workspace controls use semantic targets covered by the narrow-scr
     css,
     /\.vibe-live-shell\s+:is\(\s*button,\s*a\[href\],\s*summary,\s*select,\s*input:not\(\.vibe-composer-file-input\),\s*textarea\s*\)\s*\{[\s\S]*?min-block-size: 44px;[\s\S]*?min-inline-size: 44px;/
   );
+  const restoreTargetRules =
+    css.match(
+      /@media \(max-width: 760px\)\s*\{\s*\.vibe-restore-button,\s*\.vibe-restore-confirm button\s*\{([\s\S]*?)\}\s*\}/
+    )?.[1] ?? "";
+  assert.match(restoreTargetRules, /min-height:\s*44px/);
+  assert.match(restoreTargetRules, /min-width:\s*44px/);
 });
 
 test("Workspace responsive CSS selects one narrow panel and disables progress motion", async () => {

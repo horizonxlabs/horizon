@@ -3524,6 +3524,14 @@ th {
   padding: 1px 8px;
 }
 
+@media (max-width: 760px) {
+  .vibe-restore-button,
+  .vibe-restore-confirm button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 .vibe-restore-button:hover,
 .vibe-restore-confirm button:hover {
   background: var(--evcp-color-surface-muted);

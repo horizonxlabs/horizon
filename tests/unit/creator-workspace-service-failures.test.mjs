@@ -63,6 +63,10 @@ test("Restore point keeps a failed restore exception behind Technical details", 
     );
   });
   await act(async () => renderer.root.findByType("button").props.onClick());
+  const confirmation = renderer.root.find(
+    (node) => node.props.className === "vibe-restore-confirm"
+  );
+  assert.equal(confirmation.type, "div");
   const confirm = renderer.root
     .findAllByType("button")
     .find((button) => button.children.join("") === "Confirm");
