@@ -11,7 +11,8 @@ import type { ProjectDeletionFence, ProjectLifecycleCoordinator, ProjectMutation
 import { createAndStartFencedContainer } from "./fenced-container-start";
 import { buildFencedImage } from "./fenced-image-build";
 import { withFencedCheckout } from "./fenced-checkout";
-import { compensateDeploymentCandidate } from "./deployment-compensation";
+import { cleanupFailedDeploymentContainer, compensateDeploymentCandidate,
+  removeDeploymentImage } from "./deployment-compensation";
 // Docker builds run on the host shared by every workspace. Serialize deploy work process-wide so
 // one project's image build cannot starve another project's active development container.
 let deployQueue: Promise<void> = Promise.resolve();
@@ -162,28 +163,29 @@ export function createPublishService(deps: PublishServiceDeps) {
       input.slug,
       environment
     );
-    // DB isolation note: staging reuses the project's resolveEnv (same DATABASE_URL) but gets its
-    // own container + volume — true staging-DB isolation (separate schema/database) is a follow-up.
-    const spec = buildAppContainerSpec(
-      {
-        projectId: input.projectId,
-        slug: input.slug,
-        image: imageTag,
-        env: await deps.resolveEnv(input.projectId),
-        network
-      },
-      environment
-    );
-    const containerName = deploymentContainerName(input.slug, environment, revisionSuffix);
-    spec.name = containerName;
-    spec.labels["evcp.commit-sha"] = input.commitSha;
-    spec.labels["evcp.container-name"] = containerName;
-    const containerId = await createAndStartFencedContainer({ docker: deps.docker, spec, fence: input.fence });
+    let containerId: string | undefined;
     let finalized!: WorkspaceDeployment;
-    let healthy: boolean;
+    let healthy = false;
     let deploymentFlushed = false;
     let deployment: WorkspaceDeployment | undefined;
     try {
+      // DB isolation note: staging reuses the project's resolveEnv (same DATABASE_URL) but gets its
+      // own container + volume — true staging-DB isolation (separate schema/database) is a follow-up.
+      const spec = buildAppContainerSpec(
+        {
+          projectId: input.projectId,
+          slug: input.slug,
+          image: imageTag,
+          env: await deps.resolveEnv(input.projectId),
+          network
+        },
+        environment
+      );
+      const containerName = deploymentContainerName(input.slug, environment, revisionSuffix);
+      spec.name = containerName;
+      spec.labels["evcp.commit-sha"] = input.commitSha;
+      spec.labels["evcp.container-name"] = containerName;
+      containerId = await createAndStartFencedContainer({ docker: deps.docker, spec, fence: input.fence });
       // Queue the pending revision and its health result as one durable lifecycle batch. Prisma
       // stores commit both writes atomically when flush is called below.
       await input.fence?.assertCurrent();
@@ -209,13 +211,12 @@ export function createPublishService(deps: PublishServiceDeps) {
       await input.fence?.assertCurrent();
     } catch (error) {
       return compensateDeploymentCandidate({ deployments: deps.deployments, docker: deps.docker,
-        deployment, finalized: Boolean(finalized), flushed: deploymentFlushed, containerId, cause: error });
+        deployment, finalized: Boolean(finalized), flushed: deploymentFlushed, containerId,
+        imageIdOrTag: imageDigest, cause: error });
     }
 
     if (!healthy) {
-      // keep old version live; tear down the failed container (best-effort)
-      await deps.docker.stopContainer(containerId).catch(() => undefined);
-      await deps.docker.removeContainer(containerId).catch(() => undefined);
+      await cleanupFailedDeploymentContainer(deps.docker, containerId!);
       audit("workspace.deploy_failed", input.projectId, {
         slug: input.slug,
         environment,
@@ -256,9 +257,11 @@ export function createPublishService(deps: PublishServiceDeps) {
           });
           const containerId =
             container?.containerId ?? (container === undefined ? deployment.containerId : null);
-          if (!containerId) continue;
-          await attempt(() => deps.docker.stopContainer(containerId));
-          await attempt(() => deps.docker.removeContainer(containerId));
+          if (containerId) {
+            await attempt(() => deps.docker.stopContainer(containerId));
+            await attempt(() => deps.docker.removeContainer(containerId));
+          }
+          await attempt(() => removeDeploymentImage(deps.docker, deployment));
         }
         if (failures.length > 0) {
           throw new AggregateError(
@@ -268,7 +271,6 @@ export function createPublishService(deps: PublishServiceDeps) {
         }
         await fence?.assertCurrent();
         deps.deployments.removeProject(projectId);
-        await fence?.assertCurrent();
         await fence?.assertCurrent();
         await deps.deployments.flush?.();
         await fence?.assertCurrent();

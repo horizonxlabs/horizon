@@ -225,7 +225,7 @@ test("file init compensates a row created after deletion completed during reposi
   assert.equal(revoked[0][1].length, 1);
 });
 
-test("file init revokes a URL issued after its lease expired and deletion completed", async () => {
+test("file init removes only its owned key when URL issuance crosses deletion", async () => {
   let databaseTime = new Date("2026-08-25T00:00:00.000Z");
   const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
   const issueStarted = deferred();
@@ -250,8 +250,8 @@ test("file init revokes a URL issued after its lease expired and deletion comple
         await resumeIssue.promise;
         return { url: "https://uploads.example.test/late", expiresAt: new Date() };
       },
-      async remove() {},
-      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+      async remove(bucket, key) { revoked.push([bucket, [key]]); },
+      async revokeBucket() { assert.fail("child compensation must not revoke the project bucket"); }
     },
     actorId: "creator-1", projectId: "project-1", fileName: "late.md",
     mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
@@ -267,7 +267,7 @@ test("file init revokes a URL issued after its lease expired and deletion comple
   assert.equal(revoked[0][0], projectFileBucketName("project-1"));
 });
 
-test("file init revokes a bucket created by an issuer that throws after deletion", async () => {
+test("file init removes only its owned key when issuer throws after deletion", async () => {
   let databaseTime = new Date("2026-08-25T00:00:00.000Z");
   const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
   const bucketCreated = deferred();
@@ -292,8 +292,8 @@ test("file init revokes a bucket created by an issuer that throws after deletion
         await resumeIssue.promise;
         throw new Error("presign failed after creating bucket");
       },
-      async remove() { assert.fail("a lost fence must revoke the project bucket"); },
-      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+      async remove(bucket, key) { revoked.push([bucket, [key]]); },
+      async revokeBucket() { assert.fail("child compensation must not revoke the project bucket"); }
     },
     actorId: "creator-1", projectId: "project-1", fileName: "late.md",
     mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
@@ -307,6 +307,42 @@ test("file init revokes a bucket created by an issuer that throws after deletion
   assert.equal(rows.size, 0);
   assert.equal(revoked.length, 1);
   assert.equal(revoked[0][0], projectFileBucketName("project-1"));
+});
+
+test("file init transient fence failure cleans only its owned object and preserves existing files", async () => {
+  const rows = new Map([["existing", { id: "existing" }]]);
+  const removed = [];
+  let assertions = 0;
+  await assert.rejects(
+    initializePersistentProjectFile({
+      repository: {
+        async create(input) {
+          const row = { ...input, archivedAt: null, createdAt: new Date(), updatedAt: new Date() };
+          rows.set(input.id, row);
+          return row;
+        },
+        async deleteUpload(id) { rows.delete(id); }
+      },
+      issuer: {
+        async issue() { return { url: "https://files.test/upload", expiresAt: new Date() }; },
+        async remove(bucket, key) { removed.push([bucket, key]); },
+        async revokeBucket() { assert.fail("child compensation must never revoke a shared project bucket"); }
+      },
+      fence: {
+        async assertCurrent() {
+          assertions += 1;
+          if (assertions === 3) throw new Error("lifecycle store temporarily unavailable");
+        }
+      },
+      actorId: "creator-1", projectId: "project-1", fileName: "owned.md",
+      mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
+    }),
+    /temporarily unavailable/
+  );
+  assert.deepEqual([...rows.keys()], ["existing"]);
+  assert.equal(removed.length, 1);
+  assert.equal(removed[0][0], projectFileBucketName("project-1"));
+  assert.match(removed[0][1], /owned\.md$/);
 });
 
 test("persisted file cleanup stops between object stages after deletion-fence takeover", async () => {

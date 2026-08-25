@@ -52,6 +52,51 @@ export interface PgQueryResult {
   rowCount: number;
 }
 
+export type PgTransaction = <T>(
+  operation: (query: (sql: string, params?: unknown[]) => Promise<PgQueryResult>) => Promise<T>
+) => Promise<T>;
+
+/** Runs every callback query on one checked-out connection under an explicit transaction. */
+export function createPgTransaction(opts: PgRunSqlOptions): PgTransaction {
+  const config = opts.connectionString
+    ? { connectionString: opts.connectionString }
+    : {
+        host: opts.host,
+        port: opts.port,
+        user: opts.user,
+        password: opts.password,
+        database: opts.database
+      };
+  return async <T>(operation: (
+    query: (sql: string, params?: unknown[]) => Promise<PgQueryResult>
+  ) => Promise<T>): Promise<T> => {
+    const client = new Client(config);
+    await client.connect();
+    const query = async (sql: string, params: unknown[] = []): Promise<PgQueryResult> => {
+      const result = await client.query(sql, params);
+      return {
+        rows: result.rows as Record<string, unknown>[],
+        fields: (result.fields ?? []).map((field) => ({
+          name: field.name,
+          dataTypeID: field.dataTypeID
+        })),
+        rowCount: result.rowCount ?? result.rows.length
+      };
+    };
+    try {
+      await client.query("BEGIN");
+      const result = await operation(query);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      await client.end();
+    }
+  };
+}
+
 /**
  * Like createPgRunSql but returns rows/fields, and accepts bound parameters ($1, $2, …).
  * Used by the project database browser to run parameterized (never string-interpolated)

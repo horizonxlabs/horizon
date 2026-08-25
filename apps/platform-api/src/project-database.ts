@@ -1,4 +1,9 @@
-import { createPgQuery, type PgQueryResult } from "./workspace-orchestrator/pg-runner";
+import {
+  createPgQuery,
+  createPgTransaction,
+  type PgQueryResult,
+  type PgTransaction
+} from "./workspace-orchestrator/pg-runner";
 import type { ProjectMutationFence } from "./project-lifecycle";
 import { schemaAdvisoryLockSql } from "./workspace-orchestrator/postgres-provisioner";
 
@@ -58,10 +63,6 @@ export function schemaFromConnectionString(connectionString: string): string {
 /** Double-quote a Postgres identifier that has already been validated against introspection. */
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
-}
-
-function schemaLockCte(schema: string): string {
-  return `WITH lifecycle_fence AS (${schemaAdvisoryLockSql(schema)})`;
 }
 
 export async function introspectSchema(query: QueryFn, schema: string): Promise<ProjectDbSchema> {
@@ -203,9 +204,8 @@ export async function insertRow(
   const columns = keys.map(quoteIdent).join(", ");
   const placeholders = keys.map((_, index) => `$${index + 1}`).join(", ");
   const result = await query(
-    `${schemaLockCte(schema)}
-     INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns})
-     SELECT ${placeholders} FROM lifecycle_fence RETURNING *`,
+    `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns})
+     VALUES (${placeholders}) RETURNING *`,
     keys.map((key) => values[key])
   );
   return result.rows[0] ?? null;
@@ -229,9 +229,8 @@ export async function updateRow(
     .map((column, index) => `target.${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
     .join(" AND ");
   const result = await query(
-    `${schemaLockCte(schema)}
-     UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
-     SET ${setClause} FROM lifecycle_fence WHERE ${whereClause} RETURNING target.*`,
+    `UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     SET ${setClause} WHERE ${whereClause} RETURNING target.*`,
     [...changeKeys.map((key) => changes[key]), ...pkColumns.map((column) => pk[column])]
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -251,9 +250,8 @@ export async function deleteRow(
     .map((column, index) => `target.${quoteIdent(column)} = $${index + 1}`)
     .join(" AND ");
   const result = await query(
-    `${schemaLockCte(schema)}
-     DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
-     USING lifecycle_fence WHERE ${whereClause}`,
+    `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     WHERE ${whereClause}`,
     pkColumns.map((column) => pk[column])
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -279,6 +277,7 @@ export interface ProjectDbRouteDeps {
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
   createQuery?: (connectionString: string) => ProjectQueryFn;
+  createTransaction?: (connectionString: string) => PgTransaction;
   runChildMutation?: <T>(
     projectId: string,
     operation: (fence: ProjectMutationFence) => Promise<T>
@@ -314,8 +313,20 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const url = await deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
-      const operation = (fence?: ProjectMutationFence) =>
-        run((deps.createQuery ?? createProjectQuery)(url), schemaFromConnectionString(url), projectId, fence);
+      const schema = schemaFromConnectionString(url);
+      const operation = async (fence?: ProjectMutationFence) => {
+        if (!mutation) {
+          return run((deps.createQuery ?? createProjectQuery)(url), schema, projectId, fence);
+        }
+        await fence?.assertCurrent();
+        const transaction = (deps.createTransaction ?? ((connectionString: string) =>
+          createPgTransaction({ connectionString })))(url);
+        return transaction(async (query) => {
+          await query(schemaAdvisoryLockSql(schema));
+          await fence?.assertCurrent();
+          return run(query, schema, projectId, fence);
+        });
+      };
       deps.ok(
         response,
         await (mutation && deps.runChildMutation

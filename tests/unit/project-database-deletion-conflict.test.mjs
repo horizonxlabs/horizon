@@ -89,19 +89,23 @@ test("schema deletion waits for a database mutation paused inside its locked SQL
   const mutationCommitted = deferred();
   let cleanupFinished = false;
   let lockHeld = false;
+  let transactions = 0;
+  const statements = [];
   const query = async (sql) => {
+    statements.push(sql);
     if (sql.includes("information_schema.columns")) {
       return { rows: [{
         table_name: "items", column_name: "id", data_type: "text", is_nullable: "NO",
         ordinal_position: 1, is_primary_key: true
       }], rowCount: 1 };
     }
-    assert.match(sql, /pg_advisory_xact_lock\(hashtextextended\('evcp-schema:app_prj'/);
-    lockHeld = true;
+    if (sql.trim().startsWith("SELECT pg_advisory_xact_lock")) {
+      lockHeld = true;
+      return { rows: [], rowCount: 1 };
+    }
+    assert.match(sql, /^\s*INSERT INTO /);
     mutationEntered.resolve();
     await allowCommit.promise;
-    lockHeld = false;
-    mutationCommitted.resolve();
     return { rows: [{ id: "one" }], rowCount: 1 };
   };
   const provisioner = createPgClientPostgresProvisioner(async (sql) => {
@@ -116,7 +120,17 @@ test("schema deletion waits for a database mutation paused inside its locked SQL
     fail(_response, _status, _code, message) { assert.fail(message); },
     async resolveAccessibleProjectIds() { return ["p1"]; },
     async getDatabaseUrl() { return "postgresql://user:pass@localhost/db?schema=app_prj"; },
-    createQuery() { return query; },
+    createQuery() { assert.fail("mutations must use one checked-out transaction connection"); },
+    createTransaction() {
+      return async (operation) => {
+        transactions += 1;
+        try { return await operation(query); }
+        finally {
+          lockHeld = false;
+          mutationCommitted.resolve();
+        }
+      };
+    },
     async runChildMutation(_projectId, operation) {
       return operation({ async assertCurrent() {} });
     },
@@ -136,4 +150,7 @@ test("schema deletion waits for a database mutation paused inside its locked SQL
   allowCommit.resolve();
   await Promise.all([mutation, deletion]);
   assert.equal(cleanupFinished, true);
+  assert.equal(transactions, 1);
+  assert.match(statements[0], /^SELECT pg_advisory_xact_lock/);
+  assert.doesNotMatch(statements.at(-1), /WITH lifecycle_fence/);
 });

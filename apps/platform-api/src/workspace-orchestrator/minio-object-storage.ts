@@ -122,7 +122,12 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
       return { url: signed, expiresAt: new Date(Date.now() + expiresInSeconds * 1_000) };
     },
     async remove(bucket, objectKey) {
-      await managementClient.removeObject(bucket, objectKey);
+      try {
+        await managementClient.removeObject(bucket, objectKey);
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code !== "NoSuchKey" && code !== "NoSuchBucket") throw error;
+      }
     },
     async revokeBucket(bucket, objectKeys) {
       await revokeBucket(bucket, objectKeys);

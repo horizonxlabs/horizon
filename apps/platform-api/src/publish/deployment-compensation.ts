@@ -8,7 +8,8 @@ export async function compensateDeploymentCandidate(input: {
   deployment?: WorkspaceDeployment;
   finalized: boolean;
   flushed: boolean;
-  containerId: string;
+  containerId?: string;
+  imageIdOrTag: string;
   cause: unknown;
 }): Promise<never> {
   const failures: unknown[] = [input.cause];
@@ -21,8 +22,36 @@ export async function compensateDeploymentCandidate(input: {
   } catch (error) {
     failures.push(error);
   }
-  try { await input.docker.stopContainer(input.containerId); } catch (error) { failures.push(error); }
-  try { await input.docker.removeContainer(input.containerId); } catch (error) { failures.push(error); }
+  if (input.containerId) {
+    try { await input.docker.stopContainer(input.containerId); } catch (error) { failures.push(error); }
+    try { await input.docker.removeContainer(input.containerId); } catch (error) { failures.push(error); }
+  }
+  try {
+    if (!input.docker.removeImage) throw new Error("Docker image cleanup is unavailable");
+    await input.docker.removeImage(input.imageIdOrTag);
+  } catch (error) {
+    failures.push(error);
+  }
   if (failures.length > 1) throw new AggregateError(failures, "Deployment compensation failed");
   throw input.cause;
+}
+
+export async function cleanupFailedDeploymentContainer(
+  docker: DockerEngine,
+  containerId: string
+): Promise<void> {
+  const failures: unknown[] = [];
+  try { await docker.stopContainer(containerId); } catch (error) { failures.push(error); }
+  try { await docker.removeContainer(containerId); } catch (error) { failures.push(error); }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Failed deployment container cleanup did not finish");
+  }
+}
+
+export async function removeDeploymentImage(
+  docker: DockerEngine,
+  deployment: WorkspaceDeployment
+): Promise<void> {
+  if (!docker.removeImage) throw new Error("Docker image cleanup is unavailable");
+  await docker.removeImage(deployment.imageDigest ?? deployment.imageTag);
 }

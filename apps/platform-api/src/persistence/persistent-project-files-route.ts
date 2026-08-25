@@ -67,7 +67,6 @@ export async function initializePersistentProjectFile(input: {
   const versionId = `${sourceId}_v1`;
   const objectKey = `projects/${input.projectId}/knowledge/${sourceId}/${versionId}/${sanitize(input.fileName)}`;
   let file: PersistedProjectFile | undefined;
-  let uploadUrlIssued = false;
   try {
     await input.fence?.assertCurrent();
     file = await input.repository.create({
@@ -87,7 +86,6 @@ export async function initializePersistentProjectFile(input: {
     });
     await input.fence?.assertCurrent();
     const upload = await input.issuer.issue(bucket, objectKey);
-    uploadUrlIssued = true;
     await input.fence?.assertCurrent();
     return {
       uploadId: id, sourceId, versionId, objectKey, uploadUrl: upload.url,
@@ -96,16 +94,10 @@ export async function initializePersistentProjectFile(input: {
   } catch (error) {
     if (!file) throw error;
     const failures: unknown[] = [];
-    let fenceLost = false;
     try {
-      await input.fence?.assertCurrent();
-    } catch {
-      fenceLost = true;
-    }
-    try {
-      if ((uploadUrlIssued || fenceLost) && input.issuer.revokeBucket) {
-        await input.issuer.revokeBucket(bucket, [objectKey]);
-      } else await input.issuer.remove(bucket, objectKey);
+      // The deterministic bucket is shared by every upload in the project. Child compensation
+      // owns only this key; project-wide revocation belongs exclusively to fenced deletion.
+      await input.issuer.remove(bucket, objectKey);
     } catch (cleanupError) {
       failures.push(cleanupError);
     }

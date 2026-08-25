@@ -135,6 +135,53 @@ test("image-build compensation surfaces both the lost fence and image-removal fa
   );
 });
 
+test("a resolveEnv failure after image build removes the owned image", async () => {
+  const deps = buildPublishServiceDeps();
+  const resolutionFailure = new Error("secret resolution unavailable");
+  deps.resolveEnv = async () => { throw resolutionFailure; };
+
+  await assert.rejects(
+    createPublishService(deps).publish({
+      projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1"
+    }),
+    resolutionFailure
+  );
+  assert.deepEqual(deps.docker.state.removedImages, ["mem-build-1"]);
+  assert.equal(deps.docker.state.containers.length, 1, "only the development container remains");
+});
+
+test("downstream publish failure aggregates image-removal failure", async () => {
+  const deps = buildPublishServiceDeps();
+  const resolutionFailure = new Error("secret resolution unavailable");
+  const removalFailure = new Error("image cleanup unavailable");
+  deps.resolveEnv = async () => { throw resolutionFailure; };
+  deps.docker.removeImage = async () => { throw removalFailure; };
+
+  await assert.rejects(
+    createPublishService(deps).publish({
+      projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1"
+    }),
+    (error) => {
+      assert.equal(error instanceof AggregateError, true);
+      assert.deepEqual(error.errors, [resolutionFailure, removalFailure]);
+      return true;
+    }
+  );
+});
+
+test("project deletion removes every deployment image before deleting deployment records", async () => {
+  const deps = buildPublishServiceDeps();
+  const service = createPublishService(deps);
+  await service.publish({ projectId: "p1", slug: "app", environment: "staging", publishedByUserId: "u1" });
+  await service.publish({ projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1" });
+  const images = deps.deployments.list("p1").map((deployment) => deployment.imageDigest);
+
+  await service.deleteProject("p1");
+
+  assert.deepEqual(deps.docker.state.removedImages.sort(), images.sort());
+  assert.deepEqual(deps.deployments.list("p1"), []);
+});
+
 test("a valid publish fence restores the original checkout when the operation fails", async () => {
   const checkouts = [];
   const operationFailure = new Error("build failed");
