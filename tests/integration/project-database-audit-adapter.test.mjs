@@ -95,7 +95,28 @@ test("database mutation reports audit persistence failure and keeps the committe
 
   assert.deepEqual(responseBody, { row: { id: "one" } });
   const failure = services.audit.list().find((event) => event.action === "audit.persistence_failed");
+  assert.equal(failure?.severity, "high");
   assert.equal(failure?.resourceId, "p1");
   assert.equal(failure?.metadata.attemptedAction, "database.row.insert");
   assert.equal(failure?.metadata.message, "audit database unavailable");
+});
+
+test("database mutation reports post-commit auth resolution failure and keeps the committed success response", async () => {
+  const services = persistenceServices();
+  let responseBody;
+  const mutate = databaseMutationHandler(services, (body) => { responseBody = body; });
+
+  await mutate({
+    params: { projectId: "p1", table: "items" },
+    headers: {},
+    body: { op: "insert", values: { id: "one" } }
+  }, {});
+
+  assert.deepEqual(responseBody, { row: { id: "one" } });
+  const failure = services.audit.list().find((event) => event.action === "audit.persistence_failed");
+  assert.equal(failure?.severity, "high");
+  assert.equal(failure?.actorId, "system");
+  assert.equal(failure?.resourceId, "p1");
+  assert.equal(failure?.metadata.attemptedAction, "database.row.insert");
+  assert.match(failure?.metadata.message, /Authorization|authentication/i);
 });

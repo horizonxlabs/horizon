@@ -9,10 +9,12 @@ export function createProjectDbAuditAdapter(services: PersistenceAwarePlatformAp
     action: string,
     detail: string
   ): Promise<void> => {
-    const { user } = await resolvePersistedAuth(services, headers);
+    let actorId = "system";
     try {
+      const { user } = await resolvePersistedAuth(services, headers);
+      actorId = user.id;
       await services.corePersistence?.recordAudit({
-        actorId: user.id,
+        actorId,
         action,
         resourceType: "project_database",
         resourceId: projectId,
@@ -20,7 +22,7 @@ export function createProjectDbAuditAdapter(services: PersistenceAwarePlatformAp
       });
     } catch (error) {
       services.audit.record({
-        actorId: user.id,
+        actorId,
         action: "audit.persistence_failed",
         resourceType: "project_database",
         resourceId: projectId,
