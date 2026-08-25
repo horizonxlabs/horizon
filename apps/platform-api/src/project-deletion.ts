@@ -1,10 +1,9 @@
 import { PermissionError, type PlatformUser } from "./platform-services";
 import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
 import type { PlatformRequest, HeaderBag } from "./platform-http-types";
+import type { ProjectLifecycleCoordinator } from "./project-lifecycle";
 
-export async function deleteProjectResources(
-  cleanups: Array<() => Promise<void>>
-): Promise<void> {
+export async function deleteProjectResources(cleanups: Array<() => Promise<void>>): Promise<void> {
   const failures: Error[] = [];
   for (const cleanup of cleanups) {
     try {
@@ -31,6 +30,7 @@ export async function deletePersistedProject(input: {
   encodedProjectId: string;
   persistence: CoreRepositoryBackedService;
   cleanup: (projectId: string) => Promise<void>;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{ id: string; deleted: true }> {
   const projectId = decodeURIComponent(input.encodedProjectId);
   const project = (await input.persistence.listProjects(input.actor)).find(
@@ -39,25 +39,28 @@ export async function deletePersistedProject(input: {
   if (!project)
     throw new PermissionError(`Role ${input.actor.role} cannot delete project ${projectId}`);
 
-  await input.persistence.recordAudit({
-    actorId: input.actor.id,
-    action: "project.deletion_requested",
-    resourceType: "project",
-    resourceId: projectId,
-    metadata: { projectId }
-  });
-  await input.cleanup(projectId);
-  await input.persistence.deleteProject(input.actor, projectId);
-  await input.persistence
-    .recordAudit({
+  const remove = async () => {
+    await input.persistence.recordAudit({
       actorId: input.actor.id,
-      action: "project.deleted",
+      action: "project.deletion_requested",
       resourceType: "project",
       resourceId: projectId,
       metadata: { projectId }
-    })
-    .catch(() => undefined);
-  return { id: projectId, deleted: true };
+    });
+    await input.cleanup(projectId);
+    await input.persistence.deleteProject(input.actor, projectId);
+    await input.persistence
+      .recordAudit({
+        actorId: input.actor.id,
+        action: "project.deleted",
+        resourceType: "project",
+        resourceId: projectId,
+        metadata: { projectId }
+      })
+      .catch(() => undefined);
+    return { id: projectId, deleted: true as const };
+  };
+  return input.lifecycle ? input.lifecycle.runDeletion(projectId, remove) : remove();
 }
 
 export function registerProjectDeletionRoute(

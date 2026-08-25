@@ -8,6 +8,7 @@ import type {
 } from "../platform-services";
 import type { ProjectFileUploadUrlIssuer } from "../workspace-orchestrator/minio-object-storage";
 import type { PersistedProjectFile, PrismaProjectFileRepository } from "./project-file-repository";
+import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
 const bucket = "project-file-uploads";
 const maxBytes = 25 * 1024 * 1024;
@@ -41,7 +42,14 @@ export async function initializePersistentProjectFile(input: {
   sha256: string;
   purpose?: ProjectFilePurpose;
   includeByDefault?: boolean;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<ProjectFileUploadInitResult> {
+  if (input.lifecycle) {
+    const { lifecycle, ...operationInput } = input;
+    return lifecycle.runChildMutation(input.projectId, () =>
+      initializePersistentProjectFile(operationInput)
+    );
+  }
   validate(input);
   const id = `upl_${randomUUID()}`;
   const sourceId = `knsrc_${id}`;
@@ -80,7 +88,15 @@ export async function completePersistentProjectFile(input: {
   scanStatus?: ProjectFileScanStatus;
   extractedText?: string;
   excerpts?: string[];
+  projectId?: string;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{ file: ProjectFileUpload }> {
+  if (input.lifecycle && input.projectId) {
+    const { lifecycle, projectId, ...operationInput } = input;
+    return lifecycle.runChildMutation(projectId, () =>
+      completePersistentProjectFile(operationInput)
+    );
+  }
   const scanStatus = input.scanStatus ?? "clean";
   const excerpts = scanStatus === "clean" ? excerpt(input.extractedText, input.excerpts) : [];
   const file = await input.repository.complete(input.uploadId, { scanStatus, excerpts });
@@ -95,6 +111,7 @@ export async function handlePersistentProjectFilesRoute(input: {
   issuer?: ProjectFileUploadUrlIssuer;
   resolveActor: () => Promise<{ id: string }>;
   resolveProject: (actor: { id: string }, projectId: string) => Promise<{ id: string }>;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{ status: 200 | 201; data: unknown } | undefined> {
   const list = input.path.match(/^\/creator\/projects\/([^/]+)\/files$/);
   const init = input.path.match(/^\/creator\/projects\/([^/]+)\/files\/init$/);
@@ -125,7 +142,8 @@ export async function handlePersistentProjectFilesRoute(input: {
         includeByDefault:
           input.body?.includeByDefault === undefined
             ? undefined
-            : Boolean(input.body.includeByDefault)
+            : Boolean(input.body.includeByDefault),
+        lifecycle: input.lifecycle
       })
     };
   if (input.method === "POST" && complete) {
@@ -140,7 +158,9 @@ export async function handlePersistentProjectFilesRoute(input: {
           ? (String(input.body.scanStatus) as ProjectFileScanStatus)
           : undefined,
         extractedText: input.body?.extractedText ? String(input.body.extractedText) : undefined,
-        excerpts: Array.isArray(input.body?.excerpts) ? input.body.excerpts.map(String) : undefined
+        excerpts: Array.isArray(input.body?.excerpts) ? input.body.excerpts.map(String) : undefined,
+        projectId: project.id,
+        lifecycle: input.lifecycle
       })
     };
   }

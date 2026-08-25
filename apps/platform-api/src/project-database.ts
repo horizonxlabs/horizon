@@ -266,6 +266,7 @@ export interface ProjectDbRouteDeps {
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
+  runChildMutation?: <T>(projectId: string, operation: () => Promise<T>) => Promise<T>;
   /** Record a mutation for compliance (who/what/when). Called only after a write succeeds. */
   audit: (
     headers: DbRouteRequest["headers"],
@@ -282,7 +283,8 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   const withDb = async (
     request: DbRouteRequest,
     response: DbRouteResponse,
-    run: (query: QueryFn, schema: string, projectId: string) => Promise<unknown>
+    run: (query: QueryFn, schema: string, projectId: string) => Promise<unknown>,
+    mutation = false
   ) => {
     try {
       const projectId = String(request.params?.projectId ?? "");
@@ -291,9 +293,13 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const url = await deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
+      const operation = () =>
+        run(createProjectQuery(url), schemaFromConnectionString(url), projectId);
       deps.ok(
         response,
-        await run(createProjectQuery(url), schemaFromConnectionString(url), projectId)
+        await (mutation && deps.runChildMutation
+          ? deps.runChildMutation(projectId, operation)
+          : operation())
       );
     } catch (error) {
       const status = error instanceof ProjectDbError ? error.status : 500;
@@ -317,31 +323,36 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   // Single write endpoint (the router exposes GET/POST only); the op selects the mutation. Every
   // op goes through the validated, parameterized, primary-key-targeted helpers above.
   deps.post("/projects/:projectId/db/tables/:table/mutate", (request, response) =>
-    withDb(request, response, async (query, schema, projectId) => {
-      const table = tableOf(request);
-      const op = String(request.body?.op ?? "");
-      if (op === "insert") {
-        const row = await insertRow(query, schema, table, asRecord(request.body?.values));
-        deps.audit(request.headers, projectId, "database.row.insert", table);
-        return { row };
-      }
-      if (op === "update") {
-        const row = await updateRow(
-          query,
-          schema,
-          table,
-          asRecord(request.body?.pk),
-          asRecord(request.body?.changes)
-        );
-        deps.audit(request.headers, projectId, "database.row.update", table);
-        return { row };
-      }
-      if (op === "delete") {
-        await deleteRow(query, schema, table, asRecord(request.body?.pk));
-        deps.audit(request.headers, projectId, "database.row.delete", table);
-        return { deleted: true };
-      }
-      throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
-    })
+    withDb(
+      request,
+      response,
+      async (query, schema, projectId) => {
+        const table = tableOf(request);
+        const op = String(request.body?.op ?? "");
+        if (op === "insert") {
+          const row = await insertRow(query, schema, table, asRecord(request.body?.values));
+          deps.audit(request.headers, projectId, "database.row.insert", table);
+          return { row };
+        }
+        if (op === "update") {
+          const row = await updateRow(
+            query,
+            schema,
+            table,
+            asRecord(request.body?.pk),
+            asRecord(request.body?.changes)
+          );
+          deps.audit(request.headers, projectId, "database.row.update", table);
+          return { row };
+        }
+        if (op === "delete") {
+          await deleteRow(query, schema, table, asRecord(request.body?.pk));
+          deps.audit(request.headers, projectId, "database.row.delete", table);
+          return { deleted: true };
+        }
+        throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
+      },
+      true
+    )
   );
 }

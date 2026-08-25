@@ -7,6 +7,7 @@ import type { GitPort } from "./git-port";
 import type { DeploymentStore } from "./deployment-store";
 import type { HealthChecker } from "./health-checker";
 import { runPrePublishChecks } from "./pre-publish-checks";
+import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
 // Docker builds run on the host shared by every workspace. Serialize deploy work process-wide so
 // one project's image build cannot starve another project's active development container.
@@ -89,6 +90,7 @@ export interface PublishServiceDeps {
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
+  lifecycle?: ProjectLifecycleCoordinator;
 }
 
 export function createPublishService(deps: PublishServiceDeps) {
@@ -96,6 +98,8 @@ export function createPublishService(deps: PublishServiceDeps) {
   const projectLocks = new Map<string, Promise<void>>();
   const audit = (action: string, projectId: string, metadata?: Record<string, unknown>) =>
     deps.onAudit?.({ action, projectId, metadata });
+  const withLifecycle = <T>(projectId: string, operation: () => Promise<T>) =>
+    deps.lifecycle ? deps.lifecycle.runChildMutation(projectId, operation) : operation();
 
   // A rollback changes the source workspace's checked-out commit, and all publish operations share
   // the same per-project Docker resources. Keep each project's deploy lifecycle atomic in-process.
@@ -114,7 +118,6 @@ export function createPublishService(deps: PublishServiceDeps) {
       if (projectLocks.get(projectId) === current) projectLocks.delete(projectId);
     }
   };
-
   // publish builds a fresh production image from the dev container's /workspace source. The
   // Dockerfile/.dockerignore are injected into the build-context tar in memory (not written to
   // /workspace) so the app's git tree stays clean and re-publish stays idempotent.
@@ -131,7 +134,6 @@ export function createPublishService(deps: PublishServiceDeps) {
     ]);
     return image.imageId;
   };
-
   // Shared deploy flow: materialize an env-scoped image from a source container, start a SEPARATE
   // container for that environment, health-gate it, and record the deployment. `publish` builds the
   // image from the dev container's /workspace (real Dockerfile); `promote` snapshots the validated
@@ -257,8 +259,7 @@ export function createPublishService(deps: PublishServiceDeps) {
             container = await deps.docker.inspectContainer(deployment.containerName);
           });
           const containerId =
-            container?.containerId ??
-            (container === undefined ? deployment.containerId : null);
+            container?.containerId ?? (container === undefined ? deployment.containerId : null);
           if (!containerId) continue;
           await attempt(() => deps.docker.stopContainer(containerId));
           await attempt(() => deps.docker.removeContainer(containerId));
@@ -301,54 +302,56 @@ export function createPublishService(deps: PublishServiceDeps) {
       commitSha?: string;
       publishedByUserId: string;
     }): Promise<PublishOutcome> {
-      return withProjectLock(input.projectId, async () => {
-        const isRollback = Boolean(input.commitSha);
-        const devContainerId = await deps.getDevContainerId(input.projectId);
+      const publish = (): Promise<PublishOutcome> =>
+        withProjectLock(input.projectId, async () => {
+          const isRollback = Boolean(input.commitSha);
+          const devContainerId = await deps.getDevContainerId(input.projectId);
 
-        // Resolve target commit (explicit = rollback/older; else current HEAD).
-        const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
-        audit(isRollback ? "workspace.rollback" : "workspace.publish", input.projectId, {
-          slug: input.slug,
-          environment: input.environment,
-          commitSha
-        });
-
-        // Pre-publish checks are deliberately lightweight: the image build below is the single
-        // isolated build step. Never invoke `npm run build` in the active dev container.
-        const checks = await runPrePublishChecks(
-          { git: deps.git, migrations: deps.migrations },
-          { projectId: input.projectId, commitSha }
-        );
-        if (!checks.ok) {
-          audit("workspace.publish_rejected", input.projectId, {
+          // Resolve target commit (explicit = rollback/older; else current HEAD).
+          const commitSha = input.commitSha ?? (await deps.git.currentCommit(input.projectId));
+          audit(isRollback ? "workspace.rollback" : "workspace.publish", input.projectId, {
             slug: input.slug,
             environment: input.environment,
-            failures: checks.failures
+            commitSha
           });
-          return { ok: false, reason: "pre_checks_failed", failures: checks.failures };
-        }
 
-        // Do not mutate the live development checkout until every rollback boundary has passed.
-        // A rejected rollback must leave the current healthy source and preview untouched.
-        const originalCommit = isRollback ? await deps.git.currentCommit(input.projectId) : null;
-        if (isRollback) await deps.git.checkoutCommit(input.projectId, commitSha);
-
-        try {
-          return await withDeployQueue(() =>
-            deployFromContainer({
-              projectId: input.projectId,
+          // Pre-publish checks are deliberately lightweight: the image build below is the single
+          // isolated build step. Never invoke `npm run build` in the active dev container.
+          const checks = await runPrePublishChecks(
+            { git: deps.git, migrations: deps.migrations },
+            { projectId: input.projectId, commitSha }
+          );
+          if (!checks.ok) {
+            audit("workspace.publish_rejected", input.projectId, {
               slug: input.slug,
               environment: input.environment,
-              commitSha,
-              sourceContainerId: devContainerId,
-              publishedByUserId: input.publishedByUserId,
-              prepareImage: buildProductionImage
-            })
-          );
-        } finally {
-          if (originalCommit) await deps.git.checkoutCommit(input.projectId, originalCommit);
-        }
-      });
+              failures: checks.failures
+            });
+            return { ok: false, reason: "pre_checks_failed", failures: checks.failures };
+          }
+
+          // Do not mutate the live development checkout until every rollback boundary has passed.
+          // A rejected rollback must leave the current healthy source and preview untouched.
+          const originalCommit = isRollback ? await deps.git.currentCommit(input.projectId) : null;
+          if (isRollback) await deps.git.checkoutCommit(input.projectId, commitSha);
+
+          try {
+            return await withDeployQueue(() =>
+              deployFromContainer({
+                projectId: input.projectId,
+                slug: input.slug,
+                environment: input.environment,
+                commitSha,
+                sourceContainerId: devContainerId,
+                publishedByUserId: input.publishedByUserId,
+                prepareImage: buildProductionImage
+              })
+            );
+          } finally {
+            if (originalCommit) await deps.git.checkoutCommit(input.projectId, originalCommit);
+          }
+        });
+      return withLifecycle(input.projectId, publish);
     },
 
     // Promote the current HEALTHY staging source commit to production. Next.js basePath is compiled
@@ -359,37 +362,39 @@ export function createPublishService(deps: PublishServiceDeps) {
       slug: string;
       publishedByUserId: string;
     }): Promise<PublishOutcome> {
-      return withProjectLock(input.projectId, async () => {
-        const staging = deps.deployments.getCurrent(input.slug, "staging");
-        if (!staging) {
-          throw new Error(`no healthy staging deployment to promote for slug '${input.slug}'`);
-        }
-        const sourceContainerId = await deps.getDevContainerId(input.projectId);
-        const originalCommit = await deps.git.currentCommit(input.projectId);
+      const promote = (): Promise<PublishOutcome> =>
+        withProjectLock(input.projectId, async () => {
+          const staging = deps.deployments.getCurrent(input.slug, "staging");
+          if (!staging) {
+            throw new Error(`no healthy staging deployment to promote for slug '${input.slug}'`);
+          }
+          const sourceContainerId = await deps.getDevContainerId(input.projectId);
+          const originalCommit = await deps.git.currentCommit(input.projectId);
 
-        audit("workspace.promote", input.projectId, {
-          slug: input.slug,
-          commitSha: staging.commitSha,
-          fromDeploymentId: staging.id
+          audit("workspace.promote", input.projectId, {
+            slug: input.slug,
+            commitSha: staging.commitSha,
+            fromDeploymentId: staging.id
+          });
+
+          await deps.git.checkoutCommit(input.projectId, staging.commitSha);
+          try {
+            return await withDeployQueue(() =>
+              deployFromContainer({
+                projectId: input.projectId,
+                slug: input.slug,
+                environment: "production",
+                commitSha: staging.commitSha,
+                sourceContainerId,
+                publishedByUserId: input.publishedByUserId,
+                prepareImage: buildProductionImage
+              })
+            );
+          } finally {
+            await deps.git.checkoutCommit(input.projectId, originalCommit);
+          }
         });
-
-        await deps.git.checkoutCommit(input.projectId, staging.commitSha);
-        try {
-          return await withDeployQueue(() =>
-            deployFromContainer({
-              projectId: input.projectId,
-              slug: input.slug,
-              environment: "production",
-              commitSha: staging.commitSha,
-              sourceContainerId,
-              publishedByUserId: input.publishedByUserId,
-              prepareImage: buildProductionImage
-            })
-          );
-        } finally {
-          await deps.git.checkoutCommit(input.projectId, originalCommit);
-        }
-      });
+      return withLifecycle(input.projectId, promote);
     }
   };
 }

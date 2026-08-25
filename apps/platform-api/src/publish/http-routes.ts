@@ -8,6 +8,7 @@ import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports"
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
 import { registerAppLaunchSessionRoute } from "./app-launch-session-route";
+import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -117,6 +118,7 @@ export async function registerPublishHttpRoutes(opts: {
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<void> {
   const { rawApp, orchestrator, nodeHttp } = opts;
 
@@ -129,7 +131,8 @@ export async function registerPublishHttpRoutes(opts: {
     orchestrator,
     migrations: opts.migrations,
     env: opts.env,
-    onAudit: opts.recordAudit
+    onAudit: opts.recordAudit,
+    lifecycle: opts.lifecycle
   }));
   const publishRoutes = createPublishRoutes({ publishService, deployments: workspaceDeployments });
   const persistOrCompensate = async (

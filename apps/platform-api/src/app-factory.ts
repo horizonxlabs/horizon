@@ -4,10 +4,9 @@ import { NestFactory } from "@nestjs/core";
 import type { INestApplication } from "@nestjs/common";
 import { failure, success } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
-import { createWorkspaceRoutes, resolvePreviewTarget } from "./workspace-orchestrator/routes";
+import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
 import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-session-route";
 import { registerProjectDbRoutes } from "./project-database";
-import type { WorkspaceAuthContext } from "./workspace-orchestrator/routes";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
@@ -66,6 +65,9 @@ import type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-ht
 export type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-http-types";
 import { errorResponse } from "./error-response";
 import { deletePersistedProject, registerProjectDeletionRoute } from "./project-deletion";
+import { createProjectLifecycleCoordinator, runProjectMutationRequest, type ProjectLifecycleCoordinator } from "./project-lifecycle";
+import { resolvePersistenceUser, resolvePreviewProxyDecision, resolveWorkspaceAuth, wantsPreviewJson } from "./preview-proxy-decision";
+export { resolvePreviewProxyDecision, wantsPreviewJson } from "./preview-proxy-decision";
 type HttpRequest = {
   headers: HeaderBag;
   body?: Record<string, unknown>;
@@ -100,6 +102,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   knowledgeSkillWriter?: KnowledgeSkillWriter;
   platformSessions?: PlatformSessionService;
   projectResourceCleanup?: (projectId: string) => Promise<void>;
+  projectLifecycle?: ProjectLifecycleCoordinator;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
@@ -184,40 +187,9 @@ async function sendPlatformResponseAsync(response: HttpResponse, platformRespons
   sendPlatformResponse(response, await platformResponse);
 }
 
-export async function resolvePreviewProxyDecision(services: PersistenceAwarePlatformApiServices, headers: HeaderBag, slug: string): Promise<{ status: number } | { upstream: string }> {
-  let auth: WorkspaceAuthContext | null = null;
-  try {
-    auth = await resolveWorkspaceAuth(services, headers ?? {});
-  } catch {
-    auth = null;
-  }
-  const resolution = await resolvePreviewTarget(services.workspaceOrchestrator, auth, slug);
-  if (!resolution.ok) {
-    return { status: resolution.status };
-  }
-  return { upstream: resolution.upstream };
-}
-
-export function wantsPreviewJson(headers: HeaderBag): boolean {
-  const rawAccept = headers.accept ?? headers.Accept;
-  const accept = Array.isArray(rawAccept) ? rawAccept.join(",") : String(rawAccept ?? "");
-  return accept.includes("application/json") && !accept.includes("text/html");
-}
-
 export { renderPreviewUnavailableHtml };
 
 const resolvePersistenceAuth = resolvePersistedAuth;
-
-async function resolvePersistenceUser(services: PersistenceAwarePlatformApiServices, headers: HeaderBag) {
-  if (services.corePersistence) return (await resolvePersistenceAuth(services, headers)).user;
-  return services.auth.resolveCurrentUser(headers);
-}
-
-async function resolveWorkspaceAuth(services: PersistenceAwarePlatformApiServices, headers: HeaderBag): Promise<WorkspaceAuthContext> {
-  const user = await resolvePersistenceUser(services, headers);
-  const projectIds = services.corePersistence ? (await services.corePersistence.listProjects(user)).map((project) => project.id) : services.projects.listProjects(user).map((project) => project.id);
-  return { userId: user.id, roles: user.role ? [user.role] : [], projectIds, actor: user };
-}
 
 async function resolvePersistenceProject(services: PersistenceAwarePlatformApiServices, actor: Awaited<ReturnType<typeof resolvePersistenceUser>>, projectId: string): Promise<PlatformProject> {
   if (!services.corePersistence) throw new Error("Core persistence service is not configured");
@@ -289,6 +261,16 @@ async function resolvePersistedRuntimeInput(services: PersistenceAwarePlatformAp
 }
 
 export async function executePlatformApiRequestAsync(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
+  const lifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
+  return runProjectMutationRequest({
+    lifecycle,
+    request,
+    operation: () => executePlatformApiRequestAsyncInternal(services, request),
+    onError: errorResponse
+  });
+}
+
+async function executePlatformApiRequestAsyncInternal(services: PersistenceAwarePlatformApiServices, request: PlatformRequest): Promise<PlatformResponse> {
   const containerMatch = request.path.match(/^\/projects\/([^/]+)\/workspace\/container(?:\/(stop|wake))?$/);
   if (containerMatch) {
     try {
@@ -355,7 +337,8 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
       repository: services.projectFilePersistence,
       issuer: services.projectFileUploadUrlIssuer,
       resolveActor: () => resolvePersistenceUser(services, request.headers ?? {}),
-      resolveProject: (actor, projectId) => resolvePersistenceProject(services, actor as PlatformUser, projectId)
+      resolveProject: (actor, projectId) => resolvePersistenceProject(services, actor as PlatformUser, projectId),
+      lifecycle: services.projectLifecycle
     });
     if (persistentProjectFileResponse)
       return {
@@ -529,7 +512,8 @@ export async function executePlatformApiRequestAsync(services: PersistenceAwareP
     if (corePersistence && request.method === "DELETE" && projectDeleteMatch) {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       const cleanup = services.projectResourceCleanup ?? ((id: string) => deletePersistedProjectResources(id, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }));
-      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup });
+      const lifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
+      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle });
       return { status: HttpStatus.OK, body: success(data) };
     }
 
@@ -2109,9 +2093,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     // Falls back to a memory-backed singleton (mirrors createRuntimePlatformApiServices' memory
     // mode) so /admin/system/domain works even when core persistence isn't wired up.
     settings: services.businessSettingsPersistence ?? createBusinessSettingsRepositoryBackedService(),
-    keycloak: process.env.KEYCLOAK_ISSUER_URL
-      ? new KeycloakAdminClient({ config: readKeycloakConfig(process.env) })
-      : undefined,
+    keycloak: process.env.KEYCLOAK_ISSUER_URL ? new KeycloakAdminClient({ config: readKeycloakConfig(process.env) }) : undefined,
     writeDomainEnv: (path, content) => fs.writeFileSync(path, content, { mode: 0o600 })
   });
   registerDomainRoutes(routes, (response, platformRequest) =>
@@ -2349,7 +2331,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         excerpts: retrieval.sources.flatMap((source) => source.excerpts.map((excerpt) => `${source.title}: ${excerpt}`))
       };
     },
-    onPlatformBug: createPlatformBugAuditor(services.audit)
+    onPlatformBug: createPlatformBugAuditor(services.audit),
+    lifecycle: services.projectLifecycle ??= createProjectLifecycleCoordinator()
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
@@ -2357,7 +2340,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
 
   const recordPublishAudit = (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) =>
     services.audit.record({ actorId: "system", action: event.action, resourceType: "workspace_container", resourceId: event.projectId, metadata: event.metadata });
-  const publishStack = await createDefaultPublishStack({ orchestrator: services.workspaceOrchestrator, migrations: sharedMigrationStore, env: process.env, onAudit: recordPublishAudit });
+  const projectLifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
+  const publishStack = await createDefaultPublishStack({ orchestrator: services.workspaceOrchestrator, migrations: sharedMigrationStore, env: process.env, onAudit: recordPublishAudit, lifecycle: projectLifecycle });
   services.projectResourceCleanup = (projectId) => deletePersistedProjectResources(projectId, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, () => publishStack.publishService.deleteProject(projectId));
   await registerPublishHttpRoutes({
     rawApp,
@@ -2380,7 +2364,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         headers,
         body: { runtimeDeployment: deployment }
       }),
-    recordAudit: recordPublishAudit
+    recordAudit: recordPublishAudit,
+    lifecycle: projectLifecycle
   });
 
   routes.get("/creator/projects/:projectId/files", (request, response) =>
@@ -2992,6 +2977,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       return (await services.corePersistence!.listProjects(user)).map((project) => project.id);
     },
     getDatabaseUrl: (projectId) => services.workspaceOrchestrator.getProjectDatabaseUrl(projectId),
+    runChildMutation: (projectId, operation) => projectLifecycle.runChildMutation(projectId, operation),
     audit: (headers, projectId, action, detail) => {
       void (async () => {
         try {
