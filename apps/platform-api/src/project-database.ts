@@ -265,6 +265,7 @@ interface DbRouteRequest {
   body?: Record<string, unknown>;
 }
 type DbRouteHandler = (request: DbRouteRequest, response: DbRouteResponse) => void | Promise<void>;
+type DbMutationResult = { body: unknown; auditAction: string; auditDetail: string };
 
 export interface ProjectDbRouteDeps {
   get: (path: string, handler: DbRouteHandler) => void;
@@ -284,7 +285,7 @@ export interface ProjectDbRouteDeps {
     projectId: string,
     action: string,
     detail: string
-  ) => void;
+  ) => void | Promise<void>;
   ok: (response: DbRouteResponse, body: unknown) => void;
   fail: (response: DbRouteResponse, status: number, code: string, message: string) => void;
 }
@@ -325,12 +326,14 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
           return result;
         });
       };
-      deps.ok(
-        response,
-        await (mutation && deps.runChildMutation
+      const result = await (mutation && deps.runChildMutation
           ? deps.runChildMutation(projectId, operation)
-          : operation())
-      );
+          : operation());
+      if (mutation) {
+        const committed = result as DbMutationResult;
+        await deps.audit(request.headers, projectId, committed.auditAction, committed.auditDetail);
+        deps.ok(response, committed.body);
+      } else deps.ok(response, result);
     } catch (error) {
       const deletionConflict =
         error instanceof Error && error.name === "ProjectDeletionInProgressError";
@@ -369,8 +372,7 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
         if (op === "insert") {
           await fence?.assertCurrent();
           const row = await insertRow(query, schema, table, asRecord(request.body?.values));
-          deps.audit(request.headers, projectId, "database.row.insert", table);
-          return { row };
+          return { body: { row }, auditAction: "database.row.insert", auditDetail: table };
         }
         if (op === "update") {
           await fence?.assertCurrent();
@@ -381,14 +383,12 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
             asRecord(request.body?.pk),
             asRecord(request.body?.changes)
           );
-          deps.audit(request.headers, projectId, "database.row.update", table);
-          return { row };
+          return { body: { row }, auditAction: "database.row.update", auditDetail: table };
         }
         if (op === "delete") {
           await fence?.assertCurrent();
           await deleteRow(query, schema, table, asRecord(request.body?.pk));
-          deps.audit(request.headers, projectId, "database.row.delete", table);
-          return { deleted: true };
+          return { body: { deleted: true }, auditAction: "database.row.delete", auditDetail: table };
         }
         throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
       },

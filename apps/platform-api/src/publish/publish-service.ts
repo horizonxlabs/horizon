@@ -126,7 +126,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     fence?: ProjectMutationFence
   ) => {
     return buildFencedImage({ docker: deps.docker, sourceContainerId, imageTag,
-      dockerfilePath: "Dockerfile", fence, extraFiles: [
+      dockerfilePath: "Dockerfile", fence, compensateOnFailure: false, extraFiles: [
         { name: "Dockerfile", content: PRODUCTION_DOCKERFILE },
         { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE },
         { name: ".env.production", content: buildDeploymentEnvironment(slug, environment) }
@@ -157,18 +157,25 @@ export function createPublishService(deps: PublishServiceDeps) {
     // that an older revision already recorded.
     const revisionSuffix = `${input.commitSha.slice(0, 12)}-${randomUUID().slice(0, 8)}`;
     const imageTag = `evcp-${environment}-${input.slug}:${revisionSuffix}`;
-    const imageDigest = await input.prepareImage(
-      input.sourceContainerId,
-      imageTag,
-      input.slug,
-      environment
-    );
+    const containerName = deploymentContainerName(input.slug, environment, revisionSuffix);
+    let imageDigest = imageTag;
     let containerId: string | undefined;
     let finalized!: WorkspaceDeployment;
     let healthy = false;
     let deploymentFlushed = false;
-    let deployment: WorkspaceDeployment | undefined;
+    let deployment = deps.deployments.create({
+      projectId: input.projectId, slug: input.slug, environment, commitSha: input.commitSha,
+      imageTag, imageDigest, containerId: null, containerName,
+      publishedByUserId: input.publishedByUserId
+    });
     try {
+      await deps.deployments.flush?.();
+      deploymentFlushed = true;
+      imageDigest = await input.prepareImage(
+        input.sourceContainerId, imageTag, input.slug, environment
+      );
+      deployment = deps.deployments.updateRuntime(deployment.id, { imageDigest });
+      await deps.deployments.flush?.();
       // DB isolation note: staging reuses the project's resolveEnv (same DATABASE_URL) but gets its
       // own container + volume — true staging-DB isolation (separate schema/database) is a follow-up.
       const spec = buildAppContainerSpec(
@@ -181,25 +188,13 @@ export function createPublishService(deps: PublishServiceDeps) {
         },
         environment
       );
-      const containerName = deploymentContainerName(input.slug, environment, revisionSuffix);
       spec.name = containerName;
       spec.labels["evcp.commit-sha"] = input.commitSha;
       spec.labels["evcp.container-name"] = containerName;
       containerId = await createAndStartFencedContainer({ docker: deps.docker, spec, fence: input.fence });
-      // Queue the pending revision and its health result as one durable lifecycle batch. Prisma
-      // stores commit both writes atomically when flush is called below.
       await input.fence?.assertCurrent();
-      deployment = deps.deployments.create({
-        projectId: input.projectId,
-        slug: input.slug,
-        environment,
-        commitSha: input.commitSha,
-        imageTag,
-        imageDigest,
-        containerId,
-        containerName,
-        publishedByUserId: input.publishedByUserId
-      });
+      deployment = deps.deployments.updateRuntime(deployment.id, { containerId, containerName });
+      await deps.deployments.flush?.();
 
       const basePath =
         environment === "staging" ? `/apps/${input.slug}/staging` : `/apps/${input.slug}`;
@@ -211,7 +206,7 @@ export function createPublishService(deps: PublishServiceDeps) {
       await input.fence?.assertCurrent();
     } catch (error) {
       return compensateDeploymentCandidate({ deployments: deps.deployments, docker: deps.docker,
-        deployment, finalized: Boolean(finalized), flushed: deploymentFlushed, containerId,
+        deployment, flushed: deploymentFlushed, containerId,
         imageIdOrTag: imageTag, cause: error });
     }
 

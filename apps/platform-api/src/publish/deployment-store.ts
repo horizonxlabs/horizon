@@ -12,6 +12,11 @@ export interface DeploymentStore {
     containerName?: string;
     publishedByUserId: string;
   }): WorkspaceDeployment;
+  updateRuntime(id: string, input: {
+    imageDigest?: string;
+    containerId?: string | null;
+    containerName?: string;
+  }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
   discard(id: string): void;
   remove?(id: string): void;
@@ -55,6 +60,13 @@ export function createMemoryDeploymentStore(): DeploymentStore {
       byId.set(deployment.id, deployment);
       order.push(deployment.id);
       return deployment;
+    },
+    updateRuntime(id, input) {
+      const existing = byId.get(id);
+      if (!existing) throw new Error(`unknown deployment '${id}'`);
+      const next = { ...existing, ...input };
+      byId.set(id, next);
+      return next;
     },
     updateHealth(id, healthStatus) {
       const existing = byId.get(id);

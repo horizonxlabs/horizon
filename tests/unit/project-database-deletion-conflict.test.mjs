@@ -161,6 +161,7 @@ test("database mutation rechecks its fence after DML and rolls back before commi
   let committed = false;
   let rolledBack = false;
   let failure;
+  let audited = 0;
   const query = async (sql) => {
     if (sql.includes("information_schema.columns")) {
       return { rows: [{
@@ -201,7 +202,7 @@ test("database mutation rechecks its fence after DML and rolls back before commi
         }
       });
     },
-    audit() {}
+    audit() { audited += 1; }
   });
 
   await mutate(
@@ -213,4 +214,5 @@ test("database mutation rechecks its fence after DML and rolls back before commi
   assert.deepEqual(failure, { status: 409, code: "PROJECT_DELETION_IN_PROGRESS" });
   assert.equal(committed, false);
   assert.equal(rolledBack, true);
+  assert.equal(audited, 0, "rolled-back DML must not emit a success audit");
 });

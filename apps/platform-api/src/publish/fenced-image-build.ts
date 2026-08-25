@@ -9,6 +9,7 @@ export async function buildFencedImage(input: {
   dockerfilePath: string;
   extraFiles: TarFile[];
   fence?: ProjectMutationFence;
+  compensateOnFailure?: boolean;
 }): Promise<string> {
   await input.fence?.assertCurrent();
   let imageId: string | undefined;
@@ -20,6 +21,7 @@ export async function buildFencedImage(input: {
     await input.fence?.assertCurrent();
     return imageId;
   } catch (error) {
+    if (input.compensateOnFailure === false) throw error;
     try {
       if (!input.docker.removeImage) throw new Error("Docker image cleanup is unavailable");
       // A content digest can be shared by other deployment tags. This candidate owns only its tag.

@@ -110,7 +110,7 @@ test("real PostgreSQL schema deletion waits for checked-out mutation transaction
       CREATE SCHEMA app_takeover;
       CREATE TABLE app_takeover.items (id text PRIMARY KEY);
       CREATE FUNCTION app_takeover.pause_insert() RETURNS trigger AS $$
-      BEGIN PERFORM pg_sleep(0.25); RETURN NEW; END $$ LANGUAGE plpgsql;
+      BEGIN PERFORM pg_advisory_xact_lock(91357); RETURN NEW; END $$ LANGUAGE plpgsql;
       CREATE TRIGGER pause_insert BEFORE INSERT ON app_takeover.items
       FOR EACH ROW EXECUTE FUNCTION app_takeover.pause_insert()
     `);
@@ -138,11 +138,24 @@ test("real PostgreSQL schema deletion waits for checked-out mutation transaction
       },
       audit() {}
     });
-    setTimeout(() => { current = false; }, 75);
-    await mutate({
+    await admin.query("SELECT pg_advisory_lock(91357)");
+    const takeoverMutation = mutate({
       params: { projectId: "p1", table: "items" }, headers: {},
       body: { op: "insert", values: { id: "rolled-back" } }
     }, {});
+    let waitingInsideDml = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const activity = await admin.query(`
+        SELECT count(*)::int AS count FROM pg_stat_activity
+        WHERE wait_event = 'advisory' AND query LIKE 'INSERT INTO "app_takeover".%'
+      `);
+      if (activity.rows[0].count > 0) { waitingInsideDml = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(waitingInsideDml, true, "the mutation must be paused inside its INSERT trigger");
+    current = false;
+    await admin.query("SELECT pg_advisory_unlock(91357)");
+    await takeoverMutation;
     assert.deepEqual(failure, { status: 409, code: "PROJECT_DELETION_IN_PROGRESS" });
     const rolledBack = await admin.query("SELECT count(*)::int AS count FROM app_takeover.items");
     assert.equal(rolledBack.rows[0].count, 0);

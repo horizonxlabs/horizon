@@ -19,10 +19,10 @@ export async function deletePersistedProjectFiles(
   const files = await repository.listAll(projectId);
   await fence?.assertCurrent();
   if (files.length === 0) {
-    if (storage?.revokeBucket) {
-      await storage.revokeBucket(projectFileBucketName(projectId), []);
-      await fence?.assertCurrent();
-    }
+    if (!storage?.revokeBucket)
+      throw new Error("Project upload bucket revocation is unavailable; cleanup cannot be verified");
+    await storage.revokeBucket(projectFileBucketName(projectId), []);
+    await fence?.assertCurrent();
     return;
   }
   if (!storage) {
@@ -38,7 +38,10 @@ export async function deletePersistedProjectFiles(
       filesByBucket.set(file.bucket, bucketFiles);
     }
     for (const [bucket, bucketFiles] of filesByBucket) {
-      const operations = storage.revokeBucket && bucket === projectFileBucketName(projectId)
+      const projectBucket = bucket === projectFileBucketName(projectId);
+      if (projectBucket && !storage.revokeBucket)
+        throw new Error("Project upload bucket revocation is unavailable; cleanup cannot be verified");
+      const operations = projectBucket
         ? [() => storage.revokeBucket!(bucket, bucketFiles.map((file) => file.objectKey))]
         : bucketFiles.map((file) => () => storage.remove(bucket, file.objectKey));
       for (const operation of operations) {

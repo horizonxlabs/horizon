@@ -150,3 +150,15 @@ test("project cleanup revokes its deterministic bucket even when upload metadata
   );
   assert.deepEqual(revoked, [[projectFileBucketName("prj_empty"), []]]);
 });
+
+test("empty project-file cleanup fails closed without project-bucket revocation capability", async () => {
+  const repository = { async listAll() { return []; }, async deleteProject() {} };
+  await assert.rejects(
+    deletePersistedProjectFiles("prj_empty", repository),
+    /project upload bucket revocation is unavailable/i
+  );
+  await assert.rejects(
+    deletePersistedProjectFiles("prj_empty", repository, { async remove() {} }),
+    /project upload bucket revocation is unavailable/i
+  );
+});

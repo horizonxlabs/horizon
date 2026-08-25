@@ -6,7 +6,6 @@ export async function compensateDeploymentCandidate(input: {
   deployments: DeploymentStore;
   docker: DockerEngine;
   deployment?: WorkspaceDeployment;
-  finalized: boolean;
   flushed: boolean;
   containerId?: string;
   imageIdOrTag: string;
@@ -26,7 +25,7 @@ export async function compensateDeploymentCandidate(input: {
   // Keep the durable identity when external cleanup is incomplete so deletion can retry it.
   if (failures.length > 1) throw new AggregateError(failures, "Deployment compensation failed");
   try {
-    if (input.deployment && input.finalized && input.flushed) {
+    if (input.deployment && input.flushed) {
       if (input.deployments.remove) input.deployments.remove(input.deployment.id);
       else input.deployments.updateHealth(input.deployment.id, "failed");
       await input.deployments.flush?.();

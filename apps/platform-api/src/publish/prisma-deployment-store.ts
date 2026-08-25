@@ -14,7 +14,7 @@ export interface DeploymentRevisionClient {
     create(args: { data: RevisionRecord }): Promise<RevisionRecord>;
     update(args: {
       where: { id: string };
-      data: { healthStatus: string };
+      data: Partial<Pick<RevisionRecord, "healthStatus" | "imageDigest" | "containerId" | "containerName">>;
     }): Promise<RevisionRecord>;
     deleteMany(args: { where: { projectId?: string; id?: string } }): Promise<{ count: number }>;
   };
@@ -97,6 +97,21 @@ export async function createPrismaDeploymentStore(
         }
       );
       return deployment;
+    },
+    updateRuntime(id, input) {
+      const current = byId.get(id);
+      if (!current) throw new Error(`unknown deployment '${id}'`);
+      const next = { ...current, ...input };
+      byId.set(id, next);
+      enqueue(
+        id,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.update({ where: { id }, data: input }),
+        () => {
+          if (byId.has(id)) byId.set(id, current);
+        }
+      );
+      return next;
     },
     updateHealth(id, healthStatus) {
       const current = byId.get(id);
