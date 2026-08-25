@@ -1,46 +1,68 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
-const authenticatedCreatorFiles = [
-  "apps/creator-web/src/app/routes.ts",
-  "apps/creator-web/src/features/projects/CreatorShell.tsx",
-  "apps/creator-web/src/features/projects/ProjectSwitcher.tsx",
-  "apps/creator-web/src/features/projects/CreateProjectWizard.tsx",
-  "apps/creator-web/src/features/projects/ProjectsPage.tsx",
-  "apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx",
-  "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
-  "apps/creator-web/src/features/workspace/WorkspaceCodePanel.tsx",
-  "apps/creator-web/src/features/workspace/VibeRestorePoint.tsx",
-  "apps/creator-web/src/features/workspace/use-project-files.ts",
-  "apps/creator-web/src/features/workspace/use-vibe-chat.ts",
-  "apps/creator-web/src/features/workspace/QuickMessages.tsx",
-  "apps/creator-web/src/features/workspace/workspace-chrome.ts",
-  "apps/creator-web/src/features/prd/PrdPage.tsx",
-  "apps/creator-web/src/features/database/DatabasePage.tsx",
-  "apps/creator-web/src/features/versions/VersionsPage.tsx",
-  "apps/creator-web/src/features/users/UsersPage.tsx",
-  "apps/creator-web/src/features/publish/PublishPage.tsx",
-  "apps/creator-web/src/features/deployments/DeploymentsPage.tsx",
-  "apps/creator-web/src/features/tickets/TicketsPage.tsx",
-  "apps/creator-web/src/features/tickets/TicketDetailPage.tsx",
-  "apps/creator-web/src/features/project-settings/ProjectSettingsPage.tsx"
-];
+const creatorSourceRoot = "apps/creator-web/src";
+const authenticatedAuditExclusions = new Map([
+  [
+    "apps/creator-web/src/features/workspace/vibe-queue.ts",
+    "Internal model prompt with multilingual trigger words; it is never rendered as UI copy."
+  ]
+]);
+
+async function listProductionSources(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) return listProductionSources(file);
+      return /\.(?:ts|tsx)$/.test(entry.name) && entry.name !== "vite-env.d.ts" ? [file] : [];
+    })
+  );
+  return nested.flat().sort();
+}
 
 async function readRepoFile(file) {
   return readFile(new URL(`../../${file}`, import.meta.url), "utf8");
 }
 
 test("authenticated Creator route sources contain no Thai user-facing copy", async () => {
+  const productionSources = await listProductionSources(creatorSourceRoot);
+  for (const excluded of authenticatedAuditExclusions.keys()) {
+    assert.ok(productionSources.includes(excluded), `stale audit exclusion: ${excluded}`);
+  }
+  const authenticatedCreatorFiles = productionSources.filter(
+    (file) => !authenticatedAuditExclusions.has(file)
+  );
+  assert.ok(
+    authenticatedCreatorFiles.length > 70,
+    "audit must enumerate the production Creator tree"
+  );
   for (const file of authenticatedCreatorFiles) {
     assert.doesNotMatch(await readRepoFile(file), /[\u0E00-\u0E7F]/, file);
   }
 });
 
-test("Workspace failures keep service exceptions out of primary authenticated copy", async () => {
-  const vibeChat = await readRepoFile(
-    "apps/creator-web/src/features/workspace/use-vibe-chat.ts"
+test("bootstrap and create-project failures keep backend errors out of primary copy", async () => {
+  const app = await readRepoFile("apps/creator-web/src/app/use-creator-app.tsx");
+  const routes = await readRepoFile("apps/creator-web/src/routes/CreatorRoutes.tsx");
+  const wizard = await readRepoFile(
+    "apps/creator-web/src/features/projects/CreateProjectWizard.tsx"
   );
+
+  assert.doesNotMatch(app, /Create project failed:\s*\$\{error\.message\}/);
+  assert.doesNotMatch(app, /setCreateProjectMessage\(\s*error instanceof Error \? error\.message/);
+  assert.match(app, /setCreateProjectTechnicalDetails/);
+  assert.match(routes, /<CreatorState/);
+  assert.match(routes, /technicalDetails=\{app\.bootstrap\.technicalDetails\}/);
+  assert.doesNotMatch(routes, /<p role="alert">\{app\.bootstrap\.message\}<\/p>/);
+  assert.match(wizard, /<CreatorStatusMessage/);
+  assert.match(wizard, /technicalDetails=\{technicalDetails\}/);
+});
+
+test("Workspace failures keep service exceptions out of primary authenticated copy", async () => {
+  const vibeChat = await readRepoFile("apps/creator-web/src/features/workspace/use-vibe-chat.ts");
   const codePanel = await readRepoFile(
     "apps/creator-web/src/features/workspace/WorkspaceCodePanel.tsx"
   );
@@ -80,9 +102,6 @@ test("table-heavy Creator surfaces keep named, keyboard-reachable data regions",
   ]) {
     assert.match(users, new RegExp(`ariaLabel="${label}"`));
   }
-  assert.match(
-    database,
-    /aria-label="Database tables" role="region" tabIndex=\{0\}/
-  );
+  assert.match(database, /aria-label="Database tables" role="region" tabIndex=\{0\}/);
   assert.match(database, /aria-label=\{`Records in \$\{activeTable\}`\}/);
 });

@@ -1,14 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Render-smoke harness for creator-web.
-//
-// Static checks can pass code that crashes at render time. This harness closes
-// that gap: it renders the real `useCreatorApp` hook and every page component via
-// `renderToStaticMarkup`, so any bare-undefined reference or render-time throw fails a test.
-//
-// We stub the browser globals the render path reads (window/localStorage/document/fetch) BEFORE
-// importing the app modules. Effects do not run under static rendering, so no network happens.
+// Browser globals are stubbed before imports; effects do not run during static rendering.
 
 const localStorageValues = new Map();
 const localStorageStub = {
@@ -38,9 +31,7 @@ globalThis.fetch ??= async () => ({
 });
 
 const React = (await import("react")).default;
-// The creator-web components use the automatic JSX runtime (no `import React`), but tsx compiles
-// their JSX to classic `React.createElement`. Expose React globally so that resolves under the
-// test runtime without editing every component.
+// tsx resolves these components through classic `React.createElement` in this test runtime.
 globalThis.React = React;
 const { renderToStaticMarkup } = await import("react-dom/server");
 
@@ -113,7 +104,8 @@ test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
   localStorageValues.set("evcp_session_expires_at", new Date(Date.now() + 60_000).toISOString());
   window.location.pathname = "/creator/projects/project-1";
   const html = renderToStaticMarkup(React.createElement(CreatorApp));
-  assert.match(html, /Loading Creator projects from Platform API/);
+  assert.match(html, /creator-state-loading/);
+  assert.match(html, /Loading Creator projects/);
   localStorageValues.clear();
 });
 
@@ -260,7 +252,9 @@ test("WorkspacePage offers an accessible stop control during generation", () => 
 // instant the first token landed — a long, still-streaming response then looked finished
 // with no loading affordance at all for the rest of its own generation.
 test("WorkspacePage keeps the loading cursor lit only while a turn is still streaming", () => {
-  const messages = [{ id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }];
+  const messages = [
+    { id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }
+  ];
   const streaming = renderWithHook((app) =>
     React.createElement(WorkspacePage, { app: { ...app, isVibing: true, vibeMessages: messages } })
   );
@@ -287,24 +281,33 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
 });
 
 test("PublishPage fail-closes readiness when access information is unavailable", () => {
-  const html = renderWithHook((app) => React.createElement(PublishPage, { app: {
-    ...app,
-    bootstrap: { ...app.bootstrap, status: "ready" },
-    accessLoadState: "unavailable",
-    publishReadinessState: "unavailable",
-    publishReview: {
-      manifest: {
-        appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
-        frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
-        auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
-        roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
-      },
-      checklist: [], ready: true
-    },
-    visiblePublishChecklist: [], visiblePreview: { id: "preview-3", version: "3" },
-    publishMessage: "Access information loaded. Publish readiness is unavailable.",
-    publishMessageTone: "warning", publishMessageTechnicalDetails: "access API 503"
-  }}));
+  const html = renderWithHook((app) =>
+    React.createElement(PublishPage, {
+      app: {
+        ...app,
+        bootstrap: { ...app.bootstrap, status: "ready" },
+        accessLoadState: "unavailable",
+        publishReadinessState: "unavailable",
+        publishReview: {
+          manifest: {
+            appId: "app-1",
+            manifestVersion: "3",
+            app: { slug: "ops", route: "/apps/ops" },
+            frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
+            auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
+            roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
+          },
+          checklist: [],
+          ready: true
+        },
+        visiblePublishChecklist: [],
+        visiblePreview: { id: "preview-3", version: "3" },
+        publishMessage: "Access information loaded. Publish readiness is unavailable.",
+        publishMessageTone: "warning",
+        publishMessageTechnicalDetails: "access API 503"
+      }
+    })
+  );
   assert.match(html, /Publish readiness is unavailable/);
   assert.match(html, /Publish to App Store/);
   assert.match(html, /disabled/);

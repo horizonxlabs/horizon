@@ -15,6 +15,7 @@ export type CreatorProjectView = {
 export type CreatorBootstrapState = {
   status: "loading" | "ready" | "empty" | "error";
   message?: string;
+  technicalDetails?: string;
   userName: string;
   selectedProject: CreatorProjectView;
   projects: CreatorProjectView[];

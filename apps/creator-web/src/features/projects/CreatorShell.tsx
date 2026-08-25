@@ -27,6 +27,7 @@ export function CreatorShell({
     createProjectForm,
     handleCreateProjectField,
     createProjectMessage,
+    createProjectTechnicalDetails,
     isEnteringWorkspace,
     handleSelectProject,
     onNavigate,
@@ -81,6 +82,7 @@ export function CreatorShell({
           onSubmit={handleCreateProjectSubmit}
           onClose={() => setIsCreateProjectDialogOpen(false)}
           message={createProjectMessage}
+          technicalDetails={createProjectTechnicalDetails}
           isCreating={isCreatingProject}
         />
       ) : null}

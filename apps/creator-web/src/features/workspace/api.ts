@@ -109,6 +109,12 @@ export async function streamVibeChat(
   if (!receivedDone) throw new Error("Chat stream ended before the terminal done event");
 }
 
-export async function loadWorkspaceState(projectId: string): Promise<WorkspaceSnapshotResponse> {
-  return createCreatorPlatformClient().getWorkspace(projectId);
+export async function loadWorkspaceState(
+  projectId: string,
+  signal?: AbortSignal
+): Promise<WorkspaceSnapshotResponse> {
+  return createCreatorPlatformClient().request<WorkspaceSnapshotResponse>(
+    `/projects/${encodeURIComponent(projectId)}/workspace`,
+    { signal }
+  );
 }

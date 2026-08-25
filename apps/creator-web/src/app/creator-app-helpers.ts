@@ -10,11 +10,12 @@ import { apiBaseUrl } from "@/shared/runtime-config";
 import type { CreatorBootstrapState } from "@/shared/types";
 import { initialCreatorBootstrap, unselectedProject } from "@/app/creator-defaults";
 
-export function creatorApiFailureState(message: string): CreatorBootstrapState {
+export function creatorApiFailureState(technicalDetails: string): CreatorBootstrapState {
   return {
     ...initialCreatorBootstrap,
     status: "error",
-    message,
+    message: "Creator projects could not be loaded.",
+    technicalDetails,
     selectedProject: unselectedProject
   };
 }
@@ -53,11 +54,18 @@ export async function loadCreatorBootstrap(
 }
 
 export async function loadPrdState(
-  projectId: string
+  projectId: string,
+  signal?: AbortSignal
 ): Promise<{ current?: PrdVersionDto; versions: PrdVersionDto[] }> {
   const client = createCreatorPlatformClient();
-  const versions = await client.listPrdVersions(projectId);
-  const current = versions.length ? await client.getCurrentPrd(projectId) : undefined;
+  const encodedProjectId = encodeURIComponent(projectId);
+  const versions = await client.request<PrdVersionDto[]>(
+    `/projects/${encodedProjectId}/prd/versions`,
+    { signal }
+  );
+  const current = versions.length
+    ? await client.request<PrdVersionDto>(`/projects/${encodedProjectId}/prd`, { signal })
+    : undefined;
   return { current, versions };
 }
 

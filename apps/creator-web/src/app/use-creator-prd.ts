@@ -8,13 +8,17 @@ import {
 } from "@/app/creator-app-helpers";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
+import type { CreatorProjectRuntimeRequest } from "@/app/creator-project-runtime";
 
 type PendingPrdGeneration = { projectId: string; startedAt: number };
 export type CreatorPrdStatus = "loading" | "ready" | "empty" | "error";
 export type CreatorPrdErrorSource = "load" | "generation";
 export type CreatorPrdFeedbackTone = "success" | "warning" | "danger";
 
-export function useCreatorPrd(selectedProject: CreatorProjectView) {
+export function useCreatorPrd(
+  selectedProject: CreatorProjectView,
+  dependencies: { loadPrdState?: typeof loadPrdState } = {}
+) {
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto>();
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [prdStatus, setPrdStatus] = useState<CreatorPrdStatus>("loading");
@@ -30,6 +34,7 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
   pendingRef.current = pendingGeneration;
   const selectedProjectIdRef = useRef(selectedProject.id);
   selectedProjectIdRef.current = selectedProject.id;
+  const refreshGenerationRef = useRef(0);
 
   const visiblePrdSections =
     currentPrdVersion?.sections?.map((section) => ({
@@ -45,19 +50,32 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
     author: selectedProject.owner
   }));
 
-  async function refreshPrdState(projectId: string) {
-    setPrdStatus("loading");
-    setPrdMessage("Loading PRD.");
-    setPrdTechnicalDetails(undefined);
-    setPrdErrorSource(undefined);
-    setPrdFeedbackTone(undefined);
+  async function refreshPrdState(projectId: string, runtimeRequest?: CreatorProjectRuntimeRequest) {
+    const refreshGeneration = ++refreshGenerationRef.current;
+    const isCurrent = () =>
+      refreshGeneration === refreshGenerationRef.current &&
+      (runtimeRequest
+        ? runtimeRequest.projectId === projectId && runtimeRequest.isCurrent()
+        : selectedProjectIdRef.current === projectId);
+    if (isCurrent()) {
+      setPrdStatus("loading");
+      setPrdMessage("Loading PRD.");
+      setPrdTechnicalDetails(undefined);
+      setPrdErrorSource(undefined);
+      setPrdFeedbackTone(undefined);
+    }
     try {
-      const prdState = await loadPrdState(projectId);
+      const prdState = await (dependencies.loadPrdState ?? loadPrdState)(
+        projectId,
+        runtimeRequest?.signal
+      );
+      if (!isCurrent()) return;
       setCurrentPrdVersion(prdState.current);
       setPrdVersionList(prdState.versions);
       setPrdStatus(prdState.current ? "ready" : "empty");
       setPrdMessage(prdState.current ? "PRD is ready for review." : "No PRD draft yet.");
     } catch (error) {
+      if (!isCurrent()) return;
       setCurrentPrdVersion(undefined);
       setPrdVersionList([]);
       setPrdStatus("error");
@@ -126,6 +144,10 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
   }
 
   function resetPrdState() {
+    refreshGenerationRef.current += 1;
+    pendingRef.current = undefined;
+    setPendingGeneration(undefined);
+    setIsGeneratingPrdDraft(false);
     setCurrentPrdVersion(undefined);
     setPrdVersionList([]);
     setPrdStatus("loading");

@@ -12,6 +12,7 @@ import { VersionsPage } from "@/features/versions";
 import { WorkspacePage } from "@/features/workspace";
 import { navigateBrowserPath } from "@evcp/ui";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { CreatorState } from "@/shared";
 
 export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const routeProjectUnavailable =
@@ -22,18 +23,28 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
   if (app.bootstrap.status === "loading") {
     return (
       <main className="creator-page">
-        <p role="status">Loading Creator projects from Platform API…</p>
+        <CreatorState
+          kind="loading"
+          title="Loading Creator projects"
+          description="Retrieving the projects available to your account."
+        />
       </main>
     );
   }
   if (app.bootstrap.status === "error") {
     return (
       <main className="creator-page">
-        <h1>Creator data unavailable</h1>
-        <p role="alert">{app.bootstrap.message}</p>
-        <button type="button" onClick={() => window.location.reload()}>
-          Retry
-        </button>
+        <CreatorState
+          kind="unavailable"
+          title={app.bootstrap.message ?? "Creator projects could not be loaded."}
+          description="Your projects have not changed. Retry when the service is available."
+          technicalDetails={app.bootstrap.technicalDetails}
+          action={
+            <button type="button" onClick={() => window.location.reload()}>
+              Retry
+            </button>
+          }
+        />
       </main>
     );
   }

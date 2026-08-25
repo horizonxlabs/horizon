@@ -2,6 +2,7 @@ import { WandSparkles } from "lucide-react";
 import type { FormEvent } from "react";
 import { Button, DecisionPanel, Field, Input, Select, Textarea } from "@evcp/ui";
 import type { CreateProjectFormState } from "@/shared/types";
+import { CreatorStatusMessage } from "@/shared";
 
 export function CreateProjectWizard({
   form,
@@ -9,6 +10,7 @@ export function CreateProjectWizard({
   onSubmit,
   onClose,
   message,
+  technicalDetails,
   isCreating
 }: {
   form: CreateProjectFormState;
@@ -16,11 +18,16 @@ export function CreateProjectWizard({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
   message: string;
+  technicalDetails?: string;
   isCreating: boolean;
 }) {
   return (
     <div className="creator-dialog-backdrop" role="presentation">
-      <form className="creator-project-dialog" onSubmit={onSubmit} aria-label="Create project wizard">
+      <form
+        className="creator-project-dialog"
+        onSubmit={onSubmit}
+        aria-label="Create project wizard"
+      >
         <header>
           <div>
             <h2>Create project</h2>
@@ -86,16 +93,22 @@ export function CreateProjectWizard({
             </Select>
           </Field>
         </div>
-        <DecisionPanel
-          tone={message.includes("failed") ? "danger" : "info"}
-          badge={isCreating ? "Creating" : "Ready"}
-          title={message}
-          lines={[
-            "The project opens in its workspace after creation.",
-            "Horizon uses the business problem to prepare the first draft.",
-            "Project history remains available for later PRD review."
-          ]}
-        />
+        {technicalDetails ? (
+          <CreatorStatusMessage tone="danger" technicalDetails={technicalDetails}>
+            <strong>{message}</strong>
+          </CreatorStatusMessage>
+        ) : (
+          <DecisionPanel
+            tone="info"
+            badge={isCreating ? "Creating" : "Ready"}
+            title={message}
+            lines={[
+              "The project opens in its workspace after creation.",
+              "Horizon uses the business problem to prepare the first draft.",
+              "Project history remains available for later PRD review."
+            ]}
+          />
+        )}
         <footer>
           <Button variant="secondary" type="button" onClick={onClose} disabled={isCreating}>
             Cancel
