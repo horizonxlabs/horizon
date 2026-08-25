@@ -3,10 +3,29 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Select } from "../../packages/ui/src/index.tsx";
+import { createRequire } from "node:module";
 
 globalThis.React = React;
 
 const usersModule = await import("../../apps/creator-web/src/features/users/UsersPage.tsx");
+
+const requireFromStore = createRequire(
+  new URL("../../apps/app-store-pwa/package.json", import.meta.url)
+);
+const { act, create } = requireFromStore("react-test-renderer");
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function InvitationHarness({ invite, busy = false }) {
+  const flow = usersModule.useInvitationDrawer({ handleInviteUser: invite, isInvitingUser: busy });
+  return React.createElement("flow", flow);
+}
 
 test("the invitation form collects email, role, user type, and note", () => {
   assert.equal(typeof usersModule.InviteUserForm, "function");
@@ -102,6 +121,66 @@ test("the invitation form disables dismissal and submit actions while sending", 
   const submitButton = html.match(/<button[^>]*type="submit"[^>]*>.*?<\/button>/)?.[0];
   assert.ok(submitButton?.includes('disabled=""'));
   assert.ok(submitButton?.includes("Sending invitation…"));
+});
+
+test("the mounted invitation flow retains a failed submission and resets after success", async () => {
+  const first = deferred();
+  const outcomes = [first.promise, Promise.resolve(true)];
+  let renderer;
+
+  await act(async () => {
+    renderer = create(React.createElement(InvitationHarness, { invite: () => outcomes.shift() }));
+  });
+  let flow = renderer.root.findByType("flow").props;
+
+  await act(async () => flow.openInvitation());
+  flow = renderer.root.findByType("flow").props;
+  await act(async () => flow.handleInvitationField("email", "new.user@company.com"));
+  flow = renderer.root.findByType("flow").props;
+  assert.equal(flow.isInviteOpen, true);
+  assert.equal(flow.invitation.email, "new.user@company.com");
+
+  let failedSubmit;
+  await act(async () => {
+    failedSubmit = flow.submitInvitation({ preventDefault() {} });
+  });
+  first.resolve(false);
+  await act(async () => failedSubmit);
+  flow = renderer.root.findByType("flow").props;
+  assert.equal(flow.isInviteOpen, true);
+  assert.equal(flow.invitation.email, "new.user@company.com");
+
+  await act(async () => flow.submitInvitation({ preventDefault() {} }));
+  flow = renderer.root.findByType("flow").props;
+  assert.equal(flow.isInviteOpen, false);
+  assert.equal(flow.invitation.email, "");
+
+  await act(async () => renderer.unmount());
+});
+
+test("the mounted invitation flow supports Cancel and blocks dismissal while sending", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(InvitationHarness, { invite: async () => true }));
+  });
+  let flow = renderer.root.findByType("flow").props;
+  await act(async () => flow.openInvitation());
+  flow = renderer.root.findByType("flow").props;
+  await act(async () => flow.closeInvitation());
+  assert.equal(renderer.root.findByType("flow").props.isInviteOpen, false);
+  await act(async () => renderer.unmount());
+
+  await act(async () => {
+    renderer = create(
+      React.createElement(InvitationHarness, { invite: async () => true, busy: true })
+    );
+  });
+  flow = renderer.root.findByType("flow").props;
+  await act(async () => flow.openInvitation());
+  flow = renderer.root.findByType("flow").props;
+  await act(async () => flow.closeInvitation());
+  assert.equal(renderer.root.findByType("flow").props.isInviteOpen, true);
+  await act(async () => renderer.unmount());
 });
 
 test("the Users page shows pending invitations from app access state", () => {

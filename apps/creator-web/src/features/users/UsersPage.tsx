@@ -1,17 +1,11 @@
-import type { AppInvitationInput } from "@evcp/api-client";
-import { Button, DataTable, Drawer, Field, Input, SectionCard, Select, Textarea } from "@evcp/ui";
+import { Button, DataTable, Drawer, SectionCard } from "@evcp/ui";
 import { UserPlus } from "lucide-react";
-import { useState, type FormEvent } from "react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { InviteUserForm, useInvitationDrawer } from "./invitation-drawer";
 
-const initialInvitation: AppInvitationInput = {
-  email: "",
-  roleKey: "employee",
-  userType: "internal",
-  note: ""
-};
+export { InviteUserForm, useInvitationDrawer } from "./invitation-drawer";
 
 function formatPermission(value: string): string {
   return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -34,105 +28,6 @@ function PermissionList({ value }: { value: string }) {
   );
 }
 
-export function InviteUserForm({
-  value,
-  onChange,
-  onSubmit,
-  onCancel,
-  isSubmitting
-}: {
-  value: AppInvitationInput;
-  onChange: (field: keyof AppInvitationInput, value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onCancel?: () => void;
-  isSubmitting: boolean;
-}) {
-  return (
-    <form className="flex flex-col gap-5" onSubmit={onSubmit}>
-      <div className="rounded-card border-primary/15 bg-primary-soft border px-4 py-3">
-        <strong className="text-primary-strong block text-sm">
-          Grant app access by invitation
-        </strong>
-        <p className="text-muted mt-1 text-xs">
-          The invitation is independent of PRD and workspace readiness.
-        </p>
-      </div>
-
-      <Field
-        label="Email address"
-        htmlFor="invite-user-email"
-        hint="Use the address the user signs in with."
-      >
-        <Input
-          id="invite-user-email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder="name@company.com"
-          value={value.email}
-          onChange={(event) => onChange("email", event.target.value)}
-        />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-        <Field label="App role" htmlFor="invite-user-role">
-          <Select
-            id="invite-user-role"
-            aria-label="App role"
-            value={value.roleKey}
-            onChange={(event) => onChange("roleKey", event.target.value)}
-          >
-            <option value="employee">Employee</option>
-            <option value="manager">Manager</option>
-          </Select>
-        </Field>
-        <Field label="User type" htmlFor="invite-user-type">
-          <Select
-            id="invite-user-type"
-            aria-label="User type"
-            value={value.userType}
-            onChange={(event) => onChange("userType", event.target.value)}
-          >
-            <option value="internal">Internal</option>
-            <option value="external">External</option>
-          </Select>
-        </Field>
-      </div>
-
-      <Field
-        label="Note"
-        htmlFor="invite-user-note"
-        hint="Visible to access reviewers and project administrators."
-      >
-        <Textarea
-          id="invite-user-note"
-          placeholder="Optional context for the invitation"
-          value={value.note ?? ""}
-          onChange={(event) => onChange("note", event.target.value)}
-        />
-      </Field>
-
-      {value.userType === "external" ? (
-        <p className="rounded-control border-warning/20 bg-warning-bg text-warning border px-3 py-2 text-xs">
-          External invitations require approval before access becomes active.
-        </p>
-      ) : null}
-
-      <div className="border-border mt-2 flex justify-end gap-2 border-t pt-4">
-        {onCancel ? (
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={isSubmitting}>
-            Cancel
-          </Button>
-        ) : null}
-        <Button type="submit" disabled={isSubmitting || !value.email.trim()}>
-          <UserPlus size={16} aria-hidden="true" />
-          {isSubmitting ? "Sending invitation…" : "Send invitation"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
 export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     selectedProject,
@@ -150,26 +45,17 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
     visibleAccessRequests,
     visibleAppRoles
   } = app;
-  const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [invitation, setInvitation] = useState<AppInvitationInput>(initialInvitation);
+  const {
+    isInviteOpen,
+    invitation,
+    inviteTriggerRef,
+    emailInputRef,
+    handleInvitationField,
+    openInvitation,
+    closeInvitation,
+    submitInvitation
+  } = useInvitationDrawer({ handleInviteUser, isInvitingUser });
   const resolvedAccessLoadState = accessLoadState ?? "ready";
-
-  function handleInvitationField(field: keyof AppInvitationInput, nextValue: string) {
-    setInvitation((current) => ({ ...current, [field]: nextValue }) as AppInvitationInput);
-  }
-
-  async function handleInvitationSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const sent = await handleInviteUser(invitation);
-    if (!sent) return;
-    setInvitation(initialInvitation);
-    setIsInviteOpen(false);
-  }
-
-  function closeInvitation() {
-    if (isInvitingUser) return;
-    setIsInviteOpen(false);
-  }
 
   return (
     <>
@@ -219,7 +105,12 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     eyebrow="App Users"
                     title={`App Users: ${selectedProject.name}`}
                     action={
-                      <Button type="button" size="sm" onClick={() => setIsInviteOpen(true)}>
+                      <Button
+                        ref={inviteTriggerRef}
+                        type="button"
+                        size="sm"
+                        onClick={openInvitation}
+                      >
                         <UserPlus size={15} aria-hidden="true" /> Invite user
                       </Button>
                     }
@@ -343,15 +234,18 @@ export function UsersPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       <Drawer
         open={isInviteOpen}
         onClose={closeInvitation}
+        returnFocusRef={inviteTriggerRef}
+        initialFocusRef={emailInputRef}
         title="Invite user"
         description={`Add a user to ${selectedProject.name}. PRD baseline is not required.`}
       >
         <InviteUserForm
           value={invitation}
           onChange={handleInvitationField}
-          onSubmit={handleInvitationSubmit}
+          onSubmit={submitInvitation}
           onCancel={closeInvitation}
           isSubmitting={isInvitingUser}
+          emailInputRef={emailInputRef}
         />
       </Drawer>
     </>
