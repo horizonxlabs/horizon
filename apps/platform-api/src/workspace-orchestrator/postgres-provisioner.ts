@@ -18,6 +18,11 @@ export function roleNameFor(slug: string): string {
   return `${schemaNameFor(slug)}_role`;
 }
 
+export function schemaAdvisoryLockSql(schema: string): string {
+  const safeSchema = schema.replace(/[^a-z0-9_]/gi, "");
+  return `SELECT pg_advisory_xact_lock(hashtextextended('evcp-schema:${safeSchema}', 0))`;
+}
+
 export function buildProvisionSchemaSql(slug: string, password: string): string[] {
   const schema = schemaNameFor(slug);
   const role = roleNameFor(slug);
@@ -68,9 +73,10 @@ export function createPgClientPostgresProvisioner(
       return { schemaName: schemaNameFor(slug), roleName: roleNameFor(slug), password };
     },
     async releaseSchema(slug) {
-      for (const statement of buildReleaseSchemaSql(slug)) {
-        await runSql(statement);
-      }
+      const schema = schemaNameFor(slug);
+      await runSql(
+        `BEGIN; ${schemaAdvisoryLockSql(schema)}; ${buildReleaseSchemaSql(slug).join("; ")}; COMMIT;`
+      );
     }
   };
 }

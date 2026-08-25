@@ -84,3 +84,46 @@ test("project bucket revocation is idempotent after a prior cleanup removed the 
 
   await issuer.revokeBucket("project-file-project-123", ["one.bin"]);
 });
+
+test("project bucket revocation enumerates and removes unexpected objects before deleting the bucket", async () => {
+  const removed = [];
+  let bucketRemoved = false;
+  const issuer = createMinioProjectFileUploadUrlIssuer({
+    endPoint: "minio", port: 9000, useSSL: false, accessKey: "server", secretKey: "server",
+    publicBaseUrl: "https://files.example.internal", revokeBaseDelayMs: 0,
+    clientFactory: () => ({
+      async bucketExists() { return true; }, async makeBucket() {},
+      async *listObjectsV2() { yield { name: "known.bin" }; yield { name: "unexpected.bin" }; },
+      async removeObject(_bucket, key) { removed.push(key); },
+      async removeBucket() { bucketRemoved = true; },
+      async presignedPutObject() { return "unused"; }
+    }),
+    signingClientFactory: () => ({ async presignedPutObject() { return "unused"; } })
+  });
+  await issuer.revokeBucket("project-file-project-123", ["known.bin"]);
+  assert.deepEqual(removed.sort(), ["known.bin", "unexpected.bin"]);
+  assert.equal(bucketRemoved, true);
+});
+
+test("project bucket revocation bounds retryable conflicts and surfaces unresolved cleanup", async () => {
+  let attempts = 0;
+  const issuer = createMinioProjectFileUploadUrlIssuer({
+    endPoint: "minio", port: 9000, useSSL: false, accessKey: "server", secretKey: "server",
+    publicBaseUrl: "https://files.example.internal", revokeMaxAttempts: 3, revokeBaseDelayMs: 0,
+    clientFactory: () => ({
+      async bucketExists() { return true; }, async makeBucket() {},
+      async *listObjectsV2() {}, async removeObject() {},
+      async removeBucket() {
+        attempts += 1;
+        throw Object.assign(new Error("still active"), { code: "BucketNotEmpty" });
+      },
+      async presignedPutObject() { return "unused"; }
+    }),
+    signingClientFactory: () => ({ async presignedPutObject() { return "unused"; } })
+  });
+  await assert.rejects(
+    issuer.revokeBucket("project-file-project-123", ["known.bin"]),
+    /remains non-empty after 3 attempts/
+  );
+  assert.equal(attempts, 3);
+});

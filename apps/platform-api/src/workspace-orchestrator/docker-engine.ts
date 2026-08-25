@@ -169,6 +169,7 @@ export interface DockerEngine {
     dockerfilePath?: string,
     extraFiles?: TarFile[]
   ): Promise<{ imageId: string }>;
+  removeImage?(imageIdOrTag: string): Promise<void>;
 }
 
 interface MemoryContainer {
@@ -194,6 +195,7 @@ export function createMemoryDockerEngine(): DockerEngine & {
       dockerfilePath: string;
       extraFiles: TarFile[];
     }>;
+    removedImages: string[];
   };
 } {
   const state = {
@@ -206,7 +208,8 @@ export function createMemoryDockerEngine(): DockerEngine & {
       imageTag: string;
       dockerfilePath: string;
       extraFiles: TarFile[];
-    }>
+    }>,
+    removedImages: [] as string[]
   };
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
@@ -286,6 +289,9 @@ export function createMemoryDockerEngine(): DockerEngine & {
         extraFiles: (extraFiles ?? []).map((file) => ({ ...file }))
       });
       return { imageId: `mem-build-${state.builds.length}` };
+    },
+    async removeImage(imageIdOrTag) {
+      state.removedImages.push(imageIdOrTag);
     }
   };
 }

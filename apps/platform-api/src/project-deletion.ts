@@ -29,7 +29,7 @@ export async function deletePersistedProject(input: {
   actor: PlatformUser;
   encodedProjectId: string;
   persistence: CoreRepositoryBackedService;
-  cleanup: (projectId: string) => Promise<void>;
+  cleanup: (projectId: string, fence?: ProjectDeletionFence) => Promise<void>;
   lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{ id: string; deleted: true }> {
   const projectId = decodeURIComponent(input.encodedProjectId);
@@ -48,7 +48,7 @@ export async function deletePersistedProject(input: {
       metadata: { projectId }
     });
     await fence?.assertCurrent();
-    await input.cleanup(projectId);
+    await input.cleanup(projectId, fence);
     await fence?.assertCurrent();
     await input.persistence.deleteProject(input.actor, projectId);
     await input.persistence

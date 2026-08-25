@@ -14,8 +14,10 @@ export async function createAndStartFencedContainer(input: {
     await input.fence?.assertCurrent();
     return containerId;
   } catch (error) {
-    await input.docker.stopContainer(containerId).catch(() => undefined);
-    await input.docker.removeContainer(containerId).catch(() => undefined);
+    const failures: unknown[] = [error];
+    try { await input.docker.stopContainer(containerId); } catch (cleanupError) { failures.push(cleanupError); }
+    try { await input.docker.removeContainer(containerId); } catch (cleanupError) { failures.push(cleanupError); }
+    if (failures.length > 1) throw new AggregateError(failures, "Publish container cleanup failed");
     throw error;
   }
 }

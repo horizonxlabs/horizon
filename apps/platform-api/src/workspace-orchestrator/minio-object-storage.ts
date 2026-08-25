@@ -19,6 +19,7 @@ interface MinioPresignLike {
   makeBucket(bucket: string): Promise<void>;
   removeObject(bucket: string, objectKey: string): Promise<void>;
   removeBucket(bucket: string): Promise<void>;
+  listObjectsV2?(bucket: string, prefix: string, recursive: boolean): AsyncIterable<{ name?: string }>;
   presignedPutObject(bucket: string, objectKey: string, expirySeconds: number): Promise<string>;
 }
 
@@ -42,6 +43,8 @@ export function projectFileBucketName(projectId: string): string {
  */
 export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisionerOptions, "clientFactory"> & {
   publicBaseUrl: string;
+  revokeMaxAttempts?: number;
+  revokeBaseDelayMs?: number;
   clientFactory?: (cfg: {
     endPoint: string;
     port: number;
@@ -77,22 +80,38 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
     ? opts.signingClientFactory(signingOptions)
     : new MinioClient(signingOptions);
   const revokeBucket = async (bucket: string, objectKeys: string[]) => {
-    while (true) {
-      await Promise.all(
-        objectKeys.map((objectKey) =>
-          managementClient.removeObject(bucket, objectKey).catch(() => undefined)
-        )
-      );
+    const maxAttempts = Math.max(1, opts.revokeMaxAttempts ?? 8);
+    const retryable = new Set(["BucketNotEmpty", "Conflict", "SlowDown", "InternalError", "ServiceUnavailable"]);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
+        const keys = new Set(objectKeys);
+        if (managementClient.listObjectsV2) {
+          for await (const object of managementClient.listObjectsV2(bucket, "", true)) {
+            if (object.name) keys.add(object.name);
+          }
+        }
+        await Promise.all([...keys].map(async (objectKey) => {
+          try { await managementClient.removeObject(bucket, objectKey); }
+          catch (error) {
+            const code = (error as { code?: string }).code;
+            if (code !== "NoSuchKey" && code !== "NoSuchBucket") throw error;
+          }
+        }));
         await managementClient.removeBucket(bucket);
         return;
       } catch (error) {
         const code = (error as { code?: string }).code;
         if (code === "NoSuchBucket") return;
-        if (code !== "BucketNotEmpty" && code !== "Conflict") throw error;
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (!retryable.has(String(code))) throw error;
+        lastError = error;
+        if (attempt < maxAttempts) {
+          const delay = Math.min((opts.revokeBaseDelayMs ?? 100) * 2 ** (attempt - 1), 1_000);
+          if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
     }
+    throw new Error(`Project upload bucket '${bucket}' remains non-empty after ${maxAttempts} attempts`, { cause: lastError });
   };
   return {
     leaseDurationMs: PROJECT_FILE_UPLOAD_URL_TTL_MS,

@@ -7,12 +7,16 @@ import type { GitPort } from "./git-port";
 import type { DeploymentStore } from "./deployment-store";
 import type { HealthChecker } from "./health-checker";
 import { runPrePublishChecks } from "./pre-publish-checks";
-import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
+import type { ProjectDeletionFence, ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 import { createAndStartFencedContainer } from "./fenced-container-start";
+import { buildFencedImage } from "./fenced-image-build";
+import { withFencedCheckout } from "./fenced-checkout";
+import { compensateDeploymentCandidate } from "./deployment-compensation";
 // Docker builds run on the host shared by every workspace. Serialize deploy work process-wide so
 // one project's image build cannot starve another project's active development container.
 let deployQueue: Promise<void> = Promise.resolve();
-async function withDeployQueue<T>(operation: () => Promise<T>): Promise<T> {
+async function withDeployQueue<T>(operation: () => Promise<T>, fence?: ProjectMutationFence): Promise<T> {
+  await fence?.assertCurrent();
   const previous = deployQueue;
   let release: () => void;
   deployQueue = new Promise<void>((resolve) => {
@@ -20,6 +24,7 @@ async function withDeployQueue<T>(operation: () => Promise<T>): Promise<T> {
   });
   await previous;
   try {
+    await fence?.assertCurrent();
     return await operation();
   } finally {
     release!();
@@ -116,14 +121,15 @@ export function createPublishService(deps: PublishServiceDeps) {
     sourceContainerId: string,
     imageTag: string,
     slug: string,
-    environment: EnvironmentName
+    environment: EnvironmentName,
+    fence?: ProjectMutationFence
   ) => {
-    const image = await deps.docker.buildImage(sourceContainerId, imageTag, "Dockerfile", [
-      { name: "Dockerfile", content: PRODUCTION_DOCKERFILE },
-      { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE },
-      { name: ".env.production", content: buildDeploymentEnvironment(slug, environment) }
-    ]);
-    return image.imageId;
+    return buildFencedImage({ docker: deps.docker, sourceContainerId, imageTag,
+      dockerfilePath: "Dockerfile", fence, extraFiles: [
+        { name: "Dockerfile", content: PRODUCTION_DOCKERFILE },
+        { name: ".dockerignore", content: PRODUCTION_DOCKERIGNORE },
+        { name: ".env.production", content: buildDeploymentEnvironment(slug, environment) }
+      ] });
   };
   // Shared deploy flow: materialize an env-scoped image from a source container, start a SEPARATE
   // container for that environment, health-gate it, and record the deployment. `publish` builds the
@@ -173,7 +179,6 @@ export function createPublishService(deps: PublishServiceDeps) {
     spec.labels["evcp.commit-sha"] = input.commitSha;
     spec.labels["evcp.container-name"] = containerName;
     const containerId = await createAndStartFencedContainer({ docker: deps.docker, spec, fence: input.fence });
-
     let finalized!: WorkspaceDeployment;
     let healthy: boolean;
     let deploymentFlushed = false;
@@ -203,16 +208,8 @@ export function createPublishService(deps: PublishServiceDeps) {
       deploymentFlushed = true;
       await input.fence?.assertCurrent();
     } catch (error) {
-      // Persistence and health-check failures happen after the candidate starts. It must never
-      // survive as an unmanaged phantom when the lifecycle cannot be finalized.
-      if (deployment && finalized && deploymentFlushed) {
-        if (deps.deployments.remove) deps.deployments.remove(deployment.id);
-        else deps.deployments.updateHealth(deployment.id, "failed");
-        await deps.deployments.flush?.().catch(() => undefined);
-      } else if (deployment) deps.deployments.discard(deployment.id);
-      await deps.docker.stopContainer(containerId).catch(() => undefined);
-      await deps.docker.removeContainer(containerId).catch(() => undefined);
-      throw error;
+      return compensateDeploymentCandidate({ deployments: deps.deployments, docker: deps.docker,
+        deployment, finalized: Boolean(finalized), flushed: deploymentFlushed, containerId, cause: error });
     }
 
     if (!healthy) {
@@ -239,16 +236,18 @@ export function createPublishService(deps: PublishServiceDeps) {
   };
 
   return {
-    async deleteProject(projectId: string): Promise<void> {
+    async deleteProject(projectId: string, fence?: ProjectDeletionFence): Promise<void> {
       await withProjectLock(projectId, async () => {
         const deployments = deps.deployments.list(projectId);
         const failures: Error[] = [];
         const attempt = async (cleanup: () => Promise<void>): Promise<void> => {
+          await fence?.assertCurrent();
           try {
             await cleanup();
           } catch (error) {
             failures.push(error instanceof Error ? error : new Error(String(error)));
           }
+          await fence?.assertCurrent();
         };
         for (const deployment of deployments) {
           let container: Awaited<ReturnType<typeof deps.docker.inspectContainer>> | undefined;
@@ -267,8 +266,12 @@ export function createPublishService(deps: PublishServiceDeps) {
             `Deployment cleanup did not finish for project '${projectId}'`
           );
         }
+        await fence?.assertCurrent();
         deps.deployments.removeProject(projectId);
+        await fence?.assertCurrent();
+        await fence?.assertCurrent();
         await deps.deployments.flush?.();
+        await fence?.assertCurrent();
         try {
           audit("workspace.deployments_deleted", projectId, { count: deployments.length });
         } catch {
@@ -330,10 +333,7 @@ export function createPublishService(deps: PublishServiceDeps) {
           // Do not mutate the live development checkout until every rollback boundary has passed.
           // A rejected rollback must leave the current healthy source and preview untouched.
           const originalCommit = isRollback ? await deps.git.currentCommit(input.projectId) : null;
-          if (isRollback) await deps.git.checkoutCommit(input.projectId, commitSha);
-
-          try {
-            return await withDeployQueue(() =>
+          const deploy = () => withDeployQueue(() =>
               deployFromContainer({
                 projectId: input.projectId,
                 slug: input.slug,
@@ -342,12 +342,13 @@ export function createPublishService(deps: PublishServiceDeps) {
                 sourceContainerId: devContainerId,
                 publishedByUserId: input.publishedByUserId,
                 fence,
-                prepareImage: buildProductionImage
+                prepareImage: (...args) => buildProductionImage(...args, fence)
               })
-            );
-          } finally {
-            if (originalCommit) await deps.git.checkoutCommit(input.projectId, originalCommit);
-          }
+            , fence);
+          return originalCommit
+            ? withFencedCheckout({ git: deps.git, projectId: input.projectId,
+                targetCommit: commitSha, originalCommit, fence, operation: deploy })
+            : deploy();
         });
       return withLifecycle(input.projectId, publish);
     },
@@ -375,9 +376,9 @@ export function createPublishService(deps: PublishServiceDeps) {
             fromDeploymentId: staging.id
           });
 
-          await deps.git.checkoutCommit(input.projectId, staging.commitSha);
-          try {
-            return await withDeployQueue(() =>
+          return withFencedCheckout({
+            git: deps.git, projectId: input.projectId, targetCommit: staging.commitSha,
+            originalCommit, fence, operation: () => withDeployQueue(() =>
               deployFromContainer({
                 projectId: input.projectId,
                 slug: input.slug,
@@ -386,12 +387,10 @@ export function createPublishService(deps: PublishServiceDeps) {
                 sourceContainerId,
                 publishedByUserId: input.publishedByUserId,
                 fence,
-                prepareImage: buildProductionImage
+                prepareImage: (...args) => buildProductionImage(...args, fence)
               })
-            );
-          } finally {
-            await deps.git.checkoutCommit(input.projectId, originalCommit);
-          }
+            , fence)
+          });
         });
       return withLifecycle(input.projectId, promote);
     }

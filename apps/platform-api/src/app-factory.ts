@@ -98,7 +98,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   projectFileUploadUrlIssuer?: ProjectFileUploadUrlIssuer;
   knowledgeSkillWriter?: KnowledgeSkillWriter;
   platformSessions?: PlatformSessionService;
-  projectResourceCleanup?: (projectId: string) => Promise<void>;
+  projectResourceCleanup?: (projectId: string, fence?: import("./project-lifecycle").ProjectDeletionFence) => Promise<void>;
   projectLifecycle?: ProjectLifecycleCoordinator;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
@@ -509,7 +509,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
     const projectDeleteMatch = request.path.match(/^\/projects\/([^/]+)$/);
     if (corePersistence && request.method === "DELETE" && projectDeleteMatch) {
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
-      const cleanup = services.projectResourceCleanup ?? ((id: string) => deletePersistedProjectResources(id, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }));
+      const cleanup = services.projectResourceCleanup ?? ((id: string, fence) => deletePersistedProjectResources(id, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, undefined, fence));
       const lifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
       const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle });
       return { status: HttpStatus.OK, body: success(data) };
@@ -2340,7 +2340,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     services.audit.record({ actorId: "system", action: event.action, resourceType: "workspace_container", resourceId: event.projectId, metadata: event.metadata });
   const projectLifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
   const publishStack = await createDefaultPublishStack({ orchestrator: services.workspaceOrchestrator, migrations: sharedMigrationStore, env: process.env, onAudit: recordPublishAudit, lifecycle: projectLifecycle });
-  services.projectResourceCleanup = (projectId) => deletePersistedProjectResources(projectId, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, () => publishStack.publishService.deleteProject(projectId));
+  services.projectResourceCleanup = (projectId, fence) => deletePersistedProjectResources(projectId, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, () => publishStack.publishService.deleteProject(projectId, fence), fence);
   await registerPublishHttpRoutes({
     rawApp,
     orchestrator: services.workspaceOrchestrator,

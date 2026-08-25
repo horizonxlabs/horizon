@@ -3,6 +3,8 @@ import test from "node:test";
 
 const { deletePersistedProject, deleteProjectResources } =
   await import("../../apps/platform-api/src/project-deletion.ts");
+const { deletePersistedProjectResources } =
+  await import("../../apps/platform-api/src/persistence/project-file-cleanup.ts");
 
 const actor = { id: "creator-1", role: "creator" };
 const project = { id: "project-1" };
@@ -121,4 +123,28 @@ test("project deletion rechecks ownership after cleanup before deleting the proj
     /ownership lost/
   );
   assert.deepEqual(events, ["cleanup"]);
+});
+
+test("resource deletion fences every irreversible stage and stops after ownership takeover", async () => {
+  const events = [];
+  let assertions = 0;
+  const fence = {
+    epoch: 1,
+    async assertCurrent() {
+      assertions += 1;
+      if (assertions === 3) throw new Error("deletion ownership lost between stages");
+    }
+  };
+
+  await assert.rejects(
+    deletePersistedProjectResources(
+      "project-1",
+      { workspace: { async deleteWorkspace() { events.push("workspace"); } } },
+      async () => events.push("publish"),
+      fence
+    ),
+    (error) => error instanceof AggregateError &&
+      error.errors.some((cause) => /ownership lost/.test(cause.message))
+  );
+  assert.deepEqual(events, ["publish"]);
 });

@@ -1,5 +1,6 @@
 import { createPgQuery, type PgQueryResult } from "./workspace-orchestrator/pg-runner";
 import type { ProjectMutationFence } from "./project-lifecycle";
+import { schemaAdvisoryLockSql } from "./workspace-orchestrator/postgres-provisioner";
 
 // Per-project database browser backend. Every query here runs through a connection built from the
 // project's own scoped Postgres role (search_path pinned to the project's schema), so Postgres —
@@ -57,6 +58,10 @@ export function schemaFromConnectionString(connectionString: string): string {
 /** Double-quote a Postgres identifier that has already been validated against introspection. */
 function quoteIdent(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function schemaLockCte(schema: string): string {
+  return `WITH lifecycle_fence AS (${schemaAdvisoryLockSql(schema)})`;
 }
 
 export async function introspectSchema(query: QueryFn, schema: string): Promise<ProjectDbSchema> {
@@ -198,7 +203,9 @@ export async function insertRow(
   const columns = keys.map(quoteIdent).join(", ");
   const placeholders = keys.map((_, index) => `$${index + 1}`).join(", ");
   const result = await query(
-    `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns}) VALUES (${placeholders}) RETURNING *`,
+    `${schemaLockCte(schema)}
+     INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns})
+     SELECT ${placeholders} FROM lifecycle_fence RETURNING *`,
     keys.map((key) => values[key])
   );
   return result.rows[0] ?? null;
@@ -219,10 +226,12 @@ export async function updateRow(
   assertKnownColumns(definition, changeKeys);
   const setClause = changeKeys.map((key, index) => `${quoteIdent(key)} = $${index + 1}`).join(", ");
   const whereClause = pkColumns
-    .map((column, index) => `${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
+    .map((column, index) => `target.${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
     .join(" AND ");
   const result = await query(
-    `UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} SET ${setClause} WHERE ${whereClause} RETURNING *`,
+    `${schemaLockCte(schema)}
+     UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     SET ${setClause} FROM lifecycle_fence WHERE ${whereClause} RETURNING target.*`,
     [...changeKeys.map((key) => changes[key]), ...pkColumns.map((column) => pk[column])]
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -239,10 +248,12 @@ export async function deleteRow(
   const definition = requireTable(snapshot ?? (await introspectSchema(query, schema)), table);
   const pkColumns = requirePrimaryKeyValues(definition, pk);
   const whereClause = pkColumns
-    .map((column, index) => `${quoteIdent(column)} = $${index + 1}`)
+    .map((column, index) => `target.${quoteIdent(column)} = $${index + 1}`)
     .join(" AND ");
   const result = await query(
-    `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} WHERE ${whereClause}`,
+    `${schemaLockCte(schema)}
+     DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     USING lifecycle_fence WHERE ${whereClause}`,
     pkColumns.map((column) => pk[column])
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -267,6 +278,7 @@ export interface ProjectDbRouteDeps {
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
+  createQuery?: (connectionString: string) => ProjectQueryFn;
   runChildMutation?: <T>(
     projectId: string,
     operation: (fence: ProjectMutationFence) => Promise<T>
@@ -303,7 +315,7 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
       const operation = (fence?: ProjectMutationFence) =>
-        run(createProjectQuery(url), schemaFromConnectionString(url), projectId, fence);
+        run((deps.createQuery ?? createProjectQuery)(url), schemaFromConnectionString(url), projectId, fence);
       deps.ok(
         response,
         await (mutation && deps.runChildMutation

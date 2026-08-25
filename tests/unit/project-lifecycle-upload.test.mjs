@@ -183,3 +183,165 @@ test("a PUT held across deletion drains before project-bucket revoke and late co
   assert.equal(completionAttempted, false);
   assert.equal(metadataDeleted, true);
 });
+
+test("file init compensates a row created after deletion completed during repository.create", async () => {
+  let databaseTime = new Date("2026-08-25T00:00:00.000Z");
+  const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
+  const createStarted = deferred();
+  const resumeCreate = deferred();
+  const rows = new Map();
+  const revoked = [];
+  const repository = {
+    async create(input) {
+      createStarted.resolve();
+      await resumeCreate.promise;
+      const row = { ...input, archivedAt: null, createdAt: new Date(), updatedAt: new Date() };
+      rows.set(input.id, row);
+      return row;
+    },
+    async deleteUpload(id) { rows.delete(id); }
+  };
+  const initialization = initializePersistentProjectFile({
+    lifecycle: createProjectLifecycleCoordinator({ store, mutationLeaseMs: 100 }),
+    repository,
+    issuer: {
+      leaseDurationMs: 100,
+      async issue() { throw new Error("URL issuance must not follow a lost create fence"); },
+      async remove(bucket, key) { revoked.push([bucket, [key]]); },
+      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+    },
+    actorId: "creator-1", projectId: "project-1", fileName: "late.md",
+    mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
+  });
+  await createStarted.promise;
+  databaseTime = new Date("2026-08-25T00:00:00.200Z");
+  await createProjectLifecycleCoordinator({ store }).runDeletion("project-1", async () => undefined);
+  resumeCreate.resolve();
+
+  await assert.rejects(initialization, /being deleted/);
+  assert.equal(rows.size, 0);
+  assert.equal(revoked.length, 1);
+  assert.equal(revoked[0][0], projectFileBucketName("project-1"));
+  assert.equal(revoked[0][1].length, 1);
+});
+
+test("file init revokes a URL issued after its lease expired and deletion completed", async () => {
+  let databaseTime = new Date("2026-08-25T00:00:00.000Z");
+  const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
+  const issueStarted = deferred();
+  const resumeIssue = deferred();
+  const rows = new Map();
+  const revoked = [];
+  const repository = {
+    async create(input) {
+      const row = { ...input, archivedAt: null, createdAt: new Date(), updatedAt: new Date() };
+      rows.set(input.id, row);
+      return row;
+    },
+    async deleteUpload(id) { rows.delete(id); }
+  };
+  const initialization = initializePersistentProjectFile({
+    lifecycle: createProjectLifecycleCoordinator({ store, mutationLeaseMs: 100 }),
+    repository,
+    issuer: {
+      leaseDurationMs: 100,
+      async issue() {
+        issueStarted.resolve();
+        await resumeIssue.promise;
+        return { url: "https://uploads.example.test/late", expiresAt: new Date() };
+      },
+      async remove() {},
+      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+    },
+    actorId: "creator-1", projectId: "project-1", fileName: "late.md",
+    mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
+  });
+  await issueStarted.promise;
+  databaseTime = new Date("2026-08-25T00:00:00.200Z");
+  await createProjectLifecycleCoordinator({ store }).runDeletion("project-1", async () => rows.clear());
+  resumeIssue.resolve();
+
+  await assert.rejects(initialization, /being deleted/);
+  assert.equal(rows.size, 0);
+  assert.equal(revoked.length, 1);
+  assert.equal(revoked[0][0], projectFileBucketName("project-1"));
+});
+
+test("file init revokes a bucket created by an issuer that throws after deletion", async () => {
+  let databaseTime = new Date("2026-08-25T00:00:00.000Z");
+  const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
+  const bucketCreated = deferred();
+  const resumeIssue = deferred();
+  const rows = new Map();
+  const revoked = [];
+  const repository = {
+    async create(input) {
+      const row = { ...input, archivedAt: null, createdAt: new Date(), updatedAt: new Date() };
+      rows.set(input.id, row);
+      return row;
+    },
+    async deleteUpload(id) { rows.delete(id); }
+  };
+  const initialization = initializePersistentProjectFile({
+    lifecycle: createProjectLifecycleCoordinator({ store, mutationLeaseMs: 100 }),
+    repository,
+    issuer: {
+      leaseDurationMs: 100,
+      async issue() {
+        bucketCreated.resolve();
+        await resumeIssue.promise;
+        throw new Error("presign failed after creating bucket");
+      },
+      async remove() { assert.fail("a lost fence must revoke the project bucket"); },
+      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+    },
+    actorId: "creator-1", projectId: "project-1", fileName: "late.md",
+    mimeType: "text/markdown", sizeBytes: 42, sha256: "a".repeat(64)
+  });
+  await bucketCreated.promise;
+  databaseTime = new Date("2026-08-25T00:00:00.200Z");
+  await createProjectLifecycleCoordinator({ store }).runDeletion("project-1", async () => rows.clear());
+  resumeIssue.resolve();
+
+  await assert.rejects(initialization, /presign failed/);
+  assert.equal(rows.size, 0);
+  assert.equal(revoked.length, 1);
+  assert.equal(revoked[0][0], projectFileBucketName("project-1"));
+});
+
+test("persisted file cleanup stops between object stages after deletion-fence takeover", async () => {
+  const firstRemoved = deferred();
+  const resumeFirst = deferred();
+  const removed = [];
+  let metadataDeleted = false;
+  let current = true;
+  const cleanup = deletePersistedProjectFiles(
+    "project-1",
+    {
+      async listAll() {
+        return [
+          { bucket: "legacy-a", objectKey: "one" },
+          { bucket: "legacy-b", objectKey: "two" }
+        ];
+      },
+      async deleteProject() { metadataDeleted = true; }
+    },
+    {
+      async remove(bucket, key) {
+        removed.push([bucket, key]);
+        if (key === "one") {
+          firstRemoved.resolve();
+          await resumeFirst.promise;
+        }
+      }
+    },
+    { epoch: 1, async assertCurrent() { if (!current) throw new Error("deletion ownership lost"); } }
+  );
+  await firstRemoved.promise;
+  current = false;
+  resumeFirst.resolve();
+
+  await assert.rejects(cleanup, /ownership lost/);
+  assert.deepEqual(removed, [["legacy-a", "one"]]);
+  assert.equal(metadataDeleted, false);
+});

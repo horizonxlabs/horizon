@@ -8,6 +8,7 @@ test("generated migration SQL is atomic and scoped to the project schema", () =>
     "CREATE TABLE users(id text)"
   );
   assert.match(sql, /^BEGIN;/);
+  assert.match(sql, /pg_advisory_xact_lock\(hashtextextended\('evcp-schema:app_project_a', 0\)\)/);
   assert.match(sql, /SET LOCAL search_path TO "app_project_a"/);
   assert.match(sql, /CREATE TABLE users/);
   assert.match(sql, /COMMIT;$/);

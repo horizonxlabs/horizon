@@ -49,7 +49,6 @@ export function createPiGenerationService(deps: PiGenerationServiceDeps): Genera
     }
   };
 }
-
 async function* runLockedTurn(
   deps: PiGenerationServiceDeps,
   limits: ReturnType<typeof resolvePiAgentLimits>,
@@ -121,7 +120,6 @@ async function* runLockedTurn(
   let irreversibleFinalizationMayHaveTakenEffect = false;
   let commitEventEmitted = false;
   let rollbackRecoveryRequired = false;
-
   try {
     if (mutationCapable) {
       preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId, containerId);
@@ -310,7 +308,9 @@ async function* runLockedTurn(
     const preserveCandidate = irreversibleFinalizationMayHaveTakenEffect && candidateSha;
     if (preparedSnapshotToken && !preserveCandidate) {
       try {
+        await input.assertCurrent?.();
         await deps.workspaceGuard.restoreSnapshot(input.projectId, containerId, preparedSnapshotToken);
+        await input.assertCurrent?.();
       } catch (restoreError) {
         rollbackRecoveryRequired = true;
         errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}. Workspace snapshot recovery is required; an operator must inspect the protected recovery state before any new turn.`;

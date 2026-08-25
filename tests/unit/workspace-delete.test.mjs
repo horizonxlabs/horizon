@@ -21,6 +21,12 @@ const { WorkspaceRuntimeRepositoryBackedStore } = await import(
   "../../apps/platform-api/src/persistence/workspace-runtime-repository.ts"
 );
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 function makeOrchestrator(runtimeRecords) {
   const released = [];
   const deps = {
@@ -126,4 +132,33 @@ test("deleteWorkspace aggregates runtime persistence failure and retains retry s
   await orchestrator.deleteWorkspace("prj-leave-tracker");
   assert.equal(orchestrator.getWorkspace("prj-leave-tracker"), null);
   assert.equal(rows.has("prj-leave-tracker"), false);
+});
+
+test("deleteWorkspace stops between actual resource stages after deletion-fence takeover", async () => {
+  const { orchestrator, deps } = makeOrchestrator();
+  await orchestrator.provisionWorkspace({ projectId: "prj-leave-tracker", slug: "leave-tracker" });
+  const stopFinished = deferred();
+  const resumeStop = deferred();
+  const originalStop = deps.docker.stopContainer.bind(deps.docker);
+  let schemaReleases = 0;
+  deps.docker.stopContainer = async (containerId) => {
+    await originalStop(containerId);
+    stopFinished.resolve();
+    await resumeStop.promise;
+  };
+  deps.postgres.releaseSchema = async () => { schemaReleases += 1; };
+  let current = true;
+  const deletion = orchestrator.deleteWorkspace("prj-leave-tracker", {
+    epoch: 1,
+    async assertCurrent() { if (!current) throw new Error("deletion ownership lost"); }
+  });
+  await stopFinished.promise;
+  current = false;
+  resumeStop.resolve();
+
+  await assert.rejects(deletion, /ownership lost/);
+  assert.equal(deps.docker.state.containers.length, 1, "container removal must not run");
+  assert.equal(deps.docker.state.volumes.length, 1, "volume removal must not run");
+  assert.equal(schemaReleases, 0, "schema release must not run");
+  assert.equal(deps.objectStorage.state.buckets.length, 1, "bucket release must not run");
 });

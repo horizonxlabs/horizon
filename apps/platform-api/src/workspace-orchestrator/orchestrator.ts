@@ -17,6 +17,7 @@ import {
   provisionIndependentWorkspaceResources
 } from "./workspace-provisioning";
 import { deleteWorkspaceResources } from "./workspace-deletion";
+import type { ProjectDeletionFence } from "../project-lifecycle";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -354,7 +355,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return next;
     },
 
-    async deleteWorkspace(projectId: string): Promise<void> {
+    async deleteWorkspace(projectId: string, fence?: ProjectDeletionFence): Promise<void> {
       const record = records.get(projectId);
       if (!record) {
         return;
@@ -363,7 +364,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         record,
         deps,
         llmGatewayKeyId: llmKeyIds.get(projectId),
-        runtimeRecords
+        runtimeRecords,
+        fence
       });
       records.delete(projectId);
       llmKeyIds.delete(projectId);

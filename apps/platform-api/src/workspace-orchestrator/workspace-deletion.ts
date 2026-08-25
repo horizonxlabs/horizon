@@ -3,22 +3,26 @@ import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runti
 import { resourceKeyForProject } from "./resource-ports";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { workspaceVolumeName } from "./workspace-lifecycle";
+import type { ProjectDeletionFence } from "../project-lifecycle";
 
 export async function deleteWorkspaceResources(input: {
   record: WorkspaceContainerRecord;
   deps: WorkspaceOrchestratorDeps;
   llmGatewayKeyId?: string;
   runtimeRecords?: WorkspaceRuntimeRecordStore;
+  fence?: ProjectDeletionFence;
 }): Promise<void> {
   const { record, deps } = input;
   const releaseKey = resourceKeyForProject(record.projectId);
   const failures: Error[] = [];
   const attempt = async (release: () => Promise<void>): Promise<void> => {
+    await input.fence?.assertCurrent();
     try {
       await release();
     } catch (error) {
       failures.push(error instanceof Error ? error : new Error(String(error)));
     }
+    await input.fence?.assertCurrent();
   };
 
   let container: Awaited<ReturnType<typeof deps.docker.inspectContainer>> | undefined;

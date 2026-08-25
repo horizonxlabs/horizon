@@ -2,6 +2,7 @@ import type { PrismaProjectFileRepository } from "./project-file-repository";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { deleteProjectResources } from "../project-deletion";
 import { projectFileBucketName } from "../workspace-orchestrator/minio-object-storage";
+import type { ProjectDeletionFence } from "../project-lifecycle";
 
 export interface ProjectFileObjectStorage {
   remove(bucket: string, objectKey: string): Promise<void>;
@@ -11,9 +12,12 @@ export interface ProjectFileObjectStorage {
 export async function deletePersistedProjectFiles(
   projectId: string,
   repository: PrismaProjectFileRepository,
-  storage?: ProjectFileObjectStorage
+  storage?: ProjectFileObjectStorage,
+  fence?: ProjectDeletionFence
 ): Promise<void> {
+  await fence?.assertCurrent();
   const files = await repository.listAll(projectId);
+  await fence?.assertCurrent();
   if (files.length === 0) return;
   if (!storage) {
     throw new Error("Project file object storage is unavailable; uploaded files were not deleted");
@@ -32,11 +36,13 @@ export async function deletePersistedProjectFiles(
         ? [() => storage.revokeBucket!(bucket, bucketFiles.map((file) => file.objectKey))]
         : bucketFiles.map((file) => () => storage.remove(bucket, file.objectKey));
       for (const operation of operations) {
+        await fence?.assertCurrent();
         try {
           await operation();
         } catch (error) {
           failures.push(error instanceof Error ? error : new Error(String(error)));
         }
+        await fence?.assertCurrent();
       }
     }
     if (failures.length > 0) {
@@ -49,7 +55,9 @@ export async function deletePersistedProjectFiles(
 
   await sweep();
 
+  await fence?.assertCurrent();
   await repository.deleteProject(projectId);
+  await fence?.assertCurrent();
 }
 
 export async function deletePersistedProjectResources(
@@ -59,13 +67,19 @@ export async function deletePersistedProjectResources(
     files?: PrismaProjectFileRepository;
     storage?: ProjectFileObjectStorage;
   },
-  additionalCleanup?: () => Promise<void>
+  additionalCleanup?: () => Promise<void>,
+  fence?: ProjectDeletionFence
 ): Promise<void> {
+  const guarded = (cleanup: () => Promise<void>) => async () => {
+    await fence?.assertCurrent();
+    await cleanup();
+    await fence?.assertCurrent();
+  };
   await deleteProjectResources([
-    ...(additionalCleanup ? [additionalCleanup] : []),
-    () => input.workspace.deleteWorkspace(projectId),
+    ...(additionalCleanup ? [guarded(additionalCleanup)] : []),
+    guarded(() => input.workspace.deleteWorkspace(projectId, fence)),
     ...(input.files
-      ? [() => deletePersistedProjectFiles(projectId, input.files!, input.storage)]
+      ? [guarded(() => deletePersistedProjectFiles(projectId, input.files!, input.storage, fence))]
       : [])
   ]);
 }

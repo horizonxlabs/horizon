@@ -55,7 +55,8 @@ test("a generation turn whose child epoch expires cannot commit or persist final
         if (checks === 2) { finalCheckStarted.resolve(); await resumeFinalCheck.promise; }
         return true;
       },
-      async validate() {}, async restore() {}, async restoreSnapshot() {}, async releaseSnapshot() {}
+      async validate() {}, async restore() {},
+      async restoreSnapshot() { events.push("restore"); }, async releaseSnapshot() {}
     },
     async commitAllChanges() { events.push("commit"); return "candidate"; },
     checkpoints: { async createCheckpoint() { events.push("checkpoint"); } }
@@ -78,5 +79,6 @@ test("a generation turn whose child epoch expires cannot commit or persist final
   assert.equal(events.includes("commit"), false);
   assert.equal(events.includes("checkpoint"), false);
   assert.equal(events.includes("migration"), false);
+  assert.equal(events.includes("restore"), false);
   assert.equal((await service.history("p1")).some((message) => message.role === "assistant"), false);
 });
