@@ -3,7 +3,7 @@ import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { GenerationService } from "./generation-service-types";
-import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
+import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
   return auth.projectIds.includes(projectId);
@@ -118,7 +118,12 @@ export function createChatSseHandler(deps: {
         const parsed = JSON.parse((await readBody(req)) || "{}") as { commitSha?: unknown };
         const restore = () =>
           deps.generationService.restoreToCommit(projectId, String(parsed?.commitSha ?? ""));
-        await (deps.lifecycle ? deps.lifecycle.runChildMutation(projectId, restore) : restore());
+        await (deps.lifecycle
+          ? deps.lifecycle.runChildMutation(projectId, async (fence) => {
+              await fence.assertCurrent();
+              return restore();
+            })
+          : restore());
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       } catch (error) {
@@ -209,8 +214,15 @@ export function createChatSseHandler(deps: {
     }
 
     let releaseMutation: (() => void) | undefined;
+    let mutationFence: ProjectMutationFence | undefined;
     try {
-      releaseMutation = await deps.lifecycle?.acquireChildMutation(projectId);
+      const mutation = deps.lifecycle?.acquireChildMutationWithFence
+        ? await deps.lifecycle.acquireChildMutationWithFence(projectId)
+        : deps.lifecycle
+          ? { release: await deps.lifecycle.acquireChildMutation(projectId), fence: undefined }
+          : undefined;
+      releaseMutation = mutation?.release;
+      mutationFence = mutation?.fence;
     } catch (error) {
       res.writeHead(409, { "content-type": "application/json" });
       res.end(
@@ -310,7 +322,8 @@ export function createChatSseHandler(deps: {
           agentMode,
           actor: auth.actor,
           approvedPlan,
-          signal: controller.signal
+          signal: controller.signal,
+          assertCurrent: mutationFence?.assertCurrent
         })) {
           if (event.type === "done") {
             generationDone = true;

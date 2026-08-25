@@ -1,4 +1,5 @@
 import { createPgQuery, type PgQueryResult } from "./workspace-orchestrator/pg-runner";
+import type { ProjectMutationFence } from "./project-lifecycle";
 
 // Per-project database browser backend. Every query here runs through a connection built from the
 // project's own scoped Postgres role (search_path pinned to the project's schema), so Postgres —
@@ -266,7 +267,10 @@ export interface ProjectDbRouteDeps {
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
-  runChildMutation?: <T>(projectId: string, operation: () => Promise<T>) => Promise<T>;
+  runChildMutation?: <T>(
+    projectId: string,
+    operation: (fence: ProjectMutationFence) => Promise<T>
+  ) => Promise<T>;
   /** Record a mutation for compliance (who/what/when). Called only after a write succeeds. */
   audit: (
     headers: DbRouteRequest["headers"],
@@ -283,7 +287,12 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   const withDb = async (
     request: DbRouteRequest,
     response: DbRouteResponse,
-    run: (query: QueryFn, schema: string, projectId: string) => Promise<unknown>,
+    run: (
+      query: QueryFn,
+      schema: string,
+      projectId: string,
+      fence?: ProjectMutationFence
+    ) => Promise<unknown>,
     mutation = false
   ) => {
     try {
@@ -293,8 +302,8 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const url = await deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
-      const operation = () =>
-        run(createProjectQuery(url), schemaFromConnectionString(url), projectId);
+      const operation = (fence?: ProjectMutationFence) =>
+        run(createProjectQuery(url), schemaFromConnectionString(url), projectId, fence);
       deps.ok(
         response,
         await (mutation && deps.runChildMutation
@@ -333,15 +342,17 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
     withDb(
       request,
       response,
-      async (query, schema, projectId) => {
+      async (query, schema, projectId, fence) => {
         const table = tableOf(request);
         const op = String(request.body?.op ?? "");
         if (op === "insert") {
+          await fence?.assertCurrent();
           const row = await insertRow(query, schema, table, asRecord(request.body?.values));
           deps.audit(request.headers, projectId, "database.row.insert", table);
           return { row };
         }
         if (op === "update") {
+          await fence?.assertCurrent();
           const row = await updateRow(
             query,
             schema,
@@ -353,6 +364,7 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
           return { row };
         }
         if (op === "delete") {
+          await fence?.assertCurrent();
           await deleteRow(query, schema, table, asRecord(request.body?.pk));
           deps.audit(request.headers, projectId, "database.row.delete", table);
           return { deleted: true };

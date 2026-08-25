@@ -18,18 +18,36 @@ export class ProjectDeletionInProgressError extends Error {
 
 export interface ProjectLifecycleCoordinator {
   acquireChildMutation(projectId: string): Promise<() => void>;
-  runChildMutation<T>(projectId: string, operation: () => Promise<T>): Promise<T>;
+  acquireChildMutationWithFence?(projectId: string): Promise<{
+    fence: ProjectMutationFence;
+    release: () => void;
+  }>;
+  runChildMutation<T>(
+    projectId: string,
+    operation: (fence: ProjectMutationFence) => Promise<T>
+  ): Promise<T>;
   runChildMutationWithLease<T>(
     projectId: string,
     operation: (lease: ProjectMutationLeaseControl) => Promise<T>
   ): Promise<T>;
-  runDeletion<T>(projectId: string, operation: () => Promise<T>): Promise<T>;
+  runDeletion<T>(
+    projectId: string,
+    operation: (fence: ProjectDeletionFence) => Promise<T>
+  ): Promise<T>;
 }
 
-export interface ProjectMutationLeaseControl {
+export interface ProjectMutationFence {
+  assertCurrent(): Promise<void>;
+}
+
+export interface ProjectMutationLeaseControl extends ProjectMutationFence {
   retainFor(milliseconds: number): Promise<void>;
-  retainUntil(expiresAt: Date): Promise<void>;
   cancelRetention(): Promise<void>;
+}
+
+export interface ProjectDeletionFence {
+  readonly epoch: number;
+  assertCurrent(): Promise<void>;
 }
 
 type ProjectLifecycleState = {
@@ -54,7 +72,6 @@ export function createProjectLifecycleCoordinator(input: {
   pollIntervalMs?: number;
 } = {}): ProjectLifecycleCoordinator {
   const store = input.store ?? createMemoryProjectLifecycleStore();
-  const now = input.now ?? (() => new Date());
   const sleep = input.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const mutationLeaseMs = input.mutationLeaseMs ?? 30_000;
   const deletionLeaseMs = input.deletionLeaseMs ?? 30_000;
@@ -72,22 +89,29 @@ export function createProjectLifecycleCoordinator(input: {
   const acquireMutation = async (projectId: string) => {
     const state = stateFor(projectId);
     const leaseId = `mutation_${randomUUID()}`;
-    const acquired =
-      !state.deleting &&
-      (await store.acquireMutationLease({
-        projectId,
-        leaseId,
-        expiresAt: new Date(now().getTime() + mutationLeaseMs)
-      }));
-    if (!acquired) {
+    if (state.deleting) throw new ProjectDeletionInProgressError(projectId);
+    const acquired = await store.acquireMutationLease({
+      projectId,
+      leaseId,
+      durationMs: mutationLeaseMs
+    });
+    if (!acquired.acquired) {
       throw new ProjectDeletionInProgressError(projectId);
     }
+    const epoch = acquired.epoch;
     state.activeMutations += 1;
-    let retainedUntil: Date | undefined;
+    let retainedForMs: number | undefined;
+    let lost = false;
+    const assertCurrent = async () => {
+      if (lost || !(await store.assertMutationLease(projectId, leaseId, epoch))) {
+        throw new ProjectDeletionInProgressError(projectId);
+      }
+    };
     const heartbeat = setInterval(() => {
-      const defaultExpiry = now().getTime() + mutationLeaseMs;
-      const expiresAt = new Date(Math.max(defaultExpiry, retainedUntil?.getTime() ?? 0));
-      void store.renewMutationLease(leaseId, expiresAt);
+      void store
+        .renewMutationLease(leaseId, epoch, Math.max(mutationLeaseMs, retainedForMs ?? 0))
+        .then((renewed) => { if (!renewed) lost = true; })
+        .catch(() => { lost = true; });
     }, Math.max(1, Math.floor(mutationLeaseMs / 3)));
     heartbeat.unref?.();
     let released = false;
@@ -95,20 +119,19 @@ export function createProjectLifecycleCoordinator(input: {
       if (released) return;
       released = true;
       clearInterval(heartbeat);
-      if (!retainedUntil) void store.releaseMutationLease(leaseId);
+      if (!retainedForMs) void store.releaseMutationLease(leaseId, epoch);
       state.activeMutations -= 1;
       if (state.activeMutations === 0) state.resolveDrained?.();
     };
     const control: ProjectMutationLeaseControl = {
+      assertCurrent,
       async retainFor(milliseconds) {
-        await control.retainUntil(new Date(now().getTime() + milliseconds));
-      },
-      async retainUntil(expiresAt) {
-        await store.renewMutationLease(leaseId, expiresAt);
-        retainedUntil = expiresAt;
+        const renewed = await store.renewMutationLease(leaseId, epoch, milliseconds);
+        if (!renewed) throw new ProjectDeletionInProgressError(projectId);
+        retainedForMs = milliseconds;
       },
       async cancelRetention() {
-        retainedUntil = undefined;
+        retainedForMs = undefined;
       }
     };
     return { control, release };
@@ -116,14 +139,25 @@ export function createProjectLifecycleCoordinator(input: {
 
   const acquireChildMutation = async (projectId: string): Promise<() => void> =>
     (await acquireMutation(projectId)).release;
+  const acquireChildMutationWithFence = async (projectId: string) => {
+    const { control, release } = await acquireMutation(projectId);
+    return { fence: control, release };
+  };
 
   return {
     acquireChildMutation,
+    acquireChildMutationWithFence,
 
-    async runChildMutation<T>(projectId: string, operation: () => Promise<T>): Promise<T> {
-      const { release } = await acquireMutation(projectId);
+    async runChildMutation<T>(
+      projectId: string,
+      operation: (fence: ProjectMutationFence) => Promise<T>
+    ): Promise<T> {
+      const { control, release } = await acquireMutation(projectId);
       try {
-        return await operation();
+        await control.assertCurrent();
+        const result = await operation(control);
+        await control.assertCurrent();
+        return result;
       } finally {
         release();
       }
@@ -135,72 +169,79 @@ export function createProjectLifecycleCoordinator(input: {
     ) {
       const { control, release } = await acquireMutation(projectId);
       try {
-        return await operation(control);
+        await control.assertCurrent();
+        const result = await operation(control);
+        await control.assertCurrent();
+        return result;
       } finally {
         release();
       }
     },
 
-    async runDeletion<T>(projectId: string, operation: () => Promise<T>): Promise<T> {
+    async runDeletion<T>(
+      projectId: string,
+      operation: (fence: ProjectDeletionFence) => Promise<T>
+    ): Promise<T> {
       const state = stateFor(projectId);
       if (state.deletion) return state.deletion as Promise<T>;
       const deletion = (async () => {
-        while (true) {
-          const lease = await store.beginDeletion({
-            projectId,
-            ownerId,
-            leaseExpiresAt: new Date(now().getTime() + deletionLeaseMs),
-            now: now()
-          });
-          if (lease === "deleted") return { id: projectId, deleted: true } as T;
-          if (lease === "acquired") break;
-          await sleep(pollIntervalMs);
-        }
-        const renewDeletionLease = async () => {
-          const renewed = await store.renewDeletionLease(
-            projectId,
-            ownerId,
-            new Date(now().getTime() + deletionLeaseMs)
-          );
-          if (!renewed) throw new ProjectDeletionInProgressError(projectId);
-        };
-        const deletionHeartbeat = setInterval(() => {
-          void renewDeletionLease().catch(() => undefined);
-        }, Math.max(1, Math.floor(deletionLeaseMs / 3)));
-        deletionHeartbeat.unref?.();
-        state.deleting = true;
-        if (state.activeMutations > 0 && !state.drained) {
-          state.drained = new Promise<void>((resolve) => {
-            state.resolveDrained = resolve;
-          });
-        }
-        await state.drained;
-        while (true) {
-          await renewDeletionLease();
-          const expiries = await store.listActiveMutationLeaseExpiries(projectId, now());
-          if (expiries.length === 0) break;
-          const nextExpiry = Math.min(...expiries.map((expiry) => expiry.getTime()));
-          await sleep(
-            Math.max(
-              1,
-              Math.min(
-                pollIntervalMs,
-                Math.floor(deletionLeaseMs / 3),
-                nextExpiry - now().getTime()
-              )
-            )
-          );
-        }
+        let epoch: number | undefined;
+        let deletionHeartbeat: ReturnType<typeof setInterval> | undefined;
+        let lost = false;
         try {
-          await renewDeletionLease();
-          const result = await operation();
-          await store.completeDeletion(projectId, ownerId);
+          while (epoch === undefined) {
+            const lease = await store.beginDeletion({ projectId, ownerId, durationMs: deletionLeaseMs });
+            if (lease.status === "deleted") return { id: projectId, deleted: true } as T;
+            if (lease.status === "acquired") epoch = lease.epoch;
+            else await sleep(pollIntervalMs);
+          }
+          const assertCurrent = async () => {
+            if (lost || !(await store.assertDeletionLease(projectId, ownerId, epoch!))) {
+              throw new ProjectDeletionInProgressError(projectId);
+            }
+          };
+          const renew = async () => {
+            const renewed = await store.renewDeletionLease(
+              projectId,
+              ownerId,
+              epoch!,
+              deletionLeaseMs
+            );
+            if (!renewed) {
+              lost = true;
+              throw new ProjectDeletionInProgressError(projectId);
+            }
+          };
+          deletionHeartbeat = setInterval(() => {
+            void renew().catch(() => { lost = true; });
+          }, Math.max(1, Math.floor(deletionLeaseMs / 3)));
+          deletionHeartbeat.unref?.();
+          state.deleting = true;
+          if (state.activeMutations > 0 && !state.drained) {
+            state.drained = new Promise<void>((resolve) => { state.resolveDrained = resolve; });
+          }
+          await state.drained;
+          while (true) {
+            await renew();
+            const drainDelay = await store.getMutationDrainDelay(projectId);
+            if (drainDelay === null) break;
+            await sleep(Math.max(1, Math.min(pollIntervalMs, drainDelay)));
+          }
+          const fence: ProjectDeletionFence = { epoch, assertCurrent };
+          await fence.assertCurrent();
+          const result = await operation(fence);
+          await fence.assertCurrent();
+          if (!(await store.completeDeletion(projectId, ownerId, epoch))) {
+            throw new ProjectDeletionInProgressError(projectId);
+          }
           return result;
         } catch (error) {
-          await store.abandonDeletion(projectId, ownerId);
+          if (epoch !== undefined) {
+            await store.abandonDeletion(projectId, ownerId, epoch).catch(() => undefined);
+          }
           throw error;
         } finally {
-          clearInterval(deletionHeartbeat);
+          if (deletionHeartbeat) clearInterval(deletionHeartbeat);
         }
       })();
       state.deletion = deletion;

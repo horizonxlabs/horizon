@@ -8,12 +8,12 @@ import type {
 } from "../platform-services";
 import {
   PROJECT_FILE_UPLOAD_URL_TTL_MS,
+  projectFileBucketName,
   type ProjectFileUploadUrlIssuer
 } from "../workspace-orchestrator/minio-object-storage";
 import type { PersistedProjectFile, PrismaProjectFileRepository } from "./project-file-repository";
-import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
+import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 
-const bucket = "project-file-uploads";
 const maxBytes = 25 * 1024 * 1024;
 const allowedMimeTypes = new Set([
   "image/png",
@@ -46,16 +46,15 @@ export async function initializePersistentProjectFile(input: {
   purpose?: ProjectFilePurpose;
   includeByDefault?: boolean;
   lifecycle?: ProjectLifecycleCoordinator;
+  fence?: ProjectMutationFence;
 }): Promise<ProjectFileUploadInitResult> {
   validate(input);
   if (input.lifecycle) {
     const { lifecycle, ...operationInput } = input;
     return lifecycle.runChildMutationWithLease(input.projectId, async (lease) => {
-      await lease.retainFor(PROJECT_FILE_UPLOAD_URL_TTL_MS);
+      await lease.retainFor(input.issuer.leaseDurationMs ?? PROJECT_FILE_UPLOAD_URL_TTL_MS);
       try {
-        const result = await initializePersistentProjectFile(operationInput);
-        await lease.retainUntil(new Date(result.expiresAt));
-        return result;
+        return await initializePersistentProjectFile({ ...operationInput, fence: lease });
       } catch (error) {
         await lease.cancelRetention();
         throw error;
@@ -63,9 +62,11 @@ export async function initializePersistentProjectFile(input: {
     });
   }
   const id = `upl_${randomUUID()}`;
+  const bucket = projectFileBucketName(input.projectId);
   const sourceId = `knsrc_${id}`;
   const versionId = `${sourceId}_v1`;
   const objectKey = `projects/${input.projectId}/knowledge/${sourceId}/${versionId}/${sanitize(input.fileName)}`;
+  await input.fence?.assertCurrent();
   const file = await input.repository.create({
     id,
     projectId: input.projectId,
@@ -81,7 +82,9 @@ export async function initializePersistentProjectFile(input: {
     purpose: input.purpose ?? "ai_context",
     includeByDefault: input.includeByDefault ?? true
   });
+  await input.fence?.assertCurrent();
   const upload = await input.issuer.issue(bucket, objectKey);
+  await input.fence?.assertCurrent();
   return {
     uploadId: id,
     sourceId,
@@ -101,15 +104,17 @@ export async function completePersistentProjectFile(input: {
   excerpts?: string[];
   projectId?: string;
   lifecycle?: ProjectLifecycleCoordinator;
+  fence?: ProjectMutationFence;
 }): Promise<{ file: ProjectFileUpload }> {
   if (input.lifecycle && input.projectId) {
     const { lifecycle, projectId, ...operationInput } = input;
-    return lifecycle.runChildMutation(projectId, () =>
-      completePersistentProjectFile(operationInput)
+    return lifecycle.runChildMutation(projectId, (fence) =>
+      completePersistentProjectFile({ ...operationInput, fence })
     );
   }
   const scanStatus = input.scanStatus ?? "clean";
   const excerpts = scanStatus === "clean" ? excerpt(input.extractedText, input.excerpts) : [];
+  await input.fence?.assertCurrent();
   const file = await input.repository.complete(input.uploadId, { scanStatus, excerpts });
   return { file: map(file) };
 }

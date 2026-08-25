@@ -16,7 +16,7 @@ export interface DeploymentRevisionClient {
       where: { id: string };
       data: { healthStatus: string };
     }): Promise<RevisionRecord>;
-    deleteMany(args: { where: { projectId: string } }): Promise<{ count: number }>;
+    deleteMany(args: { where: { projectId?: string; id?: string } }): Promise<{ count: number }>;
   };
   $transaction<T>(
     operation: (
@@ -117,6 +117,21 @@ export async function createPrismaDeploymentStore(
       const discarded = operations.filter((operation) => operation.deploymentId === id);
       operations = operations.filter((operation) => operation.deploymentId !== id);
       for (const operation of discarded.reverse()) operation.rollback();
+    },
+    remove(id) {
+      const current = byId.get(id);
+      if (!current) return;
+      byId.delete(id);
+      const index = order.indexOf(id);
+      if (index >= 0) order.splice(index, 1);
+      enqueue(
+        id,
+        (transaction) => transaction.workspaceDeploymentRevision.deleteMany({ where: { id } }),
+        () => {
+          byId.set(id, current);
+          order.splice(Math.min(index < 0 ? order.length : index, order.length), 0, id);
+        }
+      );
     },
     removeProject(projectId) {
       const projectDeploymentIds = new Set(

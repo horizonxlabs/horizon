@@ -14,6 +14,7 @@ export interface DeploymentStore {
   }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
   discard(id: string): void;
+  remove?(id: string): void;
   removeProject(projectId: string): void;
   list(projectId: string): WorkspaceDeployment[];
   // Latest healthy deployment for a slug in a given environment. Defaults to "production" so the
@@ -65,6 +66,11 @@ export function createMemoryDeploymentStore(): DeploymentStore {
       return next;
     },
     discard(id) {
+      byId.delete(id);
+      const index = order.indexOf(id);
+      if (index >= 0) order.splice(index, 1);
+    },
+    remove(id) {
       byId.delete(id);
       const index = order.indexOf(id);
       if (index >= 0) order.splice(index, 1);

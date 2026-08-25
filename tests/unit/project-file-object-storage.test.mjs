@@ -12,6 +12,7 @@ test("project file uploads use a short-lived browser-reachable MinIO presigned U
       async bucketExists() { return false; },
       async makeBucket(bucket) { calls.push({ makeBucket: bucket }); },
       async removeObject(bucket, objectKey) { calls.push({ removeObject: { bucket, objectKey } }); },
+      async removeBucket(bucket) { calls.push({ removeBucket: bucket }); },
       async presignedPutObject() { throw new Error("internal endpoint must not sign browser URL"); }
     }),
     signingClientFactory: (options) => ({
@@ -39,4 +40,47 @@ test("project file uploads use a short-lived browser-reachable MinIO presigned U
       objectKey: "projects/prj_001/requirements.md"
     }
   });
+});
+
+test("a project upload bucket is revoked only after in-flight PUTs release it", async () => {
+  let bucketRemovalAttempts = 0;
+  const issuer = createMinioProjectFileUploadUrlIssuer({
+    endPoint: "minio", port: 9000, useSSL: false, accessKey: "server", secretKey: "server",
+    publicBaseUrl: "https://files.example.internal",
+    clientFactory: () => ({
+      async bucketExists() { return true; },
+      async makeBucket() {},
+      async removeObject() {},
+      async removeBucket() {
+        bucketRemovalAttempts += 1;
+        if (bucketRemovalAttempts === 1) {
+          const error = new Error("in-flight PUT");
+          error.code = "BucketNotEmpty";
+          throw error;
+        }
+      },
+      async presignedPutObject() { return "unused"; }
+    }),
+    signingClientFactory: () => ({ async presignedPutObject() { return "unused"; } })
+  });
+
+  await issuer.revokeBucket("project-file-project-123", ["one.bin", "two.bin"]);
+  assert.equal(bucketRemovalAttempts, 2);
+});
+
+test("project bucket revocation is idempotent after a prior cleanup removed the bucket", async () => {
+  const issuer = createMinioProjectFileUploadUrlIssuer({
+    endPoint: "minio", port: 9000, useSSL: false, accessKey: "server", secretKey: "server",
+    publicBaseUrl: "https://files.example.internal",
+    clientFactory: () => ({
+      async bucketExists() { return false; },
+      async makeBucket() {},
+      async removeObject() { throw Object.assign(new Error("gone"), { code: "NoSuchBucket" }); },
+      async removeBucket() { throw Object.assign(new Error("gone"), { code: "NoSuchBucket" }); },
+      async presignedPutObject() { return "unused"; }
+    }),
+    signingClientFactory: () => ({ async presignedPutObject() { return "unused"; } })
+  });
+
+  await issuer.revokeBucket("project-file-project-123", ["one.bin"]);
 });

@@ -1,9 +1,11 @@
 import type { PrismaProjectFileRepository } from "./project-file-repository";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { deleteProjectResources } from "../project-deletion";
+import { projectFileBucketName } from "../workspace-orchestrator/minio-object-storage";
 
 export interface ProjectFileObjectStorage {
   remove(bucket: string, objectKey: string): Promise<void>;
+  revokeBucket?(bucket: string, objectKeys: string[]): Promise<void>;
 }
 
 export async function deletePersistedProjectFiles(
@@ -17,20 +19,35 @@ export async function deletePersistedProjectFiles(
     throw new Error("Project file object storage is unavailable; uploaded files were not deleted");
   }
 
-  const failures: Error[] = [];
-  for (const file of files) {
-    try {
-      await storage.remove(file.bucket, file.objectKey);
-    } catch (error) {
-      failures.push(error instanceof Error ? error : new Error(String(error)));
+  const sweep = async () => {
+    const failures: Error[] = [];
+    const filesByBucket = new Map<string, typeof files>();
+    for (const file of files) {
+      const bucketFiles = filesByBucket.get(file.bucket) ?? [];
+      bucketFiles.push(file);
+      filesByBucket.set(file.bucket, bucketFiles);
     }
-  }
-  if (failures.length > 0) {
-    throw new AggregateError(
-      failures,
-      `Uploaded file cleanup did not finish for project '${projectId}'`
-    );
-  }
+    for (const [bucket, bucketFiles] of filesByBucket) {
+      const operations = storage.revokeBucket && bucket === projectFileBucketName(projectId)
+        ? [() => storage.revokeBucket!(bucket, bucketFiles.map((file) => file.objectKey))]
+        : bucketFiles.map((file) => () => storage.remove(bucket, file.objectKey));
+      for (const operation of operations) {
+        try {
+          await operation();
+        } catch (error) {
+          failures.push(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures,
+        `Uploaded file cleanup did not finish for project '${projectId}'`
+      );
+    }
+  };
+
+  await sweep();
 
   await repository.deleteProject(projectId);
 }

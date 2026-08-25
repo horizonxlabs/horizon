@@ -1,7 +1,4 @@
-import type {
-  DeletionLeaseResult,
-  ProjectLifecycleStore
-} from "../project-lifecycle-store";
+import type { DeletionLeaseResult, ProjectLifecycleStore } from "../project-lifecycle-store";
 
 type QueryClient = {
   $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
@@ -14,19 +11,24 @@ export type PrismaProjectLifecycleClient = QueryClient & {
 
 type LifecycleRow = {
   status: "active" | "deleting" | "deleted";
+  epoch: number;
+  mutation_epoch: number;
   deletion_owner_id: string | null;
-  deletion_lease_expires_at: Date | null;
+  deletion_lease_current: boolean;
 };
 
 async function lockState(client: QueryClient, projectId: string): Promise<LifecycleRow> {
   await client.$executeRawUnsafe(
-    `INSERT INTO project_lifecycle_states (project_id, status, updated_at)
-     VALUES ($1, 'active', CURRENT_TIMESTAMP)
+    `INSERT INTO project_lifecycle_states
+       (project_id, status, epoch, mutation_epoch, updated_at)
+     VALUES ($1, 'active', 0, 0, CURRENT_TIMESTAMP)
      ON CONFLICT (project_id) DO NOTHING`,
     projectId
   );
   const rows = await client.$queryRawUnsafe<LifecycleRow[]>(
-    `SELECT status, deletion_owner_id, deletion_lease_expires_at
+    `SELECT status, epoch, mutation_epoch, deletion_owner_id,
+            COALESCE(deletion_lease_expires_at > CURRENT_TIMESTAMP, false)
+              AS deletion_lease_current
      FROM project_lifecycle_states WHERE project_id = $1 FOR UPDATE`,
     projectId
   );
@@ -34,101 +36,153 @@ async function lockState(client: QueryClient, projectId: string): Promise<Lifecy
   return rows[0];
 }
 
+async function exists(client: QueryClient, query: string, values: unknown[]): Promise<boolean> {
+  const rows = await client.$queryRawUnsafe<Array<{ valid: boolean }>>(query, ...values);
+  return rows[0]?.valid === true;
+}
+
 export function createPrismaProjectLifecycleStore(
   client: PrismaProjectLifecycleClient
 ): ProjectLifecycleStore {
   return {
-    async acquireMutationLease({ projectId, leaseId, expiresAt }) {
+    async acquireMutationLease({ projectId, leaseId, durationMs }) {
       return client.$transaction(async (transaction) => {
         const state = await lockState(transaction, projectId);
-        if (state.status !== "active") return false;
+        if (state.status !== "active") return { acquired: false };
+        const epoch = state.mutation_epoch + 1;
         await transaction.$executeRawUnsafe(
-          `INSERT INTO project_mutation_leases (id, project_id, expires_at, created_at)
-           VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-           ON CONFLICT (id) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
+          `UPDATE project_lifecycle_states SET mutation_epoch = $2,
+             updated_at = CURRENT_TIMESTAMP WHERE project_id = $1`,
+          projectId,
+          epoch
+        );
+        await transaction.$executeRawUnsafe(
+          `INSERT INTO project_mutation_leases
+             (id, project_id, epoch, expires_at, created_at)
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP + $4 * INTERVAL '1 millisecond',
+                   CURRENT_TIMESTAMP)`,
           leaseId,
           projectId,
-          expiresAt
+          epoch,
+          durationMs
         );
-        return true;
+        return { acquired: true, epoch };
       });
     },
-    async renewMutationLease(leaseId, expiresAt) {
-      await client.$executeRawUnsafe(
-        "UPDATE project_mutation_leases SET expires_at = $2 WHERE id = $1",
-        leaseId,
-        expiresAt
-      );
-    },
-    async releaseMutationLease(leaseId) {
-      await client.$executeRawUnsafe("DELETE FROM project_mutation_leases WHERE id = $1", leaseId);
-    },
-    async listActiveMutationLeaseExpiries(projectId, now) {
-      return client.$transaction(async (transaction) => {
-        await transaction.$executeRawUnsafe(
-          "DELETE FROM project_mutation_leases WHERE project_id = $1 AND expires_at <= $2",
-          projectId,
-          now
-        );
-        const rows = await transaction.$queryRawUnsafe<Array<{ expires_at: Date }>>(
-          "SELECT expires_at FROM project_mutation_leases WHERE project_id = $1",
-          projectId
-        );
-        return rows.map((row) => row.expires_at);
-      });
-    },
-    async beginDeletion({ projectId, ownerId, leaseExpiresAt, now }) {
-      return client.$transaction(async (transaction): Promise<DeletionLeaseResult> => {
-        const state = await lockState(transaction, projectId);
-        if (state.status === "deleted") return "deleted";
-        const leaseIsCurrent =
-          state.status === "deleting" &&
-          state.deletion_owner_id !== null &&
-          state.deletion_owner_id !== ownerId &&
-          state.deletion_lease_expires_at !== null &&
-          state.deletion_lease_expires_at > now;
-        if (leaseIsCurrent) return "busy";
-        await transaction.$executeRawUnsafe(
-          `UPDATE project_lifecycle_states
-           SET status = 'deleting', deletion_owner_id = $2,
-               deletion_lease_expires_at = $3, updated_at = CURRENT_TIMESTAMP
-           WHERE project_id = $1`,
-          projectId,
-          ownerId,
-          leaseExpiresAt
-        );
-        return "acquired";
-      });
-    },
-    async renewDeletionLease(projectId, ownerId, expiresAt) {
+    async renewMutationLease(leaseId, epoch, durationMs) {
       const updated = await client.$executeRawUnsafe(
-        `UPDATE project_lifecycle_states SET deletion_lease_expires_at = $3,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE project_id = $1 AND status = 'deleting' AND deletion_owner_id = $2`,
-        projectId,
-        ownerId,
-        expiresAt
+        `UPDATE project_mutation_leases
+         SET expires_at = CURRENT_TIMESTAMP + $3 * INTERVAL '1 millisecond'
+         WHERE id = $1 AND epoch = $2 AND expires_at > CURRENT_TIMESTAMP`,
+        leaseId,
+        epoch,
+        durationMs
       );
       return updated > 0;
     },
-    async completeDeletion(projectId, ownerId) {
+    async releaseMutationLease(leaseId, epoch) {
       await client.$executeRawUnsafe(
+        "DELETE FROM project_mutation_leases WHERE id = $1 AND epoch = $2",
+        leaseId,
+        epoch
+      );
+    },
+    async getMutationDrainDelay(projectId) {
+      return client.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          "DELETE FROM project_mutation_leases WHERE project_id = $1 AND expires_at <= CURRENT_TIMESTAMP",
+          projectId
+        );
+        const rows = await transaction.$queryRawUnsafe<Array<{ delay_ms: number | null }>>(
+          `SELECT CEIL(EXTRACT(EPOCH FROM (MIN(expires_at) - CURRENT_TIMESTAMP)) * 1000)::integer
+             AS delay_ms
+           FROM project_mutation_leases WHERE project_id = $1`,
+          projectId
+        );
+        return rows[0]?.delay_ms ?? null;
+      });
+    },
+    async assertMutationLease(projectId, leaseId, epoch) {
+      return exists(
+        client,
+        `SELECT EXISTS(
+           SELECT 1 FROM project_mutation_leases
+           WHERE id = $1 AND project_id = $2 AND epoch = $3
+             AND expires_at > CURRENT_TIMESTAMP
+         ) AS valid`,
+        [leaseId, projectId, epoch]
+      );
+    },
+    async beginDeletion({ projectId, ownerId, durationMs }) {
+      return client.$transaction(async (transaction): Promise<DeletionLeaseResult> => {
+        const state = await lockState(transaction, projectId);
+        if (state.status === "deleted") return { status: "deleted" };
+        if (
+          state.status === "deleting" && state.deletion_owner_id !== null &&
+          state.deletion_owner_id !== ownerId && state.deletion_lease_current
+        ) return { status: "busy" };
+        const epoch = state.epoch + 1;
+        await transaction.$executeRawUnsafe(
+          `UPDATE project_lifecycle_states
+           SET status = 'deleting', epoch = $2, deletion_owner_id = $3,
+               deletion_lease_expires_at = CURRENT_TIMESTAMP + $4 * INTERVAL '1 millisecond',
+               updated_at = CURRENT_TIMESTAMP WHERE project_id = $1`,
+          projectId,
+          epoch,
+          ownerId,
+          durationMs
+        );
+        return { status: "acquired", epoch };
+      });
+    },
+    async renewDeletionLease(projectId, ownerId, epoch, durationMs) {
+      const updated = await client.$executeRawUnsafe(
+        `UPDATE project_lifecycle_states
+         SET deletion_lease_expires_at = CURRENT_TIMESTAMP + $4 * INTERVAL '1 millisecond',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $1 AND status = 'deleting' AND deletion_owner_id = $2
+           AND epoch = $3 AND deletion_lease_expires_at > CURRENT_TIMESTAMP`,
+        projectId,
+        ownerId,
+        epoch,
+        durationMs
+      );
+      return updated > 0;
+    },
+    async assertDeletionLease(projectId, ownerId, epoch) {
+      return exists(
+        client,
+        `SELECT EXISTS(
+           SELECT 1 FROM project_lifecycle_states
+           WHERE project_id = $1 AND status = 'deleting' AND deletion_owner_id = $2
+             AND epoch = $3 AND deletion_lease_expires_at > CURRENT_TIMESTAMP
+         ) AS valid`,
+        [projectId, ownerId, epoch]
+      );
+    },
+    async completeDeletion(projectId, ownerId, epoch) {
+      const updated = await client.$executeRawUnsafe(
         `UPDATE project_lifecycle_states
          SET status = 'deleted', deletion_owner_id = NULL,
              deletion_lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE project_id = $1 AND deletion_owner_id = $2`,
+         WHERE project_id = $1 AND deletion_owner_id = $2 AND epoch = $3
+           AND deletion_lease_expires_at > CURRENT_TIMESTAMP`,
         projectId,
-        ownerId
+        ownerId,
+        epoch
       );
+      return updated > 0;
     },
-    async abandonDeletion(projectId, ownerId) {
+    async abandonDeletion(projectId, ownerId, epoch) {
       await client.$executeRawUnsafe(
         `UPDATE project_lifecycle_states
          SET deletion_owner_id = NULL, deletion_lease_expires_at = NULL,
              updated_at = CURRENT_TIMESTAMP
-         WHERE project_id = $1 AND status = 'deleting' AND deletion_owner_id = $2`,
+         WHERE project_id = $1 AND status = 'deleting' AND deletion_owner_id = $2
+           AND epoch = $3`,
         projectId,
-        ownerId
+        ownerId,
+        epoch
       );
     }
   };

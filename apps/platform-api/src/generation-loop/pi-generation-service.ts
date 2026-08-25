@@ -1,6 +1,5 @@
 import type { WorkspaceAgentMode, WorkspaceChatAction, WorkspaceChatMessage } from "@evcp/types";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
-
 import { selectContextFiles } from "./context-selector";
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 import type { GenerationService, PiGenerationServiceDeps } from "./generation-service-types";
@@ -26,7 +25,6 @@ import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
 import { assertFileLimits, collectPiWriteIssues } from "./turn-checks";
-
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
   const limits = resolvePiAgentLimits(deps.limits);
@@ -65,6 +63,7 @@ async function* runLockedTurn(
   const mode: WorkspaceAgentMode =
     input.agentMode === "plan" || input.agentMode === "build" ? input.agentMode : "auto";
   const userMessage = createUserChatMessage(input.projectId, input.prompt, mode);
+  await input.assertCurrent?.();
   await deps.chatHistory.appendMessage(userMessage);
   const history = await deps.chatHistory.listMessages(input.projectId);
   const containerId = deps.getContainerId(input.projectId);
@@ -274,6 +273,7 @@ async function* runLockedTurn(
         );
       }
       if (hasFinalWorkspaceChanges) {
+        await input.assertCurrent?.();
         candidateSha = await deps.commitAllChanges(
           input.projectId,
           containerId,
@@ -289,6 +289,7 @@ async function* runLockedTurn(
           candidateSha,
           assistant,
           prompt: input.prompt,
+          assertCurrent: input.assertCurrent,
           markIrreversible() {
             irreversibleFinalizationMayHaveTakenEffect = true;
           }
@@ -296,9 +297,11 @@ async function* runLockedTurn(
         commitEventEmitted = true;
         yield { type: "commit", sha: candidateSha };
       } else {
+        await input.assertCurrent?.();
         await deps.chatHistory.appendMessage(assistant);
       }
     } else {
+      await input.assertCurrent?.();
       await deps.chatHistory.appendMessage(assistant);
     }
   } catch (error) {
@@ -318,9 +321,8 @@ async function* runLockedTurn(
         });
       }
     }
-    if (preserveCandidate) {
+    if (preserveCandidate)
       errorMessage = `Commit ${preserveCandidate} was preserved after finalization: ${errorMessage}`;
-    }
     errorMessage = await persistPiTurnErrorAssistant({
       chatHistory: deps.chatHistory,
       projectId: input.projectId,
@@ -328,6 +330,7 @@ async function* runLockedTurn(
       assistantText,
       errorMessage,
       inputAborted: input.signal?.aborted ?? false,
+      assertCurrent: input.assertCurrent,
       preservedCommitSha: preserveCandidate || undefined,
       assistantMessage,
       artifactActionIds: actionIds,

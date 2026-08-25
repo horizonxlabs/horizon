@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 const { PrismaProjectFileRepository } = await import("../../apps/platform-api/src/persistence/project-file-repository.ts");
 const { deletePersistedProjectFiles } = await import("../../apps/platform-api/src/persistence/project-file-cleanup.ts");
+const { projectFileBucketName } = await import("../../apps/platform-api/src/workspace-orchestrator/minio-object-storage.ts");
 
 test("persistent project files survive list and only clean indexed files resolve as attachments", async () => {
   const rows = new Map();
@@ -68,4 +69,71 @@ test("project file cleanup removes every object before metadata and can be retri
   await deletePersistedProjectFiles("prj_001", repository, storage);
   assert.equal(objects.size, 0);
   assert.equal(rows.size, 0, "all project-file metadata is deleted after object cleanup");
+});
+
+test("project cleanup revokes an upload bucket after a pre-expiry PUT finishes", async () => {
+  const row = {
+    id: "upl_overlap",
+    projectId: "prj_overlap",
+    bucket: projectFileBucketName("prj_overlap"),
+    objectKey: "projects/prj_overlap/slow-put.bin",
+    archivedAt: null,
+    createdAt: new Date("2026-08-25")
+  };
+  let metadataDeleted = false;
+  let objectExists = true;
+  const putFinished = (() => {
+    let resolve;
+    const promise = new Promise((done) => { resolve = done; });
+    return { promise, resolve };
+  })();
+  const removals = [];
+  const repository = {
+    async listAll() { return [row]; },
+    async deleteProject() { metadataDeleted = true; }
+  };
+  const storage = {
+    async remove() {
+      throw new Error("project bucket revocation must own cleanup");
+    },
+    async revokeBucket(_bucket, objectKeys) {
+      removals.push(...objectKeys);
+      objectExists = false;
+      await putFinished.promise;
+      objectExists = true;
+      removals.push(...objectKeys);
+      objectExists = false;
+    }
+  };
+
+  const cleanup = deletePersistedProjectFiles("prj_overlap", repository, storage);
+  await Promise.resolve();
+  assert.equal(metadataDeleted, false);
+  putFinished.resolve();
+  await cleanup;
+
+  assert.equal(objectExists, false);
+  assert.equal(metadataDeleted, true);
+  assert.deepEqual(removals, [row.objectKey, row.objectKey]);
+});
+
+test("cleanup removes legacy shared-bucket objects without trying to revoke the shared bucket", async () => {
+  const removed = [];
+  let revoked = false;
+  const repository = {
+    async listAll() {
+      return [{
+        projectId: "prj_legacy", bucket: "project-file-uploads",
+        objectKey: "projects/prj_legacy/legacy.bin"
+      }];
+    },
+    async deleteProject() {}
+  };
+  await deletePersistedProjectFiles("prj_legacy", repository, {
+    async remove(bucket, key) { removed.push([bucket, key]); },
+    async revokeBucket() { revoked = true; }
+  });
+
+  assert.equal(revoked, false);
+  assert.deepEqual(removed, [["project-file-uploads", "projects/prj_legacy/legacy.bin"]]);
 });

@@ -59,6 +59,7 @@ export interface GenerationService {
     actor?: PlatformUser;
     approvedPlan?: string;
     signal?: AbortSignal;
+    assertCurrent?: () => Promise<void>;
   }): AsyncIterable<ChatStreamEvent>;
 }
 

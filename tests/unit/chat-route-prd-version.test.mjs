@@ -96,3 +96,32 @@ test("does not record when an approved plan is present but the turn never commit
   await handler(req, fakeRes());
   assert.equal(captured.call, undefined);
 });
+
+test("chat POST passes its durable child fence into the full generation turn", async () => {
+  let assertions = 0;
+  let released = false;
+  const captured = {};
+  const input = deps(captured, false, async function* (turnInput) {
+    await turnInput.assertCurrent();
+    yield { type: "done" };
+  });
+  input.generationService.runTurn = (turnInput) => (async function* () {
+    await turnInput.assertCurrent();
+    yield { type: "done" };
+  })();
+  input.lifecycle = {
+    async acquireChildMutationWithFence() {
+      return {
+        fence: { async assertCurrent() { assertions += 1; } },
+        release() { released = true; }
+      };
+    }
+  };
+  const handler = createChatSseHandler(input);
+  await handler({
+    url: "/projects/p1/chat", method: "POST", headers: {}, body: { prompt: "go" }, once() {}, off() {}
+  }, fakeRes());
+
+  assert.equal(assertions, 1);
+  assert.equal(released, true);
+});

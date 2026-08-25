@@ -1,7 +1,7 @@
 import { PermissionError, type PlatformUser } from "./platform-services";
 import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
 import type { PlatformRequest, HeaderBag } from "./platform-http-types";
-import type { ProjectLifecycleCoordinator } from "./project-lifecycle";
+import type { ProjectDeletionFence, ProjectLifecycleCoordinator } from "./project-lifecycle";
 
 export async function deleteProjectResources(cleanups: Array<() => Promise<void>>): Promise<void> {
   const failures: Error[] = [];
@@ -39,7 +39,7 @@ export async function deletePersistedProject(input: {
   if (!project)
     throw new PermissionError(`Role ${input.actor.role} cannot delete project ${projectId}`);
 
-  const remove = async () => {
+  const remove = async (fence?: ProjectDeletionFence) => {
     await input.persistence.recordAudit({
       actorId: input.actor.id,
       action: "project.deletion_requested",
@@ -47,7 +47,9 @@ export async function deletePersistedProject(input: {
       resourceId: projectId,
       metadata: { projectId }
     });
+    await fence?.assertCurrent();
     await input.cleanup(projectId);
+    await fence?.assertCurrent();
     await input.persistence.deleteProject(input.actor, projectId);
     await input.persistence
       .recordAudit({

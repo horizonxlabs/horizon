@@ -16,6 +16,7 @@ export async function persistPiTurnErrorAssistant(input: {
   artifactActionIds: string[];
   actions: WorkspaceChatAction[];
   tokenUsage: { promptTokens: number; completionTokens: number };
+  assertCurrent?: () => Promise<void>;
 }): Promise<string> {
   const persistedContent =
     input.inputAborted && !input.preservedCommitSha
@@ -37,6 +38,7 @@ export async function persistPiTurnErrorAssistant(input: {
   let persistError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
+      await input.assertCurrent?.();
       await input.chatHistory.appendMessage(assistant);
       return input.errorMessage;
     } catch (error) {

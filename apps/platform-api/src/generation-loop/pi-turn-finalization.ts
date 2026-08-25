@@ -12,6 +12,7 @@ export async function finalizePiCandidate(input: {
   candidateSha: string;
   assistant: WorkspaceChatMessage;
   prompt: string;
+  assertCurrent?: () => Promise<void>;
   markIrreversible(): void;
 }): Promise<void> {
   input.signal.throwIfAborted();
@@ -27,6 +28,7 @@ export async function finalizePiCandidate(input: {
     lateCancellation = true;
   };
 
+  await input.assertCurrent?.();
   const migrated = await input.deps.actionRunner.runMigrationBatch({
     containerId: input.containerId,
     projectId: input.projectId,
@@ -38,6 +40,7 @@ export async function finalizePiCandidate(input: {
   if (!migrated.ok) throw new Error(migrated.error);
 
   if (input.deps.checkpoints) {
+    await input.assertCurrent?.();
     markIrreversible();
     await input.deps.checkpoints.createCheckpoint({
       projectId: input.projectId,
@@ -49,6 +52,7 @@ export async function finalizePiCandidate(input: {
   }
 
   input.assistant.commitSha = input.candidateSha;
+  await input.assertCurrent?.();
   markIrreversible();
   await input.deps.chatHistory.appendMessage(input.assistant);
   observeCancellation();

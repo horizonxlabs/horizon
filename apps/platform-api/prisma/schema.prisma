@@ -465,6 +465,8 @@ model ProjectFileUpload {
 model ProjectLifecycleState {
   projectId              String    @id @map("project_id")
   status                 String    @default("active")
+  epoch                  Int       @default(0)
+  mutationEpoch          Int       @default(0) @map("mutation_epoch")
   deletionOwnerId        String?   @map("deletion_owner_id")
   deletionLeaseExpiresAt DateTime? @map("deletion_lease_expires_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
@@ -476,6 +478,7 @@ model ProjectLifecycleState {
 model ProjectMutationLease {
   id        String   @id
   projectId String   @map("project_id")
+  epoch     Int
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 

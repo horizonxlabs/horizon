@@ -18,15 +18,22 @@ interface MinioPresignLike {
   bucketExists(bucket: string): Promise<boolean>;
   makeBucket(bucket: string): Promise<void>;
   removeObject(bucket: string, objectKey: string): Promise<void>;
+  removeBucket(bucket: string): Promise<void>;
   presignedPutObject(bucket: string, objectKey: string, expirySeconds: number): Promise<string>;
 }
 
 export interface ProjectFileUploadUrlIssuer {
+  leaseDurationMs?: number;
   issue(bucket: string, objectKey: string): Promise<{ url: string; expiresAt: Date }>;
   remove(bucket: string, objectKey: string): Promise<void>;
+  revokeBucket?(bucket: string, objectKeys: string[]): Promise<void>;
 }
 
 export const PROJECT_FILE_UPLOAD_URL_TTL_MS = 15 * 60 * 1_000;
+
+export function projectFileBucketName(projectId: string): string {
+  return `project-file-${createHash("sha256").update(projectId).digest("hex").slice(0, 40)}`;
+}
 
 /**
  * Signs browser uploads with server-held MinIO credentials. `publicBaseUrl` must name the same
@@ -69,7 +76,26 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
   const signingClient = opts.signingClientFactory
     ? opts.signingClientFactory(signingOptions)
     : new MinioClient(signingOptions);
+  const revokeBucket = async (bucket: string, objectKeys: string[]) => {
+    while (true) {
+      await Promise.all(
+        objectKeys.map((objectKey) =>
+          managementClient.removeObject(bucket, objectKey).catch(() => undefined)
+        )
+      );
+      try {
+        await managementClient.removeBucket(bucket);
+        return;
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "NoSuchBucket") return;
+        if (code !== "BucketNotEmpty" && code !== "Conflict") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  };
   return {
+    leaseDurationMs: PROJECT_FILE_UPLOAD_URL_TTL_MS,
     async issue(bucket, objectKey) {
       const expiresInSeconds = PROJECT_FILE_UPLOAD_URL_TTL_MS / 1_000;
       if (!(await managementClient.bucketExists(bucket))) await managementClient.makeBucket(bucket);
@@ -78,6 +104,9 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
     },
     async remove(bucket, objectKey) {
       await managementClient.removeObject(bucket, objectKey);
+    },
+    async revokeBucket(bucket, objectKeys) {
+      await revokeBucket(bucket, objectKeys);
     }
   };
 }

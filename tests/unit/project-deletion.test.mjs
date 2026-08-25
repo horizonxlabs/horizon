@@ -89,3 +89,36 @@ test("project resource cleanup attempts every independent cleanup and aggregates
   );
   assert.deepEqual(attempted, ["deployments", "workspace", "uploads"]);
 });
+
+test("project deletion rechecks ownership after cleanup before deleting the project row", async () => {
+  const events = [];
+  let assertions = 0;
+  const persistence = {
+    async listProjects() { return [project]; },
+    async deleteProject() { events.push("delete-row"); },
+    async recordAudit() {}
+  };
+  const lifecycle = {
+    async runDeletion(_projectId, operation) {
+      return operation({
+        epoch: 1,
+        async assertCurrent() {
+          assertions += 1;
+          if (assertions === 2) throw new Error("deletion ownership lost");
+        }
+      });
+    }
+  };
+
+  await assert.rejects(
+    deletePersistedProject({
+      actor,
+      encodedProjectId: "project-1",
+      persistence,
+      lifecycle,
+      cleanup: async () => events.push("cleanup")
+    }),
+    /ownership lost/
+  );
+  assert.deepEqual(events, ["cleanup"]);
+});
