@@ -154,3 +154,63 @@ test("schema deletion waits for a database mutation paused inside its locked SQL
   assert.match(statements[0], /^SELECT pg_advisory_xact_lock/);
   assert.doesNotMatch(statements.at(-1), /WITH lifecycle_fence/);
 });
+
+test("database mutation rechecks its fence after DML and rolls back before commit", async () => {
+  let mutate;
+  let current = true;
+  let committed = false;
+  let rolledBack = false;
+  let failure;
+  const query = async (sql) => {
+    if (sql.includes("information_schema.columns")) {
+      return { rows: [{
+        table_name: "items", column_name: "id", data_type: "text", is_nullable: "NO",
+        ordinal_position: 1, is_primary_key: true
+      }], rowCount: 1 };
+    }
+    if (sql.trim().startsWith("INSERT")) current = false;
+    return { rows: [{ id: "one" }], rowCount: 1 };
+  };
+  registerProjectDbRoutes({
+    get() {},
+    post(path, handler) { if (path.includes("mutate")) mutate = handler; },
+    ok() { assert.fail("lost fence must roll back instead of committing"); },
+    fail(_response, status, code) { failure = { status, code }; },
+    async resolveAccessibleProjectIds() { return ["p1"]; },
+    async getDatabaseUrl() { return "postgresql://user:pass@localhost/db?schema=app_prj"; },
+    createTransaction() {
+      return async (operation) => {
+        try {
+          const result = await operation(query);
+          committed = true;
+          return result;
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      };
+    },
+    async runChildMutation(_projectId, operation) {
+      return operation({
+        async assertCurrent() {
+          if (!current) {
+            const error = new Error("mutation lease lost during DML");
+            error.name = "ProjectDeletionInProgressError";
+            throw error;
+          }
+        }
+      });
+    },
+    audit() {}
+  });
+
+  await mutate(
+    { params: { projectId: "p1", table: "items" }, headers: {}, body: {
+      op: "insert", values: { id: "one" }
+    } },
+    {}
+  );
+  assert.deepEqual(failure, { status: 409, code: "PROJECT_DELETION_IN_PROGRESS" });
+  assert.equal(committed, false);
+  assert.equal(rolledBack, true);
+});

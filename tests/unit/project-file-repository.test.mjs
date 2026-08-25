@@ -137,3 +137,16 @@ test("cleanup removes legacy shared-bucket objects without trying to revoke the 
   assert.equal(revoked, false);
   assert.deepEqual(removed, [["project-file-uploads", "projects/prj_legacy/legacy.bin"]]);
 });
+
+test("project cleanup revokes its deterministic bucket even when upload metadata is empty", async () => {
+  const revoked = [];
+  await deletePersistedProjectFiles(
+    "prj_empty",
+    { async listAll() { return []; }, async deleteProject() { assert.fail("there are no rows"); } },
+    {
+      async remove() { assert.fail("project bucket sweep owns cleanup"); },
+      async revokeBucket(bucket, keys) { revoked.push([bucket, keys]); }
+    }
+  );
+  assert.deepEqual(revoked, [[projectFileBucketName("prj_empty"), []]]);
+});

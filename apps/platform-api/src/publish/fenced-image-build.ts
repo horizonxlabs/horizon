@@ -22,7 +22,8 @@ export async function buildFencedImage(input: {
   } catch (error) {
     try {
       if (!input.docker.removeImage) throw new Error("Docker image cleanup is unavailable");
-      await input.docker.removeImage(imageId ?? input.imageTag);
+      // A content digest can be shared by other deployment tags. This candidate owns only its tag.
+      await input.docker.removeImage(input.imageTag);
     } catch (cleanupError) {
       throw new AggregateError([error, cleanupError], "Publish image cleanup failed");
     }

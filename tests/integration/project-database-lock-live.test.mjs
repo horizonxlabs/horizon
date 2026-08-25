@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
 
-import { insertRow } from "../../apps/platform-api/src/project-database.ts";
+import {
+  insertRow,
+  registerProjectDbRoutes
+} from "../../apps/platform-api/src/project-database.ts";
 import {
   Client,
   createPgTransaction
@@ -17,6 +20,15 @@ const dockerAvailable = (() => {
     return false;
   }
 })();
+const postgresImage = "postgres:17-alpine";
+const postgresImageAvailable = dockerAvailable && (() => {
+  try {
+    execFileSync("docker", ["image", "inspect", postgresImage], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 function deferred() {
   let resolve;
@@ -25,13 +37,13 @@ function deferred() {
 }
 
 test("real PostgreSQL schema deletion waits for checked-out mutation transaction commit", {
-  skip: !dockerAvailable,
+  skip: !postgresImageAvailable,
   timeout: 30_000
 }, async () => {
   const container = `evcp-pg-lock-${process.pid}-${Date.now()}`;
   execFileSync("docker", [
     "run", "-d", "--rm", "--name", container,
-    "-e", "POSTGRES_PASSWORD=evcp", "-p", "127.0.0.1::5432", "postgres:17-alpine"
+    "-e", "POSTGRES_PASSWORD=evcp", "-p", "127.0.0.1::5432", postgresImage
   ], { stdio: "ignore" });
   try {
     const portOutput = execFileSync("docker", ["port", container, "5432/tcp"], {
@@ -93,8 +105,49 @@ test("real PostgreSQL schema deletion waits for checked-out mutation transaction
     assert.equal(blocked, true, "DROP SCHEMA must wait while the mutation transaction owns the lock");
     const result = await admin.query("SELECT to_regnamespace('app_lock') IS NULL AS removed");
     assert.equal(result.rows[0].removed, true);
+
+    await admin.query(`
+      CREATE SCHEMA app_takeover;
+      CREATE TABLE app_takeover.items (id text PRIMARY KEY);
+      CREATE FUNCTION app_takeover.pause_insert() RETURNS trigger AS $$
+      BEGIN PERFORM pg_sleep(0.25); RETURN NEW; END $$ LANGUAGE plpgsql;
+      CREATE TRIGGER pause_insert BEFORE INSERT ON app_takeover.items
+      FOR EACH ROW EXECUTE FUNCTION app_takeover.pause_insert()
+    `);
+    let mutate;
+    let current = true;
+    let failure;
+    registerProjectDbRoutes({
+      get() {},
+      post(path, handler) { if (path.includes("mutate")) mutate = handler; },
+      ok() { assert.fail("a mutation that loses its lease before COMMIT must roll back"); },
+      fail(_response, status, code) { failure = { status, code }; },
+      async resolveAccessibleProjectIds() { return ["p1"]; },
+      async getDatabaseUrl() { return `${connectionString}?schema=app_takeover`; },
+      createTransaction() { return createPgTransaction({ connectionString }); },
+      async runChildMutation(_projectId, operation) {
+        return operation({
+          async assertCurrent() {
+            if (!current) {
+              const error = new Error("project deletion took over during DML");
+              error.name = "ProjectDeletionInProgressError";
+              throw error;
+            }
+          }
+        });
+      },
+      audit() {}
+    });
+    setTimeout(() => { current = false; }, 75);
+    await mutate({
+      params: { projectId: "p1", table: "items" }, headers: {},
+      body: { op: "insert", values: { id: "rolled-back" } }
+    }, {});
+    assert.deepEqual(failure, { status: 409, code: "PROJECT_DELETION_IN_PROGRESS" });
+    const rolledBack = await admin.query("SELECT count(*)::int AS count FROM app_takeover.items");
+    assert.equal(rolledBack.rows[0].count, 0);
     await admin.end();
   } finally {
-    execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+    try { execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" }); } catch {}
   }
 });

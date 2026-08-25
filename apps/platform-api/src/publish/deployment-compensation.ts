@@ -13,15 +13,6 @@ export async function compensateDeploymentCandidate(input: {
   cause: unknown;
 }): Promise<never> {
   const failures: unknown[] = [input.cause];
-  try {
-    if (input.deployment && input.finalized && input.flushed) {
-      if (input.deployments.remove) input.deployments.remove(input.deployment.id);
-      else input.deployments.updateHealth(input.deployment.id, "failed");
-      await input.deployments.flush?.();
-    } else if (input.deployment) input.deployments.discard(input.deployment.id);
-  } catch (error) {
-    failures.push(error);
-  }
   if (input.containerId) {
     try { await input.docker.stopContainer(input.containerId); } catch (error) { failures.push(error); }
     try { await input.docker.removeContainer(input.containerId); } catch (error) { failures.push(error); }
@@ -29,6 +20,17 @@ export async function compensateDeploymentCandidate(input: {
   try {
     if (!input.docker.removeImage) throw new Error("Docker image cleanup is unavailable");
     await input.docker.removeImage(input.imageIdOrTag);
+  } catch (error) {
+    failures.push(error);
+  }
+  // Keep the durable identity when external cleanup is incomplete so deletion can retry it.
+  if (failures.length > 1) throw new AggregateError(failures, "Deployment compensation failed");
+  try {
+    if (input.deployment && input.finalized && input.flushed) {
+      if (input.deployments.remove) input.deployments.remove(input.deployment.id);
+      else input.deployments.updateHealth(input.deployment.id, "failed");
+      await input.deployments.flush?.();
+    } else if (input.deployment) input.deployments.discard(input.deployment.id);
   } catch (error) {
     failures.push(error);
   }
@@ -53,5 +55,5 @@ export async function removeDeploymentImage(
   deployment: WorkspaceDeployment
 ): Promise<void> {
   if (!docker.removeImage) throw new Error("Docker image cleanup is unavailable");
-  await docker.removeImage(deployment.imageDigest ?? deployment.imageTag);
+  await docker.removeImage(deployment.imageTag);
 }

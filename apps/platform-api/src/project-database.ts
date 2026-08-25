@@ -1,9 +1,5 @@
-import {
-  createPgQuery,
-  createPgTransaction,
-  type PgQueryResult,
-  type PgTransaction
-} from "./workspace-orchestrator/pg-runner";
+import { createPgQuery, createPgTransaction, type PgQueryResult,
+  type PgTransaction } from "./workspace-orchestrator/pg-runner";
 import type { ProjectMutationFence } from "./project-lifecycle";
 import { schemaAdvisoryLockSql } from "./workspace-orchestrator/postgres-provisioner";
 
@@ -324,7 +320,9 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
         return transaction(async (query) => {
           await query(schemaAdvisoryLockSql(schema));
           await fence?.assertCurrent();
-          return run(query, schema, projectId, fence);
+          const result = await run(query, schema, projectId, fence);
+          await fence?.assertCurrent();
+          return result;
         });
       };
       deps.ok(

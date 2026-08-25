@@ -212,7 +212,7 @@ export function createPublishService(deps: PublishServiceDeps) {
     } catch (error) {
       return compensateDeploymentCandidate({ deployments: deps.deployments, docker: deps.docker,
         deployment, finalized: Boolean(finalized), flushed: deploymentFlushed, containerId,
-        imageIdOrTag: imageDigest, cause: error });
+        imageIdOrTag: imageTag, cause: error });
     }
 
     if (!healthy) {

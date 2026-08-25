@@ -109,8 +109,30 @@ test("a publish that loses ownership inside image build removes the image and ne
   resumeBuild.resolve();
 
   await assert.rejects(publish, /being deleted/);
-  assert.deepEqual(removedImages, ["mem-build-1"]);
+  assert.equal(removedImages.length, 1);
+  assert.match(removedImages[0], /^evcp-production-app:/);
   assert.equal(deps.docker.state.containers.length, 1, "only the development container remains");
+});
+
+test("image compensation removes only its unique tag when two tags share one image id", async () => {
+  const removed = [];
+  const docker = {
+    async buildImage() { return { imageId: "sha256:shared-content" }; },
+    async removeImage(image) { removed.push(image); }
+  };
+  await buildFencedImage({
+    docker, sourceContainerId: "dev-1", imageTag: "app:kept", dockerfilePath: "Dockerfile",
+    extraFiles: [], fence: { async assertCurrent() {} }
+  });
+  let assertions = 0;
+  await assert.rejects(
+    buildFencedImage({
+      docker, sourceContainerId: "dev-1", imageTag: "app:owned", dockerfilePath: "Dockerfile",
+      extraFiles: [], fence: { async assertCurrent() { if (++assertions === 2) throw new Error("lost"); } }
+    }),
+    /lost/
+  );
+  assert.deepEqual(removed, ["app:owned"]);
 });
 
 test("image-build compensation surfaces both the lost fence and image-removal failure", async () => {
@@ -146,7 +168,8 @@ test("a resolveEnv failure after image build removes the owned image", async () 
     }),
     resolutionFailure
   );
-  assert.deepEqual(deps.docker.state.removedImages, ["mem-build-1"]);
+  assert.equal(deps.docker.state.removedImages.length, 1);
+  assert.match(deps.docker.state.removedImages[0], /^evcp-production-app:/);
   assert.equal(deps.docker.state.containers.length, 1, "only the development container remains");
 });
 
@@ -174,11 +197,46 @@ test("project deletion removes every deployment image before deleting deployment
   const service = createPublishService(deps);
   await service.publish({ projectId: "p1", slug: "app", environment: "staging", publishedByUserId: "u1" });
   await service.publish({ projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1" });
-  const images = deps.deployments.list("p1").map((deployment) => deployment.imageDigest);
+  const images = deps.deployments.list("p1").map((deployment) => deployment.imageTag);
 
   await service.deleteProject("p1");
 
   assert.deepEqual(deps.docker.state.removedImages.sort(), images.sort());
+  assert.deepEqual(deps.deployments.list("p1"), []);
+});
+
+test("flushed deployment remains retryable when first external compensation fails", async () => {
+  let databaseTime = new Date("2026-08-25T00:00:00.000Z");
+  const store = createMemoryProjectLifecycleStore({ now: () => databaseTime });
+  const deps = buildPublishServiceDeps();
+  deps.lifecycle = createProjectLifecycleCoordinator({ store, mutationLeaseMs: 100 });
+  const flushStarted = deferred();
+  const resumeFlush = deferred();
+  let flushes = 0;
+  deps.deployments.flush = async () => {
+    flushes += 1;
+    if (flushes === 1) { flushStarted.resolve(); await resumeFlush.promise; }
+  };
+  const imageFailure = new Error("image cleanup unavailable");
+  let failImageOnce = true;
+  const originalRemoveImage = deps.docker.removeImage.bind(deps.docker);
+  deps.docker.removeImage = async (image) => {
+    if (failImageOnce) { failImageOnce = false; throw imageFailure; }
+    return originalRemoveImage(image);
+  };
+
+  const publish = createPublishService(deps).publish({
+    projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1"
+  });
+  await flushStarted.promise;
+  databaseTime = new Date("2026-08-25T00:00:00.200Z");
+  await createProjectLifecycleCoordinator({ store }).runDeletion("p1", async () => undefined);
+  resumeFlush.resolve();
+
+  await assert.rejects(publish, (error) =>
+    error instanceof AggregateError && error.errors.includes(imageFailure));
+  assert.equal(deps.deployments.list("p1").length, 1, "failed external cleanup retains identity");
+  await createPublishService(deps).deleteProject("p1");
   assert.deepEqual(deps.deployments.list("p1"), []);
 });
 

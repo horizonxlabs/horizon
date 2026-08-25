@@ -18,7 +18,13 @@ export async function deletePersistedProjectFiles(
   await fence?.assertCurrent();
   const files = await repository.listAll(projectId);
   await fence?.assertCurrent();
-  if (files.length === 0) return;
+  if (files.length === 0) {
+    if (storage?.revokeBucket) {
+      await storage.revokeBucket(projectFileBucketName(projectId), []);
+      await fence?.assertCurrent();
+    }
+    return;
+  }
   if (!storage) {
     throw new Error("Project file object storage is unavailable; uploaded files were not deleted");
   }
