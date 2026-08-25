@@ -19,9 +19,10 @@ export async function deletePersistedProjectFiles(
   const files = await repository.listAll(projectId);
   await fence?.assertCurrent();
   if (files.length === 0) {
-    if (!storage?.revokeBucket)
-      throw new Error("Project upload bucket revocation is unavailable; cleanup cannot be verified");
-    await storage.revokeBucket(projectFileBucketName(projectId), []);
+    // Upload initialization persists its row before issuing a signed URL. No rows therefore means
+    // no issued upload can still race deletion, including installs where uploads were never enabled.
+    if (storage?.revokeBucket)
+      await storage.revokeBucket(projectFileBucketName(projectId), []);
     await fence?.assertCurrent();
     return;
   }

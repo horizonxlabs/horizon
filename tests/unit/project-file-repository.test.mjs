@@ -151,14 +151,14 @@ test("project cleanup revokes its deterministic bucket even when upload metadata
   assert.deepEqual(revoked, [[projectFileBucketName("prj_empty"), []]]);
 });
 
-test("empty project-file cleanup fails closed without project-bucket revocation capability", async () => {
-  const repository = { async listAll() { return []; }, async deleteProject() {} };
-  await assert.rejects(
-    deletePersistedProjectFiles("prj_empty", repository),
-    /project upload bucket revocation is unavailable/i
-  );
-  await assert.rejects(
-    deletePersistedProjectFiles("prj_empty", repository, { async remove() {} }),
-    /project upload bucket revocation is unavailable/i
-  );
+test("empty project-file cleanup permits deletion when metadata proves no upload URL was issued", async () => {
+  let metadataDeleteCalls = 0;
+  const repository = {
+    async listAll() { return []; },
+    async deleteProject() { metadataDeleteCalls += 1; }
+  };
+
+  await deletePersistedProjectFiles("prj_empty", repository);
+
+  assert.equal(metadataDeleteCalls, 0, "there is no upload metadata to delete");
 });

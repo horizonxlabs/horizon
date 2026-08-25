@@ -7,6 +7,7 @@ import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
 import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-session-route";
 import { registerProjectDbRoutes } from "./project-database";
+import { createProjectDbAuditAdapter } from "./project-database-audit";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
@@ -2976,22 +2977,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     },
     getDatabaseUrl: (projectId) => services.workspaceOrchestrator.getProjectDatabaseUrl(projectId),
     runChildMutation: (projectId, operation) => projectLifecycle.runChildMutation(projectId, operation),
-    audit: (headers, projectId, action, detail) => {
-      void (async () => {
-        try {
-          const { user } = await resolvePersistenceAuth(services, headers);
-          await services.corePersistence?.recordAudit({
-            actorId: user.id,
-            action,
-            resourceType: "project_database",
-            resourceId: projectId,
-            metadata: { table: detail }
-          });
-        } catch {
-          /* audit is best-effort; never block or fail a completed write */
-        }
-      })();
-    },
+    audit: createProjectDbAuditAdapter(services),
     ok: (response, body) => sendPlatformResponse(response, { status: HttpStatus.OK, body: success(body) }),
     fail: (response, status, code, message) => sendPlatformResponse(response, { status, body: failure(code, message) })
   });
