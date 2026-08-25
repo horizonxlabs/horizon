@@ -26,6 +26,8 @@ export interface ProjectFileUploadUrlIssuer {
   remove(bucket: string, objectKey: string): Promise<void>;
 }
 
+export const PROJECT_FILE_UPLOAD_URL_TTL_MS = 15 * 60 * 1_000;
+
 /**
  * Signs browser uploads with server-held MinIO credentials. `publicBaseUrl` must name the same
  * object-storage endpoint from the browser's network; it is intentionally explicit to avoid
@@ -69,7 +71,7 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
     : new MinioClient(signingOptions);
   return {
     async issue(bucket, objectKey) {
-      const expiresInSeconds = 15 * 60;
+      const expiresInSeconds = PROJECT_FILE_UPLOAD_URL_TTL_MS / 1_000;
       if (!(await managementClient.bucketExists(bucket))) await managementClient.makeBucket(bucket);
       const signed = await signingClient.presignedPutObject(bucket, objectKey, expiresInSeconds);
       return { url: signed, expiresAt: new Date(Date.now() + expiresInSeconds * 1_000) };

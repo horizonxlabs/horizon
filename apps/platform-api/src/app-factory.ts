@@ -66,13 +66,10 @@ export type { PlatformRequest, PlatformResponse, HeaderBag } from "./platform-ht
 import { errorResponse } from "./error-response";
 import { deletePersistedProject, registerProjectDeletionRoute } from "./project-deletion";
 import { createProjectLifecycleCoordinator, runProjectMutationRequest, type ProjectLifecycleCoordinator } from "./project-lifecycle";
+import { createPrismaProjectLifecycleStore } from "./persistence/prisma-project-lifecycle-store";
 import { resolvePersistenceUser, resolvePreviewProxyDecision, resolveWorkspaceAuth, wantsPreviewJson } from "./preview-proxy-decision";
 export { resolvePreviewProxyDecision, wantsPreviewJson } from "./preview-proxy-decision";
-type HttpRequest = {
-  headers: HeaderBag;
-  body?: Record<string, unknown>;
-  params?: Record<string, string>;
-};
+type HttpRequest = { headers: HeaderBag; body?: Record<string, unknown>; params?: Record<string, string> };
 type HttpResponse = {
   status: (code: number) => HttpResponse;
   json: (body: unknown) => void;
@@ -156,6 +153,7 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL);
   const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
   const projectFileUploadUrlIssuer = resolveProjectFileUploadUrlIssuer(env);
+  (services as PersistenceAwarePlatformApiServices).projectLifecycle = createProjectLifecycleCoordinator({ store: createPrismaProjectLifecycleStore(client as never) });
   return {
     ...services,
     corePersistence: service,

@@ -462,6 +462,27 @@ model ProjectFileUpload {
   @@map("project_file_uploads")
 }
 
+model ProjectLifecycleState {
+  projectId              String    @id @map("project_id")
+  status                 String    @default("active")
+  deletionOwnerId        String?   @map("deletion_owner_id")
+  deletionLeaseExpiresAt DateTime? @map("deletion_lease_expires_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, deletionLeaseExpiresAt])
+  @@map("project_lifecycle_states")
+}
+
+model ProjectMutationLease {
+  id        String   @id
+  projectId String   @map("project_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, expiresAt])
+  @@map("project_mutation_leases")
+}
+
 model GuardrailRule {
   id        String            @id
   name      String

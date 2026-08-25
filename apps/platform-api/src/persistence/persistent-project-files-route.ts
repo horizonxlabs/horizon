@@ -6,7 +6,10 @@ import type {
   ProjectFileUploadInitResult,
   ProjectFileScanStatus
 } from "../platform-services";
-import type { ProjectFileUploadUrlIssuer } from "../workspace-orchestrator/minio-object-storage";
+import {
+  PROJECT_FILE_UPLOAD_URL_TTL_MS,
+  type ProjectFileUploadUrlIssuer
+} from "../workspace-orchestrator/minio-object-storage";
 import type { PersistedProjectFile, PrismaProjectFileRepository } from "./project-file-repository";
 import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
@@ -44,13 +47,21 @@ export async function initializePersistentProjectFile(input: {
   includeByDefault?: boolean;
   lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<ProjectFileUploadInitResult> {
+  validate(input);
   if (input.lifecycle) {
     const { lifecycle, ...operationInput } = input;
-    return lifecycle.runChildMutation(input.projectId, () =>
-      initializePersistentProjectFile(operationInput)
-    );
+    return lifecycle.runChildMutationWithLease(input.projectId, async (lease) => {
+      await lease.retainFor(PROJECT_FILE_UPLOAD_URL_TTL_MS);
+      try {
+        const result = await initializePersistentProjectFile(operationInput);
+        await lease.retainUntil(new Date(result.expiresAt));
+        return result;
+      } catch (error) {
+        await lease.cancelRetention();
+        throw error;
+      }
+    });
   }
-  validate(input);
   const id = `upl_${randomUUID()}`;
   const sourceId = `knsrc_${id}`;
   const versionId = `${sourceId}_v1`;
