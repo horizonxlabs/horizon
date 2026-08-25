@@ -327,10 +327,16 @@ test("Creator workspace actions are API-client backed", () => {
 });
 
 test("Creator project wizard creates a real project and starts the first AI build", () => {
-  for (const method of ["createProject", "generatePrdDraft", "listPrdVersions", "getCurrentPrd"]) {
+  for (const method of ["createProject", "generatePrdDraft"]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
     assert.match(creatorSource, new RegExp(method));
   }
+  for (const method of ["listPrdVersions", "getCurrentPrd"]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+  }
+  assert.match(creatorSource, /\/prd\/versions/);
+  assert.match(creatorSource, /\/prd`/);
+  assert.match(creatorSource, /\{ signal \}/);
 
   assert.match(creatorSource, /handleCreateProjectSubmit/);
   assert.match(creatorSource, /client\.createProject/);
