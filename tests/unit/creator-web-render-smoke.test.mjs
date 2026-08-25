@@ -110,7 +110,7 @@ test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
 });
 
 const ROUTE_CASES = [
-  ["projects", "/creator", /Recent projects/],
+  ["projects", "/creator", /Opening latest project/],
   ["project", "/creator/projects/project-1/project", /Project: Project One/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
   ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
@@ -195,7 +195,7 @@ test("CreatorRoutes keeps the first-project state inside the shared Creator shel
     })
   );
   assert.match(html, /<aside[^>]*bg-surface text-body/);
-  assert.match(html, /Create your next internal application/);
+  assert.match(html, /Create your first project/);
   assert.match(html, /Create project/);
 });
 
@@ -206,10 +206,9 @@ for (const [name, Page] of Object.entries(PAGES)) {
   });
 }
 
-test("ProjectsPage renders the create-first landing inside the shared Creator shell", () => {
+test("ProjectsPage renders only the first-project fallback inside the shared Creator shell", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
-  assert.match(html, /class="[^"]*hz-projects-studio/);
   assert.match(html, /<aside[^>]*bg-surface text-body/);
   assert.match(
     html,
@@ -219,11 +218,9 @@ test("ProjectsPage renders the create-first landing inside the shared Creator sh
   assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
   assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
   assert.match(html, /<aside[^>]*id="app-shell-sidebar-[^"]+"/);
-  assert.match(html, /Create your next internal application/);
+  assert.match(html, /Create your first project/);
   assert.match(html, /Create project/);
-  assert.match(html, /Recent projects/);
-  assert.match(html, /aria-label="Search projects"/);
-  assert.match(html, /aria-label="Project list"/);
+  assert.doesNotMatch(html, /Recent projects|Search projects|Project list/);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
   assert.doesNotMatch(html, /Updated \d|อัปเดตเมื่อ/);
 });
@@ -316,13 +313,11 @@ test("PublishPage fail-closes readiness when access information is unavailable",
   assert.match(html, /access API 503/);
 });
 
-test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
+test("ProjectsPage empty-state CTA uses the @evcp/ui Button primitive", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
-  assert.match(
-    html,
-    /aria-label="Search projects"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="Search projects"/
-  );
+  assert.match(html, /focus-visible:ring-primary-soft/);
   assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Search projects/);
   assert.doesNotMatch(html, /hz-prompt-cta/);
 });
 

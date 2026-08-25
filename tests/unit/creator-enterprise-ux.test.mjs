@@ -194,46 +194,44 @@ test("Creator shell uses English provisioning feedback and omits duplicate page 
   assert.equal((html.match(/Publish &amp; Registry/g) ?? []).length, 1);
 });
 
-test("Projects landing renders readable metadata and an English creation wizard", () => {
-  const project = {
-    id: "operations-hub",
-    name: "Operations Hub",
-    appType: "Workflow",
-    status: "in_review",
-    owner: "Creator",
-    prdVersion: "v1",
-    frontendVersion: "v2",
-    tokenUsedThisMonth: 0,
-    createdAt: "2026-01-02T00:00:00.000Z"
-  };
+test("First-project fallback renders only the English empty state and creation wizard", () => {
   const html = renderToStaticMarkup(
     React.createElement(ProjectsPage, {
       app: {
-        creatorNavItems: [], bootstrap: { projects: [project], userName: "Creator" },
-        creatorSessionControls: null, creatorPage: "projects",
+        creatorNavItems: [],
+        bootstrap: { projects: [], userName: "Creator", status: "empty" },
+        creatorSessionControls: null,
+        creatorPage: "projects",
         pageCopy: { title: "Projects", description: "Create and select a project." },
-        selectedProject: project, creatorPageActions: null, isCreateProjectDialogOpen: true,
-        setIsCreateProjectDialogOpen: () => undefined, handleCreateProjectSubmit: () => undefined,
+        selectedProject: { id: "", name: "" },
+        creatorPageActions: null,
+        isCreateProjectDialogOpen: true,
+        setIsCreateProjectDialogOpen: () => undefined,
+        handleCreateProjectSubmit: () => undefined,
         isCreatingProject: false,
         createProjectForm: {
-          name: "", appType: "", targetDepartment: "", businessProblem: "",
-          intendedUsers: "", dataSensitivity: "internal"
+          name: "",
+          appType: "",
+          targetDepartment: "",
+          businessProblem: "",
+          intendedUsers: "",
+          dataSensitivity: "internal"
         },
         handleCreateProjectField: () => undefined,
         createProjectMessage: "Complete the project details to prepare the first workspace draft.",
-        isEnteringWorkspace: false, handleSelectProject: async () => undefined,
-        onNavigate: () => undefined, pathname: "/creator"
+        isEnteringWorkspace: false,
+        handleSelectProject: async () => undefined,
+        onNavigate: () => undefined,
+        pathname: "/creator"
       }
     })
   );
 
-  assert.match(html, /In review/);
-  assert.match(html, /Created/);
-  assert.match(html, /Jan 2, 2026/);
-  assert.match(html, /class="hz-card-app-type">Workflow/);
+  assert.match(html, /Create your first project/);
   assert.match(html, /Application type/);
   assert.match(html, /Business problem/);
   assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Recent projects|Search projects|Project list/);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
 });
 

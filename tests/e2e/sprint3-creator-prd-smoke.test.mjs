@@ -142,8 +142,8 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "Horizon AI Builder",
-    "Search projects",
+    "Opening latest project",
+    "Create your first project",
     "Create project",
     "Create project wizard",
     "PRD Viewer",

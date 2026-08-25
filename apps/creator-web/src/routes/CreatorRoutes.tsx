@@ -11,8 +11,28 @@ import { UsersPage } from "@/features/users";
 import { VersionsPage } from "@/features/versions";
 import { WorkspacePage } from "@/features/workspace";
 import { navigateBrowserPath } from "@evcp/ui";
+import { useEffect } from "react";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { selectCreatorProjectForRequest } from "@/app/creator-app-helpers";
+import { creatorPathForPage } from "@/app/routes";
 import { CreatorState } from "@/shared";
+
+function CreatorRootEntry({ app }: { app: ReturnType<typeof useCreatorApp> }) {
+  const latestProject = selectCreatorProjectForRequest(app.bootstrap.projects);
+  useEffect(() => {
+    navigateBrowserPath(creatorPathForPage(latestProject.id, "project"), { replace: true });
+  }, [latestProject.id]);
+
+  return (
+    <main className="creator-page">
+      <CreatorState
+        kind="loading"
+        title="Opening latest project"
+        description="Taking you to the most recently created project."
+      />
+    </main>
+  );
+}
 
 export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const routeProjectUnavailable =
@@ -64,7 +84,7 @@ export function CreatorRoutes({ app }: { app: ReturnType<typeof useCreatorApp> }
       </main>
     );
   }
-  if (app.creatorPage === "projects") return <ProjectsPage app={app} />;
+  if (app.creatorPage === "projects") return <CreatorRootEntry app={app} />;
   if (app.creatorPage === "project") return <ProjectOverviewPage app={app} />;
   if (app.creatorPage === "workspace") return <WorkspacePage app={app} />;
   if (app.creatorPage === "prd") return <PrdPage app={app} />;
