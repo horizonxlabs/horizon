@@ -302,8 +302,15 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
           : operation())
       );
     } catch (error) {
-      const status = error instanceof ProjectDbError ? error.status : 500;
-      deps.fail(response, status, "DATABASE_BROWSE_ERROR", (error as Error).message);
+      const deletionConflict =
+        error instanceof Error && error.name === "ProjectDeletionInProgressError";
+      const status = deletionConflict ? 409 : error instanceof ProjectDbError ? error.status : 500;
+      deps.fail(
+        response,
+        status,
+        deletionConflict ? "PROJECT_DELETION_IN_PROGRESS" : "DATABASE_BROWSE_ERROR",
+        (error as Error).message
+      );
     }
   };
 

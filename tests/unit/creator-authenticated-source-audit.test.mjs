@@ -4,13 +4,6 @@ import path from "node:path";
 import test from "node:test";
 
 const creatorSourceRoot = "apps/creator-web/src";
-const authenticatedAuditExclusions = new Map([
-  [
-    "apps/creator-web/src/features/workspace/vibe-queue.ts",
-    "Internal model prompt with multilingual trigger words; it is never rendered as UI copy."
-  ]
-]);
-
 async function listProductionSources(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
@@ -29,12 +22,7 @@ async function readRepoFile(file) {
 
 test("authenticated Creator route sources contain no Thai user-facing copy", async () => {
   const productionSources = await listProductionSources(creatorSourceRoot);
-  for (const excluded of authenticatedAuditExclusions.keys()) {
-    assert.ok(productionSources.includes(excluded), `stale audit exclusion: ${excluded}`);
-  }
-  const authenticatedCreatorFiles = productionSources.filter(
-    (file) => !authenticatedAuditExclusions.has(file)
-  );
+  const authenticatedCreatorFiles = productionSources;
   assert.ok(
     authenticatedCreatorFiles.length > 70,
     "audit must enumerate the production Creator tree"

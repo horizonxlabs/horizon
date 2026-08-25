@@ -57,6 +57,7 @@ test("the invitation form collects email, role, user type, and note", () => {
   ]);
   assert.match(html, /placeholder="Optional context for the invitation"/);
   assert.match(html, />Send invitation</);
+  assert.match(html, /<button[^>]*class="[^"]*max-md:min-h-11[^"]*"[^>]*type="submit"/);
 });
 
 test("the invitation form preserves each invitation field through its change boundary", () => {
@@ -118,6 +119,7 @@ test("the invitation form disables dismissal and submit actions while sending", 
   );
 
   assert.match(html, /<button[^>]*disabled=""[^>]*>Cancel<\/button>/);
+  assert.match(html, /<button[^>]*class="[^"]*max-md:min-h-11[^"]*"[^>]*>Cancel/);
   const submitButton = html.match(/<button[^>]*type="submit"[^>]*>.*?<\/button>/)?.[0];
   assert.ok(submitButton?.includes('disabled=""'));
   assert.ok(submitButton?.includes("Sending invitation…"));

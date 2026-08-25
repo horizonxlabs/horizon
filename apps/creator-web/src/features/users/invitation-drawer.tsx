@@ -144,11 +144,21 @@ export function InviteUserForm({
 
       <div className="border-border mt-2 flex justify-end gap-2 border-t pt-4">
         {onCancel ? (
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={isSubmitting}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="max-md:min-h-11"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" disabled={isSubmitting || !value.email.trim()}>
+        <Button
+          type="submit"
+          className="max-md:min-h-11"
+          disabled={isSubmitting || !value.email.trim()}
+        >
           <UserPlus size={16} aria-hidden="true" />
           {isSubmitting ? "Sending invitation…" : "Send invitation"}
         </Button>

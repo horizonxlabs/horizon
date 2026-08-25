@@ -37,8 +37,15 @@ export function createPublishRoutes(deps: {
       // build/run failure, missing docker network) rather than a modelled publish outcome. Surface
       // the reason to the client instead of a bare 500 so prod deploys are diagnosable.
       return {
-        status: 500,
-        body: { error: "publish_failed", message: (error as Error).message }
+        status:
+          error instanceof Error && error.name === "ProjectDeletionInProgressError" ? 409 : 500,
+        body: {
+          error:
+            error instanceof Error && error.name === "ProjectDeletionInProgressError"
+              ? "project_deletion_in_progress"
+              : "publish_failed",
+          message: (error as Error).message
+        }
       };
     }
     if (outcome.ok) {
@@ -81,7 +88,13 @@ export function createPublishRoutes(deps: {
         // e.g. no healthy staging deployment to promote
         return {
           status: 409,
-          body: { error: "no_staging_deployment", message: (error as Error).message }
+          body: {
+            error:
+              error instanceof Error && error.name === "ProjectDeletionInProgressError"
+                ? "project_deletion_in_progress"
+                : "no_staging_deployment",
+            message: (error as Error).message
+          }
         };
       }
       if (outcome.ok) {
@@ -101,7 +114,8 @@ export function createPublishRoutes(deps: {
   };
 }
 
-export type AppsResolution = { ok: true; upstream: string; projectId: string } | { ok: false; status: 404 | 503 };
+export type AppsResolution =
+  { ok: true; upstream: string; projectId: string } | { ok: false; status: 404 | 503 };
 
 export async function resolveAppsTarget(
   deployments: DeploymentStore,

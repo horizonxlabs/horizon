@@ -44,7 +44,8 @@ async function setup(resolveAuth, options = {}) {
     resolveAuth,
     resolveAttachmentContext: options.resolveAttachmentContext,
     recordPrdVersionFromPlan: options.recordPrdVersionFromPlan,
-    heartbeatIntervalMs: options.heartbeatIntervalMs
+    heartbeatIntervalMs: options.heartbeatIntervalMs,
+    lifecycle: options.lifecycle
   });
   const server = http.createServer((req, res) => {
     handler(req, res).catch((error) => {
@@ -201,8 +202,14 @@ test("approve-plan turn with no net mutation skips PRD recording and post-turn s
     const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
     assert.equal(prdRecorded, 0);
     assert.equal(postTurnScans, 0);
-    assert.equal(eventNames.some((name) => name === "prd_version"), false);
-    assert.equal(eventNames.some((name) => name === "bug_report"), false);
+    assert.equal(
+      eventNames.some((name) => name === "prd_version"),
+      false
+    );
+    assert.equal(
+      eventNames.some((name) => name === "bug_report"),
+      false
+    );
     assert.equal(eventNames.at(-1), "done");
   } finally {
     server.close();
@@ -234,8 +241,14 @@ test("Auto turns that stream no commit emit no commit event and skip post-turn s
       agentMode: "auto"
     });
     const eventNames = [...raw.body.matchAll(/^event: ([^\n]+)$/gm)].map((match) => match[1]);
-    assert.equal(eventNames.some((name) => name === "commit"), false);
-    assert.equal(eventNames.some((name) => name === "bug_report"), false);
+    assert.equal(
+      eventNames.some((name) => name === "commit"),
+      false
+    );
+    assert.equal(
+      eventNames.some((name) => name === "bug_report"),
+      false
+    );
     assert.equal(postTurnScans, 0);
   } finally {
     server.close();
@@ -351,6 +364,30 @@ test("client disconnect aborts the active generation turn", async () => {
     });
     await aborted;
     assert.equal(capturedSignal.aborted, true);
+  } finally {
+    server.close();
+  }
+});
+
+test("restore maps project deletion conflicts to HTTP 409", async () => {
+  const error = new Error("Project 'p1' is being deleted");
+  error.name = "ProjectDeletionInProgressError";
+  const { server, port } = await setup(() => auth, {
+    generationService: {
+      async restoreToCommit() {
+        assert.fail("restore must not run after deletion begins");
+      }
+    },
+    lifecycle: {
+      async runChildMutation() {
+        throw error;
+      }
+    }
+  });
+  try {
+    const response = await postChat(port, "/projects/p1/chat/restore", { commitSha: "abc123" });
+    assert.equal(response.statusCode, 409);
+    assert.equal(JSON.parse(response.body).error, "project_deletion_in_progress");
   } finally {
     server.close();
   }

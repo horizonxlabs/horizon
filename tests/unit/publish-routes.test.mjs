@@ -87,6 +87,25 @@ test("publish route surfaces infra failures as 500 publish_failed with the reaso
   assert.equal(res.body.message, "no dev container for project 'p1'");
 });
 
+test("publish route maps project deletion conflicts to 409", async () => {
+  const error = new Error("Project 'p1' is being deleted");
+  error.name = "ProjectDeletionInProgressError";
+  const routes = createPublishRoutes({
+    publishService: {
+      publish: async () => {
+        throw error;
+      }
+    },
+    deployments: createMemoryDeploymentStore()
+  });
+  const response = await routes.publish(
+    { userId: "u1", roles: ["creator"], projectIds: ["p1"] },
+    { projectId: "p1", slug: "app", environment: "production" }
+  );
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error, "project_deletion_in_progress");
+});
+
 test("promote route: 403 non-member, 409 when no staging, 201 with deployment on success", async () => {
   const deployments = createMemoryDeploymentStore();
   // non-member
@@ -171,19 +190,24 @@ test("resolveAppsTarget rechecks the deployment store after restart rehydration"
   let rehydrated = 0;
 
   assert.deepEqual(
-    await resolveAppsTarget(deployments, "prj-e8204c2a1b7e4901a1db54c2317b4852", "staging", async () => {
-      rehydrated += 1;
-      const deployment = deployments.create({
-        projectId: "prj_e8204c2a1b7e4901a1db54c2317b4852",
-        slug: "prj-e8204c2a1b7e4901a1db54c2317b4852",
-        environment: "staging",
-        commitSha: "abc123",
-        imageTag: "evcp-staging-prj-e8204c2a1b7e4901a1db54c2317b4852:abc123",
-        containerId: "container-123",
-        publishedByUserId: "system-rehydration"
-      });
-      deployments.updateHealth(deployment.id, "healthy");
-    }),
+    await resolveAppsTarget(
+      deployments,
+      "prj-e8204c2a1b7e4901a1db54c2317b4852",
+      "staging",
+      async () => {
+        rehydrated += 1;
+        const deployment = deployments.create({
+          projectId: "prj_e8204c2a1b7e4901a1db54c2317b4852",
+          slug: "prj-e8204c2a1b7e4901a1db54c2317b4852",
+          environment: "staging",
+          commitSha: "abc123",
+          imageTag: "evcp-staging-prj-e8204c2a1b7e4901a1db54c2317b4852:abc123",
+          containerId: "container-123",
+          publishedByUserId: "system-rehydration"
+        });
+        deployments.updateHealth(deployment.id, "healthy");
+      }
+    ),
     {
       ok: true,
       upstream: "http://evcp-staging-prj-e8204c2a1b7e4901a1db54c2317b4852:3000",

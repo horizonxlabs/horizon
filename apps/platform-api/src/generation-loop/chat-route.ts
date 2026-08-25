@@ -122,10 +122,12 @@ export function createChatSseHandler(deps: {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       } catch (error) {
-        res.writeHead(400, { "content-type": "application/json" });
+        const deletionConflict =
+          error instanceof Error && error.name === "ProjectDeletionInProgressError";
+        res.writeHead(deletionConflict ? 409 : 400, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            error: "restore_failed",
+            error: deletionConflict ? "project_deletion_in_progress" : "restore_failed",
             message: error instanceof Error ? error.message : "Restore failed"
           })
         );
