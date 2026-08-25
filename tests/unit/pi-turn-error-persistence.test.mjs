@@ -71,6 +71,7 @@ test("lost upsert acknowledgement retries idempotently and persists warning plus
     content: "Candidate ready",
     artifactActionIds: ["action-1"],
     actions: [],
+    parts: [{ id: "text-1", type: "text", sequence: 1, text: "Initial work" }],
     commitSha: null,
     tokenUsage: { promptTokens: 2, completionTokens: 3 },
     createdAt: "2026-08-16T00:00:00.000Z"
@@ -97,6 +98,9 @@ test("lost upsert acknowledgement retries idempotently and persists warning plus
   const messages = await fixture.store.listMessages("p1");
   assert.equal(messages.length, 1);
   assert.equal(messages[0].commitSha, "candidate-sha");
+  assert.deepEqual(messages[0].parts, [
+    { id: "text-1", type: "text", sequence: 1, text: "Initial work" }
+  ]);
   assert.match(messages[0].content, /evidence persistence failed/);
   assert.equal(fixture.writeCalls() - writesBeforePersistence, 2);
 });

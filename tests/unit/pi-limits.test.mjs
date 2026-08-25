@@ -5,16 +5,36 @@ import { resolvePiAgentLimits } from "../../apps/platform-api/src/generation-loo
 
 test("Pi gives slow local-model rounds the same default deadline as governed completions", () => {
   const previous = process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
+  const previousTurn = process.env.EVCP_PI_TURN_TIMEOUT_MS;
+  const previousTokenBudget = process.env.EVCP_PI_MAX_TURN_TOKENS;
   delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
+  delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
+  delete process.env.EVCP_PI_MAX_TURN_TOKENS;
 
   try {
     const limits = resolvePiAgentLimits();
-    assert.equal(limits.maxModelRounds, 12);
+    assert.equal(limits.maxModelRounds, 20);
     assert.equal(limits.modelRoundTimeoutMs, 300_000);
-    assert.equal(limits.maxTurnTokens, 160_000);
+    assert.equal(limits.turnTimeoutMs, 1_800_000);
+    assert.equal(limits.maxTurnTokens, undefined);
   } finally {
     if (previous === undefined) delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;
+    if (previousTurn === undefined) delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
+    else process.env.EVCP_PI_TURN_TIMEOUT_MS = previousTurn;
+    if (previousTokenBudget === undefined) delete process.env.EVCP_PI_MAX_TURN_TOKENS;
+    else process.env.EVCP_PI_MAX_TURN_TOKENS = previousTokenBudget;
+  }
+});
+
+test("the cumulative turn-token cap is opt-in for operators", () => {
+  const previous = process.env.EVCP_PI_MAX_TURN_TOKENS;
+  try {
+    process.env.EVCP_PI_MAX_TURN_TOKENS = "600000";
+    assert.equal(resolvePiAgentLimits().maxTurnTokens, 600_000);
+  } finally {
+    if (previous === undefined) delete process.env.EVCP_PI_MAX_TURN_TOKENS;
+    else process.env.EVCP_PI_MAX_TURN_TOKENS = previous;
   }
 });
 
@@ -39,9 +59,9 @@ test("a runaway-deliberation round is bounded by a reasoning character budget, n
   delete process.env.EVCP_PI_MAX_REASONING_CHARS;
 
   try {
-    // Default is well short of the 5-minute round timeout's worst case, so an oscillating
-    // model gets cut off with a legible error long before it burns the full round budget.
-    assert.equal(resolvePiAgentLimits().maxReasoningChars, 12_000);
+    // Local models may need a longer private deliberation before their first tool call;
+    // the default still remains far below the hard maximum for a genuinely stuck round.
+    assert.equal(resolvePiAgentLimits().maxReasoningChars, 60_000);
 
     process.env.EVCP_PI_MAX_REASONING_CHARS = "5000";
     assert.equal(resolvePiAgentLimits().maxReasoningChars, 5_000);

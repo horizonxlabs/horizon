@@ -125,6 +125,17 @@ test("fresh tokenless locks block while stale tokenless locks recover", async (t
   await committer.releaseSnapshot("c1", recovered);
 });
 
+test("a live turn renews its snapshot lease so it is never reclaimed as stale", async (t) => {
+  const { snapshotStore, committer } = await lockingWorkspace(t);
+  const snapshot = await committer.prepare("c1");
+  await markActiveLockStale(snapshotStore);
+
+  await committer.renewSnapshot("c1", snapshot);
+
+  await assert.rejects(() => committer.prepare("c1"), /snapshot lock is active/i);
+  await committer.releaseSnapshot("c1", snapshot);
+});
+
 test("fresh legacy reclaim residue blocks and stale residue migrates under the stable lock", async (t) => {
   const { snapshotStore, stableLock, committer } = await lockingWorkspace(t);
   await mkdir(join(snapshotStore, "snapshots"), { recursive: true });

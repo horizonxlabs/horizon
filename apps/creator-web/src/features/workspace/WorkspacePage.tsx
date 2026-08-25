@@ -1,33 +1,43 @@
 import { ArrowUpRight, ChevronLeft, RotateCw, Send, Square } from "lucide-react";
 import { Button, Tabs, Textarea } from "@evcp/ui";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from "react";
 import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
 import { BugReportBox } from "./BugReportBox";
 import { QuickMessages } from "./QuickMessages";
-import { VibeActionSummary } from "./VibeActionSummary";
 import { WorkspaceHistoryPanel } from "./WorkspaceHistoryPanel";
 import { VibeUserBubble } from "./VibeUserBubble";
-import { VibeReasoning } from "./VibeReasoning";
-import { VibeMarkdown } from "./VibeMarkdown";
+import { VibeTurnTimeline } from "./VibeTurnTimeline";
+import { VibeActionSummary } from "./VibeActionSummary";
 import { WorkspaceCodePanel } from "./WorkspaceCodePanel";
 import { WorkspaceAttachmentButton } from "./WorkspaceAttachmentButton";
 import { ProjectFileStatus, WorkspaceRequestFailure } from "./WorkspaceFailureMessages";
 import { buildQuickMessages } from "./quick-messages";
-import { stripSuggestions } from "./vibe-suggest";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
-import { extractQuestions, stripQuestions } from "./vibe-questions";
+import { extractQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
 import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
-import { currentWorkspaceTurnStart } from "./workspace-turn";
 import { usePreviewGuards } from "./use-preview-guards";
 import { usePreviewAuthorization } from "./use-preview-authorization";
+import { currentWorkspaceTurnStart } from "./workspace-turn";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
+// react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
+// Node test environments (render-smoke) never pulls in the CSS/grid module.
 const WorkspaceDatabasePanel = lazy(() => import("./WorkspaceDatabasePanel"));
+
+const CHAT_PANE_WIDTH_STORAGE_KEY = "evcp_creator_chat_pane_width";
+const DEFAULT_CHAT_PANE_WIDTH = 36;
+const MIN_CHAT_PANE_WIDTH = 28;
+const MAX_CHAT_PANE_WIDTH = 60;
+const CHAT_PANE_COLLAPSE_THRESHOLD = 26;
 export type WorkspaceView = "conversation" | "preview" | "code" | "database";
 const MOBILE_VIEWS: WorkspaceView[] = ["conversation", "preview", "code", "database"];
+
+function clampChatPaneWidth(value: number): number {
+  return Math.min(MAX_CHAT_PANE_WIDTH, Math.max(MIN_CHAT_PANE_WIDTH, value));
+}
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -63,6 +73,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   } = app;
   const [showPublish, setShowPublish] = useState(false);
   const [mobileView, setMobileView] = useState<WorkspaceView | null>("conversation");
+  const [chatPaneWidth, setChatPaneWidth] = useState(DEFAULT_CHAT_PANE_WIDTH);
+  const [isResizingPanels, setIsResizingPanels] = useState(false);
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
+  const splitViewRef = useRef<HTMLDivElement>(null);
+  const chatPaneWidthRef = useRef(DEFAULT_CHAT_PANE_WIDTH);
+  const isChatCollapsedRef = useRef(false);
+  // Auto-scroll to the newest output, but never yank the user back down while they scroll up.
   const threadRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const handleThreadScroll = () => {
@@ -73,6 +90,84 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     const el = threadRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [vibeMessages, isVibing, vibeStatus]);
+  useEffect(() => {
+    const savedValue = window.localStorage.getItem(CHAT_PANE_WIDTH_STORAGE_KEY);
+    const savedWidth = savedValue === null ? Number.NaN : Number(savedValue);
+    if (savedValue !== null && savedWidth === 0) {
+      isChatCollapsedRef.current = true;
+      setIsChatCollapsed(true);
+    } else if (Number.isFinite(savedWidth)) {
+      const width = clampChatPaneWidth(savedWidth);
+      chatPaneWidthRef.current = width;
+      setChatPaneWidth(width);
+    }
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem(
+      CHAT_PANE_WIDTH_STORAGE_KEY,
+      isChatCollapsed ? "0" : String(chatPaneWidth)
+    );
+  }, [chatPaneWidth, isChatCollapsed]);
+  useEffect(() => {
+    if (!isResizingPanels) return;
+    let frame: number | undefined;
+    let latestClientX = 0;
+    const resizeFromPointer = (clientX: number) => {
+      const splitView = splitViewRef.current;
+      const bounds = splitView?.getBoundingClientRect();
+      if (!splitView || !bounds?.width) return;
+      const rawWidth = ((clientX - bounds.left) / bounds.width) * 100;
+      const shouldCollapse = rawWidth <= CHAT_PANE_COLLAPSE_THRESHOLD;
+      if (shouldCollapse) {
+        isChatCollapsedRef.current = true;
+        splitView.classList.add("is-chat-collapsed");
+        return;
+      }
+      isChatCollapsedRef.current = false;
+      splitView.classList.remove("is-chat-collapsed");
+      const minWidth = Math.max(MIN_CHAT_PANE_WIDTH, (320 / bounds.width) * 100);
+      const maxWidth = Math.max(
+        minWidth,
+        Math.min(MAX_CHAT_PANE_WIDTH, 100 - (400 / bounds.width) * 100)
+      );
+      const width = Math.min(maxWidth, Math.max(minWidth, rawWidth));
+      chatPaneWidthRef.current = width;
+      splitView.style.setProperty("--vibe-chat-width", `${width}%`);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      latestClientX = event.clientX;
+      if (frame !== undefined) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = undefined;
+        resizeFromPointer(latestClientX);
+      });
+    };
+    const stopResizing = () => {
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+        frame = undefined;
+        resizeFromPointer(latestClientX);
+      }
+      setChatPaneWidth(chatPaneWidthRef.current);
+      setIsChatCollapsed(isChatCollapsedRef.current);
+      setIsResizingPanels(false);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResizing, { once: true });
+    window.addEventListener("pointercancel", stopResizing, { once: true });
+    window.addEventListener("blur", stopResizing, { once: true });
+    document.body.classList.add("vibe-is-resizing");
+    return () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      window.removeEventListener("blur", stopResizing);
+      document.body.classList.remove("vibe-is-resizing");
+    };
+  }, [isResizingPanels]);
+  // Preview is addressed by the id-derived resource key (matches the container name), not the
+  // public slug, so it survives a rename. Project ids never contain hyphens.
   const previewSrc = `/preview/${selectedProject.id.replaceAll("_", "-")}`;
   const previewAuth = usePreviewAuthorization({
     projectId: selectedProject.id,
@@ -124,6 +219,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               items={WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
               active={vibeTab}
               onSelect={selectTab}
+              variant="segmented"
               aria-label="Workspace view"
             />
           </div>
@@ -173,7 +269,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           </Button>
         ))}
       </nav>
-      <div className="vibe-live-body" data-workspace-view={mobileView ?? "supporting"}>
+      <div
+        className={`vibe-live-body${isChatCollapsed ? " is-chat-collapsed" : ""}`}
+        data-workspace-view={mobileView ?? "supporting"}
+        ref={splitViewRef}
+        style={{ "--vibe-chat-width": `${chatPaneWidth}%` } as CSSProperties}
+      >
         <div className="vibe-live-chat-panel">
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && !vibeTechnicalDetails && (
@@ -202,44 +303,26 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     messageIndex >= currentTurnStart ? "vibe-turn-current" : "vibe-turn-compact"
                   }`}
                 >
-                  {message.reasoning && (
-                    <VibeReasoning
-                      reasoning={message.reasoning}
-                      // "Thinking" only while this is the active turn AND the answer has not started
-                      // yet (no answer text, no actions) — once output begins, the model is done
-                      // reasoning, so it relabels to "Thought process" and collapses.
-                      live={
-                        isVibing &&
-                        messageIndex === vibeMessages.length - 1 &&
-                        !message.text &&
-                        message.actions.length === 0
-                      }
-                    />
-                  )}
-                  <div className="vibe-message-text">
-                    {message.text && (
-                      <VibeMarkdown text={stripQuestions(stripSuggestions(message.text))} />
+                  <VibeTurnTimeline
+                    parts={message.parts}
+                    legacy={message.parts?.length ? message : { ...message, actions: [] }}
+                    live={isVibing && messageIndex === vibeMessages.length - 1}
+                  />
+                  {!message.parts?.length && <VibeActionSummary actions={message.actions} />}
+                  {isVibing &&
+                    messageIndex === vibeMessages.length - 1 &&
+                    (message.text || !message.reasoning) &&
+                    !message.parts?.length && (
+                      <span className="vibe-cursor-blink" aria-hidden="true">
+                        ▋
+                      </span>
                     )}
-                    {isVibing &&
-                      messageIndex === vibeMessages.length - 1 &&
-                      (message.text || !message.reasoning) && (
-                        <span className="vibe-cursor-blink" aria-hidden="true">
-                          ▋
-                        </span>
-                      )}
-                  </div>
                   {messageIndex === vibeMessages.length - 1 && !isVibing && (
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}
                       disabled={isVibing}
                       onSubmit={(answer) => void handleVibeChat({ prompt: answer })}
                     />
-                  )}
-                  <VibeActionSummary actions={message.actions} />
-                  {message.commitSha && (
-                    <div className="vibe-commit-chip">
-                      ⑂ committed {message.commitSha.slice(0, 8)} — available in History
-                    </div>
                   )}
                   {message.isPlan && message.text && !isVibing && (
                     <Button
@@ -305,6 +388,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-composer-wrap">
             <div className="vibe-live-composer">
               <Textarea
+                className="vibe-composer-textarea"
                 aria-label="Describe the change you want to make"
                 value={promptDraft}
                 onChange={(event) => setPromptDraft(event.target.value)}
@@ -314,7 +398,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     if (promptDraft.trim()) void handleVibeChat();
                   }
                 }}
-                placeholder="Describe the change you want to make"
+                placeholder={
+                  isVibing
+                    ? "Keep typing — your request will be queued"
+                    : "Ask Pi about the app or describe a change…"
+                }
                 rows={1}
               />
               <div className="vibe-composer-footer">
@@ -322,6 +410,19 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                   disabled={isUploadingProjectFile}
                   onFiles={(files) => void handleUploadProjectFiles(files)}
                 />
+                <div className="vibe-composer-shortcuts" aria-hidden="true">
+                  {isVibing ? (
+                    <span>Next prompt queues automatically</span>
+                  ) : (
+                    <>
+                      <kbd>↵</kbd>
+                      <span>send</span>
+                      <span className="vibe-composer-shortcuts-divider">·</span>
+                      <kbd>⇧↵</kbd>
+                      <span>new line</span>
+                    </>
+                  )}
+                </div>
                 <div className="vibe-composer-right">
                   {isVibing ? (
                     <Button
@@ -335,6 +436,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     </Button>
                   ) : null}
                   <Button
+                    className="vibe-composer-send"
                     variant="primary"
                     type="button"
                     onClick={() => void handleVibeChat()}
@@ -347,6 +449,67 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </div>
             </div>
           </div>
+        </div>
+        <div
+          className={`vibe-live-resizer${isResizingPanels ? " is-resizing" : ""}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize chat and preview panels"
+          aria-valuemin={MIN_CHAT_PANE_WIDTH}
+          aria-valuemax={MAX_CHAT_PANE_WIDTH}
+          aria-valuenow={Math.round(chatPaneWidth)}
+          tabIndex={0}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            if (isChatCollapsedRef.current) {
+              isChatCollapsedRef.current = false;
+              splitViewRef.current?.classList.remove("is-chat-collapsed");
+              const restoredWidth = Math.max(MIN_CHAT_PANE_WIDTH, chatPaneWidthRef.current);
+              chatPaneWidthRef.current = restoredWidth;
+              splitViewRef.current?.style.setProperty("--vibe-chat-width", `${restoredWidth}%`);
+              setIsChatCollapsed(false);
+            }
+            setIsResizingPanels(true);
+          }}
+          onPointerUp={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            setChatPaneWidth(chatPaneWidthRef.current);
+            setIsChatCollapsed(isChatCollapsedRef.current);
+            setIsResizingPanels(false);
+          }}
+          onPointerCancel={() => {
+            setChatPaneWidth(chatPaneWidthRef.current);
+            setIsChatCollapsed(isChatCollapsedRef.current);
+            setIsResizingPanels(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault();
+              setChatPaneWidth((width) => {
+                const next = clampChatPaneWidth(width - 2);
+                chatPaneWidthRef.current = next;
+                return next;
+              });
+            }
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              setChatPaneWidth((width) => {
+                const next = clampChatPaneWidth(width + 2);
+                chatPaneWidthRef.current = next;
+                return next;
+              });
+            }
+            if (event.key === "Home") {
+              event.preventDefault();
+              chatPaneWidthRef.current = DEFAULT_CHAT_PANE_WIDTH;
+              setChatPaneWidth(DEFAULT_CHAT_PANE_WIDTH);
+            }
+          }}
+        >
+          <span className="vibe-live-resizer-grip" aria-hidden="true" />
         </div>
         <div className="vibe-live-preview-panel">
           {vibeTab === "preview" && isPreviewAuthorized ? (

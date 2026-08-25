@@ -64,7 +64,7 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
             tone="info"
             badge="PRD"
             title="No PRD is available for this project"
-            lines={["Generate a PRD draft to define the product baseline for this project."]}
+            lines={["A PRD is drafted after project creation, or you can generate one here at any time."]}
           />
         )}
       </SectionCard>

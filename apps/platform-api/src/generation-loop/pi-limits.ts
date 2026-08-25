@@ -2,7 +2,10 @@ import type { PiAgentToolLimits } from "./pi-tool-policy";
 
 export type PiAgentLimits = PiAgentToolLimits & {
   maxModelRounds: number;
-  maxTurnTokens: number;
+  // Pi governs context with native auto-compaction. A cumulative token cap is optional because
+  // providers report the full resent context on every agent round, which is not a context-limit
+  // signal and otherwise aborts healthy Pi sessions.
+  maxTurnTokens?: number;
   modelRoundTimeoutMs: number;
   maxFileBytes: number;
   turnTimeoutMs: number;
@@ -12,15 +15,23 @@ export type PiAgentLimits = PiAgentToolLimits & {
 };
 
 const defaults: PiAgentLimits = {
-  maxModelRounds: 12,
-  maxTurnTokens: 160_000,
+  // Pi uses one governed model round per tool-response cycle. A normal continuation can
+  // legitimately need to inspect several prior files, write several components, then
+  // finish its response and pass workspace validation. Twelve rounds truncated that
+  // healthy path during real Creator builds and rolled back all successful writes.
+  // Keep a firm cap (and the separate token, tool-call, reasoning, and time budgets),
+  // but leave sufficient room for a multi-file continuation to reach finalization.
+  maxModelRounds: 20,
   modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
   maxToolOutputBytes: 65_536,
   maxToolInputBytes: 120_000,
   maxFileBytes: 120_000,
-  turnTimeoutMs: 600_000,
+  // The entire turn needs to outlive a sequence of slow local-model rounds. Ten minutes
+  // aborted a real build after it had only inspected the UI kit; retain a finite ceiling
+  // while permitting a complete inspect → implement → validate cycle.
+  turnTimeoutMs: 1_800_000,
   validationRetries: 2,
   // A model that hits one disallowed/failed tool call (e.g. tries to rewrite package.json
   // directly instead of using the install tool) but otherwise wrote real, working files can
@@ -35,12 +46,14 @@ const defaults: PiAgentLimits = {
   // even ends — observed in practice as the agent oscillating between two plans forever.
   // Cutting a round short once its reasoning alone passes this budget turns that into a
   // fast, legible error instead of a multi-minute silent stall.
-  maxReasoningChars: 12_000
+  // Small local models often produce a long hidden deliberation before their first
+  // tool call. 12k cuts off legitimate first builds; keep a finite default so a
+  // genuinely stalled turn still ends well before the hard maximum.
+  maxReasoningChars: 60_000
 };
 
 const maximums: PiAgentLimits = {
   maxModelRounds: 64,
-  maxTurnTokens: 1_000_000,
   // Equal to the default until here: EVCP_PI_MODEL_ROUND_TIMEOUT_MS could never raise the
   // per-round deadline past the platform's own 5-minute default, which starves slow (e.g.
   // local/self-hosted) models that legitimately take longer than 5 minutes to answer a
@@ -61,7 +74,7 @@ const maximums: PiAgentLimits = {
 export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): PiAgentLimits {
   return {
     maxModelRounds: limit(overrides.maxModelRounds, "EVCP_PI_MAX_MODEL_ROUNDS", "maxModelRounds"),
-    maxTurnTokens: limit(overrides.maxTurnTokens, "EVCP_PI_MAX_TURN_TOKENS", "maxTurnTokens"),
+    maxTurnTokens: optionalLimit(overrides.maxTurnTokens, "EVCP_PI_MAX_TURN_TOKENS", 1_000_000),
     modelRoundTimeoutMs: limit(
       overrides.modelRoundTimeoutMs,
       "EVCP_PI_MODEL_ROUND_TIMEOUT_MS",
@@ -99,10 +112,22 @@ export function resolvePiAgentLimits(overrides: Partial<PiAgentLimits> = {}): Pi
   };
 }
 
+function optionalLimit(
+  override: number | undefined,
+  environmentName: string,
+  maximum: number
+): number | undefined {
+  const raw = override ?? process.env[environmentName];
+  if (raw === undefined || raw === "") return undefined;
+  const candidate = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(candidate) || !Number.isInteger(candidate) || candidate < 1) return undefined;
+  return Math.min(candidate, maximum);
+}
+
 function limit(
   override: number | undefined,
   environmentName: string,
-  key: keyof PiAgentLimits
+  key: Exclude<keyof PiAgentLimits, "maxTurnTokens">
 ): number {
   const candidate = override ?? Number(process.env[environmentName] ?? defaults[key]);
   if (!Number.isFinite(candidate) || !Number.isInteger(candidate) || candidate < 1) {

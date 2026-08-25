@@ -67,6 +67,22 @@ test("PRD persistence service generates baseline and lists persisted sections", 
   );
 });
 
+test("first build gets an immediate baseline without waiting for a separate PRD model call", async () => {
+  const service = createPrdRepositoryBackedService(new MemoryPrdPersistenceClient());
+
+  const baseline = await service.ensureInitialBaseline(creatorActor, project, {
+    sourcePrompt: "Build a leave request app with manager approval."
+  });
+
+  assert.equal(baseline.isBaseline, true);
+  assert.equal(baseline.version, "1.0");
+  assert.equal(baseline.sourcePrompt, "Build a leave request app with manager approval.");
+  assert.equal(
+    baseline.sections.some((section) => section.key === "business_objective"),
+    true
+  );
+});
+
 test("runtime persistence wiring exposes PRD service and routes", () => {
   assert.match(appFactory, /prdPersistence\?: PrdRepositoryBackedService/);
   assert.match(

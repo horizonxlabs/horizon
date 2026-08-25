@@ -117,3 +117,25 @@ test("Auto prompt carries the Golden Rule, suggest/question tags, and design gui
   assert.match(prompt, /Layout recipes/i);
   assert.match(prompt, /mock-data\.ts/);
 });
+
+// Regression: Auto mode never told the model the preview renders app/page.tsx, so a first
+// build could land entirely on an orphan route (e.g. app/btc-price/page.tsx) while the live
+// preview kept showing the untouched starter homepage — invisible until told to navigate.
+test("Auto and Build prompts both anchor the model to app/page.tsx as the live preview", () => {
+  const template = { name: "nextjs-base", lockedFiles: [], files: [] };
+  const input = { template, contextFiles: [], rollingSummary: null };
+
+  const autoPrompt = buildAutoSystemPrompt(input);
+  const buildPrompt = buildSystemPrompt(input);
+
+  assert.match(autoPrompt, /live preview always renders app\/page\.tsx/i);
+  assert.match(
+    autoPrompt,
+    /core or primary feature.*put it directly in app\/page\.tsx/is
+  );
+  assert.match(buildPrompt, /preview homepage is app\/page\.tsx/i);
+  assert.match(
+    buildPrompt,
+    /core or primary feature.*put it directly in app\/page\.tsx/is
+  );
+});

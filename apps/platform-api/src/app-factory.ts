@@ -650,8 +650,31 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       services.auth.requireRole(user, ["admin", "creator"]);
       const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
-      const baseline = await prdPersistence.getCurrent(user, project);
       const prompt = String(request.body?.prompt ?? "");
+      let baseline;
+      try {
+        baseline = await prdPersistence.getCurrent(user, project);
+      } catch (error) {
+        // getCurrent() throws one of two messages for a prompt-first project that has
+        // never had a PRD confirmed: "No PRD document for project X" (no document row at
+        // all) or "No current PRD version for project X" (document exists, no current
+        // version set yet). Both mean the same thing here — bootstrap a baseline — so
+        // match on either verbatim message rather than assuming a shared prefix.
+        const isMissingPrd =
+          error instanceof ValidationError &&
+          /^No (PRD document|current PRD version) for project /.test(error.message);
+        if (!isMissingPrd) throw error;
+        baseline = await prdPersistence.ensureInitialBaseline(user, project, {
+          sourcePrompt: project.businessProblem || prompt
+        });
+        await corePersistence.recordAudit({
+          actorId: user.id,
+          action: "prd.baseline.bootstrapped",
+          resourceType: "prd_version",
+          resourceId: baseline.id,
+          metadata: { projectId: project.id, source: "first_workspace_build" }
+        });
+      }
       const agentMode = resolveWorkspaceAgentMode(request.body);
       if (agentMode === "plan") {
         const guardrail = services.guardrails.evaluatePrompt(user, {
@@ -2335,6 +2358,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
+  rawApp.all("/projects/:projectId/chat/active", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
+  rawApp.all("/projects/:projectId/chat/cancel", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/restore", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
 
   const recordPublishAudit = (event: { action: string; projectId: string; metadata?: Record<string, unknown> }) =>

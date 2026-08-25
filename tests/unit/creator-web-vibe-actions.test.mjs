@@ -6,6 +6,8 @@ const { vibeActionVerb, vibeActionIcon, VIBE_ACTION_VERBS } =
 
 test("vibeActionVerb: returns the active verb while running, for every known type", () => {
   assert.equal(vibeActionVerb("file", "running"), "Creating");
+  assert.equal(vibeActionVerb("read", "running"), "Inspecting");
+  assert.equal(vibeActionVerb("list", "running"), "Listing");
   assert.equal(vibeActionVerb("edit", "running"), "Editing");
   assert.equal(vibeActionVerb("shell", "running"), "Running");
   assert.equal(vibeActionVerb("migration", "running"), "Migrating");
@@ -13,6 +15,8 @@ test("vibeActionVerb: returns the active verb while running, for every known typ
 
 test("vibeActionVerb: returns the done verb once complete, for every known type", () => {
   assert.equal(vibeActionVerb("file", "done"), "Created");
+  assert.equal(vibeActionVerb("read", "done"), "Inspected");
+  assert.equal(vibeActionVerb("list", "done"), "Listed");
   assert.equal(vibeActionVerb("edit", "done"), "Edited");
   assert.equal(vibeActionVerb("shell", "done"), "Ran");
   assert.equal(vibeActionVerb("migration", "done"), "Migrated");
@@ -42,6 +46,13 @@ test("vibeActionIcon: falls back to a bullet for unrecognized types", () => {
   assert.equal(vibeActionIcon("unknown-type"), "•");
 });
 
-test("VIBE_ACTION_VERBS: exposes exactly the four documented action types", () => {
-  assert.deepEqual(Object.keys(VIBE_ACTION_VERBS).sort(), ["edit", "file", "migration", "shell"]);
+test("VIBE_ACTION_VERBS: exposes all documented action types", () => {
+  assert.deepEqual(Object.keys(VIBE_ACTION_VERBS).sort(), [
+    "edit",
+    "file",
+    "list",
+    "migration",
+    "read",
+    "shell"
+  ]);
 });

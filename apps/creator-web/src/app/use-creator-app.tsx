@@ -211,9 +211,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleSelectProject(
     project: CreatorProjectView,
     targetPage: CreatorPage = creatorPage,
-    options: { push?: boolean } = {}
+    options: { push?: boolean; provisionWorkspace?: boolean } = {}
   ) {
-    const { push = true } = options;
+    const { push = true, provisionWorkspace = push } = options;
     const selectableTargetPage = projectSwitchTargetPage(targetPage);
     projectRuntimeGuardRef.current.invalidate();
     setBootstrap((current) => ({ ...current, selectedProject: project }));
@@ -224,7 +224,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
-    const enteringWorkspace = selectableTargetPage === "workspace";
+    const enteringWorkspace = selectableTargetPage === "workspace" && provisionWorkspace;
     setIsEnteringWorkspace(enteringWorkspace);
     await loadProjectRuntime(
       request,

@@ -13,11 +13,13 @@ export function Tabs<T extends string>({
   items,
   active,
   onSelect,
+  variant = "underline",
   "aria-label": ariaLabel
 }: {
   items: ReadonlyArray<TabItem<T>>;
   active: T;
   onSelect: (id: T) => void;
+  variant?: "underline" | "segmented";
   "aria-label"?: string;
 }) {
   return (
@@ -25,7 +27,12 @@ export function Tabs<T extends string>({
       <div
         role="tablist"
         aria-label={ariaLabel}
-        className="flex flex-wrap gap-1 border-b border-border"
+        className={cn(
+          "flex max-w-full gap-1",
+          variant === "segmented"
+            ? "overflow-x-auto rounded-xl border border-border bg-surface-muted p-1 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+            : "flex-wrap border-b border-border"
+        )}
       >
         {items.map((item) => {
           const selected = item.id === active;
@@ -37,8 +44,17 @@ export function Tabs<T extends string>({
                 aria-selected={selected}
                 onClick={() => onSelect(item.id)}
                 className={cn(
-                  "-mb-px rounded-none border-b-2 bg-transparent px-4 py-2 text-sm font-medium outline-none",
-                  selected ? "border-primary text-primary" : "border-transparent text-muted hover:text-body"
+                  "whitespace-nowrap text-sm font-medium outline-none transition-[background-color,box-shadow,color] duration-150 focus-visible:ring-2 focus-visible:ring-primary-soft",
+                  variant === "segmented"
+                    ? "rounded-lg px-3 py-1.5"
+                    : "-mb-px rounded-none border-b-2 bg-transparent px-4 py-2",
+                  selected
+                    ? variant === "segmented"
+                      ? "bg-primary-soft text-primary shadow-sm"
+                      : "border-primary text-primary"
+                    : variant === "segmented"
+                      ? "bg-transparent text-muted hover:bg-surface hover:text-body"
+                      : "border-transparent text-muted hover:text-body"
                 )}
               >
                 {item.label}

@@ -40,7 +40,7 @@ export function VibeRestorePoint({
   if (confirming) {
     return (
       <div className="vibe-restore-confirm" role="alertdialog" aria-label="Confirm restore">
-        <span>Restore the code to this point? Later work will be removed.</span>
+        <span>Restore code to this point? All later work will be removed.</span>
         <button type="button" disabled={busy} onClick={() => void runRestore()}>
           {busy ? "Restoring…" : "Confirm"}
         </button>

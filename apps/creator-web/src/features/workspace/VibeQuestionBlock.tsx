@@ -40,19 +40,19 @@ export function VibeQuestionBlock({
             }
           >
             <option value="" disabled>
-              Select an answer
+              Select an answer…
             </option>
             {question.options.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
-            <option value={OTHER}>Other — type your answer</option>
+            <option value={OTHER}>Other — enter your own</option>
           </Select>
           {choices[question.id] === OTHER && (
             <Input
               aria-label={`Your answer: ${question.question}`}
-              placeholder="Type your answer"
+              placeholder="Enter your answer"
               value={customs[question.id] ?? ""}
               disabled={disabled}
               onChange={(event) =>

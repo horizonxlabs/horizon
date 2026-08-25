@@ -20,14 +20,14 @@ export function WorkspaceHistoryPanel({
   if (versions.length === 0) {
     return (
       <div className="hz-db-empty" role="status">
-        No versions yet. Each successful AI build creates a version you can restore here.
+        No versions yet. Each successful AI build is saved here so you can restore it later.
       </div>
     );
   }
   return (
     <div className="vibe-history-panel" aria-label="Version history">
       <p className="vibe-history-hint">
-        Choose the version created by a prompt. Restoring removes work completed after that version.
+        Choose a version created from a previous prompt. Restoring it removes all later changes.
       </p>
       <ol className="vibe-history-list">
         {versions.map((version) => (

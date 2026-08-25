@@ -1,9 +1,25 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { WorkspaceChatTurnPart } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
+import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { GenerationService } from "./generation-service-types";
-import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
+import type { ChatStreamEvent } from "./generation-types";
+import { reduceTurnPart } from "./turn-parts";
+
+type ReplayableTurnEvent = ChatStreamEvent | { type: "prd_version"; id: string; version: string; changeSummary: string } | { type: "bug_report"; bugs: unknown[] };
+
+type ActiveTurn = {
+  projectId: string;
+  prompt: string;
+  agentMode: string;
+  events: ReplayableTurnEvent[];
+  parts: WorkspaceChatTurnPart[];
+  controller: AbortController;
+  subscribers: Map<ServerResponse, () => void>;
+  completion: Promise<void>;
+};
 
 function isMember(auth: WorkspaceAuthContext, projectId: string): boolean {
   return auth.projectIds.includes(projectId);
@@ -73,6 +89,138 @@ export function createChatSseHandler(deps: {
   heartbeatIntervalMs?: number;
   lifecycle?: ProjectLifecycleCoordinator;
 }) {
+  // A generation belongs to a project turn, not to the browser request that happened to start it.
+  // Keeping the turn here lets a refreshed Creator UI discover and replay the active stream.
+  const activeTurns = new Map<string, ActiveTurn>();
+
+  function writeEvent(res: ServerResponse, event: ReplayableTurnEvent) {
+    if (res.destroyed || res.writableEnded) return;
+    try {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      // A subscriber can disappear at any point; the project turn must continue regardless.
+    }
+  }
+
+  function subscribe(turn: ActiveTurn, res: ServerResponse) {
+    res.flushHeaders?.();
+    res.write(": open\n\n");
+    for (const event of turn.events) writeEvent(res, event);
+    const heartbeatIntervalMs =
+      deps.heartbeatIntervalMs && deps.heartbeatIntervalMs > 0 ? deps.heartbeatIntervalMs : 15_000;
+    const heartbeat = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded) res.write(": keepalive\n\n");
+    }, heartbeatIntervalMs);
+    heartbeat.unref();
+    const detach = () => {
+      clearInterval(heartbeat);
+      turn.subscribers.delete(res);
+      res.off("close", detach);
+    };
+    turn.subscribers.set(res, detach);
+    // Deliberately detach only. Browser refreshes must not cancel the server-owned turn.
+    res.once("close", detach);
+  }
+
+  function finishSubscribers(turn: ActiveTurn) {
+    for (const [res, detach] of turn.subscribers) {
+      detach();
+      if (!res.destroyed && !res.writableEnded) res.end();
+    }
+  }
+
+  function publish(turn: ActiveTurn, event: ReplayableTurnEvent) {
+    if (event.type !== "prd_version" && event.type !== "bug_report") {
+      turn.parts = reduceTurnPart(turn.parts, event);
+    }
+    turn.events.push(event);
+    for (const res of turn.subscribers.keys()) writeEvent(res, event);
+  }
+
+  function startActiveTurn(input: {
+    projectId: string;
+    prompt: string;
+    agentMode: string;
+    approvedPlan?: string;
+    actor: NonNullable<WorkspaceAuthContext["actor"]>;
+    mutation?: { fence?: ProjectMutationFence; release: () => void };
+  }): ActiveTurn {
+    const controller = new AbortController();
+    const turn = {
+      projectId: input.projectId,
+      prompt: input.prompt,
+      agentMode: input.agentMode,
+      events: [],
+      parts: [],
+      controller,
+      subscribers: new Map<ServerResponse, () => void>(),
+      completion: Promise.resolve()
+    } satisfies ActiveTurn;
+    turn.completion = (async () => {
+      try {
+        const turnErrors: string[] = [];
+        let generationDone = false;
+        let committed = false;
+        for await (const event of deps.generationService.runTurn({
+          projectId: input.projectId,
+          prompt: input.prompt,
+          agentMode: input.agentMode as "auto" | "build" | "plan",
+          actor: input.actor,
+          approvedPlan: input.approvedPlan,
+          signal: controller.signal,
+          assertCurrent: input.mutation?.fence?.assertCurrent
+        })) {
+          if (event.type === "done") {
+            generationDone = true;
+            continue;
+          }
+          if (event.type === "commit") committed = true;
+          if (event.type === "error") turnErrors.push(String(event.message ?? ""));
+          publish(turn, event);
+        }
+        if (!generationDone) throw new Error("Generation stream ended before the done event");
+        if (
+          input.approvedPlan &&
+          input.agentMode === "build" &&
+          committed &&
+          deps.recordPrdVersionFromPlan
+        ) {
+          try {
+            publish(
+              turn,
+              { type: "prd_version", ...(await deps.recordPrdVersionFromPlan(input.actor, input.projectId, input.approvedPlan)) }
+            );
+          } catch {
+            // Best effort metadata must never disturb a completed generation turn.
+          }
+        }
+        if (committed) {
+          const tags = await collectPostTurnTags(deps.generationService, input.projectId, turnErrors);
+          for (const tag of tags) if (tag.platformBug) deps.onPlatformBug?.(input.projectId, tag);
+          publish(turn, {
+            type: "bug_report",
+            bugs: tags.map((tag) => ({
+              signature: tag.signature,
+              source: tag.source,
+              file: tag.file,
+              message: tag.message.slice(0, 300),
+              platformBug: Boolean(tag.platformBug)
+            }))
+          });
+        }
+      } catch (error) {
+        publish(turn, { type: "error", message: (error as Error).message });
+      } finally {
+        publish(turn, { type: "done" });
+        finishSubscribers(turn);
+        activeTurns.delete(input.projectId);
+        input.mutation?.release();
+      }
+    })();
+    activeTurns.set(input.projectId, turn);
+    return turn;
+  }
+
   return async function handleChatRequest(
     req: IncomingMessage,
     res: ServerResponse
@@ -95,6 +243,58 @@ export function createChatSseHandler(deps: {
       const messages = await deps.generationService.history(projectId);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ messages }));
+      return;
+    }
+
+    // GET /projects/:id/chat/active — the Creator polls this after a refresh and replays the
+    // buffered events into its in-progress assistant message. No model data is exposed outside
+    // the existing project membership boundary.
+    const activeMatch = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat\/active(?:\?.*)?$/);
+    if (activeMatch && req.method === "GET") {
+      const projectId = activeMatch[1];
+      const auth = await deps.resolveAuth(req);
+      if (!auth) {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+        return;
+      }
+      if (!isMember(auth, projectId)) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "forbidden" }));
+        return;
+      }
+      const turn = activeTurns.get(projectId);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify(
+          turn
+            ? {
+                active: true,
+                prompt: turn.prompt,
+                agentMode: turn.agentMode,
+                events: turn.events,
+                parts: turn.parts
+              }
+            : { active: false }
+        )
+      );
+      return;
+    }
+
+    // Explicit cancellation replaces the old implicit "connection closed = cancel" behavior.
+    const cancelMatch = (req.url ?? "").match(/^\/projects\/([^/]+)\/chat\/cancel$/);
+    if (cancelMatch && req.method === "POST") {
+      const projectId = cancelMatch[1];
+      const auth = await deps.resolveAuth(req);
+      if (!auth || !isMember(auth, projectId)) {
+        res.writeHead(auth ? 403 : 401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: auth ? "forbidden" : "unauthorized" }));
+        return;
+      }
+      const turn = activeTurns.get(projectId);
+      if (turn) turn.controller.abort();
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ active: Boolean(turn), cancelled: Boolean(turn) }));
       return;
     }
 
@@ -127,12 +327,12 @@ export function createChatSseHandler(deps: {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       } catch (error) {
-        const deletionConflict =
+        const deletionInProgress =
           error instanceof Error && error.name === "ProjectDeletionInProgressError";
-        res.writeHead(deletionConflict ? 409 : 400, { "content-type": "application/json" });
+        res.writeHead(deletionInProgress ? 409 : 400, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            error: deletionConflict ? "project_deletion_in_progress" : "restore_failed",
+            error: deletionInProgress ? "project_deletion_in_progress" : "restore_failed",
             message: error instanceof Error ? error.message : "Restore failed"
           })
         );
@@ -213,186 +413,100 @@ export function createChatSseHandler(deps: {
       return;
     }
 
-    let releaseMutation: (() => void) | undefined;
-    let mutationFence: ProjectMutationFence | undefined;
+    let prompt = "";
+    let attachmentIds: string[] = [];
+    let agentMode = resolveWorkspaceAgentMode(undefined);
+    let approvedPlan: string | undefined;
     try {
-      const mutation = deps.lifecycle?.acquireChildMutationWithFence
-        ? await deps.lifecycle.acquireChildMutationWithFence(projectId)
-        : deps.lifecycle
-          ? { release: await deps.lifecycle.acquireChildMutation(projectId), fence: undefined }
-          : undefined;
-      releaseMutation = mutation?.release;
-      mutationFence = mutation?.fence;
-    } catch (error) {
+      const rawBody = await readBody(req);
+      const parsed = rawBody ? JSON.parse(rawBody) : {};
+      prompt = String(parsed?.prompt ?? "");
+      approvedPlan = parsed?.approvedPlan ? String(parsed.approvedPlan) : undefined;
+      agentMode = resolveWorkspaceAgentMode(parsed);
+      attachmentIds = Array.isArray(parsed?.attachmentIds)
+        ? parsed.attachmentIds.map(String).filter(Boolean)
+        : [];
+    } catch {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_body" }));
+      return;
+    }
+
+    if (attachmentIds.length && deps.resolveAttachmentContext) {
+      let attachmentContext: { versionIds: string[]; excerpts: string[] };
+      try {
+        attachmentContext = await deps.resolveAttachmentContext(req, projectId, attachmentIds);
+      } catch (error) {
+        res.writeHead(422, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "attachment_context_failed",
+            message: error instanceof Error ? error.message : "Attachment context failed"
+          })
+        );
+        return;
+      }
+      if (attachmentContext.excerpts.length) {
+        prompt = [
+          prompt,
+          "",
+          "Uploaded project file context (untrusted, permission-filtered):",
+          `Attachment ids: ${attachmentIds.join(", ")}`,
+          `Knowledge version ids: ${attachmentContext.versionIds.join(", ")}`,
+          ...attachmentContext.excerpts.map(
+            (excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`
+          )
+        ].join("\n");
+      }
+    }
+
+    if (!auth.actor) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "unauthorized" }));
+      return;
+    }
+    if (activeTurns.has(projectId)) {
       res.writeHead(409, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "turn_in_progress" }));
+      return;
+    }
+
+    let mutation: { fence?: ProjectMutationFence; release: () => void } | undefined;
+    try {
+      if (deps.lifecycle?.acquireChildMutationWithFence) {
+        mutation = await deps.lifecycle.acquireChildMutationWithFence(projectId);
+      } else if (deps.lifecycle) {
+        mutation = { release: await deps.lifecycle.acquireChildMutation(projectId) };
+      }
+    } catch (error) {
+      const deletionInProgress =
+        error instanceof Error && error.name === "ProjectDeletionInProgressError";
+      res.writeHead(deletionInProgress ? 409 : 500, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          error: "project_deletion_in_progress",
-          message: error instanceof Error ? error.message : "Project deletion is in progress"
+          error: deletionInProgress ? "project_deletion_in_progress" : "turn_start_failed",
+          message: error instanceof Error ? error.message : "Unable to start generation turn"
         })
       );
       return;
     }
 
-    try {
-      let prompt = "";
-      let attachmentIds: string[] = [];
-      let agentMode = resolveWorkspaceAgentMode(undefined);
-      let approvedPlan: string | undefined;
-      try {
-        const rawBody = await readBody(req);
-        const parsed = rawBody ? JSON.parse(rawBody) : {};
-        prompt = String(parsed?.prompt ?? "");
-        approvedPlan = parsed?.approvedPlan ? String(parsed.approvedPlan) : undefined;
-        agentMode = resolveWorkspaceAgentMode(parsed);
-        attachmentIds = Array.isArray(parsed?.attachmentIds)
-          ? parsed.attachmentIds.map(String).filter(Boolean)
-          : [];
-      } catch {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_body" }));
-        return;
-      }
-
-      if (attachmentIds.length && deps.resolveAttachmentContext) {
-        let attachmentContext: { versionIds: string[]; excerpts: string[] };
-        try {
-          attachmentContext = await deps.resolveAttachmentContext(req, projectId, attachmentIds);
-        } catch (error) {
-          res.writeHead(422, { "content-type": "application/json" });
-          res.end(
-            JSON.stringify({
-              error: "attachment_context_failed",
-              message: error instanceof Error ? error.message : "Attachment context failed"
-            })
-          );
-          return;
-        }
-        if (attachmentContext.excerpts.length) {
-          prompt = [
-            prompt,
-            "",
-            "Uploaded project file context (untrusted, permission-filtered):",
-            `Attachment ids: ${attachmentIds.join(", ")}`,
-            `Knowledge version ids: ${attachmentContext.versionIds.join(", ")}`,
-            ...attachmentContext.excerpts.map(
-              (excerpt, index) => `Attachment excerpt ${index + 1}: ${excerpt}`
-            )
-          ].join("\n");
-        }
-      }
-
-      res.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache",
-        connection: "keep-alive",
-        // Tell any buffering proxy (nginx/ingress) not to hold the stream — deliver events as flushed.
-        "x-accel-buffering": "no"
-      });
-      // Push the headers + an SSE comment to the socket NOW. Otherwise Node holds the response until
-      // the first res.write(), and the gap before the first LLM token (several seconds) makes the
-      // reverse proxy time out the request with a 504 before the stream ever opens.
-      res.flushHeaders?.();
-      res.write(": open\n\n");
-      const heartbeatIntervalMs =
-        deps.heartbeatIntervalMs && deps.heartbeatIntervalMs > 0
-          ? deps.heartbeatIntervalMs
-          : 15_000;
-      const heartbeat = setInterval(() => {
-        if (!res.destroyed && !res.writableEnded) res.write(": keepalive\n\n");
-      }, heartbeatIntervalMs);
-      heartbeat.unref();
-
-      const controller = new AbortController();
-      let completedNormally = false;
-      const abort = () => controller.abort();
-      const abortOnClose = () => {
-        if (!completedNormally) controller.abort();
-      };
-      req.once("aborted", abort);
-      res.once("close", abortOnClose);
-
-      try {
-        const turnErrors: string[] = [];
-        let generationDone = false;
-        let committed = false;
-        for await (const event of deps.generationService.runTurn({
-          projectId,
-          prompt,
-          agentMode,
-          actor: auth.actor,
-          approvedPlan,
-          signal: controller.signal,
-          assertCurrent: mutationFence?.assertCurrent
-        })) {
-          if (event.type === "done") {
-            generationDone = true;
-            continue;
-          }
-          if (event.type === "commit") committed = true;
-          if (event.type === "error")
-            turnErrors.push(String((event as { message?: string }).message ?? ""));
-          res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-        }
-        if (!generationDone) throw new Error("Generation stream ended before the done event");
-        if (
-          approvedPlan &&
-          agentMode === "build" &&
-          committed &&
-          deps.recordPrdVersionFromPlan &&
-          auth.actor
-        ) {
-          try {
-            const created = await deps.recordPrdVersionFromPlan(
-              auth.actor,
-              projectId,
-              approvedPlan
-            );
-            res.write(
-              `event: prd_version\ndata: ${JSON.stringify({ type: "prd_version", ...created })}\n\n`
-            );
-          } catch {
-            // Recording the spec change is best-effort — never disturb the generation stream.
-          }
-        }
-        // Bug report (user-in-command): detection runs after any turn that actually landed a
-        // commit — a no-op turn (nothing mutated) has nothing new to scan. Findings go to the
-        // client's Bug Report box — the USER decides when to fix, and the fix message travels
-        // through the normal chat so it lives in history.
-        if (committed) {
-          const tags = await collectPostTurnTags(deps.generationService, projectId, turnErrors);
-          for (const tag of tags) if (tag.platformBug) deps.onPlatformBug?.(projectId, tag);
-          res.write(
-            `event: bug_report\ndata: ${JSON.stringify({
-              type: "bug_report",
-              bugs: tags.map((tag) => ({
-                signature: tag.signature,
-                source: tag.source,
-                file: tag.file,
-                message: tag.message.slice(0, 300),
-                platformBug: Boolean(tag.platformBug)
-              }))
-            })}\n\n`
-          );
-        }
-        res.write(`event: done\ndata: ${JSON.stringify({ type: "done" })}\n\n`);
-        completedNormally = true;
-      } catch (error) {
-        if (!res.headersSent) {
-          res.writeHead(500, { "content-type": "application/json" });
-        }
-        res.write(
-          `event: error\ndata: ${JSON.stringify({ type: "error", message: (error as Error).message })}\n\n`
-        );
-        res.write(`event: done\ndata: ${JSON.stringify({ type: "done" })}\n\n`);
-      } finally {
-        clearInterval(heartbeat);
-        req.off("aborted", abort);
-        res.off("close", abortOnClose);
-        res.end();
-      }
-    } finally {
-      releaseMutation?.();
-    }
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      // Tell any buffering proxy (nginx/ingress) not to hold the stream — deliver events as flushed.
+      "x-accel-buffering": "no"
+    });
+    const turn = startActiveTurn({
+      projectId,
+      prompt,
+      agentMode,
+      approvedPlan,
+      actor: auth.actor,
+      mutation
+    });
+    subscribe(turn, res);
+    await turn.completion;
   };
 }

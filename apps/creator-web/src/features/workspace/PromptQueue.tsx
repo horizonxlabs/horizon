@@ -12,7 +12,7 @@ export function PromptQueue({
 }) {
   if (!items.length) return null;
   return (
-    <section className="vibe-prompt-queue" aria-label="Queued work">
+    <section className="vibe-prompt-queue" aria-label="Queued requests">
       <div className="vibe-prompt-queue-head">
         <ListOrdered size={13} aria-hidden="true" />
         <span>Queued work ({items.length})</span>
@@ -21,7 +21,7 @@ export function PromptQueue({
         {items.map((item, index) => (
           <li key={item.id} className="vibe-prompt-queue-item">
             <span className={`vibe-prompt-queue-status${index === 0 ? " is-next" : ""}`}>
-              {index === 0 ? "Next" : `Queue position ${index + 1}`}
+              {index === 0 ? "Next" : `Queue ${index + 1}`}
             </span>
             <span className="vibe-prompt-queue-text" title={item.prompt}>
               {item.prompt}
