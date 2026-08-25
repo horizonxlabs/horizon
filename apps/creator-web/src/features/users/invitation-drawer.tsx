@@ -89,6 +89,7 @@ export function InviteUserForm({
         <Input
           ref={emailInputRef}
           id="invite-user-email"
+          className="max-md:min-h-11"
           type="email"
           autoComplete="email"
           required
@@ -102,6 +103,7 @@ export function InviteUserForm({
         <Field label="App role" htmlFor="invite-user-role">
           <Select
             id="invite-user-role"
+            className="max-md:min-h-11"
             aria-label="App role"
             value={value.roleKey}
             onChange={(event) => onChange("roleKey", event.target.value)}
@@ -113,6 +115,7 @@ export function InviteUserForm({
         <Field label="User type" htmlFor="invite-user-type">
           <Select
             id="invite-user-type"
+            className="max-md:min-h-11"
             aria-label="User type"
             value={value.userType}
             onChange={(event) => onChange("userType", event.target.value)}

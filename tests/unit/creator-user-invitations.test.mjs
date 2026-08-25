@@ -39,8 +39,12 @@ test("the invitation form collects email, role, user type, and note", () => {
   const html = renderToStaticMarkup(element);
 
   const selectOptions = [];
+  const responsiveControls = new Map();
   function collectSelectOptions(node) {
     if (!React.isValidElement(node)) return;
+    if (["invite-user-email", "invite-user-role", "invite-user-type"].includes(node.props.id)) {
+      responsiveControls.set(node.props.id, node.props.className);
+    }
     if (node.type === Select) {
       selectOptions.push(
         React.Children.toArray(node.props.children).map((option) => option.props.children)
@@ -51,6 +55,11 @@ test("the invitation form collects email, role, user type, and note", () => {
   collectSelectOptions(element);
 
   assert.match(html, /type="email"/);
+  assert.deepEqual([...responsiveControls], [
+    ["invite-user-email", "max-md:min-h-11"],
+    ["invite-user-role", "max-md:min-h-11"],
+    ["invite-user-type", "max-md:min-h-11"]
+  ]);
   assert.deepEqual(selectOptions, [
     ["Employee", "Manager"],
     ["Internal", "External"]
