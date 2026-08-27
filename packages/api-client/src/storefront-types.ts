@@ -3,6 +3,8 @@ export type StorefrontAppCardDto = {
   appId: string;
   projectId: string;
   slug: string;
+  subdomain?: string;
+  subdomainUrl?: string;
   name: string;
   description: string;
   ownerName: string;
