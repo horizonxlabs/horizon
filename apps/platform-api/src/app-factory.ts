@@ -11,6 +11,7 @@ import { createProjectDbAuditAdapter } from "./project-database-audit";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
 import { createInternalPublishPersistenceRequest, handleLegacyPublishApiRequest, handlePersistedPublishApiRequest, preflightPublishedSubdomain, resolvePublishAccessUrlConfig } from "./publish/app-store-publish-runtime";
 import { createDefaultPublishStack } from "./publish/factory";
+import { MemoryLaunchGrantStore, type LaunchGrantStore } from "./publish/launch-grant-store";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver, createPlatformBugAuditor } from "./generation-loop/governed-context";
@@ -103,6 +104,7 @@ export type PersistenceAwarePlatformApiServices = PlatformApiServices & {
   projectResourceCleanup?: (projectId: string, fence?: import("./project-lifecycle").ProjectDeletionFence) => Promise<void>;
   projectLifecycle?: ProjectLifecycleCoordinator;
   publishAccessUrlConfig?: PublishAccessUrlConfigDto;
+  launchGrantStore?: LaunchGrantStore;
 };
 export type CorePersistenceMode = "legacy" | "memory" | "prisma";
 type RuntimeEnv = Record<string, string | undefined>;
@@ -117,11 +119,12 @@ export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CoreP
 
 export async function createRuntimePlatformApiServices(env: RuntimeEnv = process.env): Promise<PersistenceAwarePlatformApiServices> {
   const publishAccessUrlConfig = resolvePublishAccessUrlConfig(env);
+  const mode = resolveCorePersistenceMode(env);
   const services: PersistenceAwarePlatformApiServices = {
     ...createPlatformApiServices({ publishAccessUrlConfig }),
-    publishAccessUrlConfig
+    publishAccessUrlConfig,
+    ...(mode === "memory" ? { launchGrantStore: new MemoryLaunchGrantStore() } : {})
   };
-  const mode = resolveCorePersistenceMode(env);
   const productionAiSecretStore: AiSecretStore =
     env.VAULT_ADDR && env.VAULT_TOKEN_FILE
       ? new VaultKvV2AiSecretStore({
@@ -2349,6 +2352,22 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         services,
         createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
       ),
+    launchGrantStore: services.launchGrantStore,
+    resolveAppLaunch: async ({ headers, appSlug }) => {
+      const detail = services.publishStorePersistence
+        ? await services.publishStorePersistence.getStoreAppDetail(
+            await resolvePersistenceUser(services, headers),
+            appSlug
+          )
+        : services.storefront.getAppDetail(services.auth.resolveCurrentUser(headers), appSlug);
+      return {
+        appSlug: detail.slug,
+        projectId: detail.projectId,
+        routePath: detail.route,
+        subdomain: detail.subdomain,
+        subdomainUrl: detail.subdomainUrl
+      };
+    },
     recordAudit: recordPublishAudit,
     lifecycle: projectLifecycle
   });

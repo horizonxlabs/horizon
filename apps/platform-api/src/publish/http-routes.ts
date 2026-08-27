@@ -7,9 +7,10 @@ import type { MigrationStore } from "../generation-loop/migration-store";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
-import { registerAppLaunchSessionRoute } from "./app-launch-session-route";
+import { registerAppLaunchSessionRoute, type AppLaunchAuthorization } from "./app-launch-session-route";
 import { resolveRawAppStoreSubdomain } from "./app-store-publish-runtime";
 import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
+import type { LaunchGrantStore } from "./launch-grant-store";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -29,7 +30,6 @@ export async function canAccessPublishedDeployment(
 }
 
 type HeaderBag = Record<string, string | string[] | undefined>;
-
 // Minimal raw-Express surface used by the publish + /apps serve handlers (mirrors the shape the
 // app-factory infers from its Nest http adapter).
 export interface PublishRawExpress {
@@ -120,6 +120,8 @@ export async function registerPublishHttpRoutes(opts: {
     subdomain?: string;
   }) => Promise<{ status: number; body: unknown }>;
   publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
+  launchGrantStore?: LaunchGrantStore;
+  resolveAppLaunch: (input: { headers: HeaderBag; appSlug: string }) => Promise<AppLaunchAuthorization>;
   recordAudit: (event: {
     action: string;
     projectId: string;
@@ -307,20 +309,21 @@ export async function registerPublishHttpRoutes(opts: {
         });
       }
     },
-    authorize: async (headers, _appSlug, requestedRoutePath) => {
+    authorize: async (headers, appSlug, requestedRoutePath) => {
       const match = requestedRoutePath?.trim().match(/^\/apps\/([a-zA-Z0-9_-]+)$/);
       if (!match) throw new Error("Published app route is invalid");
       const auth = await opts.resolvePublishAuth(headers);
       if (!auth) throw new Error("Platform session is unavailable");
       const slug = match[1];
-      const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () =>
-        rehydrateDeployment(slug, "production")
-      );
-      if (!decision.ok || !(await opts.canAccessDeployment(auth, decision.projectId))) {
+      const launch = await opts.resolveAppLaunch({ headers, appSlug });
+      if (launch.routePath !== `/apps/${slug}`) throw new Error("Published app route is unavailable");
+      const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () => rehydrateDeployment(slug, "production"));
+      if (!decision.ok || decision.projectId !== launch.projectId || !(await opts.canAccessDeployment(auth, decision.projectId))) {
         throw new Error("Published app access is unavailable");
       }
-      return { routePath: `/apps/${slug}` };
+      return launch;
     },
+    launchGrantStore: opts.launchGrantStore,
     secureCookie: (opts.env ?? process.env).NODE_ENV === "production"
   });
 
