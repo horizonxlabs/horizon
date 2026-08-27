@@ -12,13 +12,18 @@ import {
   startStoreKeycloakLogout
 } from "./platform-client";
 
+export type StoreAppItem = AppStoreItem & {
+  subdomain?: string;
+  subdomainUrl?: string;
+};
+
 export type StoreBootstrapState = {
   status: "loading" | "ready" | "error";
   userName?: string;
   email?: string;
   role?: PlatformRole;
-  myApps: AppStoreItem[];
-  availableApps: AppStoreItem[];
+  myApps: StoreAppItem[];
+  availableApps: StoreAppItem[];
   source: "Platform API";
   error?: string;
 };
@@ -30,7 +35,7 @@ export const initialStoreBootstrap: StoreBootstrapState = {
   source: "Platform API"
 };
 
-function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
+function appCardToStoreItem(app: StorefrontAppCardDto): StoreAppItem {
   return {
     id: app.id,
     slug: app.slug,
@@ -38,6 +43,8 @@ function appCardToStoreItem(app: StorefrontAppCardDto): AppStoreItem {
     description: app.description,
     owner: app.ownerName,
     route: app.route,
+    ...(app.subdomain !== undefined ? { subdomain: app.subdomain } : {}),
+    ...(app.subdomainUrl !== undefined ? { subdomainUrl: app.subdomainUrl } : {}),
     myRole: app.myRole,
     accessStatus: app.accessStatus,
     installStatus: app.installStatus,

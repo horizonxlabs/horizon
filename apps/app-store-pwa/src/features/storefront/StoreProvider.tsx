@@ -1,5 +1,4 @@
 import type { StoreAccessRequestResponse, StoreAppInstallationResponse } from "@evcp/api-client";
-import type { AppStoreItem } from "@evcp/types";
 import {
   createContext,
   type ReactNode,
@@ -16,6 +15,7 @@ import {
   clearStoreSessionBridge,
   initialStoreBootstrap,
   loadStoreBootstrap,
+  type StoreAppItem,
   type StoreBootstrapState
 } from "./bootstrap";
 import {
@@ -31,7 +31,7 @@ export type StorefrontContextValue = {
   bootstrap: StoreBootstrapState;
   logoutError?: string;
   homeRevision: number;
-  allApps: AppStoreItem[];
+  allApps: StoreAppItem[];
   device: StoreDeviceSnapshot;
   refreshHome(options?: StoreRefreshOptions): Promise<StoreRefreshResult>;
   toggleFavorite(appSlug: string): void;
@@ -95,7 +95,7 @@ function deviceStorage(): StoreDeviceStorage {
   }
 }
 
-function mergeApps(bootstrap: StoreBootstrapState): AppStoreItem[] {
+function mergeApps(bootstrap: StoreBootstrapState): StoreAppItem[] {
   const seen = new Set<string>();
   return [...bootstrap.myApps, ...bootstrap.availableApps].filter((app) => {
     if (seen.has(app.slug)) return false;
