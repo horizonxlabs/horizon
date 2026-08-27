@@ -27,30 +27,36 @@ function apiEndpoint(baseUrl, path) {
 }
 
 async function apiRequest(baseUrl, creatorToken, path, options = {}) {
-  const response = await fetch(apiEndpoint(baseUrl, path), {
-    method: options.method ?? "GET",
-    headers: {
-      authorization: `Bearer ${creatorToken}`,
-      ...(options.body === undefined ? {} : { "content-type": "application/json" })
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    redirect: "manual",
-    signal: AbortSignal.timeout(LIVE_TIMEOUT_MS)
-  });
+  const operation = options.operation ?? "Live API request";
+  let response;
+  try {
+    response = await fetch(apiEndpoint(baseUrl, path), {
+      method: options.method ?? "GET",
+      headers: {
+        authorization: `Bearer ${creatorToken}`,
+        ...(options.body === undefined ? {} : { "content-type": "application/json" })
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      redirect: "manual",
+      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS)
+    });
+  } catch {
+    throw new Error(`${operation} request failed`);
+  }
   requireCondition(
     response.status === (options.expectedStatus ?? 200),
-    `${options.operation ?? "Live API request"} failed with status ${response.status}`
+    `${operation} failed with status ${response.status}`
   );
 
   let envelope;
   try {
     envelope = await response.json();
   } catch {
-    throw new Error(`${options.operation ?? "Live API request"} returned invalid JSON`);
+    throw new Error(`${operation} returned invalid JSON`);
   }
   requireCondition(
     envelope && typeof envelope === "object" && "data" in envelope,
-    `${options.operation ?? "Live API request"} returned an invalid envelope`
+    `${operation} returned an invalid envelope`
   );
   return envelope.data;
 }
@@ -126,7 +132,16 @@ test(
       "Live registry subdomain URL did not match the publish result"
     );
 
-    const subdomainUrl = new URL(registryEntry.subdomainUrl);
+    let subdomainUrl;
+    try {
+      subdomainUrl = new URL(registryEntry.subdomainUrl);
+    } catch {
+      throw new Error("Live registry returned an invalid subdomain URL");
+    }
+    requireCondition(
+      isLocalHostname(subdomainUrl.hostname),
+      "Live registry returned a non-local subdomain URL"
+    );
     requireCondition(
       subdomainUrl.hostname.startsWith(`${subdomain}.`),
       "Live registry returned a subdomain URL for the wrong label"
@@ -200,11 +215,16 @@ test(
       `Authenticated subdomain root was unavailable with status ${rootResponse.status}`
     );
 
-    const fallbackResponse = await fetch(new URL(fallbackRoute, platformUrl.origin), {
-      headers: { authorization: `Bearer ${creatorToken}` },
-      redirect: "manual",
-      signal: AbortSignal.timeout(LIVE_TIMEOUT_MS)
-    });
+    let fallbackResponse;
+    try {
+      fallbackResponse = await fetch(new URL(fallbackRoute, platformUrl.origin), {
+        headers: { authorization: `Bearer ${creatorToken}` },
+        redirect: "manual",
+        signal: AbortSignal.timeout(LIVE_TIMEOUT_MS)
+      });
+    } catch {
+      throw new Error("Authenticated fallback app route request failed");
+    }
     requireCondition(
       fallbackResponse.status >= 200 && fallbackResponse.status < 400,
       `Fallback app route was unavailable with status ${fallbackResponse.status}`
