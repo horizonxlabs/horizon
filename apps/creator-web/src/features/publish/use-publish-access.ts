@@ -1,5 +1,7 @@
 import {
   normalizeSubdomainSuggestion,
+  PlatformApiError,
+  type AppStorePublishInput,
   type AppInvitationInput, type AppAccessSnapshotResponse,
   type AppStoreRegistryEntryDto,
   type PublishResultResponse,
@@ -13,6 +15,7 @@ import type { CreatorStatusTone } from "@/shared";
 import { createAccessView } from "./access-view";
 import { loadCreatorAccessState, loadCreatorPublishState } from "./api";
 import { type ProjectRequestGuard, useProjectRequestGuard } from "./project-request-guard";
+import { createVisibleDeployment } from "./publish-view";
 
 export function usePublishAccess({
   selectedProject,
@@ -52,6 +55,7 @@ export function usePublishAccess({
   type AccessDecisionRequest = { promise: Promise<void> };
   const accessDecisionRequests = useRef(new Map<string, AccessDecisionRequest>());
   const [isPublishingProject, setIsPublishingProject] = useState(false);
+  const [publishSubdomainError, setPublishSubdomainError] = useState<string>();
   const requestGuard = useProjectRequestGuard(selectedProject.id || undefined);
   const publishRefreshId = useRef(0);
   function setPublishMessage(message: string) {
@@ -83,31 +87,12 @@ export function usePublishAccess({
   const visibleRegistryEntry =
     publishResult?.registryEntry ??
     registryEntries.find((entry) => entry.projectId === selectedProject.id);
-  const latestRuntimeDeployment = [...runtimeDeployments]
-    .filter((deployment) => deployment.healthStatus === "healthy")
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .at(-1);
-  const visibleDeployment = publishResult?.deployment
-    ? {
-        id: publishResult.deployment.id,
-        status: publishResult.deployment.status,
-        environment: publishResult.deployment.environment ?? "app_store",
-        manifestVersion:
-          publishResult.deployment.manifestVersion ??
-          publishResult.manifest.manifestVersion ??
-          "unknown"
-      }
-    : latestRuntimeDeployment
-      ? {
-          id: latestRuntimeDeployment.id,
-          status: latestRuntimeDeployment.healthStatus,
-          environment: latestRuntimeDeployment.environment,
-          manifestVersion:
-            visibleRegistryEntry?.manifestVersion ??
-            publishReview?.manifest.manifestVersion ??
-            "unknown"
-        }
-      : undefined;
+  const visibleDeployment = createVisibleDeployment({
+    publishResult,
+    publishReview,
+    runtimeDeployments,
+    visibleRegistryEntry
+  });
 
   function resetPublishAccess() {
     publishRefreshId.current += 1;
@@ -122,6 +107,7 @@ export function usePublishAccess({
     setIsInvitingUser(false);
     setDecidingAccessRequestIds(new Set());
     setIsPublishingProject(false);
+    setPublishSubdomainError(undefined);
     setPublishFeedback("Loading access and publish information.", "info");
   }
 
@@ -324,18 +310,23 @@ export function usePublishAccess({
     return request;
   }
 
-  async function handlePublishProject() {
+  function clearPublishSubdomainError() {
+    setPublishSubdomainError(undefined);
+  }
+  async function handlePublishProject(input?: AppStorePublishInput) {
     const guard = requestGuard.capture(selectedProject.id);
     if (!guard) return;
+    const publishInput = input ?? {
+      subdomain: normalizeSubdomainSuggestion(
+        selectedProject.name,
+        selectedProject.id.replaceAll("_", "-")
+      )
+    };
+    setPublishSubdomainError(undefined);
     setIsPublishingProject(true);
     try {
       const client = clientFactory();
-      const result = await client.publishProject(selectedProject.id, {
-        subdomain: normalizeSubdomainSuggestion(
-          selectedProject.name,
-          selectedProject.id.replaceAll("_", "-")
-        )
-      });
+      const result = await client.publishProject(selectedProject.id, publishInput);
       if (!requestGuard.isCurrent(guard)) return;
       setPublishResult(result);
       const [registry, deployments] = await Promise.all([
@@ -351,6 +342,13 @@ export function usePublishAccess({
       );
     } catch (error) {
       if (!requestGuard.isCurrent(guard)) return;
+      if (
+        error instanceof PlatformApiError &&
+        (error.code === "SUBDOMAIN_INVALID" || error.code === "SUBDOMAIN_TAKEN")
+      ) {
+        setPublishSubdomainError(error.message);
+        return;
+      }
       setPublishFeedback(
         "Project could not be published. Existing deployment information was preserved.",
         "danger",
@@ -378,6 +376,7 @@ export function usePublishAccess({
     setPublishMessage,
     publishMessageTone,
     publishMessageTechnicalDetails,
+    publishSubdomainError,
     isInvitingUser,
     setIsInvitingUser,
     decidingAccessRequestIds,
@@ -395,6 +394,7 @@ export function usePublishAccess({
     refreshCreatorPublishState,
     handleInviteUser,
     handleAccessRequestDecision,
+    clearPublishSubdomainError,
     handlePublishProject
   };
 }

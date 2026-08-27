@@ -75,7 +75,12 @@ function pageApp(overrides = {}) {
     isPublishingProject: false,
     accessLoadState: "ready",
     publishReadinessState: "ready",
-    publishReview: { manifest, checklist: checklist(), ready: true },
+    publishReview: {
+      manifest,
+      checklist: checklist(),
+      ready: true,
+      accessUrlConfig: { baseDomain: "apps.example.test", secure: true }
+    },
     publishResult: undefined,
     visibleRegistryEntry: undefined,
     visiblePublishChecklist: [],
@@ -164,7 +169,12 @@ function HookPage({ loadAccessState, loadPublishState, clientFactory = () => ({}
 
 function readyPublishState() {
   return {
-    review: { manifest, checklist: checklist(), ready: true },
+    review: {
+      manifest,
+      checklist: checklist(),
+      ready: true,
+      accessUrlConfig: { baseDomain: "apps.example.test", secure: true }
+    },
     registry: [],
     deployments: []
   };

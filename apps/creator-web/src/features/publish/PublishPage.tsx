@@ -1,5 +1,10 @@
 import { Button, SectionCard } from "@evcp/ui";
 import {
+  buildSubdomainUrl,
+  normalizeSubdomainSuggestion,
+  validateSubdomainLabel
+} from "@evcp/api-client";
+import {
   CheckCircle2,
   CircleAlert,
   FileCheck2,
@@ -11,6 +16,8 @@ import {
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { useEffect, useRef, useState } from "react";
+import { PublishAccessUrlCard } from "./PublishAccessUrlCard";
 
 function readableStatus(value: string): string {
   return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -37,11 +44,13 @@ const READINESS_LABEL_BY_KEY: Record<string, string> = {
 export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
     accessLoadState,
+    clearPublishSubdomainError,
     handlePublishProject,
     isPublishingProject,
     publishMessage,
     publishMessageTechnicalDetails,
     publishMessageTone,
+    publishSubdomainError,
     publishReadinessState,
     publishResult,
     publishReview,
@@ -51,6 +60,34 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     visiblePreview,
     visibleRegistryEntry
   } = app;
+  const suggestedSubdomain = normalizeSubdomainSuggestion(
+    selectedProject.name,
+    selectedProject.id.replaceAll("_", "-")
+  );
+  const [subdomain, setSubdomain] = useState(suggestedSubdomain);
+  const subdomainInputRef = useRef<HTMLInputElement>(null);
+  const previousProjectIdRef = useRef(selectedProject.id);
+  useEffect(() => {
+    if (previousProjectIdRef.current === selectedProject.id) return;
+    previousProjectIdRef.current = selectedProject.id;
+    setSubdomain(
+      normalizeSubdomainSuggestion(
+        selectedProject.name,
+        selectedProject.id.replaceAll("_", "-")
+      )
+    );
+    clearPublishSubdomainError();
+  }, [clearPublishSubdomainError, selectedProject.id, selectedProject.name]);
+  useEffect(() => {
+    if (publishSubdomainError) subdomainInputRef.current?.focus();
+  }, [publishSubdomainError]);
+  const subdomainValidation = validateSubdomainLabel(subdomain);
+  const subdomainError = subdomainValidation.ok
+    ? publishSubdomainError
+    : subdomainValidation.message;
+  const previewUrl = publishReview?.accessUrlConfig
+    ? buildSubdomainUrl(subdomain, publishReview.accessUrlConfig)
+    : "";
   const manifest = publishReview?.manifest ?? publishResult?.manifest;
   const resolvedAccessState = accessLoadState ?? (publishReview ? "ready" : "loading");
   const accessReady = resolvedAccessState === "ready";
@@ -156,6 +193,7 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     readinessAvailable &&
     publishReview?.ready === true &&
     readinessSteps.every((step) => step.ready);
+  const canSubmitPublish = canPublish && subdomainValidation.ok;
   const blockerSummary =
     resolvedReadinessState === "loading"
       ? "Publish readiness is loading. Wait for the latest access information before publishing."
@@ -182,6 +220,18 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
       app={app}
       content={
         <section className="creator-publish-layout" aria-label="Publish app">
+          <PublishAccessUrlCard
+            value={subdomain}
+            previewUrl={previewUrl}
+            error={subdomainError}
+            disabled={isPublishingProject}
+            inputRef={subdomainInputRef}
+            onChange={(value) => {
+              setSubdomain(value);
+              clearPublishSubdomainError();
+            }}
+          />
+
           <SectionCard
             eyebrow="Readiness"
             title="Publish readiness"
@@ -189,9 +239,9 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
               <Button
                 type="button"
                 className="creator-publish-action"
-                variant={canPublish ? "primary" : "secondary"}
-                onClick={handlePublishProject}
-                disabled={isPublishingProject || !canPublish}
+                variant={canSubmitPublish ? "primary" : "secondary"}
+                onClick={() => handlePublishProject({ subdomain })}
+                disabled={isPublishingProject || !canSubmitPublish}
                 aria-busy={isPublishingProject || undefined}
               >
                 <Store size={16} aria-hidden="true" />
@@ -267,6 +317,22 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                     {readableStatus(visibleDeployment.environment)} · Manifest version {visibleDeployment.manifestVersion}
                   </span>
                   <small title={visibleDeployment.id}>Deployment {visibleDeployment.id}</small>
+                  {visibleDeployment.subdomainUrl ? (
+                    <span className="creator-published-url">
+                      <strong>Primary access URL</strong>
+                      <a href={visibleDeployment.subdomainUrl} title={visibleDeployment.subdomainUrl}>
+                        {visibleDeployment.subdomainUrl}
+                      </a>
+                    </span>
+                  ) : null}
+                  {visibleDeployment.route ? (
+                    <span className="creator-published-url">
+                      <strong>Fallback path</strong>
+                      <a href={visibleDeployment.route} title={visibleDeployment.route}>
+                        {visibleDeployment.route}
+                      </a>
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : (

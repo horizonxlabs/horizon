@@ -6332,6 +6332,157 @@ body.vibe-is-resizing * {
   margin-bottom: var(--evcp-space-5);
 }
 
+.creator-publish-access-card {
+  grid-column: 1 / -1;
+}
+
+.creator-access-url-options {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+}
+
+.creator-access-url-option {
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-control);
+  min-width: 0;
+  padding: var(--evcp-space-3);
+}
+
+.creator-access-url-option.is-selected {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--evcp-color-primary) 28%, transparent);
+}
+
+.creator-access-url-option-heading {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--evcp-space-3);
+  min-height: 44px;
+}
+
+.creator-access-url-option-heading > input {
+  accent-color: var(--evcp-color-primary);
+  flex: 0 0 auto;
+  height: 20px;
+  margin: 0;
+  width: 20px;
+}
+
+.creator-access-url-option-heading > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.creator-access-url-option-heading strong {
+  align-items: center;
+  color: var(--evcp-color-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 14px;
+  gap: var(--evcp-space-2);
+}
+
+.creator-access-url-option-heading small,
+.creator-access-url-field > small {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.creator-access-url-option-heading em {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-pill);
+  color: var(--evcp-color-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.creator-access-url-fields {
+  display: grid;
+  gap: var(--evcp-space-3);
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  margin-top: var(--evcp-space-3);
+}
+
+.creator-access-url-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.creator-access-url-field > label {
+  color: var(--evcp-color-text);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.creator-access-url-field > input,
+.creator-access-url-preview > output {
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  color: var(--evcp-color-text);
+  font: inherit;
+  min-height: 44px;
+  min-width: 0;
+  padding: 10px 12px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  width: 100%;
+}
+
+.creator-access-url-field > input:focus-visible {
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--evcp-color-primary) 18%, transparent);
+  outline: none;
+}
+
+.creator-access-url-field > input[aria-invalid="true"] {
+  border-color: var(--evcp-color-danger-text);
+}
+
+.creator-access-url-field > input:disabled,
+.creator-access-url-preview > output {
+  background: var(--evcp-color-surface-muted);
+}
+
+.creator-access-url-preview > output {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.creator-access-url-error {
+  color: var(--evcp-color-danger-text) !important;
+  overflow-wrap: anywhere;
+}
+
+.creator-access-url-option-disabled {
+  color: var(--evcp-color-muted);
+  margin: 0;
+  opacity: 0.72;
+}
+
+.creator-access-url-option-disabled legend {
+  color: var(--evcp-color-muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  padding: 0 var(--evcp-space-1);
+  text-transform: uppercase;
+}
+
+.creator-access-url-option-disabled .creator-access-url-option-heading {
+  cursor: not-allowed;
+}
+
 .creator-readiness-list {
   display: grid;
   gap: var(--evcp-space-2);
@@ -6438,6 +6589,23 @@ body.vibe-is-resizing * {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.creator-published-url {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--evcp-space-1);
+  min-width: 0;
+}
+
+.creator-published-url strong {
+  color: var(--evcp-color-text);
+  font-size: 12px;
+}
+
+.creator-published-url a {
+  color: var(--evcp-color-primary);
+  overflow-wrap: anywhere;
 }
 
 /* --- Publish dialog: Staging/Production selector + promote --- */
@@ -7496,6 +7664,8 @@ button:disabled {
   .database-overview,
   .sprint5-subgrid,
   .creator-publish-layout,
+  .creator-access-url-options,
+  .creator-access-url-fields,
   .sprint8-shell,
   .sprint8-subgrid,
   .sprint8-conversion-grid {

@@ -50,7 +50,8 @@ function publishApp(overrides = {}) {
         roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
       },
       checklist: [],
-      ready: true
+      ready: true,
+      accessUrlConfig: { baseDomain: "apps.example.test", secure: true }
     },
     publishResult: undefined,
     visibleRegistryEntry: undefined,
