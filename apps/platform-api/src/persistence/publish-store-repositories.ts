@@ -59,7 +59,8 @@ import {
   assertSubdomainClaimAvailable,
   DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
   mapDeploymentRecord,
-  mapRegistryEntry
+  mapRegistryEntry,
+  requireProjectOwnerAccess
 } from "./publish-store-service-support";
 export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 export { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
@@ -81,6 +82,9 @@ export class PublishStoreRepositoryBackedService {
     label: string
   ): Promise<string> {
     requireAnyRole(actor, ["admin", "creator"]);
+    const project = await this.client.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new ValidationError(`Unknown project: ${projectId}`);
+    requireProjectOwnerAccess(actor, project);
     const existing = await this.client.appStoreRegistryEntry.findFirst({
       where: { subdomain: label.trim().toLowerCase() }
     });
@@ -91,7 +95,7 @@ export class PublishStoreRepositoryBackedService {
     actor: PlatformUser,
     input: { project: PlatformProject }
   ): Promise<AppAccessSnapshot> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     return this.snapshot(input.project, app);
@@ -108,7 +112,7 @@ export class PublishStoreRepositoryBackedService {
       note?: string;
     }
   ): Promise<AppInvitation> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     await this.requireRoleKey(app.id, input.roleKey);
@@ -154,7 +158,7 @@ export class PublishStoreRepositoryBackedService {
       permissions?: string[];
     }
   ): Promise<AppRoleDefinition> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const key = input.key.trim().toLowerCase();
@@ -188,7 +192,7 @@ export class PublishStoreRepositoryBackedService {
       reason: string;
     }
   ): Promise<AppAccessRequest> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     await this.requireRoleKey(app.id, input.requestedRoleKey);
@@ -213,7 +217,7 @@ export class PublishStoreRepositoryBackedService {
       decidedByUserId?: string;
     }
   ): Promise<AppAccessRequest> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const requests = await this.client.appAccessRequest.findMany({ where: { appId: app.id } });
@@ -245,7 +249,7 @@ export class PublishStoreRepositoryBackedService {
     actor: PlatformUser,
     input: { project: PlatformProject; baseline: PrdVersion; preview: PreviewVersion }
   ): Promise<PublishReview> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const manifest = await this.buildManifest(input.project, app, input.baseline, input.preview);
@@ -268,7 +272,14 @@ export class PublishStoreRepositoryBackedService {
       subdomain?: string;
     }
   ): Promise<PublishResult> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
+    const existingRegistry = await this.client.appStoreRegistryEntry.findFirst({
+      where: { appId: input.project.appId ?? `app_${slugToId(input.project.id)}` }
+    });
+    const requestedSubdomain = input.subdomain ?? existingRegistry?.subdomain ?? null;
+    const subdomain = requestedSubdomain
+      ? await this.assertSubdomainAvailable(actor, input.project.id, requestedSubdomain)
+      : null;
     const review = await this.getPublishReview(actor, input);
     if (input.runtimeDeployment) {
       review.manifest.runtime = {
@@ -339,13 +350,6 @@ export class PublishStoreRepositoryBackedService {
         publishedAt: now
       }
     });
-    const existingRegistry = await this.client.appStoreRegistryEntry.findFirst({
-      where: { appId: review.manifest.appId }
-    });
-    const requestedSubdomain = input.subdomain ?? existingRegistry?.subdomain ?? null;
-    const subdomain = requestedSubdomain
-      ? await this.assertSubdomainAvailable(actor, input.project.id, requestedSubdomain)
-      : null;
     const registryEntry = await this.client.appStoreRegistryEntry.upsert({
       where: { appId: review.manifest.appId },
       update: {
@@ -640,7 +644,7 @@ export class PublishStoreRepositoryBackedService {
     actor: PlatformUser,
     project: PlatformProject
   ): Promise<DeploymentRecord> {
-    requireProjectAccess(actor, project);
+    requireProjectOwnerAccess(actor, project);
     const deployments = await this.client.deploymentRecord.findMany({
       where: { projectId: project.id },
       orderBy: { publishedAt: "asc" }
@@ -657,7 +661,7 @@ export class PublishStoreRepositoryBackedService {
   }
 
   async getManifestForProject(actor: PlatformUser, project: PlatformProject): Promise<AppManifest> {
-    requireProjectAccess(actor, project);
+    requireProjectOwnerAccess(actor, project);
     const manifest = await this.client.appManifest.findFirst({ where: { projectId: project.id } });
     if (!manifest) throw new ValidationError(`No app manifest for project ${project.id}`);
     return mapManifest(manifest);
@@ -1292,12 +1296,6 @@ function mapNotification(record: InAppNotificationRecord): InAppNotification {
     read: record.read,
     createdAt: toIsoString(record.createdAt)
   };
-}
-
-function requireProjectAccess(actor: PlatformUser, project: PlatformProject): void {
-  requireAnyRole(actor, ["admin", "creator"]);
-  if (actor.role !== "admin" && project.ownerUserId !== actor.id)
-    throw new PermissionError(`Role ${actor.role} cannot access this resource`);
 }
 
 function requireAnyRole(actor: PlatformUser, roles: PlatformUser["role"][]): void {

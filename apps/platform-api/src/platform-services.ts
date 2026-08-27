@@ -5901,6 +5901,14 @@ export class PublishService {
     input: { subdomain?: string } = {}
   ): PublishResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
+    const existingRegistry = this.registry.find(
+      (candidate) => candidate.appId === this.projects.getProjectForActor(actor, projectId).appId
+    );
+    const subdomainSource = input.subdomain ?? existingRegistry?.subdomain;
+    const subdomain = subdomainSource
+      ? this.assertSubdomainAvailable(actor, projectId, subdomainSource)
+      : undefined;
+    const subdomainUrl = buildConfiguredSubdomainUrl(subdomain, this.accessUrlConfig);
     const review = this.getReview(actor, projectId);
     const blockingItems = review.checklist
       .filter((item) => item.status === "fail")
@@ -5949,14 +5957,6 @@ export class PublishService {
       publishedAt: now
     };
 
-    const existingRegistry = this.registry.find(
-      (candidate) => candidate.appId === review.manifest.appId
-    );
-    const subdomainSource = input.subdomain ?? existingRegistry?.subdomain;
-    const subdomain = subdomainSource
-      ? this.assertSubdomainAvailable(actor, review.project.id, subdomainSource)
-      : undefined;
-    const subdomainUrl = buildConfiguredSubdomainUrl(subdomain, this.accessUrlConfig);
     const registryEntry: AppStoreRegistryEntry = {
       id: `store_${review.manifest.app.slug}`,
       appId: review.manifest.appId,

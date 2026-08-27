@@ -9,6 +9,7 @@ export interface AppRecord {
 }
 export interface AppRoleRecord { id: string; appId: string; key: string; name: string; permissions: string[] }
 export interface UserRecord { id: string; email: string; name: string }
+export interface ProjectRecord { id: string; ownerUserId: string }
 export interface AppMemberRecordData {
   appId: string; userId: string; roleId: string; user?: UserRecord; role?: AppRoleRecord;
   userType?: string; status?: string; lastAccessAt?: DateValue | null;
@@ -73,6 +74,9 @@ export interface InAppNotificationRecord {
 export interface PublishStorePersistenceClient {
   platformUser: {
     findUnique(args: { where: { id?: string; email?: string } }): Promise<UserRecord | null>;
+  };
+  project: {
+    findUnique(args: { where: { id: string } }): Promise<ProjectRecord | null>;
   };
   app: {
     findFirst(args: { where: { projectId?: string; slug?: string; id?: string }; include?: Record<string, unknown> }): Promise<AppRecord | null>;

@@ -1,9 +1,11 @@
 import { buildSubdomainUrl, type PublishAccessUrlConfigDto } from "@evcp/api-client";
+import { PermissionError } from "../platform-errors";
 import type {
   AppMemberRecord,
   AppStoreRegistryEntry,
   DeploymentRecord,
   InAppNotification,
+  PlatformUser,
   PlatformProject,
   StorefrontAppCard
 } from "../platform-services";
@@ -37,6 +39,16 @@ export function assertSubdomainClaimAvailable(
   const subdomain = label.trim().toLowerCase();
   if (!existingProjectId || existingProjectId === projectId) return subdomain;
   throw new SubdomainConflictError();
+}
+
+export function requireProjectOwnerAccess(
+  actor: Pick<PlatformUser, "id" | "role">,
+  project: Pick<PlatformProject, "ownerUserId">
+): void {
+  if (actor.role !== "admin" && actor.role !== "creator")
+    throw new PermissionError(`Role ${actor.role} cannot access this resource`);
+  if (actor.role !== "admin" && project.ownerUserId !== actor.id)
+    throw new PermissionError(`Role ${actor.role} cannot access this resource`);
 }
 
 export function buildConfiguredSubdomainUrl(

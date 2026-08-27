@@ -6,6 +6,7 @@ import {
   SubdomainConflictError,
   createPublishStoreRepositoryBackedService
 } from "../../apps/platform-api/src/persistence/publish-store-repositories.ts";
+import { PermissionError } from "../../apps/platform-api/src/platform-services.ts";
 
 const creator = {
   id: "usr_creator",
@@ -14,6 +15,20 @@ const creator = {
   role: "creator",
   status: "active",
   permissions: ["app:publish-request"]
+};
+
+const otherCreator = {
+  ...creator,
+  id: "usr_other_creator",
+  email: "other.creator@company.com",
+  name: "Other Creator"
+};
+
+const endUser = {
+  ...creator,
+  id: "usr_end_user",
+  email: "user@company.com",
+  role: "end_user"
 };
 
 const migrationPath =
@@ -39,9 +54,59 @@ function registryEntry({ id, appId, projectId, slug, subdomain }) {
   };
 }
 
-test("registry persistence permits the owning project but rejects another project's subdomain", async () => {
+function projectRecord(id, ownerUserId) {
+  return { id, ownerUserId };
+}
+
+function publishInput({ id, appId, ownerUserId, name }) {
+  const project = {
+    id,
+    name,
+    status: "draft",
+    ownerUserId,
+    appType: "Workflow App",
+    businessProblem: "Employees need a self-service workflow",
+    targetDepartment: "HR Department",
+    intendedUsers: ["Employee", "Manager"],
+    dataSensitivity: "internal",
+    appId,
+    createdAt: "2026-08-27T00:00:00.000Z"
+  };
+  return {
+    project,
+    baseline: {
+      id: `prdver_${id}`,
+      projectId: id,
+      version: "1.0",
+      status: "baseline",
+      isBaseline: true,
+      sourcePrompt: "Create a PRD.",
+      changeSummary: "Baseline confirmed",
+      generatedBy: { scenario: "prd_generation", providerId: "aip_openai", model: "gpt-4.1" },
+      sections: [{ id: `prdsec_${id}`, key: "overview", title: "Overview", body: "Baseline", order: 1 }],
+      createdByUserId: ownerUserId,
+      createdAt: "2026-08-27T00:00:00.000Z"
+    },
+    preview: {
+      id: `preview_${id}`,
+      projectId: id,
+      version: "preview-0001",
+      summary: "Preview ready",
+      device: "desktop",
+      screenTitle: name,
+      highlights: ["Ready"],
+      createdAt: "2026-08-27T00:00:00.000Z"
+    }
+  };
+}
+
+test("registry persistence enforces project ownership before checking a subdomain", async () => {
   const service = createPublishStoreRepositoryBackedService(
     new MemoryPublishStorePersistenceClient({
+      projects: [
+        projectRecord("prj_people", creator.id),
+        projectRecord("prj_other", otherCreator.id)
+      ],
       registry: [
         registryEntry({
           id: "store_people",
@@ -61,12 +126,60 @@ test("registry persistence permits the owning project but rejects another projec
   );
   await assert.rejects(
     () => service.assertSubdomainAvailable(creator, "prj_other", "people-ops"),
+    (error) => error instanceof PermissionError && error.statusCode === 403
+  );
+  await assert.rejects(
+    () => service.assertSubdomainAvailable(endUser, "prj_unknown", "people-ops"),
+    (error) => error instanceof PermissionError && error.statusCode === 403
+  );
+  await assert.rejects(
+    () => service.assertSubdomainAvailable(otherCreator, "prj_other", "people-ops"),
     (error) => {
       assert.ok(error instanceof SubdomainConflictError);
       assert.equal(error.code, "SUBDOMAIN_TAKEN");
       assert.equal(error.status, 409);
       return true;
     }
+  );
+});
+
+test("conflicting repository publish leaves publish persistence unchanged", async () => {
+  const allowed = publishInput({
+    id: "prj_people",
+    appId: "app_people",
+    ownerUserId: creator.id,
+    name: "People Operations"
+  });
+  const blocked = publishInput({
+    id: "prj_other",
+    appId: "app_other",
+    ownerUserId: otherCreator.id,
+    name: "Other Operations"
+  });
+  const client = new MemoryPublishStorePersistenceClient({
+    projects: [projectRecord(allowed.project.id, creator.id), projectRecord(blocked.project.id, otherCreator.id)]
+  });
+  const service = createPublishStoreRepositoryBackedService(client);
+  await service.publishApp(creator, { ...allowed, subdomain: "people-ops" });
+  const beforeRequests = await client.publishRequest.findMany({});
+  const beforeDeployments = await client.deploymentRecord.findMany({ where: {} });
+
+  await assert.rejects(
+    () => service.publishApp(otherCreator, { ...blocked, subdomain: "people-ops" }),
+    (error) => {
+      assert.ok(error instanceof SubdomainConflictError);
+      assert.equal(error.code, "SUBDOMAIN_TAKEN");
+      return true;
+    }
+  );
+
+  assert.equal((await client.publishRequest.findMany({})).length, beforeRequests.length);
+  assert.equal((await client.appManifest.findFirst({ where: { projectId: blocked.project.id } })), null);
+  assert.equal((await client.deploymentRecord.findMany({ where: {} })).length, beforeDeployments.length);
+  assert.equal(blocked.project.status, "draft");
+  assert.equal(
+    await client.appStoreRegistryEntry.findFirst({ where: { projectId: blocked.project.id } }),
+    null
   );
 });
 
