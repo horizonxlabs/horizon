@@ -193,7 +193,7 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     readinessAvailable &&
     publishReview?.ready === true &&
     readinessSteps.every((step) => step.ready);
-  const canSubmitPublish = canPublish && subdomainValidation.ok;
+  const canSubmitPublish = canPublish && subdomainValidation.ok && !publishSubdomainError;
   const blockerSummary =
     resolvedReadinessState === "loading"
       ? "Publish readiness is loading. Wait for the latest access information before publishing."

@@ -219,7 +219,7 @@ for (const serverFailure of [
   { code: "SUBDOMAIN_INVALID", status: 400, message: "Subdomain is not valid." },
   { code: "SUBDOMAIN_TAKEN", status: 409, message: "Subdomain is already in use." }
 ]) {
-  test(`${serverFailure.status} ${serverFailure.code} retains and focuses the subdomain field`, async () => {
+  test(`${serverFailure.status} ${serverFailure.code} blocks retry until the subdomain changes`, async () => {
     let focusCount = 0;
     const client = {
       publishProject: async () => {
@@ -250,6 +250,15 @@ for (const serverFailure of [
     assert.equal(subdomainInput(renderer).props["aria-invalid"], true);
     assert.match(JSON.stringify(renderer.toJSON()), new RegExp(serverFailure.message));
     assert.equal(focusCount, 1);
+    assert.equal(publishButton(renderer).props.disabled, true);
+
+    await act(async () =>
+      subdomainInput(renderer).props.onChange({ target: { value: "team-hub-next" } })
+    );
+    assert.equal(subdomainInput(renderer).props.value, "team-hub-next");
+    assert.equal(subdomainInput(renderer).props["aria-invalid"], undefined);
+    assert.doesNotMatch(JSON.stringify(renderer.toJSON()), new RegExp(serverFailure.message));
+    assert.equal(publishButton(renderer).props.disabled, false);
     await act(async () => renderer.unmount());
   });
 }
