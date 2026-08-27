@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import { createMemoryDeploymentStore } from "../../apps/platform-api/src/publish/deployment-store.ts";
@@ -63,6 +65,86 @@ function responseCapture() {
     end() {},
     write() {}
   };
+}
+
+function adaptCaddyfile(file, env = {}) {
+  const absoluteFile = resolve(file);
+  const envArgs = Object.entries(env).flatMap(([name, value]) => ["-e", `${name}=${value}`]);
+  const adapted = spawnSync(
+    "docker",
+    [
+      "run",
+      "--rm",
+      ...envArgs,
+      "-v",
+      `${absoluteFile}:/etc/caddy/Caddyfile:ro`,
+      "caddy:2.8-alpine",
+      "caddy",
+      "adapt",
+      "--config",
+      "/etc/caddy/Caddyfile"
+    ],
+    { encoding: "utf8" }
+  );
+  assert.equal(adapted.status, 0, adapted.stderr);
+  return JSON.parse(adapted.stdout);
+}
+
+function wildcardHostMatches(pattern, host) {
+  const hostname = host.toLowerCase().replace(/:\d+$/, "");
+  if (!pattern.startsWith("*.")) return hostname === pattern.toLowerCase();
+  const suffix = pattern.slice(2).toLowerCase();
+  return hostname.endsWith(`.${suffix}`) && hostname.slice(0, -(suffix.length + 1)).includes(".") === false;
+}
+
+function matcherSetMatches(matcher, host, path) {
+  if (matcher.host && !matcher.host.some((pattern) => wildcardHostMatches(pattern, host))) return false;
+  if (matcher.path) {
+    const matchesPath = matcher.path.some((pattern) =>
+      pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : path === pattern
+    );
+    if (!matchesPath) return false;
+  }
+  if (matcher.header_regexp?.Host) {
+    if (!new RegExp(matcher.header_regexp.Host.pattern).test(host)) return false;
+  }
+  if (matcher.expression) {
+    assert.match(matcher.expression, /\.split\("\."\)\[0\]\.size\(\) >= 3/);
+    assert.match(matcher.expression, /\.split\("\."\)\[0\]\.size\(\) <= 63/);
+    const labelLength = host.replace(/:\d+$/, "").split(".")[0].length;
+    if (labelLength < 3 || labelLength > 63) return false;
+  }
+  if (matcher.not?.some((negated) => matcherSetMatches(negated, host, path))) return false;
+  return true;
+}
+
+function routeMatches(route, host, path) {
+  return !route.match || route.match.some((matcher) => matcherSetMatches(matcher, host, path));
+}
+
+function adaptedRoutingOutcome(routes, host, path) {
+  for (const route of routes ?? []) {
+    if (!routeMatches(route, host, path)) continue;
+    for (const handler of route.handle ?? []) {
+      if (handler.handler === "subroute") {
+        const nested = adaptedRoutingOutcome(handler.routes, host, path);
+        if (nested) return nested;
+      }
+      if (handler.handler === "reverse_proxy") {
+        return `proxy:${handler.upstreams?.[0]?.dial}`;
+      }
+      if (handler.handler === "static_response") {
+        return `status:${handler.status_code}`;
+      }
+    }
+  }
+  return null;
+}
+
+function caddyOutcome(config, host, path) {
+  const server = Object.values(config.apps.http.servers).find((candidate) => candidate.routes);
+  assert.ok(server);
+  return adaptedRoutingOutcome(server.routes, host, path);
 }
 
 test("a published-subdomain browser root proxies through the generated app base path", async () => {
@@ -181,10 +263,7 @@ test("Caddy and Compose route one platform subdomain label with trusted runtime 
   const localCompose = readFileSync("docker/docker-compose.yml", "utf8");
   const releaseCompose = readFileSync("docker/docker-compose.release.yml", "utf8");
 
-  const localPublishedRoute = localCaddyfile.indexOf("@published_subdomain {");
-  const localCatchAll = localCaddyfile.indexOf("\n\thandle {");
-  assert.notEqual(localPublishedRoute, -1);
-  assert.ok(localPublishedRoute < localCatchAll);
+  assert.match(localCaddyfile, /@published_subdomain \{/);
   assert.match(localCaddyfile, /host \*\.localhost/);
   assert.match(localCaddyfile, /header_regexp published Host \^\[a-z0-9\]/);
   assert.match(localCaddyfile, /rewrite \* \/__subdomain\{uri\}/);
@@ -200,9 +279,7 @@ test("Caddy and Compose route one platform subdomain label with trusted runtime 
     /host \*\.\{\$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost\}/
   );
   assert.match(releaseCaddyfile, /rewrite \* \/__subdomain\{uri\}/);
-  assert.ok(
-    releaseCaddyfile.indexOf("@published_subdomain") < releaseCaddyfile.indexOf("\n\thandle {")
-  );
+  assert.match(releaseCaddyfile, /@published_subdomain \{/);
 
   for (const compose of [localCompose, releaseCompose]) {
     assert.match(compose, /EVCP_APP_SUBDOMAIN_BASE_DOMAIN:/);
@@ -212,4 +289,66 @@ test("Caddy and Compose route one platform subdomain label with trusted runtime 
     releaseCompose,
     /caddy:[\s\S]*EVCP_APP_SUBDOMAIN_BASE_DOMAIN: \$\{EVCP_APP_SUBDOMAIN_BASE_DOMAIN:-localhost\}/
   );
+});
+
+test("adapted Caddy routes every valid app-host path before platform redirects", () => {
+  const local = adaptCaddyfile("docker/Caddyfile");
+  const release = adaptCaddyfile("docker/Caddyfile.release", {
+    EVCP_CADDY_ADDRESS: "platform.example.test",
+    EVCP_APP_SUBDOMAIN_BASE_DOMAIN: "apps.example.test",
+    EVCP_STORAGE_CADDY_ADDRESS: "storage.example.test"
+  });
+
+  for (const path of ["/creator", "/store"]) {
+    assert.equal(caddyOutcome(local, "sales.localhost", path), "proxy:platform-api:3100");
+    assert.equal(
+      caddyOutcome(release, "sales.apps.example.test", path),
+      "proxy:platform-api:3100"
+    );
+  }
+
+  assert.equal(caddyOutcome(local, "localhost", "/creator"), "status:308");
+  assert.equal(caddyOutcome(local, "localhost", "/store"), "status:308");
+  assert.equal(caddyOutcome(release, "platform.example.test", "/creator"), "status:308");
+  assert.equal(caddyOutcome(release, "platform.example.test", "/store"), "status:308");
+});
+
+test("adapted Caddy accepts exactly the shared published-subdomain label contract", () => {
+  const configurations = [
+    { config: adaptCaddyfile("docker/Caddyfile"), suffix: "localhost" },
+    {
+      config: adaptCaddyfile("docker/Caddyfile.release", {
+        EVCP_CADDY_ADDRESS: "platform.example.test",
+        EVCP_APP_SUBDOMAIN_BASE_DOMAIN: "apps.example.test",
+        EVCP_STORAGE_CADDY_ADDRESS: "storage.example.test"
+      }),
+      suffix: "apps.example.test"
+    }
+  ];
+  const overlong = "a".repeat(64);
+
+  for (const { config, suffix } of configurations) {
+    for (const label of ["sales", "abc", "a".repeat(63)]) {
+      assert.equal(caddyOutcome(config, `${label}.${suffix}`, "/"), "proxy:platform-api:3100");
+    }
+    for (const label of [
+      "a",
+      "ab",
+      "Sales",
+      "-sales",
+      "sales-",
+      "sales--ops",
+      "admin",
+      "api",
+      "auth",
+      "creator",
+      "store",
+      "storage",
+      "www",
+      overlong
+    ]) {
+      assert.notEqual(caddyOutcome(config, `${label}.${suffix}`, "/"), "proxy:platform-api:3100");
+    }
+    assert.notEqual(caddyOutcome(config, `deep.sales.${suffix}`, "/"), "proxy:platform-api:3100");
+  }
 });

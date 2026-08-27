@@ -1,58 +1,62 @@
 {$EVCP_CADDY_ADDRESS:localhost}, *.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} {
-	# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
-	# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
-	# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
-	@compressible not path /api/*
-	encode @compressible zstd gzip
+	route {
+		# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
+		# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
+		# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
+		@compressible not path /api/*
+		encode @compressible zstd gzip
 
-	@published_subdomain {
-		host *.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost}
-		header_regexp published Host ^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?\.[^:]+(?::[0-9]+)?$
-	}
-	handle @published_subdomain {
-		rewrite * /__subdomain{uri}
-		reverse_proxy platform-api:3100 {
-			header_up Host {http.request.host}
+		@published_subdomain {
+			host *.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost}
+			header_regexp published Host ^[a-z0-9]+(?:-[a-z0-9]+)*\.[^:]+(?::[0-9]+)?$
+			not host admin.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} api.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} auth.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} creator.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} store.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} storage.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost} www.{$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost}
+			expression {http.request.host}.split(".")[0].size() >= 3 && {http.request.host}.split(".")[0].size() <= 63
 		}
-	}
-
-	handle /auth/* {
-		reverse_proxy keycloak:8080
-	}
-
-	handle_path /api/* {
-		# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
-		reverse_proxy platform-api:3100 {
-			flush_interval -1
+		handle @published_subdomain {
+			rewrite * /__subdomain{uri}
+			reverse_proxy platform-api:3100 {
+				header_up Host {http.request.host}
+			}
 		}
-	}
 
-	redir /creator /creator/ 308
-	redir /store /store/ 308
+		handle /auth/* {
+			reverse_proxy keycloak:8080
+		}
 
-	handle /horizon-logo.png {
-		rewrite * /creator/horizon-logo.png
-		reverse_proxy creator-web:80
-	}
+		handle_path /api/* {
+			# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
+			reverse_proxy platform-api:3100 {
+				flush_interval -1
+			}
+		}
 
-	handle /creator* {
-		reverse_proxy creator-web:80
-	}
+		redir /creator /creator/ 308
+		redir /store /store/ 308
 
-	handle /apps/* {
-		reverse_proxy platform-api:3100
-	}
+		handle /horizon-logo.png {
+			rewrite * /creator/horizon-logo.png
+			reverse_proxy creator-web:80
+		}
 
-	handle /store* {
-		reverse_proxy app-store-pwa:80
-	}
+		handle /creator* {
+			reverse_proxy creator-web:80
+		}
 
-	handle /preview/* {
-		reverse_proxy platform-api:3100
-	}
+		handle /apps/* {
+			reverse_proxy platform-api:3100
+		}
 
-	handle {
-		reverse_proxy admin-web:80
+		handle /store* {
+			reverse_proxy app-store-pwa:80
+		}
+
+		handle /preview/* {
+			reverse_proxy platform-api:3100
+		}
+
+		handle {
+			reverse_proxy admin-web:80
+		}
 	}
 }
 
