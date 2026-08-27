@@ -152,14 +152,14 @@ test("a blocked review without a failed checklist item uses a truthful Registry 
 });
 
 let latestPublish;
-function HookPage({ loadAccessState, loadPublishState }) {
+function HookPage({ loadAccessState, loadPublishState, clientFactory = () => ({}), selectedProject = project }) {
   latestPublish = usePublishAccess({
-    selectedProject: project,
-    clientFactory: () => ({}),
+    selectedProject,
+    clientFactory,
     loadAccessState,
     loadPublishState
   });
-  return React.createElement(PublishPage, { app: pageApp(latestPublish) });
+  return React.createElement(PublishPage, { app: pageApp({ ...latestPublish, selectedProject }) });
 }
 
 function readyPublishState() {
@@ -179,6 +179,38 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+
+test("the Creator publish caller sends a generated app-store subdomain label", async () => {
+  const selectedProject = { ...project, id: "release_plan_2026", name: "สวัสดี" };
+  let publishArgs;
+  const client = {
+    publishProject: async (...args) => {
+      publishArgs = args;
+      return {
+        publishRequest: { id: "publish-1", status: "published", manifestVersion: "3", blockingItems: [] },
+        deployment: { id: "deployment-1", status: "published", route: "/apps/release-plan-2026" },
+        registryEntry: { id: "registry-1", slug: "release-plan-2026", status: "published" },
+        manifest
+      };
+    },
+    listAppStoreRegistry: async () => [],
+    listDeployments: async () => []
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(HookPage, {
+      selectedProject,
+      clientFactory: () => client,
+      loadAccessState: async () => ({ members: [], invitations: [], accessRequests: [], roles: [] }),
+      loadPublishState: async () => readyPublishState()
+    }));
+  });
+
+  await act(async () => latestPublish.handlePublishProject());
+
+  assert.deepEqual(publishArgs, ["release_plan_2026", { subdomain: "release-plan-2026" }]);
+  await act(async () => renderer.unmount());
+});
 
 test("a failed refresh disables a retained ready review at the real hook and page boundary", async () => {
   let publishLoads = 0;

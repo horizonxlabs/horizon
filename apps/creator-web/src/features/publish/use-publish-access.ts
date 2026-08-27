@@ -1,6 +1,6 @@
 import {
-  type AppInvitationInput,
-  type AppAccessSnapshotResponse,
+  normalizeSubdomainSuggestion,
+  type AppInvitationInput, type AppAccessSnapshotResponse,
   type AppStoreRegistryEntryDto,
   type PublishResultResponse,
   type PublishReviewResponse,
@@ -54,29 +54,24 @@ export function usePublishAccess({
   const [isPublishingProject, setIsPublishingProject] = useState(false);
   const requestGuard = useProjectRequestGuard(selectedProject.id || undefined);
   const publishRefreshId = useRef(0);
-
   function setPublishMessage(message: string) {
     setPublishMessageState(message);
     setPublishMessageTone("info");
     setPublishMessageTechnicalDetails(undefined);
   }
-
   function setPublishFeedback(message: string, tone: CreatorStatusTone, technicalDetails?: string) {
     setPublishMessageState(message);
     setPublishMessageTone(tone);
     setPublishMessageTechnicalDetails(technicalDetails);
   }
-
   function technicalDetails(error: unknown): string | undefined {
     return error instanceof Error ? error.message : undefined;
   }
-
   function setAppAccessSnapshot(snapshot: AppAccessSnapshotResponse | undefined) {
     appAccessSnapshotRef.current = snapshot;
     setAppAccessSnapshotState(snapshot);
     setAccessLoadState(snapshot ? "ready" : "loading");
   }
-
   const { visibleAppMembers, visiblePendingInvites, visibleAccessRequests, visibleAppRoles } =
     createAccessView(appAccessSnapshot);
   const visiblePublishChecklist =
@@ -335,7 +330,12 @@ export function usePublishAccess({
     setIsPublishingProject(true);
     try {
       const client = clientFactory();
-      const result = await client.publishProject(selectedProject.id);
+      const result = await client.publishProject(selectedProject.id, {
+        subdomain: normalizeSubdomainSuggestion(
+          selectedProject.name,
+          selectedProject.id.replaceAll("_", "-")
+        )
+      });
       if (!requestGuard.isCurrent(guard)) return;
       setPublishResult(result);
       const [registry, deployments] = await Promise.all([
