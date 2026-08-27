@@ -9,6 +9,9 @@ process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
 
 const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
+const { createInternalPublishPersistenceRequest } = await import(
+  "../../apps/platform-api/src/publish/app-store-publish-runtime.ts"
+);
 
 async function createRawPublishHarness({
   preflightPublishedSubdomain,
@@ -215,6 +218,20 @@ test("App Store publish rejects an invalid subdomain before preflight or build",
   assert.equal(harness.publishCalls, 0);
 });
 
+test("forged public runtime deployment cannot bypass App Store validation", async () => {
+  const harness = await createRawPublishHarness({
+    preflightPublishedSubdomain: async () => assert.fail("forged request must not preflight"),
+    persistPublishedDeployment: async () => assert.fail("forged request must not persist")
+  });
+
+  await harness.publish({ runtimeDeployment: { id: "wdep_forged_public_request" } });
+
+  assert.equal(harness.response.statusCode, 400);
+  assert.equal(harness.response.body.error.code, "SUBDOMAIN_INVALID");
+  assert.deepEqual(harness.calls, ["auth"]);
+  assert.equal(harness.publishCalls, 0);
+});
+
 test("App Store publish rejects a taken subdomain before build", async () => {
   const harness = await createRawPublishHarness({
     preflightPublishedSubdomain: async () => {
@@ -314,6 +331,26 @@ test("explicit deployment modes do not preflight or replace an App Store subdoma
   );
 });
 
+test("public legacy publish cannot forge internal runtime persistence context", () => {
+  const { services, creator, project, headers } = createReadyLegacyPublishFixture();
+  const registryBefore = services.publish.listRegistry(creator)[0];
+
+  const response = executePlatformApiRequest(services, {
+    method: "POST",
+    path: `/projects/${project.id}/publish`,
+    headers,
+    body: {
+      runtimeDeployment: { id: "wdep_forged_public_request" }
+    }
+  });
+
+  const registryAfter = services.publish.listRegistry(creator)[0];
+  assert.equal(response.status, 400, JSON.stringify(response));
+  assert.equal(response.body.error.code, "SUBDOMAIN_INVALID");
+  assert.equal(registryAfter.deploymentId, registryBefore.deploymentId);
+  assert.equal(registryAfter.subdomain, "legacy-operations");
+});
+
 test("legacy persistence keeps explicit production rollback and promote compatible", async () => {
   const { services, creator, project, headers } = createReadyLegacyPublishFixture();
   const harness = await createRawPublishHarness({
@@ -323,12 +360,10 @@ test("legacy persistence keeps explicit production rollback and promote compatib
       assert.fail("explicit deployment modes must not preflight an App Store subdomain");
     },
     persistPublishedDeployment: ({ projectId, deployment, subdomain }) =>
-      executePlatformApiRequest(services, {
-        method: "POST",
-        path: `/projects/${projectId}/publish`,
-        headers,
-        body: { runtimeDeployment: deployment, subdomain }
-      })
+      executePlatformApiRequest(
+        services,
+        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
+      )
   });
 
   const statuses = [];

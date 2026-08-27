@@ -9,7 +9,7 @@ import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-se
 import { registerProjectDbRoutes } from "./project-database";
 import { createProjectDbAuditAdapter } from "./project-database-audit";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
-import { handleLegacyPublishApiRequest, handlePersistedPublishApiRequest, preflightPublishedSubdomain, resolvePublishAccessUrlConfig } from "./publish/app-store-publish-runtime";
+import { createInternalPublishPersistenceRequest, handleLegacyPublishApiRequest, handlePersistedPublishApiRequest, preflightPublishedSubdomain, resolvePublishAccessUrlConfig } from "./publish/app-store-publish-runtime";
 import { createDefaultPublishStack } from "./publish/factory";
 import { createChatSseHandler } from "./generation-loop/chat-route";
 import { createDefaultGenerationService } from "./generation-loop/factory";
@@ -2345,12 +2345,10 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     canAccessDeployment: (auth, projectId) => canAccessPublishedDeployment(auth, projectId, services.publishStorePersistence),
     preflightPublishedSubdomain: (input) => preflightPublishedSubdomain(services, input),
     persistPublishedDeployment: ({ headers, projectId, deployment, subdomain }) =>
-      executePlatformApiRequestAsync(services, {
-        method: "POST",
-        path: `/projects/${projectId}/publish`,
-        headers,
-        body: { runtimeDeployment: deployment, subdomain }
-      }),
+      executePlatformApiRequestAsync(
+        services,
+        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
+      ),
     recordAudit: recordPublishAudit,
     lifecycle: projectLifecycle
   });

@@ -114,6 +114,39 @@ test("App Store API rejects an invalid subdomain without creating registry state
   assert.deepEqual(registry.body.data, []);
 });
 
+test("public persisted publish cannot forge internal runtime persistence context", async () => {
+  const services = await createRuntimePlatformApiServices({ EVCP_CORE_PERSISTENCE: "memory" });
+  const project = await createReadyProject(services, "Forged Runtime Operations");
+  services.publishStorePersistence = createPublishStoreRepositoryBackedService(
+    new MemoryPublishStorePersistenceClient({
+      projects: [{ id: project.id, ownerUserId: project.ownerUserId }]
+    })
+  );
+
+  const response = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${project.id}/publish`,
+    headers: CREATOR_HEADERS,
+    body: {
+      runtimeDeployment: {
+        id: "wdep_forged_public_request",
+        projectId: project.id,
+        environment: "production",
+        healthStatus: "healthy"
+      }
+    }
+  });
+  const registry = await executePlatformApiRequestAsync(services, {
+    method: "GET",
+    path: "/app-store/registry",
+    headers: CREATOR_HEADERS
+  });
+
+  assert.equal(response.status, 400, JSON.stringify(response));
+  assert.equal(response.body.error.code, "SUBDOMAIN_INVALID");
+  assert.deepEqual(registry.body.data, []);
+});
+
 test("App Store API maps a taken subdomain to a stable conflict and preserves its owner", async () => {
   const services = await createRuntimePlatformApiServices({
     EVCP_CORE_PERSISTENCE: "memory"
@@ -223,6 +256,68 @@ test("a post-commit audit failure keeps the publish successful and runtime align
   assert.equal(auditFailure?.resourceId, response.body.data.publishRequest.id);
   assert.equal(auditFailure?.metadata.attemptedAction, "app.publish.completed");
   assert.equal(JSON.stringify(auditFailure).includes("launch-grant-secret-must-not-escape"), false);
+});
+
+test("dual post-commit audit failures cannot overturn a successful publish", async () => {
+  const services = await createRuntimePlatformApiServices({
+    EVCP_CORE_PERSISTENCE: "memory"
+  });
+  const project = await createReadyProject(services, "Dual Audit Resilient Operations");
+  services.publishStorePersistence = createPublishStoreRepositoryBackedService(
+    new MemoryPublishStorePersistenceClient({
+      projects: [{ id: project.id, ownerUserId: project.ownerUserId }]
+    })
+  );
+  services.corePersistence.recordAudit = async () => {
+    throw new Error("primary-audit-secret-must-not-escape");
+  };
+  services.audit.record = () => {
+    throw new Error("fallback-audit-secret-must-not-escape");
+  };
+  const operationalErrors = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => operationalErrors.push(args);
+  const runtimeDeployment = {
+    id: "wdep_dual_audit_success",
+    projectId: project.id,
+    slug: "dual-audit-resilient-operations",
+    environment: "production",
+    revision: 4,
+    commitSha: "def456",
+    imageTag: "app:def456",
+    imageDigest: "sha256:def456",
+    containerId: "container-dual-audit-success",
+    containerName: "app-dual-audit-success",
+    publishedByUserId: "usr_creator",
+    healthStatus: "healthy",
+    createdAt: "2026-08-27T00:00:00.000Z"
+  };
+
+  let response;
+  try {
+    response = await executePlatformApiRequestAsync(services, {
+      method: "POST",
+      path: `/projects/${project.id}/publish`,
+      headers: CREATOR_HEADERS,
+      body: { subdomain: "dual-audit-resilient", runtimeDeployment }
+    });
+  } finally {
+    console.error = originalConsoleError;
+  }
+  const registry = await executePlatformApiRequestAsync(services, {
+    method: "GET",
+    path: "/app-store/registry",
+    headers: CREATOR_HEADERS
+  });
+
+  assert.equal(response.status, 201, JSON.stringify(response));
+  assert.equal(response.body.data.deployment.deploymentRevisionId, runtimeDeployment.id);
+  assert.equal(registry.body.data[0].deploymentId, response.body.data.deployment.id);
+  assert.equal(registry.body.data[0].subdomain, "dual-audit-resilient");
+  const operationalEvidence = JSON.stringify(operationalErrors);
+  assert.match(operationalEvidence, /publish completion audit unavailable/i);
+  assert.equal(operationalEvidence.includes("primary-audit-secret-must-not-escape"), false);
+  assert.equal(operationalEvidence.includes("fallback-audit-secret-must-not-escape"), false);
 });
 
 test("a Prisma subdomain race preserves the previous registry deployment and hides database details", async () => {

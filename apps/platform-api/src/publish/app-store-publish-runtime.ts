@@ -5,6 +5,7 @@ import {
   validateSubdomainLabel,
   type PublishAccessUrlConfigDto
 } from "@evcp/api-client";
+import type { WorkspaceDeployment } from "@evcp/types";
 import type { HeaderBag, PlatformRequest, PlatformResponse } from "../platform-http-types";
 import {
   PermissionError,
@@ -19,6 +20,10 @@ import type { WorkspaceRepositoryBackedService } from "../persistence/workspace-
 import { resolvePersistenceUser } from "../preview-proxy-decision";
 
 type RuntimeEnv = Record<string, string | undefined>;
+const INTERNAL_PUBLISH_PERSISTENCE = Symbol("internal-publish-persistence");
+type InternalPublishPersistenceRequest = PlatformRequest & {
+  [INTERNAL_PUBLISH_PERSISTENCE]?: true;
+};
 type PublishRuntimeServices = PlatformApiServices & {
   corePersistence?: CoreRepositoryBackedService;
   prdPersistence?: PrdRepositoryBackedService;
@@ -26,6 +31,26 @@ type PublishRuntimeServices = PlatformApiServices & {
   publishStorePersistence?: PublishStoreRepositoryBackedService;
   publishAccessUrlConfig?: PublishAccessUrlConfigDto;
 };
+
+function isInternalPublishPersistenceRequest(request: PlatformRequest): boolean {
+  return (request as InternalPublishPersistenceRequest)[INTERNAL_PUBLISH_PERSISTENCE] === true;
+}
+
+export function createInternalPublishPersistenceRequest(input: {
+  headers: HeaderBag;
+  projectId: string;
+  deployment: WorkspaceDeployment;
+  subdomain?: string;
+}): PlatformRequest {
+  const request: InternalPublishPersistenceRequest = {
+    method: "POST",
+    path: `/projects/${input.projectId}/publish`,
+    headers: input.headers,
+    body: { runtimeDeployment: input.deployment, subdomain: input.subdomain }
+  };
+  Object.defineProperty(request, INTERNAL_PUBLISH_PERSISTENCE, { value: true });
+  return request;
+}
 
 export function resolvePublishAccessUrlConfig(
   env: RuntimeEnv = process.env
@@ -211,7 +236,7 @@ export async function handlePersistedPublishApiRequest(
   const runtimeDeployment = request.body?.runtimeDeployment as never;
   const requestedSubdomain = request.body?.subdomain;
   const validation =
-    runtimeDeployment && requestedSubdomain === undefined
+    isInternalPublishPersistenceRequest(request) && requestedSubdomain === undefined
       ? undefined
       : validateRequestedSubdomain(requestedSubdomain);
   if (validation && !validation.ok) return validation.response;
@@ -250,19 +275,32 @@ export async function handlePersistedPublishApiRequest(
       }
     });
   } catch {
-    services.audit.record({
-      actorId: actor.id,
-      action: "audit.persistence_failed",
-      resourceType: "publish_request",
-      resourceId: result.publishRequest.id,
-      severity: "high",
-      metadata: {
-        attemptedAction: "app.publish.completed",
-        projectId: project.id,
-        deploymentId: result.deployment.id,
-        registryEntryId: result.registryEntry.id
+    try {
+      services.audit.record({
+        actorId: actor.id,
+        action: "audit.persistence_failed",
+        resourceType: "publish_request",
+        resourceId: result.publishRequest.id,
+        severity: "high",
+        metadata: {
+          attemptedAction: "app.publish.completed",
+          projectId: project.id,
+          deploymentId: result.deployment.id,
+          registryEntryId: result.registryEntry.id
+        }
+      });
+    } catch {
+      try {
+        console.error("publish completion audit unavailable", {
+          projectId: project.id,
+          publishRequestId: result.publishRequest.id,
+          deploymentId: result.deployment.id,
+          registryEntryId: result.registryEntry.id
+        });
+      } catch {
+        // The publish transaction is already committed; diagnostics must stay non-fatal.
       }
-    });
+    }
   }
   return { status: HttpStatus.CREATED, body: success(result) };
 }
@@ -287,7 +325,7 @@ export function handleLegacyPublishApiRequest(
   if (request.method !== "POST" || !publishMatch) return null;
   const requestedSubdomain = request.body?.subdomain;
   const validation =
-    request.body?.runtimeDeployment && requestedSubdomain === undefined
+    isInternalPublishPersistenceRequest(request) && requestedSubdomain === undefined
       ? undefined
       : validateRequestedSubdomain(requestedSubdomain);
   if (validation && !validation.ok) return validation.response;
