@@ -51,6 +51,7 @@ export interface DeploymentRecordData {
 }
 export interface AppStoreRegistryEntryRecord {
   id: string; appId: string; projectId: string; deploymentRecordId: string; slug: string;
+  subdomain: string | null;
   name: string; route: string; status: string; visibility: string; accessMode: string;
   roleKeys: string[]; ownerUserId: string; manifestVersion: string; publishedAt: DateValue;
 }
@@ -115,7 +116,7 @@ export interface PublishStorePersistenceClient {
   };
   appStoreRegistryEntry: {
     findMany(args?: { where?: { status?: string }; orderBy?: { publishedAt?: "asc" | "desc" } }): Promise<AppStoreRegistryEntryRecord[]>;
-    findFirst(args: { where: { slug?: string; projectId?: string; appId?: string } }): Promise<AppStoreRegistryEntryRecord | null>;
+    findFirst(args: { where: { slug?: string; subdomain?: string; projectId?: string; appId?: string } }): Promise<AppStoreRegistryEntryRecord | null>;
     upsert(args: { where: { appId: string }; update: Partial<AppStoreRegistryEntryRecord>; create: AppStoreRegistryEntryRecord }): Promise<AppStoreRegistryEntryRecord>;
   };
   supportTicket: {

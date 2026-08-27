@@ -34,6 +34,7 @@ import type {
   TicketType
 } from "../platform-services";
 import type { WorkspaceDeployment } from "@evcp/types";
+import type { PublishAccessUrlConfigDto } from "@evcp/api-client";
 import { PermissionError, ValidationError } from "../platform-services";
 import { canAccessPublishedProject, storeActionsForCard } from "./published-app-access";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
@@ -45,8 +46,6 @@ import type {
   AppMemberRecordData,
   AppRecord,
   AppRoleRecord,
-  AppStoreRegistryEntryRecord,
-  DeploymentRecordData,
   InAppNotificationRecord,
   PublishRequestRecordData,
   PublishStorePersistenceClient,
@@ -56,14 +55,36 @@ import type {
 import { slugId, slugToId, toIsoString } from "./publish-store-record-utils";
 import { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
 import { defaultUserName, defaultUserRecord } from "./publish-store-users";
+import {
+  assertSubdomainClaimAvailable,
+  DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
+  mapDeploymentRecord,
+  mapRegistryEntry
+} from "./publish-store-service-support";
 export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 export { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
+export { DEFAULT_PUBLISH_ACCESS_URL_CONFIG, SubdomainConflictError } from "./publish-store-service-support";
 
 export class PublishStoreRepositoryBackedService {
-  constructor(private readonly client: PublishStorePersistenceClient) {}
+  constructor(
+    private readonly client: PublishStorePersistenceClient,
+    private readonly accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
+  ) {}
 
   async canAccessPublishedProject(actor: PlatformUser, projectId: string): Promise<boolean> {
     return canAccessPublishedProject(this.client, actor, projectId);
+  }
+
+  async assertSubdomainAvailable(
+    actor: PlatformUser,
+    projectId: string,
+    label: string
+  ): Promise<string> {
+    requireAnyRole(actor, ["admin", "creator"]);
+    const existing = await this.client.appStoreRegistryEntry.findFirst({
+      where: { subdomain: label.trim().toLowerCase() }
+    });
+    return assertSubdomainClaimAvailable(label, existing?.projectId, projectId);
   }
 
   async getAppAccessSnapshot(
@@ -244,6 +265,7 @@ export class PublishStoreRepositoryBackedService {
       baseline: PrdVersion;
       preview: PreviewVersion;
       runtimeDeployment?: WorkspaceDeployment;
+      subdomain?: string;
     }
   ): Promise<PublishResult> {
     requireProjectAccess(actor, input.project);
@@ -317,11 +339,19 @@ export class PublishStoreRepositoryBackedService {
         publishedAt: now
       }
     });
+    const existingRegistry = await this.client.appStoreRegistryEntry.findFirst({
+      where: { appId: review.manifest.appId }
+    });
+    const requestedSubdomain = input.subdomain ?? existingRegistry?.subdomain ?? null;
+    const subdomain = requestedSubdomain
+      ? await this.assertSubdomainAvailable(actor, input.project.id, requestedSubdomain)
+      : null;
     const registryEntry = await this.client.appStoreRegistryEntry.upsert({
       where: { appId: review.manifest.appId },
       update: {
         deploymentRecordId: deployment.id,
         slug: review.manifest.app.slug,
+        subdomain,
         name: review.manifest.app.name,
         route: review.manifest.app.route,
         status: "published",
@@ -338,6 +368,7 @@ export class PublishStoreRepositoryBackedService {
         projectId: input.project.id,
         deploymentRecordId: deployment.id,
         slug: review.manifest.app.slug,
+        subdomain,
         name: review.manifest.app.name,
         route: review.manifest.app.route,
         status: "published",
@@ -350,10 +381,11 @@ export class PublishStoreRepositoryBackedService {
       }
     });
 
+    const mappedRegistryEntry = mapRegistryEntry(registryEntry, this.accessUrlConfig);
     return {
       publishRequest: mapPublishRequest(publishRequest),
-      deployment: mapDeployment(deployment),
-      registryEntry: mapRegistry(registryEntry),
+      deployment: mapDeploymentRecord(deployment, mappedRegistryEntry),
+      registryEntry: mappedRegistryEntry,
       manifest: review.manifest
     };
   }
@@ -364,7 +396,7 @@ export class PublishStoreRepositoryBackedService {
       where: { status: "published" },
       orderBy: { publishedAt: "asc" }
     });
-    return records.map(mapRegistry);
+    return records.map((record) => mapRegistryEntry(record, this.accessUrlConfig));
   }
 
   async listStoreApps(actor: PlatformUser): Promise<StorefrontHome> {
@@ -615,7 +647,13 @@ export class PublishStoreRepositoryBackedService {
     });
     const deployment = deployments.at(-1);
     if (!deployment) throw new ValidationError(`No deployment record for project ${project.id}`);
-    return mapDeployment(deployment);
+    const registryEntry = await this.client.appStoreRegistryEntry.findFirst({
+      where: { projectId: project.id }
+    });
+    return mapDeploymentRecord(
+      deployment,
+      registryEntry ? mapRegistryEntry(registryEntry, this.accessUrlConfig) : undefined
+    );
   }
 
   async getManifestForProject(actor: PlatformUser, project: PlatformProject): Promise<AppManifest> {
@@ -959,7 +997,7 @@ export class PublishStoreRepositoryBackedService {
   private async requireRegistryEntry(appSlug: string): Promise<AppStoreRegistryEntry> {
     const entry = await this.client.appStoreRegistryEntry.findFirst({ where: { slug: appSlug } });
     if (!entry) throw new PermissionError(`Unknown app or app is not visible: ${appSlug}`);
-    return mapRegistry(entry);
+    return mapRegistryEntry(entry, this.accessUrlConfig);
   }
 
   private async requireTicket(ticketId: string): Promise<SupportTicket> {
@@ -992,6 +1030,8 @@ export class PublishStoreRepositoryBackedService {
       description: `${entry.name} is published and governed through Horizon.`,
       ownerName: defaultUserName(entry.ownerUserId, entry.ownerUserId),
       route: entry.route,
+      subdomain: entry.subdomain,
+      subdomainUrl: entry.subdomainUrl,
       accessStatus,
       installStatus,
       installationId: installation?.id,
@@ -1046,13 +1086,15 @@ export class PublishStoreRepositoryBackedService {
 }
 
 export function createPublishStoreRepositoryBackedService(
-  client: PublishStorePersistenceClient = new MemoryPublishStorePersistenceClient()
+  client: PublishStorePersistenceClient = new MemoryPublishStorePersistenceClient(),
+  accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
 ): PublishStoreRepositoryBackedService {
-  return new PublishStoreRepositoryBackedService(client);
+  return new PublishStoreRepositoryBackedService(client, accessUrlConfig);
 }
 
 export async function createPrismaPublishStorePersistence(
-  databaseUrl = process.env.DATABASE_URL
+  databaseUrl = process.env.DATABASE_URL,
+  accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
 ): Promise<{
   client: PublishStorePersistenceClient;
   service: PublishStoreRepositoryBackedService;
@@ -1063,7 +1105,7 @@ export async function createPrismaPublishStorePersistence(
   ) as unknown as PublishStorePersistenceClient;
   return {
     client,
-    service: new PublishStoreRepositoryBackedService(client)
+    service: new PublishStoreRepositoryBackedService(client, accessUrlConfig)
   };
 }
 
@@ -1160,48 +1202,6 @@ function mapPublishRequest(record: PublishRequestRecordData): PublishRequestReco
     blockingItems: Array.isArray(record.blockingItems) ? record.blockingItems.map(String) : [],
     createdAt: toIsoString(record.createdAt),
     publishedAt: record.publishedAt ? toIsoString(record.publishedAt) : undefined
-  };
-}
-
-function mapDeployment(record: DeploymentRecordData): DeploymentRecord {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    appId: record.appId,
-    publishRequestId: record.publishRequestId,
-    status: record.status === "published" ? "published" : "failed",
-    environment: "app_store",
-    route: record.route,
-    manifestVersion: record.manifestVersion,
-    prdVersion: record.prdVersion,
-    frontendCheckpointId: record.frontendCheckpointId,
-    publishedByUserId: record.publishedByUserId,
-    deploymentRevisionId: record.deploymentRevisionId ?? undefined,
-    runtimeRevision: record.runtimeRevision ?? undefined,
-    sourceCommitSha: record.sourceCommitSha ?? undefined,
-    imageTag: record.imageTag ?? undefined,
-    imageDigest: record.imageDigest ?? undefined,
-    containerName: record.containerName ?? undefined,
-    publishedAt: toIsoString(record.publishedAt)
-  };
-}
-
-function mapRegistry(record: AppStoreRegistryEntryRecord): AppStoreRegistryEntry {
-  return {
-    id: record.id,
-    appId: record.appId,
-    projectId: record.projectId,
-    slug: record.slug,
-    name: record.name,
-    route: record.route,
-    status: "published",
-    visibility: "restricted",
-    accessMode: "membership_or_invite",
-    roleKeys: [...record.roleKeys],
-    ownerUserId: record.ownerUserId,
-    deploymentId: record.deploymentRecordId,
-    manifestVersion: record.manifestVersion,
-    publishedAt: toIsoString(record.publishedAt)
   };
 }
 

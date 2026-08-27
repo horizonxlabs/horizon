@@ -1057,6 +1057,7 @@ model AppStoreRegistryEntry {
   projectId          String   @map("project_id")
   deploymentRecordId String   @unique @map("deployment_record_id")
   slug               String   @unique
+  subdomain          String?  @unique
   name               String
   route              String
   status             String

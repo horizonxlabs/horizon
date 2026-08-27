@@ -1,4 +1,10 @@
-import { failure, success, type ApiFailure, type ApiSuccess } from "@evcp/api-client";
+import {
+  failure,
+  success,
+  type ApiFailure,
+  type ApiSuccess,
+  type PublishAccessUrlConfigDto
+} from "@evcp/api-client";
 import { mockUsers, projects as seedProjects } from "@evcp/mock-data";
 import type { MockUser, PlatformRole, Status, WorkspaceAgentMode } from "@evcp/types";
 import { createHash, createHmac, randomUUID } from "node:crypto";
@@ -27,6 +33,15 @@ import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/fac
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 import { schemaNameFor } from "./workspace-orchestrator/postgres-provisioner";
 import { resourceKeyForProject } from "./workspace-orchestrator/resource-ports";
+import {
+  assertSubdomainClaimAvailable,
+  attachRegistrySubdomain,
+  buildConfiguredSubdomainUrl,
+  createLegacyStorefrontCard,
+  DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
+  ensureLegacyStorefrontNotifications,
+  upsertByAppId
+} from "./persistence/publish-store-service-support";
 
 export { IdentityService } from "./identity-service";
 export {
@@ -36,6 +51,8 @@ export {
   QuotaExceededError,
   ValidationError
 } from "./platform-errors";
+
+export { SubdomainConflictError } from "./persistence/publish-store-service-support";
 
 export interface PlatformUser extends MockUser {
   status: "active" | "inactive" | "invited" | "suspended";
@@ -845,6 +862,8 @@ export interface DeploymentRecord {
   status: "published" | "failed";
   environment: "app_store";
   route: string;
+  subdomain?: string;
+  subdomainUrl?: string;
   manifestVersion: string;
   prdVersion: string;
   frontendCheckpointId: string;
@@ -863,6 +882,8 @@ export interface AppStoreRegistryEntry {
   appId: string;
   projectId: string;
   slug: string;
+  subdomain?: string;
+  subdomainUrl?: string;
   name: string;
   route: string;
   status: "published";
@@ -985,6 +1006,8 @@ export interface StorefrontAppCard {
   appId: string;
   projectId: string;
   slug: string;
+  subdomain?: string;
+  subdomainUrl?: string;
   name: string;
   description: string;
   ownerName: string;
@@ -5848,7 +5871,8 @@ export class PublishService {
     private readonly prds: PrdService,
     private readonly frontendVersions: FrontendVersionService,
     private readonly databaseView: DatabaseViewService,
-    private readonly appAccess: AppUserAccessService
+    private readonly appAccess: AppUserAccessService,
+    private readonly accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
   ) {}
 
   getReview(actor: PlatformUser, projectId: string): PublishReview {
@@ -5864,7 +5888,18 @@ export class PublishService {
     };
   }
 
-  publishApp(actor: PlatformUser, projectId: string): PublishResult {
+  assertSubdomainAvailable(actor: PlatformUser, projectId: string, label: string): string {
+    this.auth.requireRole(actor, ["admin", "creator"]);
+    this.projects.getProjectForActor(actor, projectId);
+    const existing = this.registry.find((candidate) => candidate.subdomain === label.trim().toLowerCase());
+    return assertSubdomainClaimAvailable(label, existing?.projectId, projectId);
+  }
+
+  publishApp(
+    actor: PlatformUser,
+    projectId: string,
+    input: { subdomain?: string } = {}
+  ): PublishResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const review = this.getReview(actor, projectId);
     const blockingItems = review.checklist
@@ -5897,7 +5932,7 @@ export class PublishService {
       throw new ValidationError(`Publish blocked: ${blockingItems.join(", ")}`);
     }
 
-    this.storeManifest(review.manifest);
+    upsertByAppId(this.manifests, review.manifest);
     review.project.status = "published";
     const deployment: DeploymentRecord = {
       id: `dep_${review.manifest.app.slug.replace(/[^a-z0-9]+/gi, "_")}_${String(this.deployments.length + 1).padStart(3, "0")}`,
@@ -5914,11 +5949,21 @@ export class PublishService {
       publishedAt: now
     };
 
+    const existingRegistry = this.registry.find(
+      (candidate) => candidate.appId === review.manifest.appId
+    );
+    const subdomainSource = input.subdomain ?? existingRegistry?.subdomain;
+    const subdomain = subdomainSource
+      ? this.assertSubdomainAvailable(actor, review.project.id, subdomainSource)
+      : undefined;
+    const subdomainUrl = buildConfiguredSubdomainUrl(subdomain, this.accessUrlConfig);
     const registryEntry: AppStoreRegistryEntry = {
       id: `store_${review.manifest.app.slug}`,
       appId: review.manifest.appId,
       projectId: review.project.id,
       slug: review.manifest.app.slug,
+      subdomain,
+      subdomainUrl,
       name: review.manifest.app.name,
       route: review.manifest.app.route,
       status: "published",
@@ -5932,7 +5977,7 @@ export class PublishService {
     };
 
     this.deployments.push(deployment);
-    this.upsertRegistry(registryEntry);
+    upsertByAppId(this.registry, registryEntry);
     this.audit.record({
       actorId: actor.id,
       action: "app.publish.completed",
@@ -5948,7 +5993,7 @@ export class PublishService {
 
     return {
       publishRequest,
-      deployment,
+      deployment: { ...deployment, subdomain, subdomainUrl },
       registryEntry,
       manifest: review.manifest
     };
@@ -5966,7 +6011,8 @@ export class PublishService {
       .reverse()
       .find((candidate) => candidate.projectId === projectId);
     if (!deployment) throw new ValidationError(`No deployment record for project ${projectId}`);
-    return deployment;
+    const registryEntry = this.registry.find((candidate) => candidate.projectId === projectId);
+    return attachRegistrySubdomain(deployment, registryEntry);
   }
 
   getManifestForProject(actor: PlatformUser, projectId: string): AppManifest {
@@ -6094,19 +6140,6 @@ export class PublishService {
     ];
   }
 
-  private storeManifest(manifest: AppManifest): void {
-    const existingIndex = this.manifests.findIndex(
-      (candidate) => candidate.appId === manifest.appId
-    );
-    if (existingIndex >= 0) this.manifests[existingIndex] = manifest;
-    else this.manifests.push(manifest);
-  }
-
-  private upsertRegistry(entry: AppStoreRegistryEntry): void {
-    const existingIndex = this.registry.findIndex((candidate) => candidate.appId === entry.appId);
-    if (existingIndex >= 0) this.registry[existingIndex] = entry;
-    else this.registry.push(entry);
-  }
 }
 
 export class GeneratedAppRuntimeService {
@@ -6302,7 +6335,7 @@ export class StorefrontService {
   listApps(actor: PlatformUser): StorefrontHome {
     this.auth.requireRole(actor, ["end_user", "creator", "admin"]);
     const cards = this.publish.listRegistry(actor).map((entry) => this.toCard(actor, entry));
-    const notifications = this.ensureNotifications(actor, cards);
+    const notifications = ensureLegacyStorefrontNotifications(this.notifications, actor.id, cards);
 
     return {
       profile: {
@@ -6374,63 +6407,17 @@ export class StorefrontService {
     const project = this.projects.getProjectById(entry.projectId);
     const member = this.appAccess.getMemberForEmail(project, actor.email);
     const pending = this.appAccess.getPendingRequestForEmail(project, actor.email);
-    const accessStatus: StoreAppAccessStatus = member
-      ? "active"
-      : pending
-        ? "pending"
-        : "available";
-    const installStatus: StoreAppInstallStatus = member ? "installed" : "not_installed";
     const owner = this.identity.listUsers().find((user) => user.id === entry.ownerUserId);
-
-    return {
-      id: entry.id,
-      appId: entry.appId,
-      projectId: entry.projectId,
-      slug: entry.slug,
-      name: entry.name,
-      description: `${project.appType} for ${project.targetDepartment}`,
-      ownerName: owner?.name ?? entry.ownerUserId,
-      route: entry.route,
-      accessStatus,
-      installStatus,
-      installationId: member ? `legacy_appinst_${entry.appId}_${actor.id}` : undefined,
-      installedAt: member?.lastAccessAt,
-      myRole: member?.roleName,
-      health: "healthy",
-      version: `manifest v${entry.manifestVersion}`,
-      lastUpdated: entry.publishedAt,
-      primaryAction:
-        accessStatus === "active"
-          ? "open"
-          : accessStatus === "pending"
-            ? "view_status"
-            : "request_access"
-    };
+    return createLegacyStorefrontCard({
+      entry,
+      project,
+      member,
+      hasPendingAccessRequest: Boolean(pending),
+      ownerName: owner?.name,
+      actorId: actor.id
+    });
   }
 
-  private ensureNotifications(
-    actor: PlatformUser,
-    cards: StorefrontAppCard[]
-  ): InAppNotification[] {
-    if (!this.notifications.some((notification) => notification.userId === actor.id)) {
-      for (const card of cards) {
-        this.notifications.push({
-          id: `noti_${actor.id}_${card.slug}`,
-          userId: actor.id,
-          type: "app_published",
-          title: `${card.name} is available`,
-          body:
-            card.accessStatus === "active"
-              ? "You can open this app from My Apps."
-              : "Request access from the app detail page.",
-          read: false,
-          createdAt: card.lastUpdated
-        });
-      }
-    }
-
-    return this.notifications.filter((notification) => notification.userId === actor.id);
-  }
 }
 
 export class TicketService {
@@ -8303,6 +8290,7 @@ export type PlatformApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 export interface PlatformApiServiceOptions {
   aiGateway?: AiGatewayRuntimeOptions;
+  publishAccessUrlConfig?: PublishAccessUrlConfigDto;
 }
 
 export function createPlatformApiServices(
@@ -8328,7 +8316,8 @@ export function createPlatformApiServices(
     prds,
     frontendVersions,
     databaseView,
-    appAccess
+    appAccess,
+    options.publishAccessUrlConfig
   );
   const generatedRuntime = new GeneratedAppRuntimeService(auth, audit, projects, publish);
   const storefront = new StorefrontService(auth, identity, projects, publish, appAccess);

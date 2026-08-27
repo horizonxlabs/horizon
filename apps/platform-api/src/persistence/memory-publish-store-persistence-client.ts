@@ -254,18 +254,30 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         this.registry.find(
           (entry) =>
             (!where.slug || entry.slug === where.slug) &&
+            (!where.subdomain || entry.subdomain === where.subdomain) &&
             (!where.projectId || entry.projectId === where.projectId) &&
             (!where.appId || entry.appId === where.appId)
         ) ?? null,
       upsert: async ({ where, update, create }) => {
         const index = this.registry.findIndex((entry) => entry.appId === where.appId);
-        if (index >= 0) {
-          const next = { ...this.registry[index], ...update };
-          this.registry[index] = next;
-          return next;
+        const candidate = index >= 0 ? { ...this.registry[index], ...update } : create;
+        const duplicate = candidate.subdomain
+          ? this.registry.find(
+              (entry) => entry.appId !== candidate.appId && entry.subdomain === candidate.subdomain
+            )
+          : undefined;
+        if (duplicate) {
+          const error = Object.assign(new Error("Unique constraint failed on subdomain"), {
+            code: "P2002"
+          });
+          throw error;
         }
-        this.registry.push(create);
-        return create;
+        if (index >= 0) {
+          this.registry[index] = candidate;
+          return candidate;
+        }
+        this.registry.push(candidate);
+        return candidate;
       }
     };
     this.supportTicket = {

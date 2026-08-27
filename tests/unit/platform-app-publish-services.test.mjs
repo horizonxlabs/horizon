@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 
 const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
 
-function createSprint6Fixture() {
-  const services = createPlatformApiServices();
+function createSprint6Fixture(options) {
+  const services = createPlatformApiServices(options);
   const admin = services.auth.resolveCurrentUser({ "x-mock-user-email": "admin@company.com" });
   const creator = services.auth.resolveCurrentUser({ "x-mock-user-email": "creator@company.com" });
   const endUser = services.auth.resolveCurrentUser({ "x-mock-user-email": "user@company.com" });
@@ -138,6 +138,30 @@ test("publish creates deployment record and app store registry entry", () => {
   assert.equal(result.registryEntry.slug, project.appId);
   assert.ok(registry.some((entry) => entry.slug === project.appId));
   assert.ok(services.audit.list().some((event) => event.action === "app.publish.completed" && event.resourceId === result.publishRequest.id));
+});
+
+test("in-memory publish maps a selected subdomain to the registry and Store card", () => {
+  const { services, creator, project } = createSprint6Fixture({
+    publishAccessUrlConfig: { baseDomain: "apps.example.test", secure: true }
+  });
+
+  const firstPublish = services.publish.publishApp(creator, project.id, {
+    subdomain: "team-leave"
+  });
+  const republish = services.publish.publishApp(creator, project.id, {
+    subdomain: "team-leave"
+  });
+  const card = services.storefront
+    .listApps(creator)
+    .myApps.find((app) => app.projectId === project.id);
+
+  assert.equal(firstPublish.registryEntry.route, `/apps/${project.appId}`);
+  assert.equal(firstPublish.registryEntry.subdomain, "team-leave");
+  assert.equal(firstPublish.registryEntry.subdomainUrl, "https://team-leave.apps.example.test");
+  assert.equal(firstPublish.deployment.subdomainUrl, "https://team-leave.apps.example.test");
+  assert.equal(republish.registryEntry.subdomain, "team-leave");
+  assert.equal(card?.route, `/apps/${project.appId}`);
+  assert.equal(card?.subdomainUrl, "https://team-leave.apps.example.test");
 });
 
 test("publish blocks missing checklist items and denies end users", () => {
