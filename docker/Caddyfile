@@ -5,6 +5,17 @@
 	@compressible not path /api/*
 	encode @compressible zstd gzip
 
+	@published_subdomain {
+		host *.localhost
+		header_regexp published Host ^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?\.localhost(?::[0-9]+)?$
+	}
+	handle @published_subdomain {
+		rewrite * /__subdomain{uri}
+		reverse_proxy platform-api:3100 {
+			header_up Host {http.request.host}
+		}
+	}
+
 	handle /auth/* {
 		reverse_proxy keycloak:8080
 	}

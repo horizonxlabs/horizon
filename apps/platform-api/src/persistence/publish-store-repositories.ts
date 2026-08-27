@@ -60,6 +60,7 @@ import {
 } from "./publish-store-publish-transaction";
 import { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
 import { defaultUserName, defaultUserRecord } from "./publish-store-users";
+import { resolvePersistedPublishedSubdomain } from "./published-subdomain-registry";
 import {
   assertSubdomainClaimAvailable,
   DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
@@ -80,7 +81,7 @@ export class PublishStoreRepositoryBackedService {
     private readonly client: PublishStorePersistenceClient,
     private readonly accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
   ) {}
-
+  resolvePublishedSubdomain(subdomain: string) { return resolvePersistedPublishedSubdomain(this.client, this.accessUrlConfig, subdomain); }
   async canAccessPublishedProject(actor: PlatformUser, projectId: string): Promise<boolean> {
     return canAccessPublishedProject(this.client, actor, projectId);
   }

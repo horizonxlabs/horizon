@@ -263,6 +263,8 @@ services:
       # Without this the app defaults to "legacy" (mock-first) persistence: real Postgres-backed
       # services (incl. first-time setup / business settings) never wire up and /setup/* 404s.
       EVCP_CORE_PERSISTENCE: ${EVCP_CORE_PERSISTENCE:-prisma}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      EVCP_APP_SUBDOMAIN_BASE_DOMAIN: ${EVCP_APP_SUBDOMAIN_BASE_DOMAIN:-localhost}
       EVCP_LITELLM_BASE_URL: http://litellm:4000
       EVCP_LITELLM_MASTER_KEY_FILE: /run/secrets/evcp_litellm_master_key
       EVCP_WORKSPACE_SECRET_KEY_FILE: /run/secrets/evcp_workspace_secret_key
@@ -372,6 +374,7 @@ services:
     environment:
       EVCP_CADDY_ADDRESS: ${EVCP_CADDY_ADDRESS:-localhost}
       EVCP_STORAGE_CADDY_ADDRESS: ${EVCP_STORAGE_CADDY_ADDRESS:-storage.localhost}
+      EVCP_APP_SUBDOMAIN_BASE_DOMAIN: ${EVCP_APP_SUBDOMAIN_BASE_DOMAIN:-localhost}
     ports:
       - "${EVCP_HTTP_PORT:-8080}:80"
       - "${EVCP_HTTPS_PORT:-8443}:443"

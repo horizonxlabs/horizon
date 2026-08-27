@@ -11,6 +11,11 @@ import { registerAppLaunchSessionRoute, type AppLaunchAuthorization } from "./ap
 import { resolveRawAppStoreSubdomain } from "./app-store-publish-runtime";
 import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 import type { LaunchGrantStore } from "./launch-grant-store";
+import {
+  proxyPublishedDeployment,
+  registerPublishedSubdomainHttpRoutes,
+  type PublishedSubdomainRegistryEntry
+} from "./subdomain-http-routes";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -121,6 +126,11 @@ export async function registerPublishHttpRoutes(opts: {
   }) => Promise<{ status: number; body: unknown }>;
   publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
   launchGrantStore?: LaunchGrantStore;
+  subdomainBaseDomain?: string;
+  subdomainSecureCookie?: boolean;
+  resolvePublishedSubdomain?: (
+    subdomain: string
+  ) => Promise<PublishedSubdomainRegistryEntry | null>;
   resolveAppLaunch: (input: { headers: HeaderBag; appSlug: string }) => Promise<AppLaunchAuthorization>;
   recordAudit: (event: {
     action: string;
@@ -327,6 +337,20 @@ export async function registerPublishHttpRoutes(opts: {
     secureCookie: (opts.env ?? process.env).NODE_ENV === "production"
   });
 
+  registerPublishedSubdomainHttpRoutes({
+    rawApp,
+    nodeHttp,
+    deployments: workspaceDeployments,
+    launchGrantStore: opts.launchGrantStore,
+    baseDomain: opts.subdomainBaseDomain ?? "localhost",
+    secureCookie:
+      opts.subdomainSecureCookie ?? (opts.env ?? process.env).NODE_ENV === "production",
+    resolvePublishedSubdomain: opts.resolvePublishedSubdomain ?? (async () => null),
+    resolvePublishAuth: opts.resolvePublishAuth,
+    canAccessDeployment: opts.canAccessDeployment,
+    rehydrateDeployment: (resourceKey) => rehydrateDeployment(resourceKey, "production")
+  });
+
   // Public reverse proxy to a healthy deployment for the given environment. Publishing endpoints
   // above remain authenticated. Deployed apps receive their full base-path URL so Next can match
   // the EVCP_PREVIEW_BASE that was compiled into the image.
@@ -349,43 +373,14 @@ export async function registerPublishHttpRoutes(opts: {
         res.status(403).json({ error: "forbidden" });
         return;
       }
-      const target = new URL(decision.upstream);
       const forwardPath = deploymentProxyPath(req.originalUrl);
-      const forwardHeaders: HeaderBag = { ...req.headers, host: target.host };
-      for (const key of Object.keys(forwardHeaders)) {
-        if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {
-          delete forwardHeaders[key];
-        }
-      }
-      const proxyReq = nodeHttp.request(
-        {
-          hostname: target.hostname,
-          port: target.port || 80,
-          method: req.method,
-          path: forwardPath,
-          headers: forwardHeaders
-        },
-        (proxyRes) => {
-          res.statusCode = proxyRes.statusCode ?? 502;
-          for (const [key, value] of Object.entries(proxyRes.headers)) {
-            if (value !== undefined) res.setHeader(key, value as string | string[]);
-          }
-          proxyRes.pipe(res as unknown as NodeJS.WritableStream);
-        }
-      );
-      proxyReq.on("error", () => {
-        if (!res.headersSent) res.status(502).json({ error: "app_upstream_unreachable" });
+      proxyPublishedDeployment({
+        nodeHttp,
+        request: req,
+        response: res,
+        upstream: decision.upstream,
+        path: forwardPath
       });
-      const method = String(req.method ?? "GET").toUpperCase();
-      if (method === "GET" || method === "HEAD" || req.body === undefined || req.body === null) {
-        proxyReq.end();
-      } else {
-        const payload = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-        proxyReq.setHeader("content-type", "application/json");
-        proxyReq.setHeader("content-length", Buffer.byteLength(payload));
-        proxyReq.write(payload);
-        proxyReq.end();
-      }
     };
 
   // Staging serve routes must be registered BEFORE the production `/apps/:slug` routes so the more

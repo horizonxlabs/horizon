@@ -2331,6 +2331,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     services.audit.record({ actorId: "system", action: event.action, resourceType: "workspace_container", resourceId: event.projectId, metadata: event.metadata });
   const projectLifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
   const publishStack = await createDefaultPublishStack({ orchestrator: services.workspaceOrchestrator, migrations: sharedMigrationStore, env: process.env, onAudit: recordPublishAudit, lifecycle: projectLifecycle });
+  const publishAccessUrlConfig = services.publishAccessUrlConfig ?? resolvePublishAccessUrlConfig(process.env);
   services.projectResourceCleanup = (projectId, fence) => deletePersistedProjectResources(projectId, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, () => publishStack.publishService.deleteProject(projectId, fence), fence);
   await registerPublishHttpRoutes({
     rawApp,
@@ -2353,6 +2354,15 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
       ),
     launchGrantStore: services.launchGrantStore,
+    subdomainBaseDomain: publishAccessUrlConfig.baseDomain,
+    subdomainSecureCookie: publishAccessUrlConfig.secure,
+    resolvePublishedSubdomain: async (subdomain) => {
+      if (!services.publishStorePersistence) return null;
+      const entry = await services.publishStorePersistence.resolvePublishedSubdomain(subdomain);
+      return entry?.subdomain
+        ? { appSlug: entry.slug, projectId: entry.projectId, routePath: entry.route, subdomain: entry.subdomain }
+        : null;
+    },
     resolveAppLaunch: async ({ headers, appSlug }) => {
       const detail = services.publishStorePersistence
         ? await services.publishStorePersistence.getStoreAppDetail(
