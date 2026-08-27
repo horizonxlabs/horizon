@@ -141,6 +141,13 @@ export async function resolveRawAppStoreSubdomain(input: {
     };
   } catch (error) {
     const domainError = error as { code?: unknown; status?: unknown };
+    if (error instanceof Error && error.name === "PermissionError") {
+      return {
+        ok: false,
+        status: HttpStatus.FORBIDDEN,
+        body: failure("FORBIDDEN", error.message)
+      };
+    }
     if (domainError.code === "SUBDOMAIN_TAKEN" && domainError.status === 409) {
       return {
         ok: false,
@@ -226,21 +233,37 @@ export async function handlePersistedPublishApiRequest(
     if (conflict) return conflict;
     throw error;
   }
-  await corePersistence.recordAudit({
-    actorId: actor.id,
-    action: "app.publish.completed",
-    resourceType: "publish_request",
-    resourceId: result.publishRequest.id,
-    metadata: {
-      projectId: project.id,
-      deploymentId: result.deployment.id,
-      registryEntryId: result.registryEntry.id,
-      manifestVersion: result.manifest.manifestVersion,
-      subdomain: result.registryEntry.subdomain,
-      route: result.registryEntry.route,
-      subdomainUrl: result.registryEntry.subdomainUrl
-    }
-  });
+  try {
+    await corePersistence.recordAudit({
+      actorId: actor.id,
+      action: "app.publish.completed",
+      resourceType: "publish_request",
+      resourceId: result.publishRequest.id,
+      metadata: {
+        projectId: project.id,
+        deploymentId: result.deployment.id,
+        registryEntryId: result.registryEntry.id,
+        manifestVersion: result.manifest.manifestVersion,
+        subdomain: result.registryEntry.subdomain,
+        route: result.registryEntry.route,
+        subdomainUrl: result.registryEntry.subdomainUrl
+      }
+    });
+  } catch {
+    services.audit.record({
+      actorId: actor.id,
+      action: "audit.persistence_failed",
+      resourceType: "publish_request",
+      resourceId: result.publishRequest.id,
+      severity: "high",
+      metadata: {
+        attemptedAction: "app.publish.completed",
+        projectId: project.id,
+        deploymentId: result.deployment.id,
+        registryEntryId: result.registryEntry.id
+      }
+    });
+  }
   return { status: HttpStatus.CREATED, body: success(result) };
 }
 
@@ -262,15 +285,19 @@ export function handleLegacyPublishApiRequest(
   }
   const publishMatch = request.path.match(/^\/projects\/([^/]+)\/publish$/);
   if (request.method !== "POST" || !publishMatch) return null;
-  const validation = validateRequestedSubdomain(request.body?.subdomain);
-  if (!validation.ok) return validation.response;
+  const requestedSubdomain = request.body?.subdomain;
+  const validation =
+    request.body?.runtimeDeployment && requestedSubdomain === undefined
+      ? undefined
+      : validateRequestedSubdomain(requestedSubdomain);
+  if (validation && !validation.ok) return validation.response;
   const actor = services.auth.resolveCurrentUser(request.headers ?? {});
   try {
     return {
       status: HttpStatus.CREATED,
       body: success(
         services.publish.publishApp(actor, publishMatch[1], {
-          subdomain: validation.subdomain
+          subdomain: validation?.subdomain
         })
       )
     };

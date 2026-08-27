@@ -3,10 +3,18 @@ import assert from "node:assert/strict";
 import { registerPublishHttpRoutes } from "../../apps/platform-api/src/publish/http-routes.ts";
 import { createMemoryDeploymentStore } from "../../apps/platform-api/src/publish/deployment-store.ts";
 import { createMemoryMigrationStore } from "../../apps/platform-api/src/generation-loop/migration-store.ts";
+import { PermissionError } from "../../apps/platform-api/src/platform-services.ts";
+
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
+const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 async function createRawPublishHarness({
   preflightPublishedSubdomain,
-  persistPublishedDeployment
+  persistPublishedDeployment,
+  projectId = "prj_publish",
+  requestHeaders = { authorization: "Bearer creator" }
 } = {}) {
   const handlers = new Map();
   const calls = [];
@@ -24,7 +32,7 @@ async function createRawPublishHarness({
       return {
         userId: "usr_creator",
         roles: ["creator"],
-        projectIds: ["prj_publish"]
+        projectIds: [projectId]
       };
     },
     canAccessDeployment: async () => true,
@@ -71,7 +79,7 @@ async function createRawPublishHarness({
             ok: true,
             deployment: {
               id: "wdep_promoted",
-              projectId: "prj_publish",
+              projectId,
               slug: "prj-publish",
               environment: "production",
               revision: 2,
@@ -121,11 +129,11 @@ async function createRawPublishHarness({
     response.headersSent = false;
     return handlers.get(path)(
       {
-        params: { projectId: "prj_publish" },
+        params: { projectId },
         method: "POST",
-        headers: { authorization: "Bearer creator" },
-        url: "/projects/prj_publish/publish",
-        originalUrl: "/projects/prj_publish/publish",
+        headers: requestHeaders,
+        url: `/projects/${projectId}/publish`,
+        originalUrl: `/projects/${projectId}/publish`,
         body,
         on() {}
       },
@@ -143,6 +151,56 @@ async function createRawPublishHarness({
     rollback: (body) => invoke("/projects/:projectId/rollback", body),
     promote: (body = {}) => invoke("/projects/:projectId/promote", body)
   };
+}
+
+function createReadyLegacyPublishFixture() {
+  const services = createPlatformApiServices();
+  const headers = { "x-mock-user-email": "creator@company.com" };
+  const admin = services.auth.resolveCurrentUser({ "x-mock-user-email": "admin@company.com" });
+  const creator = services.auth.resolveCurrentUser(headers);
+  const provider = services.aiGovernance.createProvider(admin, {
+    name: "Legacy publish test provider",
+    adapter: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    models: ["gpt-4.1"]
+  });
+  services.aiGovernance.createApiKey(admin, {
+    providerId: provider.id,
+    name: "Legacy publish test key",
+    secret: "test-only-key",
+    usageMode: "production",
+    quotaTokens: 10_000,
+    fallbackPriority: 1
+  });
+  for (const scenario of ["prd_generation", "frontend_coding"]) {
+    services.aiGovernance.configureRoute(admin, {
+      scenario,
+      primaryProviderId: provider.id,
+      primaryModel: "gpt-4.1"
+    });
+  }
+  services.aiGovernance.configureQuota(admin, {
+    scope: "creator",
+    dailyLimit: 1_000,
+    monthlyLimit: 5_000,
+    warningThreshold: 800,
+    hardStop: true,
+    usedToday: 0
+  });
+  const project = services.projects.createProject({
+    actor: creator,
+    name: "Legacy Operations",
+    appType: "Workflow App",
+    businessProblem: "Keep legacy deployment modes compatible",
+    targetDepartment: "Operations",
+    intendedUsers: ["Employee"],
+    dataSensitivity: "internal"
+  });
+  const draft = services.prds.generateDraft(creator, project.id);
+  services.prds.confirmBaseline(creator, project.id, draft.id);
+  services.workspace.submitPrompt(creator, project.id, { prompt: "Build the operations app" });
+  services.publish.publishApp(creator, project.id, { subdomain: "legacy-operations" });
+  return { services, creator, project, headers };
 }
 
 test("App Store publish rejects an invalid subdomain before preflight or build", async () => {
@@ -170,6 +228,20 @@ test("App Store publish rejects a taken subdomain before build", async () => {
   assert.equal(harness.response.statusCode, 409);
   assert.equal(harness.response.body.ok, false);
   assert.equal(harness.response.body.error.code, "SUBDOMAIN_TAKEN");
+  assert.deepEqual(harness.calls, ["auth", "preflight"]);
+  assert.equal(harness.publishCalls, 0);
+});
+
+test("App Store publish rejects an inaccessible project before build", async () => {
+  const harness = await createRawPublishHarness({
+    preflightPublishedSubdomain: async () => {
+      throw new PermissionError("Role creator cannot access project prj_publish");
+    }
+  });
+  await harness.publish({ subdomain: "people-ops" });
+  assert.equal(harness.response.statusCode, 403);
+  assert.equal(harness.response.body.ok, false);
+  assert.equal(harness.response.body.error.code, "FORBIDDEN");
   assert.deepEqual(harness.calls, ["auth", "preflight"]);
   assert.equal(harness.publishCalls, 0);
 });
@@ -240,4 +312,34 @@ test("explicit deployment modes do not preflight or replace an App Store subdoma
     persisted.map((input) => input.subdomain),
     [undefined, undefined, undefined]
   );
+});
+
+test("legacy persistence keeps explicit production rollback and promote compatible", async () => {
+  const { services, creator, project, headers } = createReadyLegacyPublishFixture();
+  const harness = await createRawPublishHarness({
+    projectId: project.id,
+    requestHeaders: headers,
+    preflightPublishedSubdomain: async () => {
+      assert.fail("explicit deployment modes must not preflight an App Store subdomain");
+    },
+    persistPublishedDeployment: ({ projectId, deployment, subdomain }) =>
+      executePlatformApiRequest(services, {
+        method: "POST",
+        path: `/projects/${projectId}/publish`,
+        headers,
+        body: { runtimeDeployment: deployment, subdomain }
+      })
+  });
+
+  const statuses = [];
+  await harness.publish({ environment: "production" });
+  statuses.push(harness.response.statusCode);
+  await harness.rollback({ environment: "production", commitSha: "previous-sha" });
+  statuses.push(harness.response.statusCode);
+  await harness.promote();
+  statuses.push(harness.response.statusCode);
+
+  assert.deepEqual(statuses, [201, 201, 201]);
+  assert.deepEqual(harness.deactivatedDeployments, []);
+  assert.equal(services.publish.listRegistry(creator)[0].subdomain, "legacy-operations");
 });

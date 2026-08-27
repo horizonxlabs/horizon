@@ -172,6 +172,59 @@ test("App Store API maps a taken subdomain to a stable conflict and preserves it
   assert.equal(registry.body.data[0].subdomain, "shared-ops");
 });
 
+test("a post-commit audit failure keeps the publish successful and runtime aligned", async () => {
+  const services = await createRuntimePlatformApiServices({
+    EVCP_CORE_PERSISTENCE: "memory"
+  });
+  const project = await createReadyProject(services, "Audit Resilient Operations");
+  services.publishStorePersistence = createPublishStoreRepositoryBackedService(
+    new MemoryPublishStorePersistenceClient({
+      projects: [{ id: project.id, ownerUserId: project.ownerUserId }]
+    })
+  );
+  services.corePersistence.recordAudit = async () => {
+    throw new Error("launch-grant-secret-must-not-escape");
+  };
+  const runtimeDeployment = {
+    id: "wdep_audit_success",
+    projectId: project.id,
+    slug: "audit-resilient-operations",
+    environment: "production",
+    revision: 3,
+    commitSha: "abc123",
+    imageTag: "app:abc123",
+    imageDigest: "sha256:abc123",
+    containerId: "container-audit-success",
+    containerName: "app-audit-success",
+    publishedByUserId: "usr_creator",
+    healthStatus: "healthy",
+    createdAt: "2026-08-27T00:00:00.000Z"
+  };
+
+  const response = await executePlatformApiRequestAsync(services, {
+    method: "POST",
+    path: `/projects/${project.id}/publish`,
+    headers: CREATOR_HEADERS,
+    body: { subdomain: "audit-resilient", runtimeDeployment }
+  });
+  const registry = await executePlatformApiRequestAsync(services, {
+    method: "GET",
+    path: "/app-store/registry",
+    headers: CREATOR_HEADERS
+  });
+
+  assert.equal(response.status, 201, JSON.stringify(response));
+  assert.equal(response.body.data.deployment.deploymentRevisionId, runtimeDeployment.id);
+  assert.equal(registry.body.data[0].deploymentId, response.body.data.deployment.id);
+  assert.equal(registry.body.data[0].subdomain, "audit-resilient");
+  const auditFailure = services.audit
+    .list()
+    .find((event) => event.action === "audit.persistence_failed");
+  assert.equal(auditFailure?.resourceId, response.body.data.publishRequest.id);
+  assert.equal(auditFailure?.metadata.attemptedAction, "app.publish.completed");
+  assert.equal(JSON.stringify(auditFailure).includes("launch-grant-secret-must-not-escape"), false);
+});
+
 test("a Prisma subdomain race preserves the previous registry deployment and hides database details", async () => {
   const services = await createRuntimePlatformApiServices({
     EVCP_CORE_PERSISTENCE: "memory"

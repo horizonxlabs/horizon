@@ -78,7 +78,7 @@ test("single no-environment publish deploys runtime then returns the persistent 
       params: { projectId: PROJECT_ID },
       method: "POST",
       headers: { authorization: "Bearer x" },
-      body: undefined,
+      body: { subdomain: "published-app" },
       url: "",
       originalUrl: "",
       on() {}
@@ -88,6 +88,7 @@ test("single no-environment publish deploys runtime then returns the persistent 
 
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].deployment.id, "wdep-1");
+  assert.equal(persisted[0].subdomain, "published-app");
   assert.equal(response.statusCode, 201);
   assert.equal(response.body.data.registryEntry.route, `/apps/${APP_SLUG}`);
 });
