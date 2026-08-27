@@ -243,11 +243,12 @@ test("published app routing and Store detail Open compose into the generated run
   assert.match(composition, /<StoreAppDetailPage appSlug=\{route\.appSlug\} \/>/);
   const recordRecent = detail.indexOf("recordRecent(app.slug)");
   const authorizeLaunch = detail.indexOf("authorizeStoreAppLaunch(app.slug, app.route)");
-  const assignRuntime = detail.indexOf("window.location.assign(app.route)");
+  const assignRuntime = detail.indexOf("window.location.assign(session.launchUrl)");
   assert.ok(recordRecent >= 0);
   assert.ok(authorizeLaunch > recordRecent);
   assert.ok(assignRuntime > recordRecent);
   assert.ok(assignRuntime > authorizeLaunch);
+  assert.doesNotMatch(detail, /window\.location\.assign\(app\.route\)/);
 });
 
 test.after(() => {

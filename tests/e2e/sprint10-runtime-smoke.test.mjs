@@ -3,9 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -93,7 +92,8 @@ function createPublishedProject(services) {
   executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint10-runtime" }
   });
   return project.body.data;
 }

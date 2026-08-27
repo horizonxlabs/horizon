@@ -33,10 +33,18 @@ async function createPersistentServices(
   publishStoreClient
 ) {
   const legacyServices = createPlatformApiServices();
-  const governedAi = await createPersistedGovernedAiFixture(aiClient, legacyServices.auth.resolveCurrentUser(adminHeaders));
+  const governedAi = await createPersistedGovernedAiFixture(
+    aiClient,
+    legacyServices.auth.resolveCurrentUser(adminHeaders)
+  );
+  const corePersistence = createCoreRepositoryBackedService(coreClient);
+  publishStoreClient.project.findUnique = async ({ where }) => {
+    const creator = await corePersistence.getUserByEmail(creatorHeaders["x-mock-user-email"]);
+    return (await corePersistence.listProjects(creator)).find(({ id }) => id === where.id) ?? null;
+  };
   const services = {
     ...legacyServices,
-    corePersistence: createCoreRepositoryBackedService(coreClient),
+    corePersistence,
     aiGovernancePersistence: governedAi.service,
     governedAiExecutor: governedAi.executor,
     prdPersistence: createPrdRepositoryBackedService(prdClient),
@@ -122,9 +130,11 @@ async function createPublishedProject(services) {
   const publish = await executePlatformApiRequestAsync(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "install-persisted" }
   });
-  assert.equal(publish.status, 201);
+  assert.equal(publish.status, 201, JSON.stringify(publish.body));
+  assert.equal(publish.body.data.registryEntry.subdomain, "install-persisted");
   return project.body.data;
 }
 

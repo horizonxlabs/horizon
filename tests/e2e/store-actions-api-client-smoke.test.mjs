@@ -89,7 +89,8 @@ function createStoreActionsFixture() {
   executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "store-actions" }
   });
   return { services, appSlug: project.body.data.appId };
 }

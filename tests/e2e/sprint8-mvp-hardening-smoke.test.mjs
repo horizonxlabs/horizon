@@ -3,9 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -94,7 +93,8 @@ function createSprint8ApiFixture() {
   executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint8-hardening" }
   });
   const ticket = executePlatformApiRequest(services, {
     method: "POST",
@@ -282,12 +282,7 @@ test("Sprint 8 UI exposes fail-closed ticket changes and API-backed operational 
     assert.match(creatorSource, new RegExp(text));
   }
 
-  for (const text of [
-    "AuditEvidenceSection",
-    "Service health",
-    "Audit Filters",
-    "Platform API"
-  ]) {
+  for (const text of ["AuditEvidenceSection", "Service health", "Audit Filters", "Platform API"]) {
     assert.match(adminSource, new RegExp(text));
   }
 });

@@ -95,7 +95,8 @@ function createSprint7ApiFixture() {
   executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint7-store" }
   });
 
   return { services, projectId: project.body.data.id, appSlug: project.body.data.appId };

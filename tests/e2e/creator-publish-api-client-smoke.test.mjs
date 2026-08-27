@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { createPlatformApiClient, PlatformApiError } = await import(
-  "../../packages/api-client/src/index.ts"
-);
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiClient, PlatformApiError } =
+  await import("../../packages/api-client/src/index.ts");
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
@@ -142,9 +140,10 @@ test("Creator publish API client actions invite approve publish and list registr
   const review = await client.getPublishReview(projectId);
   assert.equal(review.ready, true);
 
-  const publish = await client.publishProject(projectId);
+  const publish = await client.publishProject(projectId, { subdomain: "creator-client-publish" });
   assert.equal(publish.deployment.status, "published");
   assert.equal(publish.registryEntry.slug, appSlug);
+  assert.equal(publish.registryEntry.subdomain, "creator-client-publish");
 
   const registry = await client.listAppStoreRegistry();
   assert.ok(registry.some((entry) => entry.slug === appSlug));
@@ -161,7 +160,8 @@ test("Creator publish API client surfaces blocked publish as typed error", async
   });
 
   await assert.rejects(
-    () => client.publishProject(incomplete.body.data.id),
+    () =>
+      client.publishProject(incomplete.body.data.id, { subdomain: "incomplete-client-publish" }),
     (error) => {
       assert.ok(error instanceof PlatformApiError);
       assert.equal(error.status, 422);

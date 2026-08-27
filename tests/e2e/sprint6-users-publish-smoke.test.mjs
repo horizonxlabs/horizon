@@ -189,10 +189,12 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
   const publish = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${projectId}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint6-publish" }
   });
   assert.equal(publish.status, 201);
   assert.equal(publish.body.data.deployment.status, "published");
+  assert.equal(publish.body.data.registryEntry.subdomain, "sprint6-publish");
 
   const registry = executePlatformApiRequest(services, {
     method: "GET",
@@ -215,7 +217,8 @@ test("Sprint 6 API blocks incomplete publish and denies end user creator-side ma
   const publish = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "incomplete-sprint6" }
   });
   const denied = executePlatformApiRequest(services, {
     method: "GET",
