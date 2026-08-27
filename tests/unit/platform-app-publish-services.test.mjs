@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
 
 const { createPlatformApiServices, SubdomainConflictError } = await import("../../apps/platform-api/src/platform-services.ts");
+const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
 
 function createSprint6Fixture(options) {
   const services = createPlatformApiServices(options);
@@ -118,6 +119,11 @@ test("publish review manifest references PRD frontend auth roles database and ro
   const { services, creator, project } = createSprint6Fixture();
 
   const review = services.publish.getReview(creator, project.id);
+  const response = executePlatformApiRequest(services, {
+    method: "GET",
+    path: `/projects/${project.id}/publish/review`,
+    headers: { "x-mock-user-email": "creator@company.com" }
+  });
 
   assert.equal(review.ready, true);
   assert.equal(review.manifest.app.slug, project.appId);
@@ -127,6 +133,11 @@ test("publish review manifest references PRD frontend auth roles database and ro
   assert.equal(review.manifest.database.schemaName, `app_${project.id}`);
   assert.ok(review.manifest.roles.some((role) => role.key === "employee"));
   assert.ok(review.checklist.every((item) => item.status === "pass"));
+  assert.deepEqual(response.body.data.accessUrlConfig, {
+    baseDomain: "localhost",
+    secure: false,
+    port: 9800
+  });
 });
 
 test("publish creates deployment record and app store registry entry", () => {

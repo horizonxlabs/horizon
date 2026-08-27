@@ -273,9 +273,12 @@ test("runtime persistence wiring exposes Publish/store service and routes", () =
   assert.match(appFactory, /publishStorePersistence\?: PublishStoreRepositoryBackedService/);
   assert.match(
     appFactory,
-    /createPublishStoreRepositoryBackedService\(\s*new MemoryPublishStorePersistenceClient\(\)\s*\)/
+    /createPublishStoreRepositoryBackedService\(\s*new MemoryPublishStorePersistenceClient\(\),\s*publishAccessUrlConfig\s*\)/
   );
-  assert.match(appFactory, /createPrismaPublishStorePersistence\(\s*env\.DATABASE_URL\s*\)/);
+  assert.match(
+    appFactory,
+    /createPrismaPublishStorePersistence\(\s*env\.DATABASE_URL,\s*publishAccessUrlConfig\s*\)/
+  );
   assert.match(appFactory, /isPersistencePublishStoreRoute/);
   assert.match(repositorySource, /appStoreRegistryEntry/);
   assert.match(repositorySource, /supportTicket/);

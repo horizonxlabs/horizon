@@ -8,6 +8,7 @@ import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports"
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
 import { registerAppLaunchSessionRoute } from "./app-launch-session-route";
+import { resolveRawAppStoreSubdomain } from "./app-store-publish-runtime";
 import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
 interface PublishedProjectAccess {
@@ -107,10 +108,16 @@ export async function registerPublishHttpRoutes(opts: {
   env?: Record<string, string | undefined>;
   resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
   canAccessDeployment: (auth: WorkspaceAuthContext, projectId: string) => Promise<boolean>;
+  preflightPublishedSubdomain?: (input: {
+    headers: HeaderBag;
+    projectId: string;
+    subdomain: string;
+  }) => Promise<{ subdomain: string }>;
   persistPublishedDeployment?: (input: {
     headers: HeaderBag;
     projectId: string;
     deployment: WorkspaceDeployment;
+    subdomain?: string;
   }) => Promise<{ status: number; body: unknown }>;
   publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
   recordAudit: (event: {
@@ -138,20 +145,26 @@ export async function registerPublishHttpRoutes(opts: {
   const persistOrCompensate = async (
     headers: HeaderBag,
     projectId: string,
-    deployment: WorkspaceDeployment
+    deployment: WorkspaceDeployment,
+    subdomain?: string
   ): Promise<{ status: number; body: unknown } | null> => {
     if (!opts.persistPublishedDeployment) return null;
     try {
-      const persisted = await opts.persistPublishedDeployment({ headers, projectId, deployment });
+      const persisted = await opts.persistPublishedDeployment({
+        headers,
+        projectId,
+        deployment,
+        subdomain
+      });
       if (persisted.status >= 400) await publishService.deactivate(deployment);
       return persisted;
-    } catch (error) {
+    } catch {
       await publishService.deactivate(deployment);
       return {
         status: 500,
         body: {
           error: "publish_persistence_failed",
-          message: error instanceof Error ? error.message : "deployment persistence failed"
+          message: "Deployment persistence failed."
         }
       };
     }
@@ -169,7 +182,22 @@ export async function registerPublishHttpRoutes(opts: {
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { environment?: unknown } | undefined;
+    const body = req.body as { environment?: unknown; subdomain?: unknown } | undefined;
+    const isAppStorePublish = body?.environment === undefined;
+    let appStoreSubdomain: string | undefined;
+    if (isAppStorePublish) {
+      const resolvedSubdomain = await resolveRawAppStoreSubdomain({
+        headers: req.headers ?? {},
+        projectId,
+        value: body?.subdomain,
+        preflight: opts.preflightPublishedSubdomain
+      });
+      if (!resolvedSubdomain.ok) {
+        res.status(resolvedSubdomain.status).json(resolvedSubdomain.body);
+        return;
+      }
+      appStoreSubdomain = resolvedSubdomain.subdomain;
+    }
     const slug = resolveResourceKey(projectId);
     const environment = normalizeEnvironment(body?.environment);
     try {
@@ -180,7 +208,12 @@ export async function registerPublishHttpRoutes(opts: {
         opts.persistPublishedDeployment
       ) {
         const deployment = result.body.deployment as WorkspaceDeployment;
-        const persisted = await persistOrCompensate(req.headers ?? {}, projectId, deployment);
+        const persisted = await persistOrCompensate(
+          req.headers ?? {},
+          projectId,
+          deployment,
+          appStoreSubdomain
+        );
         if (persisted && (persisted.status >= 400 || body?.environment === undefined)) {
           res.status(persisted.status).json(persisted.body);
           return;
