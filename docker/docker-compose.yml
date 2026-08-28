@@ -43,6 +43,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - evcp-internal
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
