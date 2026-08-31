@@ -21,12 +21,10 @@ import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
  * provision operation to attach that container (and restore its runtime secrets) before publish.
  */
 export async function getOrRecoverDevContainerId(
-  orchestrator: Pick<WorkspaceOrchestrator, "getWorkspace" | "provisionWorkspace">,
+  orchestrator: Pick<WorkspaceOrchestrator, "provisionWorkspace">,
   projectId: string
 ): Promise<string> {
-  const workspace =
-    orchestrator.getWorkspace(projectId) ??
-    (await orchestrator.provisionWorkspace({ projectId, slug: projectId }));
+  const workspace = await orchestrator.provisionWorkspace({ projectId, slug: projectId });
   if (!workspace.containerId) {
     throw new Error(`no dev container for project '${projectId}'`);
   }
