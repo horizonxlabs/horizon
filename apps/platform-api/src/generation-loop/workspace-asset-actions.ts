@@ -10,9 +10,11 @@ type AssetAction = Extract<RunnableAction, { type: "asset" }>;
 // Binary-safe workspace write for GENERATED assets (AI images). Deliberately separate from
 // the text file action: content is base64 end-to-end (a UTF-8 re-encode would corrupt it),
 // and the text-oriented guards (conflict-marker scan, whole-file-rewrite limit) do not
-// apply to binary payloads. The payload is appended to a temp file in bounded chunks so no
-// single exec argv approaches ARG_MAX, then decoded into place atomically-enough.
-const BASE64_CHUNK_CHARS = 200_000;
+// apply to binary payloads. The payload is appended to a temp file in bounded chunks and
+// then decoded into place. Chunk bound: Linux MAX_ARG_STRLEN caps a SINGLE argv string at
+// 128KiB (131072) and the whole `su -c` script is one argv — 200KB chunks failed live with
+// "argument list too long". 100K leaves headroom for the script scaffolding around the chunk.
+const BASE64_CHUNK_CHARS = 100_000;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 
 function failed(error: string): ActionResult {

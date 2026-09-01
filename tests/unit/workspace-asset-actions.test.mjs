@@ -40,8 +40,10 @@ test("asset write streams base64 in bounded chunks and decodes into place", asyn
   const scripts = scriptsOf(docker);
   // every exec runs as the workspace user
   for (const call of docker.calls) assert.deepEqual(call.cmd.slice(0, 4), ["su", "-s", "/bin/sh", "evcp"]);
-  // no single argv carries the whole payload
-  for (const script of scripts) assert.ok(script.length < 300_000, `argv too large: ${script.length}`);
+  // Linux MAX_ARG_STRLEN caps a SINGLE argv string at 128KiB (131072) — the whole `su -c`
+  // script is one argv, so every script must stay safely under it (observed live:
+  // "exec /bin/su: argument list too long" at 200KB chunks).
+  for (const script of scripts) assert.ok(script.length < 120_000, `argv too large: ${script.length}`);
   assert.match(scripts[0], /mkdir -p 'public\/generated'/);
   // appended chunks reassemble to the exact base64
   const appended = scripts
