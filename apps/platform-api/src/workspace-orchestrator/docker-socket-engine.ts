@@ -364,6 +364,13 @@ export function createDockerSocketEngine(
         if (event.aux && typeof event.aux.ID === "string") imageId = event.aux.ID;
       }
       return { imageId: imageId ?? imageTag };
+    },
+    async removeImage(imageIdOrTag) {
+      const result = await request({
+        method: "DELETE",
+        path: `/images/${encodeURIComponent(imageIdOrTag)}?force=true`
+      });
+      await expect("image-remove", result, [200, 404]);
     }
   };
 }

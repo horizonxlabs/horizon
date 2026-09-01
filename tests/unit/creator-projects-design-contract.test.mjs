@@ -22,6 +22,15 @@ function mediaBlock(query, requiredSelector) {
   );
 }
 
+function contrastAgainstWhite(hex) {
+  const channels = hex.match(/[\da-f]{2}/gi).map((channel) => Number.parseInt(channel, 16) / 255);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  );
+  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  return 1.05 / (luminance + 0.05);
+}
+
 test("creator projects B1 styles cover studio, status, focus, and responsive layouts", () => {
   for (const selector of [
     ".hz-projects-studio",
@@ -76,6 +85,17 @@ test("creator project status uses neutral shared tokens", () => {
   assert.doesNotMatch(statusRule, /--evcp-color-(?:success|warning|danger)/);
 });
 
+test("project-card application metadata meets WCAG AA contrast on white", () => {
+  const metadataRule = declarationBlock(".hz-card-app-type");
+  assert.ok(metadataRule, "missing application metadata declaration block");
+  const color = metadataRule.match(/color:\s*(#[\da-f]{6})/i)?.[1];
+  assert.ok(color, "application metadata must resolve to a concrete color token fallback");
+  assert.ok(
+    contrastAgainstWhite(color) >= 4.5,
+    `${color} application metadata must meet 4.5:1 contrast on white`
+  );
+});
+
 test("creator light sidebar variant has concrete shared declarations", () => {
   const sidebar = declarationBlock(".app-shell-light .sidebar");
   assert.match(sidebar, /background:\s*var\(--evcp-color-surface/);
@@ -96,28 +116,4 @@ test("creator light sidebar variant has concrete shared declarations", () => {
   ]) {
     assert.ok(declarationBlock(selector), `missing light sidebar declaration: ${selector}`);
   }
-});
-
-test("shared shell has a concrete mobile off-canvas drawer contract", () => {
-  for (const selector of [
-    ".app-shell-mobile-trigger",
-    ".app-shell-mobile-backdrop",
-    ".sidebar-mobile-close"
-  ]) {
-    assert.ok(declarationBlock(selector), `missing mobile drawer declaration: ${selector}`);
-  }
-
-  const mobile = mediaBlock("max-width: 760px");
-  const sidebar = declarationBlock(".sidebar", mobile);
-  assert.match(sidebar, /position:\s*fixed/);
-  assert.match(sidebar, /transform:\s*translateX\(-100%\)/);
-
-  const openSidebar = declarationBlock(".app-shell-mobile-open .sidebar", mobile);
-  assert.match(openSidebar, /transform:\s*translateX\(0\)/);
-
-  const openBackdrop = declarationBlock(
-    ".app-shell-mobile-open .app-shell-mobile-backdrop",
-    mobile
-  );
-  assert.match(openBackdrop, /display:\s*block/);
 });

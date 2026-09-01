@@ -1,4 +1,7 @@
-import { createPgQuery, type PgQueryResult } from "./workspace-orchestrator/pg-runner";
+import { createPgQuery, createPgTransaction, type PgQueryResult,
+  type PgTransaction } from "./workspace-orchestrator/pg-runner";
+import type { ProjectMutationFence } from "./project-lifecycle";
+import { schemaAdvisoryLockSql } from "./workspace-orchestrator/postgres-provisioner";
 
 // Per-project database browser backend. Every query here runs through a connection built from the
 // project's own scoped Postgres role (search_path pinned to the project's schema), so Postgres —
@@ -197,7 +200,8 @@ export async function insertRow(
   const columns = keys.map(quoteIdent).join(", ");
   const placeholders = keys.map((_, index) => `$${index + 1}`).join(", ");
   const result = await query(
-    `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns}) VALUES (${placeholders}) RETURNING *`,
+    `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(definition.name)} (${columns})
+     VALUES (${placeholders}) RETURNING *`,
     keys.map((key) => values[key])
   );
   return result.rows[0] ?? null;
@@ -218,10 +222,11 @@ export async function updateRow(
   assertKnownColumns(definition, changeKeys);
   const setClause = changeKeys.map((key, index) => `${quoteIdent(key)} = $${index + 1}`).join(", ");
   const whereClause = pkColumns
-    .map((column, index) => `${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
+    .map((column, index) => `target.${quoteIdent(column)} = $${changeKeys.length + index + 1}`)
     .join(" AND ");
   const result = await query(
-    `UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} SET ${setClause} WHERE ${whereClause} RETURNING *`,
+    `UPDATE ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     SET ${setClause} WHERE ${whereClause} RETURNING target.*`,
     [...changeKeys.map((key) => changes[key]), ...pkColumns.map((column) => pk[column])]
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -238,10 +243,11 @@ export async function deleteRow(
   const definition = requireTable(snapshot ?? (await introspectSchema(query, schema)), table);
   const pkColumns = requirePrimaryKeyValues(definition, pk);
   const whereClause = pkColumns
-    .map((column, index) => `${quoteIdent(column)} = $${index + 1}`)
+    .map((column, index) => `target.${quoteIdent(column)} = $${index + 1}`)
     .join(" AND ");
   const result = await query(
-    `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} WHERE ${whereClause}`,
+    `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(definition.name)} AS target
+     WHERE ${whereClause}`,
     pkColumns.map((column) => pk[column])
   );
   if (result.rowCount === 0) throw new ProjectDbError("Row not found", 404);
@@ -259,6 +265,7 @@ interface DbRouteRequest {
   body?: Record<string, unknown>;
 }
 type DbRouteHandler = (request: DbRouteRequest, response: DbRouteResponse) => void | Promise<void>;
+type DbMutationResult = { body: unknown; auditAction: string; auditDetail: string };
 
 export interface ProjectDbRouteDeps {
   get: (path: string, handler: DbRouteHandler) => void;
@@ -266,13 +273,19 @@ export interface ProjectDbRouteDeps {
   /** Resolve the caller from request headers and return the project ids they may access. */
   resolveAccessibleProjectIds: (headers: DbRouteRequest["headers"]) => Promise<string[]>;
   getDatabaseUrl: (projectId: string) => Promise<string | undefined>;
+  createQuery?: (connectionString: string) => ProjectQueryFn;
+  createTransaction?: (connectionString: string) => PgTransaction;
+  runChildMutation?: <T>(
+    projectId: string,
+    operation: (fence: ProjectMutationFence) => Promise<T>
+  ) => Promise<T>;
   /** Record a mutation for compliance (who/what/when). Called only after a write succeeds. */
   audit: (
     headers: DbRouteRequest["headers"],
     projectId: string,
     action: string,
     detail: string
-  ) => void;
+  ) => void | Promise<void>;
   ok: (response: DbRouteResponse, body: unknown) => void;
   fail: (response: DbRouteResponse, status: number, code: string, message: string) => void;
 }
@@ -282,7 +295,13 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   const withDb = async (
     request: DbRouteRequest,
     response: DbRouteResponse,
-    run: (query: QueryFn, schema: string, projectId: string) => Promise<unknown>
+    run: (
+      query: QueryFn,
+      schema: string,
+      projectId: string,
+      fence?: ProjectMutationFence
+    ) => Promise<unknown>,
+    mutation = false
   ) => {
     try {
       const projectId = String(request.params?.projectId ?? "");
@@ -291,13 +310,40 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
       const url = await deps.getDatabaseUrl(projectId);
       if (!url)
         throw new ProjectDbError("Provision the workspace before browsing its database", 409);
-      deps.ok(
-        response,
-        await run(createProjectQuery(url), schemaFromConnectionString(url), projectId)
-      );
+      const schema = schemaFromConnectionString(url);
+      const operation = async (fence?: ProjectMutationFence) => {
+        if (!mutation) {
+          return run((deps.createQuery ?? createProjectQuery)(url), schema, projectId, fence);
+        }
+        await fence?.assertCurrent();
+        const transaction = (deps.createTransaction ?? ((connectionString: string) =>
+          createPgTransaction({ connectionString })))(url);
+        return transaction(async (query) => {
+          await query(schemaAdvisoryLockSql(schema));
+          await fence?.assertCurrent();
+          const result = await run(query, schema, projectId, fence);
+          await fence?.assertCurrent();
+          return result;
+        });
+      };
+      const result = await (mutation && deps.runChildMutation
+          ? deps.runChildMutation(projectId, operation)
+          : operation());
+      if (mutation) {
+        const committed = result as DbMutationResult;
+        await deps.audit(request.headers, projectId, committed.auditAction, committed.auditDetail);
+        deps.ok(response, committed.body);
+      } else deps.ok(response, result);
     } catch (error) {
-      const status = error instanceof ProjectDbError ? error.status : 500;
-      deps.fail(response, status, "DATABASE_BROWSE_ERROR", (error as Error).message);
+      const deletionConflict =
+        error instanceof Error && error.name === "ProjectDeletionInProgressError";
+      const status = deletionConflict ? 409 : error instanceof ProjectDbError ? error.status : 500;
+      deps.fail(
+        response,
+        status,
+        deletionConflict ? "PROJECT_DELETION_IN_PROGRESS" : "DATABASE_BROWSE_ERROR",
+        (error as Error).message
+      );
     }
   };
 
@@ -317,31 +363,36 @@ export function registerProjectDbRoutes(deps: ProjectDbRouteDeps): void {
   // Single write endpoint (the router exposes GET/POST only); the op selects the mutation. Every
   // op goes through the validated, parameterized, primary-key-targeted helpers above.
   deps.post("/projects/:projectId/db/tables/:table/mutate", (request, response) =>
-    withDb(request, response, async (query, schema, projectId) => {
-      const table = tableOf(request);
-      const op = String(request.body?.op ?? "");
-      if (op === "insert") {
-        const row = await insertRow(query, schema, table, asRecord(request.body?.values));
-        deps.audit(request.headers, projectId, "database.row.insert", table);
-        return { row };
-      }
-      if (op === "update") {
-        const row = await updateRow(
-          query,
-          schema,
-          table,
-          asRecord(request.body?.pk),
-          asRecord(request.body?.changes)
-        );
-        deps.audit(request.headers, projectId, "database.row.update", table);
-        return { row };
-      }
-      if (op === "delete") {
-        await deleteRow(query, schema, table, asRecord(request.body?.pk));
-        deps.audit(request.headers, projectId, "database.row.delete", table);
-        return { deleted: true };
-      }
-      throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
-    })
+    withDb(
+      request,
+      response,
+      async (query, schema, projectId, fence) => {
+        const table = tableOf(request);
+        const op = String(request.body?.op ?? "");
+        if (op === "insert") {
+          await fence?.assertCurrent();
+          const row = await insertRow(query, schema, table, asRecord(request.body?.values));
+          return { body: { row }, auditAction: "database.row.insert", auditDetail: table };
+        }
+        if (op === "update") {
+          await fence?.assertCurrent();
+          const row = await updateRow(
+            query,
+            schema,
+            table,
+            asRecord(request.body?.pk),
+            asRecord(request.body?.changes)
+          );
+          return { body: { row }, auditAction: "database.row.update", auditDetail: table };
+        }
+        if (op === "delete") {
+          await fence?.assertCurrent();
+          await deleteRow(query, schema, table, asRecord(request.body?.pk));
+          return { body: { deleted: true }, auditAction: "database.row.delete", auditDetail: table };
+        }
+        throw new ProjectDbError(`Unsupported op: ${op || "(none)"}`, 400);
+      },
+      true
+    )
   );
 }

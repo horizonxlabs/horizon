@@ -6,10 +6,14 @@ import type {
   ProjectFileUploadInitResult,
   ProjectFileScanStatus
 } from "../platform-services";
-import type { ProjectFileUploadUrlIssuer } from "../workspace-orchestrator/minio-object-storage";
+import {
+  PROJECT_FILE_UPLOAD_URL_TTL_MS,
+  projectFileBucketName,
+  type ProjectFileUploadUrlIssuer
+} from "../workspace-orchestrator/minio-object-storage";
 import type { PersistedProjectFile, PrismaProjectFileRepository } from "./project-file-repository";
+import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 
-const bucket = "project-file-uploads";
 const maxBytes = 25 * 1024 * 1024;
 const allowedMimeTypes = new Set([
   "image/png",
@@ -41,13 +45,31 @@ export async function initializePersistentProjectFile(input: {
   sha256: string;
   purpose?: ProjectFilePurpose;
   includeByDefault?: boolean;
+  lifecycle?: ProjectLifecycleCoordinator;
+  fence?: ProjectMutationFence;
 }): Promise<ProjectFileUploadInitResult> {
   validate(input);
+  if (input.lifecycle) {
+    const { lifecycle, ...operationInput } = input;
+    return lifecycle.runChildMutationWithLease(input.projectId, async (lease) => {
+      await lease.retainFor(input.issuer.leaseDurationMs ?? PROJECT_FILE_UPLOAD_URL_TTL_MS);
+      try {
+        return await initializePersistentProjectFile({ ...operationInput, fence: lease });
+      } catch (error) {
+        await lease.cancelRetention();
+        throw error;
+      }
+    });
+  }
   const id = `upl_${randomUUID()}`;
+  const bucket = projectFileBucketName(input.projectId);
   const sourceId = `knsrc_${id}`;
   const versionId = `${sourceId}_v1`;
   const objectKey = `projects/${input.projectId}/knowledge/${sourceId}/${versionId}/${sanitize(input.fileName)}`;
-  const file = await input.repository.create({
+  let file: PersistedProjectFile | undefined;
+  try {
+    await input.fence?.assertCurrent();
+    file = await input.repository.create({
     id,
     projectId: input.projectId,
     sourceId,
@@ -61,17 +83,30 @@ export async function initializePersistentProjectFile(input: {
     objectKey,
     purpose: input.purpose ?? "ai_context",
     includeByDefault: input.includeByDefault ?? true
-  });
-  const upload = await input.issuer.issue(bucket, objectKey);
-  return {
-    uploadId: id,
-    sourceId,
-    versionId,
-    objectKey,
-    uploadUrl: upload.url,
-    expiresAt: upload.expiresAt.toISOString(),
-    file: map(file)
-  };
+    });
+    await input.fence?.assertCurrent();
+    const upload = await input.issuer.issue(bucket, objectKey);
+    await input.fence?.assertCurrent();
+    return {
+      uploadId: id, sourceId, versionId, objectKey, uploadUrl: upload.url,
+      expiresAt: upload.expiresAt.toISOString(), file: map(file)
+    };
+  } catch (error) {
+    if (!file) throw error;
+    const failures: unknown[] = [];
+    try {
+      // The deterministic bucket is shared by every upload in the project. Child compensation
+      // owns only this key; project-wide revocation belongs exclusively to fenced deletion.
+      await input.issuer.remove(bucket, objectKey);
+    } catch (cleanupError) {
+      failures.push(cleanupError);
+    }
+    if (failures.length === 0) {
+      try { await input.repository.deleteUpload(id); } catch (cleanupError) { failures.push(cleanupError); }
+    }
+    if (failures.length) throw new AggregateError([error, ...failures], "Project file initialization compensation failed");
+    throw error;
+  }
 }
 
 export async function completePersistentProjectFile(input: {
@@ -80,9 +115,19 @@ export async function completePersistentProjectFile(input: {
   scanStatus?: ProjectFileScanStatus;
   extractedText?: string;
   excerpts?: string[];
+  projectId?: string;
+  lifecycle?: ProjectLifecycleCoordinator;
+  fence?: ProjectMutationFence;
 }): Promise<{ file: ProjectFileUpload }> {
+  if (input.lifecycle && input.projectId) {
+    const { lifecycle, projectId, ...operationInput } = input;
+    return lifecycle.runChildMutation(projectId, (fence) =>
+      completePersistentProjectFile({ ...operationInput, fence })
+    );
+  }
   const scanStatus = input.scanStatus ?? "clean";
   const excerpts = scanStatus === "clean" ? excerpt(input.extractedText, input.excerpts) : [];
+  await input.fence?.assertCurrent();
   const file = await input.repository.complete(input.uploadId, { scanStatus, excerpts });
   return { file: map(file) };
 }
@@ -95,6 +140,7 @@ export async function handlePersistentProjectFilesRoute(input: {
   issuer?: ProjectFileUploadUrlIssuer;
   resolveActor: () => Promise<{ id: string }>;
   resolveProject: (actor: { id: string }, projectId: string) => Promise<{ id: string }>;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{ status: 200 | 201; data: unknown } | undefined> {
   const list = input.path.match(/^\/creator\/projects\/([^/]+)\/files$/);
   const init = input.path.match(/^\/creator\/projects\/([^/]+)\/files\/init$/);
@@ -125,7 +171,8 @@ export async function handlePersistentProjectFilesRoute(input: {
         includeByDefault:
           input.body?.includeByDefault === undefined
             ? undefined
-            : Boolean(input.body.includeByDefault)
+            : Boolean(input.body.includeByDefault),
+        lifecycle: input.lifecycle
       })
     };
   if (input.method === "POST" && complete) {
@@ -140,7 +187,9 @@ export async function handlePersistentProjectFilesRoute(input: {
           ? (String(input.body.scanStatus) as ProjectFileScanStatus)
           : undefined,
         extractedText: input.body?.extractedText ? String(input.body.extractedText) : undefined,
-        excerpts: Array.isArray(input.body?.excerpts) ? input.body.excerpts.map(String) : undefined
+        excerpts: Array.isArray(input.body?.excerpts) ? input.body.excerpts.map(String) : undefined,
+        projectId: project.id,
+        lifecycle: input.lifecycle
       })
     };
   }

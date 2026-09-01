@@ -1,9 +1,9 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { WorkspaceChatAction } from "@evcp/types";
 
-import type { ChatStreamEvent } from "./generation-types";
+import type { ActionActionType, ChatStreamEvent } from "./generation-types";
 import type { HorizonPiToolDetails } from "./pi-tools";
-import { safeToolError } from "./pi-tool-policy";
+import { clipUtf8, safeToolError } from "./pi-tool-policy";
 
 const actionTypeByTool = {
   read_workspace_file: "read",
@@ -15,6 +15,9 @@ const actionTypeByTool = {
   load_governed_skill: "skill",
   generate_image: "image"
 } as const;
+
+const MAX_TOOL_EVENT_SUMMARY_BYTES = 1_024;
+const actionTypes = new Set<ActionActionType>(["read", "list", "file", "edit", "shell", "migration", "skill", "image"]);
 
 export function assistantTextDelta(event: AgentSessionEvent): string | undefined {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
@@ -40,7 +43,7 @@ export function collectToolExecutionEnd(
   writtenPaths: Set<string>,
   failedTool: HorizonPiToolDetails | undefined
 ): HorizonPiToolDetails | undefined {
-  const details = event.result?.details as HorizonPiToolDetails | undefined;
+  const details = toolDetails(event.result);
   if (!details) return failedTool;
   const terminalValidationPassed =
     details.ok &&
@@ -53,11 +56,12 @@ export function collectToolExecutionEnd(
     writtenPaths.add(details.label);
     if (next?.label === details.label) next = undefined;
   }
+  const presentation = toolPresentation(details.actionType);
   actionIds.push(event.toolCallId);
   actions.push({
     id: event.toolCallId,
     type: details.actionType,
-    label: details.label,
+    label: presentation.label,
     ok: details.ok && !event.isError
   });
   if (!details.ok || event.isError) next = details;
@@ -76,35 +80,39 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
   if (event.type === "tool_execution_start") {
     const actionType = actionTypeFor(event.toolName);
     if (!actionType) return [];
+    const presentation = toolPresentation(actionType);
     return [
       {
         type: "action_start",
         actionId: event.toolCallId,
         actionType,
-        label: toolLabel(event.toolName, event.args)
+        label: presentation.label,
+        inputSummary: presentation.inputSummary,
+        startedAt: new Date().toISOString()
       }
     ];
   }
   if (event.type === "tool_execution_update") {
-    const content = toolText(event.partialResult);
-    return content ? [{ type: "action_chunk", actionId: event.toolCallId, content }] : [];
+    const actionType = actionTypeFor(event.toolName);
+    return actionType
+      ? [{ type: "action_chunk", actionId: event.toolCallId, content: "Tool is running" }]
+      : [];
   }
   if (event.type === "tool_execution_end") {
     const details = toolDetails(event.result);
     const actionType = actionTypeFor(event.toolName) ?? details?.actionType;
     if (!actionType) return [];
-    const error = details?.error ? safeToolError(details.error) : undefined;
+    const presentation = toolPresentation(actionType);
     return [
       {
         type: "action_result",
         actionId: event.toolCallId,
         actionType,
-        label: details?.label ?? event.toolName,
+        label: presentation.label,
         ok: details?.ok === true && !event.isError,
-        ...(details?.find !== undefined ? { find: details.find } : {}),
-        ...(details?.replace !== undefined ? { replace: details.replace } : {}),
-        ...(details?.body !== undefined ? { body: details.body } : {}),
-        ...(error ? { error } : {})
+        ...(details?.ok === true && !event.isError ? { body: presentation.successSummary } : {}),
+        ...(!details?.ok || event.isError ? { error: presentation.failureSummary } : {}),
+        endedAt: new Date().toISOString()
       }
     ];
   }
@@ -121,28 +129,68 @@ function actionTypeFor(toolName: string) {
   return actionTypeByTool[toolName as keyof typeof actionTypeByTool];
 }
 
-function toolLabel(toolName: string, args: unknown): string {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return toolName;
-  const values = args as Record<string, unknown>;
-  return String(values.path ?? values.name ?? values.command ?? toolName);
+function isActionType(value: unknown): value is ActionActionType {
+  return typeof value === "string" && actionTypes.has(value as ActionActionType);
 }
 
-function toolText(result: unknown): string | undefined {
-  if (!result || typeof result !== "object") return undefined;
-  const content = (result as { content?: unknown }).content;
-  if (!Array.isArray(content)) return undefined;
-  const text = content
-    .filter((block): block is { type: "text"; text: string } =>
-      Boolean(
-        block &&
-        typeof block === "object" &&
-        (block as { type?: unknown }).type === "text" &&
-        typeof (block as { text?: unknown }).text === "string"
-      )
-    )
-    .map((block) => block.text)
-    .join("");
-  return text || undefined;
+function toolPresentation(actionType: NonNullable<ReturnType<typeof actionTypeFor>>) {
+  const presentations = {
+    read: {
+      label: "Read workspace file",
+      inputSummary: "Read workspace file requested",
+      successSummary: "Workspace file read",
+      failureSummary: "Workspace file read failed"
+    },
+    list: {
+      label: "List workspace files",
+      inputSummary: "List workspace files requested",
+      successSummary: "Workspace files listed",
+      failureSummary: "Workspace file listing failed"
+    },
+    file: {
+      label: "Write workspace file",
+      inputSummary: "Write workspace file requested",
+      successSummary: "Workspace file updated",
+      failureSummary: "Workspace file update failed"
+    },
+    edit: {
+      label: "Edit workspace file",
+      inputSummary: "Edit workspace file requested",
+      successSummary: "Workspace file updated",
+      failureSummary: "Workspace file update failed"
+    },
+    shell: {
+      label: "Run workspace command",
+      inputSummary: "Approved workspace command requested",
+      successSummary: "Workspace command completed",
+      failureSummary: "Workspace command failed"
+    },
+    migration: {
+      label: "Prepare database migration",
+      inputSummary: "Database migration requested",
+      successSummary: "Database migration prepared",
+      failureSummary: "Database migration preparation failed"
+    },
+    skill: {
+      label: "Load governed skill",
+      inputSummary: "Governed skill requested",
+      successSummary: "Governed skill loaded",
+      failureSummary: "Governed skill load failed"
+    },
+    image: {
+      label: "Generate image",
+      inputSummary: "Image generation requested",
+      successSummary: "Image generated",
+      failureSummary: "Image generation failed"
+    }
+  } as const;
+  const presentation = presentations[actionType];
+  return {
+    ...presentation,
+    inputSummary: clipUtf8(presentation.inputSummary, MAX_TOOL_EVENT_SUMMARY_BYTES),
+    successSummary: clipUtf8(presentation.successSummary, MAX_TOOL_EVENT_SUMMARY_BYTES),
+    failureSummary: clipUtf8(presentation.failureSummary, MAX_TOOL_EVENT_SUMMARY_BYTES)
+  };
 }
 
 function toolDetails(result: unknown): HorizonPiToolDetails | undefined {
@@ -152,7 +200,7 @@ function toolDetails(result: unknown): HorizonPiToolDetails | undefined {
   const candidate = details as Partial<HorizonPiToolDetails>;
   if (
     typeof candidate.actionId !== "string" ||
-    typeof candidate.actionType !== "string" ||
+    !isActionType(candidate.actionType) ||
     typeof candidate.label !== "string" ||
     typeof candidate.ok !== "boolean"
   ) {

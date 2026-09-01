@@ -36,3 +36,20 @@ test("frontend checkpoint methods use the existing encoded lifecycle endpoints",
     }
   ]);
 });
+
+test("deleteProject sends DELETE to the encoded project endpoint", async () => {
+  const requests = [];
+  const client = createPlatformApiClient({
+    baseUrl: "https://platform.example/api",
+    fetcher: async (url, init) => {
+      requests.push({ url: String(url), method: init?.method ?? "GET" });
+      return new Response(JSON.stringify({ ok: true, data: { deleted: true } }), { status: 200 });
+    }
+  });
+
+  await client.deleteProject("project/one");
+
+  assert.deepEqual(requests, [
+    { url: "https://platform.example/api/projects/project%2Fone", method: "DELETE" }
+  ]);
+});

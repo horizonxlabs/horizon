@@ -69,6 +69,7 @@ const invitationInput = {
 
 test("a successful invitation refreshes only app access and never requires publish readiness", async () => {
   let invitationCalls = 0;
+  let submittedInvitation;
   let accessRefreshCalls = 0;
   let publishRefreshCalls = 0;
   let renderer;
@@ -78,6 +79,7 @@ test("a successful invitation refreshes only app access and never requires publi
         client: {
           createAppInvitation: async (_projectId, input) => {
             invitationCalls += 1;
+            submittedInvitation = input;
             return { id: "invite-1", status: "pending", ...input };
           }
         },
@@ -103,6 +105,7 @@ test("a successful invitation refreshes only app access and never requires publi
 
   assert.equal(result, true);
   assert.equal(invitationCalls, 1);
+  assert.deepEqual(submittedInvitation, invitationInput);
   assert.equal(accessRefreshCalls, 1);
   assert.equal(publishRefreshCalls, 0);
   assert.match(latest.publishMessage, /Invitation sent/i);
@@ -137,8 +140,10 @@ test("a completed invitation stays successful when the access refresh fails", as
 
   assert.equal(result, true);
   assert.match(latest.publishMessage, /Invitation sent/i);
-  assert.match(latest.publishMessage, /refresh failed.*access refresh offline/i);
-  assert.doesNotMatch(latest.publishMessage, /Invitation failed/i);
+  assert.match(latest.publishMessage, /access information could not be refreshed/i);
+  assert.equal(latest.publishMessageTone, "warning");
+  assert.equal(latest.publishMessageTechnicalDetails, "access refresh offline");
+  assert.doesNotMatch(latest.publishMessage, /offline|failed/i);
   await act(async () => renderer.unmount());
 });
 
@@ -217,8 +222,10 @@ test("the pending invitations view excludes accepted and revoked invitations", a
 test("two access-request rows remain independently pending until each completion", async () => {
   const first = deferred();
   const second = deferred();
+  const decisionCalls = [];
   const client = {
-    decideAppAccessRequest(_projectId, input) {
+    decideAppAccessRequest(projectId, input) {
+      decisionCalls.push([projectId, input]);
       return input.requestId === "request-1" ? first.promise : second.promise;
     }
   };
@@ -244,6 +251,10 @@ test("two access-request rows remain independently pending until each completion
       ? [latest.decidingAccessRequestId]
       : [];
   assert.deepEqual(pendingIds.sort(), ["request-1", "request-2"]);
+  assert.deepEqual(decisionCalls, [
+    ["project-1", { requestId: "request-1", decision: "approved" }],
+    ["project-1", { requestId: "request-2", decision: "rejected" }]
+  ]);
 
   await act(async () => {
     first.resolve({ id: "request-1", status: "approved" });
@@ -295,7 +306,12 @@ test("access decision POST failure reports failure without refreshing", async ()
     await latest.handleAccessRequestDecision("request-1", "approved");
   });
   assert.equal(refreshCalls, 0);
-  assert.match(latest.publishMessage, /Access decision failed: decision rejected/);
+  assert.equal(
+    latest.publishMessage,
+    "Access request could not be approved. No access changes were applied."
+  );
+  assert.equal(latest.publishMessageTone, "danger");
+  assert.equal(latest.publishMessageTechnicalDetails, "decision rejected");
   assert.deepEqual(
     latest.decidingAccessRequestIds
       ? [...latest.decidingAccessRequestIds]
@@ -330,9 +346,11 @@ test("access decision POST success remains confirmed when refresh fails", async 
     await latest.handleAccessRequestDecision("request-1", "approved");
   });
   assert.equal(postCalls, 1);
-  assert.match(latest.publishMessage, /approved through Platform API/i);
-  assert.match(latest.publishMessage, /refresh failed.*refresh offline/i);
-  assert.doesNotMatch(latest.publishMessage, /decision failed/i);
+  assert.match(latest.publishMessage, /Access request approved/i);
+  assert.match(latest.publishMessage, /access information could not be refreshed/i);
+  assert.equal(latest.publishMessageTone, "warning");
+  assert.equal(latest.publishMessageTechnicalDetails, "refresh offline");
+  assert.doesNotMatch(latest.publishMessage, /offline|failed|Platform API/i);
   await act(async () => renderer.unmount());
 });
 
@@ -355,9 +373,10 @@ test("publish readiness load failure replaces the indefinite loading message", a
       /Confirm a PRD baseline/
     );
   });
-  assert.match(latest.publishMessage, /Publish readiness unavailable/i);
-  assert.match(latest.publishMessage, /Confirm a PRD baseline before publishing/);
-  assert.doesNotMatch(latest.publishMessage, /Loading publish state/);
+  assert.match(latest.publishMessage, /Publish readiness is unavailable/i);
+  assert.equal(latest.publishMessageTone, "warning");
+  assert.equal(latest.publishMessageTechnicalDetails, "Confirm a PRD baseline before publishing");
+  assert.doesNotMatch(latest.publishMessage, /baseline|Loading publish state/);
   await act(async () => renderer.unmount());
 });
 

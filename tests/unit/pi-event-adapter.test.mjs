@@ -3,7 +3,8 @@ import test from "node:test";
 
 import {
   adaptPiEvent,
-  assistantTextDelta
+  assistantTextDelta,
+  collectToolExecutionEnd
 } from "../../apps/platform-api/src/generation-loop/pi-event-adapter.ts";
 
 test("maps Pi text and thinking deltas only to Creator stream deltas", () => {
@@ -24,61 +25,66 @@ test("maps Pi text and thinking deltas only to Creator stream deltas", () => {
 });
 
 test("maps native tool lifecycle with stable Pi call IDs", () => {
+  const [start] = adaptPiEvent({
+    type: "tool_execution_start",
+    toolCallId: "call-7",
+    toolName: "edit_workspace_file",
+    args: { path: "app/private.ts", find: "secret", replace: "replacement" }
+  });
   assert.deepEqual(
-    adaptPiEvent({
-      type: "tool_execution_start",
-      toolCallId: "call-7",
-      toolName: "edit_workspace_file",
-      args: { path: "app/page.tsx" }
-    }),
-    [
-      {
-        type: "action_start",
+    { ...start, startedAt: "timestamp" },
+    {
+      type: "action_start",
+      actionId: "call-7",
+      actionType: "edit",
+      label: "Edit workspace file",
+      inputSummary: "Edit workspace file requested",
+      startedAt: "timestamp"
+    }
+  );
+  assert.match(start.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.doesNotMatch(JSON.stringify(start), /private|secret|replacement/);
+
+  const [update] = adaptPiEvent({
+    type: "tool_execution_update",
+    toolCallId: "call-7",
+    toolName: "edit_workspace_file",
+    args: { path: "app/private.ts" },
+    partialResult: { content: [{ type: "text", text: "checking app/private.ts secret output" }] }
+  });
+  assert.deepEqual(update, { type: "action_chunk", actionId: "call-7", content: "Tool is running" });
+
+  const [result] = adaptPiEvent({
+    type: "tool_execution_end",
+    toolCallId: "call-7",
+    toolName: "edit_workspace_file",
+    result: {
+      details: {
         actionId: "call-7",
         actionType: "edit",
-        label: "app/page.tsx"
-      }
-    ]
-  );
-  assert.deepEqual(
-    adaptPiEvent({
-      type: "tool_execution_update",
-      toolCallId: "call-7",
-      toolName: "edit_workspace_file",
-      args: { path: "app/page.tsx" },
-      partialResult: { content: [{ type: "text", text: "checking" }] }
-    }),
-    [{ type: "action_chunk", actionId: "call-7", content: "checking" }]
-  );
-  assert.deepEqual(
-    adaptPiEvent({
-      type: "tool_execution_end",
-      toolCallId: "call-7",
-      toolName: "edit_workspace_file",
-      result: {
-        details: {
-          actionId: "call-7",
-          actionType: "edit",
-          label: "app/page.tsx",
-          ok: true,
-          find: "Old",
-          replace: "New"
-        }
-      },
-      isError: false
-    }),
-    [
-      {
-        type: "action_result",
-        actionId: "call-7",
-        actionType: "edit",
-        label: "app/page.tsx",
+        label: "app/private.ts",
         ok: true,
-        find: "Old",
-        replace: "New"
+        body: "full private source result",
+        find: "secret",
+        replace: "replacement"
       }
-    ]
+    },
+    isError: false
+  });
+  assert.deepEqual(
+    { ...result, endedAt: "timestamp" },
+    {
+      type: "action_result",
+      actionId: "call-7",
+      actionType: "edit",
+      label: "Edit workspace file",
+      ok: true,
+      body: "Workspace file updated",
+      endedAt: "timestamp"
+    }
   );
+  assert.match(result.endedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.doesNotMatch(JSON.stringify(result), /private|secret|replacement|source/);
 });
 
 test("maps all Horizon tools and sanitized failures", () => {
@@ -100,33 +106,98 @@ test("maps all Horizon tools and sanitized failures", () => {
     });
     assert.equal(event.actionType, actionType);
   }
-  assert.deepEqual(
-    adaptPiEvent({
-      type: "tool_execution_end",
-      toolCallId: "call-bad",
-      toolName: "run_workspace_command",
-      result: {
-        details: {
-          actionId: "call-bad",
-          actionType: "shell",
-          label: "pnpm test",
-          ok: false,
-          error: "provider sk-secret failed"
-        }
-      },
-      isError: true
-    }),
-    [
-      {
-        type: "action_result",
+  const [failure] = adaptPiEvent({
+    type: "tool_execution_end",
+    toolCallId: "call-bad",
+    toolName: "run_workspace_command",
+    result: {
+      details: {
         actionId: "call-bad",
         actionType: "shell",
         label: "pnpm test",
         ok: false,
-        error: "provider sk-[redacted] failed"
+        error: "provider sk-secret failed"
       }
-    ]
+    },
+    isError: true
+  });
+  assert.deepEqual(
+    { ...failure, endedAt: "timestamp" },
+    {
+      type: "action_result",
+      actionId: "call-bad",
+      actionType: "shell",
+      label: "Run workspace command",
+      ok: false,
+      error: "Workspace command failed",
+      endedAt: "timestamp"
+    }
   );
+  assert.doesNotMatch(JSON.stringify(failure), /pnpm|secret/);
+});
+
+test("keeps raw tool targets only in the in-memory write ledger", () => {
+  const actionIds = [];
+  const actions = [];
+  const writtenPaths = new Set();
+  collectToolExecutionEnd(
+    {
+      type: "tool_execution_end",
+      toolCallId: "call-write",
+      toolName: "write_workspace_file",
+      result: {
+        details: {
+          actionId: "call-write",
+          actionType: "file",
+          label: "app/private.ts",
+          ok: true
+        }
+      },
+      isError: false
+    },
+    actionIds,
+    actions,
+    writtenPaths,
+    undefined
+  );
+
+  assert.deepEqual(actionIds, ["call-write"]);
+  assert.deepEqual(actions, [
+    { id: "call-write", type: "file", label: "Write workspace file", ok: true }
+  ]);
+  assert.deepEqual([...writtenPaths], ["app/private.ts"]);
+  assert.doesNotMatch(JSON.stringify(actions), /private/);
+});
+
+test("ignores malformed tool action types without crashing", () => {
+  const malformedEnd = {
+    type: "tool_execution_end",
+    toolCallId: "call-malformed",
+    toolName: "unknown_tool",
+    result: {
+      details: {
+        actionId: "call-malformed",
+        actionType: "not-an-action",
+        label: "app/private.ts",
+        ok: false
+      }
+    },
+    isError: true
+  };
+  const actionIds = [];
+  const actions = [];
+  const writtenPaths = new Set();
+  const priorFailure = { actionId: "prior", actionType: "shell", label: "prior", ok: false };
+
+  assert.doesNotThrow(() => adaptPiEvent(malformedEnd));
+  assert.deepEqual(adaptPiEvent(malformedEnd), []);
+  assert.equal(
+    collectToolExecutionEnd(malformedEnd, actionIds, actions, writtenPaths, priorFailure),
+    priorFailure
+  );
+  assert.deepEqual(actionIds, []);
+  assert.deepEqual(actions, []);
+  assert.deepEqual([...writtenPaths], []);
 });
 
 test("ignores Pi bookkeeping and surfaces terminal retry errors only", () => {
@@ -149,4 +220,26 @@ test("generate_image tool events adapt to the \"image\" action type", () => {
   assert.equal(start.length, 1);
   assert.equal(start[0].type, "action_start");
   assert.equal(start[0].actionType, "image");
+});
+
+test("a successful generate_image end keeps ok:true — \"image\" must be in the valid actionTypes set", () => {
+  const events = adaptPiEvent({
+    type: "tool_execution_end",
+    toolCallId: "img-1",
+    toolName: "generate_image",
+    isError: false,
+    result: {
+      content: [{ type: "text", text: "Generated public/generated/hero.png" }],
+      details: {
+        actionId: "img-1",
+        actionType: "image",
+        label: "public/generated/hero.png",
+        ok: true,
+        body: "prompt"
+      }
+    }
+  });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "action_result");
+  assert.equal(events[0].ok, true);
 });

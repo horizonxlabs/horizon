@@ -13,6 +13,7 @@ import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
 import { rehydrateRunningDeployment } from "./deployment-rehydration";
 import { createPrismaDeploymentStore } from "./prisma-deployment-store";
+import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 
 /**
  * Publish routes survive a Platform API restart: the workspace record is in-memory, whereas its
@@ -20,12 +21,10 @@ import { createPrismaDeploymentStore } from "./prisma-deployment-store";
  * provision operation to attach that container (and restore its runtime secrets) before publish.
  */
 export async function getOrRecoverDevContainerId(
-  orchestrator: Pick<WorkspaceOrchestrator, "getWorkspace" | "provisionWorkspace">,
+  orchestrator: Pick<WorkspaceOrchestrator, "provisionWorkspace">,
   projectId: string
 ): Promise<string> {
-  const workspace =
-    orchestrator.getWorkspace(projectId) ??
-    (await orchestrator.provisionWorkspace({ projectId, slug: projectId }));
+  const workspace = await orchestrator.provisionWorkspace({ projectId, slug: projectId });
   if (!workspace.containerId) {
     throw new Error(`no dev container for project '${projectId}'`);
   }
@@ -44,6 +43,7 @@ export async function createDefaultPublishStack(opts: {
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<{
   publishService: ReturnType<typeof createPublishService>;
   deployments: DeploymentStore;
@@ -111,7 +111,8 @@ export async function createDefaultPublishStack(opts: {
     // Attach published containers to the same network the orchestrator puts dev containers on
     // (EVCP_WORKSPACE_NETWORK, `evcp-internal` in this compose), falling back to the default.
     network: env.EVCP_WORKSPACE_NETWORK ?? undefined,
-    onAudit: opts.onAudit
+    onAudit: opts.onAudit,
+    lifecycle: opts.lifecycle
   });
 
   return {

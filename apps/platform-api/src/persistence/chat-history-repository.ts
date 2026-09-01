@@ -9,6 +9,7 @@ type ChatMessageRecord = {
   content: string;
   artifactActionIds: string[];
   actions: unknown;
+  parts: unknown;
   commitSha: string | null;
   tokenUsage: unknown;
   createdAt: Date | string;
@@ -28,7 +29,13 @@ export interface ChatHistoryPersistenceClient {
       where: Pick<ChatMessageRecord, "id" | "projectId" | "role">;
       data: Pick<
         ChatMessageRecord,
-        "agentMode" | "content" | "artifactActionIds" | "actions" | "commitSha" | "tokenUsage"
+        | "agentMode"
+        | "content"
+        | "artifactActionIds"
+        | "actions"
+        | "parts"
+        | "commitSha"
+        | "tokenUsage"
       >;
     }): Promise<{ count: number }>;
     findMany(args: {
@@ -55,6 +62,7 @@ function toWorkspaceChatMessage(record: ChatMessageRecord): WorkspaceChatMessage
     content: record.content,
     artifactActionIds: record.artifactActionIds,
     actions: record.actions as WorkspaceChatMessage["actions"],
+    parts: (record.parts ?? undefined) as WorkspaceChatMessage["parts"],
     commitSha: record.commitSha,
     tokenUsage: record.tokenUsage as WorkspaceChatMessage["tokenUsage"],
     createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt
@@ -73,6 +81,7 @@ export class ChatHistoryRepositoryBackedStore implements ChatHistoryStore {
       content: message.content,
       artifactActionIds: message.artifactActionIds,
       actions: message.actions ?? null,
+      parts: message.parts ?? null,
       commitSha: message.commitSha,
       tokenUsage: message.tokenUsage,
       createdAt: new Date(message.createdAt)
@@ -106,6 +115,7 @@ export class ChatHistoryRepositoryBackedStore implements ChatHistoryStore {
         content: record.content,
         artifactActionIds: record.artifactActionIds,
         actions: record.actions,
+        parts: record.parts,
         commitSha: record.commitSha,
         tokenUsage: record.tokenUsage
       }

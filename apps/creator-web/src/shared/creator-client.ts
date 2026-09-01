@@ -29,7 +29,8 @@ export function projectToView(
     owner: currentUser.user.name,
     prdVersion: project.status === "published" ? "1.0" : "0.1",
     frontendVersion: project.activeFrontendCheckpointId ?? "preview-pending",
-    tokenUsedThisMonth: 0
+    tokenUsedThisMonth: 0,
+    createdAt: project.createdAt
   };
 }
 

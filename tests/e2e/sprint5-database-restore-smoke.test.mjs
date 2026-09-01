@@ -176,7 +176,7 @@ test("Sprint 5 Creator UI exposes the API-backed project database and checkpoint
     "fetchProjectDbSchema",
     "fetchProjectDbTable",
     "mutateProjectDbRow",
-    "No tables in schema",
+    "No tables yet",
     "read-only",
     "New row",
     "Delete",

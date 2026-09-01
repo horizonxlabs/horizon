@@ -10,7 +10,7 @@ import type { ApiResult } from "@evcp/api-client";
 export type HeaderBag = Record<string, string | string[] | undefined>;
 
 export interface PlatformRequest {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   path:
     | "/health"
     | "/auth/me"
@@ -18,6 +18,7 @@ export interface PlatformRequest {
     | "/auth/change-password"
     | "/admin/users"
     | "/projects"
+    | `/projects/${string}`
     | "/audit-logs"
     | "/audit-logs/filter"
     | "/admin/monitoring"

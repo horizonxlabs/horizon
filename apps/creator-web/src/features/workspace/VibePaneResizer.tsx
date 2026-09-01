@@ -22,8 +22,10 @@ export function useChatPaneResize() {
   const chatPaneWidthRef = useRef(DEFAULT_CHAT_PANE_WIDTH);
   const isChatCollapsedRef = useRef(false);
   useEffect(() => {
-    const savedWidth = Number(window.localStorage.getItem(CHAT_PANE_WIDTH_STORAGE_KEY));
-    if (savedWidth === 0) {
+    // getItem() null must not read as width 0 (= collapsed): main's parsing fix, ported.
+    const savedValue = window.localStorage.getItem(CHAT_PANE_WIDTH_STORAGE_KEY);
+    const savedWidth = savedValue === null ? Number.NaN : Number(savedValue);
+    if (savedValue !== null && savedWidth === 0) {
       isChatCollapsedRef.current = true;
       setIsChatCollapsed(true);
     } else if (Number.isFinite(savedWidth)) {

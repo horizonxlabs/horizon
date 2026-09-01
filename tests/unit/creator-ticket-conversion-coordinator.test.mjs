@@ -41,7 +41,7 @@ const ticket = {
   actions: ["convert_to_prd_change"]
 };
 
-function TicketRoute({ client }) {
+function TicketRoute({ client, onOutcome }) {
   const [, render] = React.useReducer((value) => value + 1, 0);
   const conversion = React.useMemo(
     () =>
@@ -59,19 +59,21 @@ function TicketRoute({ client }) {
     conversion,
     isConverting: isPending,
     disabled: isPending,
-    onMessage: () => render(),
+    onOutcome,
     onPendingChange: () => render()
   });
 }
 
-function RouteHarness({ route, client }) {
+function RouteHarness({ route, client, onOutcome }) {
   return route === "ticket"
-    ? React.createElement(TicketRoute, { client })
+    ? React.createElement(TicketRoute, { client, onOutcome })
     : React.createElement("div", null, "Away");
 }
 
 test("ticket conversion lock survives route recreation and prevents a second POST", async () => {
   const post = deferred();
+  const outcomes = [];
+  const onOutcome = (outcome) => outcomes.push(outcome);
   let postCalls = 0;
   const client = {
     async convertTicketToPrdChange() {
@@ -81,7 +83,7 @@ test("ticket conversion lock survives route recreation and prevents a second POS
   };
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(RouteHarness, { route: "ticket", client }));
+    renderer = create(React.createElement(RouteHarness, { route: "ticket", client, onOutcome }));
   });
   const firstButton = renderer.root.findByType("button");
   let firstRun;
@@ -92,10 +94,10 @@ test("ticket conversion lock survives route recreation and prevents a second POS
   assert.equal(postCalls, 1);
 
   await act(async () => {
-    renderer.update(React.createElement(RouteHarness, { route: "away", client }));
+    renderer.update(React.createElement(RouteHarness, { route: "away", client, onOutcome }));
   });
   await act(async () => {
-    renderer.update(React.createElement(RouteHarness, { route: "ticket", client }));
+    renderer.update(React.createElement(RouteHarness, { route: "ticket", client, onOutcome }));
   });
   const recreatedButton = renderer.root.findByType("button");
   assert.match(recreatedButton.children.join(""), /Creating PRD Change/);
@@ -110,6 +112,7 @@ test("ticket conversion lock survives route recreation and prevents a second POS
     post.resolve();
     await Promise.all([firstRun, secondRun]);
   });
+  assert.deepEqual(outcomes, [{ kind: "success", message: "PRD change created." }]);
   await act(async () => renderer.unmount());
 });
 

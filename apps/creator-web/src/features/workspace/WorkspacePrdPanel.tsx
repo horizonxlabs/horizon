@@ -63,7 +63,7 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
           <DecisionPanel
             tone="info"
             badge="PRD"
-            title="No PRD for this project yet"
+            title="No PRD is available for this project"
             lines={["A PRD is drafted after project creation, or you can generate one here at any time."]}
           />
         )}

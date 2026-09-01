@@ -1,5 +1,6 @@
 import { Check, ChevronDown, FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { projectSwitchTargetPage, type CreatorPage } from "@/app/routes";
 import type { CreatorProjectView } from "@/shared/types";
 
 function projectInitials(name: string): string {
@@ -21,19 +22,18 @@ function projectTone(projectId: string): number {
 export function ProjectSwitcher({
   projects,
   selectedProject,
+  currentPage,
   onSelectProject,
   onCreateProject
 }: {
   projects: CreatorProjectView[];
   selectedProject: CreatorProjectView;
-  onSelectProject: (project: CreatorProjectView) => void;
+  currentPage: CreatorPage;
+  onSelectProject: (project: CreatorProjectView, targetPage: CreatorPage) => void;
   onCreateProject: () => void;
 }) {
-  // The picker represents the selected project context, not the current route. This lets a
-  // creator switch projects while staying on the current page, then open any sidebar section
-  // for the newly selected project.
-  const hasSelectedProject = Boolean(selectedProject.id);
-  const currentLabel = hasSelectedProject ? selectedProject.name : "Select a project";
+  const isAllProjects = !selectedProject.id;
+  const currentLabel = isAllProjects ? "Select project" : selectedProject.name;
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -77,7 +77,7 @@ export function ProjectSwitcher({
 
   function selectProject(project: CreatorProjectView) {
     closeMenu();
-    onSelectProject(project);
+    onSelectProject(project, projectSwitchTargetPage(currentPage));
   }
 
   function createProject() {
@@ -100,10 +100,10 @@ export function ProjectSwitcher({
       >
         <span
           className="creator-project-switcher-mark"
-          data-tone={hasSelectedProject ? projectTone(selectedProject.id) : "all"}
+          data-tone={isAllProjects ? "all" : projectTone(selectedProject.id)}
           aria-hidden="true"
         >
-          {hasSelectedProject ? projectInitials(selectedProject.name) : <FolderKanban size={17} />}
+          {isAllProjects ? "PR" : projectInitials(selectedProject.name)}
         </span>
         <span className="creator-project-switcher-copy">
           <span>Project</span>
@@ -133,7 +133,7 @@ export function ProjectSwitcher({
             aria-label="Projects"
           >
             {filteredProjects.map((project) => {
-              const isSelected = hasSelectedProject && project.id === selectedProject.id;
+              const isSelected = !isAllProjects && project.id === selectedProject.id;
               return (
                 <button
                   type="button"
@@ -170,7 +170,7 @@ export function ProjectSwitcher({
           <div className="creator-project-switcher-actions">
             <button type="button" onClick={createProject}>
               <Plus size={15} aria-hidden="true" />
-              Create new project
+              Create project
             </button>
           </div>
         </div>

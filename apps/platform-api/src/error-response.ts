@@ -32,6 +32,13 @@ export function errorResponse(error: unknown): PlatformResponse {
     return { status: HttpStatus.CONFLICT, body: failure("CONFLICT", error.message) };
   }
 
+  if (error instanceof Error && error.name === "ProjectDeletionInProgressError") {
+    return {
+      status: HttpStatus.CONFLICT,
+      body: failure("PROJECT_DELETION_IN_PROGRESS", error.message)
+    };
+  }
+
   if (error instanceof Error && error.name === "QuotaExceededError") {
     return { status: HttpStatus.TOO_MANY_REQUESTS, body: failure("QUOTA_EXCEEDED", error.message) };
   }

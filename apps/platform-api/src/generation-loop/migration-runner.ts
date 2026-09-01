@@ -1,4 +1,5 @@
 import { createPgRunSql } from "../workspace-orchestrator/pg-runner";
+import { schemaAdvisoryLockSql } from "../workspace-orchestrator/postgres-provisioner";
 
 export interface MigrationRunner {
   run(databaseUrl: string, sql: string): Promise<void>;
@@ -19,8 +20,10 @@ export function buildTransactionalMigrationSql(databaseUrl: string, sql: string)
   } catch {
     schema = null;
   }
-  const searchPath = schema ? `SET LOCAL search_path TO "${schema.replace(/"/g, "")}"; ` : "";
-  return `BEGIN; ${searchPath}${sql}; COMMIT;`;
+  const safeSchema = schema?.replace(/[^a-z0-9_]/gi, "") ?? null;
+  const searchPath = safeSchema ? `SET LOCAL search_path TO "${safeSchema}"; ` : "";
+  const lock = safeSchema ? `${schemaAdvisoryLockSql(safeSchema)}; ` : "";
+  return `BEGIN; ${lock}${searchPath}${sql}; COMMIT;`;
 }
 
 // Executes a governed migration SQL statement against the project's own

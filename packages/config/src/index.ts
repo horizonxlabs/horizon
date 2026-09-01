@@ -16,7 +16,11 @@ export const navigation: Record<Surface, NavItem[]> = {
     { label: "Publishing", route: "/admin/publishing", icon: "publish" }
   ],
   creator: [
-    { label: "Projects", route: "/creator/", icon: "projects" },
+    {
+      label: "Project",
+      route: "/creator/projects/leave-management/project",
+      icon: "dashboard"
+    },
     { label: "PRD Review", route: "/creator/projects/leave-management/prd", icon: "prd" },
     { label: "Creator Workspace", route: "/creator/projects/leave-management", icon: "workspace" },
     { label: "Database", route: "/creator/projects/leave-management/database", icon: "grid" },
@@ -36,6 +40,11 @@ export const navigation: Record<Surface, NavItem[]> = {
       label: "Tickets & Changes",
       route: "/creator/projects/leave-management/tickets",
       icon: "tickets"
+    },
+    {
+      label: "Project Settings",
+      route: "/creator/projects/leave-management/settings",
+      icon: "system"
     }
   ],
   store: [

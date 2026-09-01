@@ -1,54 +1,55 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import path from "node:path";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-function readAllSourceFiles(dir) {
-  const entries = readdirSync(dir);
-  let combined = "";
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      combined += readAllSourceFiles(fullPath);
-    } else if (/\.(tsx?|jsx?)$/.test(entry)) {
-      combined += readFileSync(fullPath, "utf8");
-    }
-  }
-  return combined;
-}
+const { navigation } = await import("../../packages/config/src/index.ts");
+const { createCreatorNavigation } = await import("../../apps/creator-web/src/app/routes.ts");
 
 test("creator navigation matches the real app creation lifecycle", () => {
-  const configSource = readFileSync("packages/config/src/index.ts", "utf8");
+  const project = { id: "expense-approval" };
+  const configuredLabels = navigation.creator.map((item) => item.label);
+  const sidebarItems = createCreatorNavigation(project);
 
-  const expectedOrder = [
-    "Projects",
-    "PRD Review",
-    "Creator Workspace",
-    "Database",
-    "Versions",
-    "Users & Roles",
-    "Publish & Registry",
-    "Deployments",
-    "Tickets & Changes"
-  ];
-
-  let previousIndex = -1;
-  for (const label of expectedOrder) {
-    const index = configSource.indexOf(`label: "${label}"`);
-    assert.ok(index > previousIndex, `${label} should appear after the previous creator menu item`);
-    previousIndex = index;
-  }
-
-  assert.match(configSource, /route: "\/creator\/"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/prd"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/database"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/versions"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/users"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/publish"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/deployments"/);
-  assert.match(configSource, /route: "\/creator\/projects\/leave-management\/tickets"/);
+  assert.deepEqual(navigation.creator[0], {
+    label: "Project",
+    route: "/creator/projects/leave-management/project",
+    icon: "dashboard"
+  });
+  assert.equal(configuredLabels.includes("Projects"), false);
+  assert.deepEqual(
+    sidebarItems.map((item) => item.label),
+    [
+      "Project",
+      "Database",
+      "Versions",
+      "Users & Roles",
+      "Publish & Registry",
+      "Deployments",
+      "Tickets & Changes",
+      "Project Settings"
+    ]
+  );
+  assert.equal(
+    sidebarItems.some((item) => item.label === "Creator Workspace"),
+    false
+  );
+  assert.equal(
+    sidebarItems.some((item) => item.label === "PRD Review"),
+    false
+  );
+  assert.deepEqual(
+    sidebarItems.map((item) => item.route),
+    [
+      "/creator/projects/expense-approval/project",
+      "/creator/projects/expense-approval/database",
+      "/creator/projects/expense-approval/versions",
+      "/creator/projects/expense-approval/users",
+      "/creator/projects/expense-approval/publish",
+      "/creator/projects/expense-approval/deployments",
+      "/creator/projects/expense-approval/tickets",
+      "/creator/projects/expense-approval/settings"
+    ]
+  );
 });
 
 test("admin navigation includes readiness pages", () => {
@@ -77,15 +78,4 @@ test("Store navigation includes implemented collections and planned account page
     assert.match(configSource, new RegExp(`label: "${label}"`));
     assert.match(configSource, new RegExp(`route: "${route.replaceAll("/", "\\/")}"`));
   }
-});
-
-test("creator project cards open the editing workspace and lifecycle pages exist", () => {
-  const creatorSource = readAllSourceFiles("apps/creator-web/src");
-
-  // Clicking a project card opens the editing workspace directly.
-  assert.match(creatorSource, /handleSelectProject\(project, "workspace"/);
-  // Lifecycle pages remain reachable via navigation and page copy.
-  assert.match(creatorSource, /Creator Workspace: Leave Management/);
-  assert.match(creatorSource, /Publish & Registry/);
-  assert.match(creatorSource, /Tickets & Changes/);
 });

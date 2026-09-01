@@ -12,8 +12,15 @@ export interface DeploymentStore {
     containerName?: string;
     publishedByUserId: string;
   }): WorkspaceDeployment;
+  updateRuntime(id: string, input: {
+    imageDigest?: string;
+    containerId?: string | null;
+    containerName?: string;
+  }): WorkspaceDeployment;
   updateHealth(id: string, healthStatus: DeploymentHealthStatus): WorkspaceDeployment;
   discard(id: string): void;
+  remove?(id: string): void;
+  removeProject(projectId: string): void;
   list(projectId: string): WorkspaceDeployment[];
   // Latest healthy deployment for a slug in a given environment. Defaults to "production" so the
   // /apps serve path and existing callers get the live production tier. Env-awareness matters:
@@ -54,6 +61,13 @@ export function createMemoryDeploymentStore(): DeploymentStore {
       order.push(deployment.id);
       return deployment;
     },
+    updateRuntime(id, input) {
+      const existing = byId.get(id);
+      if (!existing) throw new Error(`unknown deployment '${id}'`);
+      const next = { ...existing, ...input };
+      byId.set(id, next);
+      return next;
+    },
     updateHealth(id, healthStatus) {
       const existing = byId.get(id);
       if (!existing) {
@@ -67,6 +81,18 @@ export function createMemoryDeploymentStore(): DeploymentStore {
       byId.delete(id);
       const index = order.indexOf(id);
       if (index >= 0) order.splice(index, 1);
+    },
+    remove(id) {
+      byId.delete(id);
+      const index = order.indexOf(id);
+      if (index >= 0) order.splice(index, 1);
+    },
+    removeProject(projectId) {
+      const projectDeploymentIds = order.filter((id) => byId.get(id)?.projectId === projectId);
+      for (const id of projectDeploymentIds) {
+        byId.delete(id);
+        order.splice(order.indexOf(id), 1);
+      }
     },
     list(projectId) {
       return order

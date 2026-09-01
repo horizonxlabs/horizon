@@ -8,7 +8,7 @@ import type { PlatformRequest } from "./app-factory";
  */
 
 export function isPersistenceCoreRoute(request: PlatformRequest): boolean {
-  return request.path === "/auth/me" || request.path === "/projects" || request.path === "/audit-logs" || request.path === "/audit-logs/filter";
+  return request.path === "/auth/me" || request.path === "/projects" || (request.method === "DELETE" && /^\/projects\/[^/]+$/.test(request.path)) || request.path === "/audit-logs" || request.path === "/audit-logs/filter";
 }
 
 export function isNativeAuthRoute(request: PlatformRequest): boolean {

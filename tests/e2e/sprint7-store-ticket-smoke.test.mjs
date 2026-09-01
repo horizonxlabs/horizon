@@ -95,7 +95,8 @@ function createSprint7ApiFixture() {
   executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint7-store" }
   });
 
   return { services, projectId: project.body.data.id, appSlug: project.body.data.appId };
@@ -246,9 +247,9 @@ test("Sprint 7 App Store PWA assets and UI expose mobile store ticket workflow",
 
   for (const text of [
     "Creator Ticket Inbox",
-    "PRD Change Requests",
-    "No local PRD change records",
-    "Convert a ticket through the governed API"
+    "Create an auditable PRD change",
+    "Ticket service is unavailable",
+    "Creates a governed PRD change from this ticket"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }

@@ -1,4 +1,9 @@
-import type { WorkspaceAgentMode, WorkspaceChatAction, WorkspaceChatMessage } from "@evcp/types";
+import type {
+  WorkspaceAgentMode,
+  WorkspaceChatAction,
+  WorkspaceChatMessage,
+  WorkspaceChatTurnPart
+} from "@evcp/types";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 
 import { selectContextFiles } from "./context-selector";
@@ -27,6 +32,7 @@ import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
 import { assertFileLimits, collectPiWriteIssues } from "./turn-checks";
+import { reduceTurnPart } from "./turn-parts";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
   const turnLock = createProjectTurnLock();
@@ -66,6 +72,7 @@ async function* runLockedTurn(
   const mode: WorkspaceAgentMode =
     input.agentMode === "plan" || input.agentMode === "build" ? input.agentMode : "auto";
   const userMessage = createUserChatMessage(input.projectId, input.prompt, mode);
+  await input.assertCurrent?.();
   await deps.chatHistory.appendMessage(userMessage);
   const history = await deps.chatHistory.listMessages(input.projectId);
   const containerId = deps.getContainerId(input.projectId);
@@ -105,6 +112,7 @@ async function* runLockedTurn(
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
   const migrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
   let assistantText = "";
+  let turnParts: WorkspaceChatTurnPart[] = [];
   let currentAssistantDeltaText = "";
   let currentRoundReasoningChars = 0;
   let promptTokens = 0;
@@ -117,15 +125,33 @@ async function* runLockedTurn(
   const writtenPaths = new Set<string>();
   let failedTool: HorizonPiToolDetails | undefined;
   let preparedSnapshotToken: string | undefined;
+  let snapshotLeaseTimer: ReturnType<typeof setInterval> | undefined;
+  let snapshotLeaseError: Error | undefined;
   let assistantMessage: WorkspaceChatMessage | undefined;
   let candidateSha: string | undefined;
   let irreversibleFinalizationMayHaveTakenEffect = false;
   let commitEventEmitted = false;
   let rollbackRecoveryRequired = false;
 
+  function trackTurnEvent(event: ChatStreamEvent): ChatStreamEvent {
+    turnParts = reduceTurnPart(turnParts, event);
+    if (assistantMessage) assistantMessage.parts = turnParts;
+    return event;
+  }
+
   try {
     if (mutationCapable) {
       preparedSnapshotToken = await deps.workspaceGuard.prepare(input.projectId, containerId);
+      if (deps.workspaceGuard.renewSnapshot) {
+        snapshotLeaseTimer = setInterval(() => {
+          void deps.workspaceGuard
+            .renewSnapshot?.(input.projectId, containerId, preparedSnapshotToken!)
+            .catch((error) => {
+              snapshotLeaseError = error instanceof Error ? error : new Error(String(error));
+            });
+        }, 10_000);
+        snapshotLeaseTimer.unref?.();
+      }
     }
     signal.throwIfAborted();
     const { modelRuntime, model } = await createHorizonPiRuntime({
@@ -167,7 +193,7 @@ async function* runLockedTurn(
     queue = new PiSessionEventQueue(session);
     for await (const event of queue.prompt(input.prompt)) {
       collectEvent(event);
-      for (const adapted of adaptPiEvent(event)) yield adapted;
+      for (const adapted of adaptPiEvent(event)) yield trackTurnEvent(adapted);
     }
     signal.throwIfAborted();
     for (let attempt = 0; failedTool && attempt < limits.toolFailureRetries; attempt += 1) {
@@ -177,7 +203,7 @@ async function* runLockedTurn(
       failedTool = undefined;
       for await (const event of queue.prompt(feedback)) {
         collectEvent(event);
-        for (const adapted of adaptPiEvent(event)) yield adapted;
+        for (const adapted of adaptPiEvent(event)) yield trackTurnEvent(adapted);
       }
       signal.throwIfAborted();
       // A model can ignore the feedback entirely and just narrate instead of calling a
@@ -203,7 +229,7 @@ async function* runLockedTurn(
       if (writeIssues.length > 0) {
         for await (const event of queue.prompt(turnFeedback.buildWriteFeedback(writeIssues))) {
           collectEvent(event);
-          for (const adapted of adaptPiEvent(event)) yield adapted;
+          for (const adapted of adaptPiEvent(event)) yield trackTurnEvent(adapted);
         }
         signal.throwIfAborted();
         turnFeedback.ensureNoFailedTool(failedTool);
@@ -222,7 +248,7 @@ async function* runLockedTurn(
           if (attempt >= limits.validationRetries) break;
           for await (const event of queue.prompt(turnFeedback.buildValidationFeedback(error))) {
             collectEvent(event);
-            for (const adapted of adaptPiEvent(event)) yield adapted;
+            for (const adapted of adaptPiEvent(event)) yield trackTurnEvent(adapted);
           }
           signal.throwIfAborted();
           turnFeedback.ensureNoFailedTool(failedTool);
@@ -238,6 +264,7 @@ async function* runLockedTurn(
       agentMode: mode,
       artifactActionIds: actionIds,
       actions,
+      parts: turnParts,
       tokenUsage: { promptTokens, completionTokens }
     });
     assistantMessage = assistant;
@@ -265,12 +292,14 @@ async function* runLockedTurn(
         );
       }
       if (hasFinalWorkspaceChanges) {
+        await input.assertCurrent?.();
         candidateSha = await deps.commitAllChanges(
           input.projectId,
           containerId,
           `AI: ${input.prompt}`
         );
         signal.throwIfAborted();
+        const commitEvent = trackTurnEvent({ type: "commit", sha: candidateSha });
         await finalizePiCandidate({
           deps,
           signal,
@@ -280,16 +309,19 @@ async function* runLockedTurn(
           candidateSha,
           assistant,
           prompt: input.prompt,
+          assertCurrent: input.assertCurrent,
           markIrreversible() {
             irreversibleFinalizationMayHaveTakenEffect = true;
           }
         });
         commitEventEmitted = true;
-        yield { type: "commit", sha: candidateSha };
+        yield commitEvent;
       } else {
+        await input.assertCurrent?.();
         await deps.chatHistory.appendMessage(assistant);
       }
     } else {
+      await input.assertCurrent?.();
       await deps.chatHistory.appendMessage(assistant);
     }
   } catch (error) {
@@ -298,7 +330,9 @@ async function* runLockedTurn(
     const preserveCandidate = irreversibleFinalizationMayHaveTakenEffect && candidateSha;
     if (preparedSnapshotToken && !preserveCandidate) {
       try {
+        await input.assertCurrent?.();
         await deps.workspaceGuard.restoreSnapshot(input.projectId, containerId, preparedSnapshotToken);
+        await input.assertCurrent?.();
       } catch (restoreError) {
         rollbackRecoveryRequired = true;
         errorMessage = `${errorMessage}; workspace rollback failed: ${safeToolError(restoreError)}. Workspace snapshot recovery is required; an operator must inspect the protected recovery state before any new turn.`;
@@ -312,6 +346,13 @@ async function* runLockedTurn(
     if (preserveCandidate) {
       errorMessage = `Commit ${preserveCandidate} was preserved after finalization: ${errorMessage}`;
     }
+    let preservedCommitEvent: ChatStreamEvent | undefined;
+    if (preserveCandidate && !commitEventEmitted) {
+      commitEventEmitted = true;
+      preservedCommitEvent = trackTurnEvent({ type: "commit", sha: preserveCandidate });
+    }
+    const initialErrorMessage = errorMessage;
+    const errorEvent = trackTurnEvent({ type: "error", message: errorMessage });
     errorMessage = await persistPiTurnErrorAssistant({
       chatHistory: deps.chatHistory,
       projectId: input.projectId,
@@ -323,14 +364,14 @@ async function* runLockedTurn(
       assistantMessage,
       artifactActionIds: actionIds,
       actions,
-      tokenUsage: { promptTokens, completionTokens }
+      parts: turnParts,
+      tokenUsage: { promptTokens, completionTokens },
+      assertCurrent: input.assertCurrent
     });
-    if (preserveCandidate && !commitEventEmitted) {
-      commitEventEmitted = true;
-      yield { type: "commit", sha: preserveCandidate };
-    }
-    yield { type: "error", message: errorMessage };
+    if (preservedCommitEvent) yield preservedCommitEvent;
+    yield errorMessage === initialErrorMessage ? errorEvent : { type: "error", message: errorMessage };
   } finally {
+    if (snapshotLeaseTimer) clearInterval(snapshotLeaseTimer);
     if (!rollbackRecoveryRequired) {
       await releasePiTurnSnapshot(deps, input.projectId, containerId, preparedSnapshotToken);
     }
@@ -341,6 +382,9 @@ async function* runLockedTurn(
   yield { type: "done" };
 
   function collectEvent(event: AgentSessionEvent): void {
+    if (snapshotLeaseError) {
+      throw new Error(`workspace snapshot lease renewal failed: ${snapshotLeaseError.message}`);
+    }
     if (event.type === "message_start" && event.message.role === "assistant") {
       currentAssistantDeltaText = "";
       currentRoundReasoningChars = 0;
@@ -377,7 +421,10 @@ async function* runLockedTurn(
       }
       promptTokens += event.message.usage.input;
       completionTokens += event.message.usage.output;
-      if (promptTokens + completionTokens > limits.maxTurnTokens) {
+      if (
+        limits.maxTurnTokens !== undefined &&
+        promptTokens + completionTokens > limits.maxTurnTokens
+      ) {
         throw new Error(`Pi turn token budget (${limits.maxTurnTokens}) exceeded`);
       }
     }

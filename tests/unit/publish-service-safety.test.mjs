@@ -75,6 +75,12 @@ test("publish compensates a rejected Prisma lifecycle batch and the next publish
       if (!row) throw new Error(`missing revision '${where.id}'`);
       Object.assign(row, data);
       return row;
+    },
+    async deleteMany({ where }) {
+      const retained = rows.filter((row) => where.id ? row.id !== where.id : row.projectId !== where.projectId);
+      const count = rows.length - retained.length;
+      rows.splice(0, rows.length, ...retained);
+      return { count };
     }
   };
   const client = {
@@ -140,6 +146,12 @@ test("a thrown health check discards the queued candidate before the next publis
       if (!row) throw new Error(`missing revision '${where.id}'`);
       Object.assign(row, data);
       return row;
+    },
+    async deleteMany({ where }) {
+      const retained = rows.filter((row) => where.id ? row.id !== where.id : row.projectId !== where.projectId);
+      const count = rows.length - retained.length;
+      rows.splice(0, rows.length, ...retained);
+      return { count };
     }
   };
   const client = {
@@ -190,4 +202,56 @@ test("a thrown health check discards the queued candidate before the next publis
   assert.equal(recovered.deployment.revision, 1);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].healthStatus, "healthy");
+});
+
+test("cleanup candidate survives store restart when pre-container image cleanup fails", async () => {
+  const rows = [];
+  const revisionTable = {
+    async findMany() { return rows.map((row) => ({ ...row })); },
+    async create({ data }) { rows.push({ ...data }); return data; },
+    async update({ where, data }) {
+      const row = rows.find((item) => item.id === where.id);
+      if (!row) throw new Error(`missing revision '${where.id}'`);
+      Object.assign(row, data);
+      return row;
+    },
+    async deleteMany({ where }) {
+      const retained = rows.filter((row) =>
+        where.id ? row.id !== where.id : row.projectId !== where.projectId);
+      const count = rows.length - retained.length;
+      rows.splice(0, rows.length, ...retained);
+      return { count };
+    }
+  };
+  const client = {
+    workspaceDeploymentRevision: revisionTable,
+    async $transaction(operation) {
+      const snapshot = rows.map((row) => ({ ...row }));
+      try { return await operation({ workspaceDeploymentRevision: revisionTable }); }
+      catch (error) { rows.splice(0, rows.length, ...snapshot); throw error; }
+    }
+  };
+  const deps = buildPublishServiceDeps();
+  deps.deployments = await createPrismaDeploymentStore(undefined, client);
+  deps.resolveEnv = async () => { throw new Error("secrets unavailable"); };
+  let failCleanup = true;
+  const originalRemoveImage = deps.docker.removeImage.bind(deps.docker);
+  deps.docker.removeImage = async (tag) => {
+    if (failCleanup) { failCleanup = false; throw new Error("docker unavailable"); }
+    return originalRemoveImage(tag);
+  };
+
+  await assert.rejects(
+    createPublishService(deps).publish({
+      projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1"
+    }),
+    /Deployment compensation failed/
+  );
+  assert.equal(rows.length, 1, "cleanup identity is durable before container creation");
+  assert.equal(rows[0].containerId, null);
+
+  deps.deployments = await createPrismaDeploymentStore(undefined, client);
+  await createPublishService(deps).deleteProject("p1");
+  assert.deepEqual(rows, []);
+  assert.equal(deps.docker.state.removedImages.length, 1);
 });

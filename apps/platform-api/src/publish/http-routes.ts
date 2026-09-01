@@ -7,7 +7,15 @@ import type { MigrationStore } from "../generation-loop/migration-store";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
 import { createPublishRoutes, resolveAppsTarget } from "./routes";
 import { createDefaultPublishStack } from "./factory";
-import { registerAppLaunchSessionRoute } from "./app-launch-session-route";
+import { registerAppLaunchSessionRoute, type AppLaunchAuthorization } from "./app-launch-session-route";
+import { resolveRawAppStoreSubdomain } from "./app-store-publish-runtime";
+import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
+import type { LaunchGrantStore } from "./launch-grant-store";
+import {
+  proxyPublishedDeployment,
+  registerPublishedSubdomainHttpRoutes,
+  type PublishedSubdomainRegistryEntry
+} from "./subdomain-http-routes";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -27,7 +35,6 @@ export async function canAccessPublishedDeployment(
 }
 
 type HeaderBag = Record<string, string | string[] | undefined>;
-
 // Minimal raw-Express surface used by the publish + /apps serve handlers (mirrors the shape the
 // app-factory infers from its Nest http adapter).
 export interface PublishRawExpress {
@@ -106,17 +113,31 @@ export async function registerPublishHttpRoutes(opts: {
   env?: Record<string, string | undefined>;
   resolvePublishAuth: (headers: HeaderBag) => Promise<WorkspaceAuthContext | null>;
   canAccessDeployment: (auth: WorkspaceAuthContext, projectId: string) => Promise<boolean>;
+  preflightPublishedSubdomain?: (input: {
+    headers: HeaderBag;
+    projectId: string;
+    subdomain: string;
+  }) => Promise<{ subdomain: string }>;
   persistPublishedDeployment?: (input: {
     headers: HeaderBag;
     projectId: string;
     deployment: WorkspaceDeployment;
+    subdomain?: string;
   }) => Promise<{ status: number; body: unknown }>;
   publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
+  launchGrantStore?: LaunchGrantStore;
+  subdomainBaseDomain?: string;
+  subdomainSecureCookie?: boolean;
+  resolvePublishedSubdomain?: (
+    subdomain: string
+  ) => Promise<PublishedSubdomainRegistryEntry | null>;
+  resolveAppLaunch: (input: { headers: HeaderBag; appSlug: string }) => Promise<AppLaunchAuthorization>;
   recordAudit: (event: {
     action: string;
     projectId: string;
     metadata?: Record<string, unknown>;
   }) => void;
+  lifecycle?: ProjectLifecycleCoordinator;
 }): Promise<void> {
   const { rawApp, orchestrator, nodeHttp } = opts;
 
@@ -129,26 +150,33 @@ export async function registerPublishHttpRoutes(opts: {
     orchestrator,
     migrations: opts.migrations,
     env: opts.env,
-    onAudit: opts.recordAudit
+    onAudit: opts.recordAudit,
+    lifecycle: opts.lifecycle
   }));
   const publishRoutes = createPublishRoutes({ publishService, deployments: workspaceDeployments });
   const persistOrCompensate = async (
     headers: HeaderBag,
     projectId: string,
-    deployment: WorkspaceDeployment
+    deployment: WorkspaceDeployment,
+    subdomain?: string
   ): Promise<{ status: number; body: unknown } | null> => {
     if (!opts.persistPublishedDeployment) return null;
     try {
-      const persisted = await opts.persistPublishedDeployment({ headers, projectId, deployment });
+      const persisted = await opts.persistPublishedDeployment({
+        headers,
+        projectId,
+        deployment,
+        subdomain
+      });
       if (persisted.status >= 400) await publishService.deactivate(deployment);
       return persisted;
-    } catch (error) {
+    } catch {
       await publishService.deactivate(deployment);
       return {
         status: 500,
         body: {
           error: "publish_persistence_failed",
-          message: error instanceof Error ? error.message : "deployment persistence failed"
+          message: "Deployment persistence failed."
         }
       };
     }
@@ -166,7 +194,22 @@ export async function registerPublishHttpRoutes(opts: {
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { environment?: unknown } | undefined;
+    const body = req.body as { environment?: unknown; subdomain?: unknown } | undefined;
+    const isAppStorePublish = body?.environment === undefined;
+    let appStoreSubdomain: string | undefined;
+    if (isAppStorePublish) {
+      const resolvedSubdomain = await resolveRawAppStoreSubdomain({
+        headers: req.headers ?? {},
+        projectId,
+        value: body?.subdomain,
+        preflight: opts.preflightPublishedSubdomain
+      });
+      if (!resolvedSubdomain.ok) {
+        res.status(resolvedSubdomain.status).json(resolvedSubdomain.body);
+        return;
+      }
+      appStoreSubdomain = resolvedSubdomain.subdomain;
+    }
     const slug = resolveResourceKey(projectId);
     const environment = normalizeEnvironment(body?.environment);
     try {
@@ -177,7 +220,12 @@ export async function registerPublishHttpRoutes(opts: {
         opts.persistPublishedDeployment
       ) {
         const deployment = result.body.deployment as WorkspaceDeployment;
-        const persisted = await persistOrCompensate(req.headers ?? {}, projectId, deployment);
+        const persisted = await persistOrCompensate(
+          req.headers ?? {},
+          projectId,
+          deployment,
+          appStoreSubdomain
+        );
         if (persisted && (persisted.status >= 400 || body?.environment === undefined)) {
           res.status(persisted.status).json(persisted.body);
           return;
@@ -271,21 +319,36 @@ export async function registerPublishHttpRoutes(opts: {
         });
       }
     },
-    authorize: async (headers, _appSlug, requestedRoutePath) => {
+    authorize: async (headers, appSlug, requestedRoutePath) => {
       const match = requestedRoutePath?.trim().match(/^\/apps\/([a-zA-Z0-9_-]+)$/);
       if (!match) throw new Error("Published app route is invalid");
       const auth = await opts.resolvePublishAuth(headers);
       if (!auth) throw new Error("Platform session is unavailable");
       const slug = match[1];
-      const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () =>
-        rehydrateDeployment(slug, "production")
-      );
-      if (!decision.ok || !(await opts.canAccessDeployment(auth, decision.projectId))) {
+      const launch = await opts.resolveAppLaunch({ headers, appSlug });
+      if (launch.routePath !== `/apps/${slug}`) throw new Error("Published app route is unavailable");
+      const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () => rehydrateDeployment(slug, "production"));
+      if (!decision.ok || decision.projectId !== launch.projectId || !(await opts.canAccessDeployment(auth, decision.projectId))) {
         throw new Error("Published app access is unavailable");
       }
-      return { routePath: `/apps/${slug}` };
+      return launch;
     },
+    launchGrantStore: opts.launchGrantStore,
     secureCookie: (opts.env ?? process.env).NODE_ENV === "production"
+  });
+
+  registerPublishedSubdomainHttpRoutes({
+    rawApp,
+    nodeHttp,
+    deployments: workspaceDeployments,
+    launchGrantStore: opts.launchGrantStore,
+    baseDomain: opts.subdomainBaseDomain ?? "localhost",
+    secureCookie:
+      opts.subdomainSecureCookie ?? (opts.env ?? process.env).NODE_ENV === "production",
+    resolvePublishedSubdomain: opts.resolvePublishedSubdomain ?? (async () => null),
+    resolvePublishAuth: opts.resolvePublishAuth,
+    canAccessDeployment: opts.canAccessDeployment,
+    rehydrateDeployment: (resourceKey) => rehydrateDeployment(resourceKey, "production")
   });
 
   // Public reverse proxy to a healthy deployment for the given environment. Publishing endpoints
@@ -310,43 +373,14 @@ export async function registerPublishHttpRoutes(opts: {
         res.status(403).json({ error: "forbidden" });
         return;
       }
-      const target = new URL(decision.upstream);
       const forwardPath = deploymentProxyPath(req.originalUrl);
-      const forwardHeaders: HeaderBag = { ...req.headers, host: target.host };
-      for (const key of Object.keys(forwardHeaders)) {
-        if (key.toLowerCase() === "authorization" || key.toLowerCase() === "cookie") {
-          delete forwardHeaders[key];
-        }
-      }
-      const proxyReq = nodeHttp.request(
-        {
-          hostname: target.hostname,
-          port: target.port || 80,
-          method: req.method,
-          path: forwardPath,
-          headers: forwardHeaders
-        },
-        (proxyRes) => {
-          res.statusCode = proxyRes.statusCode ?? 502;
-          for (const [key, value] of Object.entries(proxyRes.headers)) {
-            if (value !== undefined) res.setHeader(key, value as string | string[]);
-          }
-          proxyRes.pipe(res as unknown as NodeJS.WritableStream);
-        }
-      );
-      proxyReq.on("error", () => {
-        if (!res.headersSent) res.status(502).json({ error: "app_upstream_unreachable" });
+      proxyPublishedDeployment({
+        nodeHttp,
+        request: req,
+        response: res,
+        upstream: decision.upstream,
+        path: forwardPath
       });
-      const method = String(req.method ?? "GET").toUpperCase();
-      if (method === "GET" || method === "HEAD" || req.body === undefined || req.body === null) {
-        proxyReq.end();
-      } else {
-        const payload = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-        proxyReq.setHeader("content-type", "application/json");
-        proxyReq.setHeader("content-length", Buffer.byteLength(payload));
-        proxyReq.write(payload);
-        proxyReq.end();
-      }
     };
 
   // Staging serve routes must be registered BEFORE the production `/apps/:slug` routes so the more

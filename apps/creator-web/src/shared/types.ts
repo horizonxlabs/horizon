@@ -9,11 +9,13 @@ export type CreatorProjectView = {
   prdVersion: string;
   frontendVersion: string;
   tokenUsedThisMonth: number;
+  createdAt: string;
 };
 
 export type CreatorBootstrapState = {
   status: "loading" | "ready" | "empty" | "error";
   message?: string;
+  technicalDetails?: string;
   userName: string;
   selectedProject: CreatorProjectView;
   projects: CreatorProjectView[];

@@ -56,6 +56,19 @@ test("core persistence denies end users from project creation", async () => {
   );
 });
 
+test("core persistence deletes a project for its owner and keeps it for another creator", async () => {
+  const service = createCoreRepositoryBackedService(new MemoryCorePersistenceClient());
+  const owner = await service.getUserByEmail("creator@company.com");
+  const otherCreator = { ...owner, id: "usr_other_creator", email: "other@company.com" };
+  const project = await service.createProject({ actor: owner, name: "Delete Me" });
+
+  await assert.rejects(() => service.deleteProject(otherCreator, project.id), /cannot delete project/);
+  assert.equal((await service.listProjects(owner)).length, 1);
+
+  await service.deleteProject(owner, project.id);
+  assert.deepEqual(await service.listProjects(owner), []);
+});
+
 test("core persistence records and filters audit events", async () => {
   const service = createCoreRepositoryBackedService(new MemoryCorePersistenceClient());
   const creator = await service.getUserByEmail("creator@company.com");

@@ -106,6 +106,8 @@ const app = (id, accessStatus, installStatus) => ({
 });
 
 const alpha = app("Alpha", "active", "installed");
+alpha.subdomain = "alpha";
+alpha.subdomainUrl = "https://alpha.apps.example.com";
 const beta = app("Beta", "active", "not_installed");
 const gamma = app("Gamma", "pending", "not_installed");
 const ready = {
@@ -331,10 +333,14 @@ test("card detail navigation does not record history but opening an active app d
         {
           store,
           client: {
-            authorizeStoreAppLaunch: async (appSlug) => {
+            authorizeStoreAppLaunch: async (appSlug, routePath) => {
               assert.equal(appSlug, "Alpha");
+              assert.equal(routePath, "/apps/Alpha");
               launchAuthorized = true;
-              return { authorized: true };
+              return {
+                authorized: true,
+                launchUrl: "https://alpha.apps.example.com/__launch/card-grant"
+              };
             }
           }
         },
@@ -342,6 +348,10 @@ test("card detail navigation does not record history but opening an active app d
       )
     );
   });
+
+  const accessUrl = renderer.root.findByProps({ className: "store-app-access-url-value" });
+  assert.equal(accessUrl.children.join(""), "https://alpha.apps.example.com");
+  assert.equal(accessUrl.props.title, "https://alpha.apps.example.com");
 
   const alphaCard = renderer.root.findAllByProps({ className: "store-app-detail-link" })[0];
   assert.ok(alphaCard);
@@ -360,7 +370,7 @@ test("card detail navigation does not record history but opening an active app d
     primary.props.onClick({ preventDefault() {} });
   });
   assert.equal(launchAuthorized, true);
-  assert.equal(window.location.pathname, "/apps/Alpha");
+  assert.equal(window.location.pathname, "https://alpha.apps.example.com/__launch/card-grant");
   assert.deepEqual(store.getSnapshot().device.recent, ["Alpha"]);
 
   await act(async () => {

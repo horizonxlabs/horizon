@@ -1,46 +1,61 @@
 :80 {
-	# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
-	# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
-	# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
-	@compressible not path /api/*
-	encode @compressible zstd gzip
+	route {
+		# Don't compress /api/*: gzip/zstd buffer the response to compress it, which batches the chat
+		# SSE tokens (text/event-stream under /api) into bursts instead of streaming them token-by-token
+		# (the AI-typing UX). Everything else (HTML/CSS/JS/assets) is still compressed.
+		@compressible not path /api/*
+		encode @compressible zstd gzip
 
-	handle /auth/* {
-		reverse_proxy keycloak:8080
-	}
-
-	handle_path /api/* {
-		# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
-		reverse_proxy platform-api:3100 {
-			flush_interval -1
+		@published_subdomain {
+			host *.localhost
+			header_regexp published Host ^[a-z0-9]+(?:-[a-z0-9]+)*\.localhost(?::[0-9]+)?$
+			not host admin.localhost api.localhost auth.localhost creator.localhost store.localhost storage.localhost www.localhost
+			expression {http.request.host}.split(".")[0].size() >= 3 && {http.request.host}.split(".")[0].size() <= 63
 		}
-	}
+		handle @published_subdomain {
+			rewrite * /__subdomain{uri}
+			reverse_proxy platform-api:3100 {
+				header_up Host {http.request.host}
+			}
+		}
 
-	redir /creator /creator/ 308
-	redir /store /store/ 308
+		handle /auth/* {
+			reverse_proxy keycloak:8080
+		}
 
-	handle /horizon-logo.png {
-		rewrite * /creator/horizon-logo.png
-		reverse_proxy creator-web:4101
-	}
+		handle_path /api/* {
+			# SSE: flush every write immediately so long AI generations stream without proxy timeouts.
+			reverse_proxy platform-api:3100 {
+				flush_interval -1
+			}
+		}
 
-	handle /creator* {
-		reverse_proxy creator-web:4101
-	}
+		redir /creator /creator/ 308
+		redir /store /store/ 308
 
-	handle /apps/* {
-		reverse_proxy platform-api:3100
-	}
+		handle /horizon-logo.png {
+			rewrite * /creator/horizon-logo.png
+			reverse_proxy creator-web:4101
+		}
 
-	handle /store* {
-		reverse_proxy app-store-pwa:4102
-	}
+		handle /creator* {
+			reverse_proxy creator-web:4101
+		}
 
-	handle /preview/* {
-		reverse_proxy platform-api:3100
-	}
+		handle /apps/* {
+			reverse_proxy platform-api:3100
+		}
 
-	handle {
-		reverse_proxy admin-web:4100
+		handle /store* {
+			reverse_proxy app-store-pwa:4102
+		}
+
+		handle /preview/* {
+			reverse_proxy platform-api:3100
+		}
+
+		handle {
+			reverse_proxy admin-web:4100
+		}
 	}
 }

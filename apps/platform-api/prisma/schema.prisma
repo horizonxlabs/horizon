@@ -208,6 +208,7 @@ model Project {
   notifications InAppNotification[]
   chatMessages ChatMessage[]
   chatSummary ChatSummary?
+  fileUploads ProjectFileUpload[]
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -456,10 +457,35 @@ model ProjectFileUpload {
   archivedAt        DateTime? @map("archived_at")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, archivedAt])
   @@unique([bucket, objectKey])
   @@map("project_file_uploads")
+}
+
+model ProjectLifecycleState {
+  projectId              String    @id @map("project_id")
+  status                 String    @default("active")
+  epoch                  Int       @default(0)
+  mutationEpoch          Int       @default(0) @map("mutation_epoch")
+  deletionOwnerId        String?   @map("deletion_owner_id")
+  deletionLeaseExpiresAt DateTime? @map("deletion_lease_expires_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, deletionLeaseExpiresAt])
+  @@map("project_lifecycle_states")
+}
+
+model ProjectMutationLease {
+  id        String   @id
+  projectId String   @map("project_id")
+  epoch     Int
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, expiresAt])
+  @@map("project_mutation_leases")
 }
 
 model GuardrailRule {
@@ -769,6 +795,7 @@ model ChatMessage {
   content           String
   artifactActionIds String[] @default([]) @map("artifact_action_ids")
   actions           Json?
+  parts             Json?
   commitSha         String?  @map("commit_sha")
   tokenUsage        Json?    @map("token_usage")
   project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -1030,6 +1057,7 @@ model AppStoreRegistryEntry {
   projectId          String   @map("project_id")
   deploymentRecordId String   @unique @map("deployment_record_id")
   slug               String   @unique
+  subdomain          String?  @unique
   name               String
   route              String
   status             String

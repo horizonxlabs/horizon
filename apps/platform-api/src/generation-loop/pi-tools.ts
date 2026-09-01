@@ -143,7 +143,8 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
         result.content = [
           {
             type: "text",
-            text: "Build validation passed. Send the final response now with no more tool calls."
+            text:
+              "Build validation passed. Continue any remaining requested work, including database migrations and API wiring, before sending the final response."
           }
         ];
       }

@@ -9,6 +9,7 @@ import type {
   AppStoreRegistryEntryRecord,
   DeploymentRecordData,
   InAppNotificationRecord,
+  ProjectRecord,
   PublishRequestRecordData,
   PublishStorePersistenceClient,
   SupportTicketRecord,
@@ -28,6 +29,7 @@ import { defaultUserRecord } from "./publish-store-users";
 
 export class MemoryPublishStorePersistenceClient implements PublishStorePersistenceClient {
   readonly platformUser: PublishStorePersistenceClient["platformUser"];
+  readonly project: PublishStorePersistenceClient["project"];
   readonly app: PublishStorePersistenceClient["app"];
   readonly appRole: PublishStorePersistenceClient["appRole"];
   readonly appMember: PublishStorePersistenceClient["appMember"];
@@ -56,6 +58,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
   private readonly ticketTimeline: SupportTicketTimelineEntryRecord[] = [];
   private readonly notifications: InAppNotificationRecord[] = [];
   private readonly users: UserRecord[] = [];
+  private readonly projects: ProjectRecord[] = [];
 
   constructor(
     seed: Partial<{
@@ -72,6 +75,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
       tickets: SupportTicketRecord[];
       ticketTimeline: SupportTicketTimelineEntryRecord[];
       notifications: InAppNotificationRecord[];
+      projects: ProjectRecord[];
       users: UserRecord[];
     }> = {}
   ) {
@@ -88,6 +92,7 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
     this.tickets = seed.tickets ?? [];
     this.ticketTimeline = seed.ticketTimeline ?? [];
     this.notifications = seed.notifications ?? [];
+    this.projects = seed.projects ?? [];
     this.users = seed.users ?? [
       defaultUserRecord("usr_creator"),
       defaultUserRecord("usr_end_user")
@@ -100,6 +105,10 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
             (where.id !== undefined && user.id === where.id) ||
             (where.email !== undefined && user.email === where.email)
         ) ?? null
+    };
+    this.project = {
+      findUnique: async ({ where }) =>
+        this.projects.find((project) => project.id === where.id) ?? null
     };
 
     this.app = {
@@ -254,18 +263,30 @@ export class MemoryPublishStorePersistenceClient implements PublishStorePersiste
         this.registry.find(
           (entry) =>
             (!where.slug || entry.slug === where.slug) &&
+            (!where.subdomain || entry.subdomain === where.subdomain) &&
             (!where.projectId || entry.projectId === where.projectId) &&
             (!where.appId || entry.appId === where.appId)
         ) ?? null,
       upsert: async ({ where, update, create }) => {
         const index = this.registry.findIndex((entry) => entry.appId === where.appId);
-        if (index >= 0) {
-          const next = { ...this.registry[index], ...update };
-          this.registry[index] = next;
-          return next;
+        const candidate = index >= 0 ? { ...this.registry[index], ...update } : create;
+        const duplicate = candidate.subdomain
+          ? this.registry.find(
+              (entry) => entry.appId !== candidate.appId && entry.subdomain === candidate.subdomain
+            )
+          : undefined;
+        if (duplicate) {
+          const error = Object.assign(new Error("Unique constraint failed on subdomain"), {
+            code: "P2002"
+          });
+          throw error;
         }
-        this.registry.push(create);
-        return create;
+        if (index >= 0) {
+          this.registry[index] = candidate;
+          return candidate;
+        }
+        this.registry.push(candidate);
+        return candidate;
       }
     };
     this.supportTicket = {

@@ -1,10 +1,16 @@
 import { type WorkspaceDeploymentDto } from "@evcp/api-client";
+import { Button } from "@evcp/ui";
 import { ArrowUpRight, ExternalLink, Globe, Rocket, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
+import { CreatorStatusMessage, type CreatorStatusTone } from "@/shared";
 import { deploymentUrl } from "./deployment-url";
 
 type TargetEnv = "staging" | "production";
+type PublishDialogClient = Pick<
+  ReturnType<typeof createCreatorPlatformClient>,
+  "listDeployments" | "promoteDeployment" | "publishProject"
+>;
 
 const ENVIRONMENTS: Array<{ value: TargetEnv; label: string; hint: string }> = [
   { value: "staging", label: "Staging", hint: "Test build before going live" },
@@ -21,58 +27,99 @@ function latestFor(
 }
 
 function healthLabel(deployment: WorkspaceDeploymentDto | undefined): string {
-  if (!deployment) return "not deployed";
+  if (!deployment) return "Not deployed";
   return `${deployment.commitSha.slice(0, 7)} · ${deployment.healthStatus}`;
 }
 
-export function PublishDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+function technicalDetails(error: unknown): string | undefined {
+  return error instanceof Error ? error.message : undefined;
+}
+
+export function PublishDialog({
+  projectId,
+  onClose,
+  client
+}: {
+  projectId: string;
+  onClose: () => void;
+  client?: PublishDialogClient;
+}) {
+  const platformClient = useMemo(() => client ?? createCreatorPlatformClient(), [client]);
   const [deployments, setDeployments] = useState<WorkspaceDeploymentDto[]>([]);
   const [target, setTarget] = useState<TargetEnv>("staging");
-  const [isBusy, setIsBusy] = useState(false);
-  const [message, setMessage] = useState<string | undefined>(undefined);
-  const [errorText, setErrorText] = useState<string | undefined>(undefined);
+  const [busyAction, setBusyAction] = useState<"deploy" | "promote" | undefined>(undefined);
+  const [feedback, setFeedback] = useState<
+    { message: string; tone: CreatorStatusTone; technicalDetails?: string } | undefined
+  >(undefined);
 
   const refresh = useCallback(async () => {
     try {
-      setDeployments(await createCreatorPlatformClient().listDeployments(projectId));
+      setDeployments(await platformClient.listDeployments(projectId));
+      return undefined;
     } catch (error) {
-      setErrorText((error as Error).message);
+      return technicalDetails(error);
     }
-  }, [projectId]);
+  }, [platformClient, projectId]);
 
   useEffect(() => {
-    void refresh();
+    void refresh().then((details) => {
+      if (!details) return;
+      setFeedback({
+        message: "Deployment history could not be loaded. You can still deploy a new build.",
+        tone: "warning",
+        technicalDetails: details
+      });
+    });
   }, [refresh]);
 
   const staging = latestFor(deployments, "staging");
+  const isBusy = busyAction !== undefined;
 
   async function handleDeploy() {
-    setIsBusy(true);
-    setErrorText(undefined);
-    setMessage(undefined);
+    setBusyAction("deploy");
+    setFeedback(undefined);
     try {
-      const result = await createCreatorPlatformClient().publishProject(projectId, target);
-      setMessage(`Deployed to ${target} · ${result.deployment.healthStatus}`);
-      await refresh();
+      const result = await platformClient.publishProject(projectId, target);
+      const refreshError = await refresh();
+      setFeedback({
+        message: refreshError
+          ? `Deployed to ${target}, but deployment history could not be refreshed.`
+          : `Deployed to ${target} · ${result.deployment.healthStatus}`,
+        tone: refreshError ? "warning" : "success",
+        technicalDetails: refreshError
+      });
     } catch (error) {
-      setErrorText((error as Error).message || "Deploy failed");
+      setFeedback({
+        message: "Deployment could not be completed. Existing deployments are unchanged.",
+        tone: "danger",
+        technicalDetails: technicalDetails(error)
+      });
     } finally {
-      setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
   async function handlePromote() {
-    setIsBusy(true);
-    setErrorText(undefined);
-    setMessage(undefined);
+    setBusyAction("promote");
+    setFeedback(undefined);
     try {
-      const result = await createCreatorPlatformClient().promoteDeployment(projectId);
-      setMessage(`Promoted to production · ${result.deployment.healthStatus}`);
-      await refresh();
+      const result = await platformClient.promoteDeployment(projectId);
+      const refreshError = await refresh();
+      setFeedback({
+        message: refreshError
+          ? "Promoted to production, but deployment history could not be refreshed."
+          : `Promoted to production · ${result.deployment.healthStatus}`,
+        tone: refreshError ? "warning" : "success",
+        technicalDetails: refreshError
+      });
     } catch (error) {
-      setErrorText((error as Error).message || "Promote failed");
+      setFeedback({
+        message: "Promotion could not be completed. The staging deployment is unchanged.",
+        tone: "danger",
+        technicalDetails: technicalDetails(error)
+      });
     } finally {
-      setIsBusy(false);
+      setBusyAction(undefined);
     }
   }
 
@@ -96,7 +143,7 @@ export function PublishDialog({ projectId, onClose }: { projectId: string; onClo
             aria-label="Close"
             onClick={onClose}
           >
-            <X size={16} />
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
 
@@ -144,22 +191,25 @@ export function PublishDialog({ projectId, onClose }: { projectId: string; onClo
           })}
         </div>
 
-        {message ? <p className="publish-dialog-note is-ok">{message}</p> : null}
-        {errorText ? <p className="publish-dialog-note is-error">{errorText}</p> : null}
+        {feedback ? (
+          <CreatorStatusMessage
+            tone={feedback.tone}
+            technicalDetails={feedback.technicalDetails}
+          >
+            {feedback.message}
+          </CreatorStatusMessage>
+        ) : null}
 
         <div className="publish-dialog-actions">
-          <button
+          <Button type="button" onClick={() => void handleDeploy()} disabled={isBusy}>
+            <Rocket size={15} aria-hidden="true" />
+            {busyAction === "deploy"
+              ? "Deploying…"
+              : `Deploy to ${target === "staging" ? "Staging" : "Production"}`}
+          </Button>
+          <Button
             type="button"
-            className="publish-dialog-primary"
-            onClick={() => void handleDeploy()}
-            disabled={isBusy}
-          >
-            <Rocket size={15} />
-            {isBusy ? "Working…" : `Deploy to ${target === "staging" ? "Staging" : "Production"}`}
-          </button>
-          <button
-            type="button"
-            className="publish-dialog-promote"
+            variant="secondary"
             onClick={() => void handlePromote()}
             disabled={isBusy || !staging || staging.healthStatus !== "healthy"}
             title={
@@ -168,9 +218,9 @@ export function PublishDialog({ projectId, onClose }: { projectId: string; onClo
                 : "Deploy a healthy staging build first"
             }
           >
-            <ArrowUpRight size={15} />
-            Promote Staging → Production
-          </button>
+            <ArrowUpRight size={15} aria-hidden="true" />
+            {busyAction === "promote" ? "Promoting…" : "Promote Staging → Production"}
+          </Button>
         </div>
       </div>
     </div>

@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { createPlatformApiServices } = await import("../../apps/platform-api/src/platform-services.ts");
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
 
-function createSprint6Fixture() {
-  const services = createPlatformApiServices();
+const { createPlatformApiServices, SubdomainConflictError } = await import("../../apps/platform-api/src/platform-services.ts");
+const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
+
+function createSprint6Fixture(options) {
+  const services = createPlatformApiServices(options);
   const admin = services.auth.resolveCurrentUser({ "x-mock-user-email": "admin@company.com" });
   const creator = services.auth.resolveCurrentUser({ "x-mock-user-email": "creator@company.com" });
   const endUser = services.auth.resolveCurrentUser({ "x-mock-user-email": "user@company.com" });
@@ -116,6 +119,11 @@ test("publish review manifest references PRD frontend auth roles database and ro
   const { services, creator, project } = createSprint6Fixture();
 
   const review = services.publish.getReview(creator, project.id);
+  const response = executePlatformApiRequest(services, {
+    method: "GET",
+    path: `/projects/${project.id}/publish/review`,
+    headers: { "x-mock-user-email": "creator@company.com" }
+  });
 
   assert.equal(review.ready, true);
   assert.equal(review.manifest.app.slug, project.appId);
@@ -125,6 +133,11 @@ test("publish review manifest references PRD frontend auth roles database and ro
   assert.equal(review.manifest.database.schemaName, `app_${project.id}`);
   assert.ok(review.manifest.roles.some((role) => role.key === "employee"));
   assert.ok(review.checklist.every((item) => item.status === "pass"));
+  assert.deepEqual(response.body.data.accessUrlConfig, {
+    baseDomain: "localhost",
+    secure: false,
+    port: 9800
+  });
 });
 
 test("publish creates deployment record and app store registry entry", () => {
@@ -138,6 +151,71 @@ test("publish creates deployment record and app store registry entry", () => {
   assert.equal(result.registryEntry.slug, project.appId);
   assert.ok(registry.some((entry) => entry.slug === project.appId));
   assert.ok(services.audit.list().some((event) => event.action === "app.publish.completed" && event.resourceId === result.publishRequest.id));
+});
+
+test("in-memory publish maps a selected subdomain to the registry and Store card", () => {
+  const { services, creator, project } = createSprint6Fixture({
+    publishAccessUrlConfig: { baseDomain: "apps.example.test", secure: true }
+  });
+
+  const firstPublish = services.publish.publishApp(creator, project.id, {
+    subdomain: "team-leave"
+  });
+  const republish = services.publish.publishApp(creator, project.id, {
+    subdomain: "team-leave"
+  });
+  const card = services.storefront
+    .listApps(creator)
+    .myApps.find((app) => app.projectId === project.id);
+
+  assert.equal(firstPublish.registryEntry.route, `/apps/${project.appId}`);
+  assert.equal(firstPublish.registryEntry.subdomain, "team-leave");
+  assert.equal(firstPublish.registryEntry.subdomainUrl, "https://team-leave.apps.example.test");
+  assert.equal(firstPublish.deployment.subdomainUrl, "https://team-leave.apps.example.test");
+  assert.equal(republish.registryEntry.subdomain, "team-leave");
+  assert.equal(card?.route, `/apps/${project.appId}`);
+  assert.equal(card?.subdomainUrl, "https://team-leave.apps.example.test");
+});
+
+test("conflicting in-memory publish leaves all publish state unchanged", () => {
+  const { services, creator, project } = createSprint6Fixture();
+  services.publish.publishApp(creator, project.id, { subdomain: "team-leave" });
+
+  const blockedProject = services.projects.createProject({
+    actor: creator,
+    name: "Blocked Leave Management",
+    appType: "Workflow App",
+    businessProblem: "Employees need a second leave workflow",
+    targetDepartment: "HR Department",
+    intendedUsers: ["Employee", "Manager"],
+    dataSensitivity: "internal"
+  });
+  const blockedDraft = services.prds.generateDraft(creator, blockedProject.id);
+  services.prds.confirmBaseline(creator, blockedProject.id, blockedDraft.id);
+  services.workspace.submitPrompt(creator, blockedProject.id, { prompt: "Add manager approvals" });
+
+  const before = {
+    requests: services.publish.publishRequests.length,
+    manifests: services.publish.manifests.length,
+    deployments: services.publish.deployments.length,
+    registry: services.publish.registry.length,
+    status: blockedProject.status
+  };
+
+  assert.throws(
+    () => services.publish.publishApp(creator, blockedProject.id, { subdomain: "team-leave" }),
+    (error) => {
+      assert.ok(error instanceof SubdomainConflictError);
+      assert.equal(error.code, "SUBDOMAIN_TAKEN");
+      return true;
+    }
+  );
+
+  assert.equal(services.publish.publishRequests.length, before.requests);
+  assert.equal(services.publish.manifests.length, before.manifests);
+  assert.equal(services.publish.deployments.length, before.deployments);
+  assert.equal(services.publish.registry.length, before.registry);
+  assert.equal(blockedProject.status, before.status);
 });
 
 test("publish blocks missing checklist items and denies end users", () => {

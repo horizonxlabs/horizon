@@ -58,6 +58,59 @@ test("happy path: checks pass, image built, prod container started, healthy depl
   assert.ok(!JSON.stringify(deps._audits).includes("postgres://x"));
 });
 
+test("deleteProject removes every published container and deployment for only that project", async () => {
+  const deps = buildDeps();
+  const service = createPublishService(deps);
+  await service.publish({ projectId: "p1", slug: "app", environment: "staging", publishedByUserId: "u1" });
+  await service.publish({ projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1" });
+
+  await service.deleteProject("p1");
+
+  assert.deepEqual(deps.deployments.list("p1"), []);
+  assert.equal(
+    deps.docker.state.containers.some(
+      (container) => container.spec.labels?.["evcp.project-id"] === "p1"
+    ),
+    false
+  );
+});
+
+test("deleteProject attempts every deployment cleanup and can retry partial removal", async () => {
+  const deps = buildDeps();
+  const service = createPublishService(deps);
+  await service.publish({ projectId: "p1", slug: "app", environment: "staging", publishedByUserId: "u1" });
+  await service.publish({ projectId: "p1", slug: "app", environment: "production", publishedByUserId: "u1" });
+  const deployments = deps.deployments.list("p1");
+  const failedContainerId = deployments[0].containerId;
+  const removeContainer = deps.docker.removeContainer;
+  const attempts = [];
+  let failOnce = true;
+  deps.docker.removeContainer = async (containerId) => {
+    attempts.push(containerId);
+    if (containerId === failedContainerId && failOnce) {
+      failOnce = false;
+      throw new Error("docker remove failed");
+    }
+    await removeContainer(containerId);
+  };
+
+  await assert.rejects(
+    service.deleteProject("p1"),
+    (error) => error instanceof AggregateError && error.errors.length === 1
+  );
+  assert.deepEqual(new Set(attempts), new Set(deployments.map((deployment) => deployment.containerId)));
+  assert.equal(deps.deployments.list("p1").length, 2, "deployment rows remain for retry");
+
+  await service.deleteProject("p1");
+  assert.deepEqual(deps.deployments.list("p1"), []);
+  assert.equal(
+    deps.docker.state.containers.some(
+      (container) => container.spec.labels?.["evcp.project-id"] === "p1"
+    ),
+    false
+  );
+});
+
 test("staging image is built with a Next base path that keeps navigation behind the staging proxy", async () => {
   const deps = buildDeps();
   const service = createPublishService(deps);

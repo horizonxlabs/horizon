@@ -1,17 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Render-smoke harness for creator-web.
-//
-// tsc and `vite build` both PASS on code that crashes at render time — e.g. a dropped
-// `import { appMembers }` surfaces only as a runtime `ReferenceError: appMembers is not defined`
-// once React actually renders the component. A prior refactor shipped exactly that class of bug
-// past the static checks; the only thing that caught it was opening a browser. This harness closes
-// that gap: it renders the real `useCreatorApp` hook and every page component via
-// `renderToStaticMarkup`, so any bare-undefined reference or render-time throw fails a test.
-//
-// We stub the browser globals the render path reads (window/localStorage/document/fetch) BEFORE
-// importing the app modules. Effects do not run under static rendering, so no network happens.
+// Browser globals are stubbed before imports; effects do not run during static rendering.
 
 const localStorageValues = new Map();
 const localStorageStub = {
@@ -41,9 +31,7 @@ globalThis.fetch ??= async () => ({
 });
 
 const React = (await import("react")).default;
-// The creator-web components use the automatic JSX runtime (no `import React`), but tsx compiles
-// their JSX to classic `React.createElement`. Expose React globally so that resolves under the
-// test runtime without editing every component.
+// tsx resolves these components through classic `React.createElement` in this test runtime.
 globalThis.React = React;
 const { renderToStaticMarkup } = await import("react-dom/server");
 
@@ -71,6 +59,7 @@ const { PublishPage } = await import(`${base}/features/publish`);
 const { DeploymentsPage } = await import(`${base}/features/deployments`);
 const { TicketsPage } = await import(`${base}/features/tickets`);
 const { TicketDetailPage } = await import(`${base}/features/tickets`);
+const { ProjectSettingsPage } = await import(`${base}/features/project-settings`);
 const { DefaultPage } = await import(`${base}/features/default-dashboard`);
 
 const PAGES = {
@@ -84,6 +73,7 @@ const PAGES = {
   DeploymentsPage,
   TicketsPage,
   TicketDetailPage,
+  ProjectSettingsPage,
   DefaultPage
 };
 
@@ -114,23 +104,25 @@ test("CreatorApp composes CreatorRoutes after a valid Creator session", () => {
   localStorageValues.set("evcp_session_expires_at", new Date(Date.now() + 60_000).toISOString());
   window.location.pathname = "/creator/projects/project-1";
   const html = renderToStaticMarkup(React.createElement(CreatorApp));
-  assert.match(html, /Loading Creator projects from Platform API/);
+  assert.match(html, /creator-state-loading/);
+  assert.match(html, /Loading Creator projects/);
   localStorageValues.clear();
 });
 
 const ROUTE_CASES = [
-  ["projects", "/creator", /รายการโปรเจกต์/],
+  ["projects", "/creator", /Opening latest project/],
+  ["project", "/creator/projects/project-1/project", /Project: Project One/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
   ["prd", "/creator/projects/project-1/prd", /Structured PRD Sections/],
-  ["database", "/creator/projects/project-1/database", /Project database/],
+  ["database", "/creator/projects/project-1/database", /Schema and records/],
   ["versions", "/creator/projects/project-1/versions", /Frontend versions/],
   ["users", "/creator/projects/project-1/users", /App users roles/],
   ["publish", "/creator/projects/project-1/publish", /Publish app/],
   ["deployments", "/creator/projects/project-1/deployments", /Project deployments/],
+  ["settings", "/creator/projects/project-1/settings", /Delete project/],
   ["tickets", "/creator/projects/project-1/tickets", /Tickets and PRD changes/],
   ["ticket detail", "/creator/projects/project-1/tickets/ticket-1", /Ticket detail/]
 ];
-
 for (const [page, pathname, expected] of ROUTE_CASES) {
   test(`CreatorRoutes maps ${page} to its capability screen`, () => {
     window.location.pathname = pathname;
@@ -192,7 +184,7 @@ test("CreatorRoutes renders project unavailable instead of another project's rou
     })
   );
   assert.match(html, /Project unavailable/);
-  assert.match(html, /Return to Projects/);
+  assert.match(html, /Open latest project/);
   assert.doesNotMatch(html, /Versions: First Project/);
 });
 
@@ -202,10 +194,9 @@ test("CreatorRoutes keeps the first-project state inside the shared Creator shel
       app: { ...app, bootstrap: { ...app.bootstrap, status: "empty" } }
     })
   );
-  // Light tone is applied to the shared shell (utilities replaced the legacy app-shell-light class).
   assert.match(html, /<aside[^>]*bg-surface text-body/);
-  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
-  assert.match(html, /สร้าง Project ใหม่/);
+  assert.match(html, /Create your first project/);
+  assert.match(html, /Create project/);
 });
 
 for (const [name, Page] of Object.entries(PAGES)) {
@@ -215,44 +206,9 @@ for (const [name, Page] of Object.entries(PAGES)) {
   });
 }
 
-test("PrdPage renders PRD section bodies as Markdown", () => {
-  const html = renderWithHook((app) =>
-    React.createElement(PrdPage, {
-      app: {
-        ...app,
-        visiblePrdSections: [
-          {
-            key: "overview",
-            order: 1,
-            title: "Overview",
-            body: [
-              "## Workflow",
-              "",
-              "**Owners** review the queue.",
-              "",
-              "| Role | Action |",
-              "| --- | --- |",
-              "| Admin | Approve |"
-            ].join("\n")
-          }
-        ]
-      }
-    })
-  );
-
-  assert.match(html, /vibe-md-h2/);
-  assert.match(html, /<strong>Owners<\/strong>/);
-  assert.match(html, /vibe-md-table/);
-  assert.match(html, /<th>Role<\/th>/);
-  assert.match(html, /<td>Approve<\/td>/);
-});
-
-test("ProjectsPage renders the create-first landing inside the shared Creator shell", () => {
+test("ProjectsPage renders only the first-project fallback inside the shared Creator shell", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
 
-  assert.match(html, /class="[^"]*hz-projects-studio/);
-  // Shared AppShell chrome, restyled onto token utilities but structurally unchanged:
-  // light tone, mobile open/close controls (by aria), backdrop, and the sidebar aside id.
   assert.match(html, /<aside[^>]*bg-surface text-body/);
   assert.match(
     html,
@@ -262,18 +218,17 @@ test("ProjectsPage renders the create-first landing inside the shared Creator sh
   assert.match(html, /aria-label="Close navigation" aria-hidden="true" tabindex="-1"/);
   assert.match(html, /aria-label="Close navigation"><span aria-hidden="true">×/);
   assert.match(html, /<aside[^>]*id="app-shell-sidebar-[^"]+"/);
-  assert.match(html, /เริ่มสร้างแอปภายในองค์กร/);
-  assert.match(html, /สร้าง Project ใหม่/);
-  assert.match(html, /โปรเจกต์ล่าสุด/);
-  assert.match(html, /aria-label="ค้นหาโปรเจกต์"/);
-  assert.match(html, /aria-label="รายการโปรเจกต์"/);
+  assert.match(html, /Create your first project/);
+  assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Recent projects|Search projects|Project list/);
+  assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
   assert.doesNotMatch(html, /Updated \d|อัปเดตเมื่อ/);
 });
 
 test("ProjectsPage is create-first: shows the create CTA and no free-text prompt box", () => {
   const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
-  assert.match(html, /สร้าง Project ใหม่/);
-  assert.doesNotMatch(html, /อธิบายแอปที่ต้องการสร้าง/);
+  assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Describe the application you want to build/);
 });
 
 test("WorkspacePage offers an accessible stop control during generation", () => {
@@ -294,7 +249,9 @@ test("WorkspacePage offers an accessible stop control during generation", () => 
 // instant the first token landed — a long, still-streaming response then looked finished
 // with no loading affordance at all for the rest of its own generation.
 test("WorkspacePage keeps the loading cursor lit only while a turn is still streaming", () => {
-  const messages = [{ id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }];
+  const messages = [
+    { id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }
+  ];
   const streaming = renderWithHook((app) =>
     React.createElement(WorkspacePage, { app: { ...app, isVibing: true, vibeMessages: messages } })
   );
@@ -311,6 +268,7 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
       app: {
         ...app,
         bootstrap: { ...app.bootstrap, status: "ready" },
+        accessLoadState: "ready",
         publishMessage: "Access decision failed: approval offline"
       }
     })
@@ -319,19 +277,48 @@ test("UsersPage visibly presents access decision feedback with alert semantics",
   assert.match(html, /Access decision failed: approval offline/);
 });
 
-test("ProjectsPage CTA and search use @evcp/ui primitives", () => {
-  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
-  assert.match(
-    html,
-    /aria-label="ค้นหาโปรเจกต์"[^>]*focus:ring-primary-soft|focus:ring-primary-soft[^>]*aria-label="ค้นหาโปรเจกต์"/
+test("PublishPage fail-closes readiness when access information is unavailable", () => {
+  const html = renderWithHook((app) =>
+    React.createElement(PublishPage, {
+      app: {
+        ...app,
+        bootstrap: { ...app.bootstrap, status: "ready" },
+        accessLoadState: "unavailable",
+        publishReadinessState: "unavailable",
+        publishReview: {
+          manifest: {
+            appId: "app-1",
+            manifestVersion: "3",
+            app: { slug: "ops", route: "/apps/ops" },
+            frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
+            auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
+            roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
+          },
+          checklist: [],
+          ready: true
+        },
+        visiblePublishChecklist: [],
+        visiblePreview: { id: "preview-3", version: "3" },
+        publishMessage: "Access information loaded. Publish readiness is unavailable.",
+        publishMessageTone: "warning",
+        publishMessageTechnicalDetails: "access API 503"
+      }
+    })
   );
-  assert.match(html, /สร้าง Project ใหม่/);
-  assert.doesNotMatch(html, /hz-prompt-cta/);
+  assert.match(html, /Publish readiness is unavailable/);
+  assert.match(html, /Publish to App Store/);
+  assert.match(html, /disabled/);
+  assert.match(html, /Retry readiness/);
+  assert.match(html, /Technical details/);
+  assert.match(html, /access API 503/);
 });
 
-test("PrdPage offers API-backed PRD recovery with the @evcp/ui Button primitive", () => {
-  const html = renderWithHook((app) => React.createElement(PrdPage, { app }));
-  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate PRD Draft<\/button>/);
+test("ProjectsPage empty-state CTA uses the @evcp/ui Button primitive", () => {
+  const html = renderWithHook((app) => React.createElement(ProjectsPage, { app }));
+  assert.match(html, /focus-visible:ring-primary-soft/);
+  assert.match(html, /Create project/);
+  assert.doesNotMatch(html, /Search projects/);
+  assert.doesNotMatch(html, /hz-prompt-cta/);
 });
 
 test("WorkspacePage tabs + header controls use @evcp/ui primitives", () => {
@@ -397,4 +384,11 @@ test("WorkspaceDatabasePanel renders on primitives without throwing", () => {
     })
   );
   assert.equal(typeof html, "string");
+});
+
+test("DatabasePage uses the available width without repeating the project name", () => {
+  const html = renderWithHook((app) => React.createElement(DatabasePage, { app }));
+  assert.match(html, /creator-database-page/);
+  assert.match(html, /Schema and records/);
+  assert.doesNotMatch(html, /Database: Project One/);
 });

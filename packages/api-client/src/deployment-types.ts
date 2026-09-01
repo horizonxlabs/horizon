@@ -41,9 +41,30 @@ export type DeploymentRecordDto = {
   status: "published" | "failed";
   environment?: "app_store";
   route: string;
+  subdomain?: string;
+  subdomainUrl?: string;
   manifestVersion?: string;
   prdVersion?: string;
   frontendCheckpointId?: string;
   publishedByUserId?: string;
+  publishedAt?: string;
+};
+
+export type AppStoreRegistryEntryDto = {
+  id: string;
+  appId?: string;
+  projectId?: string;
+  slug: string;
+  subdomain?: string;
+  subdomainUrl?: string;
+  name?: string;
+  route?: string;
+  status: "published";
+  visibility?: "restricted";
+  accessMode?: "membership_or_invite";
+  roleKeys?: string[];
+  ownerUserId?: string;
+  deploymentId?: string;
+  manifestVersion?: string;
   publishedAt?: string;
 };

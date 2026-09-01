@@ -33,6 +33,7 @@ export interface GenerationServiceDeps {
   // earlier checkpoint" action, which never runs inside a turn's actionRunner scope.
   workspaceGuard: {
     prepare(projectId: string, containerId: string): Promise<string>;
+    renewSnapshot?(projectId: string, containerId: string, snapshotToken: string): Promise<void>;
     hasChanges(projectId: string, containerId: string, snapshotToken: string): Promise<boolean>;
     validate(projectId: string, containerId: string): Promise<void>;
     restore(projectId: string, commitSha: string): Promise<void>;
@@ -59,6 +60,7 @@ export interface GenerationService {
     actor?: PlatformUser;
     approvedPlan?: string;
     signal?: AbortSignal;
+    assertCurrent?: () => Promise<void>;
   }): AsyncIterable<ChatStreamEvent>;
 }
 

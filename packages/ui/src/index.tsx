@@ -33,14 +33,21 @@ export type DataTableColumn<Row extends Record<string, ReactNode>> = {
 export function DataTable<Row extends Record<string, ReactNode>>({
   columns,
   rows,
-  rowKey
+  rowKey,
+  ariaLabel,
+  emptyMessage
 }: {
   columns: Array<DataTableColumn<Row>>;
   rows: Row[];
   rowKey?: (row: Row, index: number) => string;
+  ariaLabel?: string;
+  emptyMessage?: ReactNode;
 }) {
   return (
-    <div className="table-wrap ds-table-wrap">
+    <div
+      className="table-wrap ds-table-wrap"
+      {...(ariaLabel ? { role: "region", "aria-label": ariaLabel, tabIndex: 0 } : {})}
+    >
       <table className="ds-data-table">
         <thead>
           <tr>
@@ -65,6 +72,7 @@ export function DataTable<Row extends Record<string, ReactNode>>({
           ))}
         </tbody>
       </table>
+      {rows.length === 0 && emptyMessage ? <div className="ds-data-table-empty">{emptyMessage}</div> : null}
     </div>
   );
 }

@@ -6,6 +6,10 @@ const workspacePage = readFileSync(
   "apps/creator-web/src/features/workspace/WorkspacePage.tsx",
   "utf8"
 );
+const attachmentButton = readFileSync(
+  "apps/creator-web/src/features/workspace/WorkspaceAttachmentButton.tsx",
+  "utf8"
+);
 const vibeHook = readFileSync(
   "apps/creator-web/src/features/workspace/use-vibe-workspace.ts",
   "utf8"
@@ -17,12 +21,11 @@ const projectFilesHook = readFileSync(
 const helpers = readFileSync("apps/creator-web/src/features/workspace/api.ts", "utf8");
 
 test("Creator workspace exposes project file upload controls and status chips", () => {
-  assert.match(workspacePage, /type="file"/);
+  assert.match(attachmentButton, /type="file"/);
   // The attach control is a "+" icon button in the composer footer (was a labelled "Attach files").
-  assert.match(workspacePage, /vibe-composer-attach/);
-  assert.match(workspacePage, /vibe-composer-textarea/);
-  assert.match(workspacePage, /vibe-composer-shortcuts/);
-  // Pane-resize behavior moved wholesale into VibePaneResizer.tsx (page ratchet ≤400).
+  assert.match(attachmentButton, /vibe-composer-attach/);
+  assert.match(workspacePage, /WorkspaceAttachmentButton/);
+  // Pane-resize behavior lives in VibePaneResizer.tsx (page ratchet ≤400).
   const paneResizer = readFileSync(
     "apps/creator-web/src/features/workspace/VibePaneResizer.tsx",
     "utf8"
@@ -34,7 +37,6 @@ test("Creator workspace exposes project file upload controls and status chips", 
   assert.match(paneResizer, /evcp_creator_chat_pane_width/);
   assert.match(paneResizer, /requestAnimationFrame/);
   assert.match(paneResizer, /style\.setProperty/);
-  assert.match(paneResizer, /is-chat-collapsed/);
   assert.match(paneResizer, /CHAT_PANE_COLLAPSE_THRESHOLD/);
   assert.match(paneResizer, /setPointerCapture/);
   assert.match(paneResizer, /onPointerCancel/);

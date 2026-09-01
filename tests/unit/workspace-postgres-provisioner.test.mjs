@@ -70,3 +70,15 @@ test("pg-client provisioner removes a partially-created role/schema when any ste
   assert.ok(executed.some((sql) => /DROP SCHEMA IF EXISTS/.test(sql)));
   assert.ok(executed.some((sql) => /DROP ROLE IF EXISTS/.test(sql)));
 });
+
+test("schema deletion takes the same transaction advisory lock as migrations", async () => {
+  const executed = [];
+  const provisioner = createPgClientPostgresProvisioner(async (sql) => executed.push(sql));
+  await provisioner.releaseSchema("leave-tracker");
+
+  assert.equal(executed.length, 1);
+  assert.match(executed[0], /^BEGIN;/);
+  assert.match(executed[0], /pg_advisory_xact_lock\(hashtextextended\('evcp-schema:app_leave_tracker', 0\)\)/);
+  assert.match(executed[0], /DROP SCHEMA IF EXISTS "app_leave_tracker" CASCADE/);
+  assert.match(executed[0], /COMMIT;$/);
+});

@@ -8,7 +8,7 @@ type DeploymentsState = {
   deployments: WorkspaceDeploymentDto[];
 };
 
-type DeploymentsClient = {
+export type DeploymentsClient = {
   listDeployments(projectId: string): Promise<WorkspaceDeploymentDto[]>;
 };
 

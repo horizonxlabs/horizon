@@ -27,23 +27,25 @@ export function CreatorShell({
     createProjectForm,
     handleCreateProjectField,
     createProjectMessage,
+    createProjectTechnicalDetails,
     isEnteringWorkspace,
     handleSelectProject,
     onNavigate,
     pathname
   } = app;
+  const pageTitle = pageCopy.title.replace("Leave Management", selectedProject.name);
+  const pageEyebrow = pageCopy.eyebrow === pageCopy.title ? undefined : pageCopy.eyebrow;
   return (
     <AppShell
       title="Horizon"
-      logo={<HorizonLogo />}
+      logo={<HorizonLogo className="creator-sidebar-logo" />}
       sidebarContext={
         <ProjectSwitcher
           projects={bootstrap.projects}
           selectedProject={selectedProject}
-          onSelectProject={(project) => {
-            // Project selection only changes Creator context. Navigation happens only when a
-            // sidebar item is clicked, so the picker never redirects to a workspace URL.
-            void handleSelectProject(project, app.creatorPage, { push: false });
+          currentPage={creatorPage}
+          onSelectProject={(project, targetPage) => {
+            void handleSelectProject(project, targetPage);
           }}
           onCreateProject={() => setIsCreateProjectDialogOpen(true)}
         />
@@ -59,16 +61,16 @@ export function CreatorShell({
         <div className="hz-loading-backdrop" role="status" aria-live="polite">
           <div className="hz-loading-card">
             <span className="hz-spinner" aria-hidden="true" />
-            <strong>Starting workspace</strong>
-            <span>Starting this project's sandbox container. This may take a moment.</span>
+            <strong>Preparing workspace</strong>
+            <span>Starting this project's sandbox. This may take a moment.</span>
           </div>
         </div>
       ) : null}
       {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"
-          eyebrow={pageCopy.eyebrow}
-          title={pageCopy.title.replace("Leave Management", selectedProject.name)}
+          eyebrow={pageEyebrow}
+          title={pageTitle}
           description={pageCopy.description}
           actions={creatorPageActions}
         />
@@ -80,6 +82,7 @@ export function CreatorShell({
           onSubmit={handleCreateProjectSubmit}
           onClose={() => setIsCreateProjectDialogOpen(false)}
           message={createProjectMessage}
+          technicalDetails={createProjectTechnicalDetails}
           isCreating={isCreatingProject}
         />
       ) : null}

@@ -27,6 +27,11 @@ import type { CreateProjectFormState, CreatorProjectView } from "@/shared/types"
 import { usePublishAccess } from "@/features/publish";
 import { ensureVibeWorkspace, loadWorkspaceState, useVibeWorkspace } from "@/features/workspace";
 import { useCreatorPrd } from "@/app/use-creator-prd";
+import {
+  createCreatorProjectRuntimeGuard,
+  loadCreatorProjectRuntime,
+  type CreatorProjectRuntimeRequest
+} from "@/app/creator-project-runtime";
 
 export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [bootstrap, setBootstrap] = useState(initialCreatorBootstrap);
@@ -35,16 +40,22 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
-  const [createProjectMessage, setCreateProjectMessage] = useState("");
+  const [createProjectMessage, setCreateProjectMessage] = useState(
+    "Complete the project details to prepare the first workspace draft."
+  );
+  const [createProjectTechnicalDetails, setCreateProjectTechnicalDetails] = useState<string>();
   const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const projectRuntimeGuardRef = useRef(createCreatorProjectRuntimeGuard());
 
   const selectedProject = bootstrap.selectedProject;
   const {
     currentPrdVersion,
-    setCurrentPrdVersion,
     prdVersionList,
-    setPrdVersionList,
     prdMessage,
+    prdStatus,
+    prdTechnicalDetails,
+    prdErrorSource,
+    prdFeedbackTone,
     isGeneratingPrdDraft,
     visiblePrdSections,
     visibleVersionRows,
@@ -58,7 +69,6 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   usePageHeadingFocus(pathname);
   const creatorRoute = creatorRouteFromPath(pathname);
   const creatorPage = creatorRoute.page;
-  const lastResolvedProjectRouteRef = useRef<string | undefined>(undefined);
   const requestedProjectUnavailable =
     bootstrap.status === "ready" &&
     creatorPage !== "not-found" &&
@@ -76,6 +86,30 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     resetPrdState();
   }
 
+  function loadProjectRuntime(
+    request: CreatorProjectRuntimeRequest,
+    enteringWorkspace: boolean,
+    unavailableMessage: string
+  ) {
+    return loadCreatorProjectRuntime({
+      request,
+      enteringWorkspace,
+      refreshPrdState,
+      ensureWorkspace: ensureVibeWorkspace,
+      loadWorkspaceState,
+      refreshPublishState: publishAccess.refreshCreatorPublishState,
+      onWorkspaceSnapshot: vibeWorkspace.setWorkspaceSnapshot,
+      onWorkspaceMessage: vibeWorkspace.setWorkspaceMessage,
+      onWorkspaceUnavailable: () => {
+        vibeWorkspace.setWorkspaceSnapshot(undefined);
+        vibeWorkspace.setWorkspaceMessage(unavailableMessage);
+      },
+      onSettled: () => {
+        setIsEnteringWorkspace(false);
+      }
+    });
+  }
+
   useEffect(() => {
     // Direct navigation / reload onto a workspace URL must also provision the sandbox container
     // (the card-click path does this via handleSelectProject; a fresh page load does not).
@@ -85,39 +119,25 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       .then(async (nextBootstrap) => {
         setBootstrap(nextBootstrap);
         if (!nextBootstrap.selectedProject.id) {
+          projectRuntimeGuardRef.current.invalidate();
           vibeWorkspace.setWorkspaceSnapshot(undefined);
           vibeWorkspace.setWorkspaceMessage(
             creatorRoute.projectId
               ? "The requested project is unavailable from Platform API."
               : "Select or create a project to load workspace state."
           );
+          if (onWorkspace) setIsEnteringWorkspace(false);
           return;
         }
-        try {
-          await refreshPrdState(nextBootstrap.selectedProject.id);
-        } catch {
-          setCurrentPrdVersion(undefined);
-          setPrdVersionList([]);
-        }
-        try {
-          if (onWorkspace) {
-            await ensureVibeWorkspace(nextBootstrap.selectedProject.id);
-          }
-          vibeWorkspace.setWorkspaceSnapshot(
-            await loadWorkspaceState(nextBootstrap.selectedProject.id)
-          );
-          vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
-        } catch {
-          vibeWorkspace.setWorkspaceSnapshot(undefined);
-          vibeWorkspace.setWorkspaceMessage(
-            "Signed in. Confirm PRD baseline before workspace generation."
-          );
-        }
-        await publishAccess
-          .refreshCreatorPublishState(nextBootstrap.selectedProject.id)
-          .catch(() => undefined);
+        const request = projectRuntimeGuardRef.current.begin(nextBootstrap.selectedProject.id);
+        await loadProjectRuntime(
+          request,
+          onWorkspace,
+          "Signed in. Confirm PRD baseline before workspace generation."
+        );
       })
       .catch((error) => {
+        projectRuntimeGuardRef.current.invalidate();
         setBootstrap(
           creatorApiFailureState(
             error instanceof Error
@@ -126,27 +146,21 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
           )
         );
         vibeWorkspace.setWorkspaceSnapshot(undefined);
+        if (onWorkspace) setIsEnteringWorkspace(false);
       })
       .finally(() => {
         setIsSigningIn(false);
-        if (onWorkspace) setIsEnteringWorkspace(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (bootstrap.status !== "ready") return;
-    // A route controls initial loads and browser navigation. A selection from the project
-    // picker deliberately keeps the pathname unchanged, so it must not be overwritten by the
-    // project id still present in the old URL.
-    const routeChanged = lastResolvedProjectRouteRef.current !== pathname;
-    if (!routeChanged) return;
-    lastResolvedProjectRouteRef.current = pathname;
     const match = creatorRoute.projectId
       ? bootstrap.projects.find((project) => project.id === creatorRoute.projectId)
       : undefined;
     if (!match) {
       if (creatorRoute.projectId && selectedProject.id) {
+        projectRuntimeGuardRef.current.invalidate();
         setBootstrap((current) => ({ ...current, selectedProject: unselectedProject }));
         resetProjectRuntimeState();
       }
@@ -176,6 +190,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       .request("/auth/logout", { method: "POST" })
       .catch(() => undefined);
     clearCreatorSessionBridge();
+    projectRuntimeGuardRef.current.invalidate();
     setBootstrap(initialCreatorBootstrap);
     resetProjectRuntimeState();
     vibeWorkspace.setWorkspaceMessage("Signed out. Sign in again to load workspace state.");
@@ -186,6 +201,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   }
 
   function handleCreateProjectField(field: keyof CreateProjectFormState, value: string) {
+    setCreateProjectTechnicalDetails(undefined);
     setCreateProjectForm((current) => ({
       ...current,
       [field]: value
@@ -199,38 +215,37 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   ) {
     const { push = true, provisionWorkspace = push } = options;
     const selectableTargetPage = projectSwitchTargetPage(targetPage);
+    projectRuntimeGuardRef.current.invalidate();
     setBootstrap((current) => ({ ...current, selectedProject: project }));
     resetProjectRuntimeState();
+    const request = projectRuntimeGuardRef.current.begin(project.id);
     if (push) {
       navigateBrowserPath(creatorPathForPage(project.id, selectableTargetPage));
     }
     // Entering the workspace provisions/starts the project's sandbox container, which can take a
     // few seconds. Show a blocking loading modal until it is ready (see isEnteringWorkspace).
     const enteringWorkspace = selectableTargetPage === "workspace" && provisionWorkspace;
-    if (enteringWorkspace) setIsEnteringWorkspace(true);
-    try {
-      try {
-        await refreshPrdState(project.id);
-      } catch {
-        setCurrentPrdVersion(undefined);
-        setPrdVersionList([]);
-      }
-      try {
-        if (enteringWorkspace) {
-          await ensureVibeWorkspace(project.id);
-        }
-        vibeWorkspace.setWorkspaceSnapshot(await loadWorkspaceState(project.id));
-        vibeWorkspace.setWorkspaceMessage("Workspace snapshot loaded from Platform API.");
-      } catch {
-        vibeWorkspace.setWorkspaceSnapshot(undefined);
-        vibeWorkspace.setWorkspaceMessage(
-          "Project selected. Confirm PRD baseline before workspace generation."
-        );
-      }
-      await publishAccess.refreshCreatorPublishState(project.id).catch(() => undefined);
-    } finally {
-      if (enteringWorkspace) setIsEnteringWorkspace(false);
-    }
+    setIsEnteringWorkspace(enteringWorkspace);
+    await loadProjectRuntime(
+      request,
+      enteringWorkspace,
+      "Project selected. Confirm PRD baseline before workspace generation."
+    );
+  }
+
+  function handleProjectDeleted(projectId: string) {
+    projectRuntimeGuardRef.current.invalidate();
+    setBootstrap((current) => {
+      const projects = current.projects.filter((project) => project.id !== projectId);
+      return {
+        ...current,
+        status: projects.length ? "ready" : "empty",
+        projects,
+        selectedProject: unselectedProject
+      };
+    });
+    resetProjectRuntimeState();
+    navigateBrowserPath("/creator/");
   }
 
   // Prompt-first flow: create a project from the home prompt box, enter its workspace, and
@@ -238,8 +253,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   async function handleCreateFromPrompt(prompt: string) {
     const trimmed = prompt.trim();
     if (!trimmed) return;
+    let projectRuntimeStarted = false;
     setIsEnteringWorkspace(true);
     setCreateProjectMessage("");
+    setCreateProjectTechnicalDetails(undefined);
     try {
       const name = trimmed.split("\n")[0]?.slice(0, 60).trim() || "Untitled App";
       const project = await createCreatorPlatformClient().createProject({
@@ -248,17 +265,18 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       });
       const nextBootstrap = await loadCreatorBootstrap(project.id);
       setBootstrap(nextBootstrap);
+      projectRuntimeStarted = true;
       await handleSelectProject(nextBootstrap.selectedProject, "workspace");
       // Explicit overrides: React has not re-rendered the vibe-workspace hook with the new
       // project yet, so selectedProject/promptDraft/mode in its closure are still stale.
       vibeWorkspace.setPromptDraft("");
       await vibeWorkspace.handleVibeChat({ prompt: trimmed, projectId: project.id, mode: "build" });
     } catch (error) {
-      setCreateProjectMessage(
-        error instanceof Error ? error.message : "Could not create the project. Please try again."
-      );
+      setCreateProjectMessage("Project could not be created. Review the details and try again.");
+      setCreateProjectTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
-      setIsEnteringWorkspace(false);
+      // Once project runtime loading begins, only its current generation may clear this state.
+      if (!projectRuntimeStarted) setIsEnteringWorkspace(false);
     }
   }
 
@@ -266,6 +284,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     event.preventDefault();
     setIsCreatingProject(true);
     setCreateProjectMessage("Creating the project through the Platform API.");
+    setCreateProjectTechnicalDetails(undefined);
     try {
       const client = createCreatorPlatformClient();
       // Only the fast createProject call blocks the wizard. The multi-minute PRD generation
@@ -291,8 +310,9 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
       // PRD is out of the loop for now — the chat log is the project's memory. The PRD tab
       // still offers manual generation whenever the user wants a document.
       setCreateProjectMessage(
-        `${project.name} was created. AI is building the first version from your business problem.`
+        `${project.name} was created. Horizon is preparing the first workspace draft.`
       );
+      setCreateProjectTechnicalDetails(undefined);
       // The form's business problem becomes the FIRST build immediately — the user's words
       // must never vanish into a background PRD. Same pattern as handleCreateFromPrompt:
       // explicit overrides because the vibe hook's closure still holds the previous project.
@@ -306,11 +326,8 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
         });
       }
     } catch (error) {
-      setCreateProjectMessage(
-        error instanceof Error
-          ? `Create project failed: ${error.message}`
-          : "Create project failed. Please review required fields."
-      );
+      setCreateProjectMessage("Project could not be created. Review the details and try again.");
+      setCreateProjectTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
       setIsCreatingProject(false);
     }
@@ -334,6 +351,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     setIsCreateProjectDialogOpen,
     createProjectForm,
     createProjectMessage,
+    createProjectTechnicalDetails,
     isCreatingProject,
     currentPrdVersion,
     prdVersionList,
@@ -342,6 +360,10 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     visiblePrdSections,
     visibleVersionRows,
     prdMessage,
+    prdStatus,
+    prdTechnicalDetails,
+    prdErrorSource,
+    prdFeedbackTone,
     handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
     isGeneratingPrdDraft,
@@ -355,6 +377,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
     handleLogoutBridge,
     handleCreateProjectField,
     handleSelectProject,
+    handleProjectDeleted,
     handleCreateFromPrompt,
     handleCreateProjectSubmit,
     // Client-side sidebar nav: AppShell calls with a route; navigateBrowserPath pushes history so useBrowserPath re-derives the page.

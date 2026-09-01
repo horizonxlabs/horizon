@@ -6,20 +6,35 @@ import { resolvePiAgentLimits } from "../../apps/platform-api/src/generation-loo
 test("Pi gives slow local-model rounds the same default deadline as governed completions", () => {
   const previous = process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
   const previousTurn = process.env.EVCP_PI_TURN_TIMEOUT_MS;
+  const previousTokenBudget = process.env.EVCP_PI_MAX_TURN_TOKENS;
   delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
   delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
+  delete process.env.EVCP_PI_MAX_TURN_TOKENS;
 
   try {
     const limits = resolvePiAgentLimits();
     assert.equal(limits.maxModelRounds, 20);
     assert.equal(limits.modelRoundTimeoutMs, 300_000);
     assert.equal(limits.turnTimeoutMs, 1_800_000);
-    assert.equal(limits.maxTurnTokens, 600_000);
+    assert.equal(limits.maxTurnTokens, undefined);
   } finally {
     if (previous === undefined) delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;
     if (previousTurn === undefined) delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
     else process.env.EVCP_PI_TURN_TIMEOUT_MS = previousTurn;
+    if (previousTokenBudget === undefined) delete process.env.EVCP_PI_MAX_TURN_TOKENS;
+    else process.env.EVCP_PI_MAX_TURN_TOKENS = previousTokenBudget;
+  }
+});
+
+test("the cumulative turn-token cap is opt-in for operators", () => {
+  const previous = process.env.EVCP_PI_MAX_TURN_TOKENS;
+  try {
+    process.env.EVCP_PI_MAX_TURN_TOKENS = "600000";
+    assert.equal(resolvePiAgentLimits().maxTurnTokens, 600_000);
+  } finally {
+    if (previous === undefined) delete process.env.EVCP_PI_MAX_TURN_TOKENS;
+    else process.env.EVCP_PI_MAX_TURN_TOKENS = previous;
   }
 });
 

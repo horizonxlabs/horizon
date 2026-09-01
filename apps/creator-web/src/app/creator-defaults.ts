@@ -12,7 +12,8 @@ export const unselectedProject: CreatorProjectView = {
   owner: "",
   prdVersion: "",
   frontendVersion: "",
-  tokenUsedThisMonth: 0
+  tokenUsedThisMonth: 0,
+  createdAt: ""
 };
 
 export const initialCreatorBootstrap: CreatorBootstrapState = {

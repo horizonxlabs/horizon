@@ -4,6 +4,7 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 
 export interface ContainerGitCommitter {
   prepare(containerId: string): Promise<string>;
+  renewSnapshot(containerId: string, snapshotToken: string): Promise<void>;
   hasChanges(containerId: string, snapshotToken: string): Promise<boolean>;
   validate(containerId: string): Promise<void>;
   restore(containerId: string, commitSha: string): Promise<void>;
@@ -47,8 +48,9 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
   const gitCommand = (extraEnvironment = "") =>
     `${trustedGitEnvironment}${extraEnvironment ? ` ${extraEnvironment}` : ""} git -c safe.directory=/workspace -c core.hooksPath=/dev/null`;
   const g = gitCommand();
-  // Greater than the maximum supported turn duration; container restart is the final cleanup path.
-  const staleLockSeconds = 7_200;
+  // Active turns renew this lease. A terminated API process therefore leaves an orphan that can
+  // be reclaimed promptly instead of blocking the project for the former two-hour timeout.
+  const staleLockSeconds = 45;
   const runtimePaths = "node_modules .next '.next-*'";
   const supportedSourceFind =
     "find /workspace -xdev \\( -path /workspace/.git -o -path /workspace/node_modules -o -path /workspace/.next -o -path '/workspace/.next-*' \\) -prune -o -print0";
@@ -271,6 +273,23 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         ).catch(() => undefined);
         throw error;
       }
+    },
+    async renewSnapshot(containerId, snapshotToken) {
+      assertSnapshotToken(snapshotToken);
+      const transitionOwner = randomUUID();
+      const script = [
+        "set -eu",
+        `snapshot_root="${snapshotRoot}"`,
+        'lock_dir="$snapshot_root/active.lock"',
+        ...acquireTransitionLock(transitionOwner),
+        ...verifyOwnedSnapshot(snapshotToken),
+        'timestamp_tmp="$(mktemp "$lock_dir/.timestamp.XXXXXX")"',
+        'date +%s > "$timestamp_tmp"',
+        'chmod 600 "$timestamp_tmp"',
+        'mv -f "$timestamp_tmp" "$lock_dir/timestamp"',
+        ...releaseTransitionLock
+      ].join(" && ");
+      await runRoot(containerId, script, "workspace snapshot lease renewal");
     },
     async hasChanges(containerId, snapshotToken) {
       assertSnapshotToken(snapshotToken);

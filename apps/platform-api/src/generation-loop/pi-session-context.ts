@@ -64,6 +64,8 @@ export async function createHorizonPiSession(
     sessionManager,
     settingsManager
   });
+  // Use Pi's own compaction mechanism; this keeps the same semantics as a direct Pi session.
+  session.setAutoCompactionEnabled(true);
   return session;
 }
 

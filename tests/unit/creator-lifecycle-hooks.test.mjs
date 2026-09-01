@@ -105,6 +105,7 @@ test("frontend restore reports mutation failures without refreshing", async () =
   assert.deepEqual(calls, [["restore", "proj_1", "checkpoint_1"]]);
   assert.equal(state.status, "error");
   assert.equal(state.message, "Frontend restore failed: restore rejected");
+  assert.equal(state.failedRestoreCheckpointId, "checkpoint_1");
   assert.equal(state.lastRestore, undefined);
 });
 

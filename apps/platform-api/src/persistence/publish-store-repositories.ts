@@ -34,6 +34,7 @@ import type {
   TicketType
 } from "../platform-services";
 import type { WorkspaceDeployment } from "@evcp/types";
+import type { PublishAccessUrlConfigDto } from "@evcp/api-client";
 import { PermissionError, ValidationError } from "../platform-services";
 import { canAccessPublishedProject, storeActionsForCard } from "./published-app-access";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
@@ -45,8 +46,6 @@ import type {
   AppMemberRecordData,
   AppRecord,
   AppRoleRecord,
-  AppStoreRegistryEntryRecord,
-  DeploymentRecordData,
   InAppNotificationRecord,
   PublishRequestRecordData,
   PublishStorePersistenceClient,
@@ -54,23 +53,59 @@ import type {
   SupportTicketTimelineEntryRecord
 } from "./publish-store-persistence-types";
 import { slugId, slugToId, toIsoString } from "./publish-store-record-utils";
+import {
+  attachRuntimeDeploymentToReview,
+  isSubdomainUniqueRace,
+  runPublishTransaction
+} from "./publish-store-publish-transaction";
 import { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
 import { defaultUserName, defaultUserRecord } from "./publish-store-users";
+import { resolvePersistedPublishedSubdomain } from "./published-subdomain-registry";
+import {
+  assertSubdomainClaimAvailable,
+  DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
+  mapDeploymentRecord,
+  mapRegistryEntry,
+  requireProjectOwnerAccess,
+  SubdomainConflictError
+} from "./publish-store-service-support";
 export type { PublishStorePersistenceClient } from "./publish-store-persistence-types";
 export { MemoryPublishStorePersistenceClient } from "./memory-publish-store-persistence-client";
+export {
+  DEFAULT_PUBLISH_ACCESS_URL_CONFIG,
+  SubdomainConflictError
+} from "./publish-store-service-support";
 
 export class PublishStoreRepositoryBackedService {
-  constructor(private readonly client: PublishStorePersistenceClient) {}
-
+  constructor(
+    private readonly client: PublishStorePersistenceClient,
+    private readonly accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
+  ) {}
+  resolvePublishedSubdomain(subdomain: string) { return resolvePersistedPublishedSubdomain(this.client, this.accessUrlConfig, subdomain); }
   async canAccessPublishedProject(actor: PlatformUser, projectId: string): Promise<boolean> {
     return canAccessPublishedProject(this.client, actor, projectId);
+  }
+
+  async assertSubdomainAvailable(
+    actor: PlatformUser,
+    projectId: string,
+    label: string
+  ): Promise<string> {
+    requireAnyRole(actor, ["admin", "creator"]);
+    const project = await this.client.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new ValidationError(`Unknown project: ${projectId}`);
+    requireProjectOwnerAccess(actor, project);
+    const existing = await this.client.appStoreRegistryEntry.findFirst({
+      where: { subdomain: label.trim().toLowerCase() }
+    });
+    return assertSubdomainClaimAvailable(label, existing?.projectId, projectId);
   }
 
   async getAppAccessSnapshot(
     actor: PlatformUser,
     input: { project: PlatformProject }
   ): Promise<AppAccessSnapshot> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     return this.snapshot(input.project, app);
@@ -87,7 +122,7 @@ export class PublishStoreRepositoryBackedService {
       note?: string;
     }
   ): Promise<AppInvitation> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     await this.requireRoleKey(app.id, input.roleKey);
@@ -100,8 +135,7 @@ export class PublishStoreRepositoryBackedService {
         invitation.email.trim().toLowerCase() === email &&
         ["pending", "approval_required"].includes(invitation.status)
     );
-    if (duplicate)
-      throw new ValidationError(`${email} already has a pending invitation for this app`);
+    if (duplicate) throw new ValidationError(`${email} already has a pending invitation for this app`);
     const record = await this.client.appInvitation.create({
       data: {
         id: `appinv_${app.id}_${String(existing.length + 1).padStart(4, "0")}`,
@@ -133,7 +167,7 @@ export class PublishStoreRepositoryBackedService {
       permissions?: string[];
     }
   ): Promise<AppRoleDefinition> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const key = input.key.trim().toLowerCase();
@@ -167,7 +201,7 @@ export class PublishStoreRepositoryBackedService {
       reason: string;
     }
   ): Promise<AppAccessRequest> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     await this.requireRoleKey(app.id, input.requestedRoleKey);
@@ -192,7 +226,7 @@ export class PublishStoreRepositoryBackedService {
       decidedByUserId?: string;
     }
   ): Promise<AppAccessRequest> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const requests = await this.client.appAccessRequest.findMany({ where: { appId: app.id } });
@@ -209,13 +243,7 @@ export class PublishStoreRepositoryBackedService {
       }
     });
     if (input.decision === "approved") {
-      await this.addMember(
-        app,
-        request.requesterEmail,
-        request.requestedRoleKey,
-        "internal",
-        "active"
-      );
+      await this.addMember(app, request.requesterEmail, request.requestedRoleKey, "internal", "active");
     }
     return mapAccessRequest(updated);
   }
@@ -223,8 +251,8 @@ export class PublishStoreRepositoryBackedService {
   async getPublishReview(
     actor: PlatformUser,
     input: { project: PlatformProject; baseline: PrdVersion; preview: PreviewVersion }
-  ): Promise<PublishReview> {
-    requireProjectAccess(actor, input.project);
+  ): Promise<PublishReview & { accessUrlConfig: PublishAccessUrlConfigDto }> {
+    requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
     await this.ensureDefaults(input.project, app);
     const manifest = await this.buildManifest(input.project, app, input.baseline, input.preview);
@@ -233,7 +261,8 @@ export class PublishStoreRepositoryBackedService {
       project: input.project,
       manifest,
       checklist,
-      ready: checklist.every((item) => item.status === "pass")
+      ready: checklist.every((item) => item.status === "pass"),
+      accessUrlConfig: this.accessUrlConfig
     };
   }
 
@@ -244,118 +273,144 @@ export class PublishStoreRepositoryBackedService {
       baseline: PrdVersion;
       preview: PreviewVersion;
       runtimeDeployment?: WorkspaceDeployment;
+      subdomain?: string;
     }
   ): Promise<PublishResult> {
-    requireProjectAccess(actor, input.project);
+    requireProjectOwnerAccess(actor, input.project);
+    const existingRegistry = await this.client.appStoreRegistryEntry.findFirst({
+      where: { appId: input.project.appId ?? `app_${slugToId(input.project.id)}` }
+    });
+    const requestedSubdomain = input.subdomain ?? existingRegistry?.subdomain ?? null;
+    const subdomain = requestedSubdomain
+      ? await this.assertSubdomainAvailable(actor, input.project.id, requestedSubdomain)
+      : null;
     const review = await this.getPublishReview(actor, input);
-    if (input.runtimeDeployment) {
-      review.manifest.runtime = {
-        deploymentRevisionId: input.runtimeDeployment.id,
-        revision: input.runtimeDeployment.revision,
-        sourceCommitSha: input.runtimeDeployment.commitSha,
-        imageTag: input.runtimeDeployment.imageTag,
-        imageDigest: input.runtimeDeployment.imageDigest
-      };
-      review.manifest.app.route = `/apps/${input.runtimeDeployment.slug}`;
-      review.manifest.frontend.routes = [review.manifest.app.route];
-    }
+    if (input.runtimeDeployment) attachRuntimeDeploymentToReview(review, input.runtimeDeployment);
     const blockingItems = review.checklist
       .filter((item) => item.status === "fail")
       .map((item) => item.label);
-    const publishCount = (
-      await this.client.publishRequest.findMany({ where: { projectId: input.project.id } })
-    ).length;
-    const now = new Date();
-    const publishRequest = await this.client.publishRequest.create({
-      data: {
-        id: `pubreq_${review.manifest.app.slug}_${String(publishCount + 1).padStart(4, "0")}`,
-        projectId: input.project.id,
-        appId: review.manifest.appId,
-        status: blockingItems.length > 0 ? "blocked" : "published",
-        requestedByUserId: actor.id,
-        manifestVersion: review.manifest.manifestVersion,
-        blockingItems,
-        createdAt: now,
-        publishedAt: blockingItems.length > 0 ? null : now
-      }
-    });
-    if (blockingItems.length > 0)
+    if (blockingItems.length > 0) {
+      const publishCount = (
+        await this.client.publishRequest.findMany({ where: { projectId: input.project.id } })
+      ).length;
+      await this.client.publishRequest.create({
+        data: {
+          id: `pubreq_${review.manifest.app.slug}_${String(publishCount + 1).padStart(4, "0")}`,
+          projectId: input.project.id,
+          appId: review.manifest.appId,
+          status: "blocked",
+          requestedByUserId: actor.id,
+          manifestVersion: review.manifest.manifestVersion,
+          blockingItems,
+          createdAt: new Date(),
+          publishedAt: null
+        }
+      });
       throw new ValidationError(`Publish blocked: ${blockingItems.join(", ")}`);
+    }
 
-    await this.client.appManifest.upsert({
-      where: { appId: review.manifest.appId },
-      update: manifestRecord(review.manifest),
-      create: manifestRecord(review.manifest)
-    });
-    await this.client.app.update({
-      where: { id: review.manifest.appId },
-      data: { status: "published" }
-    });
+    try {
+      return await runPublishTransaction(this.client, async (transaction) => {
+        const publishCount = (
+          await transaction.publishRequest.findMany({ where: { projectId: input.project.id } })
+        ).length;
+        const now = new Date();
+        const publishRequest = await transaction.publishRequest.create({
+          data: {
+            id: `pubreq_${review.manifest.app.slug}_${String(publishCount + 1).padStart(4, "0")}`,
+            projectId: input.project.id,
+            appId: review.manifest.appId,
+            status: "published",
+            requestedByUserId: actor.id,
+            manifestVersion: review.manifest.manifestVersion,
+            blockingItems,
+            createdAt: now,
+            publishedAt: now
+          }
+        });
 
-    const deploymentCount = (
-      await this.client.deploymentRecord.findMany({ where: { projectId: input.project.id } })
-    ).length;
-    const deployment = await this.client.deploymentRecord.create({
-      data: {
-        id: `dep_${slugToId(review.manifest.app.slug)}_${String(deploymentCount + 1).padStart(3, "0")}`,
-        projectId: input.project.id,
-        appId: review.manifest.appId,
-        publishRequestId: publishRequest.id,
-        status: "published",
-        environment: "app_store",
-        route: review.manifest.app.route,
-        manifestVersion: review.manifest.manifestVersion,
-        prdVersion: review.manifest.prd.version,
-        frontendCheckpointId: review.manifest.frontend.checkpointId,
-        publishedByUserId: actor.id,
-        deploymentRevisionId: input.runtimeDeployment?.id,
-        runtimeRevision: input.runtimeDeployment?.revision,
-        sourceCommitSha: input.runtimeDeployment?.commitSha,
-        imageTag: input.runtimeDeployment?.imageTag,
-        imageDigest: input.runtimeDeployment?.imageDigest,
-        containerName: input.runtimeDeployment?.containerName,
-        publishedAt: now
-      }
-    });
-    const registryEntry = await this.client.appStoreRegistryEntry.upsert({
-      where: { appId: review.manifest.appId },
-      update: {
-        deploymentRecordId: deployment.id,
-        slug: review.manifest.app.slug,
-        name: review.manifest.app.name,
-        route: review.manifest.app.route,
-        status: "published",
-        visibility: "restricted",
-        accessMode: "membership_or_invite",
-        roleKeys: review.manifest.roles.map((role) => role.key),
-        ownerUserId: input.project.ownerUserId,
-        manifestVersion: review.manifest.manifestVersion,
-        publishedAt: now
-      },
-      create: {
-        id: `store_${review.manifest.app.slug}`,
-        appId: review.manifest.appId,
-        projectId: input.project.id,
-        deploymentRecordId: deployment.id,
-        slug: review.manifest.app.slug,
-        name: review.manifest.app.name,
-        route: review.manifest.app.route,
-        status: "published",
-        visibility: "restricted",
-        accessMode: "membership_or_invite",
-        roleKeys: review.manifest.roles.map((role) => role.key),
-        ownerUserId: input.project.ownerUserId,
-        manifestVersion: review.manifest.manifestVersion,
-        publishedAt: now
-      }
-    });
+        await transaction.appManifest.upsert({
+          where: { appId: review.manifest.appId },
+          update: manifestRecord(review.manifest),
+          create: manifestRecord(review.manifest)
+        });
+        await transaction.app.update({
+          where: { id: review.manifest.appId },
+          data: { status: "published" }
+        });
 
-    return {
-      publishRequest: mapPublishRequest(publishRequest),
-      deployment: mapDeployment(deployment),
-      registryEntry: mapRegistry(registryEntry),
-      manifest: review.manifest
-    };
+        const deploymentCount = (
+          await transaction.deploymentRecord.findMany({ where: { projectId: input.project.id } })
+        ).length;
+        const deployment = await transaction.deploymentRecord.create({
+          data: {
+            id: `dep_${slugToId(review.manifest.app.slug)}_${String(deploymentCount + 1).padStart(3, "0")}`,
+            projectId: input.project.id,
+            appId: review.manifest.appId,
+            publishRequestId: publishRequest.id,
+            status: "published",
+            environment: "app_store",
+            route: review.manifest.app.route,
+            manifestVersion: review.manifest.manifestVersion,
+            prdVersion: review.manifest.prd.version,
+            frontendCheckpointId: review.manifest.frontend.checkpointId,
+            publishedByUserId: actor.id,
+            deploymentRevisionId: input.runtimeDeployment?.id,
+            runtimeRevision: input.runtimeDeployment?.revision,
+            sourceCommitSha: input.runtimeDeployment?.commitSha,
+            imageTag: input.runtimeDeployment?.imageTag,
+            imageDigest: input.runtimeDeployment?.imageDigest,
+            containerName: input.runtimeDeployment?.containerName,
+            publishedAt: now
+          }
+        });
+        const registryEntry = await transaction.appStoreRegistryEntry.upsert({
+          where: { appId: review.manifest.appId },
+          update: {
+            deploymentRecordId: deployment.id,
+            slug: review.manifest.app.slug,
+            subdomain,
+            name: review.manifest.app.name,
+            route: review.manifest.app.route,
+            status: "published",
+            visibility: "restricted",
+            accessMode: "membership_or_invite",
+            roleKeys: review.manifest.roles.map((role) => role.key),
+            ownerUserId: input.project.ownerUserId,
+            manifestVersion: review.manifest.manifestVersion,
+            publishedAt: now
+          },
+          create: {
+            id: `store_${review.manifest.app.slug}`,
+            appId: review.manifest.appId,
+            projectId: input.project.id,
+            deploymentRecordId: deployment.id,
+            slug: review.manifest.app.slug,
+            subdomain,
+            name: review.manifest.app.name,
+            route: review.manifest.app.route,
+            status: "published",
+            visibility: "restricted",
+            accessMode: "membership_or_invite",
+            roleKeys: review.manifest.roles.map((role) => role.key),
+            ownerUserId: input.project.ownerUserId,
+            manifestVersion: review.manifest.manifestVersion,
+            publishedAt: now
+          }
+        });
+
+        const mappedRegistryEntry = mapRegistryEntry(registryEntry, this.accessUrlConfig);
+        return {
+          publishRequest: mapPublishRequest(publishRequest),
+          deployment: mapDeploymentRecord(deployment, mappedRegistryEntry),
+          registryEntry: mappedRegistryEntry,
+          manifest: review.manifest
+        };
+      });
+    } catch (error) {
+      if (isSubdomainUniqueRace(error)) throw new SubdomainConflictError();
+      throw error;
+    }
   }
 
   async listRegistry(actor: PlatformUser): Promise<AppStoreRegistryEntry[]> {
@@ -364,7 +419,7 @@ export class PublishStoreRepositoryBackedService {
       where: { status: "published" },
       orderBy: { publishedAt: "asc" }
     });
-    return records.map(mapRegistry);
+    return records.map((record) => mapRegistryEntry(record, this.accessUrlConfig));
   }
 
   async listStoreApps(actor: PlatformUser): Promise<StorefrontHome> {
@@ -564,11 +619,7 @@ export class PublishStoreRepositoryBackedService {
 
   async getTicketStatus(actor: PlatformUser, ticketId: string): Promise<TicketStatusView> {
     const ticket = await this.requireTicket(ticketId);
-    if (
-      actor.role !== "creator" &&
-      actor.role !== "admin" &&
-      ticket.submittedByUserId !== actor.id
-    ) {
+    if (actor.role !== "creator" && actor.role !== "admin" && ticket.submittedByUserId !== actor.id) {
       throw new PermissionError(`User ${actor.email} cannot access ticket ${ticketId}`);
     }
     const detail = await this.getStoreAppDetail(
@@ -578,10 +629,7 @@ export class PublishStoreRepositoryBackedService {
     return { ...ticket, appName: detail.name };
   }
 
-  async listCreatorInbox(
-    actor: PlatformUser,
-    projectId: string
-  ): Promise<CreatorTicketInboxItem[]> {
+  async listCreatorInbox(actor: PlatformUser, projectId: string): Promise<CreatorTicketInboxItem[]> {
     requireAnyRole(actor, ["admin", "creator"]);
     const tickets = await this.client.supportTicket.findMany({
       where: { projectId },
@@ -608,27 +656,30 @@ export class PublishStoreRepositoryBackedService {
     actor: PlatformUser,
     project: PlatformProject
   ): Promise<DeploymentRecord> {
-    requireProjectAccess(actor, project);
+    requireProjectOwnerAccess(actor, project);
     const deployments = await this.client.deploymentRecord.findMany({
       where: { projectId: project.id },
       orderBy: { publishedAt: "asc" }
     });
     const deployment = deployments.at(-1);
     if (!deployment) throw new ValidationError(`No deployment record for project ${project.id}`);
-    return mapDeployment(deployment);
+    const registryEntry = await this.client.appStoreRegistryEntry.findFirst({
+      where: { projectId: project.id }
+    });
+    return mapDeploymentRecord(
+      deployment,
+      registryEntry ? mapRegistryEntry(registryEntry, this.accessUrlConfig) : undefined
+    );
   }
 
   async getManifestForProject(actor: PlatformUser, project: PlatformProject): Promise<AppManifest> {
-    requireProjectAccess(actor, project);
+    requireProjectOwnerAccess(actor, project);
     const manifest = await this.client.appManifest.findFirst({ where: { projectId: project.id } });
     if (!manifest) throw new ValidationError(`No app manifest for project ${project.id}`);
     return mapManifest(manifest);
   }
 
-  private async canSubmitTicket(
-    actor: PlatformUser,
-    appSlug: string
-  ): Promise<StorefrontAppDetail> {
+  private async canSubmitTicket(actor: PlatformUser, appSlug: string): Promise<StorefrontAppDetail> {
     const detail = await this.getStoreAppDetail(actor, appSlug);
     if (detail.accessStatus !== "active")
       throw new PermissionError(`App ${appSlug} is not visible for ticket submission`);
@@ -869,10 +920,7 @@ export class PublishStoreRepositoryBackedService {
     return records.map(mapMember);
   }
 
-  private async getMemberForEmail(
-    appId: string,
-    email: string
-  ): Promise<AppMemberRecord | undefined> {
+  private async getMemberForEmail(appId: string, email: string): Promise<AppMemberRecord | undefined> {
     return (await this.membersForApp(appId)).find(
       (member) => member.email === email && member.status === "active"
     );
@@ -929,8 +977,7 @@ export class PublishStoreRepositoryBackedService {
       roleKey: role.key,
       roleName: role.name,
       status,
-      lastAccessAt:
-        status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
+      lastAccessAt: status === "active" ? new Date("2026-08-20T09:00:00.000Z").toISOString() : undefined
     };
   }
 
@@ -959,7 +1006,7 @@ export class PublishStoreRepositoryBackedService {
   private async requireRegistryEntry(appSlug: string): Promise<AppStoreRegistryEntry> {
     const entry = await this.client.appStoreRegistryEntry.findFirst({ where: { slug: appSlug } });
     if (!entry) throw new PermissionError(`Unknown app or app is not visible: ${appSlug}`);
-    return mapRegistry(entry);
+    return mapRegistryEntry(entry, this.accessUrlConfig);
   }
 
   private async requireTicket(ticketId: string): Promise<SupportTicket> {
@@ -971,10 +1018,7 @@ export class PublishStoreRepositoryBackedService {
     return mapTicket(ticket);
   }
 
-  private async toCard(
-    actor: PlatformUser,
-    entry: AppStoreRegistryEntry
-  ): Promise<StorefrontAppCard> {
+  private async toCard(actor: PlatformUser, entry: AppStoreRegistryEntry): Promise<StorefrontAppCard> {
     const member = await this.getMemberForEmail(entry.appId, actor.email);
     const pending = await this.getPendingRequestForEmail(entry.appId, actor.email);
     const installation = await this.client.appInstallation.findFirst({
@@ -992,6 +1036,8 @@ export class PublishStoreRepositoryBackedService {
       description: `${entry.name} is published and governed through Horizon.`,
       ownerName: defaultUserName(entry.ownerUserId, entry.ownerUserId),
       route: entry.route,
+      subdomain: entry.subdomain,
+      subdomainUrl: entry.subdomainUrl,
       accessStatus,
       installStatus,
       installationId: installation?.id,
@@ -1046,13 +1092,15 @@ export class PublishStoreRepositoryBackedService {
 }
 
 export function createPublishStoreRepositoryBackedService(
-  client: PublishStorePersistenceClient = new MemoryPublishStorePersistenceClient()
+  client: PublishStorePersistenceClient = new MemoryPublishStorePersistenceClient(),
+  accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
 ): PublishStoreRepositoryBackedService {
-  return new PublishStoreRepositoryBackedService(client);
+  return new PublishStoreRepositoryBackedService(client, accessUrlConfig);
 }
 
 export async function createPrismaPublishStorePersistence(
-  databaseUrl = process.env.DATABASE_URL
+  databaseUrl = process.env.DATABASE_URL,
+  accessUrlConfig: PublishAccessUrlConfigDto = DEFAULT_PUBLISH_ACCESS_URL_CONFIG
 ): Promise<{
   client: PublishStorePersistenceClient;
   service: PublishStoreRepositoryBackedService;
@@ -1063,7 +1111,7 @@ export async function createPrismaPublishStorePersistence(
   ) as unknown as PublishStorePersistenceClient;
   return {
     client,
-    service: new PublishStoreRepositoryBackedService(client)
+    service: new PublishStoreRepositoryBackedService(client, accessUrlConfig)
   };
 }
 
@@ -1163,48 +1211,6 @@ function mapPublishRequest(record: PublishRequestRecordData): PublishRequestReco
   };
 }
 
-function mapDeployment(record: DeploymentRecordData): DeploymentRecord {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    appId: record.appId,
-    publishRequestId: record.publishRequestId,
-    status: record.status === "published" ? "published" : "failed",
-    environment: "app_store",
-    route: record.route,
-    manifestVersion: record.manifestVersion,
-    prdVersion: record.prdVersion,
-    frontendCheckpointId: record.frontendCheckpointId,
-    publishedByUserId: record.publishedByUserId,
-    deploymentRevisionId: record.deploymentRevisionId ?? undefined,
-    runtimeRevision: record.runtimeRevision ?? undefined,
-    sourceCommitSha: record.sourceCommitSha ?? undefined,
-    imageTag: record.imageTag ?? undefined,
-    imageDigest: record.imageDigest ?? undefined,
-    containerName: record.containerName ?? undefined,
-    publishedAt: toIsoString(record.publishedAt)
-  };
-}
-
-function mapRegistry(record: AppStoreRegistryEntryRecord): AppStoreRegistryEntry {
-  return {
-    id: record.id,
-    appId: record.appId,
-    projectId: record.projectId,
-    slug: record.slug,
-    name: record.name,
-    route: record.route,
-    status: "published",
-    visibility: "restricted",
-    accessMode: "membership_or_invite",
-    roleKeys: [...record.roleKeys],
-    ownerUserId: record.ownerUserId,
-    deploymentId: record.deploymentRecordId,
-    manifestVersion: record.manifestVersion,
-    publishedAt: toIsoString(record.publishedAt)
-  };
-}
-
 function mapManifest(record: AppManifestRecord): AppManifest {
   if (record.manifest && typeof record.manifest === "object") return record.manifest as AppManifest;
   return {
@@ -1292,12 +1298,6 @@ function mapNotification(record: InAppNotificationRecord): InAppNotification {
     read: record.read,
     createdAt: toIsoString(record.createdAt)
   };
-}
-
-function requireProjectAccess(actor: PlatformUser, project: PlatformProject): void {
-  requireAnyRole(actor, ["admin", "creator"]);
-  if (actor.role !== "admin" && project.ownerUserId !== actor.id)
-    throw new PermissionError(`Role ${actor.role} cannot access this resource`);
 }
 
 function requireAnyRole(actor: PlatformUser, roles: PlatformUser["role"][]): void {

@@ -1,106 +1,345 @@
-import { DecisionPanel, DefinitionGrid, SectionCard, ToneBadge } from "@evcp/ui";
-import { CheckCircle2, ClipboardCheck, Store } from "lucide-react";
+import { Button, SectionCard } from "@evcp/ui";
+import {
+  buildSubdomainUrl,
+  normalizeSubdomainSuggestion,
+  validateSubdomainLabel
+} from "@evcp/api-client";
+import {
+  CheckCircle2,
+  CircleAlert,
+  FileCheck2,
+  Link2,
+  LockKeyhole,
+  MonitorCheck,
+  Store
+} from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
+import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { useEffect, useRef, useState } from "react";
+import { PublishAccessUrlCard } from "./PublishAccessUrlCard";
+
+function readableStatus(value: string): string {
+  return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+type ReadinessStage = "manifest" | "route" | "permissions" | "preview" | "registry";
+
+const READINESS_STAGE_BY_KEY: Record<string, ReadinessStage> = {
+  prd_baseline: "manifest",
+  active_frontend: "preview",
+  app_roles: "permissions",
+  app_owner: "permissions",
+  blocking_guardrail: "registry"
+};
+
+const READINESS_LABEL_BY_KEY: Record<string, string> = {
+  prd_baseline: "PRD baseline",
+  active_frontend: "Active frontend checkpoint",
+  app_roles: "App roles",
+  app_owner: "Project owner",
+  blocking_guardrail: "Publish guardrail"
+};
 
 export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
+    accessLoadState,
+    clearPublishSubdomainError,
     handlePublishProject,
     isPublishingProject,
-    publishReview,
+    publishMessage,
+    publishMessageTechnicalDetails,
+    publishMessageTone,
+    publishSubdomainError,
+    publishReadinessState,
     publishResult,
-    visibleRegistryEntry,
-    visiblePublishChecklist,
+    publishReview,
+    refreshCreatorPublishState,
+    selectedProject,
     visibleDeployment,
     visiblePreview,
-    publishMessage
+    visibleRegistryEntry
   } = app;
+  const suggestedSubdomain = normalizeSubdomainSuggestion(
+    selectedProject.name,
+    selectedProject.id.replaceAll("_", "-")
+  );
+  const [subdomain, setSubdomain] = useState(suggestedSubdomain);
+  const subdomainInputRef = useRef<HTMLInputElement>(null);
+  const previousProjectIdRef = useRef(selectedProject.id);
+  useEffect(() => {
+    if (previousProjectIdRef.current === selectedProject.id) return;
+    previousProjectIdRef.current = selectedProject.id;
+    setSubdomain(
+      normalizeSubdomainSuggestion(
+        selectedProject.name,
+        selectedProject.id.replaceAll("_", "-")
+      )
+    );
+    clearPublishSubdomainError();
+  }, [clearPublishSubdomainError, selectedProject.id, selectedProject.name]);
+  useEffect(() => {
+    if (publishSubdomainError) subdomainInputRef.current?.focus();
+  }, [publishSubdomainError]);
+  const subdomainValidation = validateSubdomainLabel(subdomain);
+  const subdomainError = subdomainValidation.ok
+    ? publishSubdomainError
+    : subdomainValidation.message;
+  const previewUrl = publishReview?.accessUrlConfig
+    ? buildSubdomainUrl(subdomain, publishReview.accessUrlConfig)
+    : "";
+  const manifest = publishReview?.manifest ?? publishResult?.manifest;
+  const resolvedAccessState = accessLoadState ?? (publishReview ? "ready" : "loading");
+  const accessReady = resolvedAccessState === "ready";
+  const resolvedReadinessState =
+    publishReadinessState ??
+    (resolvedAccessState === "loading"
+      ? "loading"
+      : resolvedAccessState === "unavailable" || !publishReview
+        ? "unavailable"
+        : "ready");
+  const readinessAvailable =
+    resolvedReadinessState === "ready" && accessReady && Boolean(publishReview);
+  const stageBlockers: Record<ReadinessStage, string[]> = {
+    manifest: [], route: [], permissions: [], preview: [], registry: []
+  };
+  const failedChecklist = publishReview?.checklist.filter((item) => item.status === "fail") ?? [];
+  for (const item of failedChecklist) {
+    const stage = READINESS_STAGE_BY_KEY[item.key] ?? "registry";
+    stageBlockers[stage].push(
+      READINESS_LABEL_BY_KEY[item.key] ?? "Additional publish requirement"
+    );
+  }
+  if (publishReview && !publishReview.ready && failedChecklist.length === 0) {
+    stageBlockers.registry.push("Additional publish requirement");
+  }
+  const failedChecks = Object.values(stageBlockers).flat();
+  const manifestVersion = manifest?.manifestVersion;
+  const route = manifest?.app?.route;
+  const permissionsReady =
+    readinessAvailable &&
+    Boolean(manifest?.auth?.mode) &&
+    Boolean(manifest?.roles?.length) &&
+    stageBlockers.permissions.length === 0;
+  const previewReady =
+    readinessAvailable &&
+    Boolean(manifest?.frontend?.checkpointId || visiblePreview.id) &&
+    stageBlockers.preview.length === 0;
+  const registryReady = readinessAvailable && stageBlockers.registry.length === 0;
+  const unavailableDetail =
+    resolvedReadinessState === "loading"
+      ? "Waiting for access and publish information."
+      : "Readiness information is currently unavailable.";
+  const readinessSteps = [
+    {
+      label: "Manifest",
+      ready:
+        readinessAvailable && Boolean(manifestVersion) && stageBlockers.manifest.length === 0,
+      detail: readinessAvailable
+        ? stageBlockers.manifest.length
+          ? `Resolve: ${stageBlockers.manifest.join(", ")}.`
+          : manifestVersion
+            ? `Version ${manifestVersion}`
+            : "Generate a manifest before publishing."
+        : unavailableDetail,
+      icon: FileCheck2
+    },
+    {
+      label: "Route",
+      ready: readinessAvailable && Boolean(route) && stageBlockers.route.length === 0,
+      detail: readinessAvailable
+        ? route || "Configure an application route before publishing."
+        : unavailableDetail,
+      icon: Link2
+    },
+    {
+      label: "Permissions",
+      ready: permissionsReady,
+      detail: readinessAvailable
+        ? stageBlockers.permissions.length
+          ? `Resolve: ${stageBlockers.permissions.join(", ")}.`
+          : permissionsReady
+            ? "Access roles and ownership are configured."
+            : "Resolve access requirements before publishing."
+        : unavailableDetail,
+      icon: LockKeyhole
+    },
+    {
+      label: "Preview",
+      ready: previewReady,
+      detail: readinessAvailable
+        ? stageBlockers.preview.length
+          ? `Resolve: ${stageBlockers.preview.join(", ")}.`
+          : previewReady
+            ? `Frontend ${manifest?.frontend?.version ?? visiblePreview.version} is available.`
+            : "Generate or restore an active frontend preview."
+        : unavailableDetail,
+      icon: MonitorCheck
+    },
+    {
+      label: "Registry",
+      ready: registryReady,
+      detail: readinessAvailable
+        ? stageBlockers.registry.length
+          ? `Resolve: ${stageBlockers.registry.join(", ")}.`
+          : visibleRegistryEntry
+            ? `Registry entry ${visibleRegistryEntry.slug} is available.`
+            : "The registry entry will be created during publish."
+        : unavailableDetail,
+      icon: Store
+    }
+  ];
+  const canPublish =
+    readinessAvailable &&
+    publishReview?.ready === true &&
+    readinessSteps.every((step) => step.ready);
+  const canSubmitPublish = canPublish && subdomainValidation.ok && !publishSubdomainError;
+  const blockerSummary =
+    resolvedReadinessState === "loading"
+      ? "Publish readiness is loading. Wait for the latest access information before publishing."
+      : resolvedReadinessState === "unavailable" || !publishReview
+        ? "Publish readiness is unavailable. Retry loading access and publish information."
+        : failedChecks.length
+          ? `Resolve ${failedChecks.length} readiness ${failedChecks.length === 1 ? "requirement" : "requirements"} before publishing.`
+          : "Resolve the remaining readiness requirements before publishing.";
+  const statusTone =
+    resolvedReadinessState === "loading"
+      ? "info"
+      : !canPublish
+        ? "warning"
+        : publishMessageTone === "danger"
+          ? "danger"
+          : "success";
+  const statusTechnicalDetails =
+    resolvedReadinessState === "unavailable" || (canPublish && publishMessageTone === "danger")
+      ? publishMessageTechnicalDetails
+      : undefined;
+
   return (
     <CreatorShell
       app={app}
       content={
-        <section className="sprint6-shell" aria-label="Publish app">
+        <section className="creator-publish-layout" aria-label="Publish app">
+          <PublishAccessUrlCard
+            value={subdomain}
+            previewUrl={previewUrl}
+            error={subdomainError}
+            disabled={isPublishingProject}
+            inputRef={subdomainInputRef}
+            onChange={(value) => {
+              setSubdomain(value);
+              clearPublishSubdomainError();
+            }}
+          />
+
           <SectionCard
-            eyebrow="Publish Review"
-            title="Manifest + Readiness checklist"
+            eyebrow="Readiness"
+            title="Publish readiness"
             action={
-              <button
+              <Button
                 type="button"
-                onClick={handlePublishProject}
-                disabled={isPublishingProject || !publishReview || !publishReview.ready}
+                className="creator-publish-action"
+                variant={canSubmitPublish ? "primary" : "secondary"}
+                onClick={() => handlePublishProject({ subdomain })}
+                disabled={isPublishingProject || !canSubmitPublish}
+                aria-busy={isPublishingProject || undefined}
               >
-                <Store size={15} /> {isPublishingProject ? "Publishing" : "Publish to App Store"}
-              </button>
+                <Store size={16} aria-hidden="true" />
+                {isPublishingProject ? "Publishing…" : "Publish to App Store"}
+              </Button>
             }
           >
-            <p>{publishMessage}</p>
-            <DefinitionGrid
-              items={[
-                {
-                  label: "Manifest",
-                  value:
-                    (publishReview?.manifest.manifestVersion ??
-                    publishResult?.manifest.manifestVersion)
-                      ? `manifest v${publishReview?.manifest.manifestVersion ?? publishResult?.manifest.manifestVersion}`
-                      : "No manifest returned"
-                },
-                {
-                  label: "Route",
-                  value:
-                    publishReview?.manifest.app?.route ??
-                    publishResult?.manifest.app?.route ??
-                    "No route returned"
-                },
-                {
-                  label: "Auth",
-                  value: publishReview?.manifest.auth?.mode ?? "No auth mode returned"
-                },
-                {
-                  label: "Frontend",
-                  value:
-                    publishReview?.manifest.frontend?.checkpointId ??
-                    visiblePreview.version ??
-                    "No preview returned"
-                },
-                {
-                  label: "Visibility",
-                  value: visibleRegistryEntry?.visibility ?? "No registry entry returned"
-                }
-              ]}
-            />
-            <div className="publish-checklist">
-              {visiblePublishChecklist.map((item) => (
-                <div key={item.check}>
-                  <ClipboardCheck size={16} />
-                  <strong>{item.check}</strong>
-                  <span>{item.detail}</span>
-                  <ToneBadge tone={item.state === "pass" ? "success" : "danger"}>
-                    {item.state}
-                  </ToneBadge>
-                </div>
-              ))}
-            </div>
+            <ol className="creator-readiness-list" aria-label="Publish readiness">
+              {readinessSteps.map((step) => {
+                const Icon = step.icon;
+                return (
+                  <li
+                    className={`creator-readiness-item ${step.ready ? "is-ready" : "is-blocking"}`}
+                    key={step.label}
+                  >
+                    <span className="creator-readiness-marker" aria-hidden="true">
+                      <Icon size={18} />
+                    </span>
+                    <span className="creator-readiness-copy">
+                      <strong>{step.label}</strong>
+                      <span>{step.detail}</span>
+                    </span>
+                    <span className="creator-readiness-state">
+                      {step.ready ? (
+                        <CheckCircle2 size={15} aria-hidden="true" />
+                      ) : (
+                        <CircleAlert size={15} aria-hidden="true" />
+                      )}
+                      {step.ready ? "Ready" : "Blocking"}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+
+            <CreatorStatusMessage tone={statusTone} technicalDetails={statusTechnicalDetails}>
+              {canPublish ? (
+                publishMessageTone === "danger" || publishResult
+                  ? publishMessage
+                  : "All readiness requirements are complete. This project can be published."
+              ) : (
+                <>
+                  <strong>{blockerSummary}</strong>
+                  {failedChecks.length ? (
+                    <span className="creator-publish-blocker-list">{failedChecks.join(", ")}</span>
+                  ) : null}
+                  {resolvedReadinessState === "unavailable" ? (
+                    <span className="creator-publish-retry">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          void refreshCreatorPublishState(selectedProject.id).catch(() => undefined);
+                        }}
+                      >
+                        Retry readiness
+                      </Button>
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </CreatorStatusMessage>
           </SectionCard>
-          <SectionCard eyebrow="Deployment Record" title="Published Output">
+
+          <SectionCard eyebrow="Published output" title="Latest deployment">
             {visibleDeployment ? (
-              <div className="deployment-record">
-                <CheckCircle2 size={20} />
+              <div className="creator-published-output">
+                <CheckCircle2 size={20} aria-hidden="true" />
                 <div>
-                  <strong>{visibleDeployment.id}</strong>
+                  <strong>{readableStatus(visibleDeployment.status)}</strong>
                   <span>
-                    {visibleDeployment.status} · {visibleDeployment.environment} · manifest v
-                    {visibleDeployment.manifestVersion}
+                    {readableStatus(visibleDeployment.environment)} · Manifest version {visibleDeployment.manifestVersion}
                   </span>
+                  <small title={visibleDeployment.id}>Deployment {visibleDeployment.id}</small>
+                  {visibleDeployment.subdomainUrl ? (
+                    <span className="creator-published-url">
+                      <strong>Primary access URL</strong>
+                      <a href={visibleDeployment.subdomainUrl} title={visibleDeployment.subdomainUrl}>
+                        {visibleDeployment.subdomainUrl}
+                      </a>
+                    </span>
+                  ) : null}
+                  {visibleDeployment.route ? (
+                    <span className="creator-published-url">
+                      <strong>Fallback path</strong>
+                      <a href={visibleDeployment.route} title={visibleDeployment.route}>
+                        {visibleDeployment.route}
+                      </a>
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : (
-              <DecisionPanel
-                tone="warning"
-                badge="API required"
-                title="No deployment record"
-                lines={[
-                  "A deployment appears here only after Platform API publishes a healthy revision."
-                ]}
+              <CreatorState
+                kind="empty"
+                title="No published deployment yet"
+                description="A deployment record will appear here after the first successful publish."
               />
             )}
           </SectionCard>

@@ -51,6 +51,7 @@ globalThis.React = (await import("react")).default;
 
 const { act, create } = await import("react-test-renderer");
 const { createStoreDeviceState } = await import("./device-state.ts");
+const { StoreAppCard } = await import("./StoreAppCard.tsx");
 const { StoreProvider } = await import("./StoreProvider.tsx");
 const { StoreAppDetailPage } = await import("./pages/StoreAppDetailPage.tsx");
 const { createStorefrontStateStore } = await import("./store-state.ts");
@@ -77,6 +78,8 @@ const detail = (slug = "first", actions = ["open", "submit_ticket"]) => ({
   supportContact: "help@example.com",
   actions,
   route: `/apps/${slug}`,
+  subdomain: slug,
+  subdomainUrl: `https://${slug}.apps.example.com`,
   accessStatus: "active",
   installStatus: "not_installed",
   health: "healthy",
@@ -102,6 +105,32 @@ function mount(store, client, slug = "first") {
     )
   );
 }
+
+function mountCards(client, apps) {
+  return create(
+    React.createElement(
+      StoreProvider,
+      { store: createStore(), client },
+      React.createElement(
+        React.Fragment,
+        null,
+        ...apps.map((app) => React.createElement(StoreAppCard, { app, key: app.slug }))
+      )
+    )
+  );
+}
+
+const card = (slug, accessStatus, route) => ({
+  id: slug,
+  slug,
+  name: `${slug} App`,
+  description: "A supported app",
+  owner: "IT",
+  route,
+  accessStatus,
+  installStatus: "not_installed",
+  health: "healthy"
+});
 
 function button(root, label) {
   const item = root.findAllByType("button").find((node) => node.children.join("").includes(label));
@@ -132,7 +161,65 @@ test("Open stays in Store and shows an error when launch authorization fails", a
   await act(async () => renderer.unmount());
 });
 
-test("Open records recency and authorizes launch before assigning the published runtime route", async () => {
+test("card launch failure stays in Store and exposes the server error", async () => {
+  memory.clear();
+  window.location.pathname = "/store/search";
+  const active = {
+    ...card("active", "active", "/apps/active"),
+    subdomainUrl: "https://active.apps.example.com"
+  };
+  let renderer;
+  await act(async () => {
+    renderer = mountCards(
+      {
+        authorizeStoreAppLaunch: async () => {
+          throw new Error("Launch session unavailable");
+        }
+      },
+      [active]
+    );
+  });
+  await act(async () => {
+    renderer.root
+      .findByProps({ className: "store-app-primary" })
+      .props.onClick({ preventDefault() {} });
+    await Promise.resolve();
+  });
+  assert.equal(window.location.pathname, "/store/search");
+  assert.match(
+    renderer.root.findByProps({ role: "alert" }).children.join(""),
+    /Launch session unavailable/
+  );
+  await act(async () => renderer.unmount());
+});
+
+test("pending and available cards retain non-launch access actions", async () => {
+  let launchCalls = 0;
+  let renderer;
+  await act(async () => {
+    renderer = mountCards(
+      {
+        authorizeStoreAppLaunch: async () => {
+          launchCalls += 1;
+        }
+      },
+      [card("pending", "pending"), card("requestable", "available")]
+    );
+  });
+  const actions = renderer.root.findAllByProps({ className: "store-app-primary" });
+  assert.equal(
+    actions.find((node) => node.children.join("") === "View request")?.props.href,
+    "/store/access-requests"
+  );
+  assert.equal(
+    actions.find((node) => node.children.join("") === "Request access")?.props.href,
+    "/store/apps/requestable"
+  );
+  assert.equal(launchCalls, 0);
+  await act(async () => renderer.unmount());
+});
+
+test("Open records recency and follows the server-authorized subdomain launch URL", async () => {
   memory.clear();
   window.location.pathname = "/store/apps/first";
   recentAtAssignment = undefined;
@@ -140,9 +227,14 @@ test("Open records recency and authorizes launch before assigning the published 
   globalThis.__storeLaunchAuthorized = false;
   const client = {
     getStoreAppDetail: async () => detail(),
-    authorizeStoreAppLaunch: async () => {
+    authorizeStoreAppLaunch: async (appSlug, routePath) => {
+      assert.equal(appSlug, "first");
+      assert.equal(routePath, "/apps/first");
       globalThis.__storeLaunchAuthorized = true;
-      return { authorized: true };
+      return {
+        authorized: true,
+        launchUrl: "https://first.apps.example.com/__launch/detail-grant"
+      };
     }
   };
   let renderer;
@@ -150,16 +242,46 @@ test("Open records recency and authorizes launch before assigning the published 
     renderer = mount(createStore(), client);
     await Promise.resolve();
   });
+  const accessUrl = renderer.root.findByProps({ className: "store-app-access-url-value" });
+  assert.equal(accessUrl.children.join(""), "https://first.apps.example.com");
+  assert.equal(accessUrl.props.title, "https://first.apps.example.com");
   await act(async () => {
     button(renderer.root, "Open app").props.onClick();
   });
-  assert.equal(window.location.pathname, "/apps/first");
+  assert.equal(window.location.pathname, "https://first.apps.example.com/__launch/detail-grant");
   assert.equal(launchAuthorizedAtAssignment, true);
   assert.deepEqual(recentAtAssignment, ["first"]);
   assert.deepEqual(createStoreDeviceState(window.localStorage).read().recent, ["first"]);
   await act(async () => {
     renderer.unmount();
   });
+});
+
+test("Open follows the server-authorized legacy path when no subdomain URL exists", async () => {
+  memory.clear();
+  window.location.pathname = "/store/apps/legacy";
+  const legacyDetail = detail("legacy", ["open"]);
+  delete legacyDetail.subdomain;
+  delete legacyDetail.subdomainUrl;
+  const client = {
+    getStoreAppDetail: async () => legacyDetail,
+    authorizeStoreAppLaunch: async (appSlug, routePath) => {
+      assert.equal(appSlug, "legacy");
+      assert.equal(routePath, "/apps/legacy");
+      return { authorized: true, launchUrl: "/apps/legacy" };
+    }
+  };
+  let renderer;
+  await act(async () => {
+    renderer = mount(createStore(), client, "legacy");
+    await Promise.resolve();
+  });
+  assert.equal(renderer.root.findAllByProps({ className: "store-app-access-url-value" }).length, 0);
+  await act(async () => {
+    button(renderer.root, "Open app").props.onClick();
+  });
+  assert.equal(window.location.pathname, "/apps/legacy");
+  await act(async () => renderer.unmount());
 });
 
 test.after(() => {

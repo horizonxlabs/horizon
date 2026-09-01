@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Undo2 } from "lucide-react";
+import { CreatorStatusMessage } from "@/shared";
 import { restoreWorkspaceCommit } from "./api";
 
 // Every committed turn is a restore point. Click ⏪ → inline confirm → the workspace code
@@ -18,17 +19,19 @@ export function VibeRestorePoint({
 }): ReactNode {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [restoreTechnicalDetails, setRestoreTechnicalDetails] = useState("");
 
   async function runRestore() {
     setBusy(true);
-    setError("");
+    setRestoreTechnicalDetails("");
     try {
       await restoreWorkspaceCommit(projectId, commitSha);
       setConfirming(false);
       onRestored();
     } catch (restoreError) {
-      setError(restoreError instanceof Error ? restoreError.message : "Restore failed");
+      setRestoreTechnicalDetails(
+        restoreError instanceof Error ? restoreError.message : "Unknown restore failure."
+      );
     } finally {
       setBusy(false);
     }
@@ -36,16 +39,20 @@ export function VibeRestorePoint({
 
   if (confirming) {
     return (
-      <span className="vibe-restore-confirm" role="alertdialog" aria-label="Confirm restore">
+      <div className="vibe-restore-confirm" role="alertdialog" aria-label="Confirm restore">
         <span>Restore code to this point? All later work will be removed.</span>
         <button type="button" disabled={busy} onClick={() => void runRestore()}>
-          {busy ? "Restoring…" : "Restore"}
+          {busy ? "Restoring…" : "Confirm"}
         </button>
         <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
           Cancel
         </button>
-        {error && <span className="vibe-restore-error">{error}</span>}
-      </span>
+        {restoreTechnicalDetails ? (
+          <CreatorStatusMessage tone="danger" technicalDetails={restoreTechnicalDetails}>
+            Restore failed. Try again.
+          </CreatorStatusMessage>
+        ) : null}
+      </div>
     );
   }
   return (
@@ -57,7 +64,7 @@ export function VibeRestorePoint({
       onClick={() => setConfirming(true)}
     >
       <Undo2 size={12} />
-      Restore this version
+      Restore to this point
     </button>
   );
 }

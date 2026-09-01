@@ -20,6 +20,11 @@ function environmentEntries(service) {
   return Array.isArray(env) ? env : Object.entries(env).map(([key, value]) => `${key}=${value}`);
 }
 
+function serviceNetworks(service) {
+  const networks = service.networks ?? [];
+  return Array.isArray(networks) ? networks : Object.keys(networks);
+}
+
 test("declares litellm service on internal network without published LLM admin port", () => {
   const litellm = compose.services.litellm;
   assert.ok(litellm, "litellm service missing");
@@ -52,11 +57,11 @@ test("platform-api can reach docker socket and litellm", () => {
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
 });
 
-test("development and release compose expose Pi reliability budgets", () => {
+test("development and release compose leave Pi cumulative token caps opt-in", () => {
   for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
     const joined = environmentEntries(api).join("\n");
     assert.match(joined, /EVCP_PI_MAX_MODEL_ROUNDS=.*:-20/);
-    assert.match(joined, /EVCP_PI_MAX_TURN_TOKENS=.*:-600000/);
+    assert.doesNotMatch(joined, /EVCP_PI_MAX_TURN_TOKENS/);
     assert.match(joined, /EVCP_PI_MODEL_ROUND_TIMEOUT_MS=.*:-300000/);
     assert.match(joined, /EVCP_PI_TURN_TIMEOUT_MS=.*:-1800000/);
   }
@@ -170,6 +175,26 @@ test("evcp-internal network is declared and used by workspace-facing services", 
       compose.services[name].networks?.includes("evcp-internal"),
       `${name} must join evcp-internal`
     );
+  }
+});
+
+test("default Redis consumers share a Compose network with Redis", () => {
+  for (const [name, document] of [
+    ["development", compose],
+    ["release", releaseCompose]
+  ]) {
+    const redisNetworks = new Set(serviceNetworks(document.services.redis));
+    const consumers = Object.entries(document.services).filter(([, service]) =>
+      environmentEntries(service).some((entry) => entry.includes("redis://redis:6379"))
+    );
+
+    assert.ok(consumers.length > 0, `${name} compose must declare a default Redis consumer`);
+    for (const [serviceName, service] of consumers) {
+      assert.ok(
+        serviceNetworks(service).some((network) => redisNetworks.has(network)),
+        `${name} ${serviceName} must share a network with Redis`
+      );
+    }
   }
 });
 

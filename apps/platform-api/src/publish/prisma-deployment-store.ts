@@ -14,8 +14,9 @@ export interface DeploymentRevisionClient {
     create(args: { data: RevisionRecord }): Promise<RevisionRecord>;
     update(args: {
       where: { id: string };
-      data: { healthStatus: string };
+      data: Partial<Pick<RevisionRecord, "healthStatus" | "imageDigest" | "containerId" | "containerName">>;
     }): Promise<RevisionRecord>;
+    deleteMany(args: { where: { projectId?: string; id?: string } }): Promise<{ count: number }>;
   };
   $transaction<T>(
     operation: (
@@ -97,6 +98,21 @@ export async function createPrismaDeploymentStore(
       );
       return deployment;
     },
+    updateRuntime(id, input) {
+      const current = byId.get(id);
+      if (!current) throw new Error(`unknown deployment '${id}'`);
+      const next = { ...current, ...input };
+      byId.set(id, next);
+      enqueue(
+        id,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.update({ where: { id }, data: input }),
+        () => {
+          if (byId.has(id)) byId.set(id, current);
+        }
+      );
+      return next;
+    },
     updateHealth(id, healthStatus) {
       const current = byId.get(id);
       if (!current) throw new Error(`unknown deployment '${id}'`);
@@ -116,6 +132,53 @@ export async function createPrismaDeploymentStore(
       const discarded = operations.filter((operation) => operation.deploymentId === id);
       operations = operations.filter((operation) => operation.deploymentId !== id);
       for (const operation of discarded.reverse()) operation.rollback();
+    },
+    remove(id) {
+      const current = byId.get(id);
+      if (!current) return;
+      byId.delete(id);
+      const index = order.indexOf(id);
+      if (index >= 0) order.splice(index, 1);
+      enqueue(
+        id,
+        (transaction) => transaction.workspaceDeploymentRevision.deleteMany({ where: { id } }),
+        () => {
+          byId.set(id, current);
+          order.splice(Math.min(index < 0 ? order.length : index, order.length), 0, id);
+        }
+      );
+    },
+    removeProject(projectId) {
+      const projectDeploymentIds = new Set(
+        order.filter((id) => byId.get(id)?.projectId === projectId)
+      );
+      const discarded = operations.filter((operation) =>
+        projectDeploymentIds.has(operation.deploymentId)
+      );
+      operations = operations.filter(
+        (operation) => !projectDeploymentIds.has(operation.deploymentId)
+      );
+      for (const operation of discarded.reverse()) operation.rollback();
+
+      const removed = order.flatMap((id, index) => {
+        const deployment = byId.get(id);
+        return deployment?.projectId === projectId ? [{ id, index, deployment }] : [];
+      });
+      for (const { id } of removed) {
+        byId.delete(id);
+        order.splice(order.indexOf(id), 1);
+      }
+      enqueue(
+        `project:${projectId}`,
+        (transaction) =>
+          transaction.workspaceDeploymentRevision.deleteMany({ where: { projectId } }),
+        () => {
+          for (const { id, index, deployment } of removed) {
+            byId.set(id, deployment);
+            order.splice(Math.min(index, order.length), 0, id);
+          }
+        }
+      );
     },
     list(projectId) {
       return order

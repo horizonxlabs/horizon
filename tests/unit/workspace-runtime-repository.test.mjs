@@ -12,7 +12,10 @@ test("workspace runtime repository upserts, hydrates, and removes lifecycle reco
       records.set(where.projectId, next);
       return next;
     },
-    delete: async ({ where }) => { const current = records.get(where.projectId); if (!current) throw new Error("not found"); records.delete(where.projectId); return current; }
+    deleteMany: async ({ where }) => {
+      const count = records.delete(where.projectId) ? 1 : 0;
+      return { count };
+    }
   } });
   const record = { id: "ws_1", projectId: "prj_1", slug: "leave", state: "running", containerId: "ctr_1", cpuCores: 1, memoryMb: 1024, lastActivityAt: "2026-07-13T00:00:00.000Z", lastError: undefined, createdAt: "2026-07-13T00:00:00.000Z", updatedAt: "2026-07-13T00:00:00.000Z" };
   await store.save({ record, llmGatewayKeyId: "key_1" });
@@ -21,5 +24,19 @@ test("workspace runtime repository upserts, hydrates, and removes lifecycle reco
   assert.equal(hydrated.llmGatewayKeyId, "key_1");
   assert.equal("DATABASE_URL" in hydrated.record, false);
   await store.remove("prj_1");
+  await store.remove("prj_1");
   assert.deepEqual(await store.list(), []);
+});
+
+test("workspace runtime removal propagates a Prisma transport failure", async () => {
+  const databaseError = new Error("database connection lost");
+  const store = new WorkspaceRuntimeRepositoryBackedStore({
+    workspaceRuntimeRecord: {
+      async findMany() { return []; },
+      async upsert() { throw new Error("not used"); },
+      async deleteMany() { throw databaseError; }
+    }
+  });
+
+  await assert.rejects(store.remove("prj_1"), (error) => error === databaseError);
 });

@@ -3,6 +3,7 @@ import type { CreatorProjectView } from "@/shared/types";
 
 export type CreatorPage =
   | "projects"
+  | "project"
   | "workspace"
   | "prd"
   | "database"
@@ -11,6 +12,7 @@ export type CreatorPage =
   | "publish"
   | "deployments"
   | "tickets"
+  | "settings"
   | "ticket-detail"
   | "not-found";
 
@@ -53,13 +55,15 @@ export function creatorRouteFromPath(pathname: string): CreatorRoute {
   }
   if (segments.length !== 4) return { page: "not-found", projectId };
   const pageBySuffix = {
+    project: "project",
     prd: "prd",
     database: "database",
     versions: "versions",
     users: "users",
     publish: "publish",
     deployments: "deployments",
-    tickets: "tickets"
+    tickets: "tickets",
+    settings: "settings"
   } as const;
   return pageBySuffix[suffix as keyof typeof pageBySuffix]
     ? { page: pageBySuffix[suffix as keyof typeof pageBySuffix], projectId }
@@ -70,13 +74,15 @@ export function creatorPathForPage(projectId: string, page: CreatorSelectablePag
   if (page === "projects") return "/creator/";
   const base = `/creator/projects/${encodeURIComponent(projectId)}`;
   const suffix: Partial<Record<CreatorSelectablePage, string>> = {
+    project: "project",
     prd: "prd",
     database: "database",
     versions: "versions",
     users: "users",
     publish: "publish",
     deployments: "deployments",
-    tickets: "tickets"
+    tickets: "tickets",
+    settings: "settings"
   };
   return page === "workspace" ? base : `${base}/${suffix[page]}`;
 }
@@ -120,54 +126,62 @@ export const creatorPageCopy: Record<
   projects: {
     eyebrow: "Creator Projects",
     title: "Projects",
-    description: "Select a project or start a new app from a business problem."
+    description: "Choose a project or start a new application from a business problem."
+  },
+  project: {
+    eyebrow: "Project: Leave Management",
+    title: "Project: Leave Management",
+    description: "Review project status, key information, and common actions."
   },
   workspace: {
     eyebrow: "Creator Workspace",
     title: "Creator Workspace: Leave Management",
-    description:
-      "Use prompts to build or update the selected project's frontend preview."
+    description: "Build and refine the application through guided AI changes."
   },
   prd: {
     eyebrow: "PRD Baseline",
     title: "PRD Review: Leave Management",
-    description: "Review PRD sections and version history, then confirm a baseline when ready."
+    description: "Review requirements, version history, and the confirmed product baseline."
   },
   database: {
     eyebrow: "Project Data",
     title: "Database",
-    description: "Inspect the selected project's database schema, tables, and records."
+    description: "Review project schema, tables, and records."
   },
   versions: {
     eyebrow: "Frontend History",
     title: "Frontend Versions",
-    description:
-      "Review frontend checkpoints and restore a version without changing backend services or data."
+    description: "Review checkpoints and restore the frontend without changing backend data."
   },
   users: {
     eyebrow: "Access Management",
     title: "Users & Roles",
-    description: "Manage app members, invitations, access requests, and the role permission matrix."
+    description: "Manage members, invitations, access requests, and role permissions."
   },
   publish: {
     eyebrow: "Publish & Registry",
     title: "Publish & Registry",
-    description: "Review the manifest and readiness checklist, then register the app for end users."
+    description: "Review readiness and register the application for end users."
   },
   deployments: {
     eyebrow: "Deployment History",
     title: "Deployments",
-    description: "Review environments, commits, health, and deployment times reported by the Platform API."
+    description: "Review deployment environments, versions, health, and timestamps."
   },
   tickets: {
     eyebrow: "Feedback Loop",
     title: "Tickets & Changes",
-    description: "Turn bug reports and Horizon Store feedback into PRD changes or AI prompts."
+    description: "Turn Store feedback into tracked product changes."
+  },
+  settings: {
+    eyebrow: "Project Administration",
+    title: "Project Settings",
+    description: "Manage project information and permanent deletion."
   },
   "ticket-detail": {
     eyebrow: "Feedback Detail",
     title: "Ticket Detail",
-    description: "Review ticket details and actions supported by the Platform API."
+    description: "Review ticket details and available Platform API actions."
   },
   "not-found": {
     eyebrow: "Creator",

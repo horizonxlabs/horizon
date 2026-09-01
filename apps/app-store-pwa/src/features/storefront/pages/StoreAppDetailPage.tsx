@@ -289,6 +289,14 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
         <aside className="store-app-action-rail" aria-label="Application actions">
           <section className="store-detail-panel">
             <h2>Current access</h2>
+            {app.subdomainUrl ? (
+              <p className="store-app-access-url">
+                <span>Access URL</span>
+                <span className="store-app-access-url-value" title={app.subdomainUrl}>
+                  {app.subdomainUrl}
+                </span>
+              </p>
+            ) : null}
             <p>{app.myRole ? `Role: ${app.myRole}` : "No assigned role"}</p>
             {supports("open") ? (
               <>
@@ -300,7 +308,7 @@ export function StoreAppDetailPage({ appSlug }: { appSlug: string }) {
                     setLaunchState({ pending: true });
                     void api
                       .authorizeStoreAppLaunch(app.slug, app.route)
-                      .then(() => window.location.assign(app.route))
+                      .then((session) => window.location.assign(session.launchUrl))
                       .catch((error: unknown) =>
                         setLaunchState({
                           pending: false,

@@ -17,11 +17,23 @@ export interface MinioLike {
 interface MinioPresignLike {
   bucketExists(bucket: string): Promise<boolean>;
   makeBucket(bucket: string): Promise<void>;
+  removeObject(bucket: string, objectKey: string): Promise<void>;
+  removeBucket(bucket: string): Promise<void>;
+  listObjectsV2?(bucket: string, prefix: string, recursive: boolean): AsyncIterable<{ name?: string }>;
   presignedPutObject(bucket: string, objectKey: string, expirySeconds: number): Promise<string>;
 }
 
 export interface ProjectFileUploadUrlIssuer {
+  leaseDurationMs?: number;
   issue(bucket: string, objectKey: string): Promise<{ url: string; expiresAt: Date }>;
+  remove(bucket: string, objectKey: string): Promise<void>;
+  revokeBucket?(bucket: string, objectKeys: string[]): Promise<void>;
+}
+
+export const PROJECT_FILE_UPLOAD_URL_TTL_MS = 15 * 60 * 1_000;
+
+export function projectFileBucketName(projectId: string): string {
+  return `project-file-${createHash("sha256").update(projectId).digest("hex").slice(0, 40)}`;
 }
 
 /**
@@ -31,6 +43,8 @@ export interface ProjectFileUploadUrlIssuer {
  */
 export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisionerOptions, "clientFactory"> & {
   publicBaseUrl: string;
+  revokeMaxAttempts?: number;
+  revokeBaseDelayMs?: number;
   clientFactory?: (cfg: {
     endPoint: string;
     port: number;
@@ -65,12 +79,58 @@ export function createMinioProjectFileUploadUrlIssuer(opts: Omit<MinioProvisione
   const signingClient = opts.signingClientFactory
     ? opts.signingClientFactory(signingOptions)
     : new MinioClient(signingOptions);
+  const revokeBucket = async (bucket: string, objectKeys: string[]) => {
+    const maxAttempts = Math.max(1, opts.revokeMaxAttempts ?? 8);
+    const retryable = new Set(["BucketNotEmpty", "Conflict", "SlowDown", "InternalError", "ServiceUnavailable"]);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const keys = new Set(objectKeys);
+        if (managementClient.listObjectsV2) {
+          for await (const object of managementClient.listObjectsV2(bucket, "", true)) {
+            if (object.name) keys.add(object.name);
+          }
+        }
+        await Promise.all([...keys].map(async (objectKey) => {
+          try { await managementClient.removeObject(bucket, objectKey); }
+          catch (error) {
+            const code = (error as { code?: string }).code;
+            if (code !== "NoSuchKey" && code !== "NoSuchBucket") throw error;
+          }
+        }));
+        await managementClient.removeBucket(bucket);
+        return;
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "NoSuchBucket") return;
+        if (!retryable.has(String(code))) throw error;
+        lastError = error;
+        if (attempt < maxAttempts) {
+          const delay = Math.min((opts.revokeBaseDelayMs ?? 100) * 2 ** (attempt - 1), 1_000);
+          if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw new Error(`Project upload bucket '${bucket}' remains non-empty after ${maxAttempts} attempts`, { cause: lastError });
+  };
   return {
+    leaseDurationMs: PROJECT_FILE_UPLOAD_URL_TTL_MS,
     async issue(bucket, objectKey) {
-      const expiresInSeconds = 15 * 60;
+      const expiresInSeconds = PROJECT_FILE_UPLOAD_URL_TTL_MS / 1_000;
       if (!(await managementClient.bucketExists(bucket))) await managementClient.makeBucket(bucket);
       const signed = await signingClient.presignedPutObject(bucket, objectKey, expiresInSeconds);
       return { url: signed, expiresAt: new Date(Date.now() + expiresInSeconds * 1_000) };
+    },
+    async remove(bucket, objectKey) {
+      try {
+        await managementClient.removeObject(bucket, objectKey);
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code !== "NoSuchKey" && code !== "NoSuchBucket") throw error;
+      }
+    },
+    async revokeBucket(bucket, objectKeys) {
+      await revokeBucket(bucket, objectKeys);
     }
   };
 }

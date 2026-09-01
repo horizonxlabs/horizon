@@ -5,6 +5,10 @@ import { test } from "node:test";
 const schema = readFileSync("apps/platform-api/prisma/schema.prisma", "utf8");
 const seed = readFileSync("apps/platform-api/prisma/seed.ts", "utf8");
 const repositories = readFileSync("apps/platform-api/src/persistence/core-repositories.ts", "utf8");
+const projectRepository = readFileSync(
+  "apps/platform-api/src/persistence/project-repository.ts",
+  "utf8"
+);
 
 test("core persistence contract matches Prisma user project and audit models", () => {
   for (const model of [
@@ -29,7 +33,7 @@ test("core persistence repository uses Prisma delegate names and relation includ
   }
 
   assert.match(repositories, /roles: \{ include: \{ role: true \} \}/);
-  assert.match(repositories, /project\.create/);
+  assert.match(projectRepository, /client\.project\.create/);
   assert.match(repositories, /auditLog\.create/);
   assert.match(repositories, /createPrismaCorePersistence/);
   assert.match(repositories, /MemoryCorePersistenceClient/);

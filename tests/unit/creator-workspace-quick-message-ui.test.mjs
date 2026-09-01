@@ -74,7 +74,10 @@ test("the recommended Quick Message is identified without relying on color", asy
   });
 
   const section = renderer.root.findByType("section");
+  const track = renderer.root.findByProps({ className: "vibe-live-suggestion-track" });
   const firstButton = renderer.root.findAllByType("button")[0];
   assert.equal(section.props["aria-label"], "Suggested next");
+  assert.equal(track.props["aria-label"], "Suggested prompts");
+  assert.equal(track.props.tabIndex, 0);
   assert.equal(firstButton.props["aria-label"], "Recommended: Improve Sales KPI");
 });

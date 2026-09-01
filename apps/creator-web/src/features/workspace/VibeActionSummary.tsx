@@ -1,5 +1,4 @@
-import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { VibeActionRow } from "./VibeActionRow";
 import { summarizeActions, type VibeAction } from "./vibe-actions";
 
@@ -7,46 +6,34 @@ import { summarizeActions, type VibeAction } from "./vibe-actions";
 // (with its live line counter); when done, everything rolls up into one summary line that
 // expands to the full per-file detail on demand.
 export function VibeActionSummary({ actions }: { actions: VibeAction[] }): ReactNode {
-  const [open, setOpen] = useState(false);
   if (!actions.length) return null;
   const summary = summarizeActions(actions);
-  const runningActions = actions.filter((action) => action.status === "running");
-  const label =
-    `${summary.done > 0 ? `${summary.done} actions completed` : ""}` +
-    `${summary.lines > 0 ? ` · ${summary.lines} lines` : ""}` +
-    `${summary.failed > 0 ? ` · ${summary.failed} failed` : ""}`;
+  const isActive = summary.running > 0;
+  const completedLabel = `${actions.length} completed technical action${
+    actions.length === 1 ? "" : "s"
+  }`;
+  const evidence = [
+    summary.lines > 0 ? `${summary.lines} lines` : "",
+    summary.failed > 0 ? `${summary.failed} failed` : ""
+  ].filter(Boolean).join(" · ");
 
-  if (actions.length <= 2 && runningActions.length === 0) {
-    return (
-      <div className="vibe-message-actions">
+  return (
+    <details
+      className={`vibe-technical-details${summary.failed > 0 ? " has-failed" : ""}`}
+      open={isActive || undefined}
+    >
+      <summary className="vibe-action-rollup">
+        <span aria-hidden="true">{isActive ? "⚙" : summary.failed > 0 ? "⚠" : "✓"}</span>
+        <span>
+          {isActive ? "Working" : completedLabel}
+          {evidence ? ` · ${evidence}` : ""}
+        </span>
+      </summary>
+      <div className="vibe-technical-details-body vibe-message-actions">
         {actions.map((action, index) => (
           <VibeActionRow key={`${action.id}:${index}`} action={action} />
         ))}
       </div>
-    );
-  }
-
-  return (
-    <div className="vibe-message-actions">
-      <button
-        type="button"
-        className={`vibe-action-rollup${summary.failed > 0 ? " has-failed" : ""}`}
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span>
-          {summary.running > 0 ? "⚙ Working" : summary.failed > 0 ? "⚠" : "✓"} {label.trim()}
-        </span>
-      </button>
-      {open &&
-        actions.map((action, index) => (
-          <VibeActionRow key={`${action.id}:${index}`} action={action} />
-        ))}
-      {!open &&
-        runningActions.map((action, index) => (
-          <VibeActionRow key={`run-${action.id}:${index}`} action={action} />
-        ))}
-    </div>
+    </details>
   );
 }

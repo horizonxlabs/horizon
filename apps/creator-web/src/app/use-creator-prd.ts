@@ -8,13 +8,24 @@ import {
 } from "@/app/creator-app-helpers";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 import type { CreatorProjectView } from "@/shared/types";
+import type { CreatorProjectRuntimeRequest } from "@/app/creator-project-runtime";
 
 type PendingPrdGeneration = { projectId: string; startedAt: number };
+export type CreatorPrdStatus = "loading" | "ready" | "empty" | "error";
+export type CreatorPrdErrorSource = "load" | "generation";
+export type CreatorPrdFeedbackTone = "success" | "warning" | "danger";
 
-export function useCreatorPrd(selectedProject: CreatorProjectView) {
+export function useCreatorPrd(
+  selectedProject: CreatorProjectView,
+  dependencies: { loadPrdState?: typeof loadPrdState } = {}
+) {
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto>();
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
-  const [prdMessage, setPrdMessage] = useState("Loading PRD state from Platform API.");
+  const [prdStatus, setPrdStatus] = useState<CreatorPrdStatus>("loading");
+  const [prdMessage, setPrdMessage] = useState("Loading PRD.");
+  const [prdTechnicalDetails, setPrdTechnicalDetails] = useState<string>();
+  const [prdErrorSource, setPrdErrorSource] = useState<CreatorPrdErrorSource>();
+  const [prdFeedbackTone, setPrdFeedbackTone] = useState<CreatorPrdFeedbackTone>();
   const [isGeneratingPrdDraft, setIsGeneratingPrdDraft] = useState(false);
   const [pendingGeneration, setPendingGeneration] = useState<PendingPrdGeneration>();
   // Two completion paths race (the direct response and the poll); refs let whichever lands
@@ -23,13 +34,31 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
   pendingRef.current = pendingGeneration;
   const selectedProjectIdRef = useRef(selectedProject.id);
   selectedProjectIdRef.current = selectedProject.id;
+  const refreshGenerationRef = useRef(0);
+  const manualActionRef = useRef({ projectId: selectedProject.id, generation: 0 });
+  if (manualActionRef.current.projectId !== selectedProject.id) {
+    manualActionRef.current = {
+      projectId: selectedProject.id,
+      generation: manualActionRef.current.generation + 1
+    };
+  }
 
-  const visiblePrdSections = currentPrdVersion?.sections?.map((section) => ({
-    key: section.key,
-    title: section.title,
-    body: section.body,
-    order: String(section.order)
-  })) ?? [];
+  function beginManualAction(projectId: string) {
+    const generation = manualActionRef.current.generation + 1;
+    manualActionRef.current = { projectId, generation };
+    return () =>
+      manualActionRef.current.projectId === projectId &&
+      manualActionRef.current.generation === generation &&
+      selectedProjectIdRef.current === projectId;
+  }
+
+  const visiblePrdSections =
+    currentPrdVersion?.sections?.map((section) => ({
+      key: section.key,
+      title: section.title,
+      body: section.body,
+      order: String(section.order)
+    })) ?? [];
   const visibleVersionRows = prdVersionList.map((version) => ({
     version: version.version,
     status: version.status,
@@ -37,68 +66,123 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
     author: selectedProject.owner
   }));
 
-  async function refreshPrdState(projectId: string) {
-    const prdState = await loadPrdState(projectId);
-    setCurrentPrdVersion(prdState.current);
-    setPrdVersionList(prdState.versions);
-    setPrdMessage(
-      prdState.current
-        ? "PRD loaded from Platform API."
-        : "No PRD version is available from Platform API yet. Generate a draft before confirming a baseline."
-    );
+  async function refreshPrdState(projectId: string, runtimeRequest?: CreatorProjectRuntimeRequest) {
+    const refreshGeneration = ++refreshGenerationRef.current;
+    const isCurrent = () =>
+      refreshGeneration === refreshGenerationRef.current &&
+      (runtimeRequest
+        ? runtimeRequest.projectId === projectId && runtimeRequest.isCurrent()
+        : selectedProjectIdRef.current === projectId);
+    if (isCurrent()) {
+      setPrdStatus("loading");
+      setPrdMessage("Loading PRD.");
+      setPrdTechnicalDetails(undefined);
+      setPrdErrorSource(undefined);
+      setPrdFeedbackTone(undefined);
+    }
+    try {
+      const prdState = await (dependencies.loadPrdState ?? loadPrdState)(
+        projectId,
+        runtimeRequest?.signal
+      );
+      if (!isCurrent()) return;
+      setCurrentPrdVersion(prdState.current);
+      setPrdVersionList(prdState.versions);
+      setPrdStatus(prdState.current ? "ready" : "empty");
+      setPrdMessage(prdState.current ? "PRD is ready for review." : "No PRD draft yet.");
+    } catch (error) {
+      if (!isCurrent()) return;
+      setCurrentPrdVersion(undefined);
+      setPrdVersionList([]);
+      setPrdStatus("error");
+      setPrdErrorSource("load");
+      setPrdMessage("PRD could not be loaded.");
+      setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   }
 
   async function handleConfirmPrdBaseline() {
     if (!selectedProject.id || !currentPrdVersion) {
       setPrdMessage("No API-backed PRD draft is available to confirm.");
+      setPrdFeedbackTone("warning");
       return;
     }
+    const projectId = selectedProject.id;
+    const isCurrent = beginManualAction(projectId);
     try {
-      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(selectedProject.id, {
+      const baseline = await createCreatorPlatformClient().confirmPrdBaseline(projectId, {
         versionId: currentPrdVersion.id
       });
+      if (!isCurrent()) return;
       setCurrentPrdVersion(baseline);
       setPrdVersionList((current) => [
         baseline,
         ...current.filter((version) => version.id !== baseline.id)
       ]);
-      setPrdMessage(`Baseline v${baseline.version} confirmed through Platform API.`);
+      setPrdStatus("ready");
+      setPrdMessage(`Baseline v${baseline.version} confirmed.`);
+      setPrdFeedbackTone("success");
+      setPrdTechnicalDetails(undefined);
     } catch (error) {
-      setPrdMessage(
-        error instanceof Error
-          ? `Baseline confirmation failed: ${error.message}`
-          : "Baseline confirmation failed. No local state was changed."
-      );
+      if (!isCurrent()) return;
+      setPrdMessage("Baseline could not be confirmed. The current PRD is unchanged.");
+      setPrdFeedbackTone("danger");
+      setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
     }
   }
 
   async function handleGeneratePrdDraft() {
     if (!selectedProject.id) {
       setPrdMessage("Select a project before generating a PRD draft.");
+      setPrdFeedbackTone("warning");
       return;
     }
+    const projectId = selectedProject.id;
+    const isCurrent = beginManualAction(projectId);
     setIsGeneratingPrdDraft(true);
-    setPrdMessage("Generating PRD draft through the governed AI route.");
+    setPrdMessage("Generating PRD draft.");
+    setPrdFeedbackTone(undefined);
+    setPrdTechnicalDetails(undefined);
+    setPrdErrorSource(undefined);
     try {
-      const draft = await createCreatorPlatformClient().generatePrdDraft(selectedProject.id);
+      const draft = await createCreatorPlatformClient().generatePrdDraft(projectId);
+      if (!isCurrent()) return;
       setCurrentPrdVersion(draft);
       setPrdVersionList((current) => [
         draft,
         ...current.filter((version) => version.id !== draft.id)
       ]);
-      setPrdMessage(`PRD draft v${draft.version} generated through Platform API.`);
+      setPrdStatus("ready");
+      setPrdMessage(`PRD draft v${draft.version} generated.`);
+      setPrdFeedbackTone("success");
     } catch (error) {
-      setPrdMessage(
-        `PRD generation failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      if (!isCurrent()) return;
+      setPrdStatus("error");
+      setPrdErrorSource("generation");
+      setPrdMessage("PRD draft could not be generated.");
+      setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
-      setIsGeneratingPrdDraft(false);
+      if (isCurrent()) setIsGeneratingPrdDraft(false);
     }
   }
 
   function resetPrdState() {
+    refreshGenerationRef.current += 1;
+    manualActionRef.current = {
+      projectId: selectedProjectIdRef.current,
+      generation: manualActionRef.current.generation + 1
+    };
+    pendingRef.current = undefined;
+    setPendingGeneration(undefined);
+    setIsGeneratingPrdDraft(false);
     setCurrentPrdVersion(undefined);
     setPrdVersionList([]);
+    setPrdStatus("loading");
+    setPrdMessage("Loading PRD.");
+    setPrdTechnicalDetails(undefined);
+    setPrdErrorSource(undefined);
+    setPrdFeedbackTone(undefined);
   }
 
   function settlePendingGeneration(projectId: string, draft?: PrdVersionDto) {
@@ -107,8 +191,14 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
     setIsGeneratingPrdDraft(false);
     if (!draft || selectedProjectIdRef.current !== projectId) return;
     setCurrentPrdVersion(draft);
-    setPrdVersionList((current) => [draft, ...current.filter((version) => version.id !== draft.id)]);
-    setPrdMessage(`PRD draft v${draft.version} generated through Platform API.`);
+    setPrdVersionList((current) => [
+      draft,
+      ...current.filter((version) => version.id !== draft.id)
+    ]);
+    setPrdStatus("ready");
+    setPrdMessage(`PRD draft v${draft.version} generated.`);
+    setPrdFeedbackTone("success");
+    setPrdTechnicalDetails(undefined);
   }
 
   // The wizard closes right after createProject; the multi-minute PRD call runs here instead,
@@ -116,13 +206,16 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
   function beginBackgroundPrdGeneration(projectId: string) {
     setIsGeneratingPrdDraft(true);
     setPendingGeneration({ projectId, startedAt: Date.now() });
-    setPrdMessage("Generating the first PRD draft in the background — this can take a few minutes.");
+    setPrdMessage("Generating the first PRD draft. This can take a few minutes.");
+    setPrdFeedbackTone(undefined);
+    setPrdTechnicalDetails(undefined);
+    setPrdErrorSource(undefined);
     void runBackgroundPrdGeneration(createCreatorPlatformClient(), projectId, {
       onDraft: (draft) => settlePendingGeneration(projectId, draft),
       onError: () => {
         // The server keeps generating even when this request dies — let the poll finish the job.
         if (pendingRef.current?.projectId === projectId) {
-          setPrdMessage("Generation call was interrupted; watching for the draft to appear.");
+          setPrdMessage("Generation is continuing. Waiting for the draft to appear.");
         }
       }
     });
@@ -134,7 +227,9 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
       if (isPrdGenerationTimedOut(pendingGeneration.startedAt, Date.now())) {
         setPendingGeneration(undefined);
         setIsGeneratingPrdDraft(false);
-        setPrdMessage("PRD generation is taking longer than expected. Retry generating the draft.");
+        setPrdStatus("error");
+        setPrdErrorSource("generation");
+        setPrdMessage("PRD generation is taking longer than expected.");
         return;
       }
       void loadPrdState(pendingGeneration.projectId)
@@ -154,6 +249,10 @@ export function useCreatorPrd(selectedProject: CreatorProjectView) {
     prdVersionList,
     setPrdVersionList,
     prdMessage,
+    prdStatus,
+    prdTechnicalDetails,
+    prdErrorSource,
+    prdFeedbackTone,
     setPrdMessage,
     isGeneratingPrdDraft,
     visiblePrdSections,

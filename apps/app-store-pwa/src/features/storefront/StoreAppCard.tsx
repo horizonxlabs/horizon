@@ -1,11 +1,11 @@
-import type { AppStoreItem } from "@evcp/types";
 import { navigateBrowserPath, ToneBadge } from "@evcp/ui";
 import { Heart } from "lucide-react";
 import { useState, type MouseEvent } from "react";
+import type { StoreAppItem } from "./bootstrap";
 import { useStorefront } from "./StoreProvider";
 import { storeAppAccent, storeAppCardAction } from "./store-app-card";
 
-export function StoreAppCard({ app }: { app: AppStoreItem }) {
+export function StoreAppCard({ app }: { app: StoreAppItem }) {
   const { api, device, toggleFavorite, recordRecent } = useStorefront();
   const action = storeAppCardAction(app);
   const isFavorite = device.favorites.includes(app.slug);
@@ -23,12 +23,14 @@ export function StoreAppCard({ app }: { app: AppStoreItem }) {
     if (!action.href) return;
     event.preventDefault();
     if (action.kind === "open") {
+      const route = app.route;
+      if (!route) return;
       if (launchState.pending) return;
       recordRecent(app.slug);
       setLaunchState({ pending: true });
       try {
-        await api.authorizeStoreAppLaunch(app.slug, action.href);
-        window.location.assign(action.href);
+        const session = await api.authorizeStoreAppLaunch(app.slug, route);
+        window.location.assign(session.launchUrl);
       } catch (error) {
         setLaunchState({
           pending: false,
@@ -58,6 +60,14 @@ export function StoreAppCard({ app }: { app: AppStoreItem }) {
         </ToneBadge>
         <span>{app.health}</span>
       </div>
+      {app.subdomainUrl ? (
+        <p className="store-app-access-url">
+          <span>Access URL</span>
+          <span className="store-app-access-url-value" title={app.subdomainUrl}>
+            {app.subdomainUrl}
+          </span>
+        </p>
+      ) : null}
       <button
         type="button"
         className="store-icon-button"

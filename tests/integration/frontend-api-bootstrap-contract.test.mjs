@@ -186,14 +186,16 @@ test("Store and Creator fail closed instead of creating local success evidence",
   assert.match(creatorTicketInboxSource, /refreshCreatorTicketInbox/);
   assert.match(creatorTicketActionsSource, /\/creator\/projects\//);
   assert.match(creatorTicketActionsSource, /encodeURIComponent\(projectId\)/);
-  assert.match(creatorTicketInboxSource, /No local ticket records are shown/);
+  assert.match(creatorTicketInboxSource, /setItems\(\[\]\)/);
+  assert.match(creatorTicketInboxSource, /setStatus\("error"\)/);
   assert.doesNotMatch(creatorTicketsSource, /creatorTickets|prdChangeRows/);
   assert.doesNotMatch(creatorAppHookSource, /prdSections|versionRows/);
   assert.doesNotMatch(
     creatorPublishPageSource,
     /dep_leave_management_001|\/apps\/\$\{selectedProject\.id\}/
   );
-  assert.match(creatorPublishPageSource, /No deployment record/);
+  assert.match(creatorPublishPageSource, /\{visibleDeployment \?/);
+  assert.match(creatorPublishPageSource, /kind="empty"/);
 });
 
 test("Admin operations and audit views use Platform API data and fail closed", () => {
@@ -289,7 +291,7 @@ test("Admin and Creator shells render separate page branches instead of one comb
   assert.match(uiStyles, /\.admin-page-stack/);
   assert.match(caddyfile, /redir \/creator \/creator\/ 308/);
   assert.match(caddyfile, /redir \/store \/store\/ 308/);
-  assert.match(appConfig, /route: "\/creator\/"/);
+  assert.doesNotMatch(appConfig, /route: "\/creator\/"/);
   assert.match(appConfig, /route: "\/store\/"/);
 });
 
@@ -325,13 +327,18 @@ test("Creator workspace actions are API-client backed", () => {
 });
 
 test("Creator project wizard creates a real project and starts the first AI build", () => {
-  for (const method of ["createProject", "generatePrdDraft", "listPrdVersions", "getCurrentPrd"]) {
+  for (const method of ["createProject", "generatePrdDraft"]) {
     assert.match(apiClient, new RegExp(`${method}\\(`));
     assert.match(creatorSource, new RegExp(method));
   }
+  for (const method of ["listPrdVersions", "getCurrentPrd"]) {
+    assert.match(apiClient, new RegExp(`${method}\\(`));
+  }
+  assert.match(creatorSource, /\/prd\/versions/);
+  assert.match(creatorSource, /\/prd`/);
+  assert.match(creatorSource, /\{ signal \}/);
 
   assert.match(creatorSource, /handleCreateProjectSubmit/);
-  assert.match(creatorSource, /"Create Project"/);
   assert.match(creatorSource, /client\.createProject/);
   assert.match(creatorSource, /client\.generatePrdDraft/);
   assert.match(

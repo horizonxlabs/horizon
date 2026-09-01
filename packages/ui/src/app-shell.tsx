@@ -114,7 +114,7 @@ export function AppShell({
         ref={mobileTriggerRef}
         className={cn(
           "focus-visible:outline-primary hidden focus-visible:outline-2 focus-visible:outline-offset-2",
-          "max-md:rounded-control max-md:border-border max-md:bg-surface max-md:text-body max-md:shadow-card max-md:fixed max-md:top-4 max-md:left-4 max-md:z-30 max-md:inline-flex max-md:h-[42px] max-md:w-[42px] max-md:items-center max-md:justify-center max-md:border"
+          "max-md:rounded-control max-md:border-border max-md:bg-surface max-md:text-body max-md:shadow-card max-md:fixed max-md:top-4 max-md:left-4 max-md:z-30 max-md:inline-flex max-md:h-[44px] max-md:w-[44px] max-md:items-center max-md:justify-center max-md:border"
         )}
         aria-expanded={isMobileMenuOpen}
         aria-controls={sidebarId}
@@ -153,6 +153,7 @@ export function AppShell({
         {/* Brand header */}
         <div
           className={cn(
+            "app-shell-brand",
             "flex items-center gap-[10px] px-1",
             logo ? (sidebarContext ? "pt-1.5 pb-1" : "pt-1.5 pb-[18px]") : "pt-1 pb-4",
             collapsed &&
@@ -196,8 +197,9 @@ export function AppShell({
           <button
             type="button"
             className={cn(
+              "app-shell-sidebar-toggle",
               "rounded-control ml-auto inline-flex h-[30px] min-h-[30px] flex-none items-center justify-center p-0 transition-colors max-md:hidden",
-              collapsed ? "ml-0 w-10" : "w-[30px]",
+              collapsed ? "ml-0 h-11 min-h-11 w-11" : "w-[30px]",
               isLight
                 ? "border-border bg-surface-muted text-muted hover:border-primary hover:bg-primary-soft hover:text-primary-strong border"
                 : "border border-[rgba(226,232,240,0.1)] bg-transparent text-[#94a3b8] hover:border-[rgba(226,232,240,0.2)] hover:bg-white/[0.06] hover:text-[#f8fafc]"
@@ -216,7 +218,7 @@ export function AppShell({
             ref={closeControlRef}
             className={cn(
               "focus-visible:outline-primary hidden focus-visible:outline-2 focus-visible:outline-offset-2",
-              "max-md:rounded-control max-md:border-border max-md:bg-surface-muted max-md:text-muted max-md:ml-auto max-md:inline-flex max-md:h-[30px] max-md:w-[30px] max-md:flex-none max-md:items-center max-md:justify-center max-md:border max-md:text-[20px]"
+              "max-md:rounded-control max-md:border-border max-md:bg-surface-muted max-md:text-muted max-md:ml-auto max-md:inline-flex max-md:h-[44px] max-md:w-[44px] max-md:flex-none max-md:items-center max-md:justify-center max-md:border max-md:text-[20px]"
             )}
             aria-label="Close navigation"
             onClick={() => setIsMobileMenuOpen(false)}
@@ -252,7 +254,7 @@ export function AppShell({
               </>
             );
             const base = cn(
-              "relative flex min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[13.5px] font-semibold no-underline transition-colors",
+              "relative flex min-h-[40px] items-center gap-[11px] rounded-[9px] px-[11px] text-[14px] font-semibold no-underline transition-colors",
               "before:absolute before:left-[-14px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-[0_3px_3px_0] before:opacity-0 before:transition-opacity before:content-['']",
               isLight ? "before:bg-primary" : "before:bg-accent",
               collapsed &&

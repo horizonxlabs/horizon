@@ -189,10 +189,12 @@ test("Sprint 6 API invites users approves access publishes and exposes registry"
   const publish = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${projectId}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "sprint6-publish" }
   });
   assert.equal(publish.status, 201);
   assert.equal(publish.body.data.deployment.status, "published");
+  assert.equal(publish.body.data.registryEntry.subdomain, "sprint6-publish");
 
   const registry = executePlatformApiRequest(services, {
     method: "GET",
@@ -215,7 +217,8 @@ test("Sprint 6 API blocks incomplete publish and denies end user creator-side ma
   const publish = executePlatformApiRequest(services, {
     method: "POST",
     path: `/projects/${project.body.data.id}/publish`,
-    headers: creatorHeaders
+    headers: creatorHeaders,
+    body: { subdomain: "incomplete-sprint6" }
   });
   const denied = executePlatformApiRequest(services, {
     method: "GET",
@@ -236,12 +239,11 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
     "Invite user",
     "Access Requests",
     "App Roles",
-    "Publish Review",
-    "Readiness checklist",
+    "Publish readiness",
     "Publish to App Store",
-    "Deployment Record",
-    "No deployment record",
-    "No registry entry returned"
+    "Latest deployment",
+    "No published deployment yet",
+    "The registry entry will be created during publish"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
@@ -249,8 +251,8 @@ test("Sprint 6 Creator UI exposes app users roles invite access manifest publish
   for (const component of [
     "SectionCard",
     "DataTable",
-    "DefinitionGrid",
-    "DecisionPanel",
+    "CreatorState",
+    "CreatorStatusMessage",
     "ToneBadge"
   ]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));

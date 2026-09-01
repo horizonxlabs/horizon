@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 import { cn } from "../cn";
 
 // px-3 sets horizontal padding only; py-0 is required so the fixed h-10 height
@@ -7,9 +7,11 @@ import { cn } from "../cn";
 const control =
   "h-10 w-full rounded-control border border-border bg-surface px-3 py-0 text-sm text-body outline-none placeholder:text-muted focus:border-primary focus:ring-2 focus:ring-primary-soft";
 
-export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(control, className)} {...rest} />;
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className, ...rest }, ref) {
+    return <input ref={ref} className={cn(control, className)} {...rest} />;
+  }
+);
 
 export function Field({
   label,
@@ -24,11 +26,11 @@ export function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-body">
+      <label htmlFor={htmlFor} className="text-body text-sm font-medium">
         {label}
       </label>
       {children}
-      {hint && <p className="text-xs text-muted">{hint}</p>}
+      {hint && <p className="text-muted text-xs">{hint}</p>}
     </div>
   );
 }

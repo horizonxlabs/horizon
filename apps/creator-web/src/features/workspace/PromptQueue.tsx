@@ -15,7 +15,7 @@ export function PromptQueue({
     <section className="vibe-prompt-queue" aria-label="Queued requests">
       <div className="vibe-prompt-queue-head">
         <ListOrdered size={13} aria-hidden="true" />
-        <span>Queued requests ({items.length})</span>
+        <span>Queued work ({items.length})</span>
       </div>
       <ol className="vibe-prompt-queue-list">
         {items.map((item, index) => (

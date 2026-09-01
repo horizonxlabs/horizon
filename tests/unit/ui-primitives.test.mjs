@@ -215,6 +215,22 @@ test("AppShell renders sidebar chrome, nav, and account with token utilities", (
   assert.match(html, /bg-\[#0b1220\]/);
 });
 
+test("AppShell exposes stable brand and sidebar-toggle styling hooks", () => {
+  const html = renderToStaticMarkup(
+    h(
+      AppShell,
+      {
+        title: "Horizon",
+        navItems: [{ label: "Overview", route: "/creator", icon: "dashboard" }],
+        userName: "Creator"
+      },
+      h("div", null, "Content")
+    )
+  );
+  assert.match(html, /app-shell-brand/);
+  assert.match(html, /app-shell-sidebar-toggle/);
+});
+
 test("AppShell light tone recolors the sidebar with surface tokens", () => {
   const html = renderToStaticMarkup(
     h(

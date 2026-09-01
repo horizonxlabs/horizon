@@ -15,6 +15,9 @@ export type {
 import { PlatformApiError } from "./platform-api-error";
 import type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
 export type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
+import type { AppStorePublishInput, PublishAccessUrlConfigDto } from "./publish-subdomain";
+export { RESERVED_SUBDOMAINS, buildSubdomainUrl, normalizeSubdomainSuggestion, subdomainFromHostname, validateSubdomainLabel } from "./publish-subdomain";
+export type { AppStorePublishInput, PublishAccessUrlConfigDto, SubdomainValidation } from "./publish-subdomain";
 
 export type ApiSuccess<T> = {
   ok: true;
@@ -46,7 +49,8 @@ import type {
   WorkspaceDeploymentDto,
   WorkspacePublishResponse,
   PublishRequestDto,
-  DeploymentRecordDto
+  DeploymentRecordDto,
+  AppStoreRegistryEntryDto
 } from "./deployment-types";
 export type * from "./deployment-types";
 import type {
@@ -86,6 +90,8 @@ export type * from "./system-types";
 import type { SystemUpdateResponseDto, SystemVersionDto } from "./system-types";
 export type * from "./domain-types";
 import type { DomainStatusDto, SetDomainResponseDto } from "./domain-types";
+import type { CreateProjectInput, PlatformProjectDto } from "./project-types";
+export type * from "./project-types";
 export type * from "./installer-types";
 import type {
   InstallerPreflightInput,
@@ -133,30 +139,6 @@ export type CurrentUserResponse = {
   user: PlatformUserDto;
   permissions: string[];
   auth: PlatformAuthEvidenceDto;
-};
-
-export type PlatformProjectDto = {
-  id: string;
-  name: string;
-  status: string;
-  ownerUserId: string;
-  appType: string;
-  businessProblem: string;
-  targetDepartment: string;
-  intendedUsers: string[];
-  dataSensitivity: "public" | "internal" | "confidential" | "restricted";
-  appId?: string;
-  activeFrontendCheckpointId?: string;
-  createdAt: string;
-};
-
-export type CreateProjectInput = {
-  name: string;
-  appType?: string;
-  businessProblem?: string;
-  targetDepartment?: string;
-  intendedUsers?: string[];
-  dataSensitivity?: "public" | "internal" | "confidential" | "restricted";
 };
 
 export type PrdSectionDto = {
@@ -482,23 +464,7 @@ export type PublishReviewResponse = {
   manifest: AppManifestDto;
   checklist: PublishChecklistItemDto[];
   ready: boolean;
-};
-
-export type AppStoreRegistryEntryDto = {
-  id: string;
-  appId?: string;
-  projectId?: string;
-  slug: string;
-  name?: string;
-  route?: string;
-  status: "published";
-  visibility?: "restricted";
-  accessMode?: "membership_or_invite";
-  roleKeys?: string[];
-  ownerUserId?: string;
-  deploymentId?: string;
-  manifestVersion?: string;
-  publishedAt?: string;
+  accessUrlConfig: PublishAccessUrlConfigDto;
 };
 
 export type PublishResultResponse = {
@@ -573,6 +539,12 @@ export class PlatformApiClient {
     return this.postJson<PlatformProjectDto>("/projects", input);
   }
 
+  deleteProject(projectId: string): Promise<{ id: string; deleted: true }> {
+    return this.request<{ id: string; deleted: true }>(`/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE"
+    });
+  }
+
   generatePrdDraft(projectId: string): Promise<PrdVersionDto> {
     return this.request<PrdVersionDto>(`/projects/${encodeURIComponent(projectId)}/prd/generate`, {
       method: "POST"
@@ -618,8 +590,11 @@ export class PlatformApiClient {
   getStoreAppDetail(appSlug: string): Promise<StorefrontAppDetailResponse> {
     return this.request<StorefrontAppDetailResponse>(`/store/apps/${encodeURIComponent(appSlug)}`);
   }
-  authorizeStoreAppLaunch(appSlug: string, routePath: string): Promise<{ authorized: true }> {
-    return this.postJson<{ authorized: true }>(
+  authorizeStoreAppLaunch(
+    appSlug: string,
+    routePath: string
+  ): Promise<{ authorized: true; launchUrl: string }> {
+    return this.postJson<{ authorized: true; launchUrl: string }>(
       `/store/apps/${encodeURIComponent(appSlug)}/launch-session`,
       {
         routePath
@@ -792,23 +767,23 @@ export class PlatformApiClient {
     );
   }
 
-  publishProject(projectId: string): Promise<PublishResultResponse>;
+  publishProject(projectId: string, input: AppStorePublishInput): Promise<PublishResultResponse>;
   publishProject(
     projectId: string,
     environment: "staging" | "production"
   ): Promise<WorkspacePublishResponse>;
   publishProject(
     projectId: string,
-    environment?: "staging" | "production"
+    input: AppStorePublishInput | "staging" | "production"
   ): Promise<PublishResultResponse | WorkspacePublishResponse> {
     const path = `/projects/${encodeURIComponent(projectId)}/publish`;
-    return environment
+    return typeof input === "string"
       ? this.rawRequest<WorkspacePublishResponse>(path, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ environment })
+          body: JSON.stringify({ environment: input })
         })
-      : this.request<PublishResultResponse>(path, { method: "POST" });
+      : this.postJson<PublishResultResponse>(path, input);
   }
 
   promoteDeployment(projectId: string): Promise<WorkspacePublishResponse> {

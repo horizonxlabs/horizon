@@ -2,15 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FrontendCheckpointTimelineDto, FrontendRestoreResultDto } from "@evcp/api-client";
 import { createCreatorPlatformClient } from "@/shared/creator-client";
 
-type FrontendVersionsState = {
+export type FrontendVersionsState = {
   status: "loading" | "ready" | "error";
   message: string;
   timeline?: FrontendCheckpointTimelineDto;
   restoringCheckpointId?: string;
+  failedRestoreCheckpointId?: string;
   lastRestore?: FrontendRestoreResultDto;
 };
 
-type FrontendVersionsClient = {
+export type FrontendVersionsClient = {
   getFrontendCheckpoints(projectId: string): Promise<FrontendCheckpointTimelineDto>;
   restoreFrontendCheckpoint(
     projectId: string,
@@ -65,7 +66,8 @@ export async function restoreFrontendVersion(
     const detail = errorMessage(error);
     return {
       status: "error",
-      message: detail ? `Frontend restore failed: ${detail}` : "Frontend restore failed."
+      message: detail ? `Frontend restore failed: ${detail}` : "Frontend restore failed.",
+      failedRestoreCheckpointId: checkpointId
     };
   }
 
@@ -129,11 +131,13 @@ export function useFrontendVersions(projectId: string, client?: FrontendVersions
 
   async function restoreCheckpoint(checkpointId: string) {
     const generation = ++requestGeneration.current;
+    const retainedTimeline = state.timeline;
     setScopedState((current) => ({
       projectId,
       state: {
         ...(current.projectId === projectId ? current.state : initialFrontendVersionsState),
         restoringCheckpointId: checkpointId,
+        failedRestoreCheckpointId: undefined,
         message: "Restoring the selected frontend checkpoint."
       }
     }));
@@ -147,7 +151,13 @@ export function useFrontendVersions(projectId: string, client?: FrontendVersions
       generation === requestGeneration.current &&
       activeProjectId.current === projectId
     ) {
-      setScopedState({ projectId, state: nextState });
+      setScopedState({
+        projectId,
+        state:
+          nextState.status === "error" && retainedTimeline
+            ? { ...nextState, status: "ready", timeline: retainedTimeline }
+            : nextState
+      });
     }
   }
 

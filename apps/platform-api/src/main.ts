@@ -10,6 +10,8 @@ import { createKeycloakSessionIssuer } from "./keycloak/platform-session-issuer"
 import { PlatformSessionService } from "./auth/platform-session-service";
 import { isPlatformSessionDatabase, MemoryPlatformSessionRepository, PrismaPlatformSessionRepository } from "./persistence/platform-session-repository";
 import { DurableAiJobWorker } from "./ai-governance/durable-job-worker";
+import { createClient } from "redis";
+import { RedisLaunchGrantStore } from "./publish/launch-grant-store";
 
 hydrateFileBackedSecrets();
 
@@ -18,13 +20,22 @@ const host = process.env.HOST ?? "127.0.0.1";
 const corePersistenceMode = resolveCorePersistenceMode();
 
 const runtimeServices = await createRuntimePlatformApiServices();
+const redisUrl = process.env.REDIS_URL;
+if (!redisUrl) throw new Error("REDIS_URL is required for secure subdomain launches");
+const redisClient = createClient({ url: redisUrl });
+redisClient.on("error", () => undefined);
+await redisClient.connect();
 const sessionRepository = corePersistenceMode === "prisma" && isPlatformSessionDatabase(runtimeServices.corePersistenceClient)
   ? new PrismaPlatformSessionRepository(runtimeServices.corePersistenceClient)
   : corePersistenceMode === "memory" ? new MemoryPlatformSessionRepository() : undefined;
 const platformSessions = sessionRepository
   ? new PlatformSessionService(sessionRepository, process.env.SESSION_SECRET || "local-dev-session-secret-change-before-production")
   : undefined;
-const services = { ...runtimeServices, platformSessions };
+const services = {
+  ...runtimeServices,
+  platformSessions,
+  launchGrantStore: new RedisLaunchGrantStore(redisClient)
+};
 if (process.env.KEYCLOAK_ISSUER_URL) {
   const config = readKeycloakConfig(process.env);
   services.keycloakUserManagement = new KeycloakUserService({
@@ -33,6 +44,15 @@ if (process.env.KEYCLOAK_ISSUER_URL) {
   });
 }
 const app = await createPlatformApiApp(services);
+const closeApp = app.close.bind(app);
+app.close = async () => {
+  try {
+    await closeApp();
+  } finally {
+    if (redisClient.isOpen) await redisClient.quit();
+  }
+};
+app.enableShutdownHooks();
 if (process.env.KEYCLOAK_ISSUER_URL) {
   registerKeycloakOidcRoutes(app.getHttpAdapter().getInstance(), new KeycloakOidcService({
     config: readKeycloakConfig(process.env),

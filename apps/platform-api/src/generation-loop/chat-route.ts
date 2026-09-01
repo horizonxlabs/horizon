@@ -1,9 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { WorkspaceChatTurnPart } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
+import type { ProjectLifecycleCoordinator, ProjectMutationFence } from "../project-lifecycle";
 import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { GenerationService } from "./generation-service-types";
 import type { ChatStreamEvent } from "./generation-types";
+import { reduceTurnPart } from "./turn-parts";
 
 type ReplayableTurnEvent = ChatStreamEvent | { type: "prd_version"; id: string; version: string; changeSummary: string } | { type: "bug_report"; bugs: unknown[] };
 
@@ -12,6 +15,7 @@ type ActiveTurn = {
   prompt: string;
   agentMode: string;
   events: ReplayableTurnEvent[];
+  parts: WorkspaceChatTurnPart[];
   controller: AbortController;
   subscribers: Map<ServerResponse, () => void>;
   completion: Promise<void>;
@@ -83,6 +87,7 @@ export function createChatSseHandler(deps: {
   // audited so the team sees them (the thai.css lesson).
   onPlatformBug?: (projectId: string, tag: ErrorTag) => void;
   heartbeatIntervalMs?: number;
+  lifecycle?: ProjectLifecycleCoordinator;
 }) {
   // A generation belongs to a project turn, not to the browser request that happened to start it.
   // Keeping the turn here lets a refreshed Creator UI discover and replay the active stream.
@@ -125,6 +130,9 @@ export function createChatSseHandler(deps: {
   }
 
   function publish(turn: ActiveTurn, event: ReplayableTurnEvent) {
+    if (event.type !== "prd_version" && event.type !== "bug_report") {
+      turn.parts = reduceTurnPart(turn.parts, event);
+    }
     turn.events.push(event);
     for (const res of turn.subscribers.keys()) writeEvent(res, event);
   }
@@ -135,6 +143,7 @@ export function createChatSseHandler(deps: {
     agentMode: string;
     approvedPlan?: string;
     actor: NonNullable<WorkspaceAuthContext["actor"]>;
+    mutation?: { fence?: ProjectMutationFence; release: () => void };
   }): ActiveTurn {
     const controller = new AbortController();
     const turn = {
@@ -142,6 +151,7 @@ export function createChatSseHandler(deps: {
       prompt: input.prompt,
       agentMode: input.agentMode,
       events: [],
+      parts: [],
       controller,
       subscribers: new Map<ServerResponse, () => void>(),
       completion: Promise.resolve()
@@ -157,7 +167,8 @@ export function createChatSseHandler(deps: {
           agentMode: input.agentMode as "auto" | "build" | "plan",
           actor: input.actor,
           approvedPlan: input.approvedPlan,
-          signal: controller.signal
+          signal: controller.signal,
+          assertCurrent: input.mutation?.fence?.assertCurrent
         })) {
           if (event.type === "done") {
             generationDone = true;
@@ -203,6 +214,7 @@ export function createChatSseHandler(deps: {
         publish(turn, { type: "done" });
         finishSubscribers(turn);
         activeTurns.delete(input.projectId);
+        input.mutation?.release();
       }
     })();
     activeTurns.set(input.projectId, turn);
@@ -256,7 +268,13 @@ export function createChatSseHandler(deps: {
       res.end(
         JSON.stringify(
           turn
-            ? { active: true, prompt: turn.prompt, agentMode: turn.agentMode, events: turn.events }
+            ? {
+                active: true,
+                prompt: turn.prompt,
+                agentMode: turn.agentMode,
+                events: turn.events,
+                parts: turn.parts
+              }
             : { active: false }
         )
       );
@@ -298,14 +316,23 @@ export function createChatSseHandler(deps: {
       }
       try {
         const parsed = JSON.parse((await readBody(req)) || "{}") as { commitSha?: unknown };
-        await deps.generationService.restoreToCommit(projectId, String(parsed?.commitSha ?? ""));
+        const restore = () =>
+          deps.generationService.restoreToCommit(projectId, String(parsed?.commitSha ?? ""));
+        await (deps.lifecycle
+          ? deps.lifecycle.runChildMutation(projectId, async (fence) => {
+              await fence.assertCurrent();
+              return restore();
+            })
+          : restore());
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
       } catch (error) {
-        res.writeHead(400, { "content-type": "application/json" });
+        const deletionInProgress =
+          error instanceof Error && error.name === "ProjectDeletionInProgressError";
+        res.writeHead(deletionInProgress ? 409 : 400, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            error: "restore_failed",
+            error: deletionInProgress ? "project_deletion_in_progress" : "restore_failed",
             message: error instanceof Error ? error.message : "Restore failed"
           })
         );
@@ -444,6 +471,26 @@ export function createChatSseHandler(deps: {
       return;
     }
 
+    let mutation: { fence?: ProjectMutationFence; release: () => void } | undefined;
+    try {
+      if (deps.lifecycle?.acquireChildMutationWithFence) {
+        mutation = await deps.lifecycle.acquireChildMutationWithFence(projectId);
+      } else if (deps.lifecycle) {
+        mutation = { release: await deps.lifecycle.acquireChildMutation(projectId) };
+      }
+    } catch (error) {
+      const deletionInProgress =
+        error instanceof Error && error.name === "ProjectDeletionInProgressError";
+      res.writeHead(deletionInProgress ? 409 : 500, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: deletionInProgress ? "project_deletion_in_progress" : "turn_start_failed",
+          message: error instanceof Error ? error.message : "Unable to start generation turn"
+        })
+      );
+      return;
+    }
+
     res.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-cache",
@@ -451,7 +498,14 @@ export function createChatSseHandler(deps: {
       // Tell any buffering proxy (nginx/ingress) not to hold the stream — deliver events as flushed.
       "x-accel-buffering": "no"
     });
-    const turn = startActiveTurn({ projectId, prompt, agentMode, approvedPlan, actor: auth.actor });
+    const turn = startActiveTurn({
+      projectId,
+      prompt,
+      agentMode,
+      approvedPlan,
+      actor: auth.actor,
+      mutation
+    });
     subscribe(turn, res);
     await turn.completion;
   };

@@ -132,7 +132,7 @@ test("whole-file writes to existing unlocked files reach the action runner drift
   });
 });
 
-test("successful build validation tells a local model to stop calling tools", async () => {
+test("successful build validation keeps the agent working on remaining requested work", async () => {
   const { tools } = fixture();
 
   const result = await execute(tools, "run_workspace_command", {
@@ -142,7 +142,8 @@ test("successful build validation tells a local model to stop calling tools", as
 
   assert.equal(result.details.ok, true);
   assert.match(result.content[0].text, /validation passed/i);
-  assert.match(result.content[0].text, /final response/i);
+  assert.match(result.content[0].text, /database migrations and API wiring/i);
+  assert.doesNotMatch(result.content[0].text, /no more tool calls/i);
   assert.doesNotMatch(result.content[0].text, /command output/);
 });
 

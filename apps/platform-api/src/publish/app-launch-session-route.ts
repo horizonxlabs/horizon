@@ -1,4 +1,5 @@
 import { failure, success } from "@evcp/api-client";
+import type { LaunchGrantStore } from "./launch-grant-store";
 
 type Headers = Record<string, string | string[] | undefined>;
 type Response = {
@@ -21,6 +22,16 @@ function safeRuntimeRoute(routePath: string): string {
   return normalized;
 }
 
+const LAUNCH_GRANT_TTL_SECONDS = 60;
+
+export type AppLaunchAuthorization = {
+  appSlug: string;
+  projectId: string;
+  routePath: string;
+  subdomain?: string;
+  subdomainUrl?: string;
+};
+
 export function registerAppLaunchSessionRoute(input: {
   routes: {
     post(
@@ -39,7 +50,8 @@ export function registerAppLaunchSessionRoute(input: {
     headers: Headers,
     appSlug: string,
     requestedRoutePath?: string
-  ): Promise<{ routePath: string }>;
+  ): Promise<AppLaunchAuthorization>;
+  launchGrantStore?: LaunchGrantStore;
   secureCookie?: boolean;
 }): void {
   input.routes.post("/store/apps/:appSlug/launch-session", async (request, response) => {
@@ -50,18 +62,41 @@ export function registerAppLaunchSessionRoute(input: {
     }
 
     try {
-      const { routePath } = await input.authorize(
+      const authorized = await input.authorize(
         request.headers,
         String(request.params?.appSlug ?? ""),
         typeof (request.body as { routePath?: unknown } | undefined)?.routePath === "string"
           ? ((request.body as { routePath: string }).routePath ?? undefined)
           : undefined
       );
+      if (authorized.subdomainUrl) {
+        if (!authorized.subdomain || !input.launchGrantStore) {
+          throw new Error("Subdomain launch is unavailable");
+        }
+        const grantId = await input.launchGrantStore.create(
+          {
+            appSlug: authorized.appSlug,
+            projectId: authorized.projectId,
+            routePath: safeRuntimeRoute(authorized.routePath),
+            subdomain: authorized.subdomain,
+            bearerToken: token
+          },
+          LAUNCH_GRANT_TTL_SECONDS
+        );
+        response.status(200).json(
+          success({
+            authorized: true,
+            launchUrl: `${authorized.subdomainUrl}/__launch/${grantId}`
+          })
+        );
+        return;
+      }
+      const routePath = safeRuntimeRoute(authorized.routePath);
       response.setHeader?.(
         "Set-Cookie",
         `evcp_app_token=${encodeURIComponent(token)}; Path=${safeRuntimeRoute(routePath)}; HttpOnly; SameSite=Strict; Max-Age=900${input.secureCookie ? "; Secure" : ""}`
       );
-      response.status(200).json(success({ authorized: true }));
+      response.status(200).json(success({ authorized: true, launchUrl: routePath }));
     } catch {
       response.status(403).json(failure("FORBIDDEN", "App launch is unavailable"));
     }
