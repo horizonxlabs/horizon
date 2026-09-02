@@ -7,16 +7,22 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TARGET_ROOTS = new Set(["app", "routes", "features", "shared"]);
 const LEGACY_ROOTS = new Set(["components", "hooks", "lib", "pages", "data"]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
-const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa"];
+const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa", "landing-web"];
 const baseline = new Set(
-  JSON.parse(readFileSync(resolve(ROOT, "scripts/quality/frontend-legacy-path-baseline.json"), "utf8"))
+  JSON.parse(
+    readFileSync(resolve(ROOT, "scripts/quality/frontend-legacy-path-baseline.json"), "utf8")
+  )
 );
 
 function listSourceFiles(directory) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? listSourceFiles(path) : SOURCE_EXTENSIONS.has(extname(entry.name)) ? [path] : [];
+    return entry.isDirectory()
+      ? listSourceFiles(path)
+      : SOURCE_EXTENSIONS.has(extname(entry.name))
+        ? [path]
+        : [];
   });
 }
 
@@ -53,7 +59,9 @@ export function checkFrontendArchitecture(files) {
     const isBaseline = baseline.has(file);
     if (!isMain && !isTarget && !isBaseline) {
       const root = LEGACY_ROOTS.has(context.root) ? context.root : context.root || "source root";
-      violations.push(`${file}: new code must use app, features, shared, or routes instead of legacy root ${root}`);
+      violations.push(
+        `${file}: new code must use app, features, shared, or routes instead of legacy root ${root}`
+      );
       continue;
     }
     const source = readFileSync(resolve(ROOT, file), "utf8");
@@ -68,8 +76,13 @@ export function checkFrontendArchitecture(files) {
       const targetsFeature = target[0] === "features";
       const targetFeature = target[1];
       const deepFeatureImport = targetsFeature && target.length > 2 && target[2] !== "index";
-      if ((context.root === "routes" && deepFeatureImport) || (featureName && featureName !== targetFeature && deepFeatureImport)) {
-        violations.push(`${file}: feature imports must use the public @/features/${targetFeature} index.ts API`);
+      if (
+        (context.root === "routes" && deepFeatureImport) ||
+        (featureName && featureName !== targetFeature && deepFeatureImport)
+      ) {
+        violations.push(
+          `${file}: feature imports must use the public @/features/${targetFeature} index.ts API`
+        );
       }
       const isSameFeatureImport =
         featureName && target[0] === "features" && target[1] === featureName;
@@ -83,7 +96,9 @@ export function checkFrontendArchitecture(files) {
 
 function appSourceFiles() {
   return APP_NAMES.flatMap((app) =>
-    listSourceFiles(resolve(ROOT, "apps", app, "src")).map((path) => relative(ROOT, path).replaceAll("\\", "/"))
+    listSourceFiles(resolve(ROOT, "apps", app, "src")).map((path) =>
+      relative(ROOT, path).replaceAll("\\", "/")
+    )
   );
 }
 

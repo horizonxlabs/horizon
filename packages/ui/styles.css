@@ -732,10 +732,17 @@ body {
   width: 30px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+/* Wrapped in @layer components so Tailwind utility classes (grid-cols and gap
+   utilities) on elements that also carry `.grid` always win. An unlayered rule
+   here beats @layer utilities regardless of specificity, which forced every
+   `class="grid ..."` element into an implicit 3-column, 16px-gap layout and
+   silently ignored grid-cols/gap utilities placed alongside it. */
+@layer components {
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
 }
 
 .metrics-grid {
@@ -7628,8 +7635,13 @@ button:disabled {
     max-width: 100%;
   }
 
-  .grid {
-    grid-template-columns: 1fr;
+  /* Same @layer components rationale as the base .grid rule above — keeps this
+     breakpoint override from beating Tailwind's grid-cols and sm:grid-cols
+     utilities below 760px. */
+  @layer components {
+    .grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .metrics-grid,

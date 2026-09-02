@@ -1,0 +1,73 @@
+/* Marketing surface tokens — layer 2, derived only from the layer 1 refs in theme.css.
+   Kept out of theme.css so the product design system is not carrying values used on
+   exactly one page. Classes follow the precedent of creator-project-switcher.css:
+   named classes rather than Tailwind utilities, so the design-system check's shape
+   allowlist (shadow-card, rounded-card/control/pill) does not have to be loosened. */
+@import "./theme.css";
+
+:root {
+  --evcp-gradient-hero:
+    radial-gradient(
+      60% 50% at 18% 0%,
+      color-mix(in oklab, var(--ref-sky-400) 22%, transparent) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 45% at 82% 8%,
+      color-mix(in oklab, var(--ref-blue-100) 85%, transparent) 0%,
+      transparent 72%
+    ),
+    linear-gradient(180deg, var(--ref-white) 0%, var(--ref-slate-50) 100%);
+  --evcp-shadow-glow:
+    0 1px 2px color-mix(in oklab, var(--ref-slate-900) 5%, transparent),
+    0 24px 64px color-mix(in oklab, var(--ref-blue-600) 14%, transparent);
+  --evcp-radius-hero: 28px;
+  --evcp-reveal-distance: 16px;
+}
+
+.evcp-hero-gradient {
+  background-image: var(--evcp-gradient-hero);
+}
+
+.evcp-glow-card {
+  border-radius: var(--evcp-radius-hero);
+  box-shadow: var(--evcp-shadow-glow);
+}
+
+/* quick-start code block. packages/ui/styles.css maps no --color-code-* into the
+   @theme inline block, so `bg-code-bg` / `text-code-text` utilities do not exist —
+   this class uses the theme.css tokens directly instead. */
+.evcp-code-block {
+  background: var(--evcp-color-code-bg);
+  color: var(--evcp-color-code-text);
+}
+
+/* Scroll reveal, CSS-only. The element is visible unconditionally; the fade-in is layered
+   on top only where scroll-driven animations exist and motion is welcome. Every degradation
+   path — no support, reduced motion, no JavaScript at all — ends at "visible, not animated",
+   never at "invisible". An earlier JS-gated version hid content by default and depended on
+   hydration to reveal it, which meant a failed bundle blanked the page. */
+.evcp-reveal {
+  opacity: 1;
+}
+
+@keyframes evcp-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--evcp-reveal-distance));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .evcp-reveal {
+      animation: evcp-reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 22%;
+    }
+  }
+}

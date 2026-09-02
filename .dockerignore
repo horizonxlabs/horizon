@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 dist
 .vite
+.next
 coverage
 playwright-report
 .playwright-mcp

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./apps/creator-web/src/*"]
+      "@/*": ["./apps/creator-web/src/*", "./apps/landing-web/src/*"]
     }
   }
 }
