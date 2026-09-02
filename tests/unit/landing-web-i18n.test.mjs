@@ -47,3 +47,51 @@ test("the bare root redirects to the default locale", () => {
   assert.match(proxy, /\/th/);
   assert.match(proxy, /redirect/i);
 });
+
+const THAI = /[฀-๿]/;
+
+const modules = {
+  hero: await import(`${base}/features/hero`),
+  surfaces: await import(`${base}/features/surfaces`),
+  lifecycle: await import(`${base}/features/lifecycle`),
+  governance: await import(`${base}/features/governance`),
+  selfHost: await import(`${base}/features/self-host`),
+  openSource: await import(`${base}/features/open-source`),
+  faq: await import(`${base}/features/faq`),
+  finalCta: await import(`${base}/features/final-cta`)
+};
+
+function copyOf(mod) {
+  return Object.entries(mod).find(([name]) => name.endsWith("Content"))?.[1];
+}
+
+test("every section provides copy for both locales", () => {
+  for (const [name, mod] of Object.entries(modules)) {
+    const content = copyOf(mod);
+    assert.ok(content, `${name} exports no *Content`);
+    for (const locale of LOCALES) {
+      assert.ok(content[locale], `${name} is missing ${locale} copy`);
+    }
+    assert.deepEqual(
+      Object.keys(content.th).sort(),
+      Object.keys(content.en).sort(),
+      `${name}: the two locales have different shapes`
+    );
+  }
+});
+
+test("Thai copy is Thai and English copy is not", () => {
+  for (const [name, mod] of Object.entries(modules)) {
+    const content = copyOf(mod);
+    assert.match(JSON.stringify(content.th), THAI, `${name}: th copy contains no Thai script`);
+    assert.doesNotMatch(JSON.stringify(content.en), THAI, `${name}: en copy contains Thai script`);
+  }
+});
+
+test("neither language claims a licence or an approval gate", () => {
+  for (const mod of Object.values(modules)) {
+    const all = JSON.stringify(copyOf(mod));
+    assert.doesNotMatch(all, /licen[sc]e/i);
+    assert.doesNotMatch(all, /\d+ of \d+ approvals/);
+  }
+});

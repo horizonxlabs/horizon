@@ -2,19 +2,17 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
+import { DEFAULT_LOCALE } from "@/shared/locale";
 import { lifecycleContent } from "./lifecycle-content";
 
-export function LifecycleSection(_props: LocaleProps) {
+export function LifecycleSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+  const copy = lifecycleContent[locale];
   return (
     <Section id="lifecycle">
-      <SectionHeading
-        eyebrow={lifecycleContent.eyebrow}
-        title={lifecycleContent.title}
-        description={lifecycleContent.description}
-      />
+      <SectionHeading eyebrow={copy.eyebrow} title={copy.title} description={copy.description} />
       <Reveal>
         <ol className="mt-14 grid gap-6 md:grid-cols-5">
-          {lifecycleContent.steps.map((step, index) => (
+          {copy.steps.map((step, index) => (
             <li key={step.title} className="bg-surface border-border-soft rounded-card border p-6">
               <span className="bg-primary-soft text-primary rounded-pill inline-flex h-8 w-8 items-center justify-center text-sm font-semibold">
                 {index + 1}

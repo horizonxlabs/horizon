@@ -55,7 +55,9 @@ test("site config points at the public repository", () => {
     siteConfig.repositoryUrl,
     "https://github.com/0xlabsTeam/EnterpriseVibeCodingPlatform"
   );
-  assert.ok(siteConfig.navItems.length > 0);
+  for (const locale of ["th", "en"]) {
+    assert.ok(siteConfig.navItems[locale].length > 0);
+  }
 });
 
 test("Section renders an anchorable band", () => {
@@ -133,8 +135,8 @@ const { SiteNav } = await import(`${base}/shared/site-nav.tsx`);
 const { SiteFooter } = await import(`${base}/shared/site-footer.tsx`);
 
 test("SiteNav lists configured anchor links and the repository link", () => {
-  const html = renderToStaticMarkup(React.createElement(SiteNav));
-  for (const item of siteConfig.navItems) {
+  const html = renderToStaticMarkup(React.createElement(SiteNav, { locale: "en" }));
+  for (const item of siteConfig.navItems.en) {
     assert.match(html, new RegExp(`href="${item.href}"`));
     assert.match(html, new RegExp(item.label));
   }
@@ -142,15 +144,17 @@ test("SiteNav lists configured anchor links and the repository link", () => {
 });
 
 test("SiteNav renders the logo lockup with meaningful alt text", () => {
-  const html = renderToStaticMarkup(React.createElement(SiteNav));
+  const html = renderToStaticMarkup(React.createElement(SiteNav, { locale: "en" }));
   assert.match(html, /src="\/horizon-logo\.png"/);
   assert.match(html, new RegExp(`alt="${siteConfig.name}`));
 });
 
-test("SiteFooter states the project name without claiming a licence", () => {
-  const html = renderToStaticMarkup(React.createElement(SiteFooter));
-  assert.match(html, /Horizon/);
-  assert.doesNotMatch(html, /licen[sc]e/i);
+test("SiteFooter states the project name without claiming a licence, in both locales", () => {
+  for (const locale of ["th", "en"]) {
+    const html = renderToStaticMarkup(React.createElement(SiteFooter, { locale }));
+    assert.match(html, /Horizon/);
+    assert.doesNotMatch(html, /licen[sc]e/i);
+  }
 });
 
 const { HeroSection } = await import(`${base}/features/hero`);
@@ -163,14 +167,14 @@ const { FaqSection, faqContent } = await import(`${base}/features/faq`);
 const { FinalCtaSection, finalCtaContent } = await import(`${base}/features/final-cta`);
 
 test("HeroSection renders the headline and both actions", () => {
-  const html = renderToStaticMarkup(React.createElement(HeroSection));
+  const html = renderToStaticMarkup(React.createElement(HeroSection, { locale: "en" }));
   assert.match(html, /Ship internal software/);
   assert.match(html, /href="#self-host"/);
   assert.ok(html.includes(siteConfig.repositoryUrl));
 });
 
 test("HeroSection hides the decorative product visual from assistive tech and invents no quorum claim", () => {
-  const html = renderToStaticMarkup(React.createElement(HeroSection));
+  const html = renderToStaticMarkup(React.createElement(HeroSection, { locale: "en" }));
   assert.match(html, /aria-hidden="true"/);
   // Guards against a false quorum claim (e.g. "3 of 4 approvals") that an earlier draft of the
   // hero product visual invented and this branch removed — a fabricated governance number with
@@ -179,43 +183,43 @@ test("HeroSection hides the decorative product visual from assistive tech and in
 });
 
 test("SurfacesSection renders every product surface", () => {
-  const html = renderToStaticMarkup(React.createElement(SurfacesSection));
+  const html = renderToStaticMarkup(React.createElement(SurfacesSection, { locale: "en" }));
   assert.match(html, /id="surfaces"/);
-  for (const item of surfacesContent.items) assert.ok(html.includes(item.title));
+  for (const item of surfacesContent.en.items) assert.ok(html.includes(item.title));
 });
 
 test("LifecycleSection renders every step", () => {
-  const html = renderToStaticMarkup(React.createElement(LifecycleSection));
+  const html = renderToStaticMarkup(React.createElement(LifecycleSection, { locale: "en" }));
   assert.match(html, /id="lifecycle"/);
-  for (const step of lifecycleContent.steps) assert.ok(html.includes(step.title));
+  for (const step of lifecycleContent.en.steps) assert.ok(html.includes(step.title));
 });
 
 test("GovernanceSection renders every control", () => {
-  const html = renderToStaticMarkup(React.createElement(GovernanceSection));
+  const html = renderToStaticMarkup(React.createElement(GovernanceSection, { locale: "en" }));
   assert.match(html, /id="governance"/);
-  for (const item of governanceContent.items) assert.ok(html.includes(item.title));
+  for (const item of governanceContent.en.items) assert.ok(html.includes(item.title));
 });
 
 test("SelfHostSection renders the quick start command", () => {
-  const html = renderToStaticMarkup(React.createElement(SelfHostSection));
+  const html = renderToStaticMarkup(React.createElement(SelfHostSection, { locale: "en" }));
   assert.match(html, /id="self-host"/);
-  assert.ok(html.includes(selfHostContent.command));
+  assert.ok(html.includes(selfHostContent.en.command));
 });
 
 test("OpenSourceSection renders the repository link", () => {
-  const html = renderToStaticMarkup(React.createElement(OpenSourceSection));
+  const html = renderToStaticMarkup(React.createElement(OpenSourceSection, { locale: "en" }));
   assert.match(html, /id="open-source"/);
   assert.ok(html.includes(siteConfig.repositoryUrl));
 });
 
 test("FaqSection renders every question", () => {
-  const html = renderToStaticMarkup(React.createElement(FaqSection));
+  const html = renderToStaticMarkup(React.createElement(FaqSection, { locale: "en" }));
   assert.match(html, /id="faq"/);
-  for (const entry of faqContent.entries) assert.ok(html.includes(entry.question));
+  for (const entry of faqContent.en.entries) assert.ok(html.includes(entry.question));
 });
 
 test("FinalCtaSection repeats both hero actions", () => {
-  const html = renderToStaticMarkup(React.createElement(FinalCtaSection));
+  const html = renderToStaticMarkup(React.createElement(FinalCtaSection, { locale: "en" }));
   assert.match(html, /href="#self-host"/);
   assert.ok(html.includes(siteConfig.repositoryUrl));
 });
@@ -241,7 +245,7 @@ test("the page renders every section in order", async () => {
     'id="self-host"',
     'id="open-source"',
     'id="faq"',
-    finalCtaContent.headline
+    finalCtaContent.en.headline
   ];
   let cursor = -1;
   for (const anchor of order) {
@@ -253,7 +257,7 @@ test("the page renders every section in order", async () => {
 
 test("every navigation anchor resolves to a section the page renders", async () => {
   const html = await renderLandingPage();
-  for (const item of siteConfig.navItems) {
+  for (const item of siteConfig.navItems.en) {
     assert.match(html, new RegExp(`id="${item.href.slice(1)}"`), `no section for ${item.href}`);
   }
 });

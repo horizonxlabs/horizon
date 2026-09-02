@@ -1,9 +1,10 @@
 import Image from "next/image";
 import { ActionButton } from "@/shared/action-button";
 import type { LocaleProps } from "@/shared/locale";
+import { DEFAULT_LOCALE } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
 
-export function SiteNav(_props: LocaleProps) {
+export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
   return (
     <header className="bg-surface/80 border-border-soft sticky top-0 z-50 border-b backdrop-blur">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
@@ -18,7 +19,7 @@ export function SiteNav(_props: LocaleProps) {
           />
         </a>
         <ul className="hidden items-center gap-8 md:flex">
-          {siteConfig.navItems.map((item) => (
+          {siteConfig.navItems[locale].map((item) => (
             <li key={item.href}>
               <a href={item.href} className="text-muted hover:text-body text-sm transition-colors">
                 {item.label}
