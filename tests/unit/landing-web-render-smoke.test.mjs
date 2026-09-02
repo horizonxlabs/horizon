@@ -1,5 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+
+// `next/image`'s CJS module (packages/next/dist/shared/lib/image-external.js) hints its named
+// exports to tooling via the `0 && (module.exports = { default: null, ... })` dead-code pattern
+// that Node's own cjs-module-lexer understands, but tsx's esbuild-based *static* import
+// transform does not — a static `import Image from "next/image"` here resolves to the raw
+// `{ default, getImageProps }` wrapper object rather than the real component, even though the
+// real Next.js build (SWC/webpack, which authored that hint) resolves it correctly. This is a
+// test-tooling limitation, not an app bug: verified by comparing `import Image from "next/image"`
+// (broken here) against `(await import("next/image")).default` (correctly unwraps) under this
+// same tsx runner. Shim it for this test file only so SiteNav's real render logic — nav items,
+// hrefs, labels — still gets genuine render-smoke coverage.
+const NEXT_IMAGE_SHIM_URL = new URL("./__next-image-test-shim__.mjs", import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "next/image") {
+      return { url: NEXT_IMAGE_SHIM_URL, shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url === NEXT_IMAGE_SHIM_URL) {
+      return {
+        format: "module",
+        source: `
+          import { createElement } from "react";
+          export default function Image({ src, alt, width, height, className }) {
+            return createElement("img", { src, alt, width, height, className });
+          }
+          export function getImageProps() { return {}; }
+        `,
+        shortCircuit: true
+      };
+    }
+    return nextLoad(url, context);
+  }
+});
 
 const React = (await import("react")).default;
 globalThis.React = React;
@@ -102,6 +139,12 @@ test("SiteNav lists configured anchor links and the repository link", () => {
     assert.match(html, new RegExp(item.label));
   }
   assert.ok(html.includes(siteConfig.repositoryUrl));
+});
+
+test("SiteNav renders the logo lockup with meaningful alt text", () => {
+  const html = renderToStaticMarkup(React.createElement(SiteNav));
+  assert.match(html, /src="\/horizon-logo\.png"/);
+  assert.match(html, new RegExp(`alt="${siteConfig.name}`));
 });
 
 test("SiteFooter states the project name without claiming a licence", () => {

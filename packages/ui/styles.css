@@ -9,6 +9,7 @@
 @source "./src";
 @import "react-data-grid/lib/styles.css";
 @import "./theme.css";
+@import "./fonts.css";
 @import "./creator-project-switcher.css";
 
 @theme inline {

@@ -11,7 +11,8 @@
       "default": "./src/index.tsx"
     },
     "./styles.css": "./styles.css",
-    "./marketing.css": "./marketing.css"
+    "./marketing.css": "./marketing.css",
+    "./fonts.css": "./fonts.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
