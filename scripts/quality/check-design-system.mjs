@@ -151,7 +151,7 @@ for (const file of files) {
         violations,
         file,
         lineNumber,
-        "local CSS import detected; app surfaces should import only @evcp/ui/styles.css"
+        "local CSS import detected; app surfaces should import only @evcp/ui/styles.css or @evcp/ui/marketing.css"
       );
     }
 

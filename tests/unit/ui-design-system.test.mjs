@@ -58,6 +58,46 @@ test("design system uses EVCP tokens instead of page-only hardcoded styling", ()
   assert.match(css, /button,\s*input,\s*select,\s*textarea,\s*table\s*\{[^}]*font: inherit/s);
 });
 
+test("legacy .grid rules stay wrapped in @layer components so Tailwind's grid-cols/gap utilities keep winning", () => {
+  const css = readFileSync("packages/ui/styles.css", "utf8");
+
+  // The base `.grid` rule (`display: grid; grid-template-columns: repeat(3, ...); gap: ...;`)
+  // must stay inside `@layer components`. An unlayered rule here would beat `@layer utilities`
+  // regardless of specificity, forcing every `class="grid ..."` element into an implicit
+  // 3-column layout and silently overriding Tailwind's grid-cols/gap utilities placed
+  // alongside it — the exact collision this branch fixed.
+  const baseGridMatch = css.match(/@layer components\s*\{\s*\.grid\s*\{\s*display:\s*grid;/);
+  assert.ok(baseGridMatch, "the base .grid rule must be wrapped in @layer components");
+
+  // The `@media (max-width: 760px)` override (`.grid { grid-template-columns: 1fr; }`) must
+  // also stay layered, or unprefixed `grid-cols-*` utilities stop collapsing to one column
+  // below 760px.
+  const overrideMatch = css.match(
+    /@layer components\s*\{\s*\.grid\s*\{\s*grid-template-columns:\s*1fr;/
+  );
+  assert.ok(
+    overrideMatch,
+    "the 760px .grid override must also be wrapped in @layer components"
+  );
+  assert.ok(
+    baseGridMatch.index < overrideMatch.index,
+    "expected the base .grid rule to precede the responsive override"
+  );
+
+  // CSS layer priority (theme < base < components < utilities here) is fixed by the first
+  // mention of the layer names, which happens inside the `@import "tailwindcss"` statement —
+  // rules added to an already-ordered layer later in the file still respect that order. Both
+  // `.grid` rules above must come after that import, or a stray `@layer utilities` block (or a
+  // reordered import) ahead of them could flip components above utilities and silently
+  // resurrect the collision.
+  const tailwindImportIndex = css.indexOf('@import "tailwindcss"');
+  assert.ok(tailwindImportIndex !== -1, "expected the file to import tailwindcss");
+  assert.ok(
+    tailwindImportIndex < baseGridMatch.index,
+    "@layer components rules must come after the tailwindcss import that fixes layer order"
+  );
+});
+
 test("apps preload LINE Seed Thai fonts before React renders", () => {
   for (const htmlPath of [
     "apps/creator-web/index.html",

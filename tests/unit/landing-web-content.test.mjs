@@ -9,14 +9,18 @@ const { governanceContent } = await import(`${base}/features/governance/governan
 const { selfHostContent } = await import(`${base}/features/self-host/self-host-content.ts`);
 const { faqContent } = await import(`${base}/features/faq/faq-content.ts`);
 const { openSourceContent } = await import(`${base}/features/open-source/open-source-content.ts`);
+const { finalCtaContent } = await import(`${base}/features/final-cta/final-cta-content.ts`);
 
-test("hero copy is present and in English", () => {
+test("hero copy is present and contains no Thai codepoints", () => {
+  // This only rejects Thai script specifically (the design system's kitchen-sink primitives
+  // intentionally mix in Thai copy to exercise the font stack) — it does not check for English
+  // more broadly, so keep the name and the regex in sync rather than widening the claim.
   assert.ok(heroContent.headline.length > 0);
   assert.ok(heroContent.subhead.length > 0);
   assert.doesNotMatch(
     `${heroContent.headline} ${heroContent.subhead}`,
     /[฀-๿]/,
-    "landing copy must be English only"
+    "hero copy must not contain Thai script"
   );
 });
 
@@ -74,4 +78,14 @@ test("the FAQ answers four questions and claims no licence", () => {
 test("the open source section links to the repository", () => {
   assert.ok(openSourceContent.action.href.startsWith("https://github.com/"));
   assert.equal(openSourceContent.action.external, true);
+});
+
+test("final CTA copy is present and contains no Thai codepoints", () => {
+  assert.ok(finalCtaContent.headline.length > 0);
+  assert.ok(finalCtaContent.paragraph.length > 0);
+  assert.doesNotMatch(
+    `${finalCtaContent.headline} ${finalCtaContent.paragraph}`,
+    /[฀-๿]/,
+    "final CTA copy must not contain Thai script"
+  );
 });

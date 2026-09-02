@@ -12,7 +12,7 @@ export const faqContent = {
     {
       question: "Where does my data live?",
       answer:
-        "On your own server. The platform is designed to run entirely inside your network, including the database, object storage, and identity provider."
+        "On your own server. The database, object storage, and identity provider all run inside your network — nothing leaves it except the calls to whichever AI providers you configure."
     },
     {
       question: "Can it run on Kubernetes?",

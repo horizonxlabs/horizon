@@ -3,8 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { SiteFooter } from "@/shared/site-footer";
 import { SiteNav } from "@/shared/site-nav";
-
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:4103";
+import { siteUrl } from "@/shared/site-config";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

@@ -55,3 +55,11 @@ test("the landing image runs the standalone server", () => {
   assert.match(dockerfile, /apps\/landing-web\/server\.js/);
   assert.match(dockerfile, /^USER node$/m);
 });
+
+test("the image accepts the public origin as a build argument", () => {
+  const dockerfile = readFileSync("docker/landing-web.Dockerfile", "utf8");
+  const argIndex = dockerfile.indexOf("ARG NEXT_PUBLIC_SITE_URL");
+  const buildIndex = dockerfile.indexOf("pnpm --filter @evcp/landing-web build");
+  assert.ok(argIndex !== -1, "Dockerfile must declare ARG NEXT_PUBLIC_SITE_URL");
+  assert.ok(argIndex < buildIndex, "the ARG must be declared before the build runs");
+});

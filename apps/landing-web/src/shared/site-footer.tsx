@@ -1,3 +1,4 @@
+import { ActionButton } from "@/shared/action-button";
 import { siteConfig } from "@/shared/site-config";
 
 export function SiteFooter() {
@@ -7,14 +8,10 @@ export function SiteFooter() {
         <p className="text-muted text-sm">
           {siteConfig.name} — enterprise AI application builder, developed in the open.
         </p>
-        <a
-          href={siteConfig.repositoryUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="text-primary text-sm font-medium"
-        >
-          View the source
-        </a>
+        <ActionButton
+          action={{ label: "View the source", href: siteConfig.repositoryUrl, external: true }}
+          variant="link"
+        />
       </div>
     </footer>
   );

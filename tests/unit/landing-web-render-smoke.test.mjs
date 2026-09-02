@@ -117,7 +117,7 @@ const { GovernanceSection, governanceContent } = await import(`${base}/features/
 const { SelfHostSection, selfHostContent } = await import(`${base}/features/self-host`);
 const { OpenSourceSection } = await import(`${base}/features/open-source`);
 const { FaqSection, faqContent } = await import(`${base}/features/faq`);
-const { FinalCtaSection } = await import(`${base}/features/final-cta`);
+const { FinalCtaSection, finalCtaContent } = await import(`${base}/features/final-cta`);
 
 test("HeroSection renders the headline and both actions", () => {
   const html = renderToStaticMarkup(React.createElement(HeroSection));
@@ -129,6 +129,9 @@ test("HeroSection renders the headline and both actions", () => {
 test("HeroSection hides the decorative product visual from assistive tech and invents no quorum claim", () => {
   const html = renderToStaticMarkup(React.createElement(HeroSection));
   assert.match(html, /aria-hidden="true"/);
+  // Guards against a false quorum claim (e.g. "3 of 4 approvals") that an earlier draft of the
+  // hero product visual invented and this branch removed — a fabricated governance number with
+  // no backing data. Keep this even though the current copy has nothing to trip it.
   assert.doesNotMatch(html, /\d+ of \d+ approvals/);
 });
 
@@ -186,7 +189,7 @@ test("the page renders every section in order", () => {
     'id="self-host"',
     'id="open-source"',
     'id="faq"',
-    'id="start"'
+    finalCtaContent.headline
   ];
   let cursor = -1;
   for (const anchor of order) {
