@@ -135,3 +135,22 @@ test("globals.css fails when it declares its own styling", () => {
   assert.equal(result.ok, false);
   assert.match(result.output, /globals\.css/i);
 });
+
+test("globals.css rejects a declaration appended after a legal import on the same line", () => {
+  const result = runGlobalsCheck('@import "@evcp/ui/styles.css"; .hero{color:red}\n');
+  assert.equal(result.ok, false);
+  assert.match(result.output, /globals\.css/i);
+});
+
+test("globals.css accepts a multi-line block comment without leading stars", () => {
+  const result = runGlobalsCheck(
+    '/* first line\n   second line without a star */\n@import "@evcp/ui/styles.css";\n'
+  );
+  assert.equal(result.ok, true);
+});
+
+test("globals.css rejects an import of a package other than @evcp/ui", () => {
+  const result = runGlobalsCheck('@import "@evcp/ui/styles.css";\n@import "tailwindcss";\n');
+  assert.equal(result.ok, false);
+  assert.match(result.output, /globals\.css/i);
+});
