@@ -107,6 +107,8 @@ test("SiteFooter states the project name without claiming a licence", () => {
 });
 
 const { HeroSection } = await import(`${base}/features/hero`);
+const { SurfacesSection, surfacesContent } = await import(`${base}/features/surfaces`);
+const { LifecycleSection, lifecycleContent } = await import(`${base}/features/lifecycle`);
 
 test("HeroSection renders the headline and both actions", () => {
   const html = renderToStaticMarkup(React.createElement(HeroSection));
@@ -119,4 +121,16 @@ test("HeroSection hides the decorative product visual from assistive tech and in
   const html = renderToStaticMarkup(React.createElement(HeroSection));
   assert.match(html, /aria-hidden="true"/);
   assert.doesNotMatch(html, /\d+ of \d+ approvals/);
+});
+
+test("SurfacesSection renders every product surface", () => {
+  const html = renderToStaticMarkup(React.createElement(SurfacesSection));
+  assert.match(html, /id="surfaces"/);
+  for (const item of surfacesContent.items) assert.ok(html.includes(item.title));
+});
+
+test("LifecycleSection renders every step", () => {
+  const html = renderToStaticMarkup(React.createElement(LifecycleSection));
+  assert.match(html, /id="lifecycle"/);
+  for (const step of lifecycleContent.steps) assert.ok(html.includes(step.title));
 });
