@@ -3,10 +3,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { openSourceContent } from "./open-source-content";
 
-export function OpenSourceSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function OpenSourceSection({ locale }: LocaleProps) {
   const copy = openSourceContent[locale];
   return (
     <Section id="open-source" tone="surface">

@@ -1,5 +1,5 @@
 import type { Locale } from "@/shared/locale";
-import type { LinkAction } from "@/shared/content-types";
+import type { LinkAction, StatusRow } from "@/shared/content-types";
 import { siteConfig } from "@/shared/site-config";
 
 type HeroCopy = {
@@ -7,6 +7,12 @@ type HeroCopy = {
   headline: string;
   subhead: string;
   actions: readonly LinkAction[];
+  // Decorative product-visual rows (aria-hidden — see hero-product-visual.tsx), still
+  // locale-keyed like every other piece of copy on the page. Each row must describe something
+  // the product actually does: PRD versioning, the per-project workspace container, checkpoint
+  // previews, and pre-publish checks are all real (see docs/architecture and the governance
+  // section copy below) — no invented approval counts or policies.
+  visualRows: readonly StatusRow[];
 };
 
 export const heroContent: Record<Locale, HeroCopy> = {
@@ -18,7 +24,13 @@ export const heroContent: Record<Locale, HeroCopy> = {
     actions: [
       { label: "เริ่มต้นใช้งาน", href: "#self-host" },
       { label: "ดูซอร์สโค้ดบน GitHub", href: siteConfig.repositoryUrl, external: true }
-    ] as const satisfies readonly LinkAction[]
+    ] as const satisfies readonly LinkAction[],
+    visualRows: [
+      { label: "PRD ฐาน", value: "v4 · อนุมัติแล้ว" },
+      { label: "เวิร์กสเปซ", value: "container กำลังทำงาน" },
+      { label: "พรีวิว", value: "จุดตรวจที่ 12" },
+      { label: "ตรวจสอบก่อนเผยแพร่", value: "ผ่านแล้ว" }
+    ] as const satisfies readonly StatusRow[]
   },
   en: {
     eyebrow: "Open source · self-hosted",
@@ -28,6 +40,12 @@ export const heroContent: Record<Locale, HeroCopy> = {
     actions: [
       { label: "Get started", href: "#self-host" },
       { label: "View on GitHub", href: siteConfig.repositoryUrl, external: true }
-    ] as const satisfies readonly LinkAction[]
+    ] as const satisfies readonly LinkAction[],
+    visualRows: [
+      { label: "PRD baseline", value: "v4 · approved" },
+      { label: "Workspace", value: "container running" },
+      { label: "Preview", value: "checkpoint 12" },
+      { label: "Pre-publish checks", value: "passed" }
+    ] as const satisfies readonly StatusRow[]
   }
 };

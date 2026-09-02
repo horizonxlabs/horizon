@@ -2,10 +2,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { lifecycleContent } from "./lifecycle-content";
 
-export function LifecycleSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function LifecycleSection({ locale }: LocaleProps) {
   const copy = lifecycleContent[locale];
   return (
     <Section id="lifecycle">

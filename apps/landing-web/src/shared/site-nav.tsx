@@ -1,7 +1,6 @@
 import Image from "next/image";
 import { ActionButton } from "@/shared/action-button";
 import type { Locale, LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
 import { LanguageSwitcher } from "@/shared/language-switcher";
 
@@ -10,7 +9,7 @@ const logoAlt: Record<Locale, string> = {
   en: `${siteConfig.name} — enterprise AI application builder`
 };
 
-export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function SiteNav({ locale }: LocaleProps) {
   return (
     <header className="bg-surface/80 border-border-soft sticky top-0 z-50 border-b backdrop-blur">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
@@ -20,6 +19,7 @@ export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
             alt={logoAlt[locale]}
             width={984}
             height={254}
+            sizes="120px"
             preload
             className="h-7 w-auto"
           />

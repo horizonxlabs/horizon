@@ -1,5 +1,5 @@
 import type { LocaleProps } from "@/shared/locale";
-import { LOCALES, DEFAULT_LOCALE } from "@/shared/locale";
+import { LOCALES } from "@/shared/locale";
 import { languageSwitcherContent } from "@/shared/language-switcher-content";
 
 /**
@@ -8,7 +8,7 @@ import { languageSwitcherContent } from "@/shared/language-switcher-content";
  * dropdown. The current locale is marked with `aria-current` and rendered as non-interactive
  * text rather than a self-link; every other locale links to its own root path.
  */
-export function LanguageSwitcher({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function LanguageSwitcher({ locale }: LocaleProps) {
   return (
     <ul className="flex items-center gap-3 text-sm">
       {LOCALES.map((target) => {

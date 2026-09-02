@@ -139,8 +139,8 @@ directories, so a new app would be silently unchecked. `apps/landing-web/src` is
 to `APP_SRC_DIRS`, with two narrow amendments:
 
 1. `@evcp/ui/marketing.css` joins `@evcp/ui/styles.css` in the approved import list.
-2. `apps/landing-web/src/app/globals.css` is exempt from the "no app-local stylesheet"
-   rule, because Next.js requires a CSS entry point. The exemption is conditional: the
+2. `apps/landing-web/src/app/[lang]/globals.css` is exempt from the "no app-local
+   stylesheet" rule, because Next.js requires a CSS entry point. The exemption is conditional: the
    file may contain only comments, `@import "@evcp/ui/…"` statements, and `@source`
    directives (Tailwind v4 needs one to scan the app's own sources). Any CSS declaration,
    selector, or other import fails the check. `@source` cannot introduce a colour or a
@@ -154,11 +154,14 @@ shape.
 ### Frontend architecture
 
 `scripts/quality/check-frontend-architecture.mjs` matches any `apps/*/src/**` file when
-invoked with `--files` (the `check:changed` path), so the landing page is governed by it
-even though it is absent from `APP_NAMES`. Source roots are therefore restricted to
+invoked with `--files` (the `check:changed` path); `landing-web` was also added to
+`APP_NAMES` so it is governed on a full run too. Source roots are therefore restricted to
 `app`, `features`, and `shared`, cross-module imports use `@/` aliases, `shared` never
 imports `features`, and features are consumed through their `index.ts`. The Next.js App
-Router layout satisfies this naturally.
+Router layout satisfies this naturally. `src/proxy.ts` is Next's middleware convention
+(the file must live at the source root) and is exempted the same way Vite's `main.tsx`
+already is, via `FRAMEWORK_ENTRY_FILES`, rather than being tracked in the legacy-path
+baseline.
 
 ### File size
 
@@ -173,16 +176,19 @@ apps/landing-web/
   postcss.config.mjs      @tailwindcss/postcss
   tsconfig.json           extends tsconfig.base.json, "@/*" -> "./src/*"
   package.json
-  public/                 horizon-mark.png, og image, favicon
+  public/                 horizon-logo.png, plus a .gitkeep so the empty dir survives git
   src/
     app/
-      layout.tsx          html/body shell, metadata, font wiring
-      page.tsx            composition only — renders the section components in order
-      globals.css         @import "@evcp/ui/styles.css"; @import "@evcp/ui/marketing.css";
-      sitemap.ts
-      robots.ts
+      [lang]/
+        layout.tsx        html/body shell, per-locale metadata, font wiring
+        page.tsx          composition only — renders the section components in order
+        globals.css       @import "@evcp/ui/styles.css"; @import "@evcp/ui/marketing.css";
+      sitemap.ts          stays at the app root — nesting under [lang] breaks Next's
+                           metadata-route convention — with one entry per locale
+      robots.ts           stays at the app root for the same reason
+    proxy.ts               Next's middleware convention: `/` redirects to the default locale
     features/
-      hero/               index.ts + hero-section.tsx + hero-product-visual.tsx
+      hero/                index.ts + hero-section.tsx + hero-content.ts + hero-product-visual.tsx
       surfaces/
       lifecycle/
       governance/
@@ -190,15 +196,19 @@ apps/landing-web/
       open-source/
       faq/
       final-cta/
+      site-footer/         chrome, not a page section, but locale-keyed copy still needs the
+                            same completeness/Thai-script coverage — see Testing below
     shared/
       site-nav.tsx
-      site-footer.tsx
-      section.tsx         band wrapper with a page/surface tone
+      section.tsx          band wrapper with a page/surface tone
       section-heading.tsx
       action-button.tsx
-      reveal.tsx          plain server component, CSS-only fade (no client JS)
-      site-config.ts      repository URL, nav items
+      reveal.tsx           plain server component, CSS-only fade (no client JS)
+      site-config.ts       repository URL, nav items
       content-types.ts
+      locale.ts            Locale, LOCALES, DEFAULT_LOCALE, isLocale, LocaleProps
+      language-switcher.tsx + language-switcher-content.ts
+      metadata-content.ts  per-locale <title>/<meta description> copy
 ```
 
 Copy lives beside the section that renders it — `features/hero/hero-content.ts`, and so on
@@ -311,9 +321,20 @@ stack keeps its current routing.
 - `tests/unit/landing-web-content.test.mjs` — asserts content invariants: every section
   has a heading, every navigation anchor resolves to a section that exists, and every
   external link is absolute and https.
-- `tests/unit/design-system-landing.test.mjs` — asserts the amended
-  `check-design-system.mjs` still rejects a hex literal inside
-  `apps/landing-web/src`, and rejects a `globals.css` containing a declaration.
+- `tests/unit/design-system-governance.test.mjs` — asserts the amended
+  `check-design-system.mjs` still rejects a hex literal inside `apps/landing-web/src`,
+  accepts the marketing stylesheet import, and rejects an `app/[lang]/globals.css`
+  containing anything beyond the permitted imports and `@source` directives.
+- `tests/unit/landing-web-i18n.test.mjs` — enumerates every module under
+  `apps/landing-web/src/features` from disk (plus the cross-cutting language-switcher and
+  metadata content in `shared/`) and asserts each provides copy for both locales with
+  matching shapes, that Thai copy contains Thai script and English copy does not, and that
+  neither locale claims a licence or an approval gate the product does not have. It also
+  covers the locale-segmented route tree, the `/` → `/th` redirect, and per-locale
+  `sitemap.ts`/metadata hreflang alternates.
+- `tests/unit/ui-fonts.test.mjs` — asserts every bundled font file is declared with a
+  `@font-face` using `woff2` and `font-display: swap`, and that the shared sans stack
+  resolves Latin before Thai (landing-web consumes this stack via `marketing.css`).
 
 ## Risks
 

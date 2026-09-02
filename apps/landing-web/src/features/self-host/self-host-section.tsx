@@ -2,10 +2,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { selfHostContent } from "./self-host-content";
 
-export function SelfHostSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function SelfHostSection({ locale }: LocaleProps) {
   const copy = selfHostContent[locale];
   return (
     <Section id="self-host">

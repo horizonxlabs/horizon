@@ -2,10 +2,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { governanceContent } from "./governance-content";
 
-export function GovernanceSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function GovernanceSection({ locale }: LocaleProps) {
   const copy = governanceContent[locale];
   return (
     <Section id="governance" tone="surface">

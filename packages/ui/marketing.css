@@ -9,7 +9,7 @@
   /* next/font/google exposes the self-hosted Inter face as --font-inter on <html> when the
      consuming app loads it (currently landing-web only); prefer it over the generic Inter
      family name so that app gets the optimized, self-hosted font instead of an OS fallback. */
-  --evcp-font-latin: var(--font-inter), Inter, "SF Pro Text", "Segoe UI", system-ui;
+  --evcp-font-latin: var(--font-inter, Inter), "SF Pro Text", "Segoe UI", system-ui;
   --evcp-gradient-hero:
     radial-gradient(
       60% 50% at 18% 0%,

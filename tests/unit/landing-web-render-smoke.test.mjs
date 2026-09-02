@@ -135,7 +135,7 @@ test("ActionButton omits target and rel for an internal link", () => {
 });
 
 const { SiteNav } = await import(`${base}/shared/site-nav.tsx`);
-const { SiteFooter } = await import(`${base}/shared/site-footer.tsx`);
+const { SiteFooter } = await import(`${base}/features/site-footer`);
 
 test("SiteNav lists configured anchor links and the repository link, in both locales", () => {
   for (const locale of LOCALES) {

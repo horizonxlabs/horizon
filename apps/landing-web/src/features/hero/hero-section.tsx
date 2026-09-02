@@ -1,10 +1,9 @@
 import { ActionButton } from "@/shared/action-button";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { heroContent } from "./hero-content";
 import { HeroProductVisual } from "./hero-product-visual";
 
-export function HeroSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function HeroSection({ locale }: LocaleProps) {
   const copy = heroContent[locale];
   return (
     <section id="top" className="evcp-hero-gradient px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
@@ -30,7 +29,7 @@ export function HeroSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
           </div>
         </div>
         <div className="lg:col-span-2">
-          <HeroProductVisual />
+          <HeroProductVisual locale={locale} />
         </div>
       </div>
     </section>

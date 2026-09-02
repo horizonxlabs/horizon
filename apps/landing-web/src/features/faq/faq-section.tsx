@@ -2,10 +2,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { faqContent } from "./faq-content";
 
-export function FaqSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function FaqSection({ locale }: LocaleProps) {
   const copy = faqContent[locale];
   return (
     <Section id="faq">

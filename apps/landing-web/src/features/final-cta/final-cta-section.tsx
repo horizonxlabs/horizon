@@ -1,10 +1,9 @@
 import { heroContent } from "@/features/hero";
 import { ActionButton } from "@/shared/action-button";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { finalCtaContent } from "./final-cta-content";
 
-export function FinalCtaSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function FinalCtaSection({ locale }: LocaleProps) {
   const copy = finalCtaContent[locale];
   return (
     <section className="evcp-hero-gradient px-6 py-28">

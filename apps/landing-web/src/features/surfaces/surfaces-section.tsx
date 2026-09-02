@@ -2,10 +2,9 @@ import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
 import type { LocaleProps } from "@/shared/locale";
-import { DEFAULT_LOCALE } from "@/shared/locale";
 import { surfacesContent } from "./surfaces-content";
 
-export function SurfacesSection({ locale = DEFAULT_LOCALE }: LocaleProps) {
+export function SurfacesSection({ locale }: LocaleProps) {
   const copy = surfacesContent[locale];
   return (
     <Section id="surfaces" tone="surface">

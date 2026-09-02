@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { registerHooks } from "node:module";
 
 // layout.tsx imports "./globals.css" for its Next.js-bundled side effect (Node's loader has no
@@ -163,20 +163,31 @@ test("the language switcher links to every other locale and marks the current on
   }
 });
 
-const modules = {
-  hero: await import(`${base}/features/hero`),
-  surfaces: await import(`${base}/features/surfaces`),
-  lifecycle: await import(`${base}/features/lifecycle`),
-  governance: await import(`${base}/features/governance`),
-  selfHost: await import(`${base}/features/self-host`),
-  openSource: await import(`${base}/features/open-source`),
-  faq: await import(`${base}/features/faq`),
-  finalCta: await import(`${base}/features/final-cta`),
-  // New locale-keyed content added in Task 4 — brought under the same completeness,
-  // Thai-script, and licence/approval-gate guards as every other content module below.
-  languageSwitcher: { languageSwitcherContent },
-  metadata: { metadataContent }
-};
+// Enumerated from disk rather than hand-listed: a hardcoded literal here is exactly why the
+// same class of gap (a locale module missing from this map, so it skipped every completeness,
+// Thai-script, and honesty guard below) was found three review rounds running — first
+// siteConfig.navItems, then the switcher/metadata modules, then footerCopy. Reading the
+// directory means a new features/* module is covered automatically; forgetting to register it
+// is no longer possible because there is nothing left to register.
+const featuresRoot = "apps/landing-web/src/features";
+const featureNames = readdirSync(featuresRoot, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+assert.ok(
+  featureNames.length > 0,
+  `${featuresRoot} enumeration found zero directories — the read is broken, not just empty`
+);
+
+const modules = {};
+for (const name of featureNames) {
+  modules[name] = await import(`${base}/features/${name}`);
+}
+// language-switcher-content.ts and metadata-content.ts are locale-keyed chrome content that
+// lives in shared/, not features/, because they are cross-cutting (every page/section uses
+// them) rather than a page section of their own — the disk enumeration above cannot see them,
+// so they are added explicitly rather than silently dropped from coverage.
+modules.languageSwitcher = { languageSwitcherContent };
+modules.metadata = { metadataContent };
 
 function copyOf(mod) {
   return Object.entries(mod).find(([name]) => name.endsWith("Content"))?.[1];

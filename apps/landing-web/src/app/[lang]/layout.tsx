@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { notFound } from "next/navigation";
 import "./globals.css";
-import { SiteFooter } from "@/shared/site-footer";
+import { SiteFooter } from "@/features/site-footer";
 import { SiteNav } from "@/shared/site-nav";
 import { siteUrl } from "@/shared/site-config";
 import type { Locale } from "@/shared/locale";
-import { LOCALES, isLocale } from "@/shared/locale";
+import { DEFAULT_LOCALE, LOCALES, isLocale } from "@/shared/locale";
 import { metadataContent } from "@/shared/metadata-content";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -25,11 +25,12 @@ export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Prom
   if (!isLocale(lang)) notFound();
   const copy = metadataContent[lang];
   // Driven from LOCALES rather than hardcoded, so a third locale only needs adding there.
-  // `x-default` points at the site root rather than `/th` directly: `/` already redirects to
-  // `/th`, so the root URL stays the language-selection signal instead of being invisible to it.
+  // `x-default` points at `/th` rather than the site root: the root only 308-redirects to `/th`
+  // (see proxy.ts), and hreflang consumers expect the default target to be a canonical,
+  // non-redirecting URL rather than one that forwards them again.
   const languages = {
     ...Object.fromEntries(LOCALES.map((locale) => [locale, `/${locale}`])),
-    "x-default": siteUrl
+    "x-default": `${siteUrl}/${DEFAULT_LOCALE}`
   };
   return {
     metadataBase: new URL(siteUrl),
