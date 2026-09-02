@@ -3,6 +3,7 @@ import { ActionButton } from "@/shared/action-button";
 import type { Locale, LocaleProps } from "@/shared/locale";
 import { DEFAULT_LOCALE } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
+import { LanguageSwitcher } from "@/shared/language-switcher";
 
 const logoAlt: Record<Locale, string> = {
   th: `${siteConfig.name} — เครื่องมือสร้างแอปพลิเคชัน AI สำหรับองค์กร`,
@@ -32,10 +33,13 @@ export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
             </li>
           ))}
         </ul>
-        <ActionButton
-          action={{ label: "GitHub", href: siteConfig.repositoryUrl, external: true }}
-          variant="secondary"
-        />
+        <div className="flex items-center gap-4">
+          <LanguageSwitcher locale={locale} />
+          <ActionButton
+            action={{ label: "GitHub", href: siteConfig.repositoryUrl, external: true }}
+            variant="secondary"
+          />
+        </div>
       </nav>
     </header>
   );

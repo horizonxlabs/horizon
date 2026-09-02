@@ -148,6 +148,14 @@ test("SiteNav lists configured anchor links and the repository link, in both loc
   }
 });
 
+test("SiteNav renders the language switcher, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(SiteNav, { locale }));
+    const other = LOCALES.find((candidate) => candidate !== locale);
+    assert.match(html, new RegExp(`href="/${other}"`), `${locale}: nav is missing the switcher`);
+  }
+});
+
 test("SiteNav renders the logo lockup with meaningful, locale-specific alt text", () => {
   for (const locale of LOCALES) {
     const html = renderToStaticMarkup(React.createElement(SiteNav, { locale }));

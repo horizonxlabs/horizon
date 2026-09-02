@@ -5,7 +5,9 @@ import "./globals.css";
 import { SiteFooter } from "@/shared/site-footer";
 import { SiteNav } from "@/shared/site-nav";
 import { siteUrl } from "@/shared/site-config";
+import type { Locale } from "@/shared/locale";
 import { LOCALES, isLocale } from "@/shared/locale";
+import { metadataContent } from "@/shared/metadata-content";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
@@ -14,20 +16,34 @@ export function generateStaticParams() {
   return LOCALES.map((lang) => ({ lang }));
 }
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: "Horizon — enterprise AI application builder",
-  description:
-    "Turn a requirement into a governed internal application, on infrastructure you control.",
-  openGraph: {
-    title: "Horizon — enterprise AI application builder",
-    description:
-      "Turn a requirement into a governed internal application, on infrastructure you control.",
-    url: siteUrl,
-    siteName: "Horizon",
-    type: "website"
-  }
-};
+// OpenGraph locale codes are a protocol detail, not user-facing copy, so they live next to the
+// metadata they annotate rather than under the Thai-script content guards.
+const openGraphLocale: Record<Locale, string> = { th: "th_TH", en: "en_US" };
+
+export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Promise<Metadata> {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
+  const copy = metadataContent[lang];
+  // Driven from LOCALES rather than hardcoded, so a third locale only needs adding there.
+  const languages = Object.fromEntries(LOCALES.map((locale) => [locale, `/${locale}`]));
+  return {
+    metadataBase: new URL(siteUrl),
+    title: copy.title,
+    description: copy.description,
+    alternates: {
+      canonical: `/${lang}`,
+      languages
+    },
+    openGraph: {
+      title: copy.title,
+      description: copy.description,
+      url: `/${lang}`,
+      siteName: "Horizon",
+      type: "website",
+      locale: openGraphLocale[lang]
+    }
+  };
+}
 
 export default async function RootLayout({ children, params }: LayoutProps<"/[lang]">) {
   const { lang } = await params;
