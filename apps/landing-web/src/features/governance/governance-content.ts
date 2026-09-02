@@ -13,7 +13,8 @@ export const governanceContent = {
     },
     {
       title: "Quotas and guardrails",
-      description: "Per-project spend limits, prompt controls, and usage recorded for every generation."
+      description:
+        "Per-project token quotas, prompt guardrails, and usage recorded for every generation."
     },
     {
       title: "Isolation by default",
@@ -24,8 +25,9 @@ export const governanceContent = {
       description: "Native accounts, or an existing identity provider over OIDC and SAML."
     },
     {
-      title: "Policy-based publish",
-      description: "A release passes an approval policy before it reaches a single employee."
+      title: "Pre-publish checks",
+      description:
+        "Every release is validated for rollback safety before it ships, so a bad migration cannot strand an app."
     },
     {
       title: "Audit evidence",

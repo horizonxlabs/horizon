@@ -7,8 +7,16 @@
 
 :root {
   --evcp-gradient-hero:
-    radial-gradient(60% 50% at 18% 0%, color-mix(in oklab, var(--ref-sky-400) 22%, transparent) 0%, transparent 70%),
-    radial-gradient(55% 45% at 82% 8%, color-mix(in oklab, var(--ref-blue-100) 85%, transparent) 0%, transparent 72%),
+    radial-gradient(
+      60% 50% at 18% 0%,
+      color-mix(in oklab, var(--ref-sky-400) 22%, transparent) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 45% at 82% 8%,
+      color-mix(in oklab, var(--ref-blue-100) 85%, transparent) 0%,
+      transparent 72%
+    ),
     linear-gradient(180deg, var(--ref-white) 0%, var(--ref-slate-50) 100%);
   --evcp-shadow-glow:
     0 1px 2px color-mix(in oklab, var(--ref-slate-900) 5%, transparent),

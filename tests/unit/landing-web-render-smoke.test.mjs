@@ -72,7 +72,11 @@ test("the landing app ships no client components", async () => {
     for (const entry of await readdir(root, { recursive: true })) {
       if (!entry.endsWith(".tsx") && !entry.endsWith(".ts")) continue;
       const source = await readFile(`${root}/${entry}`, "utf8");
-      assert.doesNotMatch(source, /^\s*["']use client["']/m, `${root}/${entry} is a client component`);
+      assert.doesNotMatch(
+        source,
+        /^\s*["']use client["']/m,
+        `${root}/${entry} is a client component`
+      );
     }
   }
 });

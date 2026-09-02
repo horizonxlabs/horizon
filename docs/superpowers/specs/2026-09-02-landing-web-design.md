@@ -11,7 +11,7 @@ service. It is a workspace member so that it consumes the real design tokens fro
 private-server Compose stack — it never touches `docker/Caddyfile`,
 `docker/docker-compose.yml`, or `platform-api`.
 
-The visual direction is *light premium*: the same slate/blue canvas users see after they
+The visual direction is _light premium_: the same slate/blue canvas users see after they
 sign in, with the "modern" quality coming from typography scale, generous spacing, a low
 alpha mesh gradient, and restrained scroll motion — not from inverting to a dark theme.
 
@@ -41,14 +41,14 @@ self-host quick start rather than at a sales funnel.
 The app lives at `apps/landing-web` and is picked up by the existing `apps/*` glob in
 `pnpm-workspace.yaml`.
 
-| Concern | Decision |
-| --- | --- |
-| Framework | Next.js `16.3.4`, App Router, server components by default |
-| React | `^19.2.8`, matching the version pinned across the repo |
-| Styling | Tailwind v4 through `@tailwindcss/postcss` |
+| Concern     | Decision                                                         |
+| ----------- | ---------------------------------------------------------------- |
+| Framework   | Next.js `16.3.4`, App Router, server components by default       |
+| React       | `^19.2.8`, matching the version pinned across the repo           |
+| Styling     | Tailwind v4 through `@tailwindcss/postcss`                       |
 | Shared code | `@evcp/ui": "workspace:*"` for tokens, utilities, and primitives |
-| Icons | `lucide-react`, already used by `creator-web` |
-| Dev port | `4103` (admin `4100`, creator `4101`, store `4102`) |
+| Icons       | `lucide-react`, already used by `creator-web`                    |
+| Dev port    | `4103` (admin `4100`, creator `4101`, store `4102`)              |
 
 `scripts/quality/check-workspace-scripts.mjs` requires every workspace package to expose
 `build` and `typecheck`, and the root `build`/`typecheck` scripts fan out over
@@ -72,14 +72,14 @@ development loop.
 Every colour resolves to a token already defined in `packages/ui/theme.css`. No new
 reference-palette (layer 1) value is introduced.
 
-| Element | Token |
-| --- | --- |
-| Page canvas | `--evcp-color-page`, alternating with `--evcp-color-surface` per band |
-| Hero mesh gradient | radial blends of `--evcp-color-primary-soft` and `--evcp-color-accent` at low alpha |
-| Primary action | `--evcp-color-primary`, hover `--evcp-color-primary-strong`, label `--evcp-color-on-primary` |
-| Body / secondary text | `--evcp-color-text` / `--evcp-color-muted` |
-| Cards | `--evcp-radius-card`, `--evcp-shadow-card`, lifted state `--evcp-shadow-pop` |
-| Type family | `--evcp-font-sans` |
+| Element               | Token                                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| Page canvas           | `--evcp-color-page`, alternating with `--evcp-color-surface` per band                        |
+| Hero mesh gradient    | radial blends of `--evcp-color-primary-soft` and `--evcp-color-accent` at low alpha          |
+| Primary action        | `--evcp-color-primary`, hover `--evcp-color-primary-strong`, label `--evcp-color-on-primary` |
+| Body / secondary text | `--evcp-color-text` / `--evcp-color-muted`                                                   |
+| Cards                 | `--evcp-radius-card`, `--evcp-shadow-card`, lifted state `--evcp-shadow-pop`                 |
+| Type family           | `--evcp-font-sans`                                                                           |
 
 The premium feel is produced by four devices:
 
@@ -89,10 +89,13 @@ The premium feel is produced by four devices:
    readable measure and centred.
 3. **One signature gradient.** A single soft mesh behind the hero and the final CTA,
    never repeated in between, so it reads as a brand mark rather than decoration.
-4. **Restrained motion.** A single client component (`shared/reveal.tsx`) fades and
-   lifts sections into view via `IntersectionObserver`. It renders children unwrapped
-   when `prefers-reduced-motion: reduce` matches, and its initial state is visible so
-   the server-rendered HTML is complete without JavaScript.
+4. **Restrained motion.** `shared/reveal.tsx` is a plain server component — it renders
+   `<div className="evcp-reveal">{children}</div>` and nothing else. The fade-and-lift is
+   layered on entirely in CSS: `.evcp-reveal` is visible unconditionally, and the animation
+   applies only inside `@supports (animation-timeline: view())` combined with
+   `@media (prefers-reduced-motion: no-preference)`. Every degradation path — no
+   `animation-timeline` support, reduced motion, or no JavaScript at all — ends at
+   "visible, not animated," never at "invisible," and the app ships zero client components.
 
 The hero product visual is a static composition built from real `@evcp/ui` primitives —
 a stylised Creator workspace — rather than a screenshot, so it stays truthful as the
@@ -118,7 +121,7 @@ The constraint that matters is not the exact stops but the source: every value m
 expressed in terms of a layer 1 `--ref-*` variable, never a fresh literal.
 
 `marketing.css` also exposes the classes built from those tokens — `.evcp-hero-gradient`,
-`.evcp-glow-card`, `.evcp-reveal` — following the precedent of the existing
+`.evcp-glow-card`, `.evcp-code-block`, `.evcp-reveal` — following the precedent of the existing
 `packages/ui/creator-project-switcher.css`. This matters for governance: the design-system
 check only accepts `shadow-card` and `rounded-card|control|pill` as shape utilities, so
 exposing marketing shapes as Tailwind utilities would require loosening that rule. Named
@@ -194,7 +197,7 @@ apps/landing-web/
       section.tsx         band wrapper with a page/surface tone
       section-heading.tsx
       action-button.tsx
-      reveal.tsx          "use client"
+      reveal.tsx          plain server component, CSS-only fade (no client JS)
       site-config.ts      repository URL, nav items
       content-types.ts
 ```
@@ -230,8 +233,8 @@ English copy, drawn from `README.md` so the site and the repository stay consist
 
 1. **Nav** — Horizon mark, anchor links (Platform, How it works, Security, Self-host,
    FAQ), and a GitHub link.
-2. **Hero** — headline, one-sentence subhead, primary action *Get started* to the
-   self-host section, secondary action *View on GitHub*, and the product visual.
+2. **Hero** — headline, one-sentence subhead, primary action _Get started_ to the
+   self-host section, secondary action _View on GitHub_, and the product visual.
 3. **Three surfaces** — Admin Console, Creator App, App Store PWA, taken from the
    surface table in `README.md`.
 4. **Lifecycle** — Idea → PRD → AI workspace → Preview → Publish, presented as five

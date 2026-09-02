@@ -29,7 +29,9 @@ const LANDING_ROOT_LAYOUT_CSS_IMPORT = 'import "./globals.css"';
 function landingCssEntryViolations(content) {
   // Blank out comments rather than deleting them, so byte offsets — and therefore the
   // reported line numbers — still line up with the original file.
-  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+    comment.replace(/[^\n]/g, " ")
+  );
   const violations = [];
   for (const match of stripped.matchAll(/[^;\s][^;]*/g)) {
     const statement = match[0].trim();

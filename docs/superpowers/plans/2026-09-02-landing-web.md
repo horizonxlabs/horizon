@@ -32,48 +32,50 @@
 
 **Created:**
 
-| Path | Responsibility |
-| --- | --- |
-| `packages/ui/marketing.css` | Marketing-only tokens and the named classes built from them |
-| `apps/landing-web/package.json` | Workspace manifest, scripts, dependencies |
-| `apps/landing-web/tsconfig.json` | Extends `tsconfig.base.json`, defines the `@/*` alias |
-| `apps/landing-web/next.config.ts` | `output: "standalone"`, `outputFileTracingRoot` |
-| `apps/landing-web/postcss.config.mjs` | `@tailwindcss/postcss` |
-| `apps/landing-web/src/app/globals.css` | Imports `@evcp/ui` stylesheets, declares Tailwind sources |
-| `apps/landing-web/src/app/layout.tsx` | HTML shell, metadata, nav and footer |
-| `apps/landing-web/src/app/page.tsx` | Section composition only |
-| `apps/landing-web/src/app/sitemap.ts`, `robots.ts` | Crawl metadata |
-| `apps/landing-web/src/shared/*` | `site-config`, `content-types`, `section`, `section-heading`, `action-button`, `reveal`, `site-nav`, `site-footer` |
-| `apps/landing-web/src/features/{hero,surfaces,lifecycle,governance,self-host,open-source,faq,final-cta}/` | One section each: `index.ts`, `*-section.tsx`, `*-content.ts` |
-| `docker/landing-web.Dockerfile` | Multi-stage build producing the standalone server |
-| `tests/unit/landing-web-contract.test.mjs` | Workspace and config contract |
-| `tests/unit/landing-web-content.test.mjs` | Content invariants |
-| `tests/unit/landing-web-render-smoke.test.mjs` | Static render of every section |
+| Path                                                                                                      | Responsibility                                                                                                     |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `packages/ui/marketing.css`                                                                               | Marketing-only tokens and the named classes built from them                                                        |
+| `apps/landing-web/package.json`                                                                           | Workspace manifest, scripts, dependencies                                                                          |
+| `apps/landing-web/tsconfig.json`                                                                          | Extends `tsconfig.base.json`, defines the `@/*` alias                                                              |
+| `apps/landing-web/next.config.ts`                                                                         | `output: "standalone"`, `outputFileTracingRoot`                                                                    |
+| `apps/landing-web/postcss.config.mjs`                                                                     | `@tailwindcss/postcss`                                                                                             |
+| `apps/landing-web/src/app/globals.css`                                                                    | Imports `@evcp/ui` stylesheets, declares Tailwind sources                                                          |
+| `apps/landing-web/src/app/layout.tsx`                                                                     | HTML shell, metadata, nav and footer                                                                               |
+| `apps/landing-web/src/app/page.tsx`                                                                       | Section composition only                                                                                           |
+| `apps/landing-web/src/app/sitemap.ts`, `robots.ts`                                                        | Crawl metadata                                                                                                     |
+| `apps/landing-web/src/shared/*`                                                                           | `site-config`, `content-types`, `section`, `section-heading`, `action-button`, `reveal`, `site-nav`, `site-footer` |
+| `apps/landing-web/src/features/{hero,surfaces,lifecycle,governance,self-host,open-source,faq,final-cta}/` | One section each: `index.ts`, `*-section.tsx`, `*-content.ts`                                                      |
+| `docker/landing-web.Dockerfile`                                                                           | Multi-stage build producing the standalone server                                                                  |
+| `tests/unit/landing-web-contract.test.mjs`                                                                | Workspace and config contract                                                                                      |
+| `tests/unit/landing-web-content.test.mjs`                                                                 | Content invariants                                                                                                 |
+| `tests/unit/landing-web-render-smoke.test.mjs`                                                            | Static render of every section                                                                                     |
 
 **Modified:**
 
-| Path | Change |
-| --- | --- |
-| `packages/ui/package.json` | Add the `./marketing.css` export |
-| `scripts/quality/check-design-system.mjs` | Cover `apps/landing-web/src`; approve `marketing.css`; conditionally exempt `globals.css` |
-| `tests/unit/design-system-governance.test.mjs` | Add landing-web governance cases |
-| `tsconfig.test.json` | `@/*` becomes an ordered array including landing-web |
-| `package.json` | Add `dev:landing` |
-| `.gitignore`, `.prettierignore`, `.oxlintrc.json` | Ignore `.next` |
+| Path                                              | Change                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `packages/ui/package.json`                        | Add the `./marketing.css` export                                                          |
+| `scripts/quality/check-design-system.mjs`         | Cover `apps/landing-web/src`; approve `marketing.css`; conditionally exempt `globals.css` |
+| `tests/unit/design-system-governance.test.mjs`    | Add landing-web governance cases                                                          |
+| `tsconfig.test.json`                              | `@/*` becomes an ordered array including landing-web                                      |
+| `package.json`                                    | Add `dev:landing`                                                                         |
+| `.gitignore`, `.prettierignore`, `.oxlintrc.json` | Ignore `.next`                                                                            |
 
 ---
 
 ### Task 1: Marketing tokens and design-system coverage
 
-The quality gate must cover the new app *before* the app exists, so nothing can be written into an unchecked directory.
+The quality gate must cover the new app _before_ the app exists, so nothing can be written into an unchecked directory.
 
 **Files:**
+
 - Create: `packages/ui/marketing.css`
 - Modify: `packages/ui/package.json`
 - Modify: `scripts/quality/check-design-system.mjs`
 - Test: `tests/unit/design-system-governance.test.mjs`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: the stylesheet `@evcp/ui/marketing.css`, exposing CSS custom properties `--evcp-gradient-hero`, `--evcp-shadow-glow`, `--evcp-radius-hero` and the classes `.evcp-hero-gradient`, `.evcp-glow-card`, `.evcp-reveal`, `.evcp-reveal-visible`. Later tasks apply these class names via `className`.
 
@@ -175,8 +177,16 @@ Expected: FAIL. The landing cases pass a file outside `APP_SRC_DIRS`, so the che
 
 :root {
   --evcp-gradient-hero:
-    radial-gradient(60% 50% at 18% 0%, color-mix(in oklab, var(--ref-sky-400) 22%, transparent) 0%, transparent 70%),
-    radial-gradient(55% 45% at 82% 8%, color-mix(in oklab, var(--ref-blue-100) 85%, transparent) 0%, transparent 72%),
+    radial-gradient(
+      60% 50% at 18% 0%,
+      color-mix(in oklab, var(--ref-sky-400) 22%, transparent) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 45% at 82% 8%,
+      color-mix(in oklab, var(--ref-blue-100) 85%, transparent) 0%,
+      transparent 72%
+    ),
     linear-gradient(180deg, var(--ref-white) 0%, var(--ref-slate-50) 100%);
   --evcp-shadow-glow:
     0 1px 2px color-mix(in oklab, var(--ref-slate-900) 5%, transparent),
@@ -312,11 +322,13 @@ git commit -m "feat(ui): add marketing tokens and govern landing-web sources"
 ### Task 2: Scaffold the Next.js app
 
 **Files:**
+
 - Create: `apps/landing-web/package.json`, `tsconfig.json`, `next.config.ts`, `postcss.config.mjs`, `src/app/globals.css`, `src/app/layout.tsx`, `src/app/page.tsx`
 - Modify: `package.json`, `tsconfig.test.json`, `.gitignore`, `.prettierignore`, `.oxlintrc.json`
 - Test: `tests/unit/landing-web-contract.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `@evcp/ui/marketing.css` from Task 1.
 - Produces: a buildable workspace package named `@evcp/landing-web`; the `@/` alias resolving to `apps/landing-web/src` both in `next build` and under the unit-test runner.
 
@@ -548,10 +560,12 @@ git commit -m "feat(landing-web): scaffold the Next.js marketing app"
 ### Task 3: Shared primitives
 
 **Files:**
+
 - Create: `apps/landing-web/src/shared/site-config.ts`, `content-types.ts`, `section.tsx`, `section-heading.tsx`, `action-button.tsx`, `reveal.tsx`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`
 
 **Interfaces:**
+
 - Consumes: the `@/` alias and `@evcp/ui/marketing.css` classes from Tasks 1–2.
 - Produces, for every later task:
   - `siteConfig: { name: string; repositoryUrl: string; navItems: readonly NavItem[] }`
@@ -743,9 +757,7 @@ export function ActionButton({
   action: LinkAction;
   variant: keyof typeof variantClass;
 }) {
-  const external = action.external
-    ? { target: "_blank" as const, rel: "noreferrer" as const }
-    : {};
+  const external = action.external ? { target: "_blank" as const, rel: "noreferrer" as const } : {};
   return (
     <a
       href={action.href}
@@ -818,11 +830,13 @@ git commit -m "feat(landing-web): add shared section primitives"
 ### Task 4: Site chrome — navigation and footer
 
 **Files:**
+
 - Create: `apps/landing-web/src/shared/site-nav.tsx`, `site-footer.tsx`
 - Modify: `apps/landing-web/src/app/layout.tsx`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `siteConfig`, `ActionButton`, `LinkAction`.
 - Produces: `SiteNav()` and `SiteFooter()`, both taking no props.
 
@@ -922,11 +936,11 @@ export function SiteFooter() {
 Replace the `<body>` contents in `apps/landing-web/src/app/layout.tsx`:
 
 ```tsx
-      <body className="bg-page text-body min-h-screen antialiased">
-        <SiteNav />
-        {children}
-        <SiteFooter />
-      </body>
+<body className="bg-page text-body min-h-screen antialiased">
+  <SiteNav />
+  {children}
+  <SiteFooter />
+</body>
 ```
 
 and add the imports:
@@ -953,10 +967,12 @@ git commit -m "feat(landing-web): add site navigation and footer"
 ### Task 5: Hero section
 
 **Files:**
+
 - Create: `apps/landing-web/src/features/hero/index.ts`, `hero-content.ts`, `hero-section.tsx`, `hero-product-visual.tsx`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`, `tests/unit/landing-web-content.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `Section`, `ActionButton`, `LinkAction`, `siteConfig`.
 - Produces: `HeroSection()` exported from `@/features/hero`, and `heroContent: { eyebrow: string; headline: string; subhead: string; actions: readonly LinkAction[] }`.
 
@@ -1128,11 +1144,13 @@ git commit -m "feat(landing-web): add hero section"
 ### Task 6: Surfaces and lifecycle sections
 
 **Files:**
+
 - Create: `apps/landing-web/src/features/surfaces/{index.ts,surfaces-content.ts,surfaces-section.tsx}`
 - Create: `apps/landing-web/src/features/lifecycle/{index.ts,lifecycle-content.ts,lifecycle-section.tsx}`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`, `tests/unit/landing-web-content.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `Section`, `SectionHeading`, `Reveal`, `FeatureItem`.
 - Produces: `SurfacesSection()` from `@/features/surfaces`, `LifecycleSection()` from `@/features/lifecycle`, plus `surfacesContent` and `lifecycleContent`.
 
@@ -1323,10 +1341,7 @@ export function LifecycleSection() {
       <Reveal>
         <ol className="mt-14 grid gap-6 md:grid-cols-5">
           {lifecycleContent.steps.map((step, index) => (
-            <li
-              key={step.title}
-              className="bg-surface border-border-soft rounded-card border p-6"
-            >
+            <li key={step.title} className="bg-surface border-border-soft rounded-card border p-6">
               <span className="bg-primary-soft text-primary rounded-pill inline-flex h-8 w-8 items-center justify-center text-sm font-semibold">
                 {index + 1}
               </span>
@@ -1366,11 +1381,13 @@ git commit -m "feat(landing-web): add surfaces and lifecycle sections"
 ### Task 7: Governance and self-host sections
 
 **Files:**
+
 - Create: `apps/landing-web/src/features/governance/{index.ts,governance-content.ts,governance-section.tsx}`
 - Create: `apps/landing-web/src/features/self-host/{index.ts,self-host-content.ts,self-host-section.tsx}`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`, `tests/unit/landing-web-content.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `Section`, `SectionHeading`, `Reveal`, `FeatureItem`.
 - Produces: `GovernanceSection()` from `@/features/governance`, `SelfHostSection()` from `@/features/self-host`, plus `governanceContent` and `selfHostContent`.
 
@@ -1440,7 +1457,8 @@ export const governanceContent = {
     },
     {
       title: "Quotas and guardrails",
-      description: "Per-project spend limits, prompt controls, and a usage record for every generation."
+      description:
+        "Per-project spend limits, prompt controls, and a usage record for every generation."
     },
     {
       title: "Isolation by default",
@@ -1593,12 +1611,14 @@ git commit -m "feat(landing-web): add governance and self-host sections"
 ### Task 8: Open source, FAQ, and final call to action
 
 **Files:**
+
 - Create: `apps/landing-web/src/features/open-source/{index.ts,open-source-content.ts,open-source-section.tsx}`
 - Create: `apps/landing-web/src/features/faq/{index.ts,faq-content.ts,faq-section.tsx}`
 - Create: `apps/landing-web/src/features/final-cta/{index.ts,final-cta-section.tsx}`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`, `tests/unit/landing-web-content.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `Section`, `SectionHeading`, `Reveal`, `ActionButton`, `siteConfig`, `heroContent`.
 - Produces: `OpenSourceSection()`, `FaqSection()`, `FinalCtaSection()` from their respective feature indexes, plus `openSourceContent` and `faqContent`.
 
@@ -1837,11 +1857,13 @@ git commit -m "feat(landing-web): add open source, FAQ, and final CTA sections"
 ### Task 9: Compose the page and finish the metadata
 
 **Files:**
+
 - Modify: `apps/landing-web/src/app/page.tsx`, `apps/landing-web/src/app/layout.tsx`
 - Create: `apps/landing-web/src/app/sitemap.ts`, `apps/landing-web/src/app/robots.ts`
 - Test: `tests/unit/landing-web-render-smoke.test.mjs`, `tests/unit/landing-web-content.test.mjs`
 
 **Interfaces:**
+
 - Consumes: every feature's `index.ts` from Tasks 5–8, and `siteConfig`.
 - Produces: the rendered page; `NEXT_PUBLIC_SITE_URL` read with a localhost fallback.
 
@@ -1854,7 +1876,16 @@ const LandingPage = (await import(`${base}/app/page.tsx`)).default;
 
 test("the page renders every section in order", () => {
   const html = renderToStaticMarkup(React.createElement(LandingPage));
-  const order = ["id=\"top\"", "id=\"surfaces\"", "id=\"lifecycle\"", "id=\"governance\"", "id=\"self-host\"", "id=\"open-source\"", "id=\"faq\"", "id=\"start\""];
+  const order = [
+    'id="top"',
+    'id="surfaces"',
+    'id="lifecycle"',
+    'id="governance"',
+    'id="self-host"',
+    'id="open-source"',
+    'id="faq"',
+    'id="start"'
+  ];
   let cursor = -1;
   for (const anchor of order) {
     const next = html.indexOf(anchor);
@@ -1876,7 +1907,10 @@ test("every navigation anchor resolves to a section the page renders", async () 
   for (const item of siteConfig.navItems) {
     const anchor = item.href.slice(1);
     const feature = page.toLowerCase();
-    assert.ok(feature.includes(anchor.replace("-", "")) || feature.includes(anchor), `no section for ${item.href}`);
+    assert.ok(
+      feature.includes(anchor.replace("-", "")) || feature.includes(anchor),
+      `no section for ${item.href}`
+    );
   }
 });
 ```
@@ -1992,11 +2026,13 @@ git commit -m "feat(landing-web): compose the landing page and site metadata"
 ### Task 10: Railway deployment
 
 **Files:**
+
 - Create: `docker/landing-web.Dockerfile`
 - Modify: `README.md`
 - Test: `tests/unit/landing-web-contract.test.mjs`
 
 **Interfaces:**
+
 - Consumes: the standalone build configured in Task 2.
 - Produces: an image whose entrypoint is `node apps/landing-web/server.js`, listening on `$PORT`.
 
@@ -2088,7 +2124,7 @@ Expected: PASS.
 
 Add a short subsection to `README.md` under the existing local-development material:
 
-```markdown
+````markdown
 ### Landing site
 
 The public marketing site lives in `apps/landing-web` and deploys independently of the
@@ -2097,11 +2133,13 @@ private-server stack.
 ```bash
 pnpm dev:landing   # http://127.0.0.1:4103
 ```
+````
 
 It is deployed from `docker/landing-web.Dockerfile`. The only optional environment
 variable is `NEXT_PUBLIC_SITE_URL`, used for canonical URLs and the sitemap; the platform
 Compose stack does not include it.
-```
+
+````
 
 - [ ] **Step 7: Run the full gate and commit**
 
@@ -2109,7 +2147,7 @@ Compose stack does not include it.
 pnpm check
 git add docker/landing-web.Dockerfile README.md tests/unit/landing-web-contract.test.mjs apps/landing-web/public
 git commit -m "feat(landing-web): add the Railway deployment image"
-```
+````
 
 - [ ] **Step 8: Configure the Railway service**
 

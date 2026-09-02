@@ -56,6 +56,15 @@ test("self-host quotes the real quick start command", () => {
   assert.ok(selfHostContent.services.includes("Postgres"));
 });
 
+test("every product surface appears in the self-host service list", () => {
+  for (const surface of surfacesContent.items) {
+    assert.ok(
+      selfHostContent.services.includes(surface.title),
+      `${surface.title} is described as a surface but missing from the self-host stack`
+    );
+  }
+});
+
 test("the FAQ answers four questions and claims no licence", () => {
   assert.equal(faqContent.entries.length, 4);
   const all = faqContent.entries.map((e) => `${e.question} ${e.answer}`).join(" ");

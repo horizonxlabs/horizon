@@ -27,7 +27,10 @@ function runCheck(relFile, contents) {
 }
 
 test("app file with an arbitrary Tailwind value is rejected", () => {
-  const result = runCheck("apps/admin-web/src/Bad.tsx", 'export const x = <div className="p-[13px]" />;\n');
+  const result = runCheck(
+    "apps/admin-web/src/Bad.tsx",
+    'export const x = <div className="p-[13px]" />;\n'
+  );
   assert.equal(result.ok, false);
   assert.match(result.output, /arbitrary/i);
 });
@@ -42,24 +45,36 @@ test("app file with a color utility is rejected", () => {
 });
 
 test("app file with only layout utilities passes", () => {
-  const result = runCheck("apps/admin-web/src/Good.tsx", 'export const x = <div className="flex gap-4 p-2" />;\n');
+  const result = runCheck(
+    "apps/admin-web/src/Good.tsx",
+    'export const x = <div className="flex gap-4 p-2" />;\n'
+  );
   assert.equal(result.ok, true);
 });
 
 test("app file with a bare color keyword (bg-white) is rejected", () => {
-  const result = runCheck("apps/admin-web/src/BareColor.tsx", 'export const x = <div className="bg-white" />;\n');
+  const result = runCheck(
+    "apps/admin-web/src/BareColor.tsx",
+    'export const x = <div className="bg-white" />;\n'
+  );
   assert.equal(result.ok, false);
   assert.match(result.output, /color utility/i);
 });
 
 test("app file with a non-token shadow utility (shadow-lg) is rejected", () => {
-  const result = runCheck("apps/admin-web/src/Shadow.tsx", 'export const x = <div className="shadow-lg" />;\n');
+  const result = runCheck(
+    "apps/admin-web/src/Shadow.tsx",
+    'export const x = <div className="shadow-lg" />;\n'
+  );
   assert.equal(result.ok, false);
   assert.match(result.output, /shadow\/radius/i);
 });
 
 test("app file with a non-token radius utility (rounded-full) is rejected", () => {
-  const result = runCheck("apps/admin-web/src/Radius.tsx", 'export const x = <div className="rounded-full" />;\n');
+  const result = runCheck(
+    "apps/admin-web/src/Radius.tsx",
+    'export const x = <div className="rounded-full" />;\n'
+  );
   assert.equal(result.ok, false);
   assert.match(result.output, /shadow\/radius/i);
 });
@@ -118,7 +133,10 @@ test("globals.css fails when it declares its own styling", () => {
 });
 
 test("globals.css rejects a declaration appended after a legal import on the same line", () => {
-  const result = runCheck("apps/landing-web/src/app/globals.css", '@import "@evcp/ui/styles.css"; .hero{color:red}\n');
+  const result = runCheck(
+    "apps/landing-web/src/app/globals.css",
+    '@import "@evcp/ui/styles.css"; .hero{color:red}\n'
+  );
   assert.equal(result.ok, false);
   assert.match(result.output, /globals\.css/i);
 });
@@ -141,7 +159,10 @@ test("globals.css rejects an import of a package other than @evcp/ui", () => {
 });
 
 test("the landing-web root layout may import its own globals.css", () => {
-  const result = runCheck("apps/landing-web/src/app/layout.tsx", 'import "./globals.css";\nexport const x = 1;\n');
+  const result = runCheck(
+    "apps/landing-web/src/app/layout.tsx",
+    'import "./globals.css";\nexport const x = 1;\n'
+  );
   assert.equal(result.ok, true);
 });
 

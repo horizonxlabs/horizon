@@ -25,7 +25,7 @@ export const lifecycleContent = {
     {
       title: "Publish",
       description:
-        "An approval policy gates release, then the app appears in the internal App Store."
+        "The release is checked for rollback safety, then the app appears in the internal App Store."
     }
   ] as const satisfies readonly FeatureItem[]
 };

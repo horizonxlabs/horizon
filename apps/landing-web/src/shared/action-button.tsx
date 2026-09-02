@@ -12,9 +12,7 @@ export function ActionButton({
   action: LinkAction;
   variant: keyof typeof variantClass;
 }) {
-  const external = action.external
-    ? { target: "_blank" as const, rel: "noreferrer" as const }
-    : {};
+  const external = action.external ? { target: "_blank" as const, rel: "noreferrer" as const } : {};
   return (
     <a
       href={action.href}
