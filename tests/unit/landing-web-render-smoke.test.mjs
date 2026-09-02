@@ -83,3 +83,21 @@ test("ActionButton omits target and rel for an internal link", () => {
   assert.doesNotMatch(html, /target=/);
   assert.doesNotMatch(html, /rel=/);
 });
+
+const { SiteNav } = await import(`${base}/shared/site-nav.tsx`);
+const { SiteFooter } = await import(`${base}/shared/site-footer.tsx`);
+
+test("SiteNav lists configured anchor links and the repository link", () => {
+  const html = renderToStaticMarkup(React.createElement(SiteNav));
+  for (const item of siteConfig.navItems) {
+    assert.match(html, new RegExp(`href="${item.href}"`));
+    assert.match(html, new RegExp(item.label));
+  }
+  assert.ok(html.includes(siteConfig.repositoryUrl));
+});
+
+test("SiteFooter states the project name without claiming a licence", () => {
+  const html = renderToStaticMarkup(React.createElement(SiteFooter));
+  assert.match(html, /Horizon/);
+  assert.doesNotMatch(html, /licen[sc]e/i);
+});

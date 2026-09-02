@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { SiteFooter } from "@/shared/site-footer";
+import { SiteNav } from "@/shared/site-nav";
 
 export const metadata: Metadata = {
   title: "Horizon — enterprise AI application builder",
@@ -11,7 +13,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-page text-body min-h-screen antialiased">{children}</body>
+      <body className="bg-page text-body min-h-screen antialiased">
+        <SiteNav />
+        {children}
+        <SiteFooter />
+      </body>
     </html>
   );
 }
