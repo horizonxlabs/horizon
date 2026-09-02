@@ -25,7 +25,12 @@ export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Prom
   if (!isLocale(lang)) notFound();
   const copy = metadataContent[lang];
   // Driven from LOCALES rather than hardcoded, so a third locale only needs adding there.
-  const languages = Object.fromEntries(LOCALES.map((locale) => [locale, `/${locale}`]));
+  // `x-default` points at the site root rather than `/th` directly: `/` already redirects to
+  // `/th`, so the root URL stays the language-selection signal instead of being invisible to it.
+  const languages = {
+    ...Object.fromEntries(LOCALES.map((locale) => [locale, `/${locale}`])),
+    "x-default": siteUrl
+  };
   return {
     metadataBase: new URL(siteUrl),
     title: copy.title,

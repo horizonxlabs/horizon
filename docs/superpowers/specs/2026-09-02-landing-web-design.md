@@ -5,8 +5,8 @@ Date: 2026-09-02
 ## Summary
 
 Horizon gains a public marketing site at `apps/landing-web`: a Next.js 16 App Router
-application rendered on the server, written in English, deployed to Railway as its own
-service. It is a workspace member so that it consumes the real design tokens from
+application rendered on the server, bilingual in Thai and English, deployed to Railway as
+its own service. It is a workspace member so that it consumes the real design tokens from
 `@evcp/ui` instead of copying colours by hand, but it is deployment-independent from the
 private-server Compose stack — it never touches `docker/Caddyfile`,
 `docker/docker-compose.yml`, or `platform-api`.
@@ -29,7 +29,6 @@ self-host quick start rather than at a sales funnel.
 ## Non-goals
 
 - No CMS, blog, changelog, or content pipeline.
-- No internationalisation. English only; `[locale]` segments can be added later.
 - No contact form, mail provider, or lead capture backend.
 - No analytics or third-party tracking.
 - No dark theme.
@@ -229,7 +228,18 @@ section depends on it.
 
 ## Page structure
 
-English copy, drawn from `README.md` so the site and the repository stay consistent.
+Bilingual: `th` (Thai, the default) and `en`, both statically prerendered via
+`generateStaticParams`. `/` redirects to `/th`. Locale is passed down as an explicit prop
+rather than read via `next/root-params` — the Next 16 idiom would make every section an
+async component, and `renderToStaticMarkup`, which every render-smoke test in this repo
+depends on, cannot render those. `sitemap.ts` and `robots.ts` stay at the `app/` root
+because Next's metadata-route conventions require it; nesting them under `[lang]` silently
+produced no robots route and a `/-/sitemap.xml`. The font stack is Latin-first so Latin
+renders from Inter and Thai from LINE Seed within one sentence, with the bundled Thai
+faces declared via `@font-face` in `packages/ui/fonts.css`.
+
+Copy is drawn from `README.md` so the site and the repository stay consistent, then
+translated into both locales.
 
 1. **Nav** — Horizon mark, anchor links (Platform, How it works, Security, Self-host,
    FAQ), and a GitHub link.

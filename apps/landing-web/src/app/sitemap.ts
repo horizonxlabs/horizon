@@ -7,7 +7,12 @@ import { LOCALES } from "@/shared/locale";
 // tests/unit/landing-web-i18n.test.mjs). One entry per locale, driven from LOCALES, each
 // cross-referencing every locale via `alternates.languages`.
 export default function sitemap(): MetadataRoute.Sitemap {
-  const languages = Object.fromEntries(LOCALES.map((locale) => [locale, `${siteUrl}/${locale}`]));
+  // `x-default` points at the site root, matching `/[lang]/layout.tsx`'s `generateMetadata`:
+  // `/` already redirects to `/th`, so the root URL is the language-selection signal.
+  const languages = {
+    ...Object.fromEntries(LOCALES.map((locale) => [locale, `${siteUrl}/${locale}`])),
+    "x-default": siteUrl
+  };
   return LOCALES.map((locale) => ({
     url: `${siteUrl}/${locale}`,
     lastModified: new Date(),

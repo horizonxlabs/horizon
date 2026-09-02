@@ -16,11 +16,15 @@ export function LanguageSwitcher({ locale = DEFAULT_LOCALE }: LocaleProps) {
         return (
           <li key={target}>
             {target === locale ? (
-              <span aria-current="true" className="text-body font-medium">
+              <span aria-current="true" lang={target} className="text-body font-medium">
                 {label}
               </span>
             ) : (
-              <a href={`/${target}`} className="text-muted hover:text-body transition-colors">
+              <a
+                href={`/${target}`}
+                lang={target}
+                className="text-muted hover:text-body transition-colors"
+              >
                 {label}
               </a>
             )}
