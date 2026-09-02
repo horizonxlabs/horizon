@@ -113,6 +113,20 @@ remove `.env`, and run `pnpm dev:setup` again.
 `pnpm install` is still needed on the host to run the quality gate (`pnpm check`), lint,
 typecheck, and tests locally.
 
+### Landing site
+
+The public marketing site lives at `apps/landing-web` and deploys independently of the
+private-server Compose stack. Run it locally with:
+
+```bash
+pnpm dev:landing
+```
+
+This serves the site at http://127.0.0.1:4103. For deployment, the site is built from
+`docker/landing-web.Dockerfile`, which produces a standalone Next.js image. It takes one
+optional environment variable, `NEXT_PUBLIC_SITE_URL`, used for canonical URLs and the
+sitemap.
+
 ### Private-server installation
 
 Create the local environment file and replace every example secret before continuing:

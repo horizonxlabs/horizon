@@ -47,3 +47,11 @@ test("unit tests can resolve the landing-web @/ alias", () => {
     "./apps/landing-web/src/*"
   ]);
 });
+
+test("the landing image runs the standalone server", () => {
+  const dockerfile = readFileSync("docker/landing-web.Dockerfile", "utf8");
+  assert.match(dockerfile, /node:22/);
+  assert.match(dockerfile, /pnpm --filter @evcp\/landing-web build/);
+  assert.match(dockerfile, /apps\/landing-web\/server\.js/);
+  assert.match(dockerfile, /^USER node$/m);
+});
