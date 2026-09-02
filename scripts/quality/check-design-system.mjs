@@ -21,6 +21,10 @@ const APPROVED_UI_CSS_IMPORTS = ['import "@evcp/ui/styles.css"', 'import "@evcp/
 const LANDING_CSS_ENTRY = "apps/landing-web/src/app/globals.css";
 const ALLOWED_ENTRY_STATEMENT =
   /^@(?:import\s+["']@evcp\/ui\/[a-z0-9.-]+\.css["']|source\s+["'][^"']+["'])$/;
+// The App Router only bundles global CSS when the root layout imports it directly, so the
+// root layout is the one source file allowed to import the (already-restricted) CSS entry.
+const LANDING_ROOT_LAYOUT = "apps/landing-web/src/app/layout.tsx";
+const LANDING_ROOT_LAYOUT_CSS_IMPORT = 'import "./globals.css"';
 
 function landingCssEntryViolations(content) {
   // Blank out comments rather than deleting them, so byte offsets — and therefore the
@@ -138,7 +142,8 @@ for (const file of files) {
 
     if (
       LOCAL_CSS_IMPORT_PATTERN.test(line) &&
-      !APPROVED_UI_CSS_IMPORTS.some((approved) => line.includes(approved))
+      !APPROVED_UI_CSS_IMPORTS.some((approved) => line.includes(approved)) &&
+      !(file === LANDING_ROOT_LAYOUT && line.includes(LANDING_ROOT_LAYOUT_CSS_IMPORT))
     ) {
       reportViolation(
         violations,
