@@ -10,7 +10,8 @@
       "types": "./src/index.tsx",
       "default": "./src/index.tsx"
     },
-    "./styles.css": "./styles.css"
+    "./styles.css": "./styles.css",
+    "./marketing.css": "./marketing.css"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
