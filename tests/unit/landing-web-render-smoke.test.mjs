@@ -63,7 +63,11 @@ test("Reveal renders visible content in the server output", () => {
 
 test("the landing app ships no client components", async () => {
   const { readdir, readFile } = await import("node:fs/promises");
-  const roots = ["apps/landing-web/src/shared", "apps/landing-web/src/app"];
+  const roots = [
+    "apps/landing-web/src/shared",
+    "apps/landing-web/src/app",
+    "apps/landing-web/src/features"
+  ];
   for (const root of roots) {
     for (const entry of await readdir(root, { recursive: true })) {
       if (!entry.endsWith(".tsx") && !entry.endsWith(".ts")) continue;
@@ -100,4 +104,19 @@ test("SiteFooter states the project name without claiming a licence", () => {
   const html = renderToStaticMarkup(React.createElement(SiteFooter));
   assert.match(html, /Horizon/);
   assert.doesNotMatch(html, /licen[sc]e/i);
+});
+
+const { HeroSection } = await import(`${base}/features/hero`);
+
+test("HeroSection renders the headline and both actions", () => {
+  const html = renderToStaticMarkup(React.createElement(HeroSection));
+  assert.match(html, /Ship internal software/);
+  assert.match(html, /href="#self-host"/);
+  assert.ok(html.includes(siteConfig.repositoryUrl));
+});
+
+test("HeroSection hides the decorative product visual from assistive tech and invents no quorum claim", () => {
+  const html = renderToStaticMarkup(React.createElement(HeroSection));
+  assert.match(html, /aria-hidden="true"/);
+  assert.doesNotMatch(html, /\d+ of \d+ approvals/);
 });
