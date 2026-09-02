@@ -44,18 +44,21 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 
 const base = "../../apps/landing-web/src";
 
+const { LOCALES } = await import(`${base}/shared/locale.ts`);
 const { siteConfig } = await import(`${base}/shared/site-config.ts`);
 const { Section } = await import(`${base}/shared/section.tsx`);
 const { SectionHeading } = await import(`${base}/shared/section-heading.tsx`);
 const { ActionButton } = await import(`${base}/shared/action-button.tsx`);
 const { Reveal } = await import(`${base}/shared/reveal.tsx`);
 
+const THAI = /[฀-๿]/;
+
 test("site config points at the public repository", () => {
   assert.equal(
     siteConfig.repositoryUrl,
     "https://github.com/0xlabsTeam/EnterpriseVibeCodingPlatform"
   );
-  for (const locale of ["th", "en"]) {
+  for (const locale of LOCALES) {
     assert.ok(siteConfig.navItems[locale].length > 0);
   }
 });
@@ -134,30 +137,45 @@ test("ActionButton omits target and rel for an internal link", () => {
 const { SiteNav } = await import(`${base}/shared/site-nav.tsx`);
 const { SiteFooter } = await import(`${base}/shared/site-footer.tsx`);
 
-test("SiteNav lists configured anchor links and the repository link", () => {
-  const html = renderToStaticMarkup(React.createElement(SiteNav, { locale: "en" }));
-  for (const item of siteConfig.navItems.en) {
-    assert.match(html, new RegExp(`href="${item.href}"`));
-    assert.match(html, new RegExp(item.label));
+test("SiteNav lists configured anchor links and the repository link, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(SiteNav, { locale }));
+    for (const item of siteConfig.navItems[locale]) {
+      assert.match(html, new RegExp(`href="${item.href}"`));
+      assert.ok(html.includes(item.label), `${locale}: missing nav label ${item.label}`);
+    }
+    assert.ok(html.includes(siteConfig.repositoryUrl));
   }
-  assert.ok(html.includes(siteConfig.repositoryUrl));
 });
 
-test("SiteNav renders the logo lockup with meaningful alt text", () => {
-  const html = renderToStaticMarkup(React.createElement(SiteNav, { locale: "en" }));
-  assert.match(html, /src="\/horizon-logo\.png"/);
-  assert.match(html, new RegExp(`alt="${siteConfig.name}`));
+test("SiteNav renders the logo lockup with meaningful, locale-specific alt text", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(SiteNav, { locale }));
+    assert.match(html, /src="\/horizon-logo\.png"/);
+    const altMatch = html.match(/alt="([^"]*)"/);
+    assert.ok(altMatch, `${locale}: logo image has no alt attribute`);
+    const alt = altMatch[1];
+    assert.ok(
+      alt.startsWith(siteConfig.name),
+      `${locale}: alt text should start with ${siteConfig.name}`
+    );
+    if (locale === "th") {
+      assert.match(alt, THAI, "th alt text contains no Thai script");
+    } else {
+      assert.doesNotMatch(alt, THAI, "en alt text contains Thai script");
+    }
+  }
 });
 
 test("SiteFooter states the project name without claiming a licence, in both locales", () => {
-  for (const locale of ["th", "en"]) {
+  for (const locale of LOCALES) {
     const html = renderToStaticMarkup(React.createElement(SiteFooter, { locale }));
     assert.match(html, /Horizon/);
     assert.doesNotMatch(html, /licen[sc]e/i);
   }
 });
 
-const { HeroSection } = await import(`${base}/features/hero`);
+const { HeroSection, heroContent } = await import(`${base}/features/hero`);
 const { SurfacesSection, surfacesContent } = await import(`${base}/features/surfaces`);
 const { LifecycleSection, lifecycleContent } = await import(`${base}/features/lifecycle`);
 const { GovernanceSection, governanceContent } = await import(`${base}/features/governance`);
@@ -166,98 +184,133 @@ const { OpenSourceSection } = await import(`${base}/features/open-source`);
 const { FaqSection, faqContent } = await import(`${base}/features/faq`);
 const { FinalCtaSection, finalCtaContent } = await import(`${base}/features/final-cta`);
 
-test("HeroSection renders the headline and both actions", () => {
-  const html = renderToStaticMarkup(React.createElement(HeroSection, { locale: "en" }));
-  assert.match(html, /Ship internal software/);
-  assert.match(html, /href="#self-host"/);
-  assert.ok(html.includes(siteConfig.repositoryUrl));
+test("HeroSection renders the headline and both actions, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(HeroSection, { locale }));
+    assert.ok(html.includes(heroContent[locale].headline), `${locale}: headline missing`);
+    assert.match(html, /href="#self-host"/);
+    assert.ok(html.includes(siteConfig.repositoryUrl));
+  }
 });
 
-test("HeroSection hides the decorative product visual from assistive tech and invents no quorum claim", () => {
-  const html = renderToStaticMarkup(React.createElement(HeroSection, { locale: "en" }));
-  assert.match(html, /aria-hidden="true"/);
-  // Guards against a false quorum claim (e.g. "3 of 4 approvals") that an earlier draft of the
-  // hero product visual invented and this branch removed — a fabricated governance number with
-  // no backing data. Keep this even though the current copy has nothing to trip it.
-  assert.doesNotMatch(html, /\d+ of \d+ approvals/);
+test("HeroSection hides the decorative product visual from assistive tech and invents no quorum claim, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(HeroSection, { locale }));
+    assert.match(html, /aria-hidden="true"/);
+    // Guards against a false quorum claim (e.g. "3 of 4 approvals") that an earlier draft of the
+    // hero product visual invented and this branch removed — a fabricated governance number with
+    // no backing data. Keep this even though the current copy has nothing to trip it.
+    assert.doesNotMatch(html, /\d+ of \d+ approvals/);
+  }
 });
 
-test("SurfacesSection renders every product surface", () => {
-  const html = renderToStaticMarkup(React.createElement(SurfacesSection, { locale: "en" }));
-  assert.match(html, /id="surfaces"/);
-  for (const item of surfacesContent.en.items) assert.ok(html.includes(item.title));
+test("SurfacesSection renders every product surface, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(SurfacesSection, { locale }));
+    assert.match(html, /id="surfaces"/);
+    for (const item of surfacesContent[locale].items) {
+      assert.ok(html.includes(item.title), `${locale}: missing surface ${item.title}`);
+    }
+  }
 });
 
-test("LifecycleSection renders every step", () => {
-  const html = renderToStaticMarkup(React.createElement(LifecycleSection, { locale: "en" }));
-  assert.match(html, /id="lifecycle"/);
-  for (const step of lifecycleContent.en.steps) assert.ok(html.includes(step.title));
+test("LifecycleSection renders every step, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(LifecycleSection, { locale }));
+    assert.match(html, /id="lifecycle"/);
+    for (const step of lifecycleContent[locale].steps) {
+      assert.ok(html.includes(step.title), `${locale}: missing step ${step.title}`);
+    }
+  }
 });
 
-test("GovernanceSection renders every control", () => {
-  const html = renderToStaticMarkup(React.createElement(GovernanceSection, { locale: "en" }));
-  assert.match(html, /id="governance"/);
-  for (const item of governanceContent.en.items) assert.ok(html.includes(item.title));
+test("GovernanceSection renders every control, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(GovernanceSection, { locale }));
+    assert.match(html, /id="governance"/);
+    for (const item of governanceContent[locale].items) {
+      assert.ok(html.includes(item.title), `${locale}: missing control ${item.title}`);
+    }
+  }
 });
 
-test("SelfHostSection renders the quick start command", () => {
-  const html = renderToStaticMarkup(React.createElement(SelfHostSection, { locale: "en" }));
-  assert.match(html, /id="self-host"/);
-  assert.ok(html.includes(selfHostContent.en.command));
+test("SelfHostSection renders the quick start command, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(SelfHostSection, { locale }));
+    assert.match(html, /id="self-host"/);
+    assert.ok(html.includes(selfHostContent[locale].command));
+  }
 });
 
-test("OpenSourceSection renders the repository link", () => {
-  const html = renderToStaticMarkup(React.createElement(OpenSourceSection, { locale: "en" }));
-  assert.match(html, /id="open-source"/);
-  assert.ok(html.includes(siteConfig.repositoryUrl));
+test("OpenSourceSection renders the repository link, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(OpenSourceSection, { locale }));
+    assert.match(html, /id="open-source"/);
+    assert.ok(html.includes(siteConfig.repositoryUrl));
+  }
 });
 
-test("FaqSection renders every question", () => {
-  const html = renderToStaticMarkup(React.createElement(FaqSection, { locale: "en" }));
-  assert.match(html, /id="faq"/);
-  for (const entry of faqContent.en.entries) assert.ok(html.includes(entry.question));
+test("FaqSection renders every question, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(FaqSection, { locale }));
+    assert.match(html, /id="faq"/);
+    for (const entry of faqContent[locale].entries) {
+      assert.ok(html.includes(entry.question), `${locale}: missing question ${entry.question}`);
+    }
+  }
 });
 
-test("FinalCtaSection repeats both hero actions", () => {
-  const html = renderToStaticMarkup(React.createElement(FinalCtaSection, { locale: "en" }));
-  assert.match(html, /href="#self-host"/);
-  assert.ok(html.includes(siteConfig.repositoryUrl));
+test("FinalCtaSection repeats both hero actions, in both locales", () => {
+  for (const locale of LOCALES) {
+    const html = renderToStaticMarkup(React.createElement(FinalCtaSection, { locale }));
+    assert.match(html, /href="#self-host"/);
+    assert.ok(html.includes(siteConfig.repositoryUrl));
+  }
 });
 
+const { DEFAULT_LOCALE } = await import(`${base}/shared/locale.ts`);
 const LandingPage = (await import(`${base}/app/[lang]/page.tsx`)).default;
 
 // The page component itself must await `params` (this Next.js version's route contract), so
 // unlike the section components above it cannot be rendered via `React.createElement` — call it
 // directly to resolve the element tree first, then hand that (fully synchronous) tree to
 // `renderToStaticMarkup`.
-async function renderLandingPage(lang = "en") {
+async function renderLandingPage(lang = DEFAULT_LOCALE) {
   const element = await LandingPage({ params: Promise.resolve({ lang }) });
   return renderToStaticMarkup(element);
 }
 
-test("the page renders every section in order", async () => {
-  const html = await renderLandingPage();
-  const order = [
-    'id="top"',
-    'id="surfaces"',
-    'id="lifecycle"',
-    'id="governance"',
-    'id="self-host"',
-    'id="open-source"',
-    'id="faq"',
-    finalCtaContent.en.headline
-  ];
-  let cursor = -1;
-  for (const anchor of order) {
-    const next = html.indexOf(anchor);
-    assert.ok(next > cursor, `${anchor} is missing or out of order`);
-    cursor = next;
+test("the page renders every section in order, in both locales", async () => {
+  for (const locale of LOCALES) {
+    const html = await renderLandingPage(locale);
+    const order = [
+      'id="top"',
+      'id="surfaces"',
+      'id="lifecycle"',
+      'id="governance"',
+      'id="self-host"',
+      'id="open-source"',
+      'id="faq"',
+      finalCtaContent[locale].headline
+    ];
+    let cursor = -1;
+    for (const anchor of order) {
+      const next = html.indexOf(anchor);
+      assert.ok(next > cursor, `${locale}: ${anchor} is missing or out of order`);
+      cursor = next;
+    }
   }
 });
 
-test("every navigation anchor resolves to a section the page renders", async () => {
-  const html = await renderLandingPage();
-  for (const item of siteConfig.navItems.en) {
-    assert.match(html, new RegExp(`id="${item.href.slice(1)}"`), `no section for ${item.href}`);
+test("every navigation anchor resolves to a section the page renders, in both locales", async () => {
+  for (const locale of LOCALES) {
+    const html = await renderLandingPage(locale);
+    for (const item of siteConfig.navItems[locale]) {
+      assert.match(
+        html,
+        new RegExp(`id="${item.href.slice(1)}"`),
+        `${locale}: no section for ${item.href}`
+      );
+    }
   }
 });

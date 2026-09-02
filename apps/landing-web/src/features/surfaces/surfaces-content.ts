@@ -19,17 +19,20 @@ export const surfacesContent: Record<Locale, SurfacesCopy> = {
       {
         title: "Admin Console",
         audience: "ทีม IT ความปลอดภัย และผู้ดูแลแพลตฟอร์ม",
-        description: "ควบคุมผู้ให้บริการ AI สิทธิ์การเข้าถึง นโยบาย การดำเนินงาน และสิทธิ์การใช้งาน เพื่อความพร้อมก่อนเผยแพร่"
+        description:
+          "ควบคุมผู้ให้บริการ AI สิทธิ์การเข้าถึง นโยบาย การดำเนินงาน และใบอนุญาต เพื่อความพร้อมก่อนเผยแพร่"
       },
       {
         title: "Creator App",
         audience: "ทีมสร้างธุรกิจและทีมพัฒนา",
-        description: "เปลี่ยนความต้องการให้เป็น PRD เวิร์กสเปซที่ AI สร้างขึ้น ตัวอย่างใช้งานจริง และแอปพลิเคชันที่เผยแพร่แล้ว"
+        description:
+          "เปลี่ยนความต้องการให้เป็น PRD เวิร์กสเปซที่ AI สร้างขึ้น ตัวอย่างใช้งานจริง และแอปพลิเคชันที่เผยแพร่แล้ว"
       },
       {
         title: "App Store PWA",
         audience: "พนักงานและผู้ใช้ที่ได้รับอนุมัติ",
-        description: "ค้นหาแอปภายในองค์กร ขอสิทธิ์การเข้าถึง และส่งความคิดเห็นด้านการสนับสนุนหรือผลิตภัณฑ์"
+        description:
+          "ค้นหาแอปภายในองค์กร ขอสิทธิ์การเข้าถึง และส่งความคิดเห็นด้านการสนับสนุนหรือผลิตภัณฑ์"
       }
     ] as const satisfies readonly SurfaceItem[]
   },
@@ -43,7 +46,7 @@ export const surfacesContent: Record<Locale, SurfacesCopy> = {
         title: "Admin Console",
         audience: "IT, security, and platform administrators",
         description:
-          "Govern providers, access, policies, operations, and entitlements for release readiness."
+          "Govern providers, access, policies, operations, and licenses for release readiness."
       },
       {
         title: "Creator App",
@@ -54,7 +57,8 @@ export const surfacesContent: Record<Locale, SurfacesCopy> = {
       {
         title: "App Store PWA",
         audience: "Employees and approved end users",
-        description: "Discover internal apps, request access, and submit support or product feedback."
+        description:
+          "Discover internal apps, request access, and submit support or product feedback."
       }
     ] as const satisfies readonly SurfaceItem[]
   }

@@ -1,8 +1,13 @@
 import Image from "next/image";
 import { ActionButton } from "@/shared/action-button";
-import type { LocaleProps } from "@/shared/locale";
+import type { Locale, LocaleProps } from "@/shared/locale";
 import { DEFAULT_LOCALE } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
+
+const logoAlt: Record<Locale, string> = {
+  th: `${siteConfig.name} — เครื่องมือสร้างแอปพลิเคชัน AI สำหรับองค์กร`,
+  en: `${siteConfig.name} — enterprise AI application builder`
+};
 
 export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
   return (
@@ -11,7 +16,7 @@ export function SiteNav({ locale = DEFAULT_LOCALE }: LocaleProps) {
         <a href="#top" className="flex items-center">
           <Image
             src="/horizon-logo.png"
-            alt={`${siteConfig.name} — enterprise AI application builder`}
+            alt={logoAlt[locale]}
             width={984}
             height={254}
             preload

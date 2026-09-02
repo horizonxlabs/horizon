@@ -50,6 +50,19 @@ test("the bare root redirects to the default locale", () => {
 
 const THAI = /[฀-๿]/;
 
+const { siteConfig } = await import(`${base}/shared/site-config.ts`);
+
+test("nav items are translated for both locales, with matching hrefs in the same order", () => {
+  const { th, en } = siteConfig.navItems;
+  assert.ok(th.length > 0, "th nav items are empty");
+  assert.equal(th.length, en.length, "th and en nav items have different lengths");
+  for (let i = 0; i < th.length; i += 1) {
+    assert.equal(th[i].href, en[i].href, `nav item ${i}: hrefs must match across locales`);
+    assert.match(th[i].label, THAI, `nav item ${i} (th): label contains no Thai script`);
+    assert.doesNotMatch(en[i].label, THAI, `nav item ${i} (en): label contains Thai script`);
+  }
+});
+
 const modules = {
   hero: await import(`${base}/features/hero`),
   surfaces: await import(`${base}/features/surfaces`),
@@ -88,10 +101,62 @@ test("Thai copy is Thai and English copy is not", () => {
   }
 });
 
+// Narrow, claim-shaped patterns rather than bare vocabulary. A bare `/licen[sc]e/i` or an
+// `อนุมัติ` ban would false-positive on legitimate copy: the Admin Console surface description
+// accurately says it governs "licenses" (apps/admin-web/src/features/observability-licensing is
+// a real feature; README.md:25 and :38 use the same word), and the App Store PWA audience is
+// accurately described as "approved end users" (ผู้ใช้ที่ได้รับอนุมัติ). These guards target the
+// *claim shapes* that would actually be dishonest — "this repository is licensed under X" and
+// "a release requires a person's approval" — not the presence of the words themselves.
+const LICENCE_CLAIM =
+  /licen[sc]ed under|under the [^.]{0,30}licen[sc]e|\b(MIT|Apache|GPL|BSD|MPL)\b[^.]{0,40}licen[sc]e/i;
+const APPROVAL_GATE_CLAIM = /\d+ of \d+ approvals/;
+const THAI_LICENCE_CLAIM =
+  /ภายใต้[^.]{0,30}(ใบอนุญาต|สัญญาอนุญาต)|(ใบอนุญาต|สัญญาอนุญาต)[^.]{0,10}(MIT|Apache|GPL|BSD|MPL)/;
+const THAI_APPROVAL_GATE_CLAIM = /ต้องได้รับการอนุมัติ|ขั้นตอนการอนุมัติ/;
+
 test("neither language claims a licence or an approval gate", () => {
   for (const mod of Object.values(modules)) {
     const all = JSON.stringify(copyOf(mod));
-    assert.doesNotMatch(all, /licen[sc]e/i);
-    assert.doesNotMatch(all, /\d+ of \d+ approvals/);
+    assert.doesNotMatch(all, LICENCE_CLAIM);
+    assert.doesNotMatch(all, APPROVAL_GATE_CLAIM);
+    assert.doesNotMatch(all, THAI_LICENCE_CLAIM);
+    assert.doesNotMatch(all, THAI_APPROVAL_GATE_CLAIM);
   }
+});
+
+// Proof the guards above actually discriminate, in both directions, per the fix-round review:
+// "a guard that only passes is not evidence". Each guard must both catch a constructed false
+// claim and leave the real, legitimate copy alone.
+test("the licence-claim and approval-gate guards catch false claims without flagging real copy", () => {
+  // English licence claim: must fire on a constructed false statement...
+  assert.ok(LICENCE_CLAIM.test("Horizon is released under the MIT License."));
+  // ...and must not fire on the real, accurate Admin Console copy.
+  assert.ok(
+    !LICENCE_CLAIM.test(
+      "Govern providers, access, policies, operations, and licenses for release readiness."
+    )
+  );
+
+  // Thai licence claim: must fire on a constructed false statement...
+  assert.ok(THAI_LICENCE_CLAIM.test("Horizon เผยแพร่ภายใต้ใบอนุญาต MIT"));
+  // ...and must not fire on the real, accurate Thai Admin Console copy.
+  assert.ok(
+    !THAI_LICENCE_CLAIM.test(
+      "ควบคุมผู้ให้บริการ AI สิทธิ์การเข้าถึง นโยบาย การดำเนินงาน และใบอนุญาต เพื่อความพร้อมก่อนเผยแพร่"
+    )
+  );
+
+  // Thai approval-gate claim: must fire on a constructed false statement...
+  assert.ok(
+    THAI_APPROVAL_GATE_CLAIM.test("การเผยแพร่แอปทุกครั้งต้องได้รับการอนุมัติจากผู้ดูแลระบบ")
+  );
+  // ...and must not fire on the real, accurate "approved end users" audience copy, or the real
+  // FAQ copy describing already-approved AI providers — neither is a release-approval-gate claim.
+  assert.ok(!THAI_APPROVAL_GATE_CLAIM.test("พนักงานและผู้ใช้ที่ได้รับอนุมัติ"));
+  assert.ok(
+    !THAI_APPROVAL_GATE_CLAIM.test(
+      "ทำให้ Horizon เรียกใช้โมเดลที่องค์กรของคุณอนุมัติไว้แล้ว แทนที่จะผูกติดกับผู้ให้บริการรายใดรายหนึ่งตายตัว"
+    )
+  );
 });
