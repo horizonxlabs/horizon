@@ -7,7 +7,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TARGET_ROOTS = new Set(["app", "routes", "features", "shared"]);
 const LEGACY_ROOTS = new Set(["components", "hooks", "lib", "pages", "data"]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
-const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa"];
+const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa", "landing-web"];
 const baseline = new Set(
   JSON.parse(readFileSync(resolve(ROOT, "scripts/quality/frontend-legacy-path-baseline.json"), "utf8"))
 );
