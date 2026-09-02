@@ -117,6 +117,13 @@ exported as `@evcp/ui/marketing.css`.
 The constraint that matters is not the exact stops but the source: every value must be
 expressed in terms of a layer 1 `--ref-*` variable, never a fresh literal.
 
+`marketing.css` also exposes the classes built from those tokens — `.evcp-hero-gradient`,
+`.evcp-glow-card`, `.evcp-reveal` — following the precedent of the existing
+`packages/ui/creator-project-switcher.css`. This matters for governance: the design-system
+check only accepts `shadow-card` and `rounded-card|control|pill` as shape utilities, so
+exposing marketing shapes as Tailwind utilities would require loosening that rule. Named
+classes keep the rule untouched and keep the intent readable at the call site.
+
 They are kept out of `theme.css` so the product design system is not polluted by values
 used on exactly one page, while styling still lives only inside `packages/ui` as the
 repository requires.
@@ -132,8 +139,10 @@ to `APP_SRC_DIRS`, with two narrow amendments:
 1. `@evcp/ui/marketing.css` joins `@evcp/ui/styles.css` in the approved import list.
 2. `apps/landing-web/src/app/globals.css` is exempt from the "no app-local stylesheet"
    rule, because Next.js requires a CSS entry point. The exemption is conditional: the
-   file may contain only comments and `@import "@evcp/ui/…"` statements. Any declaration
-   or any other import fails the check.
+   file may contain only comments, `@import "@evcp/ui/…"` statements, and `@source`
+   directives (Tailwind v4 needs one to scan the app's own sources). Any CSS declaration,
+   selector, or other import fails the check. `@source` cannot introduce a colour or a
+   shape, so allowing it does not weaken the rule.
 
 Everything else still applies to the landing page — no hex literals, no `rgb()`, no
 inline `style={{}}`, no Tailwind palette utilities such as `bg-slate-900`, no arbitrary
@@ -182,15 +191,38 @@ apps/landing-web/
     shared/
       site-nav.tsx
       site-footer.tsx
+      section.tsx         band wrapper with a page/surface tone
       section-heading.tsx
+      action-button.tsx
       reveal.tsx          "use client"
-      site-config.ts      repository URL, docs URL, nav items
-      content/            typed copy per section
+      site-config.ts      repository URL, nav items
+      content-types.ts
 ```
 
-Copy lives in `shared/content/*.ts` as typed data. Sections read that data and render it,
-which keeps components pure, keeps files under the size cap, and makes the content
-independently testable.
+Copy lives beside the section that renders it — `features/hero/hero-content.ts`, and so on
+— because copy and layout change together. Only genuinely cross-cutting values (the
+repository URL, the navigation list) sit in `shared/site-config.ts`. Sections read typed
+data and render it, which keeps components pure, keeps files under the size cap, and makes
+the content independently testable.
+
+Same-feature relative imports are permitted by `check-frontend-architecture.mjs`, so a
+feature reaching its own content file needs no alias; everything crossing a boundary uses
+`@/`.
+
+### Unit-test alias resolution
+
+`tsconfig.test.json` currently maps `@/*` to `apps/creator-web/src/*` only, so landing
+components would fail to resolve their `@/shared/…` imports under the test runner. The
+mapping becomes an ordered array:
+
+```json
+"@/*": ["./apps/creator-web/src/*", "./apps/landing-web/src/*"]
+```
+
+`tsx` tries each entry and falls through to the next when a path does not exist on disk;
+this was verified against a throwaway two-package fixture before the approach was
+adopted. The first landing test task re-verifies it, so the harness is proven before any
+section depends on it.
 
 ## Page structure
 
