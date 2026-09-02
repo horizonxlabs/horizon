@@ -7,6 +7,8 @@ const { surfacesContent } = await import(`${base}/features/surfaces/surfaces-con
 const { lifecycleContent } = await import(`${base}/features/lifecycle/lifecycle-content.ts`);
 const { governanceContent } = await import(`${base}/features/governance/governance-content.ts`);
 const { selfHostContent } = await import(`${base}/features/self-host/self-host-content.ts`);
+const { faqContent } = await import(`${base}/features/faq/faq-content.ts`);
+const { openSourceContent } = await import(`${base}/features/open-source/open-source-content.ts`);
 
 test("hero copy is present and in English", () => {
   assert.ok(heroContent.headline.length > 0);
@@ -52,4 +54,15 @@ test("governance covers controls the platform actually implements", () => {
 test("self-host quotes the real quick start command", () => {
   assert.equal(selfHostContent.command, "pnpm dev:setup");
   assert.ok(selfHostContent.services.includes("Postgres"));
+});
+
+test("the FAQ answers four questions and claims no licence", () => {
+  assert.equal(faqContent.entries.length, 4);
+  const all = faqContent.entries.map((e) => `${e.question} ${e.answer}`).join(" ");
+  assert.doesNotMatch(all, /licen[sc]e/i, "the repository has no LICENSE file yet");
+});
+
+test("the open source section links to the repository", () => {
+  assert.ok(openSourceContent.action.href.startsWith("https://github.com/"));
+  assert.equal(openSourceContent.action.external, true);
 });

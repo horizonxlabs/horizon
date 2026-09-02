@@ -111,6 +111,9 @@ const { SurfacesSection, surfacesContent } = await import(`${base}/features/surf
 const { LifecycleSection, lifecycleContent } = await import(`${base}/features/lifecycle`);
 const { GovernanceSection, governanceContent } = await import(`${base}/features/governance`);
 const { SelfHostSection, selfHostContent } = await import(`${base}/features/self-host`);
+const { OpenSourceSection } = await import(`${base}/features/open-source`);
+const { FaqSection, faqContent } = await import(`${base}/features/faq`);
+const { FinalCtaSection } = await import(`${base}/features/final-cta`);
 
 test("HeroSection renders the headline and both actions", () => {
   const html = renderToStaticMarkup(React.createElement(HeroSection));
@@ -147,4 +150,22 @@ test("SelfHostSection renders the quick start command", () => {
   const html = renderToStaticMarkup(React.createElement(SelfHostSection));
   assert.match(html, /id="self-host"/);
   assert.ok(html.includes(selfHostContent.command));
+});
+
+test("OpenSourceSection renders the repository link", () => {
+  const html = renderToStaticMarkup(React.createElement(OpenSourceSection));
+  assert.match(html, /id="open-source"/);
+  assert.ok(html.includes(siteConfig.repositoryUrl));
+});
+
+test("FaqSection renders every question", () => {
+  const html = renderToStaticMarkup(React.createElement(FaqSection));
+  assert.match(html, /id="faq"/);
+  for (const entry of faqContent.entries) assert.ok(html.includes(entry.question));
+});
+
+test("FinalCtaSection repeats both hero actions", () => {
+  const html = renderToStaticMarkup(React.createElement(FinalCtaSection));
+  assert.match(html, /href="#self-host"/);
+  assert.ok(html.includes(siteConfig.repositoryUrl));
 });
