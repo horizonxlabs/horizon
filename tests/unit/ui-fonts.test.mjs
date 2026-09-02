@@ -35,3 +35,14 @@ test("the landing app ships the real logo, not a text wordmark", () => {
   assert.match(nav, /horizon-logo\.png/);
   assert.match(nav, /alt=/, "the logo must carry alt text");
 });
+
+test("no rule in packages/ui/styles.css hardcodes the Thai-first stack, bypassing the shared token", () => {
+  const styles = readFileSync("packages/ui/styles.css", "utf8");
+  const fontFamilyDeclarations = styles.match(/font-family:\s*[^;]+;/g) ?? [];
+  for (const declaration of fontFamilyDeclarations) {
+    assert.ok(
+      !declaration.includes("LINE Seed Sans TH"),
+      `styles.css hardcodes the Thai face directly instead of composing var(--evcp-font-sans): ${declaration}`
+    );
+  }
+});

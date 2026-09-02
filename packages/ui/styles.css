@@ -165,7 +165,7 @@ body {
 
 .horizon-brand-name {
   color: #0f2f68;
-  font-family: "LINE Seed Sans TH", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--evcp-font-sans);
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.035em;
