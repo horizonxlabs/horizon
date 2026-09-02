@@ -1,34 +1,8 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+/** Wraps a section so it fades in as it scrolls into view. The animation lives entirely in
+ *  CSS (see .evcp-reveal in @evcp/ui/marketing.css), so this stays a server component and
+ *  the content is visible even when the animation is unsupported or unwanted. */
 export function Reveal({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "0px 0px -12% 0px" }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className={visible ? "evcp-reveal evcp-reveal-visible" : "evcp-reveal"}>
-      {children}
-    </div>
-  );
+  return <div className="evcp-reveal">{children}</div>;
 }

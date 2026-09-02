@@ -15,7 +15,6 @@
     0 24px 64px color-mix(in oklab, var(--ref-blue-600) 14%, transparent);
   --evcp-radius-hero: 28px;
   --evcp-reveal-distance: 16px;
-  --evcp-reveal-duration: 620ms;
 }
 
 .evcp-hero-gradient {
@@ -35,24 +34,32 @@
   color: var(--evcp-color-code-text);
 }
 
+/* Scroll reveal, CSS-only. The element is visible unconditionally; the fade-in is layered
+   on top only where scroll-driven animations exist and motion is welcome. Every degradation
+   path — no support, reduced motion, no JavaScript at all — ends at "visible, not animated",
+   never at "invisible". An earlier JS-gated version hid content by default and depended on
+   hydration to reveal it, which meant a failed bundle blanked the page. */
 .evcp-reveal {
-  opacity: 0;
-  transform: translateY(var(--evcp-reveal-distance));
-  transition:
-    opacity var(--evcp-reveal-duration) cubic-bezier(0.22, 1, 0.36, 1),
-    transform var(--evcp-reveal-duration) cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.evcp-reveal-visible {
   opacity: 1;
-  transform: none;
 }
 
-/* No JavaScript, or motion turned down: content must be visible and still. */
-@media (prefers-reduced-motion: reduce) {
-  .evcp-reveal {
+@keyframes evcp-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--evcp-reveal-distance));
+  }
+  to {
     opacity: 1;
     transform: none;
-    transition: none;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .evcp-reveal {
+      animation: evcp-reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 22%;
+    }
   }
 }

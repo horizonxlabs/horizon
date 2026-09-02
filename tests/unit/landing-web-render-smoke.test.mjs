@@ -1,12 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// Server components rendered statically; no browser globals, no effects.
-globalThis.IntersectionObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-
 const React = (await import("react")).default;
 globalThis.React = React;
 const { renderToStaticMarkup } = await import("react-dom/server");
@@ -59,9 +53,33 @@ test("ActionButton marks external links safe", () => {
   assert.match(html, /target="_blank"/);
 });
 
-test("Reveal renders its children in the server output", () => {
+test("Reveal renders visible content in the server output", () => {
   const html = renderToStaticMarkup(
     React.createElement(Reveal, null, React.createElement("p", null, "visible"))
   );
   assert.match(html, /visible/);
+  assert.match(html, /class="evcp-reveal"/);
+});
+
+test("the landing app ships no client components", async () => {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const roots = ["apps/landing-web/src/shared", "apps/landing-web/src/app"];
+  for (const root of roots) {
+    for (const entry of await readdir(root, { recursive: true })) {
+      if (!entry.endsWith(".tsx") && !entry.endsWith(".ts")) continue;
+      const source = await readFile(`${root}/${entry}`, "utf8");
+      assert.doesNotMatch(source, /^\s*["']use client["']/m, `${root}/${entry} is a client component`);
+    }
+  }
+});
+
+test("ActionButton omits target and rel for an internal link", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(ActionButton, {
+      action: { label: "Get started", href: "#self-host" },
+      variant: "primary"
+    })
+  );
+  assert.doesNotMatch(html, /target=/);
+  assert.doesNotMatch(html, /rel=/);
 });
