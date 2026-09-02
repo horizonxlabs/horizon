@@ -173,3 +173,32 @@ test("FinalCtaSection repeats both hero actions", () => {
   assert.match(html, /href="#self-host"/);
   assert.ok(html.includes(siteConfig.repositoryUrl));
 });
+
+const LandingPage = (await import(`${base}/app/page.tsx`)).default;
+
+test("the page renders every section in order", () => {
+  const html = renderToStaticMarkup(React.createElement(LandingPage));
+  const order = [
+    'id="top"',
+    'id="surfaces"',
+    'id="lifecycle"',
+    'id="governance"',
+    'id="self-host"',
+    'id="open-source"',
+    'id="faq"',
+    'id="start"'
+  ];
+  let cursor = -1;
+  for (const anchor of order) {
+    const next = html.indexOf(anchor);
+    assert.ok(next > cursor, `${anchor} is missing or out of order`);
+    cursor = next;
+  }
+});
+
+test("every navigation anchor resolves to a section the page renders", () => {
+  const html = renderToStaticMarkup(React.createElement(LandingPage));
+  for (const item of siteConfig.navItems) {
+    assert.match(html, new RegExp(`id="${item.href.slice(1)}"`), `no section for ${item.href}`);
+  }
+});
