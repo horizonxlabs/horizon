@@ -109,6 +109,8 @@ test("SiteFooter states the project name without claiming a licence", () => {
 const { HeroSection } = await import(`${base}/features/hero`);
 const { SurfacesSection, surfacesContent } = await import(`${base}/features/surfaces`);
 const { LifecycleSection, lifecycleContent } = await import(`${base}/features/lifecycle`);
+const { GovernanceSection, governanceContent } = await import(`${base}/features/governance`);
+const { SelfHostSection, selfHostContent } = await import(`${base}/features/self-host`);
 
 test("HeroSection renders the headline and both actions", () => {
   const html = renderToStaticMarkup(React.createElement(HeroSection));
@@ -133,4 +135,16 @@ test("LifecycleSection renders every step", () => {
   const html = renderToStaticMarkup(React.createElement(LifecycleSection));
   assert.match(html, /id="lifecycle"/);
   for (const step of lifecycleContent.steps) assert.ok(html.includes(step.title));
+});
+
+test("GovernanceSection renders every control", () => {
+  const html = renderToStaticMarkup(React.createElement(GovernanceSection));
+  assert.match(html, /id="governance"/);
+  for (const item of governanceContent.items) assert.ok(html.includes(item.title));
+});
+
+test("SelfHostSection renders the quick start command", () => {
+  const html = renderToStaticMarkup(React.createElement(SelfHostSection));
+  assert.match(html, /id="self-host"/);
+  assert.ok(html.includes(selfHostContent.command));
 });
