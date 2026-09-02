@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import type { ReactNode } from "react";
+import { notFound } from "next/navigation";
 import "./globals.css";
 import { SiteFooter } from "@/shared/site-footer";
 import { SiteNav } from "@/shared/site-nav";
 import { siteUrl } from "@/shared/site-config";
+import { LOCALES, isLocale } from "@/shared/locale";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+
+// Prerenders every supported locale route: "th" (the default) and "en".
+export function generateStaticParams() {
+  return LOCALES.map((lang) => ({ lang }));
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -23,13 +29,15 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children, params }: LayoutProps<"/[lang]">) {
+  const { lang } = await params;
+  if (!isLocale(lang)) notFound();
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang={lang} className={inter.variable}>
       <body className="bg-page text-body min-h-screen antialiased">
-        <SiteNav />
+        <SiteNav locale={lang} />
         {children}
-        <SiteFooter />
+        <SiteFooter locale={lang} />
       </body>
     </html>
   );

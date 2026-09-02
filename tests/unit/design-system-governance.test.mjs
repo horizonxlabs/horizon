@@ -117,7 +117,7 @@ test("an app-local stylesheet in landing-web is still rejected", () => {
 
 test("globals.css passes when it only imports @evcp/ui and declares sources", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/globals.css",
+    "apps/landing-web/src/app/[lang]/globals.css",
     '/* entry */\n@import "@evcp/ui/styles.css";\n@import "@evcp/ui/marketing.css";\n@source "../";\n'
   );
   assert.equal(result.ok, true);
@@ -125,7 +125,7 @@ test("globals.css passes when it only imports @evcp/ui and declares sources", ()
 
 test("globals.css fails when it declares its own styling", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/globals.css",
+    "apps/landing-web/src/app/[lang]/globals.css",
     '@import "@evcp/ui/styles.css";\n.hero { color: red; }\n'
   );
   assert.equal(result.ok, false);
@@ -134,7 +134,7 @@ test("globals.css fails when it declares its own styling", () => {
 
 test("globals.css rejects a declaration appended after a legal import on the same line", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/globals.css",
+    "apps/landing-web/src/app/[lang]/globals.css",
     '@import "@evcp/ui/styles.css"; .hero{color:red}\n'
   );
   assert.equal(result.ok, false);
@@ -143,7 +143,7 @@ test("globals.css rejects a declaration appended after a legal import on the sam
 
 test("globals.css accepts a multi-line block comment without leading stars", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/globals.css",
+    "apps/landing-web/src/app/[lang]/globals.css",
     '/* first line\n   second line without a star */\n@import "@evcp/ui/styles.css";\n'
   );
   assert.equal(result.ok, true);
@@ -151,7 +151,7 @@ test("globals.css accepts a multi-line block comment without leading stars", () 
 
 test("globals.css rejects an import of a package other than @evcp/ui", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/globals.css",
+    "apps/landing-web/src/app/[lang]/globals.css",
     '@import "@evcp/ui/styles.css";\n@import "tailwindcss";\n'
   );
   assert.equal(result.ok, false);
@@ -160,7 +160,7 @@ test("globals.css rejects an import of a package other than @evcp/ui", () => {
 
 test("the landing-web root layout may import its own globals.css", () => {
   const result = runCheck(
-    "apps/landing-web/src/app/layout.tsx",
+    "apps/landing-web/src/app/[lang]/layout.tsx",
     'import "./globals.css";\nexport const x = 1;\n'
   );
   assert.equal(result.ok, true);

@@ -1,8 +1,9 @@
 import { ActionButton } from "@/shared/action-button";
+import type { LocaleProps } from "@/shared/locale";
 import { heroContent } from "./hero-content";
 import { HeroProductVisual } from "./hero-product-visual";
 
-export function HeroSection() {
+export function HeroSection(_props: LocaleProps) {
   return (
     <section id="top" className="evcp-hero-gradient px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
       <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-5">

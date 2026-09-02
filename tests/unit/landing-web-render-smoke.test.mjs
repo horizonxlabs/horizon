@@ -220,10 +220,19 @@ test("FinalCtaSection repeats both hero actions", () => {
   assert.ok(html.includes(siteConfig.repositoryUrl));
 });
 
-const LandingPage = (await import(`${base}/app/page.tsx`)).default;
+const LandingPage = (await import(`${base}/app/[lang]/page.tsx`)).default;
 
-test("the page renders every section in order", () => {
-  const html = renderToStaticMarkup(React.createElement(LandingPage));
+// The page component itself must await `params` (this Next.js version's route contract), so
+// unlike the section components above it cannot be rendered via `React.createElement` — call it
+// directly to resolve the element tree first, then hand that (fully synchronous) tree to
+// `renderToStaticMarkup`.
+async function renderLandingPage(lang = "en") {
+  const element = await LandingPage({ params: Promise.resolve({ lang }) });
+  return renderToStaticMarkup(element);
+}
+
+test("the page renders every section in order", async () => {
+  const html = await renderLandingPage();
   const order = [
     'id="top"',
     'id="surfaces"',
@@ -242,8 +251,8 @@ test("the page renders every section in order", () => {
   }
 });
 
-test("every navigation anchor resolves to a section the page renders", () => {
-  const html = renderToStaticMarkup(React.createElement(LandingPage));
+test("every navigation anchor resolves to a section the page renders", async () => {
+  const html = await renderLandingPage();
   for (const item of siteConfig.navItems) {
     assert.match(html, new RegExp(`id="${item.href.slice(1)}"`), `no section for ${item.href}`);
   }

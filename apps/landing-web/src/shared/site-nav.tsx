@@ -1,8 +1,9 @@
 import Image from "next/image";
 import { ActionButton } from "@/shared/action-button";
+import type { LocaleProps } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
 
-export function SiteNav() {
+export function SiteNav(_props: LocaleProps) {
   return (
     <header className="bg-surface/80 border-border-soft sticky top-0 z-50 border-b backdrop-blur">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">

@@ -26,7 +26,7 @@ test("next is configured for a standalone monorepo build", () => {
 });
 
 test("the css entry only pulls in the shared design system", () => {
-  const css = readFileSync("apps/landing-web/src/app/globals.css", "utf8");
+  const css = readFileSync("apps/landing-web/src/app/[lang]/globals.css", "utf8");
   assert.match(css, /@import "@evcp\/ui\/styles\.css";/);
   assert.match(css, /@import "@evcp\/ui\/marketing\.css";/);
   assert.doesNotMatch(css, /\{/);

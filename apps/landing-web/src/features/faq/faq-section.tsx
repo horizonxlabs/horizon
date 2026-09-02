@@ -1,9 +1,10 @@
 import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
+import type { LocaleProps } from "@/shared/locale";
 import { faqContent } from "./faq-content";
 
-export function FaqSection() {
+export function FaqSection(_props: LocaleProps) {
   return (
     <Section id="faq">
       <SectionHeading eyebrow={faqContent.eyebrow} title={faqContent.title} />

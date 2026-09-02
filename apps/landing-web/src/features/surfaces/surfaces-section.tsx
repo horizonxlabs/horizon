@@ -1,9 +1,10 @@
 import { Reveal } from "@/shared/reveal";
 import { Section } from "@/shared/section";
 import { SectionHeading } from "@/shared/section-heading";
+import type { LocaleProps } from "@/shared/locale";
 import { surfacesContent } from "./surfaces-content";
 
-export function SurfacesSection() {
+export function SurfacesSection(_props: LocaleProps) {
   return (
     <Section id="surfaces" tone="surface">
       <SectionHeading

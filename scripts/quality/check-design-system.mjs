@@ -18,12 +18,12 @@ const APPROVED_UI_CSS_IMPORTS = ['import "@evcp/ui/styles.css"', 'import "@evcp/
 // exist only while it does nothing but pull in @evcp/ui and tell Tailwind where to look.
 // Validated per statement rather than per line: a line-anchored pattern cannot reject a
 // declaration appended after a legal @import, and cannot span a multi-line comment.
-const LANDING_CSS_ENTRY = "apps/landing-web/src/app/globals.css";
+const LANDING_CSS_ENTRY = "apps/landing-web/src/app/[lang]/globals.css";
 const ALLOWED_ENTRY_STATEMENT =
   /^@(?:import\s+["']@evcp\/ui\/[a-z0-9.-]+\.css["']|source\s+["'][^"']+["'])$/;
 // The App Router only bundles global CSS when the root layout imports it directly, so the
 // root layout is the one source file allowed to import the (already-restricted) CSS entry.
-const LANDING_ROOT_LAYOUT = "apps/landing-web/src/app/layout.tsx";
+const LANDING_ROOT_LAYOUT = "apps/landing-web/src/app/[lang]/layout.tsx";
 const LANDING_ROOT_LAYOUT_CSS_IMPORT = 'import "./globals.css"';
 
 function landingCssEntryViolations(content) {
