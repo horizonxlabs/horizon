@@ -1,4 +1,4 @@
 /* Entry point only. All styling lives in packages/ui. */
 @import "@evcp/ui/styles.css";
 @import "@evcp/ui/marketing.css";
-@source "../";
+@source "../../";

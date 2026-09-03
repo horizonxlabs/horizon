@@ -1,0 +1,43 @@
+/* The LINE Seed Sans TH files have been bundled in packages/ui/fonts/ since the design system
+   was created, but nothing ever declared them — so Thai text fell through to whatever the OS
+   provided (Thonburi on macOS). These declarations make the intended face actually load.
+   Licence: packages/ui/fonts/LINE_SEED_LICENSE.md */
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: url("./fonts/LINESeedSansTH_W_Th.woff2") format("woff2");
+  font-weight: 250;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: url("./fonts/LINESeedSansTH_W_Rg.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: url("./fonts/LINESeedSansTH_W_Bd.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: url("./fonts/LINESeedSansTH_W_He.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LINE Seed Sans TH";
+  src: url("./fonts/LINESeedSansTH_W_XBd.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}

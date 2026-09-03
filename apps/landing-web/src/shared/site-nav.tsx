@@ -1,15 +1,31 @@
+import Image from "next/image";
 import { ActionButton } from "@/shared/action-button";
+import type { Locale, LocaleProps } from "@/shared/locale";
 import { siteConfig } from "@/shared/site-config";
+import { LanguageSwitcher } from "@/shared/language-switcher";
 
-export function SiteNav() {
+const logoAlt: Record<Locale, string> = {
+  th: `${siteConfig.name} — เครื่องมือสร้างแอปพลิเคชัน AI สำหรับองค์กร`,
+  en: `${siteConfig.name} — enterprise AI application builder`
+};
+
+export function SiteNav({ locale }: LocaleProps) {
   return (
     <header className="bg-surface/80 border-border-soft sticky top-0 z-50 border-b backdrop-blur">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#top" className="text-lg font-semibold tracking-tight">
-          {siteConfig.name}
+        <a href="#top" className="flex items-center">
+          <Image
+            src="/horizon-logo.png"
+            alt={logoAlt[locale]}
+            width={984}
+            height={254}
+            sizes="120px"
+            preload
+            className="h-7 w-auto"
+          />
         </a>
         <ul className="hidden items-center gap-8 md:flex">
-          {siteConfig.navItems.map((item) => (
+          {siteConfig.navItems[locale].map((item) => (
             <li key={item.href}>
               <a href={item.href} className="text-muted hover:text-body text-sm transition-colors">
                 {item.label}
@@ -17,10 +33,13 @@ export function SiteNav() {
             </li>
           ))}
         </ul>
-        <ActionButton
-          action={{ label: "GitHub", href: siteConfig.repositoryUrl, external: true }}
-          variant="secondary"
-        />
+        <div className="flex items-center gap-4">
+          <LanguageSwitcher locale={locale} />
+          <ActionButton
+            action={{ label: "GitHub", href: siteConfig.repositoryUrl, external: true }}
+            variant="secondary"
+          />
+        </div>
       </nav>
     </header>
   );

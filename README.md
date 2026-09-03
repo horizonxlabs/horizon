@@ -116,7 +116,10 @@ typecheck, and tests locally.
 ### Landing site
 
 The public marketing site lives at `apps/landing-web` and deploys independently of the
-private-server Compose stack. Run it locally with:
+private-server Compose stack. It is bilingual (Thai default, English second); `/` redirects
+to `/th`. Adding a locale means adding it to `LOCALES` in `apps/landing-web/src/shared/locale.ts`
+plus a translation in each content module — the typecheck and the completeness test will
+list what is missing. Run it locally with:
 
 ```bash
 pnpm dev:landing

@@ -36,7 +36,10 @@
     "LINE Seed Sans TH", "Noto Sans Thai", "IBM Plex Sans Thai", "Sarabun", "Thonburi",
     "Leelawadee UI";
   --evcp-font-latin: Inter, "SF Pro Text", "Segoe UI", system-ui;
-  --evcp-font-sans: var(--evcp-font-thai), var(--evcp-font-latin), sans-serif;
+  /* Latin first: font fallback is per-glyph, so this renders Latin from Inter and Thai from
+     LINE Seed within the same sentence. Thai-first meant English text rendered from a Thai
+     face on any machine with one installed. */
+  --evcp-font-sans: var(--evcp-font-latin), var(--evcp-font-thai), sans-serif;
 
   /* Layer 2 — semantic tokens (names kept identical to legacy) */
   --evcp-color-page: var(--ref-slate-100);

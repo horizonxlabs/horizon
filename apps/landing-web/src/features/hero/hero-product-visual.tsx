@@ -1,11 +1,8 @@
-const workspaceRows = [
-  { label: "PRD baseline", value: "v4 · approved" },
-  { label: "Workspace", value: "container running" },
-  { label: "Preview", value: "checkpoint 12" },
-  { label: "Publish policy", value: "approved" }
-];
+import type { LocaleProps } from "@/shared/locale";
+import { heroContent } from "./hero-content";
 
-export function HeroProductVisual() {
+export function HeroProductVisual({ locale }: LocaleProps) {
+  const { visualRows } = heroContent[locale];
   return (
     <div
       aria-hidden="true"
@@ -18,7 +15,7 @@ export function HeroProductVisual() {
         <span className="text-muted ml-3 text-sm">Horizon Creator</span>
       </div>
       <dl className="divide-border-soft divide-y">
-        {workspaceRows.map((row) => (
+        {visualRows.map((row) => (
           <div key={row.label} className="flex items-center justify-between px-5 py-4">
             <dt className="text-muted text-sm">{row.label}</dt>
             <dd className="text-body text-sm font-medium">{row.value}</dd>

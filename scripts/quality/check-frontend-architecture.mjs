@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TARGET_ROOTS = new Set(["app", "routes", "features", "shared"]);
 const LEGACY_ROOTS = new Set(["components", "hooks", "lib", "pages", "data"]);
+// Framework-mandated entry points that must live at src root by convention (Vite's main.tsx,
+// Next.js's proxy.ts — see apps/landing-web/node_modules/next/dist/docs/.../file-conventions/proxy.md),
+// not legacy debt, so they are exempted rather than tracked in the legacy-path baseline.
+const FRAMEWORK_ENTRY_FILES = new Set(["main.tsx", "proxy.ts"]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa", "landing-web"];
 const baseline = new Set(
@@ -54,10 +58,10 @@ export function checkFrontendArchitecture(files) {
   for (const file of files) {
     const context = sourceContext(file);
     if (!context || !SOURCE_EXTENSIONS.has(extname(file))) continue;
-    const isMain = context.relativePath === "main.tsx";
+    const isFrameworkEntry = FRAMEWORK_ENTRY_FILES.has(context.relativePath);
     const isTarget = TARGET_ROOTS.has(context.root);
     const isBaseline = baseline.has(file);
-    if (!isMain && !isTarget && !isBaseline) {
+    if (!isFrameworkEntry && !isTarget && !isBaseline) {
       const root = LEGACY_ROOTS.has(context.root) ? context.root : context.root || "source root";
       violations.push(
         `${file}: new code must use app, features, shared, or routes instead of legacy root ${root}`
