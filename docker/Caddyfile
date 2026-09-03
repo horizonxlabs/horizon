@@ -9,7 +9,7 @@
 		@published_subdomain {
 			host *.localhost
 			header_regexp published Host ^[a-z0-9]+(?:-[a-z0-9]+)*\.localhost(?::[0-9]+)?$
-			not host admin.localhost api.localhost auth.localhost creator.localhost store.localhost storage.localhost www.localhost
+			not host admin.localhost api.localhost auth.localhost creator.localhost dash.localhost store.localhost storage.localhost www.localhost
 			expression {http.request.host}.split(".")[0].size() >= 3 && {http.request.host}.split(".")[0].size() <= 63
 		}
 		handle @published_subdomain {
