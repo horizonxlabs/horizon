@@ -11,6 +11,7 @@ type Props = {
   parts?: WorkspaceChatTurnPart[];
   legacy: { text: string; reasoning?: string; actions: VibeAction[]; commitSha?: string };
   live: boolean;
+  imageBase?: string;
 };
 
 function toAction(id: string, tool: WorkspaceChatToolPart): VibeAction {
@@ -52,7 +53,7 @@ function legacyParts(legacy: Props["legacy"]): WorkspaceChatTurnPart[] {
   return parts;
 }
 
-export function VibeTurnTimeline({ parts: persistedParts, legacy, live }: Props): ReactNode {
+export function VibeTurnTimeline({ parts: persistedParts, legacy, live, imageBase }: Props): ReactNode {
   const parts = (persistedParts?.length ? persistedParts : legacyParts(legacy)).slice().sort((a, b) => a.sequence - b.sequence);
   return (
     <div className="vibe-turn-timeline" aria-label="Agent activity">
@@ -63,7 +64,7 @@ export function VibeTurnTimeline({ parts: persistedParts, legacy, live }: Props)
         if (part.type === "text") {
           return (
             <div key={part.id} className="vibe-message-text">
-              <VibeMarkdown text={stripQuestions(stripSuggestions(part.text))} />
+              <VibeMarkdown text={stripQuestions(stripSuggestions(part.text))} imageBase={imageBase} />
               {live && index === parts.length - 1 && <span className="vibe-cursor-blink" aria-hidden="true">▋</span>}
             </div>
           );

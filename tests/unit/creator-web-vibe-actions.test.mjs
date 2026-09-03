@@ -50,9 +50,23 @@ test("VIBE_ACTION_VERBS: exposes all documented action types", () => {
   assert.deepEqual(Object.keys(VIBE_ACTION_VERBS).sort(), [
     "edit",
     "file",
+    "image",
     "list",
     "migration",
     "read",
     "shell"
   ]);
+});
+
+test("image actions get their own verb/icon and never count as lines of code", async () => {
+  const { actionLineCount } = await import(
+    "../../apps/creator-web/src/features/workspace/vibe-actions.ts"
+  );
+  assert.equal(vibeActionVerb("image", "running"), "Illustrating");
+  assert.equal(vibeActionVerb("image", "done"), "Illustrated");
+  assert.equal(vibeActionIcon("image"), "🖼️");
+  assert.equal(
+    actionLineCount({ id: "a", type: "image", label: "public/generated/x.png", status: "done", body: "a\nb\nc" }),
+    0
+  );
 });

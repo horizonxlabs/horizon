@@ -12,13 +12,16 @@ type Props = {
   editProvider?: AiProviderDto;
 };
 
-type AdapterKind = "openai" | "openrouter" | "lm_studio" | "anthropic";
+type AdapterKind = "openai" | "openrouter" | "lm_studio" | "anthropic" | "google";
 
 const PRESETS: Record<AdapterKind, { baseUrl: string; model: string }> = {
   openai: { baseUrl: "https://gateway.example/v1", model: "gpt-4.1" },
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4.1-mini" },
   lm_studio: { baseUrl: "http://host.docker.internal:1234/v1", model: "local-model-id" },
-  anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5" }
+  anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5" },
+  // Image-generation provider (scenario "image_generation"): governed image runtime only —
+  // text scenarios still reject google at resolve time.
+  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash-image" }
 };
 
 export function ProviderDrawer({ open, onClose, ai, onDone, editProvider }: Props) {

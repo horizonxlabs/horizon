@@ -70,6 +70,22 @@ export async function memoryWorkspace() {
     for (const match of script.matchAll(/echo ([A-Za-z0-9+/=]+) \| base64 -d > '([^']+)'/g)) {
       files.set(match[2], Buffer.from(match[1], "base64").toString("utf8"));
     }
+    // Binary asset writes (generate_image): truncate → chunked printf appends → decode.
+    const truncatePath = script.match(/: > '([^']+)'$/)?.[1];
+    if (truncatePath) files.set(truncatePath, "");
+    const append = script.match(/^printf %s '([A-Za-z0-9+/=]+)' >> '([^']+)'$/);
+    if (append) files.set(append[2], (files.get(append[2]) ?? "") + append[1]);
+    const atomicDecode = script.match(
+      /^base64 -d < '([^']+)' > '([^']+)' && ln '\2' '([^']+)' && rm -f '\1' '\2'$/
+    );
+    if (atomicDecode) {
+      const [, encodedPath, decodedPath, finalPath] = atomicDecode;
+      files.set(decodedPath, Buffer.from(files.get(encodedPath) ?? "", "base64"));
+      if (files.has(finalPath)) return { stdout: "", stderr: "File exists", exitCode: 1 };
+      files.set(finalPath, files.get(decodedPath));
+      files.delete(encodedPath);
+      files.delete(decodedPath);
+    }
     return { stdout: "", stderr: "", exitCode: 0 };
   };
   docker.execInContainerStream = async (id, command, onChunk) => {

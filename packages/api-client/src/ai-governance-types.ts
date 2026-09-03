@@ -86,7 +86,8 @@ export type AiScenarioDto =
   | "frontend_coding"
   | "backend_coding"
   | "review"
-  | "documentation";
+  | "documentation"
+  | "image_generation";
 export type AiUsageModeDto = "production" | "development" | "fallback";
 
 export type AiProviderDto = {

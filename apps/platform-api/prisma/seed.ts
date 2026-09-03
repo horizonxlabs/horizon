@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedDesignSystemSkill, seedDemoLeaveSkill } from "./seed-skills";
+import { seedImageGeneration } from "./seed-ai-image";
 
 const prisma = new PrismaClient();
 
@@ -278,14 +279,10 @@ async function main() {
     }
   });
 
-  for (const scenario of [
-    "prd_generation",
-    "requirement_analysis",
-    "frontend_coding",
-    "backend_coding",
-    "review",
-    "documentation"
-  ]) {
+  // Text scenarios only — image_generation routes to the Gemini provider in seed-ai-image.ts.
+  const textScenarios = ["prd_generation", "requirement_analysis", "frontend_coding",
+    "backend_coding", "review", "documentation"];
+  for (const scenario of textScenarios) {
     await prisma.aiScenarioRoute.upsert({
       where: { scenario },
       update: {
@@ -302,6 +299,7 @@ async function main() {
       }
     });
   }
+  await seedImageGeneration(prisma);
 
   await prisma.aiQuota.upsert({
     where: { scope: "organization" },

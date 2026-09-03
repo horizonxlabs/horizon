@@ -331,4 +331,8 @@ test("Workspace responsive CSS selects one narrow panel and disables progress mo
     css,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.vibe-shimmer[\s\S]*animation: none/
   );
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.vibe-working-icon[\s\S]*\.vibe-working-dot[\s\S]*animation: none/
+  );
 });

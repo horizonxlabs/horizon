@@ -1,45 +1,27 @@
-import { Type, type TSchema } from "@earendil-works/pi-ai";
+import { Type } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 
 import { isLockedFile, type GoldenTemplate } from "../workspace-orchestrator/template";
-import type { ActionRunner, RunnableAction } from "./action-runner-types";
-import type { GenerationServiceDeps } from "./generation-service-types";
+import type { RunnableAction } from "./action-runner-types";
 import { containsTransactionControl } from "./migration-runner";
 import {
-  assertInputLimit,
   assertSafeCommand,
   clipUtf8,
   filterAgentWorkspaceFiles,
   hardenSafeCommandArgs,
-  normalizeProjectPath,
-  safeToolError,
-  type PiAgentToolLimits
+  normalizeProjectPath
 } from "./pi-tool-policy";
+import { createGenerateImageTool } from "./pi-image-tool";
+import {
+  failure,
+  success,
+  tool,
+  type HorizonPiToolContext,
+  type HorizonPiToolDetails,
+  type ToolResult
+} from "./pi-tool-result";
 
-export type HorizonPiToolDetails = {
-  actionId: string;
-  actionType: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill";
-  label: string;
-  ok: boolean;
-  body?: string;
-  find?: string;
-  replace?: string;
-  error?: string;
-};
-
-export type HorizonPiToolContext = {
-  projectId: string;
-  containerId: string;
-  template: GoldenTemplate;
-  actionRunner: ActionRunner;
-  readWorkspaceFiles: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
-  skillInstructions: Readonly<Record<string, string>>;
-  migrationBuffer: Array<Extract<RunnableAction, { type: "migration" }>>;
-  signal: AbortSignal;
-  limits: PiAgentToolLimits;
-  nextToolCall(): void;
-  onAudit?: GenerationServiceDeps["onAudit"];
-};
+export type { HorizonPiToolContext, HorizonPiToolDetails } from "./pi-tool-result";
 
 export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinition[] {
   const read = tool(
@@ -204,76 +186,8 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
       return success(id, "skill", params.name, context, { body: instruction }, instruction);
     }
   );
-  return [read, list, write, edit, shell, migration, skill];
-}
-
-function tool<TParams extends TSchema>(
-  context: HorizonPiToolContext,
-  name: string,
-  label: string,
-  description: string,
-  parameters: TParams,
-  execute: (id: string, params: any, onUpdate?: (result: ToolResult) => void) => Promise<ToolResult>
-): ToolDefinition {
-  return {
-    name,
-    label,
-    description,
-    parameters,
-    async execute(id, params, signal, onUpdate) {
-      try {
-        if (signal?.aborted || context.signal.aborted) throw new Error("tool call aborted");
-        context.nextToolCall();
-        assertInputLimit(params, context.limits.maxToolInputBytes);
-        const result = await execute(id, params, onUpdate);
-        context.onAudit?.({
-          action: "pi_tool",
-          projectId: context.projectId,
-          metadata: { toolName: name, actionId: id, ok: result.details.ok }
-        });
-        return result;
-      } catch (error) {
-        const message = clipUtf8(safeToolError(error), context.limits.maxToolOutputBytes);
-        context.onAudit?.({
-          action: "pi_tool",
-          projectId: context.projectId,
-          metadata: { toolName: name, actionId: id, ok: false }
-        });
-        return {
-          content: [{ type: "text", text: message }],
-          details: {
-            actionId: id,
-            actionType: actionTypeFor(name),
-            label: labelFor(name, params),
-            ok: false,
-            error: message
-          }
-        };
-      }
-    }
-  };
-}
-
-type ToolResult = {
-  content: Array<{ type: "text"; text: string }>;
-  details: HorizonPiToolDetails;
-  terminate?: boolean;
-};
-
-function actionTypeFor(name: string): HorizonPiToolDetails["actionType"] {
-  if (name === "read_workspace_file") return "read";
-  if (name === "list_workspace_files") return "list";
-  if (name === "edit_workspace_file") return "edit";
-  if (name === "run_workspace_command") return "shell";
-  if (name === "propose_database_migration") return "migration";
-  if (name === "load_governed_skill") return "skill";
-  return "file";
-}
-
-function labelFor(name: string, params: unknown): string {
-  if (!params || typeof params !== "object" || Array.isArray(params)) return name;
-  const values = params as Record<string, unknown>;
-  return String(values.path ?? values.name ?? values.command ?? name);
+  const image = createGenerateImageTool(context);
+  return [read, list, write, edit, shell, migration, skill, image];
 }
 
 function assertUnlocked(template: GoldenTemplate, path: string): void {
@@ -292,48 +206,9 @@ function isBuildValidation(command: string, args: string[]): boolean {
   );
 }
 
-function success(
-  id: string,
-  actionType: HorizonPiToolDetails["actionType"],
-  label: string,
-  context: HorizonPiToolContext,
-  preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
-  text: string
-): ToolResult {
-  const bounded = clipUtf8(text, context.limits.maxToolOutputBytes);
-  return {
-    content: [{ type: "text", text: bounded }],
-    details: { actionId: id, actionType, label, ok: true, ...boundedPreview(preview, context) }
-  };
-}
-
-// Mirrors success(), but for a known failure that still has an attempted find/replace or body to
-// show — keeps a failed action's diff inspectable in the UI instead of just an error string.
-function failure(
-  id: string,
-  actionType: HorizonPiToolDetails["actionType"],
-  label: string,
-  context: HorizonPiToolContext,
-  preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
-  error: string
-): ToolResult {
-  const message = clipUtf8(safeToolError(error), context.limits.maxToolOutputBytes);
-  return {
-    content: [{ type: "text", text: message }],
-    details: {
-      actionId: id,
-      actionType,
-      label,
-      ok: false,
-      error: message,
-      ...boundedPreview(preview, context)
-    }
-  };
-}
-
 async function runAction(
   context: HorizonPiToolContext,
-  action: Exclude<RunnableAction, { type: "migration" }>,
+  action: Exclude<RunnableAction, { type: "migration" } | { type: "asset" }>,
   timeoutMs?: number,
   onUpdate?: (result: ToolResult) => void
 ): Promise<ToolResult> {
@@ -368,23 +243,6 @@ async function runAction(
   }
   const text = action.type === "shell" ? result.stdout : "ok";
   return success(action.id, action.type, details.label, context, details, text);
-}
-
-function boundedPreview(
-  preview: Pick<HorizonPiToolDetails, "body" | "find" | "replace">,
-  context: HorizonPiToolContext
-) {
-  return {
-    ...(preview.body === undefined
-      ? {}
-      : { body: clipUtf8(preview.body, context.limits.maxToolOutputBytes) }),
-    ...(preview.find === undefined
-      ? {}
-      : { find: clipUtf8(preview.find, context.limits.maxToolOutputBytes) }),
-    ...(preview.replace === undefined
-      ? {}
-      : { replace: clipUtf8(preview.replace, context.limits.maxToolOutputBytes) })
-  };
 }
 
 async function workspaceFiles(

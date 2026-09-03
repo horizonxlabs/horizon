@@ -110,7 +110,7 @@ export type ChatMessageRole = "user" | "assistant" | "system";
 
 export interface WorkspaceChatAction {
   id: string;
-  type: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill";
+  type: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill" | "image";
   label: string;
   ok: boolean;
 }

@@ -25,7 +25,8 @@ import { persistPiTurnErrorAssistant } from "./pi-turn-error-persistence";
 import * as turnFeedback from "./pi-turn-feedback";
 import { finalizePiCandidate } from "./pi-turn-finalization";
 import { releasePiTurnSnapshot } from "./pi-turn-snapshot-lifecycle";
-import { createHorizonPiTools, type HorizonPiToolDetails } from "./pi-tools";
+import type { HorizonPiToolDetails } from "./pi-tools";
+import { createPiTurnTools } from "./pi-turn-tools";
 import { buildAutoSystemPrompt, buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
 import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
@@ -110,7 +111,6 @@ async function* runLockedTurn(
   const timeoutSignal = AbortSignal.timeout(limits.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
   const migrations: Array<Extract<RunnableAction, { type: "migration" }>> = [];
-  let toolCalls = 0;
   let assistantText = "";
   let turnParts: WorkspaceChatTurnPart[] = [];
   let currentAssistantDeltaText = "";
@@ -163,25 +163,16 @@ async function* runLockedTurn(
       maxModelRounds: limits.maxModelRounds,
       modelRoundTimeoutMs: limits.modelRoundTimeoutMs
     });
-    const tools = createHorizonPiTools({
+    const { tools, toolCallCount } = createPiTurnTools({
+      deps,
+      actor: input.actor,
       projectId: input.projectId,
       containerId,
-      template: deps.template,
-      actionRunner: deps.actionRunner,
-      readWorkspaceFiles: async (id) => {
-        const files = filterAgentWorkspaceFiles(await (deps.readWorkspaceFiles?.(id) ?? []));
-        assertFileLimits(files, limits.maxFileBytes);
-        return files;
-      },
-      skillInstructions: governed.skillInstructions,
-      migrationBuffer: migrations,
-      signal,
       limits,
-      nextToolCall() {
-        toolCalls += 1;
-        if (toolCalls > limits.maxToolCalls) throw new Error("Pi tool call budget exceeded");
-      },
-      onAudit: deps.onAudit
+      signal,
+      skillInstructions: governed.skillInstructions,
+      migrations,
+      turnId: userMessage.id
     });
     session = await createHorizonPiSession({
       modelRuntime,
@@ -207,7 +198,7 @@ async function* runLockedTurn(
     signal.throwIfAborted();
     for (let attempt = 0; failedTool && attempt < limits.toolFailureRetries; attempt += 1) {
       const priorFailure = failedTool;
-      const toolCallsBeforeRetry = toolCalls;
+      const toolCallsBeforeRetry = toolCallCount();
       const feedback = turnFeedback.buildToolFailureFeedback(priorFailure);
       failedTool = undefined;
       for await (const event of queue.prompt(feedback)) {
@@ -218,7 +209,7 @@ async function* runLockedTurn(
       // A model can ignore the feedback entirely and just narrate instead of calling a
       // tool — no new tool_execution_end event fires, so failedTool never gets set again
       // and this would otherwise read as "resolved" with nothing actually retried.
-      if (!failedTool && toolCalls === toolCallsBeforeRetry) {
+      if (!failedTool && toolCallCount() === toolCallsBeforeRetry) {
         failedTool = priorFailure;
       }
     }

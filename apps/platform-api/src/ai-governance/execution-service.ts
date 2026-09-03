@@ -9,6 +9,11 @@ import type {
   GovernedAiAgentRoundResult
 } from "./agent-execution-types";
 import { executeGovernedAgentRound } from "./agent-execution-service";
+import {
+  executeGovernedImageGeneration,
+  type GovernedAiImageInput,
+  type GovernedAiImageResult
+} from "./image-execution-service";
 
 export type GovernedAiExecutionStatus = "succeeded" | "blocked" | "failed" | "fallback";
 
@@ -131,6 +136,18 @@ export type GovernedAiExecutorDependencies = {
     signal?: AbortSignal;
     onEvent?: (event: AgentRoundEvent) => void;
   }) => Promise<AgentRoundInvocationResult>;
+  invokeImage?: (input: {
+    provider: ResolvedAiProvider;
+    request: { prompt: string; aspectRatio?: string };
+  }) => Promise<{
+    base64: string;
+    mimeType: string;
+    tokensUsed: number;
+    latencyMs: number;
+    costUsd: number;
+    providerId: string;
+    model: string;
+  }>;
   now?: () => Date;
 };
 
@@ -228,7 +245,7 @@ export class GovernedAiExecutor {
           fallbackUsed: false,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(error, plan.provider.secret)
+          failureReason: sanitizeAiFailure(error, plan.provider.secret)
         });
       }
       try {
@@ -253,7 +270,7 @@ export class GovernedAiExecutor {
           fallbackUsed: true,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(error, plan.provider.secret)
+          failureReason: sanitizeAiFailure(error, plan.provider.secret)
         });
       } catch (fallbackError) {
         await this.dependencies.reconcileQuota?.({
@@ -271,7 +288,7 @@ export class GovernedAiExecutor {
           fallbackUsed: true,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(fallbackError, plan.fallback.secret)
+          failureReason: sanitizeAiFailure(fallbackError, plan.fallback.secret)
         });
       }
     }
@@ -288,6 +305,24 @@ export class GovernedAiExecutor {
       actor,
       input,
       onEvent
+    );
+  }
+
+  async generateImage(
+    actor: PlatformUser,
+    input: GovernedAiImageInput
+  ): Promise<GovernedAiImageResult> {
+    return executeGovernedImageGeneration(
+      this.dependencies,
+      (provider, result) =>
+        this.persist(
+          { scenario: "image_generation", projectId: input.projectId, requestId: input.requestId },
+          actor,
+          provider,
+          result
+        ),
+      actor,
+      input
     );
   }
 
@@ -335,7 +370,7 @@ function estimateTokens(prompt: string): number {
   return Math.max(1, Math.ceil(prompt.length / 4));
 }
 
-function sanitizeFailure(error: unknown, ...secrets: Array<string | undefined>): string {
+export function sanitizeAiFailure(error: unknown, ...secrets: Array<string | undefined>): string {
   const message = error instanceof Error ? error.message : String(error);
   return secrets
     .filter((secret): secret is string => Boolean(secret))

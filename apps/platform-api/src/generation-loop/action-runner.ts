@@ -13,6 +13,7 @@ import {
   shellQuote,
   workspaceWriteCommand
 } from "./workspace-file-actions";
+import { runWorkspaceAssetAction } from "./workspace-asset-actions";
 import { workspaceShellCleanupCommand, workspaceShellCommand } from "./workspace-shell-command";
 
 export { applyFindReplace } from "./find-replace";
@@ -170,6 +171,18 @@ export function createActionRunner(deps: {
           return { ok: false, error: "missing containerId", stdout: "", stderr: "", exitCode: -1 };
         }
         return runWorkspaceFileAction({
+          docker: deps.docker,
+          containerId: input.containerId,
+          template: input.template,
+          action
+        });
+      }
+
+      if (action.type === "asset") {
+        if (!input.containerId) {
+          return { ok: false, error: "missing containerId", stdout: "", stderr: "", exitCode: -1 };
+        }
+        return runWorkspaceAssetAction({
           docker: deps.docker,
           containerId: input.containerId,
           template: input.template,

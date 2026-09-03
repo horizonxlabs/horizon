@@ -3600,6 +3600,81 @@ th {
   border-color: var(--evcp-color-danger, #dc2626);
 }
 
+/* AI working indicator: pinned above the composer for the whole turn — the row keeps
+   moving (icon pulse + wave dots) so mid-turn pauses never read as "done or stuck". */
+.vibe-working {
+  align-items: center;
+  border-top: 1px solid var(--evcp-color-border);
+  color: var(--evcp-color-muted);
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  padding: 8px 18px;
+}
+
+.vibe-working-icon {
+  animation: vibe-working-pulse 1.6s ease-in-out infinite;
+  color: var(--evcp-color-primary, #4f46e5);
+  display: inline-flex;
+}
+
+.vibe-working-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vibe-working-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.vibe-working-dot {
+  animation: vibe-working-wave 1.2s ease-in-out infinite;
+  background: var(--evcp-color-primary, #4f46e5);
+  border-radius: 999px;
+  height: 4px;
+  width: 4px;
+}
+
+.vibe-working-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.vibe-working-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes vibe-working-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes vibe-working-wave {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* The header status dot breathes while a turn runs (was static). */
+.vibe-live-status.is-running .vibe-live-status-dot {
+  animation: vibe-working-pulse 1.6s ease-in-out infinite;
+}
+
 .vibe-bug-box {
   background: var(--evcp-color-danger-bg, #fef2f2);
   border-top: 1px solid var(--evcp-color-danger, #dc2626);
@@ -4673,6 +4748,16 @@ body.vibe-is-resizing * {
   padding: 1px 5px;
 }
 
+/* AI-generated image thumbnail in chat (from the recap's markdown image line). */
+.vibe-md-img {
+  border: 1px solid var(--evcp-color-border);
+  border-radius: 8px;
+  display: block;
+  margin: 8px 0;
+  max-height: 280px;
+  max-width: 100%;
+}
+
 .vibe-md-pre {
   background: var(--evcp-color-surface-muted);
   border: 1px solid var(--evcp-color-border-soft);
@@ -5379,7 +5464,9 @@ body.vibe-is-resizing * {
 @media (prefers-reduced-motion: reduce) {
   .vibe-live-shell .vibe-live-status-dot,
   .vibe-live-shell .vibe-cursor-blink,
-  .vibe-live-shell .vibe-shimmer {
+  .vibe-live-shell .vibe-shimmer,
+  .vibe-working-icon,
+  .vibe-working-dot {
     animation: none !important;
   }
 
