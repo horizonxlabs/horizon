@@ -20,6 +20,7 @@ export type HorizonPiToolDetails = {
   actionType: "read" | "list" | "file" | "edit" | "shell" | "migration" | "skill" | "image";
   label: string;
   ok: boolean;
+  softFailure?: boolean;
   body?: string;
   find?: string;
   replace?: string;
@@ -175,4 +176,3 @@ function boundedPreview(
       : { replace: clipUtf8(preview.replace, context.limits.maxToolOutputBytes) })
   };
 }
-

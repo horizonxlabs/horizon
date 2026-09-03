@@ -5456,7 +5456,9 @@ body.vibe-is-resizing * {
 @media (prefers-reduced-motion: reduce) {
   .vibe-live-shell .vibe-live-status-dot,
   .vibe-live-shell .vibe-cursor-blink,
-  .vibe-live-shell .vibe-shimmer {
+  .vibe-live-shell .vibe-shimmer,
+  .vibe-working-icon,
+  .vibe-working-dot {
     animation: none !important;
   }
 

@@ -245,7 +245,7 @@ export class GovernedAiExecutor {
           fallbackUsed: false,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(error, plan.provider.secret)
+          failureReason: sanitizeAiFailure(error, plan.provider.secret)
         });
       }
       try {
@@ -270,7 +270,7 @@ export class GovernedAiExecutor {
           fallbackUsed: true,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(error, plan.provider.secret)
+          failureReason: sanitizeAiFailure(error, plan.provider.secret)
         });
       } catch (fallbackError) {
         await this.dependencies.reconcileQuota?.({
@@ -288,7 +288,7 @@ export class GovernedAiExecutor {
           fallbackUsed: true,
           quotaScope: quota.quotaScope,
           quotaTokensReserved: requestedTokens,
-          failureReason: sanitizeFailure(fallbackError, plan.fallback.secret)
+          failureReason: sanitizeAiFailure(fallbackError, plan.fallback.secret)
         });
       }
     }
@@ -370,7 +370,7 @@ function estimateTokens(prompt: string): number {
   return Math.max(1, Math.ceil(prompt.length / 4));
 }
 
-function sanitizeFailure(error: unknown, ...secrets: Array<string | undefined>): string {
+export function sanitizeAiFailure(error: unknown, ...secrets: Array<string | undefined>): string {
   const message = error instanceof Error ? error.message : String(error);
   return secrets
     .filter((secret): secret is string => Boolean(secret))

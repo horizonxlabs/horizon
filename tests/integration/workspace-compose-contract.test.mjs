@@ -67,6 +67,16 @@ test("development and release compose leave Pi cumulative token caps opt-in", ()
   }
 });
 
+test("development and release compose expose image generation runtime limits", () => {
+  for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
+    const joined = environmentEntries(api).join("\n");
+    assert.match(joined, /EVCP_AI_IMAGE_TIMEOUT_MS=.*:-60000/);
+    assert.match(joined, /EVCP_PI_MAX_IMAGE_CALLS=.*:-4/);
+    assert.match(joined, /EVCP_PI_IMAGE_MAX_BYTES=.*:-4194304/);
+    assert.doesNotMatch(joined, /EVCP_AI_IMAGE_TOKEN_EQUIVALENT/);
+  }
+});
+
 test("dev Node services isolate Linux dependencies from the host bind mount", () => {
   for (const name of ["platform-api", "admin-web", "creator-web", "app-store-pwa"]) {
     const volumes = compose.services[name].volumes ?? [];

@@ -52,7 +52,11 @@ test("maps native tool lifecycle with stable Pi call IDs", () => {
     args: { path: "app/private.ts" },
     partialResult: { content: [{ type: "text", text: "checking app/private.ts secret output" }] }
   });
-  assert.deepEqual(update, { type: "action_chunk", actionId: "call-7", content: "Tool is running" });
+  assert.deepEqual(update, {
+    type: "action_chunk",
+    actionId: "call-7",
+    content: "Tool is running"
+  });
 
   const [result] = adaptPiEvent({
     type: "tool_execution_end",
@@ -210,7 +214,7 @@ test("ignores Pi bookkeeping and surfaces terminal retry errors only", () => {
   );
 });
 
-test("generate_image tool events adapt to the \"image\" action type", () => {
+test('generate_image tool events adapt to the "image" action type', () => {
   const start = adaptPiEvent({
     type: "tool_execution_start",
     toolCallId: "img-1",
@@ -222,7 +226,7 @@ test("generate_image tool events adapt to the \"image\" action type", () => {
   assert.equal(start[0].actionType, "image");
 });
 
-test("a successful generate_image end keeps ok:true — \"image\" must be in the valid actionTypes set", () => {
+test('a successful generate_image end keeps ok:true — "image" must be in the valid actionTypes set', () => {
   const events = adaptPiEvent({
     type: "tool_execution_end",
     toolCallId: "img-1",
@@ -242,4 +246,30 @@ test("a successful generate_image end keeps ok:true — \"image\" must be in the
   assert.equal(events.length, 1);
   assert.equal(events[0].type, "action_result");
   assert.equal(events[0].ok, true);
+});
+
+test("a soft image failure remains visible but does not fail the generation turn", () => {
+  const next = collectToolExecutionEnd(
+    {
+      type: "tool_execution_end",
+      toolCallId: "call-image",
+      toolName: "generate_image",
+      result: {
+        details: {
+          actionId: "call-image",
+          actionType: "image",
+          label: "public/generated/hero.png",
+          ok: false,
+          softFailure: true,
+          error: "image generation is not configured — continue without it"
+        }
+      },
+      isError: false
+    },
+    [],
+    [],
+    new Set(),
+    undefined
+  );
+  assert.equal(next, undefined);
 });

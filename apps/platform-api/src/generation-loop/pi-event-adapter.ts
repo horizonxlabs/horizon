@@ -17,7 +17,16 @@ const actionTypeByTool = {
 } as const;
 
 const MAX_TOOL_EVENT_SUMMARY_BYTES = 1_024;
-const actionTypes = new Set<ActionActionType>(["read", "list", "file", "edit", "shell", "migration", "skill", "image"]);
+const actionTypes = new Set<ActionActionType>([
+  "read",
+  "list",
+  "file",
+  "edit",
+  "shell",
+  "migration",
+  "skill",
+  "image"
+]);
 
 export function assistantTextDelta(event: AgentSessionEvent): string | undefined {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
@@ -52,7 +61,11 @@ export function collectToolExecutionEnd(
     event.result !== null &&
     (event.result as { terminate?: unknown }).terminate === true;
   let next = terminalValidationPassed ? undefined : failedTool;
-  if (details.ok && !event.isError && (details.actionType === "file" || details.actionType === "edit")) {
+  if (
+    details.ok &&
+    !event.isError &&
+    (details.actionType === "file" || details.actionType === "edit")
+  ) {
     writtenPaths.add(details.label);
     if (next?.label === details.label) next = undefined;
   }
@@ -64,7 +77,7 @@ export function collectToolExecutionEnd(
     label: presentation.label,
     ok: details.ok && !event.isError
   });
-  if (!details.ok || event.isError) next = details;
+  if ((!details.ok || event.isError) && !details.softFailure) next = details;
   return next;
 }
 

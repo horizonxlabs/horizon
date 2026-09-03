@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 globalThis.React = React;
 
-const { VibeWorkingIndicator } = await import(
-  "../../apps/creator-web/src/features/workspace/VibeWorkingIndicator.tsx"
-);
+const { VibeWorkingIndicator } =
+  await import("../../apps/creator-web/src/features/workspace/VibeWorkingIndicator.tsx");
 
 test("working indicator renders an animated, polite live-status row while a turn runs", () => {
   const html = renderToStaticMarkup(
@@ -30,4 +30,15 @@ test("working indicator falls back to a generic working label and hides when idl
     React.createElement(VibeWorkingIndicator, { active: false, status: "Inspecting…" })
   );
   assert.equal(idle, "");
+});
+
+test("working indicator animations stop when reduced motion is requested", () => {
+  const css = readFileSync(new URL("../../packages/ui/styles.css", import.meta.url), "utf8");
+  const animationEnd = css.indexOf("@keyframes vibe-working-wave");
+  const reducedStart = css.indexOf("@media (prefers-reduced-motion: reduce)", animationEnd);
+  const reducedMotion = css.slice(reducedStart, reducedStart + 700);
+  assert.match(
+    reducedMotion,
+    /\.vibe-working-icon,\s*\.vibe-working-dot\s*\{\s*animation:\s*none\s*!important;/
+  );
 });

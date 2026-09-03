@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { GovernedAiExecutor, MemoryAiExecutionStore } = await import(
-  "../../apps/platform-api/src/ai-governance/execution-service.ts"
-);
+const { GovernedAiExecutor, MemoryAiExecutionStore } =
+  await import("../../apps/platform-api/src/ai-governance/execution-service.ts");
 
-const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-const actor = { id: "usr_creator", email: "creator@example.test", name: "Creator", role: "creator" };
+const PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const actor = {
+  id: "usr_creator",
+  email: "creator@example.test",
+  name: "Creator",
+  role: "creator"
+};
 const imagePlan = {
-  provider: { id: "aip_google_image", model: "gemini-2.5-flash-image", secret: "gk", adapter: "google" }
+  provider: {
+    id: "aip_google_image",
+    model: "gemini-2.5-flash-image",
+    secret: "gk",
+    adapter: "google"
+  }
 };
 
 function imageExecutor(overrides = {}) {
@@ -21,14 +31,12 @@ function imageExecutor(overrides = {}) {
       return overrides.plan ?? imagePlan;
     },
     evaluateGuardrail: overrides.evaluateGuardrail ?? (async () => ({ decision: "allow" })),
-    reserveQuota:
-      overrides.reserveQuota ??
-      (async ({ requestedTokens }) => {
-        calls.requestedTokens = requestedTokens;
-        return { allowed: true, remainingToday: 90_000, quotaScope: "organization" };
-      }),
-    reconcileQuota: async ({ actualTokens }) => {
-      calls.reconciledTokens = actualTokens;
+    reserveQuota: async () => {
+      calls.quotaReservations = (calls.quotaReservations ?? 0) + 1;
+      return { allowed: false, remainingToday: 0, quotaScope: "organization" };
+    },
+    reconcileQuota: async () => {
+      calls.quotaReconciliations = (calls.quotaReconciliations ?? 0) + 1;
     },
     invoke: async () => {
       throw new Error("text invoke must not be called for images");
@@ -63,38 +71,44 @@ test("generateImage runs the governed pipeline under image_generation and return
   assert.equal(result.mimeType, "image/png");
   assert.deepEqual(calls.scenarios, ["image_generation"]);
   assert.equal(result.evidence.scenario, "image_generation");
-  // quota reserved with the image token equivalent (default 10000), reconciled with max(actual, equivalent)
-  assert.equal(calls.requestedTokens, 10_000);
-  assert.equal(calls.reconciledTokens, 10_000);
+  assert.equal(calls.quotaReservations ?? 0, 0, "image generation must not consume token quota");
+  assert.equal(
+    calls.quotaReconciliations ?? 0,
+    0,
+    "image generation must not reconcile token quota"
+  );
   // base64 must NOT be persisted — only a short marker
   const persisted = await store.findByRequestId("img_1");
   assert.equal("base64" in persisted, false);
   assert.match(persisted.text ?? "", /^image:image\/png:\d+b$/);
 });
 
-test("generateImage is idempotent per requestId (replay returns evidence, no re-invoke, no bytes)", async () => {
+test("generateImage reports a replay without persisted bytes as unavailable, never as success", async () => {
   const { executor, calls } = imageExecutor();
   await executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_2" });
-  const replay = await executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_2" });
+  const replay = await executor.generateImage(actor, {
+    projectId: "p",
+    prompt: "x",
+    requestId: "img_2"
+  });
   assert.equal(calls.invoke, 1);
-  assert.equal(replay.status, "succeeded");
+  assert.equal(replay.status, "failed");
   assert.equal(replay.base64, undefined);
+  assert.match(replay.evidence.failureReason ?? "", /replay|unavailable/i);
 });
 
-test("guardrail block and quota denial short-circuit without invoking the provider", async () => {
-  const blocked = imageExecutor({ evaluateGuardrail: async () => ({ decision: "block", reason: "nsfw" }) });
-  const blockedResult = await blocked.executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_3" });
+test("guardrail block short-circuits without invoking the provider", async () => {
+  const blocked = imageExecutor({
+    evaluateGuardrail: async () => ({ decision: "block", reason: "nsfw" })
+  });
+  const blockedResult = await blocked.executor.generateImage(actor, {
+    projectId: "p",
+    prompt: "x",
+    requestId: "img_3"
+  });
   assert.equal(blockedResult.status, "blocked");
   assert.equal(blockedResult.evidence.failureReason, "nsfw");
   assert.equal(blocked.calls.invoke, 0);
-
-  const denied = imageExecutor({
-    reserveQuota: async () => ({ allowed: false, remainingToday: 0, quotaScope: "creator" })
-  });
-  const deniedResult = await denied.executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_4" });
-  assert.equal(deniedResult.status, "blocked");
-  assert.equal(deniedResult.evidence.failureReason, "quota_exceeded");
-  assert.equal(denied.calls.invoke, 0);
 });
 
 test("provider failure falls back when configured and reports failed when not", async () => {
@@ -108,11 +122,23 @@ test("provider failure falls back when configured and reports failed when not", 
       return async ({ provider }) => {
         n += 1;
         if (n === 1) throw new Error("google 500");
-        return { base64: PNG_B64, mimeType: "image/png", tokensUsed: 1, latencyMs: 5, costUsd: 0, providerId: provider.id, model: provider.model };
+        return {
+          base64: PNG_B64,
+          mimeType: "image/png",
+          tokensUsed: 1,
+          latencyMs: 5,
+          costUsd: 0,
+          providerId: provider.id,
+          model: provider.model
+        };
       };
     })()
   });
-  const fallback = await withFallback.executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_5" });
+  const fallback = await withFallback.executor.generateImage(actor, {
+    projectId: "p",
+    prompt: "x",
+    requestId: "img_5"
+  });
   assert.equal(fallback.status, "fallback");
   assert.equal(fallback.base64, PNG_B64);
   assert.equal(fallback.evidence.providerId, "aip_b");
@@ -122,7 +148,11 @@ test("provider failure falls back when configured and reports failed when not", 
       throw new Error("provider down");
     }
   });
-  const failed = await failing.executor.generateImage(actor, { projectId: "p", prompt: "x", requestId: "img_6" });
+  const failed = await failing.executor.generateImage(actor, {
+    projectId: "p",
+    prompt: "x",
+    requestId: "img_6"
+  });
   assert.equal(failed.status, "failed");
   assert.equal(failed.base64, undefined);
   assert.match(failed.evidence.failureReason ?? "", /provider down/);

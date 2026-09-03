@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { isLockedFile, type GoldenTemplate } from "../workspace-orchestrator/template";
 import { boundedExecutionError } from "./action-execution-boundary";
@@ -36,18 +38,21 @@ export async function runWorkspaceAssetAction(input: {
   } catch (error) {
     return boundedExecutionError((error as Error).message);
   }
-  if (isLockedFile(template, filePath)) return failed(`refusing to write locked file '${filePath}'`);
+  if (isLockedFile(template, filePath))
+    return failed(`refusing to write locked file '${filePath}'`);
   const base64 = action.base64.replace(/\s+/g, "");
   if (!base64 || !BASE64_PATTERN.test(base64) || base64.length % 4 !== 0)
     return failed(`asset content for '${filePath}' is not valid base64`);
   const byteLength = Buffer.from(base64, "base64").byteLength;
 
   const quotedPath = shellQuote(filePath);
-  const quotedTmp = shellQuote(`${filePath}.b64.tmp`);
   const directory = filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/")) : ".";
+  const temporaryPrefix = `${directory}/.evcp-asset-${randomUUID()}`;
+  const quotedTmp = shellQuote(`${temporaryPrefix}.b64.tmp`);
+  const quotedDecodedTmp = shellQuote(`${temporaryPrefix}.decoded.tmp`);
   const run = async (script: string) =>
     docker.execInContainer(containerId, workspaceWriteCommand(script));
-  const cleanup = () => run(`rm -f ${quotedTmp}`).catch(() => undefined);
+  const cleanup = () => run(`rm -f ${quotedTmp} ${quotedDecodedTmp}`).catch(() => undefined);
 
   const prepare = await run(`mkdir -p ${shellQuote(directory)} && : > ${quotedTmp}`);
   if (prepare.exitCode !== 0) return failed(`asset write failed for '${filePath}'`);
@@ -59,7 +64,10 @@ export async function runWorkspaceAssetAction(input: {
       return failed(`asset write failed for '${filePath}'`);
     }
   }
-  const decode = await run(`base64 -d < ${quotedTmp} > ${quotedPath} && rm -f ${quotedTmp}`);
+  const decode = await run(
+    `base64 -d < ${quotedTmp} > ${quotedDecodedTmp} && ` +
+      `ln ${quotedDecodedTmp} ${quotedPath} && rm -f ${quotedTmp} ${quotedDecodedTmp}`
+  );
   if (decode.exitCode !== 0) {
     await cleanup();
     return failed(`asset write failed for '${filePath}'`);

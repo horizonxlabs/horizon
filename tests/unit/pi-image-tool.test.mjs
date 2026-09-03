@@ -3,7 +3,8 @@ import test from "node:test";
 
 import { createGenerateImageTool } from "../../apps/platform-api/src/generation-loop/pi-image-tool.ts";
 
-const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 function fixture(overrides = {}) {
   const actionRunnerCalls = [];
@@ -68,7 +69,13 @@ test("generates an image, writes the asset, and teaches base-path usage in the t
 
 test("rejects bad paths, bad aspect ratios, and overwriting an existing image", async () => {
   const { run, actionRunnerCalls, generateCalls } = fixture();
-  for (const path of ["app/hero.png", "public/hero.png", "public/generated/hero.jpg", "public/generated/../x.png", "public/generated/a/b.png"]) {
+  for (const path of [
+    "app/hero.png",
+    "public/hero.png",
+    "public/generated/hero.jpg",
+    "public/generated/../x.png",
+    "public/generated/a/b.png"
+  ]) {
     const result = await run({ path, prompt: "p" });
     assert.equal(result.details.ok, false, `expected rejection for ${path}`);
   }
@@ -103,6 +110,7 @@ test("fails soft when image generation is not configured or blocked, and enforce
   assert.equal(notConfigured.details.ok, false);
   assert.match(notConfigured.content[0].text, /not configured/i);
   assert.match(notConfigured.content[0].text, /continue/i);
+  assert.equal(notConfigured.details.softFailure, true);
   assert.equal(missing.actionRunnerCalls.length, 0);
 
   const blocked = fixture({
@@ -111,6 +119,17 @@ test("fails soft when image generation is not configured or blocked, and enforce
   const deniedResult = await blocked.run({ path: "public/generated/x.png", prompt: "p" });
   assert.equal(deniedResult.details.ok, false);
   assert.match(deniedResult.details.error, /quota_exceeded/);
+  assert.equal(deniedResult.details.softFailure, true);
+
+  const unavailable = fixture({
+    generateImage: async () => {
+      throw new Error("AI scenario route image_generation is not configured");
+    }
+  });
+  const unavailableResult = await unavailable.run({ path: "public/generated/x.png", prompt: "p" });
+  assert.equal(unavailableResult.details.ok, false);
+  assert.equal(unavailableResult.details.softFailure, true);
+  assert.match(unavailableResult.content[0].text, /continue/i);
 
   const oversized = fixture({
     limits: {
@@ -126,4 +145,29 @@ test("fails soft when image generation is not configured or blocked, and enforce
   assert.equal(tooBig.details.ok, false);
   assert.match(tooBig.details.error, /image size|byte/i);
   assert.equal(oversized.actionRunnerCalls.length, 0);
+});
+
+test("rejects provider bytes that are not a real PNG before writing the asset", async () => {
+  const wrongMime = fixture({
+    generateImage: async () => ({ status: "succeeded", base64: PNG_B64, mimeType: "image/jpeg" })
+  });
+  const wrongMimeResult = await wrongMime.run({ path: "public/generated/x.png", prompt: "p" });
+  assert.equal(wrongMimeResult.details.ok, false);
+  assert.match(wrongMimeResult.details.error, /PNG/i);
+  assert.equal(wrongMime.actionRunnerCalls.length, 0);
+
+  const badSignature = fixture({
+    generateImage: async () => ({
+      status: "succeeded",
+      base64: Buffer.from("not a png").toString("base64"),
+      mimeType: "image/png"
+    })
+  });
+  const badSignatureResult = await badSignature.run({
+    path: "public/generated/y.png",
+    prompt: "p"
+  });
+  assert.equal(badSignatureResult.details.ok, false);
+  assert.match(badSignatureResult.details.error, /PNG/i);
+  assert.equal(badSignature.actionRunnerCalls.length, 0);
 });

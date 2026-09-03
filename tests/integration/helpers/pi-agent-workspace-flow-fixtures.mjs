@@ -75,10 +75,16 @@ export async function memoryWorkspace() {
     if (truncatePath) files.set(truncatePath, "");
     const append = script.match(/^printf %s '([A-Za-z0-9+/=]+)' >> '([^']+)'$/);
     if (append) files.set(append[2], (files.get(append[2]) ?? "") + append[1]);
-    const decode = script.match(/^base64 -d < '([^']+)' > '([^']+)' && rm -f '\1'$/);
-    if (decode) {
-      files.set(decode[2], Buffer.from(files.get(decode[1]) ?? "", "base64"));
-      files.delete(decode[1]);
+    const atomicDecode = script.match(
+      /^base64 -d < '([^']+)' > '([^']+)' && ln '\2' '([^']+)' && rm -f '\1' '\2'$/
+    );
+    if (atomicDecode) {
+      const [, encodedPath, decodedPath, finalPath] = atomicDecode;
+      files.set(decodedPath, Buffer.from(files.get(encodedPath) ?? "", "base64"));
+      if (files.has(finalPath)) return { stdout: "", stderr: "File exists", exitCode: 1 };
+      files.set(finalPath, files.get(decodedPath));
+      files.delete(encodedPath);
+      files.delete(decodedPath);
     }
     return { stdout: "", stderr: "", exitCode: 0 };
   };
