@@ -19,9 +19,7 @@ const PRESETS: Record<AdapterKind, { baseUrl: string; model: string }> = {
   openrouter: { baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4.1-mini" },
   lm_studio: { baseUrl: "http://host.docker.internal:1234/v1", model: "local-model-id" },
   anthropic: { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-5" },
-  // Image-generation provider (scenario "image_generation"): governed image runtime only —
-  // text scenarios still reject google at resolve time.
-  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash-image" }
+  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash" }
 };
 
 export function ProviderDrawer({ open, onClose, ai, onDone, editProvider }: Props) {
@@ -116,6 +114,7 @@ export function ProviderDrawer({ open, onClose, ai, onDone, editProvider }: Prop
             <option value="openrouter">OpenRouter</option>
             <option value="lm_studio">LM Studio (local)</option>
             <option value="anthropic">Anthropic native</option>
+            <option value="google">Google Gemini</option>
           </Select>
         </Field>
         <Field label="Provider base URL">

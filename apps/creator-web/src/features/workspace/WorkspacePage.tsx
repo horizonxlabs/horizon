@@ -20,17 +20,16 @@ import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
 import { usePreviewGuards } from "./use-preview-guards";
 import { VibePaneResizer, useChatPaneResize } from "./VibePaneResizer";
-import { WorkspaceMobileNav } from "./WorkspaceMobileNav";
+import { WorkspaceMobileNav, type WorkspaceView } from "./WorkspaceMobileNav";
 import { VibeWorkingIndicator } from "./VibeWorkingIndicator";
 import { usePreviewAuthorization } from "./use-preview-authorization";
 import { currentWorkspaceTurnStart } from "./workspace-turn";
+import { WorkspaceWakeOverlay } from "./WorkspaceWakeOverlay";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
 // Node test environments (render-smoke) never pulls in the CSS/grid module.
 const WorkspaceDatabasePanel = lazy(() => import("./WorkspaceDatabasePanel"));
-
-export type WorkspaceView = "conversation" | "preview" | "code" | "database";
 
 export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -110,7 +109,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   };
   const currentTurnStart = currentWorkspaceTurnStart(vibeMessages);
   return (
-    <div className="vibe-live-shell">
+    <div className="vibe-live-shell" aria-busy={app.isEnteringWorkspace || undefined}>
+      {app.isEnteringWorkspace ? <WorkspaceWakeOverlay projectName={selectedProject.name} /> : null}
       <header className="vibe-live-header">
         <div className="vibe-live-header-left">
           <a className="vibe-live-back-link" href="/creator/">

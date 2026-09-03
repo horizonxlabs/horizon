@@ -66,6 +66,7 @@ export function parseProviderJson(data: string): Record<string, unknown> {
 export function openAiCompatibleBaseUrl(provider: ResolvedAiProvider): string {
   const baseUrl = provider.baseUrl?.trim().replace(/\/+$/, "") ?? "";
   if (provider.adapter === "lm_studio" && !/\/v1$/i.test(baseUrl)) return `${baseUrl}/v1`;
+  if (provider.adapter === "google" && !/\/openai$/i.test(baseUrl)) return `${baseUrl}/openai`;
   return baseUrl;
 }
 

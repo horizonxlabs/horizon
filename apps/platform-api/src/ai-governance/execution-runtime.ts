@@ -94,10 +94,9 @@ async function resolvePlan(
   return { provider, ...(fallback ? { fallback } : {}) };
 }
 
-// Adapter support is per-modality: the image runtime speaks google/openai image APIs,
-// while text scenarios must never route to google (the completion runtime would send a
-// Gemini key to /chat/completions). Scenario decides which allowlist applies.
-const TEXT_ADAPTERS = ["openai", "openrouter", "lm_studio", "anthropic"];
+// Adapter support is per-modality. Google text requests use Gemini's OpenAI-compatible
+// endpoint, while image requests continue to use the native generateContent endpoint.
+const TEXT_ADAPTERS = ["openai", "openrouter", "lm_studio", "anthropic", "google"];
 const IMAGE_ADAPTERS = ["google", "openai"];
 
 async function resolveProvider(
