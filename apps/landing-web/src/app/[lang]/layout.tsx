@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import "./globals.css";
 import { SiteFooter } from "@/features/site-footer";
 import { SiteNav } from "@/shared/site-nav";
@@ -20,7 +21,14 @@ export function generateStaticParams() {
 // metadata they annotate rather than under the Thai-script content guards.
 const openGraphLocale: Record<Locale, string> = { th: "th_TH", en: "en_US" };
 
-export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Promise<Metadata> {
+// Typed explicitly rather than with Next's generated route-props helper for this path: that
+// helper only resolves after `next build` writes .next/types/routes.d.ts, which doesn't exist
+// on a fresh clone or in CI before the build step runs, so depending on it breaks `pnpm typecheck`.
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ lang: string }>;
+}): Promise<Metadata> {
   const { lang } = await params;
   if (!isLocale(lang)) notFound();
   const copy = metadataContent[lang];
@@ -51,7 +59,15 @@ export async function generateMetadata({ params }: LayoutProps<"/[lang]">): Prom
   };
 }
 
-export default async function RootLayout({ children, params }: LayoutProps<"/[lang]">) {
+// Same reasoning as generateMetadata above: explicit prop types avoid depending on the
+// generated route-type helper that is unavailable exactly when CI needs it.
+export default async function RootLayout({
+  children,
+  params
+}: {
+  children: ReactNode;
+  params: Promise<{ lang: string }>;
+}) {
   const { lang } = await params;
   if (!isLocale(lang)) notFound();
   return (

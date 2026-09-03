@@ -63,3 +63,17 @@ test("the image accepts the public origin as a build argument", () => {
   assert.ok(argIndex !== -1, "Dockerfile must declare ARG NEXT_PUBLIC_SITE_URL");
   assert.ok(argIndex < buildIndex, "the ARG must be declared before the build runs");
 });
+
+test("route files do not depend on Next's generated route types", () => {
+  // LayoutProps<"/[lang]"> and PageProps<"/[lang]"> only resolve after `next build` writes
+  // .next/types/routes.d.ts. Since .next is gitignored and check.mjs typechecks before it
+  // builds, depending on them breaks `pnpm typecheck` on a fresh clone and in CI.
+  for (const file of ["layout.tsx", "page.tsx"]) {
+    const source = readFileSync(`apps/landing-web/src/app/[lang]/${file}`, "utf8");
+    assert.doesNotMatch(
+      source,
+      /\b(LayoutProps|PageProps)\s*</,
+      `${file} uses a generated route-type helper; type params explicitly instead`
+    );
+  }
+});

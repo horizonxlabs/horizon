@@ -9,7 +9,14 @@ import { SelfHostSection } from "@/features/self-host";
 import { SurfacesSection } from "@/features/surfaces";
 import { isLocale } from "@/shared/locale";
 
-export default async function LandingPage({ params }: PageProps<"/[lang]">) {
+// Typed explicitly rather than with Next's generated route-props helper for this path: that
+// helper only resolves after `next build` writes .next/types/routes.d.ts, which doesn't exist
+// on a fresh clone or in CI before the build step runs, so depending on it breaks `pnpm typecheck`.
+export default async function LandingPage({
+  params
+}: {
+  params: Promise<{ lang: string }>;
+}) {
   const { lang } = await params;
   if (!isLocale(lang)) notFound();
   return (
