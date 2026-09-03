@@ -6,12 +6,11 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TARGET_ROOTS = new Set(["app", "routes", "features", "shared"]);
 const LEGACY_ROOTS = new Set(["components", "hooks", "lib", "pages", "data"]);
-// Framework-mandated entry points that must live at src root by convention (Vite's main.tsx,
-// Next.js's proxy.ts — see apps/landing-web/node_modules/next/dist/docs/.../file-conventions/proxy.md),
+// Framework-mandated entry points that must live at src root by convention (Vite's main.tsx),
 // not legacy debt, so they are exempted rather than tracked in the legacy-path baseline.
-const FRAMEWORK_ENTRY_FILES = new Set(["main.tsx", "proxy.ts"]);
+const FRAMEWORK_ENTRY_FILES = new Set(["main.tsx"]);
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
-const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa", "landing-web"];
+const APP_NAMES = ["admin-web", "creator-web", "app-store-pwa"];
 const baseline = new Set(
   JSON.parse(
     readFileSync(resolve(ROOT, "scripts/quality/frontend-legacy-path-baseline.json"), "utf8")

@@ -22,7 +22,6 @@
     "dev:api": "pnpm --filter @evcp/platform-api dev",
     "dev:creator": "pnpm --filter @evcp/creator-web dev",
     "dev:store": "pnpm --filter @evcp/app-store-pwa dev",
-    "dev:landing": "pnpm --filter @evcp/landing-web dev",
     "build": "pnpm -r --filter './packages/*' --filter './apps/*' build",
     "typecheck": "pnpm -r --filter './packages/*' --filter './apps/*' typecheck",
     "lint": "pnpm lint:repo && pnpm lint:code",

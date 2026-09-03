@@ -2,6 +2,10 @@
 
 Date: 2026-09-02
 
+> **Note (2026-09-03):** The implementation described here moved out of this monorepo to
+> `horizonxlabs/horizon-website` on 2026-09-03. This document is kept as the historical
+> design record and no longer describes the current location of the code.
+
 ## Summary
 
 Horizon gains a public marketing site at `apps/landing-web`: a Next.js 16 App Router

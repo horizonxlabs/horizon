@@ -30,12 +30,6 @@ test("the sans stack resolves Latin before Thai", () => {
   );
 });
 
-test("the landing app ships the real logo, not a text wordmark", () => {
-  const nav = readFileSync("apps/landing-web/src/shared/site-nav.tsx", "utf8");
-  assert.match(nav, /horizon-logo\.png/);
-  assert.match(nav, /alt=/, "the logo must carry alt text");
-});
-
 test("no rule in packages/ui/styles.css hardcodes the Thai-first stack, bypassing the shared token", () => {
   const styles = readFileSync("packages/ui/styles.css", "utf8");
   const fontFamilyDeclarations = styles.match(/font-family:\s*[^;]+;/g) ?? [];

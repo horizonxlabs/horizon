@@ -5,41 +5,14 @@ import { extname, join, relative } from "node:path";
 const APP_SRC_DIRS = [
   "apps/admin-web/src",
   "apps/creator-web/src",
-  "apps/app-store-pwa/src",
-  "apps/landing-web/src"
+  "apps/app-store-pwa/src"
 ];
 const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const STYLE_EXTENSIONS = new Set([".css", ".scss", ".sass", ".less"]);
 const COLOR_PATTERN = /#[0-9a-fA-F]{3,8}\b|(?:rgb|rgba|hsl|hsla)\s*\(/;
 const INLINE_STYLE_PATTERN = /\bstyle\s*=\s*\{\s*\{/;
 const LOCAL_CSS_IMPORT_PATTERN = /import\s+["'][^"']+\.css["']/;
-const APPROVED_UI_CSS_IMPORTS = ['import "@evcp/ui/styles.css"', 'import "@evcp/ui/marketing.css"'];
-// Next.js requires a CSS entry point, so landing-web gets exactly one stylesheet. It may
-// exist only while it does nothing but pull in @evcp/ui and tell Tailwind where to look.
-// Validated per statement rather than per line: a line-anchored pattern cannot reject a
-// declaration appended after a legal @import, and cannot span a multi-line comment.
-const LANDING_CSS_ENTRY = "apps/landing-web/src/app/[lang]/globals.css";
-const ALLOWED_ENTRY_STATEMENT =
-  /^@(?:import\s+["']@evcp\/ui\/[a-z0-9.-]+\.css["']|source\s+["'][^"']+["'])$/;
-// The App Router only bundles global CSS when the root layout imports it directly, so the
-// root layout is the one source file allowed to import the (already-restricted) CSS entry.
-const LANDING_ROOT_LAYOUT = "apps/landing-web/src/app/[lang]/layout.tsx";
-const LANDING_ROOT_LAYOUT_CSS_IMPORT = 'import "./globals.css"';
-
-function landingCssEntryViolations(content) {
-  // Blank out comments rather than deleting them, so byte offsets — and therefore the
-  // reported line numbers — still line up with the original file.
-  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, (comment) =>
-    comment.replace(/[^\n]/g, " ")
-  );
-  const violations = [];
-  for (const match of stripped.matchAll(/[^;\s][^;]*/g)) {
-    const statement = match[0].trim();
-    if (ALLOWED_ENTRY_STATEMENT.test(statement)) continue;
-    violations.push({ line: stripped.slice(0, match.index).split("\n").length, statement });
-  }
-  return violations;
-}
+const APPROVED_UI_CSS_IMPORTS = ['import "@evcp/ui/styles.css"'];
 // Match arbitrary VALUES (a utility root immediately followed by `-[`) while NOT
 // matching Tailwind variant syntax like `data-[state=open]:`, `aria-[expanded]:`,
 // `supports-[...]`, `group-[...]`, `peer-[...]`, `has-[...]` (legit variant prefixes).
@@ -100,17 +73,6 @@ for (const file of files) {
   const lines = content.split("\n");
 
   if (STYLE_EXTENSIONS.has(extension)) {
-    if (file === LANDING_CSS_ENTRY) {
-      for (const violation of landingCssEntryViolations(content)) {
-        reportViolation(
-          violations,
-          file,
-          violation.line,
-          "landing-web globals.css may only import @evcp/ui stylesheets and declare @source paths"
-        );
-      }
-      continue;
-    }
     reportViolation(
       violations,
       file,
@@ -144,14 +106,13 @@ for (const file of files) {
 
     if (
       LOCAL_CSS_IMPORT_PATTERN.test(line) &&
-      !APPROVED_UI_CSS_IMPORTS.some((approved) => line.includes(approved)) &&
-      !(file === LANDING_ROOT_LAYOUT && line.includes(LANDING_ROOT_LAYOUT_CSS_IMPORT))
+      !APPROVED_UI_CSS_IMPORTS.some((approved) => line.includes(approved))
     ) {
       reportViolation(
         violations,
         file,
         lineNumber,
-        "local CSS import detected; app surfaces should import only @evcp/ui/styles.css or @evcp/ui/marketing.css"
+        "local CSS import detected; app surfaces should import only @evcp/ui/styles.css"
       );
     }
 

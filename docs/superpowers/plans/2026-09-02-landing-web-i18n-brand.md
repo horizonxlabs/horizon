@@ -1,5 +1,9 @@
 # Landing Web — Bilingual TH/EN, Real Fonts, Real Logo
 
+> **Note (2026-09-03):** The implementation described here moved out of this monorepo to
+> `horizonxlabs/horizon-website` on 2026-09-03. This document is kept as the historical
+> plan record and no longer describes the current location of the code.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the landing site bilingual with Thai as the default language, render both scripts in fonts that are actually loaded, and use the real Horizon logo instead of a text wordmark.

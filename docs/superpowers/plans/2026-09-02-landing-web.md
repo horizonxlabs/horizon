@@ -1,5 +1,9 @@
 # Landing Web Implementation Plan
 
+> **Note (2026-09-03):** The implementation described here moved out of this monorepo to
+> `horizonxlabs/horizon-website` on 2026-09-03. This document is kept as the historical
+> plan record and no longer describes the current location of the code.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a public, server-rendered marketing site for Horizon at `apps/landing-web`, styled from the real product design tokens and deployable to Railway on its own.

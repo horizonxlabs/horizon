@@ -115,23 +115,8 @@ typecheck, and tests locally.
 
 ### Landing site
 
-The public marketing site lives at `apps/landing-web` and deploys independently of the
-private-server Compose stack. It is bilingual (Thai default, English second); `/` redirects
-to `/th`. Adding a locale means adding it to `LOCALES` in `apps/landing-web/src/shared/locale.ts`
-plus a translation in each content module — the typecheck and the completeness test will
-list what is missing. Run it locally with:
-
-```bash
-pnpm dev:landing
-```
-
-This serves the site at http://127.0.0.1:4103. For deployment, the site is built from
-`docker/landing-web.Dockerfile`, which produces a standalone Next.js image. It takes one
-optional variable, `NEXT_PUBLIC_SITE_URL`, used for canonical URLs, the sitemap, and the
-`og:url` tag — but `NEXT_PUBLIC_*` variables are inlined by the Next.js compiler at
-**build** time, so this must be set as a Railway **build** variable (not a service/runtime
-variable), and changing it requires a rebuild. If it is left unset, the built image
-advertises `http://localhost:4103` in its sitemap, robots.txt, and OpenGraph tags.
+The public marketing site is no longer part of this monorepo; it now lives at
+`https://github.com/horizonxlabs/horizon-website` and deploys independently.
 
 ### Private-server installation
 
