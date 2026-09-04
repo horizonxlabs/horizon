@@ -9,11 +9,13 @@ export const RESERVED_SUBDOMAINS = new Set([
 ]);
 
 export type SubdomainValidation =
-  | { ok: true; value: string }
-  | { ok: false; code: "SUBDOMAIN_INVALID"; message: string };
+  { ok: true; value: string } | { ok: false; code: "SUBDOMAIN_INVALID"; message: string };
+
+export type AppStoreVisibility = "public" | "restricted";
 
 export type AppStorePublishInput = {
   subdomain: string;
+  visibility?: AppStoreVisibility;
 };
 
 export type PublishAccessUrlConfigDto = {

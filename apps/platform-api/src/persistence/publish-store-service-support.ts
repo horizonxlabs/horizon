@@ -1,4 +1,8 @@
-import { buildSubdomainUrl, type PublishAccessUrlConfigDto } from "@evcp/api-client";
+import {
+  buildSubdomainUrl,
+  type AppStoreVisibility,
+  type PublishAccessUrlConfigDto
+} from "@evcp/api-client";
 import { PermissionError } from "../platform-errors";
 import type {
   AppMemberRecord,
@@ -63,6 +67,7 @@ export function mapRegistryEntry(
   accessUrlConfig: PublishAccessUrlConfigDto
 ): AppStoreRegistryEntry {
   const subdomain = record.subdomain ?? undefined;
+  const visibility: AppStoreVisibility = record.visibility === "public" ? "public" : "restricted";
   return {
     id: record.id,
     appId: record.appId,
@@ -73,8 +78,8 @@ export function mapRegistryEntry(
     name: record.name,
     route: record.route,
     status: "published",
-    visibility: "restricted",
-    accessMode: "membership_or_invite",
+    visibility,
+    accessMode: visibility === "public" ? "public" : "membership_or_invite",
     roleKeys: [...record.roleKeys],
     ownerUserId: record.ownerUserId,
     deploymentId: record.deploymentRecordId,
@@ -130,11 +135,14 @@ export function createLegacyStorefrontCard(input: {
   ownerName?: string;
   actorId: string;
 }): StorefrontAppCard {
-  const accessStatus = input.member
-    ? "active"
-    : input.hasPendingAccessRequest
-      ? "pending"
-      : "available";
+  const accessStatus =
+    input.entry.visibility === "public"
+      ? "active"
+      : input.member
+        ? "active"
+        : input.hasPendingAccessRequest
+          ? "pending"
+          : "available";
   return {
     id: input.entry.id,
     appId: input.entry.appId,
@@ -148,7 +156,9 @@ export function createLegacyStorefrontCard(input: {
     route: input.entry.route,
     accessStatus,
     installStatus: input.member ? "installed" : "not_installed",
-    installationId: input.member ? `legacy_appinst_${input.entry.appId}_${input.actorId}` : undefined,
+    installationId: input.member
+      ? `legacy_appinst_${input.entry.appId}_${input.actorId}`
+      : undefined,
     installedAt: input.member?.lastAccessAt,
     myRole: input.member?.roleName,
     health: "healthy",

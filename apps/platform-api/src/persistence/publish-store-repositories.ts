@@ -34,7 +34,7 @@ import type {
   TicketType
 } from "../platform-services";
 import type { WorkspaceDeployment } from "@evcp/types";
-import type { PublishAccessUrlConfigDto } from "@evcp/api-client";
+import type { AppStoreVisibility, PublishAccessUrlConfigDto } from "@evcp/api-client";
 import { PermissionError, ValidationError } from "../platform-services";
 import { canAccessPublishedProject, storeActionsForCard } from "./published-app-access";
 import { resourceKeyForProject } from "../workspace-orchestrator/resource-ports";
@@ -85,7 +85,6 @@ export class PublishStoreRepositoryBackedService {
   async canAccessPublishedProject(actor: PlatformUser, projectId: string): Promise<boolean> {
     return canAccessPublishedProject(this.client, actor, projectId);
   }
-
   async assertSubdomainAvailable(
     actor: PlatformUser,
     projectId: string,
@@ -273,7 +272,7 @@ export class PublishStoreRepositoryBackedService {
       baseline: PrdVersion;
       preview: PreviewVersion;
       runtimeDeployment?: WorkspaceDeployment;
-      subdomain?: string;
+      subdomain?: string; visibility?: AppStoreVisibility;
     }
   ): Promise<PublishResult> {
     requireProjectOwnerAccess(actor, input.project);
@@ -281,6 +280,7 @@ export class PublishStoreRepositoryBackedService {
       where: { appId: input.project.appId ?? `app_${slugToId(input.project.id)}` }
     });
     const requestedSubdomain = input.subdomain ?? existingRegistry?.subdomain ?? null;
+    const visibility = input.visibility ?? (existingRegistry?.visibility === "public" ? "public" : "restricted");
     const subdomain = requestedSubdomain
       ? await this.assertSubdomainAvailable(actor, input.project.id, requestedSubdomain)
       : null;
@@ -373,8 +373,8 @@ export class PublishStoreRepositoryBackedService {
             name: review.manifest.app.name,
             route: review.manifest.app.route,
             status: "published",
-            visibility: "restricted",
-            accessMode: "membership_or_invite",
+            visibility,
+            accessMode: visibility === "public" ? "public" : "membership_or_invite",
             roleKeys: review.manifest.roles.map((role) => role.key),
             ownerUserId: input.project.ownerUserId,
             manifestVersion: review.manifest.manifestVersion,
@@ -390,8 +390,8 @@ export class PublishStoreRepositoryBackedService {
             name: review.manifest.app.name,
             route: review.manifest.app.route,
             status: "published",
-            visibility: "restricted",
-            accessMode: "membership_or_invite",
+            visibility,
+            accessMode: visibility === "public" ? "public" : "membership_or_invite",
             roleKeys: review.manifest.roles.map((role) => role.key),
             ownerUserId: input.project.ownerUserId,
             manifestVersion: review.manifest.manifestVersion,
@@ -1024,7 +1024,7 @@ export class PublishStoreRepositoryBackedService {
     const installation = await this.client.appInstallation.findFirst({
       where: { appId: entry.appId, userId: actor.id }
     });
-    const accessStatus = member ? "active" : pending ? "pending" : "available";
+    const accessStatus = entry.visibility === "public" ? "active" : member ? "active" : pending ? "pending" : "available";
     const installStatus =
       installation?.status === "active" ? "installed" : installation ? "disabled" : "not_installed";
     return {

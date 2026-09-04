@@ -94,11 +94,15 @@ function wildcardHostMatches(pattern, host) {
   const hostname = host.toLowerCase().replace(/:\d+$/, "");
   if (!pattern.startsWith("*.")) return hostname === pattern.toLowerCase();
   const suffix = pattern.slice(2).toLowerCase();
-  return hostname.endsWith(`.${suffix}`) && hostname.slice(0, -(suffix.length + 1)).includes(".") === false;
+  return (
+    hostname.endsWith(`.${suffix}`) &&
+    hostname.slice(0, -(suffix.length + 1)).includes(".") === false
+  );
 }
 
 function matcherSetMatches(matcher, host, path) {
-  if (matcher.host && !matcher.host.some((pattern) => wildcardHostMatches(pattern, host))) return false;
+  if (matcher.host && !matcher.host.some((pattern) => wildcardHostMatches(pattern, host)))
+    return false;
   if (matcher.path) {
     const matchesPath = matcher.path.some((pattern) =>
       pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : path === pattern
@@ -266,6 +270,7 @@ test("Caddy and Compose route one platform subdomain label with trusted runtime 
   assert.match(localCaddyfile, /@published_subdomain \{/);
   assert.match(localCaddyfile, /host \*\.localhost/);
   assert.match(localCaddyfile, /header_regexp published Host \^\[a-z0-9\]/);
+  assert.match(localCaddyfile, /not host[^\n]*dash\.localhost/);
   assert.match(localCaddyfile, /rewrite \* \/__subdomain\{uri\}/);
   assert.match(localCaddyfile, /reverse_proxy platform-api:3100/);
 
@@ -274,12 +279,13 @@ test("Caddy and Compose route one platform subdomain label with trusted runtime 
     releaseCaddyfile,
     /\{\$EVCP_CADDY_ADDRESS:localhost\}, \*\.\{\$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost\}/
   );
-  assert.match(
-    releaseCaddyfile,
-    /host \*\.\{\$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost\}/
-  );
+  assert.match(releaseCaddyfile, /host \*\.\{\$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost\}/);
   assert.match(releaseCaddyfile, /rewrite \* \/__subdomain\{uri\}/);
   assert.match(releaseCaddyfile, /@published_subdomain \{/);
+  assert.match(
+    releaseCaddyfile,
+    /not host[^\n]*dash\.\{\$EVCP_APP_SUBDOMAIN_BASE_DOMAIN:localhost\}/
+  );
 
   for (const compose of [localCompose, releaseCompose]) {
     assert.match(compose, /EVCP_APP_SUBDOMAIN_BASE_DOMAIN:/);
@@ -301,10 +307,7 @@ test("adapted Caddy routes every valid app-host path before platform redirects",
 
   for (const path of ["/creator", "/store"]) {
     assert.equal(caddyOutcome(local, "sales.localhost", path), "proxy:platform-api:3100");
-    assert.equal(
-      caddyOutcome(release, "sales.apps.example.test", path),
-      "proxy:platform-api:3100"
-    );
+    assert.equal(caddyOutcome(release, "sales.apps.example.test", path), "proxy:platform-api:3100");
   }
 
   assert.equal(caddyOutcome(local, "localhost", "/creator"), "status:308");
@@ -342,6 +345,7 @@ test("adapted Caddy accepts exactly the shared published-subdomain label contrac
       "api",
       "auth",
       "creator",
+      "dash",
       "store",
       "storage",
       "www",

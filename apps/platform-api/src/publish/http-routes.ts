@@ -1,4 +1,5 @@
 import type * as NodeHttp from "node:http";
+import { failure, type AppStoreVisibility } from "@evcp/api-client";
 import type { EnvironmentName } from "@evcp/types";
 import type { WorkspaceDeployment } from "@evcp/types";
 import type { WorkspaceAuthContext } from "../workspace-orchestrator/routes";
@@ -11,11 +12,14 @@ import { registerAppLaunchSessionRoute, type AppLaunchAuthorization } from "./ap
 import { resolveRawAppStoreSubdomain } from "./app-store-publish-runtime";
 import type { ProjectLifecycleCoordinator } from "../project-lifecycle";
 import type { LaunchGrantStore } from "./launch-grant-store";
+import { appSessionHeaders, deploymentProxyPath, normalizePublishEnvironment, type PublishHeaderBag as HeaderBag } from "./http-route-support";
 import {
   proxyPublishedDeployment,
   registerPublishedSubdomainHttpRoutes,
   type PublishedSubdomainRegistryEntry
 } from "./subdomain-http-routes";
+
+export { deploymentProxyPath } from "./http-route-support";
 
 interface PublishedProjectAccess {
   canAccessPublishedProject: (
@@ -34,7 +38,6 @@ export async function canAccessPublishedDeployment(
   return persistence.canAccessPublishedProject(auth.actor, projectId);
 }
 
-type HeaderBag = Record<string, string | string[] | undefined>;
 // Minimal raw-Express surface used by the publish + /apps serve handlers (mirrors the shape the
 // app-factory infers from its Nest http adapter).
 export interface PublishRawExpress {
@@ -75,24 +78,6 @@ type PublishRes = Parameters<PublishRawExpress["all"]>[1] extends (
   ? S
   : never;
 
-function normalizeEnvironment(value: unknown): EnvironmentName {
-  return value === "staging" || value === "dev" || value === "production" ? value : "production";
-}
-
-export function deploymentProxyPath(originalUrl: string): string {
-  return originalUrl || "/";
-}
-
-function appSessionHeaders(headers: HeaderBag): HeaderBag {
-  const encodedToken = String(headers.cookie ?? "").match(/(?:^|;\s*)evcp_app_token=([^;]+)/)?.[1];
-  if (!encodedToken) return headers;
-  try {
-    return { ...headers, authorization: `Bearer ${decodeURIComponent(encodedToken)}` };
-  } catch {
-    return headers;
-  }
-}
-
 /**
  * Register the container-publish HTTP routes on the raw Express instance:
  *   POST /projects/:projectId/publish     — deploy to an environment (body { environment, slug? })
@@ -123,6 +108,7 @@ export async function registerPublishHttpRoutes(opts: {
     projectId: string;
     deployment: WorkspaceDeployment;
     subdomain?: string;
+    visibility?: AppStoreVisibility;
   }) => Promise<{ status: number; body: unknown }>;
   publishStack?: Awaited<ReturnType<typeof createDefaultPublishStack>>;
   launchGrantStore?: LaunchGrantStore;
@@ -158,7 +144,8 @@ export async function registerPublishHttpRoutes(opts: {
     headers: HeaderBag,
     projectId: string,
     deployment: WorkspaceDeployment,
-    subdomain?: string
+    subdomain?: string,
+    visibility?: AppStoreVisibility
   ): Promise<{ status: number; body: unknown } | null> => {
     if (!opts.persistPublishedDeployment) return null;
     try {
@@ -166,7 +153,8 @@ export async function registerPublishHttpRoutes(opts: {
         headers,
         projectId,
         deployment,
-        subdomain
+        subdomain,
+        visibility
       });
       if (persisted.status >= 400) await publishService.deactivate(deployment);
       return persisted;
@@ -194,10 +182,16 @@ export async function registerPublishHttpRoutes(opts: {
       return;
     }
     const projectId = String(req.params?.projectId ?? "");
-    const body = req.body as { environment?: unknown; subdomain?: unknown } | undefined;
+    const body = req.body as { environment?: unknown; subdomain?: unknown; visibility?: unknown } | undefined;
     const isAppStorePublish = body?.environment === undefined;
     let appStoreSubdomain: string | undefined;
+    let appStoreVisibility: AppStoreVisibility | undefined;
     if (isAppStorePublish) {
+      if (body?.visibility !== undefined && body.visibility !== "public" && body.visibility !== "restricted") {
+        res.status(400).json(failure("VISIBILITY_INVALID", "Visibility must be public or restricted."));
+        return;
+      }
+      appStoreVisibility = body?.visibility === "public" ? "public" : "restricted";
       const resolvedSubdomain = await resolveRawAppStoreSubdomain({
         headers: req.headers ?? {},
         projectId,
@@ -211,7 +205,7 @@ export async function registerPublishHttpRoutes(opts: {
       appStoreSubdomain = resolvedSubdomain.subdomain;
     }
     const slug = resolveResourceKey(projectId);
-    const environment = normalizeEnvironment(body?.environment);
+    const environment = normalizePublishEnvironment(body?.environment);
     try {
       const result = await publishRoutes.publish(auth, { projectId, slug, environment });
       if (
@@ -224,7 +218,8 @@ export async function registerPublishHttpRoutes(opts: {
           req.headers ?? {},
           projectId,
           deployment,
-          appStoreSubdomain
+          appStoreSubdomain,
+          appStoreVisibility
         );
         if (persisted && (persisted.status >= 400 || body?.environment === undefined)) {
           res.status(persisted.status).json(persisted.body);
@@ -251,7 +246,7 @@ export async function registerPublishHttpRoutes(opts: {
     const projectId = String(req.params?.projectId ?? "");
     const body = req.body as { environment?: unknown; commitSha?: string } | undefined;
     const slug = resolveResourceKey(projectId);
-    const environment = normalizeEnvironment(body?.environment);
+    const environment = normalizePublishEnvironment(body?.environment);
     const commitSha = String(body?.commitSha ?? "");
     const result = await publishRoutes.rollback(auth, { projectId, slug, environment, commitSha });
     if (result.status === 201 && environment === "production" && opts.persistPublishedDeployment) {
@@ -328,7 +323,7 @@ export async function registerPublishHttpRoutes(opts: {
       const launch = await opts.resolveAppLaunch({ headers, appSlug });
       if (launch.routePath !== `/apps/${slug}`) throw new Error("Published app route is unavailable");
       const decision = await resolveAppsTarget(workspaceDeployments, slug, "production", () => rehydrateDeployment(slug, "production"));
-      if (!decision.ok || decision.projectId !== launch.projectId || !(await opts.canAccessDeployment(auth, decision.projectId))) {
+      if (!decision.ok || decision.projectId !== launch.projectId || (launch.visibility !== "public" && !(await opts.canAccessDeployment(auth, decision.projectId)))) {
         throw new Error("Published app access is unavailable");
       }
       return launch;

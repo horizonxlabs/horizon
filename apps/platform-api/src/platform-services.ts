@@ -887,8 +887,8 @@ export interface AppStoreRegistryEntry {
   name: string;
   route: string;
   status: "published";
-  visibility: "restricted";
-  accessMode: "membership_or_invite";
+  visibility: "public" | "restricted";
+  accessMode: "public" | "membership_or_invite";
   roleKeys: string[];
   ownerUserId: string;
   deploymentId: string;
@@ -5898,7 +5898,7 @@ export class PublishService {
   publishApp(
     actor: PlatformUser,
     projectId: string,
-    input: { subdomain?: string } = {}
+    input: { subdomain?: string; visibility?: "public" | "restricted" } = {}
   ): PublishResult {
     this.auth.requireRole(actor, ["admin", "creator"]);
     const existingRegistry = this.registry.find(
@@ -5967,8 +5967,8 @@ export class PublishService {
       name: review.manifest.app.name,
       route: review.manifest.app.route,
       status: "published",
-      visibility: "restricted",
-      accessMode: "membership_or_invite",
+      visibility: input.visibility ?? existingRegistry?.visibility ?? "restricted",
+      accessMode: (input.visibility ?? existingRegistry?.visibility) === "public" ? "public" : "membership_or_invite",
       roleKeys: review.manifest.roles.map((role) => role.key),
       ownerUserId: review.project.ownerUserId,
       deploymentId: deployment.id,

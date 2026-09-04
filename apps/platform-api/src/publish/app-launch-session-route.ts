@@ -30,6 +30,7 @@ export type AppLaunchAuthorization = {
   routePath: string;
   subdomain?: string;
   subdomainUrl?: string;
+  visibility?: "public" | "restricted";
 };
 
 export function registerAppLaunchSessionRoute(input: {
@@ -70,6 +71,12 @@ export function registerAppLaunchSessionRoute(input: {
           : undefined
       );
       if (authorized.subdomainUrl) {
+        if (authorized.visibility === "public") {
+          response.status(200).json(
+            success({ authorized: true, launchUrl: authorized.subdomainUrl })
+          );
+          return;
+        }
         if (!authorized.subdomain || !input.launchGrantStore) {
           throw new Error("Subdomain launch is unavailable");
         }
