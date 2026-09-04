@@ -1,5 +1,6 @@
 import { Button } from "@evcp/ui";
-import type { WorkspaceView } from "./WorkspacePage";
+
+export type WorkspaceView = "conversation" | "preview" | "code" | "database";
 
 const MOBILE_VIEWS: WorkspaceView[] = ["conversation", "preview", "code", "database"];
 

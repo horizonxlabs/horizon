@@ -132,12 +132,15 @@ test("AdminRoutes retains setup and session guard selection", () => {
   );
 });
 
-test("ProviderDrawer exposes OpenRouter and LM Studio presets", async () => {
+test("ProviderDrawer exposes OpenRouter, LM Studio, and Gemini provider options", async () => {
   const drawer = await readFile("apps/admin-web/src/features/ai-governance/drawers/ProviderDrawer.tsx", "utf8");
   assert.match(drawer, /value="openrouter"/);
   assert.match(drawer, /value="lm_studio"/);
+  assert.match(drawer, /<option value="google">Google Gemini<\/option>/);
   assert.match(drawer, /https:\/\/openrouter\.ai\/api\/v1/);
   assert.match(drawer, /host\.docker\.internal:1234/);
+  assert.match(drawer, /generativelanguage\.googleapis\.com\/v1beta/);
+  assert.match(drawer, /gemini-2\.5-flash/);
 });
 
 test("ProviderDrawer renders its open state without throwing", () => {
