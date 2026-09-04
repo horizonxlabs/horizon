@@ -65,19 +65,27 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
     selectedProject.id.replaceAll("_", "-")
   );
   const [subdomain, setSubdomain] = useState(suggestedSubdomain);
+  const [visibility, setVisibility] = useState<"public" | "restricted">(
+    visibleRegistryEntry?.visibility === "public" ? "public" : "restricted"
+  );
+  const visibilityTouchedRef = useRef(false);
   const subdomainInputRef = useRef<HTMLInputElement>(null);
   const previousProjectIdRef = useRef(selectedProject.id);
   useEffect(() => {
     if (previousProjectIdRef.current === selectedProject.id) return;
     previousProjectIdRef.current = selectedProject.id;
+    visibilityTouchedRef.current = false;
+    setVisibility(visibleRegistryEntry?.visibility === "public" ? "public" : "restricted");
     setSubdomain(
-      normalizeSubdomainSuggestion(
-        selectedProject.name,
-        selectedProject.id.replaceAll("_", "-")
-      )
+      normalizeSubdomainSuggestion(selectedProject.name, selectedProject.id.replaceAll("_", "-"))
     );
     clearPublishSubdomainError();
-  }, [clearPublishSubdomainError, selectedProject.id, selectedProject.name]);
+  }, [clearPublishSubdomainError, selectedProject.id, selectedProject.name, visibleRegistryEntry]);
+  useEffect(() => {
+    if (!visibilityTouchedRef.current && visibleRegistryEntry?.projectId === selectedProject.id) {
+      setVisibility(visibleRegistryEntry.visibility === "public" ? "public" : "restricted");
+    }
+  }, [selectedProject.id, visibleRegistryEntry]);
   useEffect(() => {
     if (publishSubdomainError) subdomainInputRef.current?.focus();
   }, [publishSubdomainError]);
@@ -101,14 +109,16 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
   const readinessAvailable =
     resolvedReadinessState === "ready" && accessReady && Boolean(publishReview);
   const stageBlockers: Record<ReadinessStage, string[]> = {
-    manifest: [], route: [], permissions: [], preview: [], registry: []
+    manifest: [],
+    route: [],
+    permissions: [],
+    preview: [],
+    registry: []
   };
   const failedChecklist = publishReview?.checklist.filter((item) => item.status === "fail") ?? [];
   for (const item of failedChecklist) {
     const stage = READINESS_STAGE_BY_KEY[item.key] ?? "registry";
-    stageBlockers[stage].push(
-      READINESS_LABEL_BY_KEY[item.key] ?? "Additional publish requirement"
-    );
+    stageBlockers[stage].push(READINESS_LABEL_BY_KEY[item.key] ?? "Additional publish requirement");
   }
   if (publishReview && !publishReview.ready && failedChecklist.length === 0) {
     stageBlockers.registry.push("Additional publish requirement");
@@ -133,8 +143,7 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
   const readinessSteps = [
     {
       label: "Manifest",
-      ready:
-        readinessAvailable && Boolean(manifestVersion) && stageBlockers.manifest.length === 0,
+      ready: readinessAvailable && Boolean(manifestVersion) && stageBlockers.manifest.length === 0,
       detail: readinessAvailable
         ? stageBlockers.manifest.length
           ? `Resolve: ${stageBlockers.manifest.join(", ")}.`
@@ -223,12 +232,17 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
           <PublishAccessUrlCard
             value={subdomain}
             previewUrl={previewUrl}
+            visibility={visibility}
             error={subdomainError}
             disabled={isPublishingProject}
             inputRef={subdomainInputRef}
             onChange={(value) => {
               setSubdomain(value);
               clearPublishSubdomainError();
+            }}
+            onVisibilityChange={(value) => {
+              visibilityTouchedRef.current = true;
+              setVisibility(value);
             }}
           />
 
@@ -240,7 +254,7 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                 type="button"
                 className="creator-publish-action"
                 variant={canSubmitPublish ? "primary" : "secondary"}
-                onClick={() => handlePublishProject({ subdomain })}
+                onClick={() => handlePublishProject({ subdomain, visibility })}
                 disabled={isPublishingProject || !canSubmitPublish}
                 aria-busy={isPublishingProject || undefined}
               >
@@ -279,9 +293,11 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
 
             <CreatorStatusMessage tone={statusTone} technicalDetails={statusTechnicalDetails}>
               {canPublish ? (
-                publishMessageTone === "danger" || publishResult
-                  ? publishMessage
-                  : "All readiness requirements are complete. This project can be published."
+                publishMessageTone === "danger" || publishResult ? (
+                  publishMessage
+                ) : (
+                  "All readiness requirements are complete. This project can be published."
+                )
               ) : (
                 <>
                   <strong>{blockerSummary}</strong>
@@ -295,7 +311,9 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                         size="sm"
                         variant="secondary"
                         onClick={() => {
-                          void refreshCreatorPublishState(selectedProject.id).catch(() => undefined);
+                          void refreshCreatorPublishState(selectedProject.id).catch(
+                            () => undefined
+                          );
                         }}
                       >
                         Retry readiness
@@ -314,13 +332,17 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                 <div>
                   <strong>{readableStatus(visibleDeployment.status)}</strong>
                   <span>
-                    {readableStatus(visibleDeployment.environment)} · Manifest version {visibleDeployment.manifestVersion}
+                    {readableStatus(visibleDeployment.environment)} · Manifest version{" "}
+                    {visibleDeployment.manifestVersion}
                   </span>
                   <small title={visibleDeployment.id}>Deployment {visibleDeployment.id}</small>
                   {visibleDeployment.subdomainUrl ? (
                     <span className="creator-published-url">
                       <strong>Primary access URL</strong>
-                      <a href={visibleDeployment.subdomainUrl} title={visibleDeployment.subdomainUrl}>
+                      <a
+                        href={visibleDeployment.subdomainUrl}
+                        title={visibleDeployment.subdomainUrl}
+                      >
                         {visibleDeployment.subdomainUrl}
                       </a>
                     </span>

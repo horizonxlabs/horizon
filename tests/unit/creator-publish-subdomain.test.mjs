@@ -107,25 +107,39 @@ function subdomainInput(renderer) {
   );
 }
 
+function visibilityInput(renderer, value) {
+  return renderer.root.find(
+    (node) =>
+      node.type === "input" &&
+      node.props.name === "creator-publish-visibility" &&
+      node.props.value === value
+  );
+}
+
 function publishButton(renderer) {
   return renderer.root.find(
     (node) => node.type === "button" && textOf(node).includes("Publish to App Store")
   );
 }
 
-test("PublishAccessUrlCard exposes one selected platform option and disabled custom DNS", () => {
+test("PublishAccessUrlCard exposes public access and keeps custom DNS disabled", () => {
   const html = renderToStaticMarkup(
     React.createElement(PublishAccessUrlCard, {
       value: "people-ops",
       previewUrl: "https://people-ops.apps.example.test",
+      visibility: "public",
       error: "This subdomain is reserved.",
-      onChange() {}
+      onChange() {},
+      onVisibilityChange() {}
     })
   );
 
   assert.match(html, /Access URL/);
   assert.match(html, /type="radio"[^>]*checked/);
   assert.match(html, /Platform subdomain/);
+  assert.match(html, /Public/);
+  assert.match(html, /Anyone with the link can open the app without signing in/);
+  assert.match(html, /Restricted/);
   assert.match(html, /for="creator-publish-subdomain"/);
   assert.match(
     html,
@@ -171,6 +185,31 @@ test("PublishPage initializes from the project fallback and resets only when pro
   await act(async () => renderer.unmount());
 });
 
+test("PublishPage restores the current visibility when editing a published app", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(PublishPage, {
+        app: pageApp({
+          visibleRegistryEntry: {
+            id: "registry-public",
+            projectId: project.id,
+            slug: "release-plan-2026",
+            subdomain: "team-hub",
+            subdomainUrl: "https://team-hub.apps.example.test",
+            status: "published",
+            visibility: "public"
+          }
+        })
+      })
+    );
+  });
+
+  assert.equal(visibilityInput(renderer, "public").props.checked, true);
+  assert.equal(visibilityInput(renderer, "restricted").props.checked, false);
+  await act(async () => renderer.unmount());
+});
+
 test("PublishPage renders the access URL before readiness and blocks invalid labels", async () => {
   const calls = [];
   let renderer;
@@ -195,10 +234,12 @@ test("PublishPage renders the access URL before readiness and blocks invalid lab
   assert.equal(publishButton(renderer).props.disabled, true);
 
   await act(async () => subdomainInput(renderer).props.onChange({ target: { value: "team-hub" } }));
+  await act(async () => visibilityInput(renderer, "public").props.onChange());
   assert.equal(subdomainInput(renderer).props["aria-invalid"], undefined);
+  assert.equal(visibilityInput(renderer, "public").props.checked, true);
   assert.equal(publishButton(renderer).props.disabled, false);
   await act(async () => publishButton(renderer).props.onClick());
-  assert.deepEqual(calls, [{ subdomain: "team-hub" }]);
+  assert.deepEqual(calls, [{ subdomain: "team-hub", visibility: "public" }]);
   await act(async () => renderer.unmount());
 });
 
@@ -308,7 +349,7 @@ test("a successful publish shows its primary subdomain and fallback path", async
   await act(async () => subdomainInput(renderer).props.onChange({ target: { value: "team-hub" } }));
   await act(async () => publishButton(renderer).props.onClick());
 
-  assert.deepEqual(calls, [[project.id, { subdomain: "team-hub" }]]);
+  assert.deepEqual(calls, [[project.id, { subdomain: "team-hub", visibility: "restricted" }]]);
   const html = JSON.stringify(renderer.toJSON());
   assert.match(html, /https:\/\/team-hub\.apps\.example\.test/);
   assert.match(html, /\/apps\/team-hub/);

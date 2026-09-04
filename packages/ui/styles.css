@@ -6473,6 +6473,33 @@ body.vibe-is-resizing * {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--evcp-color-primary) 28%, transparent);
 }
 
+.creator-access-visibility {
+  display: grid;
+  gap: var(--evcp-space-2);
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.creator-access-visibility > legend {
+  color: var(--evcp-color-text);
+  font-size: 12px;
+  font-weight: 750;
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+}
+
+.creator-access-visibility > .creator-access-url-option-heading {
+  background: var(--evcp-color-surface-muted);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-control);
+  padding: 10px 12px;
+}
+
+.creator-access-visibility > .creator-access-url-option-heading:has(input:checked) {
+  background: color-mix(in srgb, var(--evcp-color-primary) 6%, var(--evcp-color-surface));
+  border-color: var(--evcp-color-primary);
+}
+
 .creator-access-url-option-heading {
   align-items: center;
   cursor: pointer;
@@ -7788,6 +7815,7 @@ button:disabled {
   .sprint5-subgrid,
   .creator-publish-layout,
   .creator-access-url-options,
+  .creator-access-visibility,
   .creator-access-url-fields,
   .sprint8-shell,
   .sprint8-subgrid,

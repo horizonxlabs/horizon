@@ -2348,10 +2348,10 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     },
     canAccessDeployment: (auth, projectId) => canAccessPublishedDeployment(auth, projectId, services.publishStorePersistence),
     preflightPublishedSubdomain: (input) => preflightPublishedSubdomain(services, input),
-    persistPublishedDeployment: ({ headers, projectId, deployment, subdomain }) =>
+    persistPublishedDeployment: ({ headers, projectId, deployment, subdomain, visibility }) =>
       executePlatformApiRequestAsync(
         services,
-        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
+        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain, visibility })
       ),
     launchGrantStore: services.launchGrantStore,
     subdomainBaseDomain: publishAccessUrlConfig.baseDomain,
@@ -2360,7 +2360,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       if (!services.publishStorePersistence) return null;
       const entry = await services.publishStorePersistence.resolvePublishedSubdomain(subdomain);
       return entry?.subdomain
-        ? { appSlug: entry.slug, projectId: entry.projectId, routePath: entry.route, subdomain: entry.subdomain }
+        ? { appSlug: entry.slug, projectId: entry.projectId, routePath: entry.route, subdomain: entry.subdomain, visibility: entry.visibility }
         : null;
     },
     resolveAppLaunch: async ({ headers, appSlug }) => {
@@ -2375,7 +2375,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         projectId: detail.projectId,
         routePath: detail.route,
         subdomain: detail.subdomain,
-        subdomainUrl: detail.subdomainUrl
+        subdomainUrl: detail.subdomainUrl, visibility: detail.accessMode === "public" ? "public" : "restricted"
       };
     },
     recordAudit: recordPublishAudit,
