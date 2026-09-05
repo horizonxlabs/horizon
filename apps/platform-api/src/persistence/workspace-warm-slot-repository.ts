@@ -229,7 +229,11 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     return slot ? toWarmWorkspaceSlot(slot) : null;
   }
 
-  async retryPreparing(id: string, lease: WarmSlotOperationLease): Promise<WarmWorkspaceSlot | null> {
+  async retryPreparing(
+    id: string,
+    resourceKey: string,
+    lease: WarmSlotOperationLease
+  ): Promise<WarmWorkspaceSlot | null> {
     const restarted = await this.client.workspaceWarmSlot.updateMany({
       where: {
         id,
@@ -239,12 +243,15 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
       },
       data: {
         state: "preparing",
+        resourceKey,
         containerId: null,
         llmGatewayKeyId: null,
         secretPayload: null,
         claimProjectId: null,
         lastError: null,
         retryAfter: null,
+        readyAt: null,
+        claimedAt: null,
         operationExpiresAt: new Date(lease.expiresAt)
       }
     });

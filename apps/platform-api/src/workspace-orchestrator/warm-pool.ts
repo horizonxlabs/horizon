@@ -217,7 +217,11 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
                 await options.store.remove(owned.id, ownerId);
                 return;
               }
-              const retried = await options.store.retryPreparing(owned.id, operationLease(ownerId));
+              const retried = await options.store.retryPreparing(
+                owned.id,
+                createSlotIdentity().resourceKey,
+                operationLease(ownerId)
+              );
               if (retried) retries.push({ slot: retried, ownerId });
             } catch {
               const failureCount = owned.failureCount + 1;

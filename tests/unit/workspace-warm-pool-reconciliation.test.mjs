@@ -301,7 +301,7 @@ test("ensureCapacity retries quarantined cleanup after its backoff", async () =>
   await fixture.pool.ensureCapacity();
   const [replacement] = await fixture.store.list();
   assert.equal(replacement.state, "ready");
-  assert.equal(replacement.resourceKey, "warm-resource-1");
+  assert.equal(replacement.resourceKey, "warm-resource-2");
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
 });
 

@@ -75,7 +75,11 @@ export interface WorkspaceWarmSlotStore {
     expectedState: WarmWorkspaceSlotState,
     lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot | null>;
-  retryPreparing(id: string, lease: WarmSlotOperationLease): Promise<WarmWorkspaceSlot | null>;
+  retryPreparing(
+    id: string,
+    resourceKey: string,
+    lease: WarmSlotOperationLease
+  ): Promise<WarmWorkspaceSlot | null>;
   claim(projectId: string): Promise<WarmWorkspaceSlot | null>;
   remove(id: string, ownerId?: string): Promise<boolean>;
 }

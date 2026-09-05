@@ -32,7 +32,9 @@ export async function reconcileWorkspaceWarmPool(options: {
   for (const slot of slots) {
     if (
       options.targetSize > 0 &&
-      (slot.state === "failed" || (slot.state === "preparing" && slot.failureCount > 0))
+      (slot.state === "failed" ||
+        (slot.state === "preparing" && slot.failureCount > 0) ||
+        (slot.state === "cleaning" && slot.failureCount > 0))
     ) {
       totals.preserved += 1;
       continue;

@@ -285,17 +285,29 @@ function createMemoryWarmSlotStore(now) {
       });
       return clone(slot);
     },
-    async retryPreparing(id, lease) {
+    async retryPreparing(id, resourceKey, lease) {
       const slot = slots.get(id);
-      if (!slot || slot.state !== "cleaning" || !owns(slot, lease)) return null;
+      if (
+        !slot ||
+        slot.state !== "cleaning" ||
+        !owns(slot, lease) ||
+        [...slots.values()].some(
+          (candidate) => candidate.id !== id && candidate.resourceKey === resourceKey
+        )
+      ) {
+        return null;
+      }
       Object.assign(slot, {
         state: "preparing",
+        resourceKey,
         containerId: null,
         llmGatewayKeyId: null,
         secretPayload: null,
         claimProjectId: null,
         lastError: null,
         retryAfter: null,
+        readyAt: null,
+        claimedAt: null,
         operationExpiresAt: lease.expiresAt,
         updatedAt: iso()
       });

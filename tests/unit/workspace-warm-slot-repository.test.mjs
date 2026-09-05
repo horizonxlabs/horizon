@@ -232,20 +232,14 @@ test("repository retains retry history while cleanup occupies capacity and resta
   const client = new AtomicCapacityPersistenceClient();
   const store = new WorkspaceWarmSlotRepositoryBackedStore(client);
   await store.createPreparing(slotFixture, operationLease);
-  await store.recordPreparedResources(
-    slotFixture.id,
-    { llmGatewayKeyId: "gateway_key_1", secretPayload: "sealed-payload" },
-    operationLease
-  );
-  await store.recordPreparingContainer(slotFixture.id, "container_1", operationLease);
+  await store.markReady(slotFixture.id, readyPatch, operationLease);
   await store.markFailed(
     slotFixture.id,
     {
       lastError: "preview_unhealthy",
       failureCount: 3,
       retryAfter: "2026-09-05T00:05:00.000Z"
-    },
-    operationLease
+    }
   );
   const retryLease = {
     ownerId: "retry-owner",
@@ -257,15 +251,17 @@ test("repository retains retry history while cleanup occupies capacity and resta
   const concurrentReservation = await store.reservePreparing(1, [
     { id: "replacement", resourceKey: "replacement-resource" }
   ], retryLease);
-  const retrying = await store.retryPreparing(slotFixture.id, retryLease);
+  const retrying = await store.retryPreparing(slotFixture.id, "retry-generation-resource", retryLease);
 
   assert.deepEqual(concurrentReservation, []);
   assert.equal(retrying.id, slotFixture.id);
   assert.equal(retrying.state, "preparing");
   assert.equal(retrying.failureCount, 3);
+  assert.equal(retrying.resourceKey, "retry-generation-resource");
   assert.equal(retrying.containerId, null);
   assert.equal(retrying.llmGatewayKeyId, null);
   assert.equal(retrying.secretPayload, null);
+  assert.equal(retrying.readyAt, null);
 });
 
 test("warm-slot Prisma schema uniquely identifies resources and indexes claim candidates", async () => {
