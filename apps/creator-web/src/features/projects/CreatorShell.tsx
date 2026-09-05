@@ -4,6 +4,7 @@ import { HorizonLogo } from "@/shared/HorizonLogo";
 import { CreateProjectWizard } from "./CreateProjectWizard";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { WorkspaceWakeOverlay } from "@/features/workspace";
 
 export function CreatorShell({
   app,
@@ -57,15 +58,7 @@ export function CreatorShell({
       currentPath={pathname}
       onNavigate={onNavigate}
     >
-      {isEnteringWorkspace ? (
-        <div className="hz-loading-backdrop" role="status" aria-live="polite">
-          <div className="hz-loading-card">
-            <span className="hz-spinner" aria-hidden="true" />
-            <strong>Preparing workspace</strong>
-            <span>Starting this project's sandbox. This may take a moment.</span>
-          </div>
-        </div>
-      ) : null}
+      {isEnteringWorkspace ? <WorkspaceWakeOverlay projectName={selectedProject.name} /> : null}
       {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"
