@@ -125,7 +125,10 @@ test("PRD and History do not announce Preview as selected and Preview remains se
 
   await act(async () => tabNamed("History").props.onClick());
   assert.deepEqual(pressedLabels(), []);
-  assert.match(renderer.root.findByProps({ role: "status" }).children.join(""), /No versions yet/);
+  const historyStatus = renderer.root
+    .findAllByProps({ role: "status" })
+    .find((status) => status.children.join("").includes("No versions yet"));
+  assert.ok(historyStatus);
 
   const previewButton = switcherButtons().find((button) => button.children.includes("Preview"));
   await act(async () => previewButton.props.onClick());
@@ -179,6 +182,55 @@ test("a detected bug creates an English fix draft through BugReportBox and the c
   });
   assert.match(userBubble.children.join(""), /Fix this bug/);
   assert.doesNotMatch(userBubble.children.join(""), /[\u0E00-\u0E7F]/);
+});
+
+test("Workspace failure recovery retries the latest user request", async () => {
+  const submissions = [];
+  const app = {
+    ...appFor("preview", () => {}),
+    vibeStatus: "Failed",
+    vibeMessages: [
+      { id: "u-1", role: "user", text: "Build the first preview", actions: [] },
+      {
+        id: "a-1",
+        role: "assistant",
+        text: "\n\n⚠️ Vault secret operation failed (403)",
+        actions: [],
+        parts: [
+          {
+            id: "error-1",
+            type: "error",
+            sequence: 0,
+            message: "Vault secret operation failed (403)"
+          }
+        ]
+      }
+    ],
+    handleVibeChat(options) {
+      submissions.push(options.prompt);
+    }
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(WorkspacePage, { app }));
+  });
+
+  const retry = renderer.root
+    .findAllByType("button")
+    .find((button) => button.children.includes("Retry access"));
+  await act(async () => retry.props.onClick());
+  assert.deepEqual(submissions, ["Build the first preview"]);
+});
+
+test("Workspace exposes a named conversation panel toggle", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(WorkspacePage, { app: appFor("preview", () => {}) }));
+  });
+
+  const collapse = renderer.root.findByProps({ "aria-label": "Collapse conversation panel" });
+  await act(async () => collapse.props.onClick({ stopPropagation() {} }));
+  assert.ok(renderer.root.findByProps({ "aria-label": "Expand conversation panel" }));
 });
 
 test("the attachment control is a keyboard-reachable native button wired to its file input", async () => {

@@ -323,7 +323,7 @@ function toAgentMessages(context: Context): AgentRoundMessage[] {
       content: message.content.map((block) => {
         if (block.type === "text") return { type: "text", text: block.text };
         if (block.type === "thinking") return { type: "thinking", thinking: block.thinking };
-        return { type: "toolCall", id: block.id, name: block.name, arguments: block.arguments };
+        return { ...block };
       }),
       timestamp: message.timestamp
     };

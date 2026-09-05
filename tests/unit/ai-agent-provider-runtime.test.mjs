@@ -201,6 +201,66 @@ test("Gemini text providers use Google's OpenAI-compatible chat endpoint", async
   assert.equal(result.message.content[0].text, "Gemini ready");
 });
 
+test("Gemini agent rounds preserve thought signatures across tool calls", async () => {
+  const requests = [];
+  let invocation = 0;
+  const executor = await createRuntimeExecutor("google", async (_url, init) => {
+    requests.push(JSON.parse(String(init.body)));
+    invocation += 1;
+    const stream =
+      invocation === 1
+        ? [
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-gemini-1","type":"function","function":{"name":"read_workspace_file","arguments":"{\\"path\\":\\"app/page.tsx\\"}"}}]}}]}',
+            "",
+            'data: {"choices":[{"delta":{"extra_content":{"google":{"thought_signature":"signature-A"}}},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n")
+        : [
+            'data: {"choices":[{"delta":{"content":"Done"}}],"usage":{"prompt_tokens":12,"completion_tokens":1,"total_tokens":13}}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n");
+    return new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  });
+
+  const first = await executor.executeAgentRound(
+    actor,
+    roundInput({ requestId: "round-runtime-google-signature-1" })
+  );
+  const toolCall = first.message.content.find((block) => block.type === "toolCall");
+  assert.equal(toolCall.thoughtSignature, "signature-A");
+
+  const second = await executor.executeAgentRound(
+    actor,
+    roundInput({
+      requestId: "round-runtime-google-signature-2",
+      messages: [
+        { role: "user", content: "Read the current page", timestamp: 1 },
+        first.message,
+        {
+          role: "toolResult",
+          toolCallId: "call-gemini-1",
+          toolName: "read_workspace_file",
+          content: [{ type: "text", text: "export default function Page() {}" }],
+          isError: false,
+          timestamp: 3
+        }
+      ]
+    })
+  );
+
+  assert.equal(second.status, "succeeded");
+  assert.deepEqual(requests[1].messages[2].tool_calls[0].extra_content, {
+    google: { thought_signature: "signature-A" }
+  });
+});
+
 test("runtime streams Anthropic native tool calls into the same contract", async () => {
   let request;
   const stream = [

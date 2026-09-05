@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@evcp/ui";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 // Chat/preview split-pane sizing: persisted width, rAF drag-resize, collapse under a
 // threshold. Extracted whole from WorkspacePage (boy-scout: the page sat over the 400-line
@@ -123,15 +125,28 @@ export function VibePaneResizer({ resize }: { resize: ReturnType<typeof useChatP
     chatPaneWidth,
     setChatPaneWidth,
     isResizingPanels,
+    isChatCollapsed,
     setIsResizingPanels,
     setIsChatCollapsed,
     splitViewRef,
     chatPaneWidthRef,
     isChatCollapsedRef
   } = resize;
+  const toggleChatPane = () => {
+    const nextCollapsed = !isChatCollapsed;
+    isChatCollapsedRef.current = nextCollapsed;
+    setIsChatCollapsed(nextCollapsed);
+    splitViewRef.current?.classList.toggle("is-chat-collapsed", nextCollapsed);
+    if (!nextCollapsed) {
+      const restoredWidth = Math.max(MIN_CHAT_PANE_WIDTH, chatPaneWidthRef.current);
+      chatPaneWidthRef.current = restoredWidth;
+      setChatPaneWidth(restoredWidth);
+      splitViewRef.current?.style.setProperty("--vibe-chat-width", `${restoredWidth}%`);
+    }
+  };
   return (
     <div
-      className={`vibe-live-resizer${isResizingPanels ? " is-resizing" : ""}`}
+      className={`vibe-live-resizer${isResizingPanels ? "is-resizing" : ""}`}
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize chat and preview panels"
@@ -189,7 +204,24 @@ export function VibePaneResizer({ resize }: { resize: ReturnType<typeof useChatP
         }
       }}
     >
-      <span className="vibe-live-resizer-grip" aria-hidden="true" />
+      <Button
+        className="vibe-live-resizer-toggle"
+        variant="secondary"
+        type="button"
+        aria-label={isChatCollapsed ? "Expand conversation panel" : "Collapse conversation panel"}
+        title={isChatCollapsed ? "Expand conversation panel" : "Collapse conversation panel"}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleChatPane();
+        }}
+      >
+        {isChatCollapsed ? (
+          <PanelLeftOpen size={15} aria-hidden="true" />
+        ) : (
+          <PanelLeftClose size={15} aria-hidden="true" />
+        )}
+      </Button>
     </div>
   );
 }
