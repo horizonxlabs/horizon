@@ -6,7 +6,6 @@ import { buildDevContainerSpec } from "./docker-engine";
 import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 import {
-  cleanupOrphanWorkspaceResources,
   waitForPreviewReady,
   workspaceSecretEntries,
   workspaceVolumeLabels,
@@ -17,6 +16,7 @@ import type { ProjectDeletionFence } from "../project-lifecycle";
 import { physicalResourceKey } from "./warm-pool-config";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
+import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -243,8 +243,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   return {
+    ...createWarmPoolLifecycle(deps, records),
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
+      deps.runtimeRecords = store;
       for (const snapshot of await store.list()) {
         // Reconcile persisted state with Docker so a stack restart cannot leave preview stuck at 503.
         const live =
@@ -259,18 +261,6 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         records.set(record.projectId, record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
       }
-    },
-    async cleanupOrphanContainers(): Promise<string[]> {
-      return cleanupOrphanWorkspaceResources({
-        docker: deps.docker,
-        activeProjectIds: new Set(records.keys()),
-        onRemoved: ({ projectId, containerName, volumeName }) =>
-          audit({
-            action: "workspace.orphan_removed",
-            projectId,
-            metadata: { containerName, volumeName }
-          })
-      });
     },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;

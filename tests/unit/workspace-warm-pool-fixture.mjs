@@ -8,7 +8,8 @@ export function createWarmPoolFixture({
   targetSize,
   readySlots = 0,
   previewExitCode = 0,
-  cleanupFailure
+  cleanupFailure,
+  runtimeRecords
 }) {
   const store = createMemoryWarmSlotStore();
   const docker = createMemoryDockerEngine();
@@ -133,6 +134,7 @@ export function createWarmPoolFixture({
         async hydrate() {}
       },
       docker,
+      runtimeRecords,
       postgresHost: "postgres:5432",
       databaseName: "evcp",
       s3Endpoint: "http://minio:9000",

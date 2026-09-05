@@ -14,8 +14,22 @@ import {
   createDockerMinioIdentityAdmin,
   createMinioObjectStorageProvisioner
 } from "./minio-object-storage";
+import { createWorkspaceWarmPool, type WorkspaceWarmPool } from "./warm-pool";
+import type { WorkspaceWarmSlotStore } from "./warm-pool-types";
+import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
+import { createWarmPoolSecretCodec } from "./warm-pool-secret-codec";
+import { resolveWorkspaceWarmPoolSize } from "./warm-pool-config";
 
 const DEV_SECRET_KEY = "0".repeat(64);
+
+export type WorkspaceWarmPoolFactory = (store: WorkspaceWarmSlotStore) => WorkspaceWarmPool;
+
+export interface DefaultWorkspaceOrchestratorOptions {
+  secretKeyHex?: string;
+  onAudit?: WorkspaceOrchestratorDeps["onAudit"];
+  env?: Record<string, string | undefined>;
+  onWarmPoolFactory?: (factory: WorkspaceWarmPoolFactory) => void;
+}
 
 export function resolveWorkspaceAdapterMode(
   env: Record<string, string | undefined> = process.env
@@ -37,24 +51,15 @@ export function resolveWorkspaceRuntimeOptions(
 }
 
 export function createDefaultWorkspaceOrchestrator(
-  opts: {
-    secretKeyHex?: string;
-    onAudit?: (event: {
-      action: string;
-      projectId: string;
-      metadata?: Record<string, unknown>;
-    }) => void;
-    env?: Record<string, string | undefined>;
-  } = {}
+  opts: DefaultWorkspaceOrchestratorOptions = {}
 ): WorkspaceOrchestrator {
   const env = opts.env ?? process.env;
   const mode = resolveWorkspaceAdapterMode(env);
+  const targetSize = resolveWorkspaceWarmPoolSize(env, mode);
   const encryptionKeyHex = opts.secretKeyHex ?? env.EVCP_WORKSPACE_SECRET_KEY;
 
   if (mode === "real" && !encryptionKeyHex) {
-    throw new Error(
-      "EVCP_WORKSPACE_SECRET_KEY is required when EVCP_WORKSPACE_REAL_ADAPTERS=1"
-    );
+    throw new Error("EVCP_WORKSPACE_SECRET_KEY is required when EVCP_WORKSPACE_REAL_ADAPTERS=1");
   }
   if (mode === "real" && (!env.EVCP_LITELLM_BASE_URL || !env.EVCP_LITELLM_MASTER_KEY)) {
     throw new Error(
@@ -111,7 +116,7 @@ export function createDefaultWorkspaceOrchestrator(
     });
     void secrets.hydrate();
 
-    return createWorkspaceOrchestrator({
+    const deps: WorkspaceOrchestratorDeps = {
       postgres: createPgClientPostgresProvisioner(pgRunSql),
       objectStorage,
       llmGateway: createLiteLlmGatewayAdmin({
@@ -122,7 +127,17 @@ export function createDefaultWorkspaceOrchestrator(
       docker,
       ...runtimeOptions,
       onAudit: opts.onAudit
-    });
+    };
+    const orchestrator = createWorkspaceOrchestrator(deps);
+    opts.onWarmPoolFactory?.((store) =>
+      createWorkspaceWarmPool({
+        targetSize,
+        store,
+        deps,
+        codec: createWarmPoolSecretCodec(resolvedEncryptionKeyHex)
+      })
+    );
+    return orchestrator;
   }
 
   return createWorkspaceOrchestrator({

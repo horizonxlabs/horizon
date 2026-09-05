@@ -17,11 +17,12 @@ import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver, createPlatformBugAuditor } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
-import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
+import { initializeWorkspaceRuntime } from "./workspace-orchestrator/runtime-startup";
+import type { WorkspaceWarmPoolFactory } from "./workspace-orchestrator/factory";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
-import { startIdleSweep } from "./workspace-orchestrator/idle-sweep";
+import { startWorkspaceSweeps } from "./workspace-orchestrator/workspace-sweeps";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
 import { createPlatformApiServices, PermissionError, ValidationError, type AuthResolution, type PlatformApiServices, type PlatformProject, type PlatformUser } from "./platform-services";
@@ -120,8 +121,9 @@ export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CoreP
 export async function createRuntimePlatformApiServices(env: RuntimeEnv = process.env): Promise<PersistenceAwarePlatformApiServices> {
   const publishAccessUrlConfig = resolvePublishAccessUrlConfig(env);
   const mode = resolveCorePersistenceMode(env);
+  let warmPoolFactory: WorkspaceWarmPoolFactory | undefined;
   const services: PersistenceAwarePlatformApiServices = {
-    ...createPlatformApiServices({ publishAccessUrlConfig }),
+    ...createPlatformApiServices({ publishAccessUrlConfig, workspace: { env, onWarmPoolFactory: (factory) => { warmPoolFactory = factory; } } }),
     publishAccessUrlConfig,
     ...(mode === "memory" ? { launchGrantStore: new MemoryLaunchGrantStore() } : {})
   };
@@ -156,8 +158,7 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
-  await services.workspaceOrchestrator.hydrateRuntimeRecords(await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL));
-  await services.workspaceOrchestrator.cleanupOrphanContainers();
+  await initializeWorkspaceRuntime(services.workspaceOrchestrator, env.DATABASE_URL, warmPoolFactory);
   const { client: aiClient, service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL, productionAiSecretStore);
   const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(env.DATABASE_URL);
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
@@ -3306,9 +3307,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   }
 }
 
-export function startWorkspaceIdleSweep(services: PersistenceAwarePlatformApiServices, opts: { intervalMs?: number } = {}): { stop(): void } {
-  return startIdleSweep(services.workspaceOrchestrator, opts);
-}
+export { startWorkspaceIdleSweep } from "./workspace-orchestrator/workspace-sweeps";
 
 export async function createPlatformApiApp(services: PersistenceAwarePlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
   const app = await NestFactory.create(PlatformApiModule, {
@@ -3321,7 +3320,7 @@ export async function createPlatformApiApp(services: PersistenceAwarePlatformApi
     credentials: true
   });
   await registerPlatformRoutes(app, services);
-  startWorkspaceIdleSweep(services);
+  app.get(PlatformApiModule).registerWorkspaceSweeps(startWorkspaceSweeps(services));
 
   return app;
 }

@@ -13,6 +13,7 @@ import {
   workspaceWarmVolumeLabels
 } from "./workspace-lifecycle";
 import { provisionIndependentWorkspaceResources } from "./workspace-provisioning";
+import { countSlots, reconcileWorkspaceWarmPool } from "./warm-pool-reconciliation";
 
 const INITIAL_RETRY_DELAY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 5 * 60_000;
@@ -23,6 +24,16 @@ export interface WorkspaceWarmPool {
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown): Promise<void>;
   reconcile(): Promise<void>;
+  getStatus(): Promise<WarmPoolStatus>;
+  getActiveSlotIds(): Promise<ReadonlySet<string>>;
+}
+
+export interface WarmPoolStatus {
+  target: number;
+  preparing: number;
+  ready: number;
+  claiming: number;
+  failed: number;
 }
 
 export interface WorkspaceWarmPoolOptions {
@@ -45,6 +56,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const postgresHost = options.deps.postgresHost ?? "postgres:5432";
   const s3Endpoint = options.deps.s3Endpoint ?? "http://minio:9000";
   let inFlightEnsure: Promise<void> | null = null;
+  let inFlightReconcile: Promise<void> | null = null;
 
   const slotCounts = async () => {
     const slots = await options.store.list();
@@ -217,7 +229,9 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
 
   const ensureCapacity = (): Promise<void> => {
     if (inFlightEnsure) return inFlightEnsure;
-    const operation = ensureCapacityOnce();
+    const operation = inFlightReconcile
+      ? inFlightReconcile.then(ensureCapacityOnce)
+      : ensureCapacityOnce();
     const tracked = operation.finally(() => {
       if (inFlightEnsure === tracked) inFlightEnsure = null;
     });
@@ -227,6 +241,12 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
 
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
+    async getStatus() {
+      return countSlots(await options.store.list(), options.targetSize);
+    },
+    async getActiveSlotIds() {
+      return new Set((await options.store.list()).map((slot) => slot.id));
+    },
     async claim(projectId) {
       // A crashed claimant is reconciled separately; never give that project a second slot.
       if ((await options.store.list()).some((slot) => slot.claimProjectId === projectId))
@@ -287,10 +307,20 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         // The failed row retains every known owner identifier for the next reconciliation retry.
       }
     },
-    async reconcile() {
-      await ensureCapacity();
+    reconcile() {
+      if (inFlightReconcile) return inFlightReconcile;
+      const operation = inFlightEnsure ? inFlightEnsure.then(reconcileOnce) : reconcileOnce();
+      const tracked = operation.finally(() => {
+        if (inFlightReconcile === tracked) inFlightReconcile = null;
+      });
+      inFlightReconcile = tracked;
+      return tracked;
     }
   };
+
+  async function reconcileOnce(): Promise<void> {
+    await reconcileWorkspaceWarmPool({ ...options, now, cleanupSlotResources, retryDelayMs });
+  }
   return pool;
 }
 

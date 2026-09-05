@@ -243,3 +243,31 @@ test("a handoff that loses its lease cannot remove the new owner's secrets or co
   assert.deepEqual(fixture.prepared.releasedSchemas, []);
   assert.equal(persistence.leases.get("prj_takeover").token, "new-owner");
 });
+test("orchestrator attaches a pool after construction and exposes aggregate status only", async () => {
+  const fixture = await createFixture({ ready: false });
+  fixture.deps.warmPool = undefined;
+  const { orchestrator } = fixture;
+  assert.deepEqual(await orchestrator.getWarmPoolStatus(), {
+    target: 0,
+    preparing: 0,
+    ready: 0,
+    claiming: 0,
+    failed: 0
+  });
+  orchestrator.configureWarmPool(fixture.prepared.pool);
+  await orchestrator.ensureWarmPoolCapacity();
+  await orchestrator.reconcileWarmPool();
+  assert.deepEqual(await orchestrator.getWarmPoolStatus(), {
+    target: 1,
+    preparing: 0,
+    ready: 1,
+    claiming: 0,
+    failed: 0
+  });
+  assert.deepEqual(await orchestrator.cleanupOrphanContainers(), []);
+  const record = await orchestrator.provisionWorkspace({
+    projectId: "late-attachment",
+    slug: "late-attachment"
+  });
+  assert.equal(record.resourceKey, "warm-resource-1");
+});

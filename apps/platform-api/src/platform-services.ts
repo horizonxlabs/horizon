@@ -29,7 +29,8 @@ import {
   PROJECT_FILE_BUCKET,
   PROJECT_FILE_MAX_SIZE_BYTES
 } from "./project-file-constants";
-import { createDefaultWorkspaceOrchestrator } from "./workspace-orchestrator/factory";
+import { createDefaultWorkspaceOrchestrator, type DefaultWorkspaceOrchestratorOptions } from "./workspace-orchestrator/factory";
+import { workspaceAuditRecord } from "./workspace-orchestrator/workspace-audit";
 import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 import { schemaNameFor } from "./workspace-orchestrator/postgres-provisioner";
 import { resourceKeyForProject } from "./workspace-orchestrator/resource-ports";
@@ -8289,6 +8290,7 @@ export interface PlatformApiServices {
 export type PlatformApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 export interface PlatformApiServiceOptions {
+  workspace?: Omit<DefaultWorkspaceOrchestratorOptions, "onAudit">;
   aiGateway?: AiGatewayRuntimeOptions;
   publishAccessUrlConfig?: PublishAccessUrlConfigDto;
 }
@@ -8364,14 +8366,8 @@ export function createPlatformApiServices(
     skills
   );
   const workspaceOrchestrator = createDefaultWorkspaceOrchestrator({
-    onAudit: (event) =>
-      audit.record({
-        actorId: "system",
-        action: event.action,
-        resourceType: "workspace_container",
-        resourceId: event.projectId,
-        metadata: event.metadata
-      })
+    ...options.workspace,
+    onAudit: (event) => audit.record(workspaceAuditRecord(event))
   });
 
   return {
