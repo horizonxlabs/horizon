@@ -172,15 +172,15 @@ test("provisionWorkspace starts independent infrastructure work in parallel", as
   assert.equal((await provisioning).state, "running");
 });
 
-test("provisionWorkspace persists independent encrypted secrets in parallel", async () => {
+test("provisionWorkspace submits all six encrypted secrets as one atomic attempt", async () => {
   const release = deferred();
   const started = new Set();
   const deps = createDeps();
-  const put = deps.secrets.put.bind(deps.secrets);
-  deps.secrets.put = async (projectId, name, value) => {
-    started.add(name);
+  const replace = deps.secrets.replaceForProvisioning.bind(deps.secrets);
+  deps.secrets.replaceForProvisioning = async (projectId, env, attempt) => {
+    for (const name of Object.keys(env)) started.add(name);
     await release.promise;
-    return put(projectId, name, value);
+    return replace(projectId, env, attempt);
   };
   const orchestrator = createWorkspaceOrchestrator(deps);
 

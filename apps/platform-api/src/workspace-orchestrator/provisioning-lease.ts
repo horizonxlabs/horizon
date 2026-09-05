@@ -4,6 +4,8 @@ import type {
   WorkspaceRuntimeSnapshot
 } from "../persistence/workspace-runtime-repository";
 import type { WorkspaceProvisioningLeaseStore } from "../persistence/workspace-provisioning-lease-repository";
+import type { ProjectSecretStore, ProvisioningSecretAttempt } from "./secret-store";
+import { workspaceSecretEntries } from "./workspace-lifecycle";
 
 const LEASE_TTL_MS = 5 * 60_000;
 const localLeaseStores = new WeakMap<object, WorkspaceProvisioningLeaseStore>();
@@ -66,8 +68,31 @@ export function createProvisioningLeaseCoordinator(
       throw new WorkspaceProvisioningLeaseLostError();
     }
   };
+  const secretAttempt = (projectId: string): ProvisioningSecretAttempt => {
+    const owner = active.get(projectId);
+    if (!owner || owner.lost) throw new WorkspaceProvisioningLeaseLostError();
+    return {
+      token: owner.token,
+      async assertOwned() {
+        if (active.get(projectId) !== owner) throw new WorkspaceProvisioningLeaseLostError();
+        await assertOwned(projectId);
+      }
+    };
+  };
   return {
     assertOwned,
+    secretAttempt,
+    async adoptSecrets(projectId: string, secrets: ProjectSecretStore): Promise<void> {
+      if (!active.has(projectId)) return;
+      await secrets.hydrate();
+      const env = await secrets.resolveEnv(projectId);
+      const managed = Object.fromEntries(
+        workspaceSecretEntries(Object.entries(env).map(([name, value]) => `${name}=${value}`))
+      );
+      if (Object.keys(managed).length > 0) {
+        await secrets.replaceForProvisioning(projectId, managed, secretAttempt(projectId));
+      }
+    },
     async run<T>(
       projectId: string,
       operation: (snapshot?: WorkspaceRuntimeSnapshot) => Promise<T>

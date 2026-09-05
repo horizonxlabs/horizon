@@ -70,6 +70,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   ): Promise<WorkspaceContainerRecord> => {
     const physicalKey = physicalResourceKey(existing);
     const logicalKey = resourceKeyForProject(input.projectId);
+    await leases.adoptSecrets(input.projectId, deps.secrets);
     const found = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
@@ -155,6 +156,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       save,
       persist,
       assertOwnership: leases.assertOwned,
+      secretAttempt: leases.secretAttempt,
       rememberLlmKey: (projectId, keyId) => {
         llmKeyIds.set(projectId, keyId);
       },
@@ -184,9 +186,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
       await waitForPreviewReady(deps.docker, found.containerId);
       // Restore managed values from the original container runtime environment if they were not persisted.
-      for (const [name, value] of workspaceSecretEntries(found.env)) {
-        await deps.secrets.put(input.projectId, name, value);
-      }
+      await deps.secrets.replaceForProvisioning(
+        input.projectId,
+        Object.fromEntries(workspaceSecretEntries(found.env)),
+        leases.secretAttempt(input.projectId)
+      );
       const healed = save({
         id: `ws-${resourceKey}`,
         projectId: input.projectId,

@@ -1,19 +1,18 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WarmWorkspaceAllocation } from "./warm-pool-types";
+import type { ProvisioningSecretAttempt } from "./secret-store";
 import { assertTransition } from "./state";
 import { resourceKeyForProject } from "./resource-ports";
 import { buildDevContainerSpec } from "./docker-engine";
 import { waitForPreviewReady, workspaceVolumeName } from "./workspace-lifecycle";
-import {
-  persistWorkspaceSecrets,
-  provisionIndependentWorkspaceResources
-} from "./workspace-provisioning";
+import { provisionIndependentWorkspaceResources } from "./workspace-provisioning";
 
 interface ProvisioningState {
   save(record: WorkspaceContainerRecord): WorkspaceContainerRecord;
   persist(record: WorkspaceContainerRecord): Promise<void>;
   assertOwnership(projectId: string): Promise<void>;
+  secretAttempt(projectId: string): ProvisioningSecretAttempt;
   rememberLlmKey(projectId: string, keyId: string): void;
   removeFailedClaim(projectId: string, runtimeWriteAttempted: boolean): Promise<void>;
 }
@@ -57,6 +56,7 @@ export function createWorkspaceProvisioning(
     allocation: WarmWorkspaceAllocation
   ): Promise<WorkspaceContainerRecord> => {
     const logicalKey = resourceKeyForProject(input.projectId);
+    const attempt = state.secretAttempt(input.projectId);
     let containerId: string | undefined;
     let runtimeWriteAttempted = false;
     try {
@@ -80,7 +80,7 @@ export function createWorkspaceProvisioning(
       await deps.docker.startContainer(containerId);
       await waitForPreviewReady(deps.docker, containerId);
       await state.assertOwnership(input.projectId);
-      await persistWorkspaceSecrets(deps, input.projectId, allocation.env);
+      await deps.secrets.replaceForProvisioning(input.projectId, allocation.env, attempt);
       const record: WorkspaceContainerRecord = {
         id: `ws-${logicalKey}`,
         projectId: input.projectId,
@@ -105,7 +105,7 @@ export function createWorkspaceProvisioning(
       // The pool exclusively owns schema, bucket, key, volume, and anonymous-container cleanup.
       if (containerId) await deps.docker.removeContainer(containerId).catch(() => undefined);
       await state.assertOwnership(input.projectId);
-      await deps.secrets.removeAll(input.projectId).catch(() => undefined);
+      await deps.secrets.removeProvisioning(input.projectId, attempt.token).catch(() => undefined);
       await state.removeFailedClaim(input.projectId, runtimeWriteAttempted);
       throw error;
     }
@@ -116,6 +116,7 @@ export function createWorkspaceProvisioning(
     slug: string;
   }): Promise<WorkspaceContainerRecord> => {
     const resourceKey = resourceKeyForProject(input.projectId);
+    const attempt = state.secretAttempt(input.projectId);
     let record: WorkspaceContainerRecord = save({
       id: `ws-${resourceKey}`,
       projectId: input.projectId,
@@ -150,16 +151,20 @@ export function createWorkspaceProvisioning(
       rollbacks.push(...resourceRollbacks);
       state.rememberLlmKey(input.projectId, llmKey.keyId);
 
-      rollbacks.push(() => deps.secrets.removeAll(input.projectId));
+      rollbacks.push(() => deps.secrets.removeProvisioning(input.projectId, attempt.token));
       await state.assertOwnership(input.projectId);
-      await persistWorkspaceSecrets(deps, input.projectId, {
-        DATABASE_URL: `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`,
-        S3_ENDPOINT: s3Endpoint,
-        S3_BUCKET: bucket.bucket,
-        S3_ACCESS_KEY: bucket.accessKey,
-        S3_SECRET_KEY: bucket.secretKey,
-        LLM_GATEWAY_KEY: llmKey.key
-      });
+      await deps.secrets.replaceForProvisioning(
+        input.projectId,
+        {
+          DATABASE_URL: `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`,
+          S3_ENDPOINT: s3Endpoint,
+          S3_BUCKET: bucket.bucket,
+          S3_ACCESS_KEY: bucket.accessKey,
+          S3_SECRET_KEY: bucket.secretKey,
+          LLM_GATEWAY_KEY: llmKey.key
+        },
+        attempt
+      );
       await state.assertOwnership(input.projectId);
       const { containerId } = await deps.docker.createContainer(
         await buildWorkspaceSpec(input.projectId, resourceKey, resourceKey)

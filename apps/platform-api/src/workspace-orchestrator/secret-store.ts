@@ -8,6 +8,12 @@ interface StoredSecret {
   authTag: string;
   rotatedAt: string | null;
   createdAt: string;
+  provisioningToken?: string | null;
+}
+
+export interface ProvisioningSecretAttempt {
+  token: string;
+  assertOwned(): Promise<void>;
 }
 
 export interface ProjectSecretStore {
@@ -16,6 +22,12 @@ export interface ProjectSecretStore {
   resolveEnv(projectId: string): Promise<Record<string, string>>;
   rotate(projectId: string, name: string, value: string): Promise<void>;
   removeAll(projectId: string): Promise<void>;
+  replaceForProvisioning(
+    projectId: string,
+    env: Record<string, string>,
+    attempt: ProvisioningSecretAttempt
+  ): Promise<void>;
+  removeProvisioning(projectId: string, token: string): Promise<void>;
   /** Load persisted (encrypted) secrets from the at-rest store into memory. Awaited at startup. */
   hydrate(): Promise<void>;
 }
@@ -100,6 +112,38 @@ export function createProjectSecretStore(opts: {
       await persistence?.deleteAll(projectId);
       byProject.delete(projectId);
     },
+    async replaceForProvisioning(projectId, env, attempt) {
+      await attempt.assertOwned();
+      const rows = Object.entries(env).map(([name, value]) => ({
+        projectId,
+        name,
+        ...encrypt(value),
+        rotatedAt: null,
+        createdAt: new Date().toISOString(),
+        provisioningToken: attempt.token
+      }));
+      if (persistence) {
+        if (!persistence.replaceProvisioning)
+          throw new Error("secret persistence does not support provisioning attempts");
+        if (!(await persistence.replaceProvisioning(projectId, attempt.token, rows))) {
+          throw new Error("workspace provisioning lease is no longer owned");
+        }
+      }
+      // A delayed transaction response must not restore stale values in the local cache.
+      await attempt.assertOwned();
+      for (const row of rows) bucketFor(projectId).set(row.name, row);
+    },
+    async removeProvisioning(projectId, token) {
+      if (persistence) {
+        if (!persistence.deleteProvisioning)
+          throw new Error("secret persistence does not support provisioning attempts");
+        await persistence.deleteProvisioning(projectId, token);
+      }
+      const bucket = bucketFor(projectId);
+      for (const [name, secret] of bucket) {
+        if (secret.provisioningToken === token) bucket.delete(name);
+      }
+    },
     async hydrate() {
       if (!persistence) return;
       try {
@@ -110,7 +154,8 @@ export function createProjectSecretStore(opts: {
             iv: row.iv,
             authTag: row.authTag,
             rotatedAt: row.rotatedAt,
-            createdAt: row.createdAt
+            createdAt: row.createdAt,
+            provisioningToken: row.provisioningToken
           });
         }
       } catch (error) {

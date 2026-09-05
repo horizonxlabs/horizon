@@ -58,6 +58,9 @@ export function createRuntimeLeaseFixture() {
     records,
     leases,
     client,
+    get now() {
+      return now;
+    },
     advance(ms) {
       now += ms;
     },

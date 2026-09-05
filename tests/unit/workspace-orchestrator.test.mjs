@@ -163,6 +163,10 @@ test("provisioning fails before Docker when encrypted secret persistence is unav
         upsert: async () => {
           throw new Error("secret persistence unavailable");
         },
+        replaceProvisioning: async () => {
+          throw new Error("secret persistence unavailable");
+        },
+        deleteProvisioning: async () => {},
         deleteAll: async () => {}
       }
     })
