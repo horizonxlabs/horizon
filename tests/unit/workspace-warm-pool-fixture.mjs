@@ -11,10 +11,11 @@ export function createWarmPoolFixture({
   cleanupFailure,
   runtimeRecords,
   operationLeaseMs,
-  createOperationOwner
+  createOperationOwner,
+  store: suppliedStore
 }) {
   let currentNow = START;
-  const store = createMemoryWarmSlotStore(() => currentNow);
+  const store = suppliedStore ?? createMemoryWarmSlotStore(() => currentNow);
   const docker = createMemoryDockerEngine();
   const releasedSchemas = [];
   const releasedBuckets = [];

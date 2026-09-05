@@ -29,6 +29,7 @@ export async function provisionIndependentWorkspaceResources(
     assertOwnership?: () => Promise<void>;
   }
 ): Promise<ProvisionedWorkspaceResources> {
+  await input.assertOwnership?.();
   const results = await Promise.allSettled([
     deps.postgres.provisionSchema(input.resourceKey),
     deps.objectStorage.provisionBucket(input.resourceKey),

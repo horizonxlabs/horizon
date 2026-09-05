@@ -21,11 +21,12 @@ export function preparationErrorCategory(error: unknown): string {
 export function isWarmSlotRetryable(slot: WarmWorkspaceSlot, now: Date): boolean {
   const retryDue = slot.retryAfter !== null && new Date(slot.retryAfter).getTime() <= now.getTime();
   if (slot.state === "failed") return retryDue;
-  if (slot.state === "cleaning") return slot.failureCount > 0 && retryDue;
+  // Restart clears the schedule; failure history identifies the durable retry lineage.
+  // Its next owner may take over only once the in-progress operation has expired.
   return (
-    slot.state === "preparing" &&
+    (slot.state === "preparing" || slot.state === "cleaning") &&
     slot.failureCount > 0 &&
-    slot.operationExpiresAt !== null &&
-    new Date(slot.operationExpiresAt).getTime() <= now.getTime()
+    (slot.operationExpiresAt === null ||
+      new Date(slot.operationExpiresAt).getTime() <= now.getTime())
   );
 }

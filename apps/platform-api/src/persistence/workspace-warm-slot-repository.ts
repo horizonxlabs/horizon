@@ -49,6 +49,7 @@ type WarmSlotModel = {
     };
     data: Record<string, unknown>;
   }): Promise<{ count: number }>;
+  updateManyAndReturn(args: Parameters<WarmSlotModel["updateMany"]>[0]): Promise<WarmSlotRecord[]>;
   findUnique(args: { where: { id: string } }): Promise<WarmSlotRecord | null>;
   deleteMany(args: { where: { id: string; operationOwner?: string } }): Promise<{ count: number }>;
 };
@@ -234,7 +235,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     resourceKey: string,
     lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot | null> {
-    const restarted = await this.client.workspaceWarmSlot.updateMany({
+    const [restarted] = await this.client.workspaceWarmSlot.updateManyAndReturn({
       where: {
         id,
         state: "cleaning",
@@ -255,9 +256,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
         operationExpiresAt: new Date(lease.expiresAt)
       }
     });
-    if (restarted.count !== 1) return null;
-    const slot = await this.client.workspaceWarmSlot.findUnique({ where: { id } });
-    return slot ? toWarmWorkspaceSlot(slot) : null;
+    return restarted ? toWarmWorkspaceSlot(restarted) : null;
   }
 
   async claim(projectId: string): Promise<WarmWorkspaceSlot | null> {
