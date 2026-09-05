@@ -259,12 +259,13 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       candidates,
       operationLease(ownerId)
     );
-    await Promise.all(
-      [
-        ...retries,
-        ...reserved.map((slot) => ({ slot, ownerId }))
-      ].map(({ slot, ownerId: reservationOwner }) => prepareOne(slot, reservationOwner))
+    const prepared = await Promise.allSettled(
+      [...retries, ...reserved.map((slot) => ({ slot, ownerId }))].map(
+        ({ slot, ownerId: reservationOwner }) => prepareOne(slot, reservationOwner)
+      )
     );
+    const failure = prepared.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
   };
 
   const ensureCapacity = (): Promise<void> => {
