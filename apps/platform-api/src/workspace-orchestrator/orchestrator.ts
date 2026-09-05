@@ -16,6 +16,7 @@ import { deleteWorkspaceResources } from "./workspace-deletion";
 import type { ProjectDeletionFence } from "../project-lifecycle";
 import { physicalResourceKey } from "./warm-pool-config";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
+import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -35,6 +36,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const llmKeyIds = new Map<string, string>();
   const provisioning = new Map<string, Promise<WorkspaceContainerRecord>>();
   let runtimeRecords = deps.runtimeRecords;
+  const leases = createProvisioningLeaseCoordinator(() => runtimeRecords, deps.docker);
 
   const now = () => new Date().toISOString();
   const save = (record: WorkspaceContainerRecord): WorkspaceContainerRecord => {
@@ -44,7 +46,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   const persist = async (record: WorkspaceContainerRecord): Promise<void> => {
-    await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
+    await leases.persist({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
   };
 
   const buildWorkspaceSpec = async (projectId: string, logicalKey: string, physicalKey: string) =>
@@ -152,11 +154,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     {
       save,
       persist,
+      assertOwnership: leases.assertOwned,
       rememberLlmKey: (projectId, keyId) => {
         llmKeyIds.set(projectId, keyId);
       },
       async removeFailedClaim(projectId, runtimeWriteAttempted) {
-        if (runtimeWriteAttempted) await runtimeRecords?.remove(projectId).catch(() => undefined);
+        if (runtimeWriteAttempted) await leases.remove(projectId);
         records.delete(projectId);
         llmKeyIds.delete(projectId);
       }
@@ -207,6 +210,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return healed;
     }
 
+    await leases.assertOwned(input.projectId);
     const allocation = await deps.warmPool?.claim(input.projectId);
     if (allocation) {
       try {
@@ -219,6 +223,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         refillWarmPool();
         return record;
       } catch (error) {
+        await leases.assertOwned(input.projectId);
         await deps.warmPool!.failClaim(allocation.slotId, error);
         auditPoolEvent({
           action: "workspace.pool_claim_failed",
@@ -295,9 +300,20 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     }): Promise<WorkspaceContainerRecord> {
       const existing = provisioning.get(input.projectId);
       if (existing) return existing;
-      const operation = provisionWorkspaceOnce(input).finally(() => {
-        if (provisioning.get(input.projectId) === operation) provisioning.delete(input.projectId);
-      });
+      const operation = leases
+        .run(input.projectId, async (snapshot) => {
+          if (snapshot) {
+            records.set(input.projectId, {
+              ...snapshot.record,
+              state: snapshot.record.state === "provisioning" ? "failed" : snapshot.record.state
+            });
+            if (snapshot.llmGatewayKeyId) llmKeyIds.set(input.projectId, snapshot.llmGatewayKeyId);
+          }
+          return provisionWorkspaceOnce(input);
+        })
+        .finally(() => {
+          if (provisioning.get(input.projectId) === operation) provisioning.delete(input.projectId);
+        });
       provisioning.set(input.projectId, operation);
       return operation;
     },

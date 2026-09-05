@@ -9,8 +9,12 @@ interface ProvisionedWorkspaceResources {
   rollbacks: Rollback[];
 }
 
-async function rollbackCompleted(rollbacks: Rollback[]): Promise<void> {
+async function rollbackCompleted(
+  rollbacks: Rollback[],
+  assertOwnership?: () => Promise<void>
+): Promise<void> {
   for (const rollback of rollbacks.reverse()) {
+    await assertOwnership?.();
     await rollback().catch(() => undefined);
   }
 }
@@ -22,6 +26,7 @@ export async function provisionIndependentWorkspaceResources(
     resourceKey: string;
     volumeName: string;
     volumeLabels?: Record<string, string>;
+    assertOwnership?: () => Promise<void>;
   }
 ): Promise<ProvisionedWorkspaceResources> {
   const results = await Promise.allSettled([
@@ -58,7 +63,7 @@ export async function provisionIndependentWorkspaceResources(
 
   const failure = results.find((result) => result.status === "rejected");
   if (failure?.status === "rejected") {
-    await rollbackCompleted(rollbacks);
+    await rollbackCompleted(rollbacks, input.assertOwnership);
     throw failure.reason;
   }
 

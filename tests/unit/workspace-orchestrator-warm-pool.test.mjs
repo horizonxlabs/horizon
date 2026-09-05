@@ -3,6 +3,7 @@ import test from "node:test";
 import { createWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts";
 import { createProjectSecretStore } from "../../apps/platform-api/src/workspace-orchestrator/secret-store.ts";
 import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
+import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
 
 async function createFixture({ ready = true, failure } = {}) {
   const prepared = createWarmPoolFixture({ targetSize: 1 });
@@ -227,4 +228,142 @@ test("same-project callers share a promise and claim only one warm slot", async 
   assert.equal(results[0], results[1]);
   assert.equal(fixture.order.filter((step) => step === "claim").length, 1);
   assert.deepEqual(fixture.coldCalls, []);
+});
+
+test("two replicas preserve the durable warm winner without cold provisioning or secret rollback", async () => {
+  const fixture = await createFixture();
+  const persistence = createRuntimeLeaseFixture();
+  const create = fixture.prepared.docker.createContainer.bind(fixture.prepared.docker);
+  fixture.prepared.docker.createContainer = async (spec) => {
+    if (fixture.prepared.docker.state.containers.some((item) => item.spec.name === spec.name)) {
+      throw new Error("Docker container name is already in use");
+    }
+    return create(spec);
+  };
+  let releaseWinner;
+  const winnerFinished = new Promise((resolve) => {
+    releaseWinner = resolve;
+  });
+  let claims = 0;
+  const claim = fixture.deps.warmPool.claim.bind(fixture.deps.warmPool);
+  fixture.deps.warmPool.claim = async (projectId) => {
+    claims += 1;
+    if (claims > 1) await winnerFinished;
+    return claim(projectId);
+  };
+  const first = createWorkspaceOrchestrator({
+    ...fixture.deps,
+    runtimeRecords: persistence.createStore()
+  });
+  const second = createWorkspaceOrchestrator({
+    ...fixture.deps,
+    runtimeRecords: persistence.createStore()
+  });
+  const input = { projectId: "prj_race", slug: "race" };
+  const a = first.provisionWorkspace(input);
+  const b = second.provisionWorkspace(input);
+  a.then(releaseWinner, releaseWinner);
+  const results = await Promise.allSettled([a, b]);
+  assert.deepEqual(
+    results.map((result) => result.status),
+    ["fulfilled", "fulfilled"]
+  );
+  assert.deepEqual(
+    results.map((result) => result.value.resourceKey),
+    ["warm-resource-1", "warm-resource-1"]
+  );
+  assert.equal(fixture.prepared.docker.state.containers.length, 1);
+  assert.equal(persistence.records.get("prj_race").state, "running");
+  assert.equal(persistence.records.get("prj_race").resourceKey, "warm-resource-1");
+  assert.equal((await fixture.deps.secrets.resolveEnv("prj_race")).LLM_GATEWAY_KEY, "llm-secret-1");
+  assert.deepEqual(fixture.coldCalls, []);
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+});
+
+test("an expired provisioning lease can be taken over without waiting for the crashed replica", async () => {
+  const fixture = await createFixture();
+  const persistence = createRuntimeLeaseFixture();
+  const store = persistence.createStore();
+  await store.provisioningLeases.acquire("prj_crashed", "crashed-token", 1000);
+  persistence.advance(1000);
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  const record = await orchestrator.provisionWorkspace({
+    projectId: "prj_crashed",
+    slug: "crashed"
+  });
+  assert.equal(record.state, "running");
+  assert.equal(record.resourceKey, "warm-resource-1");
+  assert.deepEqual(fixture.coldCalls, []);
+  assert.equal(persistence.leases.size, 0);
+});
+
+test("an expired lease owner falls back cold without destroying a stale claimed slot", async () => {
+  const fixture = await createFixture();
+  const persistence = createRuntimeLeaseFixture();
+  const store = persistence.createStore();
+  await store.provisioningLeases.acquire("prj_stale_claim", "crashed", 1000);
+  const stale = await fixture.prepared.pool.claim("prj_stale_claim");
+  persistence.advance(1000);
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  const record = await orchestrator.provisionWorkspace({
+    projectId: "prj_stale_claim",
+    slug: "stale-claim"
+  });
+  assert.equal(record.state, "running");
+  assert.equal(record.resourceKey, "prj-stale-claim");
+  assert.deepEqual(fixture.coldCalls, ["prj-stale-claim"]);
+  assert.equal((await fixture.prepared.store.list())[0].id, stale.slotId);
+  assert.equal((await fixture.prepared.store.list())[0].state, "claiming");
+  assert.deepEqual(fixture.prepared.releasedSchemas, []);
+});
+
+test("a handoff that loses its lease cannot remove the new owner's secrets or container", async () => {
+  const fixture = await createFixture();
+  const persistence = createRuntimeLeaseFixture();
+  const store = persistence.createStore();
+  const originalExec = fixture.deps.docker.execInContainer.bind(fixture.deps.docker);
+  fixture.deps.docker.execInContainer = async (containerId, command) => {
+    await originalExec(containerId, command);
+    persistence.advance(5 * 60_000);
+    assert.equal(
+      await store.provisioningLeases.acquire("prj_takeover", "new-owner", 300_000),
+      true
+    );
+    await fixture.deps.secrets.put("prj_takeover", "LLM_GATEWAY_KEY", "new-owner-secret");
+    await store.provisioningLeases.save(
+      {
+        record: {
+          id: "ws-prj-takeover",
+          projectId: "prj_takeover",
+          slug: "takeover",
+          resourceKey: "warm-resource-1",
+          state: "running",
+          containerId,
+          cpuCores: 1,
+          memoryMb: 2048,
+          lastActivityAt: "2026-09-05T00:00:00.000Z",
+          createdAt: "2026-09-05T00:00:00.000Z",
+          updatedAt: "2026-09-05T00:00:00.000Z"
+        },
+        llmGatewayKeyId: "key-1"
+      },
+      "new-owner",
+      300_000
+    );
+    throw new Error("stale worker resumed after takeover");
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_takeover", slug: "takeover" }),
+    /lease is no longer owned/
+  );
+  assert.equal(
+    (await fixture.deps.secrets.resolveEnv("prj_takeover")).LLM_GATEWAY_KEY,
+    "new-owner-secret"
+  );
+  assert.equal(fixture.prepared.docker.state.containers.length, 1);
+  assert.equal((await store.list())[0].record.resourceKey, "warm-resource-1");
+  assert.deepEqual(fixture.coldCalls, []);
+  assert.deepEqual(fixture.prepared.releasedSchemas, []);
+  assert.equal(persistence.leases.get("prj_takeover").token, "new-owner");
 });

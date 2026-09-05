@@ -190,6 +190,7 @@ model Project {
   frontendCheckpoints FrontendCheckpoint[]
   workspaceMigrationRecords WorkspaceMigrationRecord[]
   workspaceRuntimeRecord WorkspaceRuntimeRecord?
+  workspaceProvisioningLease WorkspaceProvisioningLease?
   appInvitations AppInvitation[]
   appAccessRequests AppAccessRequest[]
   appManifests AppManifest[]
@@ -786,6 +787,15 @@ model WorkspaceRuntimeRecord {
 
   @@index([state, lastActivityAt])
   @@map("workspace_runtime_records")
+}
+
+model WorkspaceProvisioningLease {
+  projectId String   @id @map("project_id")
+  token     String
+  expiresAt DateTime @map("expires_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_provisioning_leases")
 }
 
 model WorkspaceWarmSlot {

@@ -13,6 +13,7 @@ import {
 interface ProvisioningState {
   save(record: WorkspaceContainerRecord): WorkspaceContainerRecord;
   persist(record: WorkspaceContainerRecord): Promise<void>;
+  assertOwnership(projectId: string): Promise<void>;
   rememberLlmKey(projectId: string, keyId: string): void;
   removeFailedClaim(projectId: string, runtimeWriteAttempted: boolean): Promise<void>;
 }
@@ -59,8 +60,10 @@ export function createWorkspaceProvisioning(
     let containerId: string | undefined;
     let runtimeWriteAttempted = false;
     try {
+      await state.assertOwnership(input.projectId);
       await deps.docker.stopContainer(allocation.containerId);
       await deps.docker.removeContainer(allocation.containerId);
+      await state.assertOwnership(input.projectId);
       const created = await deps.docker.createContainer(
         buildDevContainerSpec({
           projectId: input.projectId,
@@ -76,6 +79,7 @@ export function createWorkspaceProvisioning(
       containerId = created.containerId;
       await deps.docker.startContainer(containerId);
       await waitForPreviewReady(deps.docker, containerId);
+      await state.assertOwnership(input.projectId);
       await persistWorkspaceSecrets(deps, input.projectId, allocation.env);
       const record: WorkspaceContainerRecord = {
         id: `ws-${logicalKey}`,
@@ -97,8 +101,10 @@ export function createWorkspaceProvisioning(
       await deps.warmPool!.completeClaim(allocation.slotId);
       return save(record);
     } catch (error) {
+      await state.assertOwnership(input.projectId);
       // The pool exclusively owns schema, bucket, key, volume, and anonymous-container cleanup.
       if (containerId) await deps.docker.removeContainer(containerId).catch(() => undefined);
+      await state.assertOwnership(input.projectId);
       await deps.secrets.removeAll(input.projectId).catch(() => undefined);
       await state.removeFailedClaim(input.projectId, runtimeWriteAttempted);
       throw error;
@@ -128,6 +134,7 @@ export function createWorkspaceProvisioning(
 
     const rollbacks: Array<() => Promise<void>> = [];
     try {
+      await state.assertOwnership(input.projectId);
       const volumeName = workspaceVolumeName(resourceKey);
       const {
         pg,
@@ -137,12 +144,14 @@ export function createWorkspaceProvisioning(
       } = await provisionIndependentWorkspaceResources(deps, {
         projectId: input.projectId,
         resourceKey,
-        volumeName
+        volumeName,
+        assertOwnership: () => state.assertOwnership(input.projectId)
       });
       rollbacks.push(...resourceRollbacks);
       state.rememberLlmKey(input.projectId, llmKey.keyId);
 
       rollbacks.push(() => deps.secrets.removeAll(input.projectId));
+      await state.assertOwnership(input.projectId);
       await persistWorkspaceSecrets(deps, input.projectId, {
         DATABASE_URL: `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`,
         S3_ENDPOINT: s3Endpoint,
@@ -151,6 +160,7 @@ export function createWorkspaceProvisioning(
         S3_SECRET_KEY: bucket.secretKey,
         LLM_GATEWAY_KEY: llmKey.key
       });
+      await state.assertOwnership(input.projectId);
       const { containerId } = await deps.docker.createContainer(
         await buildWorkspaceSpec(input.projectId, resourceKey, resourceKey)
       );
@@ -175,6 +185,7 @@ export function createWorkspaceProvisioning(
       return record;
     } catch (error) {
       for (const rollback of rollbacks.reverse()) {
+        await state.assertOwnership(input.projectId);
         try {
           await rollback();
         } catch {

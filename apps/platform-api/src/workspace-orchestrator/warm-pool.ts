@@ -228,7 +228,16 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
     async claim(projectId) {
-      const slot = await options.store.claim(projectId);
+      // A crashed claimant is reconciled separately; never give that project a second slot.
+      if ((await options.store.list()).some((slot) => slot.claimProjectId === projectId))
+        return null;
+      let slot: WarmWorkspaceSlot | null;
+      try {
+        slot = await options.store.claim(projectId);
+      } catch (error) {
+        if (isProjectClaimConflict(error)) return null;
+        throw error;
+      }
       if (!slot) return null;
       try {
         if (!slot.containerId || !slot.llmGatewayKeyId || !slot.secretPayload) {
@@ -308,4 +317,14 @@ function preparationErrorCategory(error: unknown): string {
 function isAlreadyAbsentError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /unknown container|no such|not found|\b404\b/i.test(message);
+}
+
+function isProjectClaimConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const failure = error as { code?: string; meta?: { target?: unknown }; constraint?: string };
+  return (
+    (failure.code === "P2002" &&
+      /claim_project_id|claimProjectId/.test(JSON.stringify(failure.meta?.target) ?? "")) ||
+    (failure.code === "23505" && failure.constraint === "workspace_warm_slots_claim_project_id_key")
+  );
 }

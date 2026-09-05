@@ -169,6 +169,32 @@ test("concurrent claims across pool managers allocate a ready slot only once", a
   assert.equal(slot.claimProjectId, "prj_first");
 });
 
+test("a project with an existing claim cannot consume another ready slot", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 2 });
+  await fixture.pool.ensureCapacity();
+  const original = await fixture.pool.claim("prj_existing_claim");
+  assert.ok(original);
+  assert.equal(await fixture.pool.claim("prj_existing_claim"), null);
+  const slots = await fixture.store.list();
+  assert.equal(slots.filter((slot) => slot.state === "claiming").length, 1);
+  assert.equal(slots.filter((slot) => slot.state === "ready").length, 1);
+  assert.deepEqual(fixture.releasedSchemas, []);
+});
+
+test("a racing project-claim uniqueness conflict returns no allocation without cleanup", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  await fixture.pool.ensureCapacity();
+  fixture.store.claim = async () => {
+    throw Object.assign(new Error("unique project claim"), {
+      code: "P2002",
+      meta: { target: ["claim_project_id"] }
+    });
+  };
+  assert.equal(await fixture.pool.claim("prj_conflict"), null);
+  assert.equal((await fixture.store.list())[0].state, "ready");
+  assert.deepEqual(fixture.releasedSchemas, []);
+});
+
 test("an unreadable claimed envelope is quarantined with sanitized audit and asynchronous refill", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   await fixture.pool.ensureCapacity();
