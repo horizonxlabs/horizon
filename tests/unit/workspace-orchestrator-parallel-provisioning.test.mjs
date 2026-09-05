@@ -35,6 +35,28 @@ function deferred() {
   return { promise, resolve };
 }
 
+test("same-project cold provisioning shares one promise and permits retry after rejection", async () => {
+  const deps = createDeps();
+  const provisionSchema = deps.postgres.provisionSchema.bind(deps.postgres);
+  let attempts = 0;
+  deps.postgres.provisionSchema = async (...args) => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("first provisioning failed");
+    return provisionSchema(...args);
+  };
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  const input = { projectId: "prj_shared_cold", slug: "shared-cold" };
+  const first = orchestrator.provisionWorkspace(input);
+  const second = orchestrator.provisionWorkspace(input);
+  const results = await Promise.allSettled([first, second]);
+  assert.equal(first, second);
+  assert.equal(results[0].status, "rejected");
+  assert.equal(results[1].status, "rejected");
+  assert.equal(attempts, 1);
+  assert.equal((await orchestrator.provisionWorkspace(input)).state, "running");
+  assert.equal(attempts, 2);
+});
+
 test("provisionWorkspace starts independent infrastructure work in parallel", async () => {
   const release = deferred();
   const started = new Set();

@@ -156,6 +156,44 @@ test("claim opens the prepared allocation and completeClaim retires its slot", a
   assert.equal((await fixture.store.list()).length, 0);
 });
 
+test("concurrent claims across pool managers allocate a ready slot only once", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  await fixture.pool.ensureCapacity();
+  const results = await Promise.all([
+    fixture.pool.claim("prj_first"),
+    fixture.createPool().claim("prj_second")
+  ]);
+  assert.equal(results.filter(Boolean).length, 1);
+  const [slot] = await fixture.store.list();
+  assert.equal(slot.state, "claiming");
+  assert.equal(slot.claimProjectId, "prj_first");
+});
+
+test("an unreadable claimed envelope is quarantined with sanitized audit and asynchronous refill", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  await fixture.pool.ensureCapacity();
+  const [slot] = await fixture.store.list();
+  await fixture.store.markReady(slot.id, { ...slot, secretPayload: "invalid-secret-envelope" });
+  let refillRequested = false;
+  fixture.pool.ensureCapacity = () => {
+    refillRequested = true;
+    return new Promise(() => {});
+  };
+
+  assert.equal(await fixture.pool.claim("prj_corrupt"), null);
+
+  assert.equal((await fixture.store.list()).length, 0);
+  assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
+  const event = fixture.audits.at(-1);
+  assert.equal(event.action, "workspace.pool_claim_failed");
+  assert.equal(event.projectId, "prj_corrupt");
+  assert.doesNotMatch(
+    JSON.stringify(event),
+    /invalid-secret-envelope|pg-secret|storage-secret|llm-secret/
+  );
+  assert.equal(refillRequested, true);
+});
+
 test("failClaim destroys every slot-owned resource and retires its row", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   await fixture.pool.ensureCapacity();

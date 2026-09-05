@@ -243,6 +243,18 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         };
       } catch (error) {
         await pool.failClaim(slot.id, error);
+        try {
+          options.deps.onAudit?.({
+            action: "workspace.pool_claim_failed",
+            projectId,
+            metadata: { slotId: slot.id }
+          });
+        } catch {
+          // A quarantined claim must still allow cold fallback if audit delivery fails.
+        }
+        void Promise.resolve()
+          .then(() => pool.ensureCapacity())
+          .catch(() => undefined);
         return null;
       }
     },
