@@ -139,11 +139,14 @@ until the claim and logical preview URL are verified, so refill activity cannot 
 request-time creation. It then releases and awaits the refill requested by the orchestrator.
 It uses the real Prisma slot/runtime repositories and encrypted PostgreSQL secret persistence.
 
-An `after()` hook is registered before fixture setup. It joins refill work, deletes the project
-workspace and every remaining anonymous resource created by this run, verifies schema/bucket/
+An `after()` hook is registered before fixture setup. It joins provisioning and waits for the
+pool's idle boundary, including refills scheduled internally after claim failure, before deleting
+the project workspace and every remaining anonymous resource created by this run. It verifies schema/bucket/
 container/volume absence and successful key revocation, retires the fixture rows, and disconnects
 Prisma. Cleanup failures fail the test. The disposable database itself is retained. Record the
 actual pass/failure output and cleanup diagnostic; a skipped test is not live deployment evidence.
+Container-absence failures report only the container name and a boolean; Docker environment
+objects must never be included in assertion output.
 
 To exercise the deployed API itself, use a disposable project and a valid session header. Replace
 `<project-key>` with the project ID after replacing underscores with hyphens:

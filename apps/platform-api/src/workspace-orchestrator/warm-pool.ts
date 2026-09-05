@@ -24,11 +24,14 @@ import {
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
 import { isWarmSlotRetryable, preparationErrorCategory, retryDelayMs } from "./warm-pool-retry";
+import { createWarmPoolWorkTracker } from "./warm-pool-work";
 
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
   ensureCapacity(): Promise<void>;
+  /** Stop new requests before awaiting scheduled refill and active reconciliation work. */
+  waitForIdle(): Promise<void>;
   claim(projectId: string): Promise<WarmWorkspaceAllocation | null>;
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown): Promise<void>;
@@ -70,6 +73,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const s3Endpoint = options.deps.s3Endpoint ?? "http://minio:9000";
   let inFlightEnsure: Promise<void> | null = null;
   let inFlightReconcile: Promise<void> | null = null;
+  const work = createWarmPoolWorkTracker();
 
   const slotCounts = async () => {
     const slots = await options.store.list();
@@ -272,11 +276,12 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       if (inFlightEnsure === tracked) inFlightEnsure = null;
     });
     inFlightEnsure = tracked;
-    return tracked;
+    return work.track(tracked);
   };
 
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
+    waitForIdle: work.waitForIdle,
     async getStatus() {
       return countSlots(await options.store.list(), options.targetSize);
     },
@@ -318,8 +323,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         } catch {
           // A quarantined claim must still allow cold fallback if audit delivery fails.
         }
-        void Promise.resolve()
-          .then(() => pool.ensureCapacity())
+        void work.track(Promise.resolve().then(() => pool.ensureCapacity()))
           .catch(() => undefined);
         return null;
       }
@@ -358,7 +362,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         if (inFlightReconcile === tracked) inFlightReconcile = null;
       });
       inFlightReconcile = tracked;
-      return tracked;
+      return work.track(tracked);
     }
   };
 

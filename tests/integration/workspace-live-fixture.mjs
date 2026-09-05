@@ -30,6 +30,8 @@ import { createPgSecretPersistence } from "../../apps/platform-api/src/workspace
 import { createWorkspaceWarmPool } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool.ts";
 import { createWarmPoolSecretCodec } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-secret-codec.ts";
 import { workspaceVolumeName } from "../../apps/platform-api/src/workspace-orchestrator/workspace-lifecycle.ts";
+import { assertLiveContainerAbsent } from "./workspace-live-assertions.mjs";
+import { waitForWorkspaceLiveIdle } from "./workspace-live-idle.mjs";
 
 export async function createWorkspaceLiveFixture(
   context,
@@ -81,6 +83,7 @@ export async function createWorkspaceLiveFixture(
   let deps;
   let orchestrator;
   let fixture;
+  let pool;
   let projectCreated = false;
   let slotSequence = 0;
 
@@ -88,8 +91,7 @@ export async function createWorkspaceLiveFixture(
   context.after(async () => {
     closing = true;
     refillGate?.resolve();
-    await Promise.allSettled(pendingProvisions);
-    await Promise.allSettled(pendingRefills);
+    await waitForWorkspaceLiveIdle(pool, pendingProvisions, pendingRefills);
     const failures = [];
     const attempt = async (label, operation) => {
       try {
@@ -141,9 +143,9 @@ export async function createWorkspaceLiveFixture(
     }
   });
 
-  assert.deepEqual(
-    await store.list(),
-    [],
+  assert.equal(
+    (await store.list()).length,
+    0,
     "use a migrated, empty database with no API or other live test running"
   );
   assert.equal(
@@ -239,6 +241,7 @@ export async function createWorkspaceLiveFixture(
       refillGate = undefined;
       gate.resolve();
       await Promise.all(pendingRefills);
+      await pool.waitForIdle();
     },
     async assertResourcesRemoved() {
       const query = createPgQuery({ connectionString: databaseUrl });
@@ -254,7 +257,7 @@ export async function createWorkspaceLiveFixture(
           "test bucket must be removed"
         );
       }
-      for (const name of containerNames) assert.equal(await docker.inspectContainer(name), null);
+      for (const name of containerNames) await assertLiveContainerAbsent(docker, name);
       const volumes = await docker.listManagedVolumes();
       assert.equal(
         volumes.some((volume) =>
@@ -276,7 +279,7 @@ export async function createWorkspaceLiveFixture(
     }
   });
   projectCreated = true;
-  const pool = createWorkspaceWarmPool({
+  pool = createWorkspaceWarmPool({
     targetSize,
     store,
     deps,
