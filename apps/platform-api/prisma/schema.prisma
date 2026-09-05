@@ -771,6 +771,7 @@ model WorkspaceCodeCheckpoint {
 model WorkspaceRuntimeRecord {
   id                String   @id
   projectId         String   @unique @map("project_id")
+  resourceKey       String   @map("resource_key")
   slug              String
   state             String
   containerId       String?  @map("container_id")
@@ -785,6 +786,26 @@ model WorkspaceRuntimeRecord {
 
   @@index([state, lastActivityAt])
   @@map("workspace_runtime_records")
+}
+
+model WorkspaceWarmSlot {
+  id              String    @id
+  resourceKey     String    @unique @map("resource_key")
+  state           String
+  containerId     String?   @map("container_id")
+  llmGatewayKeyId String?   @map("llm_gateway_key_id")
+  secretPayload   String?   @map("secret_payload")
+  claimProjectId  String?   @unique @map("claim_project_id")
+  lastError       String?   @map("last_error")
+  retryAfter      DateTime? @map("retry_after")
+  failureCount    Int       @default(0) @map("failure_count")
+  readyAt         DateTime? @map("ready_at")
+  claimedAt       DateTime? @map("claimed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([state, createdAt])
+  @@map("workspace_warm_slots")
 }
 
 model ChatMessage {
