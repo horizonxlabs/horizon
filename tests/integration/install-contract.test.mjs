@@ -22,9 +22,13 @@ test("checked-in environment template passes contract mode without leaking plain
   assert.ok(!serialized.includes(env.POSTGRES_PASSWORD), "database password must be redacted");
 });
 
+test("checked-in environment template defaults the workspace warm pool to three slots", () => {
+  const env = loadEnvFile(".env.example");
+  assert.equal(env.EVCP_WORKSPACE_WARM_POOL_SIZE, "3");
+});
+
 test("docker compose no longer hardcodes the old default database password", () => {
   const composeText = readFileSync("docker/docker-compose.yml", "utf8");
   assert.ok(!composeText.includes("POSTGRES_PASSWORD: evcp"));
   assert.ok(composeText.includes("${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"));
 });
-

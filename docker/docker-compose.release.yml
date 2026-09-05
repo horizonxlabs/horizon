@@ -269,6 +269,7 @@ services:
       EVCP_LITELLM_MASTER_KEY_FILE: /run/secrets/evcp_litellm_master_key
       EVCP_WORKSPACE_SECRET_KEY_FILE: /run/secrets/evcp_workspace_secret_key
       EVCP_WORKSPACE_IMAGE: ${EVCP_IMAGE_REPOSITORY:?EVCP_IMAGE_REPOSITORY required}/evcp-workspace-next:${EVCP_VERSION:?EVCP_VERSION required}
+      EVCP_WORKSPACE_WARM_POOL_SIZE: ${EVCP_WORKSPACE_WARM_POOL_SIZE:-3}
       EVCP_TEMPLATE_DIR: /workspace/templates/nextjs-base
       EVCP_WORKSPACE_NETWORK: evcp_evcp-internal
       EVCP_WORKSPACE_REAL_ADAPTERS: "1"

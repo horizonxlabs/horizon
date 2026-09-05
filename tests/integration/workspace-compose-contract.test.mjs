@@ -57,6 +57,17 @@ test("platform-api can reach docker socket and litellm", () => {
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
 });
 
+test("real workspace deployments configure a three-slot warm pool", () => {
+  assert.equal(
+    compose.services["platform-api"].environment.EVCP_WORKSPACE_WARM_POOL_SIZE,
+    "${EVCP_WORKSPACE_WARM_POOL_SIZE:-3}"
+  );
+  assert.equal(
+    releaseCompose.services["platform-api"].environment.EVCP_WORKSPACE_WARM_POOL_SIZE,
+    "${EVCP_WORKSPACE_WARM_POOL_SIZE:-3}"
+  );
+});
+
 test("development and release compose leave Pi cumulative token caps opt-in", () => {
   for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
     const joined = environmentEntries(api).join("\n");

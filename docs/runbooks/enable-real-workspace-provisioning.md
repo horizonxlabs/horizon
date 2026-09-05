@@ -34,7 +34,54 @@ docker logs evcp-platform-api 2>&1 | grep "real-adapter mode"
 
 (LiteLLM stays a memory stub until Plan 7 starts the litellm service — provisioning is not blocked by it.)
 
-## 3. Verify end-to-end (live)
+## 3. Configure and observe the workspace warm pool
+
+Real-adapter deployments keep `EVCP_WORKSPACE_WARM_POOL_SIZE=3` prepared slots by default. A
+slot includes its own schema, bucket, gateway key, initialized volume, and running workspace
+process, so project creation can claim it without waiting for those resources to be created.
+
+- Set a whole number from `0` through `20`. `3` is the default and `20` is the hard safety limit.
+- Set `EVCP_WORKSPACE_WARM_POOL_SIZE=0` to disable the pool on the next API start; new projects
+  then use the existing cold-provisioning path. This is the operational rollback switch for the
+  pool and does not delete existing project workspaces.
+- Budget for every configured warm process in addition to active project workspaces. With the
+  example `EVCP_WORKSPACE_CPU=2` and `EVCP_WORKSPACE_MEM_MB=2048`, the default pool reserves up
+  to 6 CPU cores and 6144 MiB while all three slots are running. Size the host and Docker limits
+  accordingly before increasing the value.
+
+Change the value in the deployment environment (or `.env` for local Compose), then recreate the
+API so startup reads it:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
+```
+
+Observe durable slot state without reading encrypted credential payloads:
+
+```bash
+docker compose -f docker/docker-compose.yml exec postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT state, count(*) FROM workspace_warm_slots GROUP BY state ORDER BY state;"'
+
+docker ps -a --filter 'label=evcp.kind=workspace-warm' \
+  --format 'table {{.Names}}\t{{.Status}}\t{{.Label "evcp.warm-slot-id"}}'
+docker volume ls --filter 'label=evcp.kind=workspace-warm'
+```
+
+For a successful warm claim, audit storage records `workspace.pool_claimed`; when no ready slot is
+available, it records `workspace.pool_cold_fallback` and provision continues immediately on the
+cold path. Confirm that behavior with aggregate audit data only:
+
+```bash
+docker compose -f docker/docker-compose.yml exec postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT action, count(*) FROM audit_logs WHERE action IN (\$warm\$workspace.pool_claimed\$warm\$, \$warm\$workspace.pool_cold_fallback\$warm\$) GROUP BY action ORDER BY action;"'
+```
+
+Neither command should query or print `secret_payload`; credentials remain encrypted at rest and
+must not be copied into Docker labels, logs, or audit metadata.
+
+## 4. Verify end-to-end (live)
 
 Run the full-provision integration test inside the recreated container (it has the socket, env, and network):
 
@@ -55,9 +102,29 @@ curl -sS -H "authorization: <valid session>" \
   http://localhost:3100/preview/<slug>/ -o /dev/null -w "%{http_code}\n"   # 200/3xx (502 = dev server still booting; retry)
 ```
 
-## Rollback (disable real mode)
+## 5. Post-deploy smoke checks
+
+Run the live provisioning check below, then use a disposable project in Creator to confirm the
+full lifecycle:
+
+1. Create the project and open Workspace; verify that provision completes and the preview serves.
+2. Submit a small governed generation request; verify the generated file/diff and refreshed
+   preview.
+3. Publish the project and open the resulting application URL.
+4. Delete the disposable project; verify its project workspace container, volume, schema, and
+   bucket are removed, while any remaining warm-slot counts stay at the configured target.
+
+If a claim falls back cold during the smoke, it is safe to continue; inspect the aggregate state
+and audit queries above to distinguish temporary refill from a persistent preparation failure.
+
+## Rollback (disable real mode or the warm pool)
 
 Set `EVCP_WORKSPACE_REAL_ADAPTERS: "0"` in `docker/docker-compose.yml` and recreate `platform-api`. The orchestrator falls back to the in-memory adapter path.
+
+To retain real workspaces but stop prewarming, instead set
+`EVCP_WORKSPACE_WARM_POOL_SIZE=0` in the deployment environment and recreate `platform-api`.
+Existing project workspaces continue to run; new projects provision cold until the value is raised
+again.
 
 ## Notes
 
