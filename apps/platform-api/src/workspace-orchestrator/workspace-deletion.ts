@@ -1,6 +1,7 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 import { physicalResourceKey } from "./warm-pool-config";
+import { resourceKeyForProject } from "./resource-ports";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { workspaceVolumeName } from "./workspace-lifecycle";
 import type { ProjectDeletionFence } from "../project-lifecycle";
@@ -27,7 +28,9 @@ export async function deleteWorkspaceResources(input: {
 
   let container: Awaited<ReturnType<typeof deps.docker.inspectContainer>> | undefined;
   await attempt(async () => {
-    container = await deps.docker.inspectContainer(`evcp-ws-${releaseKey}`);
+    container = await deps.docker.inspectContainer(
+      `evcp-ws-${resourceKeyForProject(record.projectId)}`
+    );
   });
   const containerId =
     container?.containerId ?? (container === undefined ? record.containerId : null);

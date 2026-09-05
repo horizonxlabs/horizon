@@ -2,31 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 
-const { createWorkspaceOrchestrator } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts"
-);
-const { createPgClientPostgresProvisioner } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts"
-);
-const { createMemoryObjectStorageProvisioner, createMemoryLlmGatewayAdmin } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts"
-);
-const { createProjectSecretStore } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/secret-store.ts"
-);
-const { createMemoryDockerEngine } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts"
-);
-const { WorkspaceRuntimeRepositoryBackedStore } = await import(
-  "../../apps/platform-api/src/persistence/workspace-runtime-repository.ts"
-);
-const { deleteWorkspaceResources } = await import(
-  "../../apps/platform-api/src/workspace-orchestrator/workspace-deletion.ts"
-);
+const { createWorkspaceOrchestrator } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts");
+const { createPgClientPostgresProvisioner } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts");
+const { createMemoryObjectStorageProvisioner, createMemoryLlmGatewayAdmin } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts");
+const { createProjectSecretStore } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/secret-store.ts");
+const { createMemoryDockerEngine } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
+const { WorkspaceRuntimeRepositoryBackedStore } =
+  await import("../../apps/platform-api/src/persistence/workspace-runtime-repository.ts");
+const { deleteWorkspaceResources } =
+  await import("../../apps/platform-api/src/workspace-orchestrator/workspace-deletion.ts");
 
 function deferred() {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -44,22 +39,17 @@ function makeOrchestrator(runtimeRecords) {
   return { orchestrator: createWorkspaceOrchestrator(deps), deps, audits: released };
 }
 
-test("delete uses a persisted physical resource key", async () => {
+test("delete uses the logical container identity and persisted physical resource key", async () => {
   const releasedSchemas = [];
   const removedVolumes = [];
-  const { deps } = makeOrchestrator();
-  const record = {
-    id: "ws-prj-leave-tracker",
+  const { orchestrator, deps } = makeOrchestrator();
+  const running = await orchestrator.provisionWorkspace({
     projectId: "prj-leave-tracker",
-    slug: "leave-tracker",
-    resourceKey: "warm-slot-abc",
-    state: "running",
-    containerId: null,
-    cpuCores: 1,
-    memoryMb: 2048,
-    lastActivityAt: "2026-09-05T00:00:00.000Z",
-    createdAt: "2026-09-05T00:00:00.000Z",
-    updatedAt: "2026-09-05T00:00:00.000Z"
+    slug: "leave-tracker"
+  });
+  const record = {
+    ...running,
+    resourceKey: "warm-slot-abc"
   };
   deps.postgres.releaseSchema = async (schema) => releasedSchemas.push(schema);
   deps.docker.removeVolume = async (volume) => removedVolumes.push(volume);
@@ -68,6 +58,7 @@ test("delete uses a persisted physical resource key", async () => {
 
   assert.deepEqual(releasedSchemas, ["warm-slot-abc"]);
   assert.deepEqual(removedVolumes, ["evcp-ws-warm-slot-abc-data"]);
+  assert.deepEqual(deps.docker.state.containers, [], "logical project container removed");
 });
 
 test("deleteWorkspace releases schema, bucket, llm key, secrets, container and drops the record", async () => {
@@ -126,9 +117,13 @@ test("deleteWorkspace aggregates runtime persistence failure and retains retry s
   let removeError = databaseError;
   const runtimeRecords = new WorkspaceRuntimeRepositoryBackedStore({
     workspaceRuntimeRecord: {
-      async findMany() { return [...rows.values()]; },
+      async findMany() {
+        return [...rows.values()];
+      },
       async upsert({ where, update, create }) {
-        const next = rows.has(where.projectId) ? { ...rows.get(where.projectId), ...update } : create;
+        const next = rows.has(where.projectId)
+          ? { ...rows.get(where.projectId), ...update }
+          : create;
         rows.set(where.projectId, next);
         return next;
       },
@@ -147,8 +142,7 @@ test("deleteWorkspace aggregates runtime persistence failure and retains retry s
   await assert.rejects(
     orchestrator.deleteWorkspace("prj-leave-tracker"),
     (error) =>
-      error instanceof AggregateError &&
-      error.errors.some((cause) => cause === databaseError)
+      error instanceof AggregateError && error.errors.some((cause) => cause === databaseError)
   );
   assert.equal(
     orchestrator.getWorkspace("prj-leave-tracker")?.projectId,
@@ -175,11 +169,15 @@ test("deleteWorkspace stops between actual resource stages after deletion-fence 
     stopFinished.resolve();
     await resumeStop.promise;
   };
-  deps.postgres.releaseSchema = async () => { schemaReleases += 1; };
+  deps.postgres.releaseSchema = async () => {
+    schemaReleases += 1;
+  };
   let current = true;
   const deletion = orchestrator.deleteWorkspace("prj-leave-tracker", {
     epoch: 1,
-    async assertCurrent() { if (!current) throw new Error("deletion ownership lost"); }
+    async assertCurrent() {
+      if (!current) throw new Error("deletion ownership lost");
+    }
   });
   await stopFinished.promise;
   current = false;

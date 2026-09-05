@@ -49,33 +49,34 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
   };
 
-  const buildWorkspaceSpec = async (projectId: string, resourceKey: string) =>
+  const buildWorkspaceSpec = async (projectId: string, logicalKey: string, physicalKey: string) =>
     buildDevContainerSpec({
       projectId,
-      slug: resourceKey,
+      slug: logicalKey,
       image,
       env: {
         ...(await deps.secrets.resolveEnv(projectId)),
-        EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
+        EVCP_PREVIEW_BASE: `/preview/${logicalKey}`
       },
       cpuCores,
       memoryMb,
       network,
-      workspaceVolume: workspaceVolumeName(resourceKey)
+      workspaceVolume: workspaceVolumeName(physicalKey)
     });
 
   const recoverExistingWorkspace = async (
     existing: WorkspaceContainerRecord,
     input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
-    const resourceKey = physicalResourceKey(existing);
-    const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
+    const physicalKey = physicalResourceKey(existing);
+    const logicalKey = resourceKeyForProject(input.projectId);
+    const found = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
       const recovered = save({
         ...existing,
-        resourceKey,
+        resourceKey: physicalKey,
         slug: input.slug,
         state: "running",
         containerId: found.containerId,
@@ -99,17 +100,17 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       );
     }
     await deps.docker.ensureVolume(
-      workspaceVolumeName(resourceKey),
+      workspaceVolumeName(physicalKey),
       workspaceVolumeLabels(input.projectId)
     );
     const { containerId } = await deps.docker.createContainer(
-      await buildWorkspaceSpec(input.projectId, resourceKey)
+      await buildWorkspaceSpec(input.projectId, logicalKey, physicalKey)
     );
     await deps.docker.startContainer(containerId);
     await waitForPreviewReady(deps.docker, containerId);
     const recovered = save({
       ...existing,
-      resourceKey,
+      resourceKey: physicalKey,
       slug: input.slug,
       state: "running",
       containerId,
@@ -143,7 +144,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
             ? true
             : ((
                 await deps.docker
-                  .inspectContainer(`evcp-ws-${physicalResourceKey(snapshot.record)}`)
+                  .inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`)
                   .catch(() => null)
               )?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
@@ -206,8 +207,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           await deps.docker.startContainer(found.containerId).catch(() => undefined);
         }
         await waitForPreviewReady(deps.docker, found.containerId);
-        // Restore managed values from the original container runtime environment when a restart
-        // happened before they were persisted (or from an older deployment that did not persist them yet).
+        // Restore managed values from the original container runtime environment if they were not persisted.
         for (const [name, value] of workspaceSecretEntries(found.env)) {
           await deps.secrets.put(input.projectId, name, value);
         }
@@ -276,7 +276,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           LLM_GATEWAY_KEY: llmKey.key
         });
         const { containerId } = await deps.docker.createContainer(
-          await buildWorkspaceSpec(input.projectId, resourceKey)
+          await buildWorkspaceSpec(input.projectId, resourceKey, resourceKey)
         );
         rollbacks.push(() => deps.docker.removeContainer(containerId));
         await deps.docker.startContainer(containerId);

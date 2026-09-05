@@ -12,6 +12,8 @@ const { createProjectSecretStore } =
   await import("../../apps/platform-api/src/workspace-orchestrator/secret-store.ts");
 const { createMemoryDockerEngine } =
   await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
+const { registerWorkspaceResourceIdentityCases } =
+  await import("./workspace-orchestrator-resource-identity-cases.mjs");
 
 function createDeps(overrides = {}) {
   const executedSql = [];
@@ -43,6 +45,8 @@ function createRuntimeRecordStore() {
     }
   };
 }
+
+registerWorkspaceResourceIdentityCases({ createDeps, createRuntimeRecordStore });
 
 test("provisionWorkspace creates schema, bucket, llm key, secrets and running container", async () => {
   const { deps, executedSql, audits } = createDeps();
