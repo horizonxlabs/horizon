@@ -41,9 +41,12 @@ slot includes its own schema, bucket, gateway key, initialized volume, and runni
 process, so project creation can claim it without waiting for those resources to be created.
 
 - Set a whole number from `0` through `20`. `3` is the default and `20` is the hard safety limit.
-- Set `EVCP_WORKSPACE_WARM_POOL_SIZE=0` to disable the pool on the next API start; new projects
-  then use the existing cold-provisioning path. This is the operational rollback switch for the
-  pool and does not delete existing project workspaces.
+- Set `EVCP_WORKSPACE_WARM_POOL_SIZE=0` to disable warm claims on the next API start; every new
+  project then uses the existing cold-provisioning path. Startup reconciliation drains unclaimed
+  ready and recoverable slots through the normal cleanup fences, releasing their warm resources.
+  A slot with live preparation/cleanup ownership waits for its lease to expire before a safe drain
+  retry. Assigned project runtimes are never deleted. This is the operational rollback switch for
+  the pool.
 - Budget for every configured warm process in addition to active project workspaces. With the
   example `EVCP_WORKSPACE_CPU=2` and `EVCP_WORKSPACE_MEM_MB=2048`, the default pool reserves up
   to 6 CPU cores and 6144 MiB while all three slots are running. Size the host and Docker limits
@@ -123,8 +126,10 @@ Set `EVCP_WORKSPACE_REAL_ADAPTERS: "0"` in `docker/docker-compose.yml` and recre
 
 To retain real workspaces but stop prewarming, instead set
 `EVCP_WORKSPACE_WARM_POOL_SIZE=0` in the deployment environment and recreate `platform-api`.
-Existing project workspaces continue to run; new projects provision cold until the value is raised
-again.
+New projects take the cold path immediately after that startup. During its startup reconciliation,
+the API drains unclaimed ready or recoverable warm slots; slots protected by an active operation
+lease are drained only after that lease safely expires and cleanup can take ownership. Existing
+project workspaces continue to run and are not part of the drain until the value is raised again.
 
 ## Notes
 

@@ -35,7 +35,12 @@ export async function reconcileWorkspaceWarmPool(options: {
         candidate.labels["evcp.kind"] === "workspace-warm" &&
         candidate.labels["evcp.warm-slot-id"] === slot.id
     );
-    if (!runtimeKeys.has(slot.resourceKey) && slot.state === "ready" && container?.running) {
+    if (
+      options.targetSize > 0 &&
+      !runtimeKeys.has(slot.resourceKey) &&
+      slot.state === "ready" &&
+      container?.running
+    ) {
       try {
         await waitForPreviewReady(options.deps.docker, container.containerId);
         totals.preserved += 1;

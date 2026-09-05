@@ -156,6 +156,14 @@ test("claim opens the prepared allocation and completeClaim retires its slot", a
   assert.equal((await fixture.store.list()).length, 0);
 });
 
+test("a disabled zero-target pool never claims an existing ready allocation", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 0, readySlots: 1 });
+
+  assert.equal(await fixture.pool.claim("prj_cold"), null);
+  assert.equal((await fixture.store.list())[0].state, "ready");
+  assert.deepEqual(fixture.releasedSchemas, []);
+});
+
 test("concurrent claims across pool managers allocate a ready slot only once", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   await fixture.pool.ensureCapacity();

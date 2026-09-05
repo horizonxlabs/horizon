@@ -287,6 +287,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       return new Set((await options.store.list()).map((slot) => slot.id));
     },
     async claim(projectId) {
+      if (options.targetSize === 0) return null;
       // A crashed claimant is reconciled separately; never give that project a second slot.
       if ((await options.store.list()).some((slot) => slot.claimProjectId === projectId))
         return null;
