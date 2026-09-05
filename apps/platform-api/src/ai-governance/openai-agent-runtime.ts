@@ -54,6 +54,13 @@ function openAiMessages(
       .map((block) => ({
         id: block.id,
         type: "function",
+        ...(block.thoughtSignature
+          ? {
+              extra_content: {
+                google: { thought_signature: block.thoughtSignature }
+              }
+            }
+          : {}),
         function: { name: block.name, arguments: JSON.stringify(block.arguments) }
       }));
     result.push({
@@ -114,9 +121,17 @@ export async function streamOpenAiAgentRound(
   let outputTokens = 0;
   let totalTokens = 0;
   let costUsd = 0;
+  let roundThoughtSignature = "";
   const toolCalls = new Map<
     number,
-    { id: string; name: string; argumentsJson: string; contentIndex: number; started: boolean }
+    {
+      id: string;
+      name: string;
+      argumentsJson: string;
+      thoughtSignature?: string;
+      contentIndex: number;
+      started: boolean;
+    }
   >();
 
   await consumeSse(response, (data) => {
@@ -125,9 +140,15 @@ export async function streamOpenAiAgentRound(
         delta?: {
           content?: unknown;
           reasoning_content?: unknown;
+          extra_content?: {
+            google?: { thought_signature?: unknown };
+          };
           tool_calls?: Array<{
             index?: unknown;
             id?: unknown;
+            extra_content?: {
+              google?: { thought_signature?: unknown };
+            };
             function?: { name?: unknown; arguments?: unknown };
           }>;
         };
@@ -144,6 +165,10 @@ export async function streamOpenAiAgentRound(
     const providerError = providerErrorMessage(frame.error);
     if (providerError) throw nonRetryableProviderError(providerError);
     const delta = frame.choices?.[0]?.delta;
+    const roundSignature = delta?.extra_content?.google?.thought_signature;
+    if (typeof roundSignature === "string" && roundSignature) {
+      roundThoughtSignature = roundSignature;
+    }
     if (typeof delta?.content === "string" && delta.content) {
       text += delta.content;
       input.onEvent?.({ type: "text_delta", delta: delta.content });
@@ -172,6 +197,10 @@ export async function streamOpenAiAgentRound(
       if (typeof incoming.function?.name === "string" && incoming.function.name) {
         current.name = incoming.function.name;
       }
+      const thoughtSignature = incoming.extra_content?.google?.thought_signature;
+      if (typeof thoughtSignature === "string" && thoughtSignature) {
+        current.thoughtSignature = thoughtSignature;
+      }
       if (!current.started) {
         current.started = true;
         input.onEvent?.({ type: "toolcall_start", contentIndex: current.contentIndex });
@@ -199,6 +228,7 @@ export async function streamOpenAiAgentRound(
   const content: Array<AgentTextBlock | AgentThinkingBlock | AgentToolCallBlock> = [];
   if (text) content.push({ type: "text", text });
   if (thinking) content.push({ type: "thinking", thinking });
+  let firstToolCall = true;
   for (const [, call] of [...toolCalls.entries()].sort(([left], [right]) => left - right)) {
     if (!call.name) throw nonRetryableProviderError("tool call is missing a name");
     let argumentsValue: unknown;
@@ -214,8 +244,12 @@ export async function streamOpenAiAgentRound(
       type: "toolCall",
       id: call.id,
       name: call.name,
-      arguments: argumentsValue as Record<string, unknown>
+      arguments: argumentsValue as Record<string, unknown>,
+      ...(call.thoughtSignature || (firstToolCall && roundThoughtSignature)
+        ? { thoughtSignature: call.thoughtSignature || roundThoughtSignature }
+        : {})
     };
+    firstToolCall = false;
     content.push(toolCall);
     input.onEvent?.({ type: "toolcall_end", contentIndex: call.contentIndex, toolCall });
   }

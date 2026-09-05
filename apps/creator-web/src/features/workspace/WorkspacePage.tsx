@@ -1,5 +1,5 @@
-import { ArrowUpRight, ChevronLeft, RotateCw, Send, Square } from "lucide-react";
-import { Button, Tabs, Textarea } from "@evcp/ui";
+import { Send, Square } from "lucide-react";
+import { Button, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { PublishDialog } from "@/features/publish";
 import { PromptQueue } from "./PromptQueue";
@@ -16,7 +16,6 @@ import { buildQuickMessages } from "./quick-messages";
 import { VibeQuestionBlock } from "./VibeQuestionBlock";
 import { extractQuestions } from "./vibe-questions";
 import { WorkspacePrdPanel } from "./WorkspacePrdPanel";
-import { TAB_LABELS, WORKSPACE_TABS } from "./workspace-chrome";
 import { turnLineTotal } from "./vibe-actions";
 import { usePreviewGuards } from "./use-preview-guards";
 import { VibePaneResizer, useChatPaneResize } from "./VibePaneResizer";
@@ -25,6 +24,8 @@ import { VibeWorkingIndicator } from "./VibeWorkingIndicator";
 import { usePreviewAuthorization } from "./use-preview-authorization";
 import { currentWorkspaceTurnStart } from "./workspace-turn";
 import { WorkspaceWakeOverlay } from "./WorkspaceWakeOverlay";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { deriveWorkspaceFailure } from "./workspace-failure";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -94,6 +95,11 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     hasPreview,
     hasProjectFiles: projectFiles.length > 0
   });
+  const workspaceFailure = deriveWorkspaceFailure({
+    messages: vibeMessages,
+    status: vibeStatus,
+    technicalDetails: vibeTechnicalDetails
+  });
   usePreviewGuards({
     projectId: selectedProject.id,
     enabled: previewAuth.state === "ready",
@@ -111,70 +117,28 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   return (
     <div className="vibe-live-shell" aria-busy={app.isEnteringWorkspace || undefined}>
       {app.isEnteringWorkspace ? <WorkspaceWakeOverlay projectName={selectedProject.name} /> : null}
-      <header className="vibe-live-header">
-        <div className="vibe-live-header-left">
-          <a className="vibe-live-back-link" href="/creator/">
-            <ChevronLeft size={16} aria-hidden="true" />
-            <span>Projects</span>
-          </a>
-          <div className="vibe-live-divider" />
-          <strong className="vibe-live-project-name">{selectedProject.name}</strong>
-          <span className={`vibe-live-status ${isVibing ? "is-running" : "is-ready"}`.trim()}>
-            <span className="vibe-live-status-dot" />
-            {vibeStatus || "Completed"}
-            {isVibing && liveLines > 0 ? ` · ${liveLines} lines` : ""}
-          </span>
-        </div>
-        <div className="vibe-live-header-right">
-          <div className="workspace-desktop-tabs">
-            <Tabs
-              items={WORKSPACE_TABS.map((tab) => ({ id: tab, label: TAB_LABELS[tab] }))}
-              active={vibeTab}
-              onSelect={selectTab}
-              variant="segmented"
-              aria-label="Workspace view"
-            />
-          </div>
-          <div className="vibe-live-divider" />
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={() => setVibePreviewKey((key) => key + 1)}
-            title="Refresh preview"
-            aria-label="Refresh preview"
-          >
-            <RotateCw size={15} />
-          </Button>
-          <a
-            href={previewSrc}
-            target="_blank"
-            rel="noreferrer"
-            aria-disabled={!isPreviewAuthorized}
-            onClick={(event) => {
-              if (!isPreviewAuthorized) event.preventDefault();
-            }}
-            className="vibe-live-control"
-          >
-            <span>Preview</span>
-            <ArrowUpRight size={14} aria-hidden="true" />
-          </a>
-          <Button
-            variant="primary"
-            type="button"
-            title="Publish to staging or production"
-            onClick={() => setShowPublish(true)}
-          >
-            Publish
-          </Button>
-        </div>
-      </header>
+      <WorkspaceHeader
+        projectName={selectedProject.name}
+        status={vibeStatus}
+        isVibing={isVibing}
+        liveLines={liveLines}
+        failed={Boolean(workspaceFailure)}
+        activeTab={vibeTab}
+        previewSrc={previewSrc}
+        isPreviewAuthorized={isPreviewAuthorized}
+        onSelectTab={selectTab}
+        onRefreshPreview={() => setVibePreviewKey((key) => key + 1)}
+        onPublish={() => setShowPublish(true)}
+      />
       <WorkspaceMobileNav active={mobileView} onSelect={selectMobileView} />
       <div
-        className={`vibe-live-body${paneResize.isChatCollapsed ? " is-chat-collapsed" : ""}`}
+        className={`vibe-live-body${paneResize.isChatCollapsed ? "is-chat-collapsed" : ""}`}
         data-workspace-view={mobileView ?? "supporting"}
         ref={paneResize.splitViewRef}
       >
-        <div className="vibe-live-chat-panel">
+        <div
+          className={`vibe-live-chat-panel${workspaceFailure ? " has-workspace-failure" : ""}`}
+        >
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && !vibeTechnicalDetails && (
               <div className="vibe-live-empty">
@@ -207,6 +171,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     parts={message.parts}
                     legacy={message.parts?.length ? message : { ...message, actions: [] }}
                     live={isVibing && messageIndex === vibeMessages.length - 1}
+                    hideFailureDetails={
+                      Boolean(workspaceFailure) && messageIndex === vibeMessages.length - 1
+                    }
                   />
                   {!message.parts?.length && <VibeActionSummary actions={message.actions} />}
                   {isVibing &&
@@ -236,10 +203,17 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 </div>
               )
             )}
-            <WorkspaceRequestFailure technicalDetails={vibeTechnicalDetails} />
+            <WorkspaceRequestFailure
+              failure={workspaceFailure}
+              onRetry={() => {
+                if (workspaceFailure?.retryPrompt) {
+                  void handleVibeChat({ prompt: workspaceFailure.retryPrompt });
+                }
+              }}
+            />
           </div>
           {/* Hidden mid-turn (stale); re-derives from the model's <suggest> lines when done. */}
-          {!isVibing && quickMessages.length > 0 && (
+          {!workspaceFailure && !isVibing && quickMessages.length > 0 && (
             <QuickMessages
               items={quickMessages}
               disabled={isVibing}

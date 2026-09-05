@@ -1,15 +1,34 @@
-import { CreatorStatusMessage } from "@/shared";
+import { Button } from "@evcp/ui";
+import { CreatorState, CreatorStatusMessage } from "@/shared";
+import type { WorkspaceFailure } from "./workspace-failure";
 
 export function WorkspaceRequestFailure({
-  technicalDetails
+  failure,
+  onRetry
 }: {
-  technicalDetails?: string;
+  failure?: WorkspaceFailure;
+  onRetry: () => void;
 }) {
-  if (!technicalDetails) return null;
+  if (!failure) return null;
   return (
-    <CreatorStatusMessage tone="danger" technicalDetails={technicalDetails}>
-      We couldn't complete the workspace request. Try again.
-    </CreatorStatusMessage>
+    <div className="vibe-workspace-recovery">
+      <CreatorState
+        kind="error"
+        title={failure.title}
+        description={failure.description}
+        action={
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={!failure.retryPrompt}
+            onClick={onRetry}
+          >
+            {failure.retryLabel}
+          </Button>
+        }
+        technicalDetails={failure.technicalDetails}
+      />
+    </div>
   );
 }
 

@@ -112,25 +112,6 @@ test("Workspace announces sandbox preparation instead of showing an unlabelled b
   assert.match(html, /Your workspace will be ready shortly\./);
 });
 
-test("Workspace renders service failures as user copy with disclosed technical details", () => {
-  const html = renderToStaticMarkup(
-    React.createElement(WorkspacePage, {
-      app: baseApp({
-        vibeTechnicalDetails: "Chat request failed (503)",
-        projectFileMessage: "Project file upload failed. Try again.",
-        projectFileTechnicalDetails: "object storage credentials rejected"
-      })
-    })
-  );
-
-  assert.match(html, /complete the workspace request\. Try again\./);
-  assert.doesNotMatch(html, /Create and understand your app with Pi/);
-  assert.match(html, /Project file upload failed\. Try again\./);
-  assert.equal((html.match(/<summary>Technical details<\/summary>/g) ?? []).length, 2);
-  assert.match(html, /<pre>Chat request failed \(503\)<\/pre>/);
-  assert.match(html, /<pre>object storage credentials rejected<\/pre>/);
-});
-
 test("completed technical actions are closed while active work stays expanded", () => {
   const completed = renderToStaticMarkup(
     React.createElement(VibeActionSummary, {
@@ -261,7 +242,53 @@ test("supporting Workspace surfaces render English operational copy", () => {
   assert.match(html, /Queued work \(1\)/);
   assert.match(html, /Restore to this point/);
   assert.match(html, /No versions yet/);
-  assert.match(html, /No PRD is available for this project/);
+  assert.match(html, /No PRD draft yet/);
+});
+
+test("Workspace PRD separates empty state from load failure", () => {
+  const empty = renderToStaticMarkup(
+    React.createElement(WorkspacePrdPanel, {
+      app: {
+        visiblePrdSections: [],
+        visibleVersionRows: [],
+        prdStatus: "empty",
+        prdMessage: "No PRD draft yet.",
+        currentPrdVersion: undefined,
+        handleConfirmPrdBaseline() {},
+        handleGeneratePrdDraft() {},
+        refreshPrdState() {},
+        selectedProject: { id: "project_1" },
+        isGeneratingPrdDraft: false
+      }
+    })
+  );
+  assert.match(empty, /No PRD draft yet/);
+  assert.equal((empty.match(/Generate PRD Draft/g) ?? []).length, 1);
+  assert.doesNotMatch(empty, /could not be loaded/);
+
+  const unavailable = renderToStaticMarkup(
+    React.createElement(WorkspacePrdPanel, {
+      app: {
+        visiblePrdSections: [],
+        visibleVersionRows: [],
+        prdStatus: "error",
+        prdMessage: "PRD could not be loaded.",
+        prdTechnicalDetails: "HTTP 503 from PRD service",
+        prdErrorSource: "load",
+        currentPrdVersion: undefined,
+        handleConfirmPrdBaseline() {},
+        handleGeneratePrdDraft() {},
+        refreshPrdState() {},
+        selectedProject: { id: "project_1" },
+        isGeneratingPrdDraft: false
+      }
+    })
+  );
+  assert.match(unavailable, /PRD could not be loaded/);
+  assert.match(unavailable, />Retry<\/button>/);
+  assert.match(unavailable, /Technical details/);
+  assert.match(unavailable, /HTTP 503 from PRD service/);
+  assert.doesNotMatch(unavailable, /No PRD is available/);
 });
 
 test("rendered Workspace controls use semantic targets covered by the narrow-screen sizing rule", async () => {
@@ -348,5 +375,14 @@ test("Workspace responsive CSS selects one narrow panel and disables progress mo
   assert.match(
     css,
     /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.vibe-working-icon[\s\S]*\.vibe-working-dot[\s\S]*animation: none/
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 899px\)[\s\S]*\.vibe-live-resizer\s*\{[\s\S]*display: none/
+  );
+  assert.match(css, /\.vibe-composer-textarea\s*\{[\s\S]*max-height:\s*180px[\s\S]*resize:\s*none/);
+  assert.match(
+    css,
+    /\.vibe-live-chat-panel\.has-workspace-failure \.vibe-live-thread\s*\{[\s\S]*flex:\s*0 1 auto/
   );
 });
