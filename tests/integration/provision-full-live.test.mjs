@@ -1,52 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { createDefaultWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/factory.ts";
-import { schemaNameFor } from "../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts";
-import { resourceKeyForProject } from "../../apps/platform-api/src/workspace-orchestrator/resource-ports.ts";
-
-const LIVE = process.env.EVCP_PROVISION_LIVE === "1";
+import { createWorkspaceLiveFixture } from "./workspace-live-fixture.mjs";
 
 test(
-  "provisionWorkspace creates a real schema + bucket + running container, and cleanup removes them",
-  { skip: !LIVE },
-  async () => {
-    const orchestrator = createDefaultWorkspaceOrchestrator({
-      env: { ...process.env, EVCP_WORKSPACE_REAL_ADAPTERS: "1" }
-    });
-    const slug = "e2e" + Math.floor(Number(process.env.EVCP_TEST_SEED ?? "1"));
-    const projectId = `proj-${slug}`;
-    const resourceKey = resourceKeyForProject(projectId);
-
-    const record = await orchestrator.provisionWorkspace({ projectId, slug });
-    try {
-      assert.equal(record.state, "running");
-      assert.ok(record.containerId, "expected a real container id");
-
-      // real container is up
-      const running = execFileSync("docker", ["ps", "--format", "{{.Names}}"]).toString();
-      assert.ok(
-        running.includes(`evcp-ws-${resourceKey}`),
-        "expected id-derived workspace container to be running"
-      );
-      assert.deepEqual((await orchestrator.listSecretNames(projectId)).sort(), [
-        "DATABASE_URL",
-        "LLM_GATEWAY_KEY",
-        "S3_ACCESS_KEY",
-        "S3_BUCKET",
-        "S3_ENDPOINT",
-        "S3_SECRET_KEY"
-      ]);
-    } finally {
-      await orchestrator.deleteWorkspace(projectId);
-      // container gone
-      const after = execFileSync("docker", ["ps", "-a", "--format", "{{.Names}}"]).toString();
-      assert.ok(
-        !after.includes(`evcp-ws-${resourceKey}`),
-        "expected the container removed after deleteWorkspace"
-      );
-    }
-    // NOTE: also assert schema/bucket removal via psql/mc if desired; deleteWorkspace calls releaseSchema+releaseBucket best-effort.
-    assert.ok(schemaNameFor(resourceKey).includes(slug));
+  "cold provisioning creates real resources and deletion removes them",
+  {
+    skip: process.env.EVCP_PROVISION_LIVE !== "1",
+    timeout: 300_000
+  },
+  async (context) => {
+    const fixture = await createWorkspaceLiveFixture(context, { targetSize: 0 });
+    const { orchestrator, projectId, projectKey, docker } = fixture;
+    const record = await orchestrator.provisionWorkspace({ projectId, slug: projectKey });
+    assert.equal(record.state, "running");
+    assert.equal(record.resourceKey, projectKey);
+    assert.ok(record.containerId);
+    assert.equal((await docker.inspectContainer(`evcp-ws-${projectKey}`)).running, true);
+    assert.deepEqual(fixture.calls, { schemas: 1, buckets: 1, keys: 1 });
+    assert.deepEqual((await orchestrator.listSecretNames(projectId)).sort(), [
+      "DATABASE_URL",
+      "LLM_GATEWAY_KEY",
+      "S3_ACCESS_KEY",
+      "S3_BUCKET",
+      "S3_ENDPOINT",
+      "S3_SECRET_KEY"
+    ]);
+    const preview = await docker.execInContainer(record.containerId, [
+      "curl",
+      "-fsS",
+      `http://127.0.0.1:3000/preview/${projectKey}/api/health`
+    ]);
+    assert.equal(preview.exitCode, 0);
+    await orchestrator.deleteWorkspace(projectId);
+    await fixture.assertResourcesRemoved();
   }
 );

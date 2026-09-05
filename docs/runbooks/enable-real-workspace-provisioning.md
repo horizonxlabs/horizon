@@ -1,11 +1,13 @@
 # Runbook: Enable Real Workspace Provisioning
 
-Turns on real per-project provisioning — `provisionWorkspace` creates a real Postgres schema+role, a real MinIO bucket, and boots a real dev container (`evcp-ws-<slug>`) from the `evcp/workspace-next:1` image. Delivered by Plan 6.
+Turns on real workspace provisioning. A cold allocation creates a Postgres schema and role,
+MinIO bucket and scoped identity, LiteLLM key, and workspace container. A warm allocation reuses
+prepared physical resources; its final container and preview URL use the logical project key.
 
-## Prerequisites (already in place)
+## Prerequisites
 
-- Running compose stack: `evcp-postgres`, `evcp-redis`, `evcp-minio` (healthy).
-- `docker/.env` provides `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_WORKSPACE_SECRET_KEY`.
+- Running compose stack: healthy PostgreSQL, Redis, MinIO, and LiteLLM services.
+- The deployment environment provides `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_WORKSPACE_SECRET_KEY`, `EVCP_LITELLM_BASE_URL`, and `EVCP_LITELLM_MASTER_KEY`.
 - `docker/docker-compose.yml` `platform-api` service now sets `EVCP_WORKSPACE_REAL_ADAPTERS: "1"` plus `EVCP_PG_*` / `EVCP_S3_*` and mounts `/var/run/docker.sock`.
 
 ## 1. Build the workspace dev image
@@ -19,7 +21,8 @@ docker images | grep workspace-next   # expect evcp/workspace-next   1
 
 ## 2. Recreate platform-api so it picks up the socket mount + real-adapter env
 
-> The currently-running `evcp-platform-api` container predates the docker-socket mount and the new env, so it must be **recreated** (not just restarted). This briefly interrupts the API.
+Recreate `platform-api` after changing its adapter configuration or Docker socket mount so those
+settings take effect. This briefly interrupts the API.
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
@@ -29,10 +32,11 @@ Confirm real mode is active:
 
 ```bash
 docker logs evcp-platform-api 2>&1 | grep "real-adapter mode"
-# expect: [workspace] real-adapter mode: Docker=real, Postgres=real (postgres), MinIO=real (minio), LiteLLM=memory-stub ...
+# expect: [workspace] real-adapter mode: Docker=real, Postgres=real (postgres), MinIO=real (minio), LiteLLM=real.
 ```
 
-(LiteLLM stays a memory stub until Plan 7 starts the litellm service — provisioning is not blocked by it.)
+Real mode requires `EVCP_LITELLM_BASE_URL` and `EVCP_LITELLM_MASTER_KEY`, alongside the
+PostgreSQL, MinIO, and workspace encryption configuration. It does not substitute a gateway stub.
 
 ## 3. Configure and observe the workspace warm pool
 
@@ -86,28 +90,76 @@ must not be copied into Docker labels, logs, or audit metadata.
 
 ## 4. Verify end-to-end (live)
 
-Run the full-provision integration test inside the recreated container (it has the socket, env, and network):
+The cold and warm smoke tests are opt-in. Without opt-in they each report one skip and perform
+no provisioning or database connections:
 
 ```bash
-docker exec -e EVCP_PROVISION_LIVE=1 -e EVCP_TEST_SEED=$RANDOM evcp-platform-api \
-  sh -lc 'cd /workspace && node --import tsx --test tests/integration/provision-full-live.test.mjs'
-# expect: a real schema + bucket + evcp-ws-<slug> container created, then cleaned up
+node --import tsx --test tests/integration/provision-full-live.test.mjs
+node --import tsx --test tests/integration/workspace-warm-pool-live.test.mjs
 ```
 
-Or exercise the real API path (member-gated — needs a valid session header):
+For an actual run, use a checkout with dependencies installed, the Docker socket mounted at
+`/var/run/docker.sock`, and access to PostgreSQL, MinIO, and LiteLLM. The configured workspace
+image must exist on that daemon, and the workspace network must reach the service hostnames.
+
+Export a dedicated live-test environment before running the commands below:
+
+- `EVCP_WORKSPACE_LIVE_DATABASE_URL`: admin connection URL for a disposable database, separate
+  from the running platform. Use its `public` schema; no API or other live test may use this
+  database during the test. The fixture refuses pre-existing warm slots or workspace runtimes.
+- `POSTGRES_DB`: that same disposable database name. `EVCP_PG_HOST` and `EVCP_PG_PORT` must
+  identify this PostgreSQL service from inside workspace containers.
+- `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_S3_HOST`, `EVCP_S3_PORT`, optional
+  `EVCP_S3_ADMIN_HOST`/`EVCP_S3_SSL`, and `EVCP_MINIO_CONTAINER_NAME` configure real scoped
+  bucket provisioning. The MinIO container needs `mc` for identity administration.
+- `EVCP_LITELLM_BASE_URL`, `EVCP_LITELLM_MASTER_KEY`, and the 64-hex-character
+  `EVCP_WORKSPACE_SECRET_KEY` are required. Load credentials from the deployment's secret
+  handling mechanism; never include their values in test reports.
+- `EVCP_WORKSPACE_IMAGE` and `EVCP_WORKSPACE_NETWORK` select the existing image/network
+  (defaults: `evcp/workspace-next:1` and `evcp-internal`).
+
+Apply the checked-in migrations only to that disposable database, then run the two tests
+separately. The cold smoke explicitly uses target zero; the warm smoke uses target one regardless
+of the deployment's configured pool size.
+
+```bash
+DATABASE_URL="$EVCP_WORKSPACE_LIVE_DATABASE_URL" \
+  pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma
+
+EVCP_PROVISION_LIVE=1 EVCP_WORKSPACE_REAL_ADAPTERS=1 \
+  node --import tsx --test tests/integration/provision-full-live.test.mjs
+
+EVCP_WARM_POOL_LIVE=1 EVCP_WORKSPACE_REAL_ADAPTERS=1 \
+  node --import tsx --test tests/integration/workspace-warm-pool-live.test.mjs
+```
+
+The warm smoke must report a healthy claim with `schemas=0 buckets=0 keys=0` created on the
+request path, then one ready replacement. It holds the asynchronous refill at the test boundary
+until the claim and logical preview URL are verified, so refill activity cannot hide an extra
+request-time creation. It then releases and awaits the refill requested by the orchestrator.
+It uses the real Prisma slot/runtime repositories and encrypted PostgreSQL secret persistence.
+
+An `after()` hook is registered before fixture setup. It joins refill work, deletes the project
+workspace and every remaining anonymous resource created by this run, verifies schema/bucket/
+container/volume absence and successful key revocation, retires the fixture rows, and disconnects
+Prisma. Cleanup failures fail the test. The disposable database itself is retained. Record the
+actual pass/failure output and cleanup diagnostic; a skipped test is not live deployment evidence.
+
+To exercise the deployed API itself, use a disposable project and a valid session header. Replace
+`<project-key>` with the project ID after replacing underscores with hyphens:
 
 ```bash
 curl -sS -X POST http://localhost:3100/projects/<projectId>/workspace/provision \
   -H "authorization: <valid session>" -H "content-type: application/json" \
   -d '{"projectId":"<projectId>","slug":"<slug>"}'
-docker ps --format '{{.Names}}' | grep evcp-ws-<slug>          # container running
+docker ps --format '{{.Names}}' | grep evcp-ws-<project-key>
 curl -sS -H "authorization: <valid session>" \
-  http://localhost:3100/preview/<slug>/ -o /dev/null -w "%{http_code}\n"   # 200/3xx (502 = dev server still booting; retry)
+  http://localhost:3100/preview/<project-key>/ -o /dev/null -w "%{http_code}\n"
 ```
 
 ## 5. Post-deploy smoke checks
 
-Run the live provisioning check below, then use a disposable project in Creator to confirm the
+Run the live provisioning checks above, then use a disposable project in Creator to confirm the
 full lifecycle:
 
 1. Create the project and open Workspace; verify that provision completes and the preview serves.
