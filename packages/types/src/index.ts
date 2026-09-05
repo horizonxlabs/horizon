@@ -64,6 +64,7 @@ export interface WorkspaceContainerRecord {
   id: string;
   projectId: string;
   slug: string;
+  resourceKey?: string;
   state: WorkspaceState;
   containerId: string | null;
   cpuCores: number;

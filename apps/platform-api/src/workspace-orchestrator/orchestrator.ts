@@ -18,6 +18,7 @@ import {
 } from "./workspace-provisioning";
 import { deleteWorkspaceResources } from "./workspace-deletion";
 import type { ProjectDeletionFence } from "../project-lifecycle";
+import { physicalResourceKey } from "./warm-pool-config";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -65,15 +66,16 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
   const recoverExistingWorkspace = async (
     existing: WorkspaceContainerRecord,
-    input: { projectId: string; slug: string },
-    resourceKey: string
+    input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
+    const resourceKey = physicalResourceKey(existing);
     const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
       const recovered = save({
         ...existing,
+        resourceKey,
         slug: input.slug,
         state: "running",
         containerId: found.containerId,
@@ -107,6 +109,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     await waitForPreviewReady(deps.docker, containerId);
     const recovered = save({
       ...existing,
+      resourceKey,
       slug: input.slug,
       state: "running",
       containerId,
@@ -140,7 +143,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
             ? true
             : ((
                 await deps.docker
-                  .inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`)
+                  .inspectContainer(`evcp-ws-${physicalResourceKey(snapshot.record)}`)
                   .catch(() => null)
               )?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
@@ -193,10 +196,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       // Immutable id-derived resource names prevent project renames from orphaning infrastructure.
       const resourceKey = resourceKeyForProject(input.projectId);
       const existing = records.get(input.projectId);
-      if (existing && existing.state !== "failed") {
-        if (existing.state === "archived") return existing;
-        return recoverExistingWorkspace(existing, input, resourceKey);
-      }
+      if (existing?.state === "archived") return existing;
+      if (existing && existing.state !== "failed") return recoverExistingWorkspace(existing, input);
 
       // After API restart, reattach to durable Docker resources instead of provisioning duplicates.
       const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
@@ -205,9 +206,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           await deps.docker.startContainer(found.containerId).catch(() => undefined);
         }
         await waitForPreviewReady(deps.docker, found.containerId);
-        // The original container already contains the encrypted-at-rest secrets in its runtime
-        // environment. Restore the managed values when a restart happened before they were
-        // persisted (or from an older deployment that did not persist them yet).
+        // Restore managed values from the original container runtime environment when a restart
+        // happened before they were persisted (or from an older deployment that did not persist them yet).
         for (const [name, value] of workspaceSecretEntries(found.env)) {
           await deps.secrets.put(input.projectId, name, value);
         }
@@ -215,6 +215,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
           id: `ws-${resourceKey}`,
           projectId: input.projectId,
           slug: input.slug,
+          resourceKey,
           state: "running",
           containerId: found.containerId,
           cpuCores,
@@ -237,6 +238,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         id: `ws-${resourceKey}`,
         projectId: input.projectId,
         slug: input.slug,
+        resourceKey,
         state: "provisioning",
         containerId: null,
         cpuCores,
@@ -333,11 +335,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
-      const next = await recoverExistingWorkspace(
-        record,
-        { projectId, slug: record.slug },
-        resourceKeyForProject(projectId)
-      );
+      const next = await recoverExistingWorkspace(record, { projectId, slug: record.slug });
       audit({ action: "workspace.started", projectId });
       return next;
     },
@@ -349,7 +347,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.stopContainer(record.containerId).catch(() => undefined);
         await deps.docker.removeContainer(record.containerId);
       }
-      const next = save({ ...record, state: "archived", containerId: null });
+      const next = save({
+        ...record,
+        resourceKey: physicalResourceKey(record),
+        state: "archived",
+        containerId: null
+      });
       await persist(next);
       audit({ action: "workspace.archived", projectId });
       return next;

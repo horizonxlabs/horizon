@@ -20,6 +20,9 @@ const { createMemoryDockerEngine } = await import(
 const { WorkspaceRuntimeRepositoryBackedStore } = await import(
   "../../apps/platform-api/src/persistence/workspace-runtime-repository.ts"
 );
+const { deleteWorkspaceResources } = await import(
+  "../../apps/platform-api/src/workspace-orchestrator/workspace-deletion.ts"
+);
 
 function deferred() {
   let resolve;
@@ -40,6 +43,32 @@ function makeOrchestrator(runtimeRecords) {
   };
   return { orchestrator: createWorkspaceOrchestrator(deps), deps, audits: released };
 }
+
+test("delete uses a persisted physical resource key", async () => {
+  const releasedSchemas = [];
+  const removedVolumes = [];
+  const { deps } = makeOrchestrator();
+  const record = {
+    id: "ws-prj-leave-tracker",
+    projectId: "prj-leave-tracker",
+    slug: "leave-tracker",
+    resourceKey: "warm-slot-abc",
+    state: "running",
+    containerId: null,
+    cpuCores: 1,
+    memoryMb: 2048,
+    lastActivityAt: "2026-09-05T00:00:00.000Z",
+    createdAt: "2026-09-05T00:00:00.000Z",
+    updatedAt: "2026-09-05T00:00:00.000Z"
+  };
+  deps.postgres.releaseSchema = async (schema) => releasedSchemas.push(schema);
+  deps.docker.removeVolume = async (volume) => removedVolumes.push(volume);
+
+  await deleteWorkspaceResources({ record, deps, llmGatewayKeyId: "key-1" });
+
+  assert.deepEqual(releasedSchemas, ["warm-slot-abc"]);
+  assert.deepEqual(removedVolumes, ["evcp-ws-warm-slot-abc-data"]);
+});
 
 test("deleteWorkspace releases schema, bucket, llm key, secrets, container and drops the record", async () => {
   const { orchestrator, deps, audits } = makeOrchestrator();

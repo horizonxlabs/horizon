@@ -55,6 +55,7 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.equal(record.state, "running");
   assert.equal(record.slug, "leave-tracker");
   assert.equal(record.id, "ws-prj-leave-tracker");
+  assert.equal(record.resourceKey, "prj-leave-tracker");
   assert.ok(record.containerId);
   assert.ok(executedSql.some((sql) => sql.includes("CREATE SCHEMA")));
   assert.ok(executedSql.some((sql) => sql.includes("app_prj_leave_tracker")));

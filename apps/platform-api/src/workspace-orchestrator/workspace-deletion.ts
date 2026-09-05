@@ -1,6 +1,6 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
-import { resourceKeyForProject } from "./resource-ports";
+import { physicalResourceKey } from "./warm-pool-config";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { workspaceVolumeName } from "./workspace-lifecycle";
 import type { ProjectDeletionFence } from "../project-lifecycle";
@@ -13,7 +13,7 @@ export async function deleteWorkspaceResources(input: {
   fence?: ProjectDeletionFence;
 }): Promise<void> {
   const { record, deps } = input;
-  const releaseKey = resourceKeyForProject(record.projectId);
+  const releaseKey = physicalResourceKey(record);
   const failures: Error[] = [];
   const attempt = async (release: () => Promise<void>): Promise<void> => {
     await input.fence?.assertCurrent();
