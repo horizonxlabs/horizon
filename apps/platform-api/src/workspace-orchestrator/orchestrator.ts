@@ -250,7 +250,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   return {
-    ...createWarmPoolLifecycle(deps, records),
+    ...createWarmPoolLifecycle(deps, records, llmKeyIds),
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
       deps.runtimeRecords = store;

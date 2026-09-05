@@ -19,6 +19,7 @@ import { createWarmPoolWorkTracker } from "./warm-pool-work";
 import { recoverWarmClaim } from "./warm-pool-claim-recovery";
 import { prepareWarmSlot } from "./warm-pool-preparation";
 import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
+import { recoverStartupWarmClaims } from "./warm-pool-startup-recovery";
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
@@ -27,11 +28,13 @@ export interface WorkspaceWarmPool {
   waitForIdle(): Promise<void>;
   claim(projectId: string): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
+  recoverClaims(): ReturnType<typeof recoverStartupWarmClaims>;
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown): Promise<void>;
   reconcile(): Promise<void>;
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
+  getClaimProjectIds(): Promise<ReadonlySet<string>>;
 }
 export interface WarmPoolStatus {
   target: number;
@@ -184,12 +187,21 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
+    recoverClaims: () =>
+      work.track(recoverStartupWarmClaims({ ...options, now, operationLeaseMs })),
     waitForIdle: work.waitForIdle,
     async getStatus() {
       return countSlots(await options.store.list(), options.targetSize);
     },
     async getActiveSlotIds() {
       return new Set((await options.store.list()).map((slot) => slot.id));
+    },
+    async getClaimProjectIds() {
+      return new Set(
+        (await options.store.list()).flatMap((slot) =>
+          slot.claimProjectId ? [slot.claimProjectId] : []
+        )
+      );
     },
     async claim(projectId) {
       if (options.targetSize === 0) return null;

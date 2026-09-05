@@ -15,7 +15,10 @@ export function startWorkspaceSweeps(services: WorkspaceServices): Array<{ stop(
   return [
     startWorkspaceIdleSweep(services),
     startWarmPoolSweep({
-      reconcile: () => services.workspaceOrchestrator.reconcileWarmPool(),
+      reconcile: async () => {
+        await services.workspaceOrchestrator.recoverWarmClaims();
+        await services.workspaceOrchestrator.reconcileWarmPool();
+      },
       ensureCapacity: () => services.workspaceOrchestrator.ensureWarmPoolCapacity()
     })
   ];

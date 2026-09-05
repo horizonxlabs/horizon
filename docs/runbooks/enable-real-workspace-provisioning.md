@@ -90,6 +90,14 @@ docker compose -f docker/docker-compose.yml exec postgres \
 Neither command should query or print `secret_payload`; credentials remain encrypted at rest and
 must not be copied into Docker labels, logs, or audit metadata.
 
+Before destructive startup reconciliation, the API recovers healthy final project containers
+whose warm claim survived a crash. Matching prepared credentials establish their physical
+identity; project leases fence secret/runtime persistence before normal reconciliation retires
+the claim. A contended project remains protected and is retried by the periodic sweep. Missing,
+unhealthy, or mismatched handoffs continue through fenced cleanup. Secret/runtime persistence
+failures stop startup before cleanup; restore the dependency and retry startup, without deleting
+the claiming row. This recovery also runs with a zero pool target to preserve completed handoffs.
+
 Preparation records its physical key and slot operation token in `workspace_warm_preparations`
 before dispatching external creates. Late responses are compensated using their original resource
 identifiers; retry generations use fresh keys. Retirement sweeps use the exact container/volume,
@@ -97,6 +105,8 @@ schema, bucket, and gateway alias, and never clean a current slot or assigned ru
 The gateway must support `/key/delete` with `key_aliases` (the same `proj-<resourceKey>` alias sent
 when creating the key). Verify that capability against the deployed LiteLLM version during the
 live smoke; the local adapter contract alone is not evidence of live gateway compatibility.
+Alias cleanup accepts only LiteLLM's exact confirmed `No keys found` 404 envelope as successful
+absence; authentication, malformed responses, transport errors, and unrelated 404s remain failures.
 
 A crash or lost create response leaves `settled=false`. These non-secret intents are deliberately
 retained and retried, even after a successful cleanup, because a remote operation could commit

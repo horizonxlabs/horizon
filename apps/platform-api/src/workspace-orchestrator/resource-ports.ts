@@ -130,9 +130,21 @@ export function createLiteLlmGatewayAdmin(opts: {
         headers,
         body: JSON.stringify({ key_aliases: [bucketNameFor(resourceKey)] })
       });
-      if (!response.ok) {
+      if (!response.ok && !(await isConfirmedLiteLlmKeyAbsence(response))) {
         throw new Error(`litellm generation key revoke failed (${response.status})`);
       }
     }
   };
+}
+
+async function isConfirmedLiteLlmKeyAbsence(response: Response): Promise<boolean> {
+  if (response.status !== 404) return false;
+  const payload = await response.json().catch(() => null);
+  // Exact upstream delete_verification_tokens / ProxyException contract, not arbitrary 404s.
+  return (
+    payload?.error?.message === "{'error': 'No keys found'}" &&
+    payload.error.type === "internal_server_error" &&
+    payload.error.param === "None" &&
+    payload.error.code === "404"
+  );
 }

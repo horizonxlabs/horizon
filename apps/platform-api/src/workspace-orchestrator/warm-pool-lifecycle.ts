@@ -6,11 +6,19 @@ import { cleanupOrphanWorkspaceResources } from "./workspace-lifecycle";
 
 export function createWarmPoolLifecycle(
   deps: WorkspaceOrchestratorDeps,
-  records: ReadonlyMap<string, WorkspaceContainerRecord>
+  records: Map<string, WorkspaceContainerRecord>,
+  llmKeyIds: Map<string, string>
 ) {
   return {
     configureWarmPool(pool: WorkspaceWarmPool): void {
       deps.warmPool = pool;
+    },
+    async recoverWarmClaims(): Promise<void> {
+      for (const snapshot of (await deps.warmPool?.recoverClaims()) ?? []) {
+        records.set(snapshot.record.projectId, snapshot.record);
+        if (snapshot.llmGatewayKeyId)
+          llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
+      }
     },
     async reconcileWarmPool(): Promise<void> {
       await deps.warmPool?.reconcile();
@@ -24,11 +32,22 @@ export function createWarmPoolLifecycle(
       );
     },
     async cleanupOrphanContainers(): Promise<string[]> {
+      const claimingProjects = (await deps.warmPool?.getClaimProjectIds()) ?? [];
+      const activeWarmSlotIds = await deps.warmPool?.getActiveSlotIds();
+      // Read durable assignments AFTER claims: another replica can save and retire a claim
+      // between startup hydration and this inventory. Both sides of that handoff must survive.
+      const durableRecords = ((await deps.runtimeRecords?.list()) ?? []).map(
+        ({ record }) => record
+      );
+      const activeRecords = [...records.values(), ...durableRecords];
       return cleanupOrphanWorkspaceResources({
         docker: deps.docker,
-        activeProjectIds: new Set(records.keys()),
-        activeWarmSlotIds: await deps.warmPool?.getActiveSlotIds(),
-        activeResourceKeys: new Set([...records.values()].map(physicalResourceKey)),
+        activeProjectIds: new Set([
+          ...claimingProjects,
+          ...activeRecords.map((record) => record.projectId)
+        ]),
+        activeWarmSlotIds,
+        activeResourceKeys: new Set(activeRecords.map(physicalResourceKey)),
         onRemoved: ({ projectId, containerName, volumeName }) =>
           deps.onAudit?.({
             action: "workspace.orphan_removed",
