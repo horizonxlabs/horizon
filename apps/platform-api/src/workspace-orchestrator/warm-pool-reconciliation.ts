@@ -30,6 +30,10 @@ export async function reconcileWorkspaceWarmPool(options: {
   const slots = await options.store.list();
   const totals = { preserved: 0, retired: 0, cleaned: 0, cleanupFailed: 0 };
   for (const slot of slots) {
+    if (options.targetSize > 0 && slot.state === "failed") {
+      totals.preserved += 1;
+      continue;
+    }
     const container = containers.find(
       (candidate) =>
         candidate.labels["evcp.kind"] === "workspace-warm" &&

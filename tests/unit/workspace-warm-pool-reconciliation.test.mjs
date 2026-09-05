@@ -287,7 +287,7 @@ test("reconcile finds a preparing container created before its identifier was pe
   assert.equal((await fixture.store.list()).length, 0);
 });
 
-test("reconcile quarantines cleanup failures and retries them on the next pass", async () => {
+test("ensureCapacity retries quarantined cleanup after its backoff", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1, cleanupFailure: "schema" });
   await fixture.pool.ensureCapacity();
   fixture.previewExitCode = 1;
@@ -297,8 +297,11 @@ test("reconcile quarantines cleanup failures and retries them on the next pass",
   assert.equal(failed.lastError, "cleanup_error");
   assert.equal(failed.resourceKey, "warm-resource-1");
   fixture.setNow(new Date(failed.retryAfter));
-  await fixture.createPool().reconcile();
-  assert.equal((await fixture.store.list()).length, 0);
+  fixture.previewExitCode = 0;
+  await fixture.pool.ensureCapacity();
+  const [replacement] = await fixture.store.list();
+  assert.equal(replacement.state, "ready");
+  assert.equal(replacement.resourceKey, "warm-resource-2");
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
 });
 
