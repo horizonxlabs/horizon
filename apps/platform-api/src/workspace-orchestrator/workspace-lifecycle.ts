@@ -33,6 +33,18 @@ export function workspaceVolumeLabels(projectId: string): Record<string, string>
   };
 }
 
+export function workspaceWarmResourceLabels(slotId: string): Record<string, string> {
+  return {
+    "evcp.managed": "true",
+    "evcp.kind": "workspace-warm",
+    "evcp.warm-slot-id": slotId
+  };
+}
+
+export function workspaceWarmVolumeLabels(slotId: string): Record<string, string> {
+  return workspaceWarmResourceLabels(slotId);
+}
+
 export async function waitForPreviewReady(
   docker: Pick<DockerEngine, "execInContainer">,
   containerId: string

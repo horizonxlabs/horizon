@@ -17,7 +17,12 @@ async function rollbackCompleted(rollbacks: Rollback[]): Promise<void> {
 
 export async function provisionIndependentWorkspaceResources(
   deps: WorkspaceOrchestratorDeps,
-  input: { projectId: string; resourceKey: string; volumeName: string }
+  input: {
+    projectId: string;
+    resourceKey: string;
+    volumeName: string;
+    volumeLabels?: Record<string, string>;
+  }
 ): Promise<ProvisionedWorkspaceResources> {
   const results = await Promise.allSettled([
     deps.postgres.provisionSchema(input.resourceKey),
@@ -26,11 +31,14 @@ export async function provisionIndependentWorkspaceResources(
       projectId: input.projectId,
       slug: input.resourceKey
     }),
-    deps.docker.ensureVolume(input.volumeName, {
-      "evcp.managed": "true",
-      "evcp.project-id": input.projectId,
-      "evcp.kind": "workspace-data"
-    })
+    deps.docker.ensureVolume(
+      input.volumeName,
+      input.volumeLabels ?? {
+        "evcp.managed": "true",
+        "evcp.project-id": input.projectId,
+        "evcp.kind": "workspace-data"
+      }
+    )
   ] as const);
 
   const rollbacks: Rollback[] = [];
