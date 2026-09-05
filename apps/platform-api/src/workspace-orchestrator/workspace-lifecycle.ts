@@ -1,7 +1,7 @@
 import type { DockerEngine } from "./docker-engine";
 import { resourceKeyForProject } from "./resource-ports";
 
-const MANAGED_WORKSPACE_SECRET_NAMES = new Set([
+export const MANAGED_WORKSPACE_SECRET_NAMES: ReadonlySet<string> = new Set([
   "DATABASE_URL",
   "LLM_GATEWAY_KEY",
   "S3_ENDPOINT",

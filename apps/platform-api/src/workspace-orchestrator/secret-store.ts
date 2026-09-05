@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { SecretPersistence } from "./secret-persistence";
+import { MANAGED_WORKSPACE_SECRET_NAMES } from "./workspace-lifecycle";
 
 interface StoredSecret {
   name: string;
@@ -28,6 +29,7 @@ export interface ProjectSecretStore {
     attempt: ProvisioningSecretAttempt
   ): Promise<void>;
   removeProvisioning(projectId: string, token: string): Promise<void>;
+  adoptProvisioning(projectId: string, attempt: ProvisioningSecretAttempt): Promise<void>;
   /** Load persisted (encrypted) secrets from the at-rest store into memory. Awaited at startup. */
   hydrate(): Promise<void>;
 }
@@ -42,6 +44,39 @@ export function createProjectSecretStore(opts: {
   const key = Buffer.from(opts.encryptionKeyHex, "hex");
   const persistence = opts.persistence;
   const byProject = new Map<string, Map<string, StoredSecret>>();
+  const revisions = new Map<string, number>();
+  const nameRevisions = new Map<string, Map<string, number>>();
+  const deletionRevisions = new Map<string, number>();
+  const beginMutation = (projectId: string, names: string[] = []) => {
+    const revision = (revisions.get(projectId) ?? 0) + 1;
+    revisions.set(projectId, revision);
+    const namesForProject = nameRevisions.get(projectId) ?? new Map<string, number>();
+    for (const name of names) namesForProject.set(name, revision);
+    nameRevisions.set(projectId, namesForProject);
+    return revision;
+  };
+  const mayWrite = (projectId: string, name: string, revision: number) =>
+    (nameRevisions.get(projectId)?.get(name) ?? 0) <= revision &&
+    (deletionRevisions.get(projectId) ?? 0) <= revision;
+  const refreshProject = async (projectId: string) => {
+    if (!persistence) return;
+    while (true) {
+      const revision = revisions.get(projectId) ?? 0;
+      const rows = (await persistence.loadAll()).filter((row) => row.projectId === projectId);
+      if ((revisions.get(projectId) ?? 0) !== revision) continue;
+      byProject.set(projectId, new Map(rows.map((row) => [row.name, row])));
+      revisions.set(projectId, revision + 1);
+      return;
+    }
+  };
+  const updateCache = async (projectId: string, revision: number, apply: () => void) => {
+    // A later mutation may have completed while this database response was suspended.
+    if (persistence && revisions.get(projectId) !== revision) await refreshProject(projectId);
+    else {
+      apply();
+      revisions.set(projectId, (revisions.get(projectId) ?? 0) + 1);
+    }
+  };
 
   const persist = async (projectId: string, secret: StoredSecret) => {
     await persistence?.upsert({ projectId, ...secret });
@@ -78,6 +113,7 @@ export function createProjectSecretStore(opts: {
 
   return {
     async put(projectId, name, value) {
+      const revision = beginMutation(projectId, [name]);
       const secret: StoredSecret = {
         name,
         ...encrypt(value),
@@ -85,7 +121,9 @@ export function createProjectSecretStore(opts: {
         createdAt: new Date().toISOString()
       };
       await persist(projectId, secret);
-      bucketFor(projectId).set(name, secret);
+      await updateCache(projectId, revision, () => {
+        if (mayWrite(projectId, name, revision)) bucketFor(projectId).set(name, secret);
+      });
     },
     async listNames(projectId) {
       return [...bucketFor(projectId).keys()];
@@ -98,6 +136,7 @@ export function createProjectSecretStore(opts: {
       return env;
     },
     async rotate(projectId, name, value) {
+      const revision = beginMutation(projectId, [name]);
       const existing = bucketFor(projectId).get(name);
       const secret: StoredSecret = {
         name,
@@ -106,14 +145,24 @@ export function createProjectSecretStore(opts: {
         createdAt: existing?.createdAt ?? new Date().toISOString()
       };
       await persist(projectId, secret);
-      bucketFor(projectId).set(name, secret);
+      await updateCache(projectId, revision, () => {
+        if (mayWrite(projectId, name, revision)) bucketFor(projectId).set(name, secret);
+      });
     },
     async removeAll(projectId) {
+      const revision = beginMutation(projectId);
+      deletionRevisions.set(projectId, revision);
       await persistence?.deleteAll(projectId);
-      byProject.delete(projectId);
+      await updateCache(projectId, revision, () => {
+        for (const name of bucketFor(projectId).keys()) {
+          if ((nameRevisions.get(projectId)?.get(name) ?? 0) <= revision)
+            bucketFor(projectId).delete(name);
+        }
+      });
     },
     async replaceForProvisioning(projectId, env, attempt) {
       await attempt.assertOwned();
+      const revision = beginMutation(projectId, Object.keys(env));
       const rows = Object.entries(env).map(([name, value]) => ({
         projectId,
         name,
@@ -131,32 +180,66 @@ export function createProjectSecretStore(opts: {
       }
       // A delayed transaction response must not restore stale values in the local cache.
       await attempt.assertOwned();
-      for (const row of rows) bucketFor(projectId).set(row.name, row);
+      await updateCache(projectId, revision, () => {
+        for (const row of rows) {
+          if (mayWrite(projectId, row.name, revision)) bucketFor(projectId).set(row.name, row);
+        }
+      });
+    },
+    async adoptProvisioning(projectId, attempt) {
+      await attempt.assertOwned();
+      beginMutation(projectId);
+      if (persistence) {
+        if (!persistence.adoptProvisioning)
+          throw new Error("secret persistence does not support provisioning adoption");
+        if (
+          !(await persistence.adoptProvisioning(projectId, attempt.token, [
+            ...MANAGED_WORKSPACE_SECRET_NAMES
+          ]))
+        ) {
+          throw new Error("workspace provisioning lease is no longer owned");
+        }
+        await attempt.assertOwned();
+        await refreshProject(projectId);
+      } else {
+        for (const secret of bucketFor(projectId).values()) {
+          if (MANAGED_WORKSPACE_SECRET_NAMES.has(secret.name))
+            secret.provisioningToken = attempt.token;
+        }
+      }
     },
     async removeProvisioning(projectId, token) {
+      const revision = beginMutation(projectId);
       if (persistence) {
         if (!persistence.deleteProvisioning)
           throw new Error("secret persistence does not support provisioning attempts");
         await persistence.deleteProvisioning(projectId, token);
       }
-      const bucket = bucketFor(projectId);
-      for (const [name, secret] of bucket) {
-        if (secret.provisioningToken === token) bucket.delete(name);
-      }
+      await updateCache(projectId, revision, () => {
+        const bucket = bucketFor(projectId);
+        for (const [name, secret] of bucket) {
+          if (secret.provisioningToken === token) bucket.delete(name);
+        }
+      });
     },
     async hydrate() {
       if (!persistence) return;
+      const observed = new Map(revisions);
       try {
-        for (const row of await persistence.loadAll()) {
-          bucketFor(row.projectId).set(row.name, {
-            name: row.name,
-            ciphertext: row.ciphertext,
-            iv: row.iv,
-            authTag: row.authTag,
-            rotatedAt: row.rotatedAt,
-            createdAt: row.createdAt,
-            provisioningToken: row.provisioningToken
-          });
+        const rows = await persistence.loadAll();
+        const projects = new Set([...byProject.keys(), ...rows.map((row) => row.projectId)]);
+        for (const projectId of projects) {
+          if ((revisions.get(projectId) ?? 0) !== (observed.get(projectId) ?? 0)) {
+            await refreshProject(projectId);
+          } else {
+            byProject.set(
+              projectId,
+              new Map(
+                rows.filter((row) => row.projectId === projectId).map((row) => [row.name, row])
+              )
+            );
+            revisions.set(projectId, (revisions.get(projectId) ?? 0) + 1);
+          }
         }
       } catch (error) {
         console.warn("[secret-store] hydrate failed:", error);

@@ -33,6 +33,14 @@ export function createSecretSqlFixture(runtime) {
       });
       return result([], 1);
     }
+    if (sql.includes("UPDATE project_secrets SET provisioning_token")) {
+      assert.equal(inTransaction, true);
+      for (const row of rows.values()) {
+        if (row.project_id === params[0] && params[2].includes(row.name))
+          row.provisioning_token = params[1];
+      }
+      return result();
+    }
     if (sql.includes("DELETE FROM project_secrets")) {
       let count = 0;
       for (const [id, row] of rows) {

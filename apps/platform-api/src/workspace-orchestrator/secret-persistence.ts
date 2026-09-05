@@ -27,6 +27,7 @@ export interface SecretPersistence {
   deleteAll(projectId: string): Promise<void>;
   replaceProvisioning?(projectId: string, token: string, rows: StoredSecretRow[]): Promise<boolean>;
   deleteProvisioning?(projectId: string, token: string): Promise<void>;
+  adoptProvisioning?(projectId: string, token: string, names: string[]): Promise<boolean>;
 }
 
 export function createPgSecretPersistence(connectionString: string): SecretPersistence {
@@ -126,6 +127,23 @@ export function createSqlSecretPersistence(
             ]
           );
         }
+        return true;
+      });
+    },
+    async adoptProvisioning(projectId, token, names) {
+      await ensureTable();
+      return transaction(async (execute) => {
+        const lease = await execute(
+          `SELECT token FROM workspace_provisioning_leases
+           WHERE project_id = $1 AND token = $2 AND expires_at > clock_timestamp()
+           FOR UPDATE`,
+          [projectId, token]
+        );
+        if (lease.rowCount !== 1) return false;
+        await execute(
+          `UPDATE project_secrets SET provisioning_token = $2 WHERE project_id = $1 AND name = ANY($3::text[])`,
+          [projectId, token, names]
+        );
         return true;
       });
     },
