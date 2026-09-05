@@ -173,6 +173,7 @@ test("reconcile rechecks runtime ownership after acquiring cleanup ownership", a
   const fixture = createWarmPoolFixture({
     targetSize: 1,
     runtimeRecords: {
+      provisioningLeases: availableProjectLeases,
       async list() {
         reads += 1;
         return reads === 1
@@ -240,9 +241,14 @@ test("orphan cleanup preserves durable warm slots and removes unowned warm resou
 });
 
 test("reconcile emits one aggregate audit with no slot identifiers or credentials", async () => {
-  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  const runtime = createRuntimeLeaseFixture();
+  const fixture = createWarmPoolFixture({
+    targetSize: 1,
+    runtimeRecords: runtime.createStore()
+  });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  runtime.deleteProject("project-1");
   fixture.audits.length = 0;
   await fixture.pool.reconcile();
   assert.deepEqual(fixture.audits, [
@@ -307,9 +313,14 @@ test("reconcile preserves a durable healthy ready slot and checks its health", a
 });
 
 test("reconcile cleans an abandoned claim and does not refill until explicitly requested", async () => {
-  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  const runtime = createRuntimeLeaseFixture();
+  const fixture = createWarmPoolFixture({
+    targetSize: 1,
+    runtimeRecords: runtime.createStore()
+  });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  runtime.deleteProject("project-1");
   await fixture.createPool().reconcile();
   assert.equal((await fixture.store.list()).length, 0);
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
@@ -324,6 +335,7 @@ test("reconcile retires a claim owned by a durable runtime without physical clea
   const fixture = createWarmPoolFixture({
     targetSize: 1,
     runtimeRecords: {
+      provisioningLeases: availableProjectLeases,
       async list() {
         return [{ record: { projectId: "project-1", resourceKey: "warm-resource-1" } }];
       }
@@ -339,3 +351,13 @@ test("reconcile retires a claim owned by a durable runtime without physical clea
   assert.equal(fixture.docker.state.containers.length, 1);
   assert.equal(fixture.docker.state.volumes.length, 1);
 });
+
+const availableProjectLeases = {
+  async acquire() {
+    return "acquired";
+  },
+  async renew() {
+    return true;
+  },
+  async release() {}
+};

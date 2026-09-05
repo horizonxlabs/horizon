@@ -4,13 +4,22 @@ import type {
 } from "./workspace-runtime-repository";
 
 export interface WorkspaceProvisioningLeaseStore {
-  acquire(projectId: string, token: string, ttlMs: number): Promise<boolean>;
+  acquire(
+    projectId: string,
+    token: string,
+    ttlMs: number
+  ): Promise<WorkspaceProvisioningLeaseAcquisition>;
   renew(projectId: string, token: string, ttlMs: number): Promise<boolean>;
   save(snapshot: WorkspaceRuntimeSnapshot, token: string, ttlMs: number): Promise<boolean>;
   remove(projectId: string, token: string, ttlMs: number): Promise<boolean>;
   release(projectId: string, token: string): Promise<void>;
   isActive(projectId: string): Promise<boolean>;
 }
+
+export type WorkspaceProvisioningLeaseAcquisition =
+  | "acquired"
+  | "contended"
+  | "missing_project";
 
 interface LeaseTransactionClient {
   workspaceRuntimeRecord: WorkspaceRuntimePersistenceClient["workspaceRuntimeRecord"];
@@ -44,8 +53,19 @@ SELECT EXISTS (
 export class WorkspaceProvisioningLeaseRepository implements WorkspaceProvisioningLeaseStore {
   constructor(private readonly client: WorkspaceProvisioningLeaseClient) {}
 
-  async acquire(projectId: string, token: string, ttlMs: number): Promise<boolean> {
-    return (await this.client.$executeRawUnsafe(ACQUIRE_SQL, projectId, token, ttlMs)) === 1;
+  async acquire(
+    projectId: string,
+    token: string,
+    ttlMs: number
+  ): Promise<WorkspaceProvisioningLeaseAcquisition> {
+    try {
+      return (await this.client.$executeRawUnsafe(ACQUIRE_SQL, projectId, token, ttlMs)) === 1
+        ? "acquired"
+        : "contended";
+    } catch (error) {
+      if (isMissingProjectForeignKeyError(error)) return "missing_project";
+      throw error;
+    }
   }
 
   async renew(projectId: string, token: string, ttlMs: number): Promise<boolean> {
@@ -99,4 +119,26 @@ export class WorkspaceProvisioningLeaseRepository implements WorkspaceProvisioni
     );
     return result?.active ?? false;
   }
+}
+
+function isMissingProjectForeignKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    constraint?: unknown;
+    message?: unknown;
+    meta?: { code?: unknown; constraint?: unknown; message?: unknown };
+  };
+  const directForeignKey = candidate.code === "23503";
+  const prismaRawForeignKey = candidate.code === "P2010" && candidate.meta?.code === "23503";
+  if (!directForeignKey && !prismaRawForeignKey) return false;
+  const details = [
+    candidate.constraint,
+    candidate.message,
+    candidate.meta?.constraint,
+    candidate.meta?.message
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  return details.includes("workspace_provisioning_leases_project_id_fkey");
 }

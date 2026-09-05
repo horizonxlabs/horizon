@@ -25,9 +25,9 @@ function localLeases(
   const tokens = new Map<string, { token: string; expiresAt: number }>();
   const leases: WorkspaceProvisioningLeaseStore = {
     async acquire(projectId, token, ttlMs) {
-      if ((tokens.get(projectId)?.expiresAt ?? 0) > Date.now()) return false;
+      if ((tokens.get(projectId)?.expiresAt ?? 0) > Date.now()) return "contended";
       tokens.set(projectId, { token, expiresAt: Date.now() + ttlMs });
-      return true;
+      return "acquired";
     },
     async renew(projectId, token, ttlMs) {
       const lease = tokens.get(projectId);
@@ -95,8 +95,13 @@ export function createProvisioningLeaseCoordinator(
       const store = getStore();
       const leases = store?.provisioningLeases ?? localLeases(store ?? memoryScope, store);
       const token = randomUUID();
-      while (!(await leases.acquire(projectId, token, LEASE_TTL_MS))) {
+      let acquisition = await leases.acquire(projectId, token, LEASE_TTL_MS);
+      while (acquisition === "contended") {
         await new Promise((resolve) => setTimeout(resolve, 50));
+        acquisition = await leases.acquire(projectId, token, LEASE_TTL_MS);
+      }
+      if (acquisition === "missing_project") {
+        throw new Error(`workspace project '${projectId}' no longer exists`);
       }
       const owner = { token, leases, lost: false };
       active.set(projectId, owner);

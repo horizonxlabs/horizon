@@ -48,16 +48,20 @@ export async function reconcileWorkspaceWarmPool(options: {
     const projectLeases = slot.claimProjectId
       ? options.deps.runtimeRecords?.provisioningLeases
       : undefined;
-    if (
-      slot.claimProjectId &&
-      projectLeases &&
-      !(await projectLeases.acquire(slot.claimProjectId, ownerId, options.operationLeaseMs))
-    ) {
+    if (slot.claimProjectId && !projectLeases) {
+      totals.preserved += 1;
+      continue;
+    }
+    const projectLeaseAcquisition =
+      slot.claimProjectId && projectLeases
+        ? await projectLeases.acquire(slot.claimProjectId, ownerId, options.operationLeaseMs)
+        : undefined;
+    if (projectLeaseAcquisition === "contended") {
       totals.preserved += 1;
       continue;
     }
     const projectOwnership =
-      slot.claimProjectId && projectLeases
+      slot.claimProjectId && projectLeases && projectLeaseAcquisition === "acquired"
         ? maintainWorkspaceCleanupProjectLease({
             leases: projectLeases,
             projectId: slot.claimProjectId,
@@ -130,7 +134,7 @@ export async function reconcileWorkspaceWarmPool(options: {
       );
     } finally {
       projectOwnership?.stop();
-      if (slot.claimProjectId && projectLeases) {
+      if (slot.claimProjectId && projectLeases && projectLeaseAcquisition === "acquired") {
         await projectLeases.release(slot.claimProjectId, ownerId).catch(() => undefined);
       }
     }

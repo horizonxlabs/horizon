@@ -91,7 +91,7 @@ test("a cold provisioner that loses its lease cannot roll back resources or secr
   fixture.advance(300_000);
   assert.equal(
     await store.provisioningLeases.acquire("prj_stale_cold", "successor", 300_000),
-    true
+    "acquired"
   );
   const winner = {
     ...(await store.list())[0],

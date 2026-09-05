@@ -42,17 +42,17 @@ test("a project lease acquired at the cleanup boundary prevents claimed resource
   await fixture.pool.claim("project-1");
   const leases = runtimeStore.provisioningLeases;
   const acquire = leases.acquire.bind(leases);
-  let projectLeaseWon = false;
+  let projectLeaseOutcome = "contended";
   leases.acquire = async (projectId, token, ttlMs) => {
     if (token === "cleanup-owner") {
-      projectLeaseWon = await acquire(projectId, "project-owner", ttlMs);
+      projectLeaseOutcome = await acquire(projectId, "project-owner", ttlMs);
     }
     return acquire(projectId, token, ttlMs);
   };
 
   await fixture.createPool().reconcile();
 
-  assert.equal(projectLeaseWon, true);
+  assert.equal(projectLeaseOutcome, "acquired");
   assert.equal((await fixture.store.list())[0].state, "claiming");
   assert.equal(fixture.docker.state.containers.length, 1);
   assert.equal(fixture.docker.state.volumes.length, 1);
@@ -70,9 +70,9 @@ test("a claiming cleanup lease excludes project provisioning at the slot-cleanup
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
   const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
-  let projectLeaseWon;
+  let projectLeaseOutcome;
   fixture.store.acquireCleanup = async (...args) => {
-    projectLeaseWon = await runtimeStore.provisioningLeases.acquire(
+    projectLeaseOutcome = await runtimeStore.provisioningLeases.acquire(
       "project-1",
       "project-owner",
       300_000
@@ -82,7 +82,7 @@ test("a claiming cleanup lease excludes project provisioning at the slot-cleanup
 
   await fixture.createPool().reconcile();
 
-  assert.equal(projectLeaseWon, false);
+  assert.equal(projectLeaseOutcome, "contended");
   assert.deepEqual(await fixture.store.list(), []);
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
   assert.equal(fixture.docker.state.containers.length, 0);
@@ -124,9 +124,46 @@ test("claiming cleanup renews its project lease throughout destructive work", as
 
   assert.equal(
     await runtimeStore.provisioningLeases.acquire("project-1", "project-owner", 30),
-    false
+    "contended"
   );
   releaseCleanup();
   await reconciling;
   assert.deepEqual(await fixture.store.list(), []);
+});
+
+test("a deleted project's stale claim cannot abort other cleanup or refill", async () => {
+  const runtime = createRuntimeLeaseFixture();
+  const runtimeStore = runtime.createStore();
+  const fixture = createWarmPoolFixture({
+    targetSize: 2,
+    runtimeRecords: runtimeStore
+  });
+  await fixture.pool.ensureCapacity();
+  await fixture.pool.claim("deleted-project");
+  runtime.deleteProject("deleted-project");
+  fixture.previewExitCode = 1;
+
+  await fixture.createPool().reconcile();
+
+  assert.deepEqual(await fixture.store.list(), []);
+  assert.deepEqual(fixture.releasedSchemas.sort(), ["warm-resource-1", "warm-resource-2"]);
+  fixture.previewExitCode = 0;
+  await fixture.pool.ensureCapacity();
+  assert.deepEqual(
+    (await fixture.store.list()).map((slot) => slot.state),
+    ["ready", "ready"]
+  );
+  assert.equal(fixture.prepareAttempts, 4);
+});
+
+test("a claimed slot is preserved when project absence cannot be established durably", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  await fixture.pool.ensureCapacity();
+  await fixture.pool.claim("unknown-project");
+
+  await fixture.createPool().reconcile();
+
+  assert.equal((await fixture.store.list())[0].state, "claiming");
+  assert.equal(fixture.docker.state.containers.length, 1);
+  assert.deepEqual(fixture.releasedSchemas, []);
 });

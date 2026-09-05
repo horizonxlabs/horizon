@@ -27,13 +27,13 @@ test("runtime provisioning leases atomically exclude another replica until expir
     first.acquire("prj_shared", "first", 1000),
     second.acquire("prj_shared", "second", 1000)
   ]);
-  assert.deepEqual(results, [true, false]);
+  assert.deepEqual(results, ["acquired", "contended"]);
   assert.equal(await first.isActive("prj_shared"), true);
   fixture.advance(999);
-  assert.equal(await second.acquire("prj_shared", "second", 1000), false);
+  assert.equal(await second.acquire("prj_shared", "second", 1000), "contended");
   fixture.advance(1);
   assert.equal(await first.isActive("prj_shared"), false);
-  assert.equal(await second.acquire("prj_shared", "second", 1000), true);
+  assert.equal(await second.acquire("prj_shared", "second", 1000), "acquired");
   assert.equal(await first.renew("prj_shared", "first", 1000), false);
 });
 
@@ -56,8 +56,34 @@ test("expired owners cannot save or roll back the durable winner and cannot rele
   );
   assert.equal(await leases.remove("prj_shared", "old", 1000), false);
   await leases.release("prj_shared", "old");
-  assert.equal(await leases.acquire("prj_shared", "intruder", 1000), false);
+  assert.equal(await leases.acquire("prj_shared", "intruder", 1000), "contended");
   assert.equal((await store.list())[0].record.resourceKey, "warm-resource-1");
   assert.equal(await leases.remove("prj_shared", "winner", 1000), true);
   assert.deepEqual(await store.list(), []);
+});
+
+test("lease acquisition reports a definitively deleted project without hiding other FK errors", async () => {
+  const fixture = createRuntimeLeaseFixture();
+  const leases = fixture.createStore().provisioningLeases;
+  fixture.deleteProject("deleted-project");
+
+  assert.equal(
+    await leases.acquire("deleted-project", "cleanup-owner", 300_000),
+    "missing_project"
+  );
+
+  const execute = fixture.client.$executeRawUnsafe.bind(fixture.client);
+  fixture.client.$executeRawUnsafe = async (sql, ...parameters) => {
+    if (sql.trimStart().startsWith("INSERT INTO")) {
+      throw Object.assign(new Error("different foreign key failed"), {
+        code: "23503",
+        constraint: "some_other_constraint"
+      });
+    }
+    return execute(sql, ...parameters);
+  };
+  await assert.rejects(
+    leases.acquire("existing-project", "cleanup-owner", 300_000),
+    /different foreign key failed/
+  );
 });

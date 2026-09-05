@@ -203,7 +203,7 @@ test("a handoff that loses its lease cannot remove the new owner's secrets or co
     persistence.advance(5 * 60_000);
     assert.equal(
       await store.provisioningLeases.acquire("prj_takeover", "new-owner", 300_000),
-      true
+      "acquired"
     );
     await fixture.deps.secrets.put("prj_takeover", "LLM_GATEWAY_KEY", "new-owner-secret");
     await store.provisioningLeases.save(
