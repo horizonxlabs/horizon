@@ -1,15 +1,23 @@
 import type {
   WarmWorkspaceSlot,
   WarmWorkspaceSlotState,
+  WarmSlotOperationLease,
   WorkspaceWarmSlotStore
 } from "../workspace-orchestrator/warm-pool-types";
 
 type WarmSlotRecord = Omit<
   WarmWorkspaceSlot,
-  "state" | "retryAfter" | "readyAt" | "claimedAt" | "createdAt" | "updatedAt"
+  | "state"
+  | "retryAfter"
+  | "operationExpiresAt"
+  | "readyAt"
+  | "claimedAt"
+  | "createdAt"
+  | "updatedAt"
 > & {
   state: string;
   retryAfter: Date | string | null;
+  operationExpiresAt: Date | string | null;
   readyAt: Date | string | null;
   claimedAt: Date | string | null;
   createdAt: Date | string;
@@ -20,40 +28,27 @@ type WarmSlotModel = {
   findMany(args: { orderBy: { createdAt: "asc" } }): Promise<WarmSlotRecord[]>;
   count(args: { where: { state: { in: Array<"preparing" | "ready"> } } }): Promise<number>;
   create(args: {
-    data: { id: string; resourceKey: string; state: "preparing" };
+    data: {
+      id: string;
+      resourceKey: string;
+      state: "preparing";
+      operationOwner?: string;
+      operationExpiresAt?: Date;
+    };
   }): Promise<WarmSlotRecord>;
-  update(args: {
-    where: { id: string };
-    data:
-      | {
-          state: "ready";
-          containerId: string;
-          llmGatewayKeyId: string;
-          secretPayload: string;
-          readyAt: Date;
-          lastError: null;
-          retryAfter: null;
-        }
-      | {
-          state: "failed";
-          lastError: string;
-          retryAfter: Date;
-          failureCount: number;
-        }
-      | {
-          llmGatewayKeyId: string;
-          secretPayload: string;
-        }
-      | {
-          containerId: string;
-        };
-  }): Promise<WarmSlotRecord>;
+  update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<WarmSlotRecord>;
   updateMany(args: {
-    where: { id: string; state: "ready" };
-    data: { state: "claiming"; claimProjectId: string; claimedAt: Date };
+    where: {
+      id: string;
+      state?: WarmWorkspaceSlotState;
+      operationOwner?: string;
+      operationExpiresAt?: { gt?: Date };
+      OR?: Array<{ operationExpiresAt: null } | { operationExpiresAt: { lte: Date } }>;
+    };
+    data: Record<string, unknown>;
   }): Promise<{ count: number }>;
   findUnique(args: { where: { id: string } }): Promise<WarmSlotRecord | null>;
-  deleteMany(args: { where: { id: string } }): Promise<{ count: number }>;
+  deleteMany(args: { where: { id: string; operationOwner?: string } }): Promise<{ count: number }>;
 };
 
 type WarmSlotTransactionClient = {
@@ -71,6 +66,7 @@ const CLAIM_READY_SLOT_SQL = `
 SELECT "id"
 FROM "workspace_warm_slots"
 WHERE "state" = 'ready'
+  AND ("operation_expires_at" IS NULL OR "operation_expires_at" <= CURRENT_TIMESTAMP)
 ORDER BY "created_at" ASC
 FOR UPDATE SKIP LOCKED
 LIMIT 1
@@ -90,16 +86,29 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
   }
 
   async createPreparing(
-    slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">
+    slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">,
+    lease?: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot> {
     return toWarmWorkspaceSlot(
-      await this.client.workspaceWarmSlot.create({ data: { ...slot, state: "preparing" } })
+      await this.client.workspaceWarmSlot.create({
+        data: {
+          ...slot,
+          state: "preparing",
+          ...(lease
+            ? {
+                operationOwner: lease.ownerId,
+                operationExpiresAt: new Date(lease.expiresAt)
+              }
+            : {})
+        }
+      })
     );
   }
 
   async reservePreparing(
     targetSize: number,
-    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>
+    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>,
+    lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot[]> {
     return this.client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(RESERVE_CAPACITY_LOCK_SQL);
@@ -112,7 +121,12 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
         reserved.push(
           toWarmWorkspaceSlot(
             await transaction.workspaceWarmSlot.create({
-              data: { ...candidate, state: "preparing" }
+              data: {
+                ...candidate,
+                state: "preparing",
+                operationOwner: lease.ownerId,
+                operationExpiresAt: new Date(lease.expiresAt)
+              }
             })
           )
         );
@@ -123,39 +137,93 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
 
   async recordPreparedResources(
     id: string,
-    patch: { llmGatewayKeyId: string; secretPayload: string }
-  ): Promise<void> {
-    await this.client.workspaceWarmSlot.update({ where: { id }, data: patch });
+    patch: { llmGatewayKeyId: string; secretPayload: string },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean> {
+    return this.updateOwned(id, patch, lease);
   }
 
-  async recordPreparingContainer(id: string, containerId: string): Promise<void> {
-    await this.client.workspaceWarmSlot.update({ where: { id }, data: { containerId } });
+  async recordPreparingContainer(
+    id: string,
+    containerId: string,
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean> {
+    return this.updateOwned(id, { containerId }, lease);
   }
 
   async markReady(
     id: string,
-    patch: { containerId: string; llmGatewayKeyId: string; secretPayload: string }
-  ): Promise<void> {
-    await this.client.workspaceWarmSlot.update({
-      where: { id },
-      data: {
+    patch: { containerId: string; llmGatewayKeyId: string; secretPayload: string },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean> {
+    return this.updateOwned(
+      id,
+      {
         state: "ready",
         ...patch,
         readyAt: new Date(),
         lastError: null,
-        retryAfter: null
-      }
-    });
+        retryAfter: null,
+        operationOwner: null,
+        operationExpiresAt: null
+      },
+      lease,
+      false
+    );
   }
 
   async markFailed(
     id: string,
-    patch: { lastError: string; retryAfter: string; failureCount: number }
-  ): Promise<void> {
-    await this.client.workspaceWarmSlot.update({
-      where: { id },
-      data: { ...patch, state: "failed", retryAfter: new Date(patch.retryAfter) }
+    patch: { lastError: string; retryAfter: string; failureCount: number },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean> {
+    return this.updateOwned(
+      id,
+      {
+        ...patch,
+        state: "failed",
+        retryAfter: new Date(patch.retryAfter),
+        ...(lease ? { operationExpiresAt: new Date(patch.retryAfter) } : {})
+      },
+      lease,
+      false
+    );
+  }
+
+  async renewOperation(id: string, lease: WarmSlotOperationLease): Promise<boolean> {
+    return (
+      (
+        await this.client.workspaceWarmSlot.updateMany({
+          where: {
+            id,
+            operationOwner: lease.ownerId,
+            operationExpiresAt: { gt: new Date(lease.now) }
+          },
+          data: { operationExpiresAt: new Date(lease.expiresAt) }
+        })
+      ).count === 1
+    );
+  }
+
+  async acquireCleanup(
+    id: string,
+    expectedState: WarmWorkspaceSlotState,
+    lease: WarmSlotOperationLease
+  ): Promise<WarmWorkspaceSlot | null> {
+    const acquired = await this.client.workspaceWarmSlot.updateMany({
+      where: {
+        id,
+        state: expectedState,
+        OR: [{ operationExpiresAt: null }, { operationExpiresAt: { lte: new Date(lease.now) } }]
+      },
+      data: {
+        operationOwner: lease.ownerId,
+        operationExpiresAt: new Date(lease.expiresAt)
+      }
     });
+    if (acquired.count !== 1) return null;
+    const slot = await this.client.workspaceWarmSlot.findUnique({ where: { id } });
+    return slot ? toWarmWorkspaceSlot(slot) : null;
   }
 
   async claim(projectId: string): Promise<WarmWorkspaceSlot | null> {
@@ -167,7 +235,11 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
 
       const claimedAt = new Date();
       const claimed = await transaction.workspaceWarmSlot.updateMany({
-        where: { id: candidate.id, state: "ready" },
+        where: {
+          id: candidate.id,
+          state: "ready",
+          OR: [{ operationExpiresAt: null }, { operationExpiresAt: { lte: claimedAt } }]
+        },
         data: { state: "claiming", claimProjectId: projectId, claimedAt }
       });
       if (claimed.count !== 1) return null;
@@ -179,8 +251,41 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     });
   }
 
-  async remove(id: string): Promise<void> {
-    await this.client.workspaceWarmSlot.deleteMany({ where: { id } });
+  async remove(id: string, ownerId?: string): Promise<boolean> {
+    return (
+      (
+        await this.client.workspaceWarmSlot.deleteMany({
+          where: { id, ...(ownerId ? { operationOwner: ownerId } : {}) }
+        })
+      ).count === 1
+    );
+  }
+
+  private async updateOwned(
+    id: string,
+    data: Record<string, unknown>,
+    lease?: WarmSlotOperationLease,
+    renew = true
+  ): Promise<boolean> {
+    if (!lease) {
+      await this.client.workspaceWarmSlot.update({ where: { id }, data });
+      return true;
+    }
+    return (
+      (
+        await this.client.workspaceWarmSlot.updateMany({
+          where: {
+            id,
+            operationOwner: lease.ownerId,
+            operationExpiresAt: { gt: new Date(lease.now) }
+          },
+          data: {
+            ...data,
+            ...(renew ? { operationExpiresAt: new Date(lease.expiresAt) } : {})
+          }
+        })
+      ).count === 1
+    );
   }
 }
 
@@ -199,6 +304,7 @@ function toWarmWorkspaceSlot(record: WarmSlotRecord): WarmWorkspaceSlot {
     ...record,
     state: record.state as WarmWorkspaceSlotState,
     retryAfter: toOptionalIso(record.retryAfter),
+    operationExpiresAt: toOptionalIso(record.operationExpiresAt),
     readyAt: toOptionalIso(record.readyAt),
     claimedAt: toOptionalIso(record.claimedAt),
     createdAt: toIso(record.createdAt),

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
+import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
 import {
   cleanupOrphanWorkspaceResources,
   workspaceWarmResourceLabels
@@ -29,7 +30,7 @@ test("reconcile persists a discovered container owner for a later refill cleanup
   assert.equal((await fixture.store.list()).length, 0);
 });
 
-test("reconciliation waits for in-process preparation before deciding a slot is stale", async () => {
+test("a second manager cannot reconcile a preparation with a live durable owner", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   const exec = fixture.docker.execInContainer;
   let releaseHealth;
@@ -42,12 +43,154 @@ test("reconciliation waits for in-process preparation before deciding a slot is 
   };
   const preparing = fixture.pool.ensureCapacity();
   await new Promise(setImmediate);
-  const reconciling = fixture.pool.reconcile();
-  await new Promise(setImmediate);
-  releaseHealth();
-  await Promise.all([preparing, reconciling]);
+  await fixture.createPool().reconcile();
+  assert.equal(fixture.docker.state.containers.length, 1);
+  assert.equal(fixture.docker.state.volumes.length, 1);
   assert.deepEqual(fixture.releasedSchemas, []);
+  releaseHealth();
+  await preparing;
   assert.equal((await fixture.store.list())[0].state, "ready");
+});
+
+test("preparation renews its durable operation owner while readiness is pending", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const fixture = createWarmPoolFixture({ targetSize: 1, operationLeaseMs: 30 });
+  const exec = fixture.docker.execInContainer;
+  let releaseHealth;
+  const healthGate = new Promise((resolve) => {
+    releaseHealth = resolve;
+  });
+  fixture.docker.execInContainer = async (...args) => {
+    await healthGate;
+    return exec(...args);
+  };
+
+  const preparing = fixture.pool.ensureCapacity();
+  await new Promise(setImmediate);
+  fixture.setNow(new Date("2026-09-05T00:00:00.020Z"));
+  t.mock.timers.tick(10);
+  await new Promise(setImmediate);
+
+  const [renewed] = await fixture.store.list();
+  assert.equal(renewed.operationExpiresAt, "2026-09-05T00:00:00.050Z");
+  releaseHealth();
+  await preparing;
+  assert.equal((await fixture.store.list())[0].state, "ready");
+});
+
+test("a second manager preserves a claim protected by a live project lease", async () => {
+  const runtime = createRuntimeLeaseFixture();
+  const runtimeStore = runtime.createStore();
+  const fixture = createWarmPoolFixture({ targetSize: 1, runtimeRecords: runtimeStore });
+  await fixture.pool.ensureCapacity();
+  await runtimeStore.provisioningLeases.acquire("project-1", "live-owner", 300_000);
+  await fixture.pool.claim("project-1");
+
+  await fixture.createPool().reconcile();
+
+  const [slot] = await fixture.store.list();
+  assert.equal(slot.state, "claiming");
+  assert.equal(fixture.docker.state.containers.length, 1);
+  assert.equal(fixture.docker.state.volumes.length, 1);
+  assert.deepEqual(fixture.releasedSchemas, []);
+});
+
+test("a claim that wins during a ready health check fences reconciliation cleanup", async () => {
+  const runtime = createRuntimeLeaseFixture();
+  const runtimeStore = runtime.createStore();
+  const fixture = createWarmPoolFixture({ targetSize: 1, runtimeRecords: runtimeStore });
+  await fixture.pool.ensureCapacity();
+  let releaseHealth;
+  const healthGate = new Promise((resolve) => {
+    releaseHealth = resolve;
+  });
+  fixture.docker.execInContainer = async () => {
+    await healthGate;
+    return { stdout: "", stderr: "unhealthy", exitCode: 1 };
+  };
+  const reconciling = fixture.createPool().reconcile();
+  await new Promise(setImmediate);
+  await runtimeStore.provisioningLeases.acquire("project-1", "live-owner", 300_000);
+  assert.ok(await fixture.pool.claim("project-1"));
+  releaseHealth();
+
+  await reconciling;
+
+  const [slot] = await fixture.store.list();
+  assert.equal(slot.state, "claiming");
+  assert.equal(fixture.docker.state.containers.length, 1);
+  assert.deepEqual(fixture.releasedSchemas, []);
+});
+
+test("expired claim ownership allows exactly one reconciler to clean", async () => {
+  const runtime = createRuntimeLeaseFixture();
+  const runtimeStore = runtime.createStore();
+  const fixture = createWarmPoolFixture({ targetSize: 1, runtimeRecords: runtimeStore });
+  await fixture.pool.ensureCapacity();
+  await runtimeStore.provisioningLeases.acquire("project-1", "crashed-owner", 1_000);
+  await fixture.pool.claim("project-1");
+  runtime.advance(1_001);
+
+  await Promise.all([fixture.pool.reconcile(), fixture.createPool().reconcile()]);
+
+  assert.deepEqual(await fixture.store.list(), []);
+  assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
+  assert.deepEqual(fixture.releasedBuckets, ["warm-resource-1"]);
+  assert.deepEqual(fixture.revokedKeys, ["key-1"]);
+});
+
+test("expired preparation ownership allows exactly one reconciler to clean", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 0 });
+  await fixture.store.createPreparing(
+    { id: "slot-1", resourceKey: "warm-stale" },
+    {
+      ownerId: "crashed-preparer",
+      now: "2026-09-04T23:54:59.000Z",
+      expiresAt: "2026-09-05T00:00:00.000Z"
+    }
+  );
+  await fixture.docker.ensureVolume(
+    "evcp-ws-warm-stale-data",
+    workspaceWarmResourceLabels("slot-1")
+  );
+  await fixture.docker.createContainer({
+    name: "evcp-ws-warm-stale",
+    env: [],
+    labels: workspaceWarmResourceLabels("slot-1")
+  });
+
+  await Promise.all([fixture.pool.reconcile(), fixture.createPool().reconcile()]);
+
+  assert.deepEqual(await fixture.store.list(), []);
+  assert.deepEqual(fixture.releasedSchemas, ["warm-stale"]);
+  assert.deepEqual(fixture.releasedBuckets, ["warm-stale"]);
+  assert.equal(fixture.docker.state.containers.length, 0);
+  assert.equal(fixture.docker.state.volumes.length, 0);
+});
+
+test("reconcile rechecks runtime ownership after acquiring cleanup ownership", async () => {
+  let reads = 0;
+  const fixture = createWarmPoolFixture({
+    targetSize: 1,
+    runtimeRecords: {
+      async list() {
+        reads += 1;
+        return reads === 1
+          ? []
+          : [{ record: { projectId: "project-1", resourceKey: "warm-resource-1" } }];
+      }
+    }
+  });
+  await fixture.pool.ensureCapacity();
+  await fixture.pool.claim("project-1");
+
+  await fixture.createPool().reconcile();
+
+  assert.equal(reads, 2);
+  assert.deepEqual(await fixture.store.list(), []);
+  assert.deepEqual(fixture.releasedSchemas, []);
+  assert.equal(fixture.docker.state.containers.length, 1);
+  assert.equal(fixture.docker.state.volumes.length, 1);
 });
 
 test("concurrent reconciliation calls collapse into one pass", async () => {
@@ -147,6 +290,7 @@ test("reconcile quarantines cleanup failures and retries them on the next pass",
   assert.equal(failed.state, "failed");
   assert.equal(failed.lastError, "cleanup_error");
   assert.equal(failed.resourceKey, "warm-resource-1");
+  fixture.setNow(new Date(failed.retryAfter));
   await fixture.createPool().reconcile();
   assert.equal((await fixture.store.list()).length, 0);
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);

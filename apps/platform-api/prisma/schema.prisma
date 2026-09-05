@@ -806,6 +806,8 @@ model WorkspaceWarmSlot {
   llmGatewayKeyId String?   @map("llm_gateway_key_id")
   secretPayload   String?   @map("secret_payload")
   claimProjectId  String?   @unique @map("claim_project_id")
+  operationOwner  String?   @map("operation_owner")
+  operationExpiresAt DateTime? @map("operation_expires_at")
   lastError       String?   @map("last_error")
   retryAfter      DateTime? @map("retry_after")
   failureCount    Int       @default(0) @map("failure_count")
@@ -815,6 +817,7 @@ model WorkspaceWarmSlot {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@index([state, createdAt])
+  @@index([operationExpiresAt])
   @@map("workspace_warm_slots")
 }
 

@@ -21,6 +21,7 @@ type RuntimeRecord = WorkspaceContainerRecord & { llmGatewayKeyId?: string | nul
 
 export interface WorkspaceRuntimePersistenceClient {
   $executeRawUnsafe?: WorkspaceProvisioningLeaseClient["$executeRawUnsafe"];
+  $queryRawUnsafe?: WorkspaceProvisioningLeaseClient["$queryRawUnsafe"];
   $transaction?: WorkspaceProvisioningLeaseClient["$transaction"];
   workspaceRuntimeRecord: {
     findMany(args: { orderBy: { updatedAt: "asc" } }): Promise<RuntimeRecord[]>;
@@ -37,7 +38,7 @@ export class WorkspaceRuntimeRepositoryBackedStore implements WorkspaceRuntimeRe
   readonly provisioningLeases?: WorkspaceProvisioningLeaseStore;
 
   constructor(private readonly client: WorkspaceRuntimePersistenceClient) {
-    if (client.$executeRawUnsafe && client.$transaction) {
+    if (client.$executeRawUnsafe && client.$queryRawUnsafe && client.$transaction) {
       this.provisioningLeases = new WorkspaceProvisioningLeaseRepository(
         client as WorkspaceProvisioningLeaseClient
       );

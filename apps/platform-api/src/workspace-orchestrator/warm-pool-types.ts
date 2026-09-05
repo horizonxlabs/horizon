@@ -8,6 +8,8 @@ export interface WarmWorkspaceSlot {
   llmGatewayKeyId: string | null;
   secretPayload: string | null;
   claimProjectId: string | null;
+  operationOwner: string | null;
+  operationExpiresAt: string | null;
   lastError: string | null;
   retryAfter: string | null;
   failureCount: number;
@@ -15,6 +17,12 @@ export interface WarmWorkspaceSlot {
   claimedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WarmSlotOperationLease {
+  ownerId: string;
+  now: string;
+  expiresAt: string;
 }
 
 export interface WarmWorkspaceAllocation {
@@ -27,24 +35,41 @@ export interface WarmWorkspaceAllocation {
 
 export interface WorkspaceWarmSlotStore {
   list(): Promise<WarmWorkspaceSlot[]>;
-  createPreparing(slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">): Promise<WarmWorkspaceSlot>;
+  createPreparing(
+    slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">,
+    lease?: WarmSlotOperationLease
+  ): Promise<WarmWorkspaceSlot>;
   reservePreparing(
     targetSize: number,
-    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>
+    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>,
+    lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot[]>;
   recordPreparedResources(
     id: string,
-    patch: { llmGatewayKeyId: string; secretPayload: string }
-  ): Promise<void>;
-  recordPreparingContainer(id: string, containerId: string): Promise<void>;
+    patch: { llmGatewayKeyId: string; secretPayload: string },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean>;
+  recordPreparingContainer(
+    id: string,
+    containerId: string,
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean>;
   markReady(
     id: string,
-    patch: { containerId: string; llmGatewayKeyId: string; secretPayload: string }
-  ): Promise<void>;
+    patch: { containerId: string; llmGatewayKeyId: string; secretPayload: string },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean>;
   markFailed(
     id: string,
-    patch: { lastError: string; retryAfter: string; failureCount: number }
-  ): Promise<void>;
+    patch: { lastError: string; retryAfter: string; failureCount: number },
+    lease?: WarmSlotOperationLease
+  ): Promise<boolean>;
+  renewOperation(id: string, lease: WarmSlotOperationLease): Promise<boolean>;
+  acquireCleanup(
+    id: string,
+    expectedState: WarmWorkspaceSlotState,
+    lease: WarmSlotOperationLease
+  ): Promise<WarmWorkspaceSlot | null>;
   claim(projectId: string): Promise<WarmWorkspaceSlot | null>;
-  remove(id: string): Promise<void>;
+  remove(id: string, ownerId?: string): Promise<boolean>;
 }

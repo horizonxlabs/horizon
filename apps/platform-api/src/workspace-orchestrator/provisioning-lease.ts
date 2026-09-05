@@ -47,6 +47,9 @@ function localLeases(
     },
     async release(projectId, token) {
       if (tokens.get(projectId)?.token === token) tokens.delete(projectId);
+    },
+    async isActive(projectId) {
+      return (tokens.get(projectId)?.expiresAt ?? 0) > Date.now();
     }
   };
   localLeaseStores.set(scope, leases);

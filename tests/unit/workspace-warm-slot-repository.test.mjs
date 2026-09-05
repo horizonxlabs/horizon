@@ -25,6 +25,8 @@ class DeterministicWarmSlotPersistenceClient {
         llmGatewayKeyId: null,
         secretPayload: null,
         claimProjectId: null,
+        operationOwner: data.operationOwner ?? null,
+        operationExpiresAt: data.operationExpiresAt ?? null,
         lastError: null,
         retryAfter: null,
         failureCount: 0,
@@ -44,12 +46,19 @@ class DeterministicWarmSlotPersistenceClient {
     },
     updateMany: async ({ where, data }) => {
       const row = this.rows.get(where.id);
-      if (!row || row.state !== where.state) return { count: 0 };
+      if (!matchesWhere(row, where)) return { count: 0 };
       Object.assign(row, data, { updatedAt: new Date("2026-09-05T00:00:02.000Z") });
       return { count: 1 };
     },
     findUnique: async ({ where }) => cloneRow(this.rows.get(where.id) ?? null),
-    deleteMany: async ({ where }) => ({ count: this.rows.delete(where.id) ? 1 : 0 })
+    deleteMany: async ({ where }) => {
+      const row = this.rows.get(where.id);
+      if (!row || (where.operationOwner && row.operationOwner !== where.operationOwner)) {
+        return { count: 0 };
+      }
+      this.rows.delete(where.id);
+      return { count: 1 };
+    }
   };
 
   async $queryRawUnsafe(query) {
@@ -105,6 +114,11 @@ const readyPatch = {
   llmGatewayKeyId: "gateway_key_1",
   secretPayload: "sealed-payload"
 };
+const operationLease = {
+  ownerId: "preparer",
+  now: "2026-09-05T00:00:00.000Z",
+  expiresAt: "2026-09-05T00:05:00.000Z"
+};
 
 test("two concurrent claims cannot acquire the same ready slot", async () => {
   const client = new DeterministicWarmSlotPersistenceClient();
@@ -130,8 +144,8 @@ test("two repository instances atomically reserve no more than the capacity targ
     }));
 
   const reservations = await Promise.all([
-    first.reservePreparing(3, identities("first")),
-    second.reservePreparing(3, identities("second"))
+    first.reservePreparing(3, identities("first"), operationLease),
+    second.reservePreparing(3, identities("second"), operationLease)
   ]);
 
   assert.equal(reservations.flat().length, 3);
@@ -161,11 +175,47 @@ test("preparation ownership is persisted incrementally without changing slot sta
   assert.equal(slot.containerId, "container_1");
 });
 
+test("cleanup ownership is acquired by exactly one repository after operation expiry", async () => {
+  const client = new DeterministicWarmSlotPersistenceClient();
+  const first = new WorkspaceWarmSlotRepositoryBackedStore(client);
+  const second = new WorkspaceWarmSlotRepositoryBackedStore(client);
+  await first.createPreparing(slotFixture, {
+    ownerId: "preparer",
+    now: "2026-09-05T00:00:00.000Z",
+    expiresAt: "2026-09-05T00:05:00.000Z"
+  });
+
+  assert.equal(
+    await second.acquireCleanup(slotFixture.id, "preparing", {
+      ownerId: "early-cleaner",
+      now: "2026-09-05T00:04:59.999Z",
+      expiresAt: "2026-09-05T00:09:59.999Z"
+    }),
+    null
+  );
+  const owners = await Promise.all([
+    first.acquireCleanup(slotFixture.id, "preparing", {
+      ownerId: "cleaner-one",
+      now: "2026-09-05T00:05:00.001Z",
+      expiresAt: "2026-09-05T00:10:00.001Z"
+    }),
+    second.acquireCleanup(slotFixture.id, "preparing", {
+      ownerId: "cleaner-two",
+      now: "2026-09-05T00:05:00.001Z",
+      expiresAt: "2026-09-05T00:10:00.001Z"
+    })
+  ]);
+
+  assert.equal(owners.filter(Boolean).length, 1);
+});
+
 test("warm-slot Prisma schema uniquely identifies resources and indexes claim candidates", async () => {
   const schema = await readFile(schemaUrl, "utf8");
   const model = schema.match(/model WorkspaceWarmSlot \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   assert.match(model, /resourceKey\s+String\s+@unique\s+@map\("resource_key"\)/);
+  assert.match(model, /operationOwner\s+String\?\s+@map\("operation_owner"\)/);
+  assert.match(model, /operationExpiresAt\s+DateTime\?\s+@map\("operation_expires_at"\)/);
   assert.match(model, /@@index\(\[state, createdAt\]\)/);
 });
 
@@ -175,4 +225,21 @@ function byCreatedAt(left, right) {
 
 function cloneRow(row) {
   return row === null ? null : structuredClone(row);
+}
+
+function matchesWhere(row, where) {
+  if (!row) return false;
+  if (where.state && row.state !== where.state) return false;
+  if (where.operationOwner && row.operationOwner !== where.operationOwner) return false;
+  if (where.operationExpiresAt?.gt && !(row.operationExpiresAt > where.operationExpiresAt.gt)) {
+    return false;
+  }
+  if (where.OR) {
+    return where.OR.some((condition) =>
+      condition.operationExpiresAt === null
+        ? row.operationExpiresAt === null
+        : row.operationExpiresAt <= condition.operationExpiresAt.lte
+    );
+  }
+  return true;
 }

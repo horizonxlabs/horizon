@@ -40,6 +40,10 @@ export function createRuntimeLeaseFixture() {
       }
       throw new Error(`unexpected lease query: ${sql}`);
     },
+    async $queryRawUnsafe(sql, projectId) {
+      if (!/SELECT EXISTS/.test(sql)) throw new Error(`unexpected lease query: ${sql}`);
+      return [{ active: (leases.get(projectId)?.expiresAt ?? 0) > now }];
+    },
     async $transaction(operation) {
       const previous = tail;
       let release;

@@ -28,9 +28,11 @@ test("runtime provisioning leases atomically exclude another replica until expir
     second.acquire("prj_shared", "second", 1000)
   ]);
   assert.deepEqual(results, [true, false]);
+  assert.equal(await first.isActive("prj_shared"), true);
   fixture.advance(999);
   assert.equal(await second.acquire("prj_shared", "second", 1000), false);
   fixture.advance(1);
+  assert.equal(await first.isActive("prj_shared"), false);
   assert.equal(await second.acquire("prj_shared", "second", 1000), true);
   assert.equal(await first.renew("prj_shared", "first", 1000), false);
 });

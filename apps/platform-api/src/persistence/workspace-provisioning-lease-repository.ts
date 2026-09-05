@@ -9,11 +9,13 @@ export interface WorkspaceProvisioningLeaseStore {
   save(snapshot: WorkspaceRuntimeSnapshot, token: string, ttlMs: number): Promise<boolean>;
   remove(projectId: string, token: string, ttlMs: number): Promise<boolean>;
   release(projectId: string, token: string): Promise<void>;
+  isActive(projectId: string): Promise<boolean>;
 }
 
 interface LeaseTransactionClient {
   workspaceRuntimeRecord: WorkspaceRuntimePersistenceClient["workspaceRuntimeRecord"];
   $executeRawUnsafe(sql: string, ...parameters: unknown[]): Promise<number>;
+  $queryRawUnsafe<T>(sql: string, ...parameters: unknown[]): Promise<T>;
 }
 
 export interface WorkspaceProvisioningLeaseClient extends LeaseTransactionClient {
@@ -30,6 +32,13 @@ const RENEW_SQL = `
 UPDATE "workspace_provisioning_leases"
 SET "expires_at" = CURRENT_TIMESTAMP + ($3::double precision * INTERVAL '1 millisecond')
 WHERE "project_id" = $1 AND "token" = $2 AND "expires_at" > CURRENT_TIMESTAMP
+`;
+const ACTIVE_SQL = `
+SELECT EXISTS (
+  SELECT 1
+  FROM "workspace_provisioning_leases"
+  WHERE "project_id" = $1 AND "expires_at" > CURRENT_TIMESTAMP
+) AS "active"
 `;
 
 export class WorkspaceProvisioningLeaseRepository implements WorkspaceProvisioningLeaseStore {
@@ -81,5 +90,13 @@ export class WorkspaceProvisioningLeaseRepository implements WorkspaceProvisioni
       projectId,
       token
     );
+  }
+
+  async isActive(projectId: string): Promise<boolean> {
+    const [result] = await this.client.$queryRawUnsafe<Array<{ active: boolean }>>(
+      ACTIVE_SQL,
+      projectId
+    );
+    return result?.active ?? false;
   }
 }
