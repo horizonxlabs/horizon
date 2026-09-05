@@ -58,6 +58,7 @@ type WarmSlotModel = {
 
 type WarmSlotTransactionClient = {
   workspaceWarmSlot: Pick<WarmSlotModel, "count" | "create" | "updateMany" | "findUnique">;
+  $executeRawUnsafe(statement: string): Promise<number>;
   $queryRawUnsafe<T>(query: string): Promise<T>;
 };
 
@@ -101,7 +102,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>
   ): Promise<WarmWorkspaceSlot[]> {
     return this.client.$transaction(async (transaction) => {
-      await transaction.$queryRawUnsafe<unknown[]>(RESERVE_CAPACITY_LOCK_SQL);
+      await transaction.$executeRawUnsafe(RESERVE_CAPACITY_LOCK_SQL);
       const currentCapacity = await transaction.workspaceWarmSlot.count({
         where: { state: { in: ["preparing", "ready"] } }
       });

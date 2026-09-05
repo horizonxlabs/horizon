@@ -9,6 +9,7 @@ const schemaUrl = new URL("../../apps/platform-api/prisma/schema.prisma", import
 class DeterministicWarmSlotPersistenceClient {
   rows = new Map();
   claimQueries = [];
+  executedStatements = [];
   waitingQueries = [];
 
   workspaceWarmSlot = {
@@ -68,6 +69,11 @@ class DeterministicWarmSlotPersistenceClient {
     }
 
     return result;
+  }
+
+  async $executeRawUnsafe(statement) {
+    this.executedStatements.push(statement);
+    return 0;
   }
 
   async $transaction(operation) {
@@ -130,7 +136,11 @@ test("two repository instances atomically reserve no more than the capacity targ
 
   assert.equal(reservations.flat().length, 3);
   assert.equal((await first.list()).length, 3);
-  assert.match(client.claimQueries[0], /pg_advisory_xact_lock/i);
+  assert.match(client.executedStatements[0], /pg_advisory_xact_lock/i);
+  assert.equal(
+    client.claimQueries.some((query) => /pg_advisory_xact_lock/i.test(query)),
+    false
+  );
 });
 
 test("preparation ownership is persisted incrementally without changing slot state", async () => {
