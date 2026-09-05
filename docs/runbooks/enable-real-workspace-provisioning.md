@@ -45,8 +45,8 @@ process, so project creation can claim it without waiting for those resources to
   project then uses the existing cold-provisioning path. Startup reconciliation drains unclaimed
   ready and recoverable slots through the normal cleanup fences, releasing their warm resources.
   A slot with live preparation/cleanup ownership waits for its lease to expire before a safe drain
-  retry. Assigned project runtimes are never deleted. This is the operational rollback switch for
-  the pool.
+  retry on the periodic warm-pool sweep. Assigned project runtimes are never deleted. This is the
+  operational rollback switch for the pool.
 - Budget for every configured warm process in addition to active project workspaces. With the
   example `EVCP_WORKSPACE_CPU=2` and `EVCP_WORKSPACE_MEM_MB=2048`, the default pool reserves up
   to 6 CPU cores and 6144 MiB while all three slots are running. Size the host and Docker limits
@@ -128,8 +128,9 @@ To retain real workspaces but stop prewarming, instead set
 `EVCP_WORKSPACE_WARM_POOL_SIZE=0` in the deployment environment and recreate `platform-api`.
 New projects take the cold path immediately after that startup. During its startup reconciliation,
 the API drains unclaimed ready or recoverable warm slots; slots protected by an active operation
-lease are drained only after that lease safely expires and cleanup can take ownership. Existing
-project workspaces continue to run and are not part of the drain until the value is raised again.
+lease are drained only after that lease safely expires and a later periodic sweep can take cleanup
+ownership. Existing project workspaces continue to run and are not part of the drain until the
+value is raised again.
 
 ## Notes
 
