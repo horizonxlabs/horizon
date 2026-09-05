@@ -98,7 +98,7 @@ test("Workspace renders a labeled four-view mobile switcher with one pressed vie
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
 });
 
-test("Workspace announces container wake-up instead of showing an unlabelled blank state", () => {
+test("Workspace announces sandbox preparation instead of showing an unlabelled blank state", () => {
   const html = renderToStaticMarkup(
     React.createElement(WorkspacePage, {
       app: baseApp({ isEnteringWorkspace: true })
@@ -107,9 +107,9 @@ test("Workspace announces container wake-up instead of showing an unlabelled bla
 
   assert.match(html, /role="status"/);
   assert.match(html, /aria-live="polite"/);
-  assert.match(html, /Waking up your workspace/);
+  assert.match(html, /Preparing sandbox/);
   assert.match(html, /Starting a secure container for Project One/);
-  assert.match(html, /Your files and conversation will appear when it is ready\./);
+  assert.match(html, /Your workspace will be ready shortly\./);
 });
 
 test("Workspace renders service failures as user copy with disclosed technical details", () => {

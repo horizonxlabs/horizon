@@ -3,10 +3,9 @@ export function WorkspaceWakeOverlay({ projectName }: { projectName: string }) {
     <div className="hz-loading-backdrop" role="status" aria-live="polite">
       <div className="hz-loading-card">
         <span className="hz-spinner" aria-hidden="true" />
-        <strong>Waking up your workspace</strong>
+        <strong>Preparing sandbox</strong>
         <span>
-          Starting a secure container for {projectName}. Your files and conversation will appear
-          when it is ready.
+          Starting a secure container for {projectName}. Your workspace will be ready shortly.
         </span>
       </div>
     </div>
