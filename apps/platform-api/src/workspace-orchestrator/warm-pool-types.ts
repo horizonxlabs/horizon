@@ -1,4 +1,9 @@
-export type WarmWorkspaceSlotState = "preparing" | "ready" | "claiming" | "failed";
+export type WarmWorkspaceSlotState =
+  | "preparing"
+  | "ready"
+  | "claiming"
+  | "cleaning"
+  | "failed";
 
 export interface WarmWorkspaceSlot {
   id: string;

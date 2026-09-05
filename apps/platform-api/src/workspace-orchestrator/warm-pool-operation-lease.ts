@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { WorkspaceProvisioningLeaseStore } from "../persistence/workspace-provisioning-lease-repository";
 import type {
   WarmSlotOperationLease,
   WarmWorkspaceSlot,
@@ -8,6 +9,12 @@ import type {
 export class WarmSlotOperationLeaseLostError extends Error {
   constructor() {
     super("warm slot operation lease is no longer owned");
+  }
+}
+
+export class WorkspaceCleanupProjectLeaseLostError extends Error {
+  constructor() {
+    super("workspace cleanup project lease is no longer owned");
   }
 }
 
@@ -74,4 +81,33 @@ export async function withMaintainedWarmSlotOperationLease<T>(
   } finally {
     ownership.stop();
   }
+}
+
+export function maintainWorkspaceCleanupProjectLease(input: {
+  leases: WorkspaceProvisioningLeaseStore;
+  projectId: string;
+  token: string;
+  leaseMs: number;
+}) {
+  let lost = false;
+  const assertOwned = async () => {
+    if (
+      lost ||
+      !(await input.leases.renew(input.projectId, input.token, input.leaseMs))
+    ) {
+      lost = true;
+      throw new WorkspaceCleanupProjectLeaseLostError();
+    }
+  };
+  const heartbeat = setInterval(
+    () => void assertOwned().catch(() => undefined),
+    Math.max(10, Math.floor(input.leaseMs / 3))
+  );
+  heartbeat.unref?.();
+  return {
+    assertOwned,
+    stop() {
+      clearInterval(heartbeat);
+    }
+  };
 }

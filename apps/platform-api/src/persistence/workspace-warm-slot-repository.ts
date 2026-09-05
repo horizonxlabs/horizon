@@ -217,6 +217,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
         OR: [{ operationExpiresAt: null }, { operationExpiresAt: { lte: new Date(lease.now) } }]
       },
       data: {
+        state: "cleaning",
         operationOwner: lease.ownerId,
         operationExpiresAt: new Date(lease.expiresAt)
       }

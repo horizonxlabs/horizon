@@ -10,7 +10,8 @@ export function createWarmPoolFixture({
   previewExitCode = 0,
   cleanupFailure,
   runtimeRecords,
-  operationLeaseMs
+  operationLeaseMs,
+  createOperationOwner
 }) {
   let currentNow = START;
   const store = createMemoryWarmSlotStore(() => currentNow);
@@ -82,6 +83,7 @@ export function createWarmPoolFixture({
     codec,
     now: () => currentNow,
     operationLeaseMs,
+    createOperationOwner,
     createSlotIdentity: () => {
       const sequence = nextId++;
       return { id: `warm_slot_${sequence}`, resourceKey: `warm-resource-${sequence}` };
@@ -272,6 +274,7 @@ function createMemoryWarmSlotStore(now) {
         return null;
       }
       Object.assign(slot, {
+        state: "cleaning",
         operationOwner: lease.ownerId,
         operationExpiresAt: lease.expiresAt,
         updatedAt: iso()

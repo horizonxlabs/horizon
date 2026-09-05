@@ -207,13 +207,36 @@ test("cleanup ownership is acquired by exactly one repository after operation ex
   ]);
 
   assert.equal(owners.filter(Boolean).length, 1);
+  assert.equal(owners.find(Boolean).state, "cleaning");
+  assert.equal(
+    await second.acquireCleanup(slotFixture.id, "preparing", {
+      ownerId: "wrong-resumer",
+      now: "2026-09-05T00:10:00.002Z",
+      expiresAt: "2026-09-05T00:15:00.002Z"
+    }),
+    null
+  );
+  assert.equal(
+    (
+      await second.acquireCleanup(slotFixture.id, "cleaning", {
+        ownerId: "cleaning-resumer",
+        now: "2026-09-05T00:10:00.002Z",
+        expiresAt: "2026-09-05T00:15:00.002Z"
+      })
+    ).state,
+    "cleaning"
+  );
 });
 
 test("warm-slot Prisma schema uniquely identifies resources and indexes claim candidates", async () => {
   const schema = await readFile(schemaUrl, "utf8");
   const model = schema.match(/model WorkspaceWarmSlot \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const states =
+    schema.match(/enum WorkspaceWarmSlotState \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   assert.match(model, /resourceKey\s+String\s+@unique\s+@map\("resource_key"\)/);
+  assert.match(model, /state\s+WorkspaceWarmSlotState/);
+  assert.match(states, /\bcleaning\b/);
   assert.match(model, /operationOwner\s+String\?\s+@map\("operation_owner"\)/);
   assert.match(model, /operationExpiresAt\s+DateTime\?\s+@map\("operation_expires_at"\)/);
   assert.match(model, /@@index\(\[state, createdAt\]\)/);

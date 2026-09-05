@@ -7,7 +7,10 @@ import type {
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { physicalResourceKey } from "./warm-pool-config";
 import { waitForPreviewReady } from "./workspace-lifecycle";
-import { withMaintainedWarmSlotOperationLease } from "./warm-pool-operation-lease";
+import {
+  maintainWorkspaceCleanupProjectLease,
+  withMaintainedWarmSlotOperationLease
+} from "./warm-pool-operation-lease";
 
 export async function reconcileWorkspaceWarmPool(options: {
   store: WorkspaceWarmSlotStore;
@@ -41,73 +44,96 @@ export async function reconcileWorkspaceWarmPool(options: {
         // A running container is only reusable when the preview is healthy.
       }
     }
+    const ownerId = (options.createOperationOwner ?? randomUUID)();
+    const projectLeases = slot.claimProjectId
+      ? options.deps.runtimeRecords?.provisioningLeases
+      : undefined;
     if (
-      slot.state === "claiming" &&
       slot.claimProjectId &&
-      (await options.deps.runtimeRecords?.provisioningLeases?.isActive(slot.claimProjectId))
+      projectLeases &&
+      !(await projectLeases.acquire(slot.claimProjectId, ownerId, options.operationLeaseMs))
     ) {
       totals.preserved += 1;
       continue;
     }
-
-    const ownerId = (options.createOperationOwner ?? randomUUID)();
-    const acquired = await options.store.acquireCleanup(
-      slot.id,
-      slot.state,
-      operationLease(options, ownerId)
-    );
-    if (!acquired) {
-      totals.preserved += 1;
-      continue;
-    }
-    await withMaintainedWarmSlotOperationLease(
-      {
-        store: options.store,
-        slotId: acquired.id,
-        ownerId,
-        now: options.now,
-        leaseMs: options.operationLeaseMs
-      },
-      async (ownership) => {
-        let ownedSlot = acquired;
-        if (container && container.containerId !== acquired.containerId) {
-          const updated = await options.store.recordPreparingContainer(
-            acquired.id,
-            container.containerId,
-            operationLease(options, ownerId)
-          );
-          if (!updated) return;
-          ownedSlot = { ...acquired, containerId: container.containerId };
-        }
-
-        // Ownership can become durable between the initial inventory and cleanup-CAS acquisition.
-        runtimeKeys = await durableRuntimeKeys(options.deps);
-        if (runtimeKeys.has(ownedSlot.resourceKey)) {
-          await options.store.remove(ownedSlot.id, ownerId);
-          totals.retired += 1;
-          return;
-        }
-        try {
-          await options.cleanupSlotResources(ownedSlot, ownership.assertOwned);
-          await options.store.remove(ownedSlot.id, ownerId);
-          totals.cleaned += 1;
-        } catch {
-          totals.cleanupFailed += 1;
-          const failureCount = ownedSlot.failureCount + 1;
-          await options.store.markFailed(
-            ownedSlot.id,
-            {
-              lastError: "cleanup_error",
-              failureCount,
-              retryAfter: new Date(
-                options.now().getTime() + options.retryDelayMs(failureCount)
-              ).toISOString()
-            },
-            operationLease(options, ownerId)
-          );
-        }
+    const projectOwnership =
+      slot.claimProjectId && projectLeases
+        ? maintainWorkspaceCleanupProjectLease({
+            leases: projectLeases,
+            projectId: slot.claimProjectId,
+            token: ownerId,
+            leaseMs: options.operationLeaseMs
+          })
+        : undefined;
+    try {
+      const acquired = await options.store.acquireCleanup(
+        slot.id,
+        slot.state,
+        operationLease(options, ownerId)
+      );
+      if (!acquired) {
+        totals.preserved += 1;
+        continue;
       }
-    );
+      await withMaintainedWarmSlotOperationLease(
+        {
+          store: options.store,
+          slotId: acquired.id,
+          ownerId,
+          now: options.now,
+          leaseMs: options.operationLeaseMs
+        },
+        async (ownership) => {
+          const assertOwned = async () => {
+            await projectOwnership?.assertOwned();
+            await ownership.assertOwned();
+          };
+          let ownedSlot = acquired;
+          if (container && container.containerId !== acquired.containerId) {
+            const updated = await options.store.recordPreparingContainer(
+              acquired.id,
+              container.containerId,
+              operationLease(options, ownerId)
+            );
+            if (!updated) return;
+            ownedSlot = { ...acquired, containerId: container.containerId };
+          }
+
+          // Ownership can become durable between the initial inventory and cleanup-CAS acquisition.
+          runtimeKeys = await durableRuntimeKeys(options.deps);
+          await assertOwned();
+          if (runtimeKeys.has(ownedSlot.resourceKey)) {
+            await options.store.remove(ownedSlot.id, ownerId);
+            totals.retired += 1;
+            return;
+          }
+          try {
+            await options.cleanupSlotResources(ownedSlot, assertOwned);
+            await options.store.remove(ownedSlot.id, ownerId);
+            totals.cleaned += 1;
+          } catch {
+            totals.cleanupFailed += 1;
+            const failureCount = ownedSlot.failureCount + 1;
+            await options.store.markFailed(
+              ownedSlot.id,
+              {
+                lastError: "cleanup_error",
+                failureCount,
+                retryAfter: new Date(
+                  options.now().getTime() + options.retryDelayMs(failureCount)
+                ).toISOString()
+              },
+              operationLease(options, ownerId)
+            );
+          }
+        }
+      );
+    } finally {
+      projectOwnership?.stop();
+      if (slot.claimProjectId && projectLeases) {
+        await projectLeases.release(slot.claimProjectId, ownerId).catch(() => undefined);
+      }
+    }
   }
   try {
     options.deps.onAudit?.({

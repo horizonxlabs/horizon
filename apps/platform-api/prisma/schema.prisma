@@ -59,6 +59,14 @@ enum GuardrailRuleType {
   policy
 }
 
+enum WorkspaceWarmSlotState {
+  preparing
+  ready
+  claiming
+  cleaning
+  failed
+}
+
 model PlatformUser {
   id          String              @id
   email       String              @unique
@@ -801,7 +809,7 @@ model WorkspaceProvisioningLease {
 model WorkspaceWarmSlot {
   id              String    @id
   resourceKey     String    @unique @map("resource_key")
-  state           String
+  state           WorkspaceWarmSlotState
   containerId     String?   @map("container_id")
   llmGatewayKeyId String?   @map("llm_gateway_key_id")
   secretPayload   String?   @map("secret_payload")
