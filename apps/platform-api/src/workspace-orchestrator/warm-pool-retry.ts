@@ -1,3 +1,5 @@
+import type { WarmWorkspaceSlot } from "./warm-pool-types";
+
 const INITIAL_RETRY_DELAY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 5 * 60_000;
 
@@ -14,4 +16,16 @@ export function preparationErrorCategory(error: unknown): string {
   if (/llm|gateway|key/.test(message)) return "llm_gateway_error";
   if (/secret|credential|envelope/.test(message)) return "credential_error";
   return "preparation_error";
+}
+
+export function isWarmSlotRetryable(slot: WarmWorkspaceSlot, now: Date): boolean {
+  const retryDue = slot.retryAfter !== null && new Date(slot.retryAfter).getTime() <= now.getTime();
+  if (slot.state === "failed") return retryDue;
+  if (slot.state === "cleaning") return slot.failureCount > 0 && retryDue;
+  return (
+    slot.state === "preparing" &&
+    slot.failureCount > 0 &&
+    slot.operationExpiresAt !== null &&
+    new Date(slot.operationExpiresAt).getTime() <= now.getTime()
+  );
 }

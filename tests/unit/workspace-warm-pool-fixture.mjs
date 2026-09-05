@@ -43,6 +43,7 @@ export function createWarmPoolFixture({
   const fixture = {
     store,
     docker,
+    deps: undefined,
     releasedSchemas,
     releasedBuckets,
     revokedKeys,
@@ -77,6 +78,62 @@ export function createWarmPoolFixture({
     return removeVolume(volumeName);
   };
 
+  const deps = {
+    postgres: {
+      async provisionSchema(resourceKey) {
+        prepareAttempts += 1;
+        return {
+          schemaName: `app_${resourceKey.replaceAll("-", "_")}`,
+          roleName: `app_${resourceKey.replaceAll("-", "_")}_role`,
+          password: `pg-secret-${prepareAttempts}`
+        };
+      },
+      async releaseSchema(resourceKey) {
+        failCleanupOnce("schema");
+        releasedSchemas.push(resourceKey);
+      }
+    },
+    objectStorage: {
+      async provisionBucket(resourceKey) {
+        return {
+          bucket: `proj-${resourceKey}`,
+          accessKey: `access-key-${prepareAttempts}`,
+          secretKey: `storage-secret-${prepareAttempts}`
+        };
+      },
+      async releaseBucket(resourceKey) {
+        failCleanupOnce("bucket");
+        releasedBuckets.push(resourceKey);
+      }
+    },
+    llmGateway: {
+      async createVirtualKey() {
+        return { keyId: `key-${prepareAttempts}`, key: `llm-secret-${prepareAttempts}` };
+      },
+      async revokeVirtualKey(keyId) {
+        failCleanupOnce("key");
+        revokedKeys.push(keyId);
+      }
+    },
+    secrets: {
+      async put() {},
+      async listNames() {
+        return [];
+      },
+      async resolveEnv() {
+        return {};
+      },
+      async rotate() {},
+      async removeAll() {},
+      async hydrate() {}
+    },
+    docker,
+    runtimeRecords,
+    postgresHost: "postgres:5432",
+    databaseName: "evcp",
+    s3Endpoint: "http://minio:9000",
+    onAudit: (event) => audits.push(event)
+  };
   const poolOptions = {
     targetSize,
     store,
@@ -88,63 +145,9 @@ export function createWarmPoolFixture({
       const sequence = nextId++;
       return { id: `warm_slot_${sequence}`, resourceKey: `warm-resource-${sequence}` };
     },
-    deps: {
-      postgres: {
-        async provisionSchema(resourceKey) {
-          prepareAttempts += 1;
-          return {
-            schemaName: `app_${resourceKey.replaceAll("-", "_")}`,
-            roleName: `app_${resourceKey.replaceAll("-", "_")}_role`,
-            password: `pg-secret-${prepareAttempts}`
-          };
-        },
-        async releaseSchema(resourceKey) {
-          failCleanupOnce("schema");
-          releasedSchemas.push(resourceKey);
-        }
-      },
-      objectStorage: {
-        async provisionBucket(resourceKey) {
-          return {
-            bucket: `proj-${resourceKey}`,
-            accessKey: `access-key-${prepareAttempts}`,
-            secretKey: `storage-secret-${prepareAttempts}`
-          };
-        },
-        async releaseBucket(resourceKey) {
-          failCleanupOnce("bucket");
-          releasedBuckets.push(resourceKey);
-        }
-      },
-      llmGateway: {
-        async createVirtualKey() {
-          return { keyId: `key-${prepareAttempts}`, key: `llm-secret-${prepareAttempts}` };
-        },
-        async revokeVirtualKey(keyId) {
-          failCleanupOnce("key");
-          revokedKeys.push(keyId);
-        }
-      },
-      secrets: {
-        async put() {},
-        async listNames() {
-          return [];
-        },
-        async resolveEnv() {
-          return {};
-        },
-        async rotate() {},
-        async removeAll() {},
-        async hydrate() {}
-      },
-      docker,
-      runtimeRecords,
-      postgresHost: "postgres:5432",
-      databaseName: "evcp",
-      s3Endpoint: "http://minio:9000",
-      onAudit: (event) => audits.push(event)
-    }
+    deps
   };
+  fixture.deps = deps;
   fixture.createPool = () => createWorkspaceWarmPool(poolOptions);
   fixture.pool = fixture.createPool();
 
@@ -211,7 +214,8 @@ function createMemoryWarmSlotStore(now) {
       await previous;
       try {
         const current = [...slots.values()].filter(
-          (slot) => slot.state === "preparing" || slot.state === "ready"
+          (slot) =>
+            slot.state === "preparing" || slot.state === "ready" || slot.state === "cleaning"
         ).length;
         const missing = Math.max(0, targetSize - current);
         const reserved = [];
@@ -276,6 +280,22 @@ function createMemoryWarmSlotStore(now) {
       Object.assign(slot, {
         state: "cleaning",
         operationOwner: lease.ownerId,
+        operationExpiresAt: lease.expiresAt,
+        updatedAt: iso()
+      });
+      return clone(slot);
+    },
+    async retryPreparing(id, lease) {
+      const slot = slots.get(id);
+      if (!slot || slot.state !== "cleaning" || !owns(slot, lease)) return null;
+      Object.assign(slot, {
+        state: "preparing",
+        containerId: null,
+        llmGatewayKeyId: null,
+        secretPayload: null,
+        claimProjectId: null,
+        lastError: null,
+        retryAfter: null,
         operationExpiresAt: lease.expiresAt,
         updatedAt: iso()
       });

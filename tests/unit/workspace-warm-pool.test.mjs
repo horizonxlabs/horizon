@@ -108,7 +108,7 @@ test("replacement failures preserve exponential history and cap retries at five 
   assert.equal(failed.retryAfter, "2026-09-05T00:10:15.000Z");
 });
 
-test("an expired failed slot is removed and replaced", async () => {
+test("an expired failed slot restarts its durable retry row", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1, previewExitCode: 1 });
   await fixture.pool.ensureCapacity();
   const failedId = (await fixture.store.list())[0].id;
@@ -119,7 +119,7 @@ test("an expired failed slot is removed and replaced", async () => {
 
   const slots = await fixture.store.list();
   assert.equal(slots.length, 1);
-  assert.notEqual(slots[0].id, failedId);
+  assert.equal(slots[0].id, failedId);
   assert.equal(slots[0].state, "ready");
 });
 
@@ -265,10 +265,7 @@ for (const cleanupFailure of ["key", "schema", "bucket", "volume"]) {
     await fixture.pool.ensureCapacity();
 
     const slots = await fixture.store.list();
-    assert.equal(
-      slots.some((slot) => slot.id === allocation.slotId),
-      false
-    );
+    assert.equal(slots.some((slot) => slot.id === allocation.slotId), true);
     assert.equal(slots.filter((slot) => slot.state === "ready").length, 1);
   });
 }

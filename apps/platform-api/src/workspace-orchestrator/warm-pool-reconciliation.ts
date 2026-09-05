@@ -30,7 +30,10 @@ export async function reconcileWorkspaceWarmPool(options: {
   const slots = await options.store.list();
   const totals = { preserved: 0, retired: 0, cleaned: 0, cleanupFailed: 0 };
   for (const slot of slots) {
-    if (options.targetSize > 0 && slot.state === "failed") {
+    if (
+      options.targetSize > 0 &&
+      (slot.state === "failed" || (slot.state === "preparing" && slot.failureCount > 0))
+    ) {
       totals.preserved += 1;
       continue;
     }

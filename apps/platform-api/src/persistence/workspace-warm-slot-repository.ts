@@ -26,7 +26,9 @@ type WarmSlotRecord = Omit<
 
 type WarmSlotModel = {
   findMany(args: { orderBy: { createdAt: "asc" } }): Promise<WarmSlotRecord[]>;
-  count(args: { where: { state: { in: Array<"preparing" | "ready"> } } }): Promise<number>;
+  count(args: {
+    where: { state: { in: Array<"preparing" | "ready" | "cleaning"> } };
+  }): Promise<number>;
   create(args: {
     data: {
       id: string;
@@ -113,7 +115,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     return this.client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(RESERVE_CAPACITY_LOCK_SQL);
       const currentCapacity = await transaction.workspaceWarmSlot.count({
-        where: { state: { in: ["preparing", "ready"] } }
+        where: { state: { in: ["preparing", "ready", "cleaning"] } }
       });
       const missing = Math.max(0, targetSize - currentCapacity);
       const reserved: WarmWorkspaceSlot[] = [];
@@ -223,6 +225,30 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
       }
     });
     if (acquired.count !== 1) return null;
+    const slot = await this.client.workspaceWarmSlot.findUnique({ where: { id } });
+    return slot ? toWarmWorkspaceSlot(slot) : null;
+  }
+
+  async retryPreparing(id: string, lease: WarmSlotOperationLease): Promise<WarmWorkspaceSlot | null> {
+    const restarted = await this.client.workspaceWarmSlot.updateMany({
+      where: {
+        id,
+        state: "cleaning",
+        operationOwner: lease.ownerId,
+        operationExpiresAt: { gt: new Date(lease.now) }
+      },
+      data: {
+        state: "preparing",
+        containerId: null,
+        llmGatewayKeyId: null,
+        secretPayload: null,
+        claimProjectId: null,
+        lastError: null,
+        retryAfter: null,
+        operationExpiresAt: new Date(lease.expiresAt)
+      }
+    });
+    if (restarted.count !== 1) return null;
     const slot = await this.client.workspaceWarmSlot.findUnique({ where: { id } });
     return slot ? toWarmWorkspaceSlot(slot) : null;
   }

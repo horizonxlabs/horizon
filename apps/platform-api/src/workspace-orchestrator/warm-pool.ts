@@ -23,7 +23,7 @@ import {
   warmSlotOperationLease,
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
-import { preparationErrorCategory, retryDelayMs } from "./warm-pool-retry";
+import { isWarmSlotRetryable, preparationErrorCategory, retryDelayMs } from "./warm-pool-retry";
 
 const OPERATION_LEASE_MS = 5 * 60_000;
 
@@ -104,11 +104,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const cleanupSlotResources = (slot: WarmWorkspaceSlot, assertOwned?: () => Promise<void>) =>
     cleanupWarmSlotResources(options.deps, slot, assertOwned);
 
-  const prepareOne = async (
-    slot: WarmWorkspaceSlot,
-    ownerId: string,
-    previousFailureCount = 0
-  ): Promise<void> => {
+  const prepareOne = async (slot: WarmWorkspaceSlot, ownerId: string): Promise<void> => {
     const startedAt = now().getTime();
     const ownership = maintainWarmSlotOperationLease({
       store: options.store,
@@ -177,7 +173,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       await auditPreparation("workspace.pool_ready", slot.id, startedAt);
     } catch (error) {
       if (error instanceof WarmSlotOperationLeaseLostError) return;
-      const failureCount = Math.max(slot.failureCount, previousFailureCount) + 1;
+      const failureCount = slot.failureCount + 1;
       const errorCategory = preparationErrorCategory(error);
       const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
       let lastError = errorCategory;
@@ -199,13 +195,9 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
 
   const ensureCapacityOnce = async (): Promise<void> => {
     const observed = await options.store.list();
-    const expiredFailureCounts: number[] = [];
+    const retries: Array<{ slot: WarmWorkspaceSlot; ownerId: string }> = [];
     for (const slot of observed) {
-      if (
-        slot.state === "failed" &&
-        slot.retryAfter !== null &&
-        new Date(slot.retryAfter).getTime() <= now().getTime()
-      ) {
+      if (isWarmSlotRetryable(slot, now())) {
         const ownerId = createOperationOwner();
         const owned = await options.store.acquireCleanup(
           slot.id,
@@ -221,12 +213,16 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
               if (!runtimeKeys.has(owned.resourceKey)) {
                 await cleanupSlotResources(owned, ownership.assertOwned);
               }
-              await options.store.remove(owned.id, ownerId);
-              expiredFailureCounts.push(slot.failureCount);
+              if (options.targetSize === 0) {
+                await options.store.remove(owned.id, ownerId);
+                return;
+              }
+              const retried = await options.store.retryPreparing(owned.id, operationLease(ownerId));
+              if (retried) retries.push({ slot: retried, ownerId });
             } catch {
-              const failureCount = slot.failureCount + 1;
+              const failureCount = owned.failureCount + 1;
               await options.store.markFailed(
-                slot.id,
+                owned.id,
                 {
                   lastError: "cleanup_error",
                   failureCount,
@@ -255,14 +251,11 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       candidates,
       operationLease(ownerId)
     );
-    const reservations = reserved.map((slot, index) => ({
-      slot,
-      previousFailureCount: expiredFailureCounts[index] ?? 0
-    }));
     await Promise.all(
-      reservations.map(({ slot, previousFailureCount }) =>
-        prepareOne(slot, ownerId, previousFailureCount)
-      )
+      [
+        ...retries,
+        ...reserved.map((slot) => ({ slot, ownerId }))
+      ].map(({ slot, ownerId: reservationOwner }) => prepareOne(slot, reservationOwner))
     );
   };
 
