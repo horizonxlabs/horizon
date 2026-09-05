@@ -9,6 +9,8 @@ prepared physical resources; its final container and preview URL use the logical
 - Running compose stack: healthy PostgreSQL, Redis, MinIO, and LiteLLM services.
 - The deployment environment provides `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_WORKSPACE_SECRET_KEY`, `EVCP_LITELLM_BASE_URL`, and `EVCP_LITELLM_MASTER_KEY`.
 - `docker/docker-compose.yml` `platform-api` service now sets `EVCP_WORKSPACE_REAL_ADAPTERS: "1"` plus `EVCP_PG_*` / `EVCP_S3_*` and mounts `/var/run/docker.sock`.
+- Apply all checked-in Prisma migrations through the deployment pipeline before starting the
+  updated API, including `20260905050000_workspace_warm_preparation_intents`.
 
 ## 1. Build the workspace dev image
 
@@ -88,6 +90,21 @@ docker compose -f docker/docker-compose.yml exec postgres \
 Neither command should query or print `secret_payload`; credentials remain encrypted at rest and
 must not be copied into Docker labels, logs, or audit metadata.
 
+Preparation records its physical key and slot operation token in `workspace_warm_preparations`
+before dispatching external creates. Late responses are compensated using their original resource
+identifiers; retry generations use fresh keys. Retirement sweeps use the exact container/volume,
+schema, bucket, and gateway alias, and never clean a current slot or assigned runtime this way.
+The gateway must support `/key/delete` with `key_aliases` (the same `proj-<resourceKey>` alias sent
+when creating the key). Verify that capability against the deployed LiteLLM version during the
+live smoke; the local adapter contract alone is not evidence of live gateway compatibility.
+
+A crash or lost create response leaves `settled=false`. These non-secret intents are deliberately
+retained and retried, even after a successful cleanup, because a remote operation could commit
+later. Inspect aggregate counts with `SELECT settled, count(*) FROM workspace_warm_preparations
+GROUP BY settled;`. Persistent growth requires investigating failed adapters; do not bulk-delete
+these rows, which would discard cleanup ownership. Automatic garbage collection of ambiguous
+intents requires a provider-confirmed completion boundary and is not implemented.
+
 ## 4. Verify end-to-end (live)
 
 The cold and warm smoke tests are opt-in. Without opt-in they each report one skip and perform
@@ -106,7 +123,8 @@ Export a dedicated live-test environment before running the commands below:
 
 - `EVCP_WORKSPACE_LIVE_DATABASE_URL`: admin connection URL for a disposable database, separate
   from the running platform. Use its `public` schema; no API or other live test may use this
-  database during the test. The fixture refuses pre-existing warm slots or workspace runtimes.
+  database during the test. The fixture refuses pre-existing warm slots, workspace runtimes, or
+  preparation intents from an earlier run.
 - `POSTGRES_DB`: that same disposable database name. `EVCP_PG_HOST` and `EVCP_PG_PORT` must
   identify this PostgreSQL service from inside workspace containers.
 - `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_S3_HOST`, `EVCP_S3_PORT`, optional
@@ -145,6 +163,8 @@ the project workspace and every remaining anonymous resource created by this run
 container/volume absence and successful key revocation, retires the fixture rows, and disconnects
 Prisma. Cleanup failures fail the test. The disposable database itself is retained. Record the
 actual pass/failure output and cleanup diagnostic; a skipped test is not live deployment evidence.
+Cleanup also exercises exact-alias gateway revocation. Ambiguous preparation intents fail cleanup
+verification and remain in the disposable database for subsequent operator-controlled sweeps.
 Container-absence failures report only the container name and a boolean; Docker environment
 objects must never be included in assertion output.
 

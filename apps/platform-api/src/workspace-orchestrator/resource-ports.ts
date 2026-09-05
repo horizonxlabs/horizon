@@ -51,6 +51,8 @@ interface LlmVirtualKeyInput {
 export interface LlmGatewayAdmin {
   createVirtualKey(input: LlmVirtualKeyInput): Promise<{ keyId: string; key: string }>;
   revokeVirtualKey(keyId: string): Promise<void>;
+  /** Retire a generation even when its create response (and key ID) was lost. */
+  revokeVirtualKeysForResource(resourceKey: string): Promise<void>;
 }
 
 export function createMemoryLlmGatewayAdmin(): LlmGatewayAdmin & {
@@ -75,6 +77,11 @@ export function createMemoryLlmGatewayAdmin(): LlmGatewayAdmin & {
       const entry = state.keys.find((item) => item.keyId === keyId);
       if (entry) {
         entry.revoked = true;
+      }
+    },
+    async revokeVirtualKeysForResource(resourceKey) {
+      for (const entry of state.keys) {
+        if (entry.slug === resourceKey) entry.revoked = true;
       }
     }
   };
@@ -115,6 +122,16 @@ export function createLiteLlmGatewayAdmin(opts: {
       });
       if (!response.ok) {
         throw new Error(`litellm key revoke failed (${response.status})`);
+      }
+    },
+    async revokeVirtualKeysForResource(resourceKey) {
+      const response = await fetchImpl(`${opts.baseUrl}/key/delete`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ key_aliases: [bucketNameFor(resourceKey)] })
+      });
+      if (!response.ok) {
+        throw new Error(`litellm generation key revoke failed (${response.status})`);
       }
     }
   };

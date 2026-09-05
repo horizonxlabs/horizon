@@ -122,3 +122,18 @@ test("the pool idle boundary includes a scheduled refill before capacity work st
     await draining;
   }
 });
+
+test("live preflight rejects a database with old preparation intents before any resource dispatch", async () => {
+  const { assertLiveWorkspaceDatabaseEmpty } =
+    await import("../integration/workspace-live-assertions.mjs");
+  const store = {
+    list: async () => [],
+    preparations: { list: async () => [{ resourceKey: "prior-run", settled: false }] }
+  };
+  await assert.rejects(
+    () => assertLiveWorkspaceDatabaseEmpty(store, { count: async () => 0 }),
+    /no preparation intents/
+  );
+  store.preparations.list = async () => [];
+  await assertLiveWorkspaceDatabaseEmpty(store, { count: async () => 0 });
+});

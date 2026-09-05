@@ -1,6 +1,8 @@
 import { createMemoryDockerEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
 import { createWarmPoolSecretCodec } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-secret-codec.ts";
 import { createWorkspaceWarmPool } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool.ts";
+import { createWarmPreparationIntentStore } from "../../apps/platform-api/src/persistence/workspace-warm-preparation-repository.ts";
+import { createWarmPreparationPersistenceModel } from "./workspace-warm-preparation-persistence-fixture.mjs";
 
 const START = new Date("2026-09-05T00:00:00.000Z");
 
@@ -114,6 +116,10 @@ export function createWarmPoolFixture({
       async revokeVirtualKey(keyId) {
         failCleanupOnce("key");
         revokedKeys.push(keyId);
+      },
+      async revokeVirtualKeysForResource(resourceKey) {
+        failCleanupOnce("key");
+        revokedKeys.push(`alias:${resourceKey}`);
       }
     },
     secrets: {
@@ -163,6 +169,9 @@ function createMemoryWarmSlotStore(now) {
   let reservationTail = Promise.resolve();
 
   const store = {
+    preparations: createWarmPreparationIntentStore({
+      workspaceWarmPreparation: createWarmPreparationPersistenceModel()
+    }),
     seedReady(input) {
       const createdAt = iso();
       slots.set(input.id, {

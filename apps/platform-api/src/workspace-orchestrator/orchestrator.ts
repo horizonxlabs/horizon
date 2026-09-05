@@ -185,17 +185,19 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.startContainer(found.containerId).catch(() => undefined);
       }
       await waitForPreviewReady(deps.docker, found.containerId);
+      const env = Object.fromEntries(workspaceSecretEntries(found.env));
+      const recoveredClaim = await deps.warmPool?.recoverClaim(input.projectId, env);
       // Restore managed values from the original container runtime environment if they were not persisted.
       await deps.secrets.replaceForProvisioning(
         input.projectId,
-        Object.fromEntries(workspaceSecretEntries(found.env)),
+        env,
         leases.secretAttempt(input.projectId)
       );
       const healed = save({
         id: `ws-${resourceKey}`,
         projectId: input.projectId,
         slug: input.slug,
-        resourceKey,
+        resourceKey: recoveredClaim?.resourceKey ?? resourceKey,
         state: "running",
         containerId: found.containerId,
         cpuCores,
@@ -205,7 +207,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         createdAt: now(),
         updatedAt: now()
       });
+      if (recoveredClaim) llmKeyIds.set(input.projectId, recoveredClaim.llmGatewayKeyId);
       await persist(healed);
+      if (recoveredClaim) {
+        await deps.warmPool!.completeClaim(recoveredClaim.slotId);
+        refillWarmPool();
+      }
       audit({
         action: "workspace.reattached",
         projectId: input.projectId,

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { buildWarmContainerSpec } from "./docker-engine";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type {
   WarmWorkspaceAllocation,
@@ -7,25 +6,19 @@ import type {
   WorkspaceWarmSlotStore
 } from "./warm-pool-types";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
-import {
-  waitForPreviewReady,
-  workspaceVolumeName,
-  workspaceWarmVolumeLabels
-} from "./workspace-lifecycle";
-import { provisionIndependentWorkspaceResources } from "./workspace-provisioning";
 import { countSlots, reconcileWorkspaceWarmPool } from "./warm-pool-reconciliation";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupWarmSlotResources } from "./warm-pool-cleanup";
 import {
   defaultWarmSlotIdentity,
-  maintainWarmSlotOperationLease,
-  WarmSlotOperationLeaseLostError,
   warmSlotOperationLease,
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
-import { isWarmSlotRetryable, preparationErrorCategory, retryDelayMs } from "./warm-pool-retry";
+import { isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
 import { createWarmPoolWorkTracker } from "./warm-pool-work";
-
+import { recoverWarmClaim } from "./warm-pool-claim-recovery";
+import { prepareWarmSlot } from "./warm-pool-preparation";
+import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
@@ -33,13 +26,13 @@ export interface WorkspaceWarmPool {
   /** Stop new requests before awaiting scheduled refill and active reconciliation work. */
   waitForIdle(): Promise<void>;
   claim(projectId: string): Promise<WarmWorkspaceAllocation | null>;
+  recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown): Promise<void>;
   reconcile(): Promise<void>;
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
 }
-
 export interface WarmPoolStatus {
   target: number;
   preparing: number;
@@ -64,13 +57,6 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const createSlotIdentity = options.createSlotIdentity ?? defaultWarmSlotIdentity;
   const createOperationOwner = options.createOperationOwner ?? randomUUID;
   const operationLeaseMs = options.operationLeaseMs ?? OPERATION_LEASE_MS;
-  const image = options.deps.image ?? "evcp/workspace-next:1";
-  const network = options.deps.network ?? process.env.EVCP_WORKSPACE_NETWORK ?? "evcp-internal";
-  const cpuCores = options.deps.cpuCores ?? Number(process.env.EVCP_WORKSPACE_CPU ?? 1);
-  const memoryMb = options.deps.memoryMb ?? Number(process.env.EVCP_WORKSPACE_MEM_MB ?? 2048);
-  const databaseName = options.deps.databaseName ?? "evcp";
-  const postgresHost = options.deps.postgresHost ?? "postgres:5432";
-  const s3Endpoint = options.deps.s3Endpoint ?? "http://minio:9000";
   let inFlightEnsure: Promise<void> | null = null;
   let inFlightReconcile: Promise<void> | null = null;
   const work = createWarmPoolWorkTracker();
@@ -108,94 +94,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const cleanupSlotResources = (slot: WarmWorkspaceSlot, assertOwned?: () => Promise<void>) =>
     cleanupWarmSlotResources(options.deps, slot, assertOwned);
 
-  const prepareOne = async (slot: WarmWorkspaceSlot, ownerId: string): Promise<void> => {
-    const startedAt = now().getTime();
-    const ownership = maintainWarmSlotOperationLease({
-      store: options.store,
-      slotId: slot.id,
-      ownerId,
-      now,
-      leaseMs: operationLeaseMs
-    });
-    let ownedSlot = slot;
-    try {
-      await auditPreparation("workspace.pool_prepare_started", slot.id, startedAt);
-      const volumeName = workspaceVolumeName(slot.resourceKey);
-      const resources = await provisionIndependentWorkspaceResources(options.deps, {
-        projectId: slot.id,
-        resourceKey: slot.resourceKey,
-        volumeName,
-        volumeLabels: workspaceWarmVolumeLabels(slot.id),
-        assertOwnership: ownership.assertOwned
-      });
-      const env = {
-        DATABASE_URL: `postgresql://${resources.pg.roleName}:${resources.pg.password}@${postgresHost}/${databaseName}?schema=${resources.pg.schemaName}`,
-        S3_ENDPOINT: s3Endpoint,
-        S3_BUCKET: resources.bucket.bucket,
-        S3_ACCESS_KEY: resources.bucket.accessKey,
-        S3_SECRET_KEY: resources.bucket.secretKey,
-        LLM_GATEWAY_KEY: resources.llmKey.key
-      };
-      const secretPayload = options.codec.seal(env);
-      ownedSlot = {
-        ...ownedSlot,
-        llmGatewayKeyId: resources.llmKey.keyId,
-        secretPayload
-      };
-      ownership.assertUpdated(
-        await options.store.recordPreparedResources(
-          slot.id,
-          { llmGatewayKeyId: resources.llmKey.keyId, secretPayload },
-          operationLease(ownerId)
-        )
-      );
-      const { containerId } = await options.deps.docker.createContainer(
-        buildWarmContainerSpec({
-          slotId: slot.id,
-          resourceKey: slot.resourceKey,
-          image,
-          env,
-          cpuCores,
-          memoryMb,
-          network,
-          workspaceVolume: volumeName
-        })
-      );
-      ownedSlot = { ...ownedSlot, containerId };
-      ownership.assertUpdated(
-        await options.store.recordPreparingContainer(slot.id, containerId, operationLease(ownerId))
-      );
-      await options.deps.docker.startContainer(containerId);
-      await waitForPreviewReady(options.deps.docker, containerId);
-      ownership.assertUpdated(
-        await options.store.markReady(
-          slot.id,
-          { containerId, llmGatewayKeyId: resources.llmKey.keyId, secretPayload },
-          operationLease(ownerId)
-        )
-      );
-      await auditPreparation("workspace.pool_ready", slot.id, startedAt);
-    } catch (error) {
-      if (error instanceof WarmSlotOperationLeaseLostError) return;
-      const failureCount = slot.failureCount + 1;
-      const errorCategory = preparationErrorCategory(error);
-      const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
-      let lastError = errorCategory;
-      await cleanupSlotResources(ownedSlot, ownership.assertOwned).catch(() => {
-        lastError = "cleanup_error";
-      });
-      ownership.assertUpdated(
-        await options.store.markFailed(
-          slot.id,
-          { lastError, failureCount, retryAfter },
-          operationLease(ownerId)
-        )
-      );
-      await auditPreparation("workspace.pool_prepare_failed", slot.id, startedAt, errorCategory);
-    } finally {
-      ownership.stop();
-    }
-  };
+  const prepareOne = (slot: WarmWorkspaceSlot, ownerId: string) =>
+    prepareWarmSlot({ ...options, now, operationLeaseMs, auditPreparation }, slot, ownerId);
 
   const ensureCapacityOnce = async (): Promise<void> => {
     const observed = await options.store.list();
@@ -264,6 +164,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         ({ slot, ownerId: reservationOwner }) => prepareOne(slot, reservationOwner)
       )
     );
+    await reconcileRetiredWarmPreparations(options);
     const failure = prepared.find((result) => result.status === "rejected");
     if (failure) throw failure.reason;
   };
@@ -282,6 +183,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
 
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
+    recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
     waitForIdle: work.waitForIdle,
     async getStatus() {
       return countSlots(await options.store.list(), options.targetSize);
@@ -324,8 +226,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         } catch {
           // A quarantined claim must still allow cold fallback if audit delivery fails.
         }
-        void work.track(Promise.resolve().then(() => pool.ensureCapacity()))
-          .catch(() => undefined);
+        void work.track(Promise.resolve().then(() => pool.ensureCapacity())).catch(() => undefined);
         return null;
       }
     },
@@ -366,7 +267,6 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       return work.track(tracked);
     }
   };
-
   async function reconcileOnce(): Promise<void> {
     await reconcileWorkspaceWarmPool({
       ...options,
@@ -376,6 +276,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       cleanupSlotResources,
       retryDelayMs
     });
+    await reconcileRetiredWarmPreparations(options);
   }
 
   async function durableRuntimeKeys(): Promise<Set<string>> {

@@ -1,4 +1,7 @@
+import { createWarmPreparationPersistenceModel } from "./workspace-warm-preparation-persistence-fixture.mjs";
+
 export class DeterministicWarmSlotPersistenceClient {
+  workspaceWarmPreparation = createWarmPreparationPersistenceModel();
   rows = new Map();
   claimQueries = [];
   executedStatements = [];
@@ -99,7 +102,9 @@ export class AtomicCapacityPersistenceClient extends DeterministicWarmSlotPersis
   async $transaction(operation) {
     const previous = this.transactionTail;
     let release;
-    this.transactionTail = new Promise((resolve) => { release = resolve; });
+    this.transactionTail = new Promise((resolve) => {
+      release = resolve;
+    });
     await previous;
     try {
       return await operation(this);

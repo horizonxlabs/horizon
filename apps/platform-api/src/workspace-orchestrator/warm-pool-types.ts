@@ -1,9 +1,4 @@
-export type WarmWorkspaceSlotState =
-  | "preparing"
-  | "ready"
-  | "claiming"
-  | "cleaning"
-  | "failed";
+export type WarmWorkspaceSlotState = "preparing" | "ready" | "claiming" | "cleaning" | "failed";
 
 export interface WarmWorkspaceSlot {
   id: string;
@@ -38,7 +33,23 @@ export interface WarmWorkspaceAllocation {
   env: Record<string, string>;
 }
 
+/** Non-secret intent retained independently of the slot's retry/claim lifecycle. */
+export interface WarmPreparationIntent {
+  resourceKey: string;
+  slotId: string;
+  operationOwner: string;
+  settled: boolean;
+}
+
+export interface WarmPreparationIntentStore {
+  list(): Promise<WarmPreparationIntent[]>;
+  create(intent: Omit<WarmPreparationIntent, "settled">): Promise<void>;
+  settle(resourceKey: string): Promise<void>;
+  remove(resourceKey: string): Promise<void>;
+}
+
 export interface WorkspaceWarmSlotStore {
+  preparations: WarmPreparationIntentStore;
   list(): Promise<WarmWorkspaceSlot[]>;
   createPreparing(
     slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">,

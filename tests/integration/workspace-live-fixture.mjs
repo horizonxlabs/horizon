@@ -30,8 +30,12 @@ import { createPgSecretPersistence } from "../../apps/platform-api/src/workspace
 import { createWorkspaceWarmPool } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool.ts";
 import { createWarmPoolSecretCodec } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-secret-codec.ts";
 import { workspaceVolumeName } from "../../apps/platform-api/src/workspace-orchestrator/workspace-lifecycle.ts";
-import { assertLiveContainerAbsent } from "./workspace-live-assertions.mjs";
+import {
+  assertLiveContainerAbsent,
+  assertLiveWorkspaceDatabaseEmpty
+} from "./workspace-live-assertions.mjs";
 import { waitForWorkspaceLiveIdle } from "./workspace-live-idle.mjs";
+import { reconcileRetiredWarmPreparations } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-retirement.ts";
 
 export async function createWorkspaceLiveFixture(
   context,
@@ -120,10 +124,22 @@ export async function createWorkspaceLiveFixture(
       for (const keyId of keyIds) {
         await attempt("gateway key revocation", () => deps.llmGateway.revokeVirtualKey(keyId));
       }
+      for (const resourceKey of resourceKeys) {
+        await attempt("gateway generation retirement", () =>
+          deps.llmGateway.revokeVirtualKeysForResource(resourceKey)
+        );
+      }
       await attempt("project secrets", () => deps.secrets.removeAll(projectId));
       if (failures.length === 0) {
         await fixture.assertResourcesRemoved();
         for (const id of slotIds) await store.remove(id);
+        await reconcileRetiredWarmPreparations({ store, deps });
+        assert.equal(
+          (await store.preparations.list()).filter((intent) => resourceKeys.has(intent.resourceKey))
+            .length,
+          0,
+          "ambiguous preparation intents remain; preserve the database for later cleanup"
+        );
         if (projectCreated) {
           await client.project.delete({ where: { id: projectId } });
           await client.platformUser.delete({ where: { id: ownerId } });
@@ -143,16 +159,7 @@ export async function createWorkspaceLiveFixture(
     }
   });
 
-  assert.equal(
-    (await store.list()).length,
-    0,
-    "use a migrated, empty database with no API or other live test running"
-  );
-  assert.equal(
-    await client.workspaceRuntimeRecord.count(),
-    0,
-    "live-test database must have no workspaces"
-  );
+  await assertLiveWorkspaceDatabaseEmpty(store, client.workspaceRuntimeRecord);
   const docker = createDockerSocketEngine();
   const createContainer = docker.createContainer.bind(docker);
   docker.createContainer = async (spec) => {
@@ -196,6 +203,7 @@ export async function createWorkspaceLiveFixture(
   };
   const createKey = llmGateway.createVirtualKey.bind(llmGateway);
   llmGateway.createVirtualKey = async (input) => {
+    resourceKeys.add(input.slug);
     calls.keys += 1;
     const key = await createKey(input);
     keyIds.add(key.keyId);

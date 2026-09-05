@@ -829,6 +829,17 @@ model WorkspaceWarmSlot {
   @@map("workspace_warm_slots")
 }
 
+// Deliberately no slot FK: a retired generation must survive slot rotation/deletion.
+model WorkspaceWarmPreparation {
+  resourceKey    String   @id @map("resource_key")
+  slotId         String   @map("slot_id")
+  operationOwner String   @map("operation_owner")
+  settled        Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("workspace_warm_preparations")
+}
+
 model ChatMessage {
   id                String   @id
   projectId         String   @map("project_id")

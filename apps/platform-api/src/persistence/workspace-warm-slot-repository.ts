@@ -4,6 +4,10 @@ import type {
   WarmSlotOperationLease,
   WorkspaceWarmSlotStore
 } from "../workspace-orchestrator/warm-pool-types";
+import {
+  createWarmPreparationIntentStore,
+  type WorkspaceWarmPreparationPersistenceClient
+} from "./workspace-warm-preparation-repository";
 
 type WarmSlotRecord = Omit<
   WarmWorkspaceSlot,
@@ -60,7 +64,7 @@ type WarmSlotTransactionClient = {
   $queryRawUnsafe<T>(query: string): Promise<T>;
 };
 
-export interface WorkspaceWarmSlotPersistenceClient {
+export interface WorkspaceWarmSlotPersistenceClient extends WorkspaceWarmPreparationPersistenceClient {
   workspaceWarmSlot: WarmSlotModel;
   $transaction<T>(operation: (client: WarmSlotTransactionClient) => Promise<T>): Promise<T>;
 }
@@ -80,7 +84,11 @@ SELECT pg_advisory_xact_lock(hashtextextended('evcp-workspace-warm-pool-capacity
 `;
 
 export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlotStore {
-  constructor(private readonly client: WorkspaceWarmSlotPersistenceClient) {}
+  readonly preparations;
+
+  constructor(private readonly client: WorkspaceWarmSlotPersistenceClient) {
+    this.preparations = createWarmPreparationIntentStore(client);
+  }
 
   async list(): Promise<WarmWorkspaceSlot[]> {
     return (await this.client.workspaceWarmSlot.findMany({ orderBy: { createdAt: "asc" } })).map(
