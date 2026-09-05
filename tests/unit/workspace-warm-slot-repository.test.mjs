@@ -13,6 +13,8 @@ class DeterministicWarmSlotPersistenceClient {
 
   workspaceWarmSlot = {
     findMany: async () => [...this.rows.values()].sort(byCreatedAt).map(cloneRow),
+    count: async ({ where }) =>
+      [...this.rows.values()].filter((row) => where.state.in.includes(row.state)).length,
     create: async ({ data }) => {
       const now = new Date("2026-09-05T00:00:00.000Z");
       const row = {
@@ -73,6 +75,24 @@ class DeterministicWarmSlotPersistenceClient {
   }
 }
 
+class AtomicCapacityPersistenceClient extends DeterministicWarmSlotPersistenceClient {
+  transactionTail = Promise.resolve();
+
+  async $transaction(operation) {
+    const previous = this.transactionTail;
+    let release;
+    this.transactionTail = new Promise((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation(this);
+    } finally {
+      release();
+    }
+  }
+}
+
 const slotFixture = { id: "warm_1", resourceKey: "warm-resource-1" };
 const readyPatch = {
   containerId: "container_1",
@@ -91,6 +111,44 @@ test("two concurrent claims cannot acquire the same ready slot", async () => {
   assert.equal(claims.filter(Boolean).length, 1);
   assert.equal(new Set(claims.filter(Boolean).map((slot) => slot.id)).size, 1);
   assert.match(client.claimQueries[0], /FOR\s+UPDATE\s+SKIP\s+LOCKED\s+LIMIT\s+1/i);
+});
+
+test("two repository instances atomically reserve no more than the capacity target", async () => {
+  const client = new AtomicCapacityPersistenceClient();
+  const first = new WorkspaceWarmSlotRepositoryBackedStore(client);
+  const second = new WorkspaceWarmSlotRepositoryBackedStore(client);
+  const identities = (prefix) =>
+    Array.from({ length: 3 }, (_, index) => ({
+      id: `${prefix}_${index}`,
+      resourceKey: `${prefix}-resource-${index}`
+    }));
+
+  const reservations = await Promise.all([
+    first.reservePreparing(3, identities("first")),
+    second.reservePreparing(3, identities("second"))
+  ]);
+
+  assert.equal(reservations.flat().length, 3);
+  assert.equal((await first.list()).length, 3);
+  assert.match(client.claimQueries[0], /pg_advisory_xact_lock/i);
+});
+
+test("preparation ownership is persisted incrementally without changing slot state", async () => {
+  const client = new DeterministicWarmSlotPersistenceClient();
+  const store = new WorkspaceWarmSlotRepositoryBackedStore(client);
+  await store.createPreparing(slotFixture);
+
+  await store.recordPreparedResources(slotFixture.id, {
+    llmGatewayKeyId: "gateway_key_1",
+    secretPayload: "sealed-payload"
+  });
+  await store.recordPreparingContainer(slotFixture.id, "container_1");
+
+  const [slot] = await store.list();
+  assert.equal(slot.state, "preparing");
+  assert.equal(slot.llmGatewayKeyId, "gateway_key_1");
+  assert.equal(slot.secretPayload, "sealed-payload");
+  assert.equal(slot.containerId, "container_1");
 });
 
 test("warm-slot Prisma schema uniquely identifies resources and indexes claim candidates", async () => {

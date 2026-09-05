@@ -18,6 +18,7 @@ type WarmSlotRecord = Omit<
 
 type WarmSlotModel = {
   findMany(args: { orderBy: { createdAt: "asc" } }): Promise<WarmSlotRecord[]>;
+  count(args: { where: { state: { in: Array<"preparing" | "ready"> } } }): Promise<number>;
   create(args: {
     data: { id: string; resourceKey: string; state: "preparing" };
   }): Promise<WarmSlotRecord>;
@@ -38,6 +39,13 @@ type WarmSlotModel = {
           lastError: string;
           retryAfter: Date;
           failureCount: number;
+        }
+      | {
+          llmGatewayKeyId: string;
+          secretPayload: string;
+        }
+      | {
+          containerId: string;
         };
   }): Promise<WarmSlotRecord>;
   updateMany(args: {
@@ -49,7 +57,7 @@ type WarmSlotModel = {
 };
 
 type WarmSlotTransactionClient = {
-  workspaceWarmSlot: Pick<WarmSlotModel, "updateMany" | "findUnique">;
+  workspaceWarmSlot: Pick<WarmSlotModel, "count" | "create" | "updateMany" | "findUnique">;
   $queryRawUnsafe<T>(query: string): Promise<T>;
 };
 
@@ -67,6 +75,10 @@ FOR UPDATE SKIP LOCKED
 LIMIT 1
 `;
 
+const RESERVE_CAPACITY_LOCK_SQL = `
+SELECT pg_advisory_xact_lock(hashtextextended('evcp-workspace-warm-pool-capacity', 0))
+`;
+
 export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlotStore {
   constructor(private readonly client: WorkspaceWarmSlotPersistenceClient) {}
 
@@ -82,6 +94,41 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     return toWarmWorkspaceSlot(
       await this.client.workspaceWarmSlot.create({ data: { ...slot, state: "preparing" } })
     );
+  }
+
+  async reservePreparing(
+    targetSize: number,
+    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>
+  ): Promise<WarmWorkspaceSlot[]> {
+    return this.client.$transaction(async (transaction) => {
+      await transaction.$queryRawUnsafe<unknown[]>(RESERVE_CAPACITY_LOCK_SQL);
+      const currentCapacity = await transaction.workspaceWarmSlot.count({
+        where: { state: { in: ["preparing", "ready"] } }
+      });
+      const missing = Math.max(0, targetSize - currentCapacity);
+      const reserved: WarmWorkspaceSlot[] = [];
+      for (const candidate of candidates.slice(0, missing)) {
+        reserved.push(
+          toWarmWorkspaceSlot(
+            await transaction.workspaceWarmSlot.create({
+              data: { ...candidate, state: "preparing" }
+            })
+          )
+        );
+      }
+      return reserved;
+    });
+  }
+
+  async recordPreparedResources(
+    id: string,
+    patch: { llmGatewayKeyId: string; secretPayload: string }
+  ): Promise<void> {
+    await this.client.workspaceWarmSlot.update({ where: { id }, data: patch });
+  }
+
+  async recordPreparingContainer(id: string, containerId: string): Promise<void> {
+    await this.client.workspaceWarmSlot.update({ where: { id }, data: { containerId } });
   }
 
   async markReady(

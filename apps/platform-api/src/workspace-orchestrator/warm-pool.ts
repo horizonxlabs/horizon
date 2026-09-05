@@ -75,24 +75,35 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   };
 
   const cleanupSlotResources = async (slot: WarmWorkspaceSlot): Promise<void> => {
+    const failures: unknown[] = [];
+    const cleanup = async (operation: () => Promise<void>) => {
+      try {
+        await operation();
+      } catch (error) {
+        if (!isAlreadyAbsentError(error)) failures.push(error);
+      }
+    };
     if (slot.containerId) {
-      await options.deps.docker.removeContainer(slot.containerId).catch(() => undefined);
+      await cleanup(() => options.deps.docker.removeContainer(slot.containerId!));
     }
-    const cleanup: Array<Promise<unknown>> = [
-      options.deps.postgres.releaseSchema(slot.resourceKey),
-      options.deps.objectStorage.releaseBucket(slot.resourceKey),
-      options.deps.docker.removeVolume(workspaceVolumeName(slot.resourceKey))
+    const operations: Array<() => Promise<void>> = [
+      () => options.deps.postgres.releaseSchema(slot.resourceKey),
+      () => options.deps.objectStorage.releaseBucket(slot.resourceKey),
+      () => options.deps.docker.removeVolume(workspaceVolumeName(slot.resourceKey))
     ];
     if (slot.llmGatewayKeyId) {
-      cleanup.push(options.deps.llmGateway.revokeVirtualKey(slot.llmGatewayKeyId));
+      operations.push(() => options.deps.llmGateway.revokeVirtualKey(slot.llmGatewayKeyId!));
     }
-    await Promise.allSettled(cleanup);
+    await Promise.all(operations.map(cleanup));
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "warm workspace resource cleanup failed");
+    }
   };
 
   const prepareOne = async (slot: WarmWorkspaceSlot, previousFailureCount = 0): Promise<void> => {
     const startedAt = now().getTime();
     await auditPreparation("workspace.pool_prepare_started", slot.id, startedAt);
-    let rollbacks: Array<() => Promise<void>> = [];
+    let ownedSlot = slot;
     try {
       const volumeName = workspaceVolumeName(slot.resourceKey);
       const resources = await provisionIndependentWorkspaceResources(options.deps, {
@@ -101,7 +112,6 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         volumeName,
         volumeLabels: workspaceWarmVolumeLabels(slot.id)
       });
-      rollbacks = resources.rollbacks;
       const env = {
         DATABASE_URL: `postgresql://${resources.pg.roleName}:${resources.pg.password}@${postgresHost}/${databaseName}?schema=${resources.pg.schemaName}`,
         S3_ENDPOINT: s3Endpoint,
@@ -111,6 +121,15 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         LLM_GATEWAY_KEY: resources.llmKey.key
       };
       const secretPayload = options.codec.seal(env);
+      ownedSlot = {
+        ...ownedSlot,
+        llmGatewayKeyId: resources.llmKey.keyId,
+        secretPayload
+      };
+      await options.store.recordPreparedResources(slot.id, {
+        llmGatewayKeyId: resources.llmKey.keyId,
+        secretPayload
+      });
       const { containerId } = await options.deps.docker.createContainer(
         buildWarmContainerSpec({
           slotId: slot.id,
@@ -123,7 +142,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
           workspaceVolume: volumeName
         })
       );
-      rollbacks.push(() => options.deps.docker.removeContainer(containerId));
+      ownedSlot = { ...ownedSlot, containerId };
+      await options.store.recordPreparingContainer(slot.id, containerId);
       await options.deps.docker.startContainer(containerId);
       await waitForPreviewReady(options.deps.docker, containerId);
       await options.store.markReady(slot.id, {
@@ -133,15 +153,20 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       });
       await auditPreparation("workspace.pool_ready", slot.id, startedAt);
     } catch (error) {
-      for (const rollback of rollbacks.reverse()) {
-        await rollback().catch(() => undefined);
-      }
       const failureCount = Math.max(slot.failureCount, previousFailureCount) + 1;
       const errorCategory = preparationErrorCategory(error);
+      const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
       await options.store.markFailed(slot.id, {
         lastError: errorCategory,
         failureCount,
-        retryAfter: new Date(now().getTime() + retryDelayMs(failureCount)).toISOString()
+        retryAfter
+      });
+      await cleanupSlotResources(ownedSlot).catch(async () => {
+        await options.store.markFailed(slot.id, {
+          lastError: "cleanup_error",
+          failureCount,
+          retryAfter
+        });
       });
       await auditPreparation("workspace.pool_prepare_failed", slot.id, startedAt, errorCategory);
     }
@@ -156,9 +181,18 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         slot.retryAfter !== null &&
         new Date(slot.retryAfter).getTime() <= now().getTime()
       ) {
-        await cleanupSlotResources(slot);
-        await options.store.remove(slot.id);
-        expiredFailureCounts.push(slot.failureCount);
+        try {
+          await cleanupSlotResources(slot);
+          await options.store.remove(slot.id);
+          expiredFailureCounts.push(slot.failureCount);
+        } catch {
+          const failureCount = slot.failureCount + 1;
+          await options.store.markFailed(slot.id, {
+            lastError: "cleanup_error",
+            failureCount,
+            retryAfter: new Date(now().getTime() + retryDelayMs(failureCount)).toISOString()
+          });
+        }
       }
     }
 
@@ -169,17 +203,13 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         slot.retryAfter !== null &&
         new Date(slot.retryAfter).getTime() > now().getTime()
     ).length;
-    const currentCapacity =
-      slots.filter((slot) => slot.state === "preparing" || slot.state === "ready").length +
-      blockedFailures;
-    const missing = Math.max(0, options.targetSize - currentCapacity);
-    const reservations: Array<{ slot: WarmWorkspaceSlot; previousFailureCount: number }> = [];
-    for (let index = 0; index < missing; index += 1) {
-      reservations.push({
-        slot: await options.store.createPreparing(createSlotIdentity()),
-        previousFailureCount: expiredFailureCounts[index] ?? 0
-      });
-    }
+    const reservableTarget = Math.max(0, options.targetSize - blockedFailures);
+    const candidates = Array.from({ length: reservableTarget }, createSlotIdentity);
+    const reserved = await options.store.reservePreparing(reservableTarget, candidates);
+    const reservations = reserved.map((slot, index) => ({
+      slot,
+      previousFailureCount: expiredFailureCounts[index] ?? 0
+    }));
     await Promise.all(
       reservations.map(({ slot, previousFailureCount }) => prepareOne(slot, previousFailureCount))
     );
@@ -222,8 +252,19 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     async failClaim(slotId, _error) {
       const slot = (await options.store.list()).find((candidate) => candidate.id === slotId);
       if (!slot) return;
-      await cleanupSlotResources(slot);
-      await options.store.remove(slotId);
+      const failureCount = slot.failureCount + 1;
+      const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
+      await options.store.markFailed(slotId, {
+        lastError: "cleanup_error",
+        failureCount,
+        retryAfter
+      });
+      try {
+        await cleanupSlotResources(slot);
+        await options.store.remove(slotId);
+      } catch {
+        // The failed row retains every known owner identifier for the next reconciliation retry.
+      }
     },
     async reconcile() {
       await ensureCapacity();
@@ -250,4 +291,9 @@ function preparationErrorCategory(error: unknown): string {
   if (/llm|gateway|key/.test(message)) return "llm_gateway_error";
   if (/secret|credential|envelope/.test(message)) return "credential_error";
   return "preparation_error";
+}
+
+function isAlreadyAbsentError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /unknown container|no such|not found|\b404\b/i.test(message);
 }

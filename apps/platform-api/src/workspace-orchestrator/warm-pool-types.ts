@@ -28,6 +28,15 @@ export interface WarmWorkspaceAllocation {
 export interface WorkspaceWarmSlotStore {
   list(): Promise<WarmWorkspaceSlot[]>;
   createPreparing(slot: Pick<WarmWorkspaceSlot, "id" | "resourceKey">): Promise<WarmWorkspaceSlot>;
+  reservePreparing(
+    targetSize: number,
+    candidates: Array<Pick<WarmWorkspaceSlot, "id" | "resourceKey">>
+  ): Promise<WarmWorkspaceSlot[]>;
+  recordPreparedResources(
+    id: string,
+    patch: { llmGatewayKeyId: string; secretPayload: string }
+  ): Promise<void>;
+  recordPreparingContainer(id: string, containerId: string): Promise<void>;
   markReady(
     id: string,
     patch: { containerId: string; llmGatewayKeyId: string; secretPayload: string }

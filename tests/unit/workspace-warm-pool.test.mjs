@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createMemoryDockerEngine } from "../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts";
-import { createWarmPoolSecretCodec } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-secret-codec.ts";
-import { createWorkspaceWarmPool } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool.ts";
-
-const START = new Date("2026-09-05T00:00:00.000Z");
+import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
 
 test("ensureCapacity prepares exactly the missing slots", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 3, readySlots: 1 });
@@ -26,6 +22,51 @@ test("parallel ensureCapacity calls collapse into one preparation pass", async (
 
   assert.equal((await fixture.store.list()).length, 3);
   assert.equal(fixture.prepareAttempts, 3);
+});
+
+test("two managers sharing a durable store never reserve beyond target capacity", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 3 });
+  const secondManager = fixture.createPool();
+
+  await Promise.all([fixture.pool.ensureCapacity(), secondManager.ensureCapacity()]);
+
+  const slots = await fixture.store.list();
+  assert.equal(slots.length, 3);
+  assert.equal(slots.filter((slot) => slot.state === "ready").length, 3);
+});
+
+test("preparation persists resource and container ownership before start and readiness", async () => {
+  const fixture = createWarmPoolFixture({
+    targetSize: 1,
+    previewExitCode: 1,
+    cleanupFailure: "schema"
+  });
+  let beforeContainerCreate;
+  let beforeContainerStart;
+  const createContainer = fixture.docker.createContainer.bind(fixture.docker);
+  fixture.docker.createContainer = async (spec) => {
+    [beforeContainerCreate] = await fixture.store.list();
+    return createContainer(spec);
+  };
+  const startContainer = fixture.docker.startContainer.bind(fixture.docker);
+  fixture.docker.startContainer = async (containerId) => {
+    [beforeContainerStart] = await fixture.store.list();
+    return startContainer(containerId);
+  };
+
+  await fixture.pool.ensureCapacity();
+
+  assert.equal(beforeContainerCreate.state, "preparing");
+  assert.equal(beforeContainerCreate.llmGatewayKeyId, "key-1");
+  assert.ok(beforeContainerCreate.secretPayload);
+  assert.equal(beforeContainerCreate.containerId, null);
+  assert.equal(beforeContainerStart.state, "preparing");
+  assert.match(beforeContainerStart.containerId, /^mem-/);
+  const [failed] = await fixture.store.list();
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.llmGatewayKeyId, "key-1");
+  assert.ok(failed.secretPayload);
+  assert.match(failed.containerId, /^mem-/);
 });
 
 test("a slot is ready only after preview health succeeds", async () => {
@@ -132,191 +173,30 @@ test("failClaim destroys every slot-owned resource and retires its row", async (
   assert.doesNotMatch(JSON.stringify(fixture.audits), /exposed-secret-value/);
 });
 
-function createWarmPoolFixture({ targetSize, readySlots = 0, previewExitCode = 0 }) {
-  const store = createMemoryWarmSlotStore();
-  const docker = createMemoryDockerEngine();
-  const releasedSchemas = [];
-  const releasedBuckets = [];
-  const revokedKeys = [];
-  const audits = [];
-  let prepareAttempts = 0;
-  let currentNow = START;
-  let nextId = readySlots + 1;
-  const codec = createWarmPoolSecretCodec("1".repeat(64));
+for (const cleanupFailure of ["key", "schema", "bucket", "volume"]) {
+  test(`a ${cleanupFailure} cleanup failure retains the quarantined row until a successful retry`, async () => {
+    const fixture = createWarmPoolFixture({ targetSize: 1, cleanupFailure });
+    await fixture.pool.ensureCapacity();
+    const allocation = await fixture.pool.claim(`prj_${cleanupFailure}_failure`);
+    assert.ok(allocation);
 
-  for (let index = 1; index <= readySlots; index += 1) {
-    store.seedReady({
-      id: `warm_slot_${index}`,
-      resourceKey: `warm-resource-${index}`,
-      containerId: `existing-container-${index}`,
-      llmGatewayKeyId: `existing-key-${index}`,
-      secretPayload: codec.seal({ DATABASE_URL: `postgresql://existing-${index}` })
-    });
-  }
+    await fixture.pool.failClaim(allocation.slotId, new Error("handoff failed"));
 
-  const fixture = {
-    store,
-    docker,
-    releasedSchemas,
-    releasedBuckets,
-    revokedKeys,
-    audits,
-    get prepareAttempts() {
-      return prepareAttempts;
-    },
-    get previewExitCode() {
-      return previewExitCode;
-    },
-    set previewExitCode(value) {
-      previewExitCode = value;
-    },
-    setNow(value) {
-      currentNow = value;
-    }
-  };
+    const [quarantined] = await fixture.store.list();
+    assert.equal(quarantined.id, allocation.slotId);
+    assert.equal(quarantined.state, "failed");
+    assert.equal(quarantined.containerId, allocation.containerId);
+    assert.equal(quarantined.llmGatewayKeyId, allocation.llmGatewayKeyId);
+    assert.ok(quarantined.secretPayload);
 
-  const execInContainer = docker.execInContainer.bind(docker);
-  docker.execInContainer = async (containerId, command) => {
-    await execInContainer(containerId, command);
-    return {
-      stdout: "",
-      stderr: previewExitCode === 0 ? "" : "not ready",
-      exitCode: previewExitCode
-    };
-  };
+    fixture.setNow(new Date(quarantined.retryAfter));
+    await fixture.pool.ensureCapacity();
 
-  fixture.pool = createWorkspaceWarmPool({
-    targetSize,
-    store,
-    codec,
-    now: () => currentNow,
-    createSlotIdentity: () => {
-      const sequence = nextId++;
-      return { id: `warm_slot_${sequence}`, resourceKey: `warm-resource-${sequence}` };
-    },
-    deps: {
-      postgres: {
-        async provisionSchema(resourceKey) {
-          prepareAttempts += 1;
-          return {
-            schemaName: `app_${resourceKey.replaceAll("-", "_")}`,
-            roleName: `app_${resourceKey.replaceAll("-", "_")}_role`,
-            password: `pg-secret-${prepareAttempts}`
-          };
-        },
-        async releaseSchema(resourceKey) {
-          releasedSchemas.push(resourceKey);
-        }
-      },
-      objectStorage: {
-        async provisionBucket(resourceKey) {
-          return {
-            bucket: `proj-${resourceKey}`,
-            accessKey: `access-key-${prepareAttempts}`,
-            secretKey: `storage-secret-${prepareAttempts}`
-          };
-        },
-        async releaseBucket(resourceKey) {
-          releasedBuckets.push(resourceKey);
-        }
-      },
-      llmGateway: {
-        async createVirtualKey() {
-          return { keyId: `key-${prepareAttempts}`, key: `llm-secret-${prepareAttempts}` };
-        },
-        async revokeVirtualKey(keyId) {
-          revokedKeys.push(keyId);
-        }
-      },
-      secrets: {
-        async put() {},
-        async listNames() {
-          return [];
-        },
-        async resolveEnv() {
-          return {};
-        },
-        async rotate() {},
-        async removeAll() {},
-        async hydrate() {}
-      },
-      docker,
-      postgresHost: "postgres:5432",
-      databaseName: "evcp",
-      s3Endpoint: "http://minio:9000",
-      onAudit: (event) => audits.push(event)
-    }
+    const slots = await fixture.store.list();
+    assert.equal(
+      slots.some((slot) => slot.id === allocation.slotId),
+      false
+    );
+    assert.equal(slots.filter((slot) => slot.state === "ready").length, 1);
   });
-
-  return fixture;
-}
-
-function createMemoryWarmSlotStore() {
-  const slots = new Map();
-  let timestamp = 0;
-  const iso = () => new Date(START.getTime() + timestamp++).toISOString();
-  const clone = (value) => structuredClone(value);
-
-  return {
-    seedReady(input) {
-      const createdAt = iso();
-      slots.set(input.id, {
-        ...input,
-        state: "ready",
-        claimProjectId: null,
-        lastError: null,
-        retryAfter: null,
-        failureCount: 0,
-        readyAt: createdAt,
-        claimedAt: null,
-        createdAt,
-        updatedAt: createdAt
-      });
-    },
-    async list() {
-      return [...slots.values()].map(clone);
-    },
-    async createPreparing(input) {
-      if (slots.has(input.id)) throw new Error(`duplicate slot '${input.id}'`);
-      const createdAt = iso();
-      const slot = {
-        ...input,
-        state: "preparing",
-        containerId: null,
-        llmGatewayKeyId: null,
-        secretPayload: null,
-        claimProjectId: null,
-        lastError: null,
-        retryAfter: null,
-        failureCount: 0,
-        readyAt: null,
-        claimedAt: null,
-        createdAt,
-        updatedAt: createdAt
-      };
-      slots.set(slot.id, slot);
-      return clone(slot);
-    },
-    async markReady(id, patch) {
-      Object.assign(slots.get(id), patch, {
-        state: "ready",
-        lastError: null,
-        retryAfter: null,
-        readyAt: iso(),
-        updatedAt: iso()
-      });
-    },
-    async markFailed(id, patch) {
-      Object.assign(slots.get(id), patch, { state: "failed", updatedAt: iso() });
-    },
-    async claim(projectId) {
-      const slot = [...slots.values()].find((candidate) => candidate.state === "ready");
-      if (!slot) return null;
-      Object.assign(slot, { state: "claiming", claimProjectId: projectId, claimedAt: iso() });
-      return clone(slot);
-    },
-    async remove(id) {
-      slots.delete(id);
-    }
-  };
 }
