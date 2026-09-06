@@ -214,7 +214,7 @@ test("an unreadable claimed envelope is quarantined with sanitized audit and asy
     return new Promise(() => {});
   };
 
-  assert.equal(await fixture.pool.claim("prj_corrupt"), null);
+  assert.equal(await fixture.pool.claim("prj_corrupt", async () => {}), null);
 
   assert.equal((await fixture.store.list()).length, 0);
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
@@ -234,7 +234,11 @@ test("failClaim destroys every slot-owned resource and retires its row", async (
   const allocation = await fixture.pool.claim("prj_broken");
   assert.ok(allocation);
 
-  await fixture.pool.failClaim(allocation.slotId, new Error("handoff exposed-secret-value failed"));
+  await fixture.pool.failClaim(
+    allocation.slotId,
+    new Error("handoff exposed-secret-value failed"),
+    async () => {}
+  );
 
   assert.equal((await fixture.store.list()).length, 0);
   assert.equal(fixture.docker.state.containers.length, 0);
@@ -252,7 +256,7 @@ for (const cleanupFailure of ["key", "schema", "bucket", "volume"]) {
     const allocation = await fixture.pool.claim(`prj_${cleanupFailure}_failure`);
     assert.ok(allocation);
 
-    await fixture.pool.failClaim(allocation.slotId, new Error("handoff failed"));
+    await fixture.pool.failClaim(allocation.slotId, new Error("handoff failed"), async () => {});
 
     const [quarantined] = await fixture.store.list();
     assert.equal(quarantined.id, allocation.slotId);
@@ -265,7 +269,10 @@ for (const cleanupFailure of ["key", "schema", "bucket", "volume"]) {
     await fixture.pool.ensureCapacity();
 
     const slots = await fixture.store.list();
-    assert.equal(slots.some((slot) => slot.id === allocation.slotId), true);
+    assert.equal(
+      slots.some((slot) => slot.id === allocation.slotId),
+      true
+    );
     assert.equal(slots.filter((slot) => slot.state === "ready").length, 1);
   });
 }

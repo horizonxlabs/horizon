@@ -6,9 +6,8 @@ import type {
 } from "./warm-pool-types";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { physicalResourceKey } from "./warm-pool-config";
-import type { WorkspaceRuntimeSnapshot } from "../persistence/workspace-runtime-repository";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
-import { recoverOwnedWarmClaim } from "./warm-pool-startup-recovery";
+import { recoverOwnedWarmClaim, type WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { waitForPreviewReady } from "./workspace-lifecycle";
 import {
   maintainWorkspaceCleanupProjectLease,
@@ -23,13 +22,13 @@ export async function reconcileWorkspaceWarmPool(options: {
   now: () => Date;
   operationLeaseMs: number;
   createOperationOwner?: () => string;
+  publishRecovered?: WarmRecoveryPublisher;
   cleanupSlotResources: (
     slot: WarmWorkspaceSlot,
     assertOwned?: () => Promise<void>
   ) => Promise<void>;
   retryDelayMs: (failureCount: number) => number;
-}): Promise<WorkspaceRuntimeSnapshot[]> {
-  const recovered: WorkspaceRuntimeSnapshot[] = [];
+}): Promise<void> {
   const containers = await options.deps.docker.listManagedContainers();
   let runtimeKeys = await durableRuntimeKeys(options.deps);
   const slots = await options.store.list();
@@ -100,11 +99,12 @@ export async function reconcileWorkspaceWarmPool(options: {
           totals.preserved += 1;
           continue;
         }
-        const snapshot = await recoverOwnedWarmClaim(options, current, {
-          token: ownerId,
-          assertOwned: projectOwnership.assertOwned
-        });
-        if (snapshot) recovered.push(snapshot);
+        await recoverOwnedWarmClaim(
+          options,
+          current,
+          { token: ownerId, assertOwned: projectOwnership.assertOwned },
+          options.publishRecovered
+        );
       }
       const acquired = await options.store.acquireCleanup(
         slot.id,
@@ -184,7 +184,6 @@ export async function reconcileWorkspaceWarmPool(options: {
   } catch {
     // Audit delivery must not invalidate completed reconciliation.
   }
-  return recovered;
 }
 
 async function durableRuntimeKeys(deps: WorkspaceOrchestratorDeps): Promise<Set<string>> {

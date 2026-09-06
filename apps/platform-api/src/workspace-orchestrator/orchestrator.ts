@@ -221,8 +221,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return healed;
     }
 
-    await leases.assertOwned(input.projectId);
-    const allocation = await deps.warmPool?.claim(input.projectId);
+    const assertProjectOwned = () => leases.assertOwned(input.projectId);
+    await assertProjectOwned();
+    const allocation = await deps.warmPool?.claim(input.projectId, assertProjectOwned);
     if (allocation) {
       try {
         const record = await provisionClaimedWorkspace(input, allocation);
@@ -234,8 +235,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         refillWarmPool();
         return record;
       } catch (error) {
-        await leases.assertOwned(input.projectId);
-        await deps.warmPool!.failClaim(allocation.slotId, error);
+        await assertProjectOwned();
+        await deps.warmPool!.failClaim(allocation.slotId, error, assertProjectOwned);
         auditPoolEvent({
           action: "workspace.pool_claim_failed",
           projectId: input.projectId,

@@ -16,11 +16,11 @@ export function createWarmPoolLifecycle(
       deps.warmPool = pool;
     },
     async reconcileWarmPool(): Promise<void> {
-      for (const snapshot of (await deps.warmPool?.reconcile()) ?? []) {
+      await deps.warmPool?.reconcile((snapshot) => {
         records.set(snapshot.record.projectId, snapshot.record);
         if (snapshot.llmGatewayKeyId)
           llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
-      }
+      });
     },
     async ensureWarmPoolCapacity(): Promise<void> {
       await deps.warmPool?.ensureCapacity();

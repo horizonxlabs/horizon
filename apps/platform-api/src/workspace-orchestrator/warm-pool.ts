@@ -18,6 +18,7 @@ import {
 import { isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
 import { createWarmPoolWorkTracker } from "./warm-pool-work";
 import { recoverWarmClaim } from "./warm-pool-claim-recovery";
+import type { WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { prepareWarmSlot } from "./warm-pool-preparation";
 import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
 const OPERATION_LEASE_MS = 5 * 60_000;
@@ -26,11 +27,14 @@ export interface WorkspaceWarmPool {
   ensureCapacity(): Promise<void>;
   /** Stop new requests before awaiting scheduled refill and active reconciliation work. */
   waitForIdle(): Promise<void>;
-  claim(projectId: string): Promise<WarmWorkspaceAllocation | null>;
+  claim(
+    projectId: string,
+    assertProjectOwned: () => Promise<void>
+  ): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
   completeClaim(slotId: string): Promise<void>;
-  failClaim(slotId: string, error: unknown): Promise<void>;
-  reconcile(): ReturnType<typeof reconcileWorkspaceWarmPool>;
+  failClaim(slotId: string, error: unknown, assertProjectOwned: () => Promise<void>): Promise<void>;
+  reconcile(publishRecovered?: WarmRecoveryPublisher): Promise<void>;
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
   getClaimProjectIds(): Promise<ReadonlySet<string>>;
@@ -223,7 +227,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         )
       );
     },
-    async claim(projectId) {
+    async claim(projectId, assertProjectOwned) {
       if (options.targetSize === 0) return null;
       // A crashed claimant is reconciled separately; never give that project a second slot.
       if ((await options.store.list()).some((slot) => slot.claimProjectId === projectId))
@@ -248,7 +252,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
           env: options.codec.open(slot.secretPayload)
         };
       } catch (error) {
-        await pool.failClaim(slot.id, error);
+        await pool.failClaim(slot.id, error, assertProjectOwned);
         try {
           options.deps.onAudit?.({
             action: "workspace.pool_claim_failed",
@@ -265,7 +269,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     async completeClaim(slotId) {
       await options.store.remove(slotId);
     },
-    async failClaim(slotId, _error) {
+    async failClaim(slotId, _error, assertProjectOwned) {
       const slot = (await options.store.list()).find((candidate) => candidate.id === slotId);
       if (!slot) return;
       const failureCount = slot.failureCount + 1;
@@ -277,7 +281,10 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         { store: options.store, slotId, ownerId, now, leaseMs: operationLeaseMs },
         async (ownership) => {
           try {
-            await cleanupSlotResources(owned, ownership.assertOwned);
+            await cleanupSlotResources(owned, async () => {
+              await assertProjectOwned();
+              await ownership.assertOwned();
+            });
             await options.store.remove(slotId, ownerId);
           } catch {
             await options.store.markFailed(
@@ -289,9 +296,10 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         }
       );
     },
-    reconcile() {
+    reconcile(publishRecovered) {
       if (inFlightReconcile) return inFlightReconcile;
-      const operation = inFlightEnsure ? inFlightEnsure.then(reconcileOnce) : reconcileOnce();
+      const reconcile = () => reconcileOnce(publishRecovered);
+      const operation = inFlightEnsure ? inFlightEnsure.then(reconcile) : reconcile();
       const tracked = operation.finally(() => {
         if (inFlightReconcile === tracked) inFlightReconcile = null;
       });
@@ -299,17 +307,17 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       return work.track(tracked);
     }
   };
-  async function reconcileOnce(): ReturnType<typeof reconcileWorkspaceWarmPool> {
-    const recovered = await reconcileWorkspaceWarmPool({
+  async function reconcileOnce(publishRecovered?: WarmRecoveryPublisher): Promise<void> {
+    await reconcileWorkspaceWarmPool({
       ...options,
       now,
       operationLeaseMs,
       createOperationOwner,
+      publishRecovered,
       cleanupSlotResources,
       retryDelayMs
     });
     await reconcileRetiredWarmPreparations(options);
-    return recovered;
   }
 
   async function durableRuntimeKeys(): Promise<Set<string>> {

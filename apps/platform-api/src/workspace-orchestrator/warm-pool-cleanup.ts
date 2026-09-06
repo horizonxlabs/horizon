@@ -13,6 +13,7 @@ export async function cleanupWarmSlotResources(
     const assigned = ((await deps.runtimeRecords?.list()) ?? []).some(
       ({ record }) => record.projectId === slot.claimProjectId
     );
+    await assertOwned?.();
     if (!assigned) {
       const final = await deps.docker.inspectContainer(
         `evcp-ws-${resourceKeyForProject(slot.claimProjectId)}`

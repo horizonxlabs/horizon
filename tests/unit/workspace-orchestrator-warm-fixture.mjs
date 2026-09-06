@@ -46,18 +46,18 @@ export async function createFixture({ ready = true, failure } = {}) {
   };
   const pool = {
     ...prepared.pool,
-    async claim(projectId) {
+    async claim(...args) {
       order.push("claim");
-      return prepared.pool.claim(projectId);
+      return prepared.pool.claim(...args);
     },
     async completeClaim(slotId) {
       order.push("complete");
       maybeFail("complete");
       return prepared.pool.completeClaim(slotId);
     },
-    async failClaim(slotId, error) {
+    async failClaim(...args) {
       order.push("fail");
-      return prepared.pool.failClaim(slotId, error);
+      return prepared.pool.failClaim(...args);
     },
     ensureCapacity() {
       order.push("refill");

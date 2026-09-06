@@ -57,7 +57,7 @@ test("live cleanup waits for a blocked refill scheduled inside corrupt-envelope 
       return pending;
     }
   };
-  assert.equal(await exposedPool.claim("prj_bad_envelope"), null);
+  assert.equal(await exposedPool.claim("prj_bad_envelope", async () => {}), null);
   await refillStarted.promise;
   const inFlightRefill = fixture.pool.ensureCapacity();
   assert.equal(observedRefills.size, 0, "closure-internal refill bypasses the copied wrapper");
@@ -105,7 +105,7 @@ test("the pool idle boundary includes a scheduled refill before capacity work st
     await release.promise;
     return ensureCapacity();
   };
-  assert.equal(await fixture.pool.claim("prj_bad_scheduled_envelope"), null);
+  assert.equal(await fixture.pool.claim("prj_bad_scheduled_envelope", async () => {}), null);
   await requested.promise;
   let idle = false;
   const draining = fixture.pool.waitForIdle().then(() => {
