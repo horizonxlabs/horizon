@@ -173,6 +173,10 @@ function designQualitySection(): string {
 - "Anuphan Variable" is the offline Thai/Latin sans. Use font-mono (JetBrains Mono) with tabular-nums for comparable KPI values, table amounts, and IDs.
 - Use EmptyState for zero-data views and Skeleton for loading rather than bare text.
 - Use believable localized copy and 8–15 varied seed records instead of lorem ipsum.
+- Treat the current date supplied by the runtime as authoritative. Never present stale dates as upcoming events.
+- Sample or demo data must be clearly labeled. Do not invent prices, certifications, contact details, speakers, capacity, or availability and present them as verified facts.
+- Never claim that an email was sent, a registration was saved, or another side effect succeeded unless an implemented backend completed it. For mock-only flows, say that the submission was recorded locally for demonstration.
+- Every form control needs an accessible name. Prefer a visible <label htmlFor="field-id"> with a matching input id; placeholders alone are not labels.
 - The first build sets a polished visual system. Later turns obey the Golden Rule and retain it.`;
 }
 

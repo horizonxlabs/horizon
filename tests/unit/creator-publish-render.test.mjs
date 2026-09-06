@@ -21,8 +21,7 @@ const requireFromStore = createRequire(
 const { act, create } = requireFromStore("react-test-renderer");
 const { PublishDialog } =
   await import("../../apps/creator-web/src/features/publish/PublishDialog.tsx");
-const { PublishPage } =
-  await import("../../apps/creator-web/src/features/publish/PublishPage.tsx");
+const { PublishPage } = await import("../../apps/creator-web/src/features/publish/PublishPage.tsx");
 
 function publishApp(overrides = {}) {
   return {
@@ -44,7 +43,9 @@ function publishApp(overrides = {}) {
     publishReadinessState: "ready",
     publishReview: {
       manifest: {
-        appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
+        appId: "app-1",
+        manifestVersion: "3",
+        app: { slug: "ops", route: "/apps/ops" },
         frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
         auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
         roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
@@ -93,16 +94,20 @@ async function renderDialog(client) {
 test("PublishPage summarizes readable blockers without invoking its disabled action", async () => {
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(PublishPage, { app: publishApp({
-      publishReview: {
-        ...publishApp().publishReview,
-        checklist: [
-          { key: "prd_baseline", label: "PRD baseline", status: "fail", detail: "prd_123" },
-          { key: "app_roles", label: "App roles", status: "fail", detail: "owner_user_id" }
-        ],
-        ready: false
-      }
-    }) }));
+    renderer = create(
+      React.createElement(PublishPage, {
+        app: publishApp({
+          publishReview: {
+            ...publishApp().publishReview,
+            checklist: [
+              { key: "prd_baseline", label: "PRD baseline", status: "fail", detail: "prd_123" },
+              { key: "app_roles", label: "App roles", status: "fail", detail: "owner_user_id" }
+            ],
+            ready: false
+          }
+        })
+      })
+    );
   });
   try {
     const json = JSON.stringify(renderer.toJSON());
@@ -126,11 +131,16 @@ test("PublishPage uses semantic progress and error feedback", () => {
   assert.match(publishing, /Publishing…/);
   assert.match(publishing, /disabled/);
 
-  const failed = renderToStaticMarkup(React.createElement(PublishPage, { app: publishApp({
-    publishMessage: "Project could not be published. Existing deployment information was preserved.",
-    publishMessageTone: "danger",
-    publishMessageTechnicalDetails: "publish API 503"
-  }) }));
+  const failed = renderToStaticMarkup(
+    React.createElement(PublishPage, {
+      app: publishApp({
+        publishMessage:
+          "Project could not be published. Existing deployment information was preserved.",
+        publishMessageTone: "danger",
+        publishMessageTechnicalDetails: "publish API 503"
+      })
+    })
+  );
   assert.match(failed, /role="alert"/);
   assert.match(failed, /Technical details/);
   assert.match(failed, /publish API 503/);
@@ -140,12 +150,16 @@ test("PublishPage retries unavailable readiness for the selected project", async
   const retriedProjects = [];
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(PublishPage, { app: publishApp({
-      accessLoadState: "unavailable",
-      publishReadinessState: "unavailable",
-      refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId),
-      publishMessageTechnicalDetails: "readiness API 503"
-    }) }));
+    renderer = create(
+      React.createElement(PublishPage, {
+        app: publishApp({
+          accessLoadState: "unavailable",
+          publishReadinessState: "unavailable",
+          refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId),
+          publishMessageTechnicalDetails: "readiness API 503"
+        })
+      })
+    );
   });
   try {
     const retry = renderer.root.find(
@@ -162,11 +176,15 @@ test("PublishPage retries when access loaded but publish review is unavailable",
   const retriedProjects = [];
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(PublishPage, { app: publishApp({
-      publishReview: undefined,
-      publishReadinessState: "unavailable",
-      refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId)
-    }) }));
+    renderer = create(
+      React.createElement(PublishPage, {
+        app: publishApp({
+          publishReview: undefined,
+          publishReadinessState: "unavailable",
+          refreshCreatorPublishState: async (projectId) => retriedProjects.push(projectId)
+        })
+      })
+    );
   });
   try {
     const retry = renderer.root.find(
@@ -201,7 +219,10 @@ test("PublishDialog labels an in-flight deployment and preserves its request", a
     });
     assert.deepEqual(calls, [["project-1", "staging"]]);
     assert.match(JSON.stringify(renderer.toJSON()), /Deploying…/);
-    assert.equal(renderer.root.findAllByType("button").filter((button) => button.props.disabled).length >= 2, true);
+    assert.equal(
+      renderer.root.findAllByType("button").filter((button) => button.props.disabled).length >= 2,
+      true
+    );
 
     pending.resolve({ deployment: { healthStatus: "healthy" } });
     await act(async () => {
@@ -218,10 +239,16 @@ test("PublishDialog labels an in-flight promotion and preserves its request", as
   const pending = deferred();
   let promotedProject;
   const client = {
-    listDeployments: async () => [{
-      id: "staging-1", environment: "staging", healthStatus: "healthy",
-      commitSha: "1234567890", slug: "ops", createdAt: "2026-08-24T12:00:00.000Z"
-    }],
+    listDeployments: async () => [
+      {
+        id: "staging-1",
+        environment: "staging",
+        healthStatus: "healthy",
+        commitSha: "1234567890",
+        slug: "ops",
+        createdAt: "2026-08-24T12:00:00.000Z"
+      }
+    ],
     publishProject: async () => undefined,
     promoteDeployment: (projectId) => {
       promotedProject = projectId;
@@ -239,7 +266,10 @@ test("PublishDialog labels an in-flight promotion and preserves its request", as
       await Promise.resolve();
     });
     assert.equal(promotedProject, "project-1");
-    assert.match(JSON.stringify(renderer.toJSON()), /Promoting…/);
+    const busyJson = JSON.stringify(renderer.toJSON());
+    assert.match(busyJson, /Promoting…/);
+    assert.match(busyJson, /Rebuilding and health-checking the production app/);
+    assert.match(busyJson, /safe to close this dialog/);
     pending.resolve({ deployment: { healthStatus: "healthy" } });
     await act(async () => {
       await pending.promise;
@@ -281,14 +311,16 @@ test("PublishDialog presents deployment failures as outcomes with technical deta
 
 test("PublishDialog presents deployment-history failures as one actionable warning", async () => {
   const client = {
-    listDeployments: async () => { throw new Error("history API 503"); },
+    listDeployments: async () => {
+      throw new Error("history API 503");
+    },
     publishProject: async () => undefined,
     promoteDeployment: async () => undefined
   };
   const renderer = await renderDialog(client);
   try {
-    const messages = renderer.root.findAll(
-      (node) => node.props.className?.includes("creator-status-message")
+    const messages = renderer.root.findAll((node) =>
+      node.props.className?.includes("creator-status-message")
     );
     assert.equal(messages.length, 1);
     assert.match(messages[0].props.className, /warning/);
@@ -303,12 +335,20 @@ test("PublishDialog presents deployment-history failures as one actionable warni
 
 test("PublishDialog presents promotion failures as outcomes with technical details", async () => {
   const client = {
-    listDeployments: async () => [{
-      id: "staging-1", environment: "staging", healthStatus: "healthy",
-      commitSha: "1234567890", slug: "ops", createdAt: "2026-08-24T12:00:00.000Z"
-    }],
+    listDeployments: async () => [
+      {
+        id: "staging-1",
+        environment: "staging",
+        healthStatus: "healthy",
+        commitSha: "1234567890",
+        slug: "ops",
+        createdAt: "2026-08-24T12:00:00.000Z"
+      }
+    ],
     publishProject: async () => undefined,
-    promoteDeployment: async () => { throw new Error("promotion API 409"); }
+    promoteDeployment: async () => {
+      throw new Error("promotion API 409");
+    }
   };
   const renderer = await renderDialog(client);
   try {

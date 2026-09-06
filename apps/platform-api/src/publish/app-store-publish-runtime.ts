@@ -240,7 +240,7 @@ export async function handlePersistedPublishApiRequest(
   ) {
     const actor = await resolvePersistenceUser(services, request.headers ?? {});
     const project = await resolvePersistenceProject(services, actor, reviewMatch[1]);
-    const baseline = await prdPersistence.getCurrent(actor, project);
+    const baseline = await prdPersistence.getCurrentOptional(actor, project);
     const preview = await workspacePersistence.refreshPreview(actor, { project, baseline });
     return {
       status: HttpStatus.OK,
@@ -275,7 +275,7 @@ export async function handlePersistedPublishApiRequest(
   if (validation && !validation.ok) return validation.response;
   const actor = await resolvePersistenceUser(services, request.headers ?? {});
   const project = await resolvePersistenceProject(services, actor, publishMatch[1]);
-  const baseline = await prdPersistence.getCurrent(actor, project);
+  const baseline = await prdPersistence.getCurrentOptional(actor, project);
   const preview = await workspacePersistence.refreshPreview(actor, { project, baseline });
   let result;
   try {

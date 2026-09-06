@@ -273,3 +273,26 @@ test("a soft image failure remains visible but does not fail the generation turn
   );
   assert.equal(next, undefined);
 });
+
+test("image failures expose the sanitized provider reason in Creator", () => {
+  const [failure] = adaptPiEvent({
+    type: "tool_execution_end",
+    toolCallId: "img-failed",
+    toolName: "generate_image",
+    result: {
+      details: {
+        actionId: "img-failed",
+        actionType: "image",
+        label: "public/generated/hero.png",
+        ok: false,
+        softFailure: true,
+        error: "image generation failed: AI image provider returned HTTP 403"
+      }
+    },
+    isError: false
+  });
+
+  assert.equal(failure.ok, false);
+  assert.match(failure.error, /HTTP 403/);
+  assert.doesNotMatch(failure.error, /public\/generated/);
+});

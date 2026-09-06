@@ -41,7 +41,7 @@ function prdApp(overrides = {}) {
     visibleVersionRows: [],
     currentPrdVersion: undefined,
     prdStatus: "empty",
-    prdMessage: "No PRD draft yet.",
+    prdMessage: "No AI project note yet.",
     prdTechnicalDetails: undefined,
     prdErrorSource: undefined,
     prdFeedbackTone: undefined,
@@ -57,45 +57,45 @@ function renderPrd(overrides) {
   return renderToStaticMarkup(React.createElement(PrdPage, { app: prdApp(overrides) }));
 }
 
-test("PRD uses one semantic state for loading, empty, and unavailable outcomes", () => {
+test("AI project notes use one semantic state for loading, empty, and unavailable outcomes", () => {
   const loading = renderPrd({ prdStatus: "loading" });
   assert.match(loading, /creator-state-loading/);
-  assert.match(loading, /Loading PRD/);
+  assert.match(loading, /Loading project notes/);
   assert.doesNotMatch(loading, /Loading PRD state from Platform API/);
 
   const empty = renderPrd({ prdStatus: "empty" });
   assert.match(empty, /creator-state-empty/);
-  assert.match(empty, /No PRD draft yet/);
-  assert.equal((empty.match(/Generate PRD Draft/g) ?? []).length, 1);
+  assert.match(empty, /No AI project note yet/);
+  assert.match(empty, /optional/i);
+  assert.equal((empty.match(/Generate AI Note/g) ?? []).length, 1);
 
   const unavailable = renderPrd({
     prdStatus: "error",
-    prdMessage: "PRD could not be loaded.",
+    prdMessage: "Project notes could not be loaded.",
     prdTechnicalDetails: "HTTP 503 from PRD service"
   });
   assert.match(unavailable, /creator-state-unavailable/);
-  assert.match(unavailable, /PRD could not be loaded/);
+  assert.match(unavailable, /Project notes could not be loaded/);
   assert.match(unavailable, /Retry/);
   assert.match(unavailable, /Technical details/);
   assert.match(unavailable, /HTTP 503 from PRD service/);
 });
 
-test("PRD generation and baseline feedback use semantic shared states", () => {
+test("AI note generation and saved feedback use semantic shared states", () => {
   const generating = renderPrd({ prdStatus: "empty", isGeneratingPrdDraft: true });
   assert.match(generating, /creator-state-loading/);
-  assert.match(generating, /Generating PRD draft/);
-  assert.doesNotMatch(generating, />Generating PRD</);
+  assert.match(generating, /Generating AI project note/);
 
   const ready = renderPrd({
     prdStatus: "ready",
     currentPrdVersion: { id: "prd-1", version: "1.0", status: "baseline" },
-    prdMessage: "Baseline v1.0 confirmed.",
+    prdMessage: "AI project note v1.0 saved.",
     prdFeedbackTone: "success",
     visiblePrdSections: [{ key: "overview", order: "1", title: "Overview", body: "Ready" }]
   });
   assert.match(ready, /creator-status-message-success/);
-  assert.match(ready, /Baseline v1.0 confirmed/);
-  assert.match(ready, /Confirm Baseline/);
+  assert.match(ready, /AI project note v1.0 saved/);
+  assert.doesNotMatch(ready, /Confirm Baseline/);
 });
 
 test("PrdPage renders PRD section bodies as Markdown", () => {
@@ -126,7 +126,7 @@ test("PrdPage renders PRD section bodies as Markdown", () => {
   assert.match(html, /<td>Approve<\/td>/);
 });
 
-test("PrdPage offers API-backed PRD recovery with the Button primitive", () => {
+test("PrdPage offers API-backed optional note generation with the Button primitive", () => {
   const html = renderPrd({ prdStatus: "empty" });
-  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate PRD Draft<\/button>/);
+  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate AI Note<\/button>/);
 });

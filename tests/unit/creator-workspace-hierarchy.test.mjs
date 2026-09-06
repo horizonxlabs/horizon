@@ -242,7 +242,7 @@ test("supporting Workspace surfaces render English operational copy", () => {
   assert.match(html, /Queued work \(1\)/);
   assert.match(html, /Restore to this point/);
   assert.match(html, /No versions yet/);
-  assert.match(html, /No PRD draft yet/);
+  assert.match(html, /No AI project note yet/);
 });
 
 test("Workspace PRD separates empty state from load failure", () => {
@@ -252,7 +252,7 @@ test("Workspace PRD separates empty state from load failure", () => {
         visiblePrdSections: [],
         visibleVersionRows: [],
         prdStatus: "empty",
-        prdMessage: "No PRD draft yet.",
+        prdMessage: "No AI project note yet.",
         currentPrdVersion: undefined,
         handleConfirmPrdBaseline() {},
         handleGeneratePrdDraft() {},
@@ -262,8 +262,8 @@ test("Workspace PRD separates empty state from load failure", () => {
       }
     })
   );
-  assert.match(empty, /No PRD draft yet/);
-  assert.equal((empty.match(/Generate PRD Draft/g) ?? []).length, 1);
+  assert.match(empty, /No AI project note yet/);
+  assert.equal((empty.match(/Generate AI Note/g) ?? []).length, 1);
   assert.doesNotMatch(empty, /could not be loaded/);
 
   const unavailable = renderToStaticMarkup(

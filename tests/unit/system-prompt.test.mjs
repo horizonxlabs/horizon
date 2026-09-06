@@ -48,6 +48,22 @@ test("Build and Auto prompts expose only the controlled package command boundary
   }
 });
 
+test("generated apps avoid fabricated production claims and meet form accessibility basics", () => {
+  const input = {
+    template: { name: "nextjs-base", lockedFiles: [], files: [] },
+    contextFiles: [],
+    rollingSummary: null
+  };
+
+  for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
+    assert.match(prompt, /Never claim.*email.*sent.*unless.*implemented backend/is);
+    assert.match(prompt, /sample or demo data.*clearly label/is);
+    assert.match(prompt, /Do not invent.*prices.*certifications.*contact/i);
+    assert.match(prompt, /label.*htmlFor.*matching.*id/is);
+    assert.match(prompt, /current date/i);
+  }
+});
+
 test("Auto prompt answers informational questions without mutation authority", () => {
   const template = { name: "nextjs-base", lockedFiles: [], files: [] };
   const prompt = buildAutoSystemPrompt({ template, contextFiles: [], rollingSummary: null });
@@ -129,13 +145,7 @@ test("Auto and Build prompts both anchor the model to app/page.tsx as the live p
   const buildPrompt = buildSystemPrompt(input);
 
   assert.match(autoPrompt, /live preview always renders app\/page\.tsx/i);
-  assert.match(
-    autoPrompt,
-    /core or primary feature.*put it directly in app\/page\.tsx/is
-  );
+  assert.match(autoPrompt, /core or primary feature.*put it directly in app\/page\.tsx/is);
   assert.match(buildPrompt, /preview homepage is app\/page\.tsx/i);
-  assert.match(
-    buildPrompt,
-    /core or primary feature.*put it directly in app\/page\.tsx/is
-  );
+  assert.match(buildPrompt, /core or primary feature.*put it directly in app\/page\.tsx/is);
 });

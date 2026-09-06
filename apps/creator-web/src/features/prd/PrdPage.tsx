@@ -1,5 +1,5 @@
 import { Button, DataTable, Markdown, SectionCard, WorkflowRail } from "@evcp/ui";
-import { CheckCircle2, LockKeyhole } from "lucide-react";
+import { CheckCircle2, Sparkles } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorState, CreatorStatusMessage } from "@/shared";
@@ -13,8 +13,6 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
     prdTechnicalDetails,
     prdErrorSource,
     prdFeedbackTone,
-    currentPrdVersion,
-    handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
     isGeneratingPrdDraft
   } = app;
@@ -28,42 +26,24 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       content={
         <section className="ds-workbench creator-prd-workbench">
           <WorkflowRail
-            eyebrow="PRD Flow"
-            title="Review Path"
+            eyebrow="AI Notes"
+            title="Optional Context"
             steps={[
-              { label: "project input captured", icon: <CheckCircle2 size={16} /> },
-              { label: "governed AI route resolved", icon: <CheckCircle2 size={16} /> },
-              { label: "PRD draft generated", icon: <CheckCircle2 size={16} /> },
-              { label: "Confirm Baseline v1.0", icon: <LockKeyhole size={16} /> }
+              { label: "Project context captured", icon: <CheckCircle2 size={16} /> },
+              { label: "AI organizes the context", icon: <Sparkles size={16} /> },
+              { label: "Notes remain optional", icon: <CheckCircle2 size={16} /> }
             ]}
           />
           <div className="ds-main-stack">
-            <SectionCard
-              eyebrow="PRD Viewer"
-              title="Structured PRD Sections"
-              action={
-                currentPrdVersion && prdStatus === "ready" ? (
-                  <Button
-                    variant="primary"
-                    type="button"
-                    disabled={currentPrdVersion.status === "baseline"}
-                    onClick={() => {
-                      void handleConfirmPrdBaseline();
-                    }}
-                  >
-                    Confirm Baseline
-                  </Button>
-                ) : null
-              }
-            >
+            <SectionCard eyebrow="AI Project Notes" title="Project Context">
               {isGeneratingPrdDraft ? (
                 <CreatorState
                   kind="loading"
-                  title="Generating PRD draft"
-                  description="This can take a few minutes."
+                  title="Generating AI project note"
+                  description="AI is organizing the project context. This note is optional and never blocks publishing."
                 />
               ) : prdStatus === "loading" ? (
-                <CreatorState kind="loading" title="Loading PRD" />
+                <CreatorState kind="loading" title="Loading project notes" />
               ) : prdStatus === "error" ? (
                 <CreatorState
                   kind={prdErrorSource === "generation" ? "error" : "unavailable"}
@@ -71,7 +51,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   description={
                     prdErrorSource === "generation"
                       ? "No draft was created."
-                      : "Existing PRD versions are unchanged."
+                      : "Existing project notes are unchanged."
                   }
                   action={
                     <Button
@@ -86,11 +66,11 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
               ) : prdStatus === "empty" ? (
                 <CreatorState
                   kind="empty"
-                  title="No PRD draft yet"
-                  description="Generate a draft to review requirements and confirm a baseline."
+                  title="No AI project note yet"
+                  description="This optional note helps AI remember project context. You can build and publish without it."
                   action={
                     <Button variant="primary" onClick={() => void handleGeneratePrdDraft()}>
-                      Generate PRD Draft
+                      Generate AI Note
                     </Button>
                   }
                 />
@@ -121,9 +101,9 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
               )}
             </SectionCard>
             {prdStatus === "ready" ? (
-              <SectionCard eyebrow="Version History" title="PRD Version History">
+              <SectionCard eyebrow="History" title="Project Note Versions">
                 <DataTable
-                  ariaLabel="PRD version history"
+                  ariaLabel="Project note version history"
                   columns={[
                     { key: "version", label: "Version" },
                     {
@@ -135,7 +115,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     { key: "author", label: "Author" }
                   ]}
                   rows={visibleVersionRows}
-                  emptyMessage="No earlier PRD versions."
+                  emptyMessage="No earlier project notes."
                 />
               </SectionCard>
             ) : null}

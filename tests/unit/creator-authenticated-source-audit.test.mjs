@@ -80,7 +80,7 @@ test("table-heavy Creator surfaces keep named, keyboard-reachable data regions",
     "apps/creator-web/src/features/workspace/WorkspaceDatabasePanel.tsx"
   );
 
-  assert.match(prd, /ariaLabel="PRD version history"/);
+  assert.match(prd, /ariaLabel="Project note version history"/);
   assert.match(deployments, /ariaLabel="Project deployments"/);
   for (const label of [
     "Project members",

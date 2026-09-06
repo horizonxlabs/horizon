@@ -663,30 +663,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
       services.auth.requireRole(user, ["admin", "creator"]);
       const project = await resolvePersistenceProject(services, user, workspacePromptMatch[1]);
       const prompt = String(request.body?.prompt ?? "");
-      let baseline;
-      try {
-        baseline = await prdPersistence.getCurrent(user, project);
-      } catch (error) {
-        // getCurrent() throws one of two messages for a prompt-first project that has
-        // never had a PRD confirmed: "No PRD document for project X" (no document row at
-        // all) or "No current PRD version for project X" (document exists, no current
-        // version set yet). Both mean the same thing here — bootstrap a baseline — so
-        // match on either verbatim message rather than assuming a shared prefix.
-        const isMissingPrd =
-          error instanceof ValidationError &&
-          /^No (PRD document|current PRD version) for project /.test(error.message);
-        if (!isMissingPrd) throw error;
-        baseline = await prdPersistence.ensureInitialBaseline(user, project, {
-          sourcePrompt: project.businessProblem || prompt
-        });
-        await corePersistence.recordAudit({
-          actorId: user.id,
-          action: "prd.baseline.bootstrapped",
-          resourceType: "prd_version",
-          resourceId: baseline.id,
-          metadata: { projectId: project.id, source: "first_workspace_build" }
-        });
-      }
+      const baseline = await prdPersistence.getCurrentOptional(user, project);
       const agentMode = resolveWorkspaceAgentMode(request.body);
       if (agentMode === "plan") {
         const guardrail = services.guardrails.evaluatePrompt(user, {
@@ -734,7 +711,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
     if (prdPersistence && workspacePersistence && request.method === "POST" && workspaceRefreshMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, workspaceRefreshMatch[1]);
-      const baseline = await prdPersistence.getCurrent(user, project);
+      const baseline = await prdPersistence.getCurrentOptional(user, project);
       return {
         status: HttpStatus.OK,
         body: success(await workspacePersistence.refreshPreview(user, { project, baseline }))
@@ -745,7 +722,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
     if (prdPersistence && workspacePersistence && request.method === "GET" && workspaceMatch) {
       const user = await resolvePersistenceUser(services, request.headers ?? {});
       const project = await resolvePersistenceProject(services, user, workspaceMatch[1]);
-      const baseline = await prdPersistence.getCurrent(user, project);
+      const baseline = await prdPersistence.getCurrentOptional(user, project);
       return {
         status: HttpStatus.OK,
         body: success(await workspacePersistence.getWorkspace(user, { project, baseline }))

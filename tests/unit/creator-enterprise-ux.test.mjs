@@ -123,8 +123,8 @@ test("authenticated Creator route copy is concise English", () => {
       "Build and refine the application through guided AI changes."
     ],
     prd: [
-      "PRD Review: Leave Management",
-      "Review requirements, version history, and the confirmed product baseline."
+      "Project Notes: Leave Management",
+      "Optional AI-generated context for the project. Notes never block building or publishing."
     ],
     database: ["Database", "Review project schema, tables, and records."],
     versions: [

@@ -2,7 +2,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 
 import { isLockedFile } from "../workspace-orchestrator/template";
-import { normalizeProjectPath } from "./pi-tool-policy";
+import { normalizeProjectPath, safeToolError } from "./pi-tool-policy";
 import {
   failure,
   success,
@@ -72,9 +72,9 @@ export function createGenerateImageTool(context: HorizonPiToolContext): ToolDefi
           prompt,
           ...(aspectRatio ? { aspectRatio } : {})
         });
-      } catch {
+      } catch (error) {
         return failSoft(
-          "image generation is not configured or is temporarily unavailable — continue the build without generated images"
+          `image generation failed: ${safeToolError(error)} — continue the build without generated images`
         );
       }
       if (generated.status !== "succeeded" && generated.status !== "fallback")

@@ -232,13 +232,7 @@ async function main() {
 
   await prisma.aiProvider.upsert({
     where: { id: "aip_openai_production" },
-    update: {
-      name: "OpenAI Production",
-      adapter: "openai",
-      baseUrl: "https://api.openai.com/v1",
-      models: ["gpt-4.1", "gpt-4.1-mini"],
-      status: "active"
-    },
+    update: {},
     create: {
       id: "aip_openai_production",
       name: "OpenAI Production",
@@ -251,18 +245,7 @@ async function main() {
 
   await prisma.aiApiKey.upsert({
     where: { id: "aik_openai_primary" },
-    update: {
-      name: "Primary Production Key",
-      usageMode: "production",
-      quotaTokens: 100000,
-      fallbackPriority: 1,
-      fingerprint: "fp_seed_demo_001",
-      maskedValue: "sk-...demo",
-      secretCiphertext: "local-envelope:c2VlZC1kZW1vLWtleQ==",
-      keyVersion: 1,
-      encryptionProvider: "local-envelope",
-      status: "active"
-    },
+    update: {},
     create: {
       id: "aik_openai_primary",
       providerId: "aip_openai_production",
@@ -285,12 +268,7 @@ async function main() {
   for (const scenario of textScenarios) {
     await prisma.aiScenarioRoute.upsert({
       where: { scenario },
-      update: {
-        primaryProviderId: "aip_openai_production",
-        primaryModel: "gpt-4.1",
-        fallbackProviderId: null,
-        fallbackModel: null
-      },
+      update: {},
       create: {
         id: `air_${scenario}`,
         scenario,

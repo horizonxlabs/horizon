@@ -318,7 +318,7 @@ export type ProjectFileUploadCompleteResponse = { file: ProjectFileUploadDto };
 
 export type WorkspaceSnapshotResponse = {
   project: PlatformProjectDto;
-  baseline: {
+  baseline?: {
     id: string;
     projectId: string;
     version: string;

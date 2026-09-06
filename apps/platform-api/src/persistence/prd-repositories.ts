@@ -4,13 +4,11 @@ import { ConflictError, PermissionError, ValidationError } from "../platform-ser
 type DateValue = Date | string;
 type PrdStatus = "draft" | "baseline_confirmed";
 type PrdVersionStatus = PrdVersion["status"];
-
 interface GeneratedByRecord {
   scenario: AiScenario;
   providerId: string;
   model: string;
 }
-
 interface PrdDocumentRecord {
   id: string;
   projectId: string;
@@ -21,7 +19,6 @@ interface PrdDocumentRecord {
   createdAt?: DateValue;
   updatedAt: DateValue;
 }
-
 interface PrdVersionRecord {
   id: string;
   documentId: string;
@@ -35,7 +32,6 @@ interface PrdVersionRecord {
   createdAt: DateValue;
   sections?: PrdSectionRecord[];
 }
-
 interface PrdSectionRecord {
   id: string;
   versionId: string;
@@ -44,31 +40,25 @@ interface PrdSectionRecord {
   body: string;
   order: number;
 }
-
 interface FindUniqueDocumentArgs {
   where: { projectId: string };
   include?: { versions?: { include?: { sections?: boolean }; orderBy?: { createdAt?: "asc" | "desc" } } };
 }
-
 interface UpsertDocumentArgs {
   where: { projectId: string };
   update: Partial<PrdDocumentRecord>;
   create: PrdDocumentRecord;
 }
-
 interface UpdateDocumentArgs {
   where: { projectId: string };
   data: Partial<PrdDocumentRecord>;
 }
-
 interface CreateVersionArgs {
   data: PrdVersionRecord;
 }
-
 interface CreateSectionArgs {
   data: PrdSectionRecord;
 }
-
 export interface PrdPersistenceClient {
   prdDocument: {
     findUnique(args: FindUniqueDocumentArgs): Promise<PrdDocumentRecord | null>;
@@ -82,14 +72,12 @@ export interface PrdPersistenceClient {
     create(args: CreateSectionArgs): Promise<PrdSectionRecord>;
   };
 }
-
 export interface GeneratePrdDraftInput {
   project: PlatformProject;
   sourcePrompt: string;
   generatedBy: GeneratedByRecord;
   aiSummary: string;
 }
-
 export class PrdRepositoryBackedService {
   constructor(private readonly client: PrdPersistenceClient) {}
 
@@ -218,10 +206,22 @@ export class PrdRepositoryBackedService {
     return mapVersion(current, project.id);
   }
 
+  async getCurrentOptional(
+    actor: PlatformUser,
+    project: PlatformProject
+  ): Promise<PrdVersion | undefined> {
+    requireProjectAccess(actor, project);
+    const document = await this.findDocument(project.id);
+    const current = document?.versions?.find(
+      (version) => version.id === document.currentVersionId
+    );
+    return current ? mapVersion(current, project.id) : undefined;
+  }
+
   async listVersions(actor: PlatformUser, project: PlatformProject): Promise<PrdVersion[]> {
     requireProjectAccess(actor, project);
-    const document = await this.getDocument(project.id);
-    return (document.versions ?? []).map((version) => mapVersion(version, project.id));
+    const document = await this.findDocument(project.id);
+    return (document?.versions ?? []).map((version) => mapVersion(version, project.id));
   }
 
   private async ensureDocument(projectId: string, now: Date): Promise<PrdDocumentRecord> {
@@ -242,12 +242,16 @@ export class PrdRepositoryBackedService {
   }
 
   private async getDocument(projectId: string): Promise<PrdDocumentRecord> {
-    const document = await this.client.prdDocument.findUnique({
+    const document = await this.findDocument(projectId);
+    if (!document) throw new ValidationError(`No PRD document for project ${projectId}`);
+    return document;
+  }
+
+  private findDocument(projectId: string): Promise<PrdDocumentRecord | null> {
+    return this.client.prdDocument.findUnique({
       where: { projectId },
       include: { versions: { include: { sections: true }, orderBy: { createdAt: "asc" } } }
     });
-    if (!document) throw new ValidationError(`No PRD document for project ${projectId}`);
-    return document;
   }
 }
 
@@ -259,12 +263,10 @@ export class MemoryPrdPersistenceClient implements PrdPersistenceClient {
   private readonly documents: PrdDocumentRecord[];
   private readonly versions: PrdVersionRecord[];
   private readonly sections: PrdSectionRecord[];
-
   constructor(seed: { documents?: PrdDocumentRecord[]; versions?: PrdVersionRecord[]; sections?: PrdSectionRecord[] } = {}) {
     this.documents = seed.documents ?? [];
     this.versions = seed.versions ?? [];
     this.sections = seed.sections ?? [];
-
     this.prdDocument = {
       findUnique: async ({ where }) => this.findDocument(where.projectId),
       upsert: async ({ where, update, create }) => {

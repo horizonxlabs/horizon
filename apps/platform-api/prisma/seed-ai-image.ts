@@ -1,54 +1,77 @@
 import type { PrismaClient } from "@prisma/client";
 
-// Image-generation governance seed: a Google (Gemini) provider + the image_generation
-// scenario route. Kept out of seed.ts (that file sits at its large-file ratchet ceiling).
-// The demo key is a placeholder ciphertext — a real install must supply a key in the
-// admin console before the generate_image tool activates; until then the tool fails soft.
+const IMAGE_PROVIDER_ID = "aip_google_image";
+const IMAGE_KEY_ID = "aik_google_image_primary";
+const IMAGE_MODEL = process.env.EVCP_GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+
+// Reuse an administrator-supplied Gemini credential. The encrypted value is copied
+// server-side; seed data must never invent or reactivate a fake production secret.
+// An explicitly configured image route always wins over this automatic setup.
 export async function seedImageGeneration(prisma: PrismaClient): Promise<void> {
+  const currentRoute = await prisma.aiScenarioRoute.findUnique({
+    where: { scenario: "image_generation" }
+  });
+  if (currentRoute && currentRoute.primaryProviderId !== IMAGE_PROVIDER_ID) return;
+
+  const providers = await prisma.aiProvider.findMany();
+  const keys = await prisma.aiApiKey.findMany();
+  const sourceProvider = providers.find(
+    (provider) =>
+      provider.id !== IMAGE_PROVIDER_ID &&
+      provider.status === "active" &&
+      /gemini|generativelanguage\.googleapis\.com/i.test(`${provider.name} ${provider.baseUrl}`) &&
+      keys.some((key) => key.providerId === provider.id && key.status === "active")
+  );
+  if (!sourceProvider) return;
+  const sourceKey = keys.find(
+    (key) => key.providerId === sourceProvider.id && key.status === "active"
+  );
+  if (!sourceKey) return;
+
   const provider = {
-    name: "Google Gemini Images",
+    name: "Gemini Images",
     adapter: "google",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    models: ["gemini-2.5-flash-image"],
-    status: "active"
+    models: [IMAGE_MODEL],
+    status: "active" as const
   };
   await prisma.aiProvider.upsert({
-    where: { id: "aip_google_image" },
+    where: { id: IMAGE_PROVIDER_ID },
     update: provider,
-    create: { id: "aip_google_image", ...provider }
+    create: { id: IMAGE_PROVIDER_ID, ...provider }
   });
 
   const key = {
     name: "Gemini Image Key",
-    usageMode: "production",
-    quotaTokens: 100000,
-    fallbackPriority: 1,
-    fingerprint: "fp_seed_demo_img_001",
-    maskedValue: "AI...demo",
-    secretCiphertext: "local-envelope:c2VlZC1kZW1vLWltYWdlLWtleQ==",
-    keyVersion: 1,
-    encryptionProvider: "local-envelope",
+    usageMode: sourceKey.usageMode,
+    quotaTokens: sourceKey.quotaTokens,
+    fallbackPriority: sourceKey.fallbackPriority,
+    fingerprint: sourceKey.fingerprint,
+    maskedValue: sourceKey.maskedValue,
+    secretCiphertext: sourceKey.secretCiphertext,
+    keyVersion: sourceKey.keyVersion,
+    encryptionProvider: sourceKey.encryptionProvider,
     status: "active"
   };
   await prisma.aiApiKey.upsert({
-    where: { id: "aik_google_image_primary" },
+    where: { id: IMAGE_KEY_ID },
     update: key,
-    create: { id: "aik_google_image_primary", providerId: "aip_google_image", ...key }
+    create: { id: IMAGE_KEY_ID, providerId: IMAGE_PROVIDER_ID, ...key }
   });
 
   await prisma.aiScenarioRoute.upsert({
     where: { scenario: "image_generation" },
     update: {
-      primaryProviderId: "aip_google_image",
-      primaryModel: "gemini-2.5-flash-image",
+      primaryProviderId: IMAGE_PROVIDER_ID,
+      primaryModel: IMAGE_MODEL,
       fallbackProviderId: null,
       fallbackModel: null
     },
     create: {
       id: "air_image_generation",
       scenario: "image_generation",
-      primaryProviderId: "aip_google_image",
-      primaryModel: "gemini-2.5-flash-image"
+      primaryProviderId: IMAGE_PROVIDER_ID,
+      primaryModel: IMAGE_MODEL
     }
   });
 }

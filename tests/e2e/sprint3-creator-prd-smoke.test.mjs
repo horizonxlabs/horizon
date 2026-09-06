@@ -138,7 +138,7 @@ test("Sprint 3 API denies end user project and PRD access", () => {
   assert.equal(denied.status, 403);
 });
 
-test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and baseline flow", () => {
+test("Creator UI exposes project creation and optional AI project notes", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
@@ -146,11 +146,10 @@ test("Sprint 3 Creator UI exposes project picker wizard PRD viewer history and b
     "Create your first project",
     "Create project",
     "Create project wizard",
-    "PRD Viewer",
-    "Structured PRD Sections",
-    "Version History",
-    "Confirm Baseline",
-    "No API-backed PRD draft"
+    "AI Project Notes",
+    "Project Context",
+    "Project Note Versions",
+    "Generate AI Note"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }

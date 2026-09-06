@@ -14,12 +14,18 @@ type WorkspaceApi = Pick<WorkspaceRepositoryBackedService, "blockPrompt" | "subm
 export async function handlePersistedWorkspacePrompt(input: {
   actor: PlatformUser;
   project: PlatformProject;
-  baseline: PrdVersion;
+  baseline?: PrdVersion;
   prompt: string;
   requestId: string;
   executor: Pick<GovernedAiExecutor, "execute">;
   workspace: WorkspaceApi;
-  audit: (event: { actorId: string; action: string; resourceId: string; severity: "info" | "warning"; metadata: Record<string, unknown> }) => Promise<unknown>;
+  audit: (event: {
+    actorId: string;
+    action: string;
+    resourceId: string;
+    severity: "info" | "warning";
+    metadata: Record<string, unknown>;
+  }) => Promise<unknown>;
 }): Promise<{ status: 200 | 201; body: WorkspacePromptBody }> {
   const execution = await input.executor.execute(input.actor, {
     scenario: "frontend_coding",
@@ -41,7 +47,11 @@ export async function handlePersistedWorkspacePrompt(input: {
       action: "workspace.prompt.blocked",
       resourceId: blocked.task.id,
       severity: "warning",
-      metadata: { projectId: input.project.id, executionId: execution.evidence.id, reason: execution.evidence.failureReason }
+      metadata: {
+        projectId: input.project.id,
+        executionId: execution.evidence.id,
+        reason: execution.evidence.failureReason
+      }
     });
     return { status: 200, body: { ...blocked, aiEvidence: execution.evidence } };
   }
@@ -58,12 +68,21 @@ export async function handlePersistedWorkspacePrompt(input: {
     action: "workspace.prompt.accepted",
     resourceId: result.task.id,
     severity: "info",
-    metadata: { projectId: input.project.id, executionId: execution.evidence.id, previewVersion: result.preview.version, tokensUsed: execution.evidence.tokensUsed }
+    metadata: {
+      projectId: input.project.id,
+      executionId: execution.evidence.id,
+      previewVersion: result.preview.version,
+      tokensUsed: execution.evidence.tokensUsed
+    }
   });
   return { status: 201, body: { ...result, aiEvidence: execution.evidence } };
 }
 
 function guardrailForExecution(evidence: AiExecutionEvidence): GuardrailResult {
   const blocked = evidence.status === "blocked" || evidence.status === "failed";
-  return { decision: blocked ? "block" : "allow", severity: blocked ? "high" : "info", eventId: evidence.id };
+  return {
+    decision: blocked ? "block" : "allow",
+    severity: blocked ? "high" : "info",
+    eventId: evidence.id
+  };
 }

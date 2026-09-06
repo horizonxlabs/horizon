@@ -22,7 +22,7 @@ export function useCreatorPrd(
   const [currentPrdVersion, setCurrentPrdVersion] = useState<PrdVersionDto>();
   const [prdVersionList, setPrdVersionList] = useState<PrdVersionDto[]>([]);
   const [prdStatus, setPrdStatus] = useState<CreatorPrdStatus>("loading");
-  const [prdMessage, setPrdMessage] = useState("Loading PRD.");
+  const [prdMessage, setPrdMessage] = useState("Loading project notes.");
   const [prdTechnicalDetails, setPrdTechnicalDetails] = useState<string>();
   const [prdErrorSource, setPrdErrorSource] = useState<CreatorPrdErrorSource>();
   const [prdFeedbackTone, setPrdFeedbackTone] = useState<CreatorPrdFeedbackTone>();
@@ -75,7 +75,7 @@ export function useCreatorPrd(
         : selectedProjectIdRef.current === projectId);
     if (isCurrent()) {
       setPrdStatus("loading");
-      setPrdMessage("Loading PRD.");
+      setPrdMessage("Loading project notes.");
       setPrdTechnicalDetails(undefined);
       setPrdErrorSource(undefined);
       setPrdFeedbackTone(undefined);
@@ -89,14 +89,14 @@ export function useCreatorPrd(
       setCurrentPrdVersion(prdState.current);
       setPrdVersionList(prdState.versions);
       setPrdStatus(prdState.current ? "ready" : "empty");
-      setPrdMessage(prdState.current ? "PRD is ready for review." : "No PRD draft yet.");
+      setPrdMessage(prdState.current ? "AI project note is ready." : "No AI project note yet.");
     } catch (error) {
       if (!isCurrent()) return;
       setCurrentPrdVersion(undefined);
       setPrdVersionList([]);
       setPrdStatus("error");
       setPrdErrorSource("load");
-      setPrdMessage("PRD could not be loaded.");
+      setPrdMessage("Project notes could not be loaded.");
       setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
       throw error;
     }
@@ -134,14 +134,14 @@ export function useCreatorPrd(
 
   async function handleGeneratePrdDraft() {
     if (!selectedProject.id) {
-      setPrdMessage("Select a project before generating a PRD draft.");
+      setPrdMessage("Select a project before generating an AI project note.");
       setPrdFeedbackTone("warning");
       return;
     }
     const projectId = selectedProject.id;
     const isCurrent = beginManualAction(projectId);
     setIsGeneratingPrdDraft(true);
-    setPrdMessage("Generating PRD draft.");
+    setPrdMessage("Generating AI project note.");
     setPrdFeedbackTone(undefined);
     setPrdTechnicalDetails(undefined);
     setPrdErrorSource(undefined);
@@ -154,13 +154,13 @@ export function useCreatorPrd(
         ...current.filter((version) => version.id !== draft.id)
       ]);
       setPrdStatus("ready");
-      setPrdMessage(`PRD draft v${draft.version} generated.`);
+      setPrdMessage(`AI project note v${draft.version} saved.`);
       setPrdFeedbackTone("success");
     } catch (error) {
       if (!isCurrent()) return;
       setPrdStatus("error");
       setPrdErrorSource("generation");
-      setPrdMessage("PRD draft could not be generated.");
+      setPrdMessage("AI project note could not be generated.");
       setPrdTechnicalDetails(error instanceof Error ? error.message : String(error));
     } finally {
       if (isCurrent()) setIsGeneratingPrdDraft(false);
@@ -179,7 +179,7 @@ export function useCreatorPrd(
     setCurrentPrdVersion(undefined);
     setPrdVersionList([]);
     setPrdStatus("loading");
-    setPrdMessage("Loading PRD.");
+    setPrdMessage("Loading project notes.");
     setPrdTechnicalDetails(undefined);
     setPrdErrorSource(undefined);
     setPrdFeedbackTone(undefined);
@@ -196,7 +196,7 @@ export function useCreatorPrd(
       ...current.filter((version) => version.id !== draft.id)
     ]);
     setPrdStatus("ready");
-    setPrdMessage(`PRD draft v${draft.version} generated.`);
+    setPrdMessage(`AI project note v${draft.version} saved.`);
     setPrdFeedbackTone("success");
     setPrdTechnicalDetails(undefined);
   }
@@ -206,7 +206,7 @@ export function useCreatorPrd(
   function beginBackgroundPrdGeneration(projectId: string) {
     setIsGeneratingPrdDraft(true);
     setPendingGeneration({ projectId, startedAt: Date.now() });
-    setPrdMessage("Generating the first PRD draft. This can take a few minutes.");
+    setPrdMessage("Generating an optional AI project note. This can take a few minutes.");
     setPrdFeedbackTone(undefined);
     setPrdTechnicalDetails(undefined);
     setPrdErrorSource(undefined);
@@ -229,7 +229,7 @@ export function useCreatorPrd(
         setIsGeneratingPrdDraft(false);
         setPrdStatus("error");
         setPrdErrorSource("generation");
-        setPrdMessage("PRD generation is taking longer than expected.");
+        setPrdMessage("AI project note generation is taking longer than expected.");
         return;
       }
       void loadPrdState(pendingGeneration.projectId)

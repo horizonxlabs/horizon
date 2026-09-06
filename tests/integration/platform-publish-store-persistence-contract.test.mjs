@@ -208,20 +208,11 @@ test("Publish/store persistence service stores access defaults publish registry 
   );
 });
 
-test("Publish/store persistence service blocks publish without baseline or preview and denies invisible tickets", async () => {
+test("Publish/store persistence service blocks publish without a preview and denies invisible tickets", async () => {
   const service = createPublishStoreRepositoryBackedService(
     new MemoryPublishStorePersistenceClient()
   );
 
-  await assert.rejects(
-    () =>
-      service.publishApp(creatorActor, {
-        project,
-        baseline: { ...baseline, isBaseline: false },
-        preview
-      }),
-    /Publish blocked|baseline/i
-  );
   await assert.rejects(
     () =>
       service.publishApp(creatorActor, {
@@ -243,6 +234,50 @@ test("Publish/store persistence service blocks publish without baseline or previ
       }),
     /not visible|Unknown app/
   );
+});
+
+test("Publish/store persistence publishes a ready public app without a PRD note", async () => {
+  const service = createPublishStoreRepositoryBackedService(
+    new MemoryPublishStorePersistenceClient({ projects: [project] })
+  );
+  const runtimeDeployment = {
+    id: "wdep_runtime_optional_prd",
+    projectId: project.id,
+    slug: "prj-runtime-key",
+    environment: "production",
+    revision: 1,
+    commitSha: "abc123",
+    imageTag: "app:abc123",
+    imageDigest: "sha256:image",
+    containerId: "container-optional-prd",
+    containerName: "app-optional-prd",
+    publishedByUserId: creatorActor.id,
+    healthStatus: "healthy",
+    createdAt: new Date().toISOString()
+  };
+
+  const review = await service.getPublishReview(creatorActor, {
+    project,
+    baseline: undefined,
+    preview
+  });
+  const result = await service.publishApp(creatorActor, {
+    project,
+    baseline: undefined,
+    preview,
+    runtimeDeployment,
+    subdomain: "industrial-iot-expo-qa",
+    visibility: "public"
+  });
+
+  assert.equal(review.ready, true);
+  assert.equal(review.manifest.prd.versionId, "");
+  assert.equal(
+    review.checklist.some((item) => item.key === "prd_baseline"),
+    false
+  );
+  assert.equal(result.registryEntry.subdomain, "industrial-iot-expo-qa");
+  assert.equal(result.registryEntry.visibility, "public");
 });
 
 test("Publish/store persistence rejects a duplicate active invitation case-insensitively", async () => {

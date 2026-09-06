@@ -42,7 +42,7 @@ export class WorkspaceRepositoryBackedService {
 
   async getWorkspace(
     actor: PlatformUser,
-    input: { project: PlatformProject; baseline: PrdVersion }
+    input: { project: PlatformProject; baseline?: PrdVersion }
   ): Promise<WorkspaceSnapshot> {
     requireProjectAccess(actor, input.project);
     requireBaseline(input.baseline, input.project.id);
@@ -159,10 +159,10 @@ export class WorkspaceRepositoryBackedService {
 
   async refreshPreview(
     actor: PlatformUser,
-    input: { project: PlatformProject; baseline: PrdVersion }
+    input: { project: PlatformProject; baseline?: PrdVersion }
   ): Promise<PreviewVersion> {
     requireProjectAccess(actor, input.project);
-    requireBaseline(input.baseline, input.project.id);
+    if (input.baseline) requireBaseline(input.baseline, input.project.id);
     return this.latestPreview(input.project.id);
   }
 
@@ -280,7 +280,8 @@ function requireProjectAccess(actor: PlatformUser, project: PlatformProject): vo
     throw new PermissionError(`Role ${actor.role} cannot access project ${project.id}`);
 }
 
-function requireBaseline(baseline: PrdVersion, projectId: string): void {
+function requireBaseline(baseline: PrdVersion | undefined, projectId: string): void {
+  if (!baseline) return;
   if (baseline.projectId !== projectId || !baseline.isBaseline)
     throw new ValidationError(
       `PRD baseline is required before opening workspace for project ${projectId}`
@@ -294,7 +295,7 @@ function buildSteps(
 ): WorkspaceTaskStepRecord[] {
   const labels = [
     "Understanding request",
-    "Loading PRD baseline",
+    "Loading optional project notes",
     "Guardrail pre-check",
     "Selecting skill",
     "Generating frontend",

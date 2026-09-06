@@ -192,11 +192,16 @@ export function PublishDialog({
         </div>
 
         {feedback ? (
-          <CreatorStatusMessage
-            tone={feedback.tone}
-            technicalDetails={feedback.technicalDetails}
-          >
+          <CreatorStatusMessage tone={feedback.tone} technicalDetails={feedback.technicalDetails}>
             {feedback.message}
+          </CreatorStatusMessage>
+        ) : null}
+
+        {busyAction ? (
+          <CreatorStatusMessage tone="info">
+            {busyAction === "promote"
+              ? "Rebuilding and health-checking the production app. This can take several minutes; it is safe to close this dialog and follow progress in Deployments."
+              : `Building and health-checking the ${target} app. This can take several minutes; it is safe to close this dialog and follow progress in Deployments.`}
           </CreatorStatusMessage>
         ) : null}
 

@@ -106,6 +106,23 @@ test("Workspace persistence service stores prompt task preview and usage records
   assert.equal(snapshot.tokenBudget.remainingToday, 880);
 });
 
+test("Workspace opens and accepts prompts when the optional project note is absent", async () => {
+  const service = createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient());
+
+  const initial = await service.getWorkspace(creatorActor, { project, baseline: undefined });
+  const result = await service.submitPrompt(creatorActor, {
+    project,
+    baseline: undefined,
+    prompt: "Build the first screen",
+    guardrail: allowGuardrail,
+    route: { providerId: "aip_openai", model: "gpt-4.1-mini" },
+    tokensUsed: 80
+  });
+
+  assert.equal(initial.baseline, undefined);
+  assert.equal(result.task.status, "ready");
+});
+
 test("Workspace persistence service stores blocked task without replacing preview or usage", async () => {
   const service = createWorkspaceRepositoryBackedService(new MemoryWorkspacePersistenceClient());
   await service.submitPrompt(creatorActor, {

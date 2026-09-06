@@ -249,7 +249,7 @@ export class PublishStoreRepositoryBackedService {
 
   async getPublishReview(
     actor: PlatformUser,
-    input: { project: PlatformProject; baseline: PrdVersion; preview: PreviewVersion }
+    input: { project: PlatformProject; baseline?: PrdVersion; preview: PreviewVersion }
   ): Promise<PublishReview & { accessUrlConfig: PublishAccessUrlConfigDto }> {
     requireProjectOwnerAccess(actor, input.project);
     const app = await this.ensureApp(input.project);
@@ -269,7 +269,7 @@ export class PublishStoreRepositoryBackedService {
     actor: PlatformUser,
     input: {
       project: PlatformProject;
-      baseline: PrdVersion;
+      baseline?: PrdVersion;
       preview: PreviewVersion;
       runtimeDeployment?: WorkspaceDeployment;
       subdomain?: string; visibility?: AppStoreVisibility;
@@ -796,7 +796,7 @@ export class PublishStoreRepositoryBackedService {
   private async buildManifest(
     project: PlatformProject,
     app: ManagedApp,
-    baseline: PrdVersion,
+    baseline: PrdVersion | undefined,
     preview: PreviewVersion
   ): Promise<AppManifest> {
     const roles = await this.rolesForApp(app.id);
@@ -818,8 +818,8 @@ export class PublishStoreRepositoryBackedService {
         status: app.status
       },
       prd: {
-        versionId: baseline.isBaseline ? baseline.id : "",
-        version: baseline.isBaseline ? baseline.version : ""
+        versionId: baseline?.id ?? "",
+        version: baseline?.version ?? ""
       },
       frontend: {
         checkpointId: preview.version === "preview-0000" ? "" : preview.id,
@@ -850,14 +850,6 @@ export class PublishStoreRepositoryBackedService {
   ): Promise<PublishChecklistItem[]> {
     const members = await this.membersForApp(manifest.appId);
     return [
-      {
-        key: "prd_baseline",
-        label: "PRD baseline",
-        status: manifest.prd.versionId ? "pass" : "fail",
-        detail: manifest.prd.versionId
-          ? `Baseline ${manifest.prd.version}`
-          : "Confirm PRD baseline before publishing"
-      },
       {
         key: "active_frontend",
         label: "Active frontend checkpoint",

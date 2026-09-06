@@ -118,7 +118,7 @@ test("runtime memory persistence keeps workspace task preview and usage across s
   assert.equal(refreshed.body.data.id, snapshot.body.data.preview.id);
 });
 
-test("first workspace build bootstraps its PRD baseline before accepting the prompt", async () => {
+test("first workspace build succeeds without creating a required project note", async () => {
   const coreClient = new MemoryCorePersistenceClient();
   const aiClient = new MemoryAiGovernancePersistenceClient();
   const prdClient = new MemoryPrdPersistenceClient();
@@ -153,15 +153,10 @@ test("first workspace build bootstraps its PRD baseline before accepting the pro
   assert.equal(created.status, 201);
   assert.equal(prompt.status, 201);
   assert.equal(prompt.body.data.task.status, "ready");
-  assert.equal(baseline.baselineVersionId, `prdver_${created.body.data.id}_baseline_v1_0`);
+  assert.equal(baseline, null);
 });
 
-// Regression: getCurrent() throws "No current PRD version..." (not "No PRD document...")
-// when a document row already exists but nothing has been confirmed as current — a state a
-// partially-completed PRD wizard can leave behind. The bootstrap catch in app-factory.ts
-// once matched only a "No PRD document" prefix and let this second message escape as a
-// 4xx, blocking the very first build for that project.
-test("first workspace build still bootstraps a baseline when a PRD document exists with no current version", async () => {
+test("first workspace build succeeds when an optional note document has no current version", async () => {
   const coreClient = new MemoryCorePersistenceClient();
   const aiClient = new MemoryAiGovernancePersistenceClient();
   const prdClient = new MemoryPrdPersistenceClient();

@@ -603,7 +603,7 @@ export interface WorkspacePromptResult {
 
 export interface WorkspaceSnapshot {
   project: PlatformProject;
-  baseline: PrdVersion;
+  baseline?: PrdVersion;
   preview: PreviewVersion;
   tasks: WorkspaceTask[];
   usage: AiUsageLog[];
@@ -6096,14 +6096,6 @@ export class PublishService {
   ): PublishChecklistItem[] {
     const access = this.appAccess.getSnapshot(actor, project.id);
     return [
-      {
-        key: "prd_baseline",
-        label: "PRD baseline",
-        status: manifest.prd.versionId ? "pass" : "fail",
-        detail: manifest.prd.versionId
-          ? `Baseline ${manifest.prd.version}`
-          : "Confirm PRD baseline before publishing"
-      },
       {
         key: "active_frontend",
         label: "Active frontend checkpoint",

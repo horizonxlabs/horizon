@@ -83,6 +83,13 @@ test("first build gets an immediate baseline without waiting for a separate PRD 
   );
 });
 
+test("missing PRD documents are exposed as an empty optional note", async () => {
+  const service = createPrdRepositoryBackedService(new MemoryPrdPersistenceClient());
+
+  assert.deepEqual(await service.listVersions(creatorActor, project), []);
+  assert.equal(await service.getCurrentOptional(creatorActor, project), undefined);
+});
+
 test("runtime persistence wiring exposes PRD service and routes", () => {
   assert.match(appFactory, /prdPersistence\?: PrdRepositoryBackedService/);
   assert.match(

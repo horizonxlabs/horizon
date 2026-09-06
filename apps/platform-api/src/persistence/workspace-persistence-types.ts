@@ -111,7 +111,7 @@ export interface WorkspacePersistenceClient {
 
 export interface SubmitWorkspacePromptInput {
   project: PlatformProject;
-  baseline: PrdVersion;
+  baseline?: PrdVersion;
   prompt: string;
   guardrail: GuardrailResult;
   route: { providerId: string; model: string };
@@ -122,7 +122,7 @@ export interface SubmitWorkspacePromptInput {
 
 export interface BlockWorkspacePromptInput {
   project: PlatformProject;
-  baseline: PrdVersion;
+  baseline?: PrdVersion;
   prompt: string;
   guardrail: GuardrailResult;
 }

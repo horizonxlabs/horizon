@@ -15,7 +15,6 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
     prdErrorSource,
     prdFeedbackTone,
     currentPrdVersion,
-    handleConfirmPrdBaseline,
     handleGeneratePrdDraft,
     isGeneratingPrdDraft
   } = app;
@@ -27,32 +26,15 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
     prdStatus ?? (currentPrdVersion || visiblePrdSections.length ? "ready" : "empty");
   return (
     <div className="vibe-prd-panel">
-      <SectionCard
-        eyebrow="PRD"
-        title="Product Spec"
-        action={
-          currentPrdVersion && effectivePrdStatus === "ready" ? (
-            <Button
-              variant="primary"
-              type="button"
-              disabled={currentPrdVersion.status === "baseline"}
-              onClick={() => {
-                void handleConfirmPrdBaseline();
-              }}
-            >
-              {currentPrdVersion.status === "baseline" ? "Baseline confirmed" : "Confirm Baseline"}
-            </Button>
-          ) : null
-        }
-      >
+      <SectionCard eyebrow="AI Notes" title="Project Context">
         {isGeneratingPrdDraft ? (
           <CreatorState
             kind="loading"
-            title="Generating PRD draft"
-            description="This can take a few minutes."
+            title="Generating AI project note"
+            description="AI is organizing the project context. This note is optional and never blocks publishing."
           />
         ) : effectivePrdStatus === "loading" ? (
-          <CreatorState kind="loading" title="Loading PRD" />
+          <CreatorState kind="loading" title="Loading project notes" />
         ) : effectivePrdStatus === "error" ? (
           <CreatorState
             kind={prdErrorSource === "generation" ? "error" : "unavailable"}
@@ -60,7 +42,7 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
             description={
               prdErrorSource === "generation"
                 ? "No draft was created."
-                : "Existing PRD versions are unchanged."
+                : "Existing project notes are unchanged."
             }
             action={
               <Button
@@ -76,11 +58,11 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
         ) : effectivePrdStatus === "empty" ? (
           <CreatorState
             kind="empty"
-            title="No PRD draft yet"
-            description="Generate a draft to review requirements and confirm a baseline."
+            title="No AI project note yet"
+            description="This optional note helps AI remember project context. You can build and publish without it."
             action={
               <Button variant="primary" type="button" onClick={() => void handleGeneratePrdDraft()}>
-                Generate PRD Draft
+                Generate AI Note
               </Button>
             }
           />
@@ -108,9 +90,9 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
         )}
       </SectionCard>
       {effectivePrdStatus === "ready" ? (
-        <SectionCard eyebrow="History" title="PRD Versions">
+        <SectionCard eyebrow="History" title="Project Note Versions">
           <DataTable
-            ariaLabel="PRD version history"
+            ariaLabel="Project note version history"
             columns={[
               { key: "version", label: "Version" },
               {
@@ -122,7 +104,7 @@ export function WorkspacePrdPanel({ app }: { app: ReturnType<typeof useCreatorAp
               { key: "author", label: "Author" }
             ]}
             rows={visibleVersionRows}
-            emptyMessage="No earlier PRD versions."
+            emptyMessage="No earlier project notes."
           />
         </SectionCard>
       ) : null}

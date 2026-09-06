@@ -123,12 +123,13 @@ test("fails soft when image generation is not configured or blocked, and enforce
 
   const unavailable = fixture({
     generateImage: async () => {
-      throw new Error("AI scenario route image_generation is not configured");
+      throw new Error("AI image provider returned HTTP 403");
     }
   });
   const unavailableResult = await unavailable.run({ path: "public/generated/x.png", prompt: "p" });
   assert.equal(unavailableResult.details.ok, false);
   assert.equal(unavailableResult.details.softFailure, true);
+  assert.match(unavailableResult.details.error, /HTTP 403/);
   assert.match(unavailableResult.content[0].text, /continue/i);
 
   const oversized = fixture({

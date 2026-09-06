@@ -116,6 +116,10 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
     const actionType = actionTypeFor(event.toolName) ?? details?.actionType;
     if (!actionType) return [];
     const presentation = toolPresentation(actionType);
+    const failureSummary =
+      actionType === "image" && details?.error
+        ? `${presentation.failureSummary}: ${safeToolError(details.error)}`
+        : presentation.failureSummary;
     return [
       {
         type: "action_result",
@@ -124,7 +128,7 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
         label: presentation.label,
         ok: details?.ok === true && !event.isError,
         ...(details?.ok === true && !event.isError ? { body: presentation.successSummary } : {}),
-        ...(!details?.ok || event.isError ? { error: presentation.failureSummary } : {}),
+        ...(!details?.ok || event.isError ? { error: failureSummary } : {}),
         endedAt: new Date().toISOString()
       }
     ];
