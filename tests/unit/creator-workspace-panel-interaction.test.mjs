@@ -273,7 +273,7 @@ test("Workspace failure recovery retries the latest user request", async () => {
   assert.deepEqual(submissions, ["Build the first preview"]);
 });
 
-test("Workspace exposes a named conversation panel toggle", async () => {
+test("Workspace keeps an accessible conversation restore control after collapse", async () => {
   let renderer;
   await act(async () => {
     renderer = create(React.createElement(WorkspacePage, { app: appFor("preview", () => {}) }));
@@ -281,7 +281,21 @@ test("Workspace exposes a named conversation panel toggle", async () => {
 
   const collapse = renderer.root.findByProps({ "aria-label": "Collapse conversation panel" });
   await act(async () => collapse.props.onClick({ stopPropagation() {} }));
-  assert.ok(renderer.root.findByProps({ "aria-label": "Expand conversation panel" }));
+  const expand = renderer.root
+    .findAllByProps({ "aria-label": "Expand conversation panel" })
+    .find((node) => node.type === "button");
+  const separator = renderer.root.findByProps({ role: "separator" });
+
+  // Interactive controls nested inside role=separator are hidden from the accessibility tree.
+  // The restore button must remain a sibling so it is both visible and keyboard reachable.
+  assert.equal(
+    separator.findAllByProps({ "aria-label": "Expand conversation panel" }).length,
+    0
+  );
+  assert.ok(expand);
+
+  await act(async () => expand.props.onClick({ stopPropagation() {} }));
+  assert.ok(renderer.root.findByProps({ "aria-label": "Collapse conversation panel" }));
 });
 
 test("the attachment control is a keyboard-reachable native button wired to its file input", async () => {

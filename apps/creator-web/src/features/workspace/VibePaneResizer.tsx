@@ -146,64 +146,69 @@ export function VibePaneResizer({ resize }: { resize: ReturnType<typeof useChatP
   };
   return (
     <div
-      className={`vibe-live-resizer${isResizingPanels ? "is-resizing" : ""}`}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize chat and preview panels"
-      aria-valuemin={MIN_CHAT_PANE_WIDTH}
-      aria-valuemax={MAX_CHAT_PANE_WIDTH}
-      aria-valuenow={Math.round(chatPaneWidth)}
-      tabIndex={0}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
-        if (isChatCollapsedRef.current) {
-          isChatCollapsedRef.current = false;
-          splitViewRef.current?.classList.remove("is-chat-collapsed");
-          const restoredWidth = Math.max(MIN_CHAT_PANE_WIDTH, chatPaneWidthRef.current);
-          chatPaneWidthRef.current = restoredWidth;
-          splitViewRef.current?.style.setProperty("--vibe-chat-width", `${restoredWidth}%`);
-          setIsChatCollapsed(false);
-        }
-        setIsResizingPanels(true);
-      }}
-      onPointerUp={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-        setChatPaneWidth(chatPaneWidthRef.current);
-        setIsChatCollapsed(isChatCollapsedRef.current);
-        setIsResizingPanels(false);
-      }}
-      onPointerCancel={() => {
-        setChatPaneWidth(chatPaneWidthRef.current);
-        setIsChatCollapsed(isChatCollapsedRef.current);
-        setIsResizingPanels(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") {
-          event.preventDefault();
-          setChatPaneWidth((width) => {
-            const next = clampChatPaneWidth(width - 2);
-            chatPaneWidthRef.current = next;
-            return next;
-          });
-        }
-        if (event.key === "ArrowRight") {
-          event.preventDefault();
-          setChatPaneWidth((width) => {
-            const next = clampChatPaneWidth(width + 2);
-            chatPaneWidthRef.current = next;
-            return next;
-          });
-        }
-        if (event.key === "Home") {
-          event.preventDefault();
-          chatPaneWidthRef.current = DEFAULT_CHAT_PANE_WIDTH;
-          setChatPaneWidth(DEFAULT_CHAT_PANE_WIDTH);
-        }
-      }}
+      className={`vibe-live-resizer${isResizingPanels ? " is-resizing" : ""}${
+        isChatCollapsed ? " is-collapsed" : ""
+      }`}
     >
+      <div
+        className="vibe-live-resizer-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat and preview panels"
+        aria-valuemin={MIN_CHAT_PANE_WIDTH}
+        aria-valuemax={MAX_CHAT_PANE_WIDTH}
+        aria-valuenow={Math.round(chatPaneWidth)}
+        tabIndex={0}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          if (isChatCollapsedRef.current) {
+            isChatCollapsedRef.current = false;
+            splitViewRef.current?.classList.remove("is-chat-collapsed");
+            const restoredWidth = Math.max(MIN_CHAT_PANE_WIDTH, chatPaneWidthRef.current);
+            chatPaneWidthRef.current = restoredWidth;
+            splitViewRef.current?.style.setProperty("--vibe-chat-width", `${restoredWidth}%`);
+            setIsChatCollapsed(false);
+          }
+          setIsResizingPanels(true);
+        }}
+        onPointerUp={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          setChatPaneWidth(chatPaneWidthRef.current);
+          setIsChatCollapsed(isChatCollapsedRef.current);
+          setIsResizingPanels(false);
+        }}
+        onPointerCancel={() => {
+          setChatPaneWidth(chatPaneWidthRef.current);
+          setIsChatCollapsed(isChatCollapsedRef.current);
+          setIsResizingPanels(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            setChatPaneWidth((width) => {
+              const next = clampChatPaneWidth(width - 2);
+              chatPaneWidthRef.current = next;
+              return next;
+            });
+          }
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            setChatPaneWidth((width) => {
+              const next = clampChatPaneWidth(width + 2);
+              chatPaneWidthRef.current = next;
+              return next;
+            });
+          }
+          if (event.key === "Home") {
+            event.preventDefault();
+            chatPaneWidthRef.current = DEFAULT_CHAT_PANE_WIDTH;
+            setChatPaneWidth(DEFAULT_CHAT_PANE_WIDTH);
+          }
+        }}
+      />
       <Button
         className="vibe-live-resizer-toggle"
         variant="secondary"
