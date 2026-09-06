@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { useRef } from "react";
 
 export function WorkspaceAttachmentButton({
@@ -19,7 +19,7 @@ export function WorkspaceAttachmentButton({
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
-        <Plus size={18} aria-hidden="true" />
+        <Paperclip size={17} aria-hidden="true" />
       </button>
       <input
         ref={inputRef}

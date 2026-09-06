@@ -16,6 +16,8 @@ globalThis.window ??= {
   removeEventListener() {}
 };
 globalThis.window.localStorage ??= storage;
+globalThis.window.setInterval ??= globalThis.setInterval;
+globalThis.window.clearInterval ??= globalThis.clearInterval;
 globalThis.document ??= {
   getElementById: () => null,
   createElement: () => ({ style: {} }),
@@ -133,6 +135,55 @@ test("PRD and History do not announce Preview as selected and Preview remains se
   const previewButton = switcherButtons().find((button) => button.children.includes("Preview"));
   await act(async () => previewButton.props.onClick());
   assert.deepEqual(pressedLabels(), ["Preview"]);
+});
+
+test("authorized Preview keeps visible sandbox progress until the iframe has loaded", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, data: { authorized: true } })
+  });
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(React.createElement(WorkspacePage, { app: appFor("preview", () => {}) }));
+    });
+
+    const iframe = renderer.root.findByType("iframe");
+    const loadingState = renderer.root.findByProps({ "data-preview-loading": true });
+    assert.ok(loadingState);
+    assert.match(JSON.stringify(renderer.toJSON()), /Preparing app preview/);
+    assert.match(JSON.stringify(renderer.toJSON()), /Starting the secure sandbox/);
+
+    await act(async () => iframe.props.onLoad());
+    assert.equal(renderer.root.findAllByProps({ "data-preview-loading": true }).length, 0);
+  } finally {
+    await act(async () => renderer?.unmount());
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("busy message composer groups status and queue controls into one professional action surface", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(WorkspacePage, {
+        app: { ...appFor("preview", () => {}), isVibing: true, vibeStatus: "Working" }
+      })
+    );
+  });
+
+  const composer = renderer.root.findByProps({ className: "vibe-live-composer is-busy" });
+  assert.ok(composer.findByProps({ className: "vibe-working" }));
+  assert.ok(composer.findByProps({ className: "lucide lucide-paperclip" }));
+  assert.equal(
+    composer.findByProps({ className: "vibe-composer-queue-status" }).children.at(-1),
+    "Queues after current task"
+  );
+  const stopControl = composer.findByProps({ "aria-label": "Stop generation" });
+  assert.equal(stopControl.findByType("span").children.join(""), "Stop");
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Next prompt queues automatically/);
 });
 
 test("a detected bug creates an English fix draft through BugReportBox and the composer", async () => {

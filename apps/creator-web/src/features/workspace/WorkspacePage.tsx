@@ -25,6 +25,7 @@ import { usePreviewAuthorization } from "./use-preview-authorization";
 import { currentWorkspaceTurnStart } from "./workspace-turn";
 import { WorkspaceWakeOverlay } from "./WorkspaceWakeOverlay";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { WorkspacePreviewFrame } from "./WorkspacePreviewFrame";
 import { deriveWorkspaceFailure } from "./workspace-failure";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
@@ -137,7 +138,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         ref={paneResize.splitViewRef}
       >
         <div
-          className={`vibe-live-chat-panel${workspaceFailure ? " has-workspace-failure" : ""}`}
+          className={
+            workspaceFailure ? "vibe-live-chat-panel has-workspace-failure" : "vibe-live-chat-panel"
+          }
         >
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && !vibeTechnicalDetails && (
@@ -252,7 +255,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
               </div>
             )}
           </div>
-          <VibeWorkingIndicator active={isVibing} status={vibeStatus} />
           <BugReportBox
             bugs={bugReports}
             disabled={isVibing}
@@ -261,7 +263,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           />
           <PromptQueue items={promptQueue} onRemove={removeQueuedPrompt} />
           <div className="vibe-live-composer-wrap">
-            <div className="vibe-live-composer">
+            <div className={isVibing ? "vibe-live-composer is-busy" : "vibe-live-composer"}>
+              <VibeWorkingIndicator active={isVibing} status={vibeStatus} />
               <Textarea
                 className="vibe-composer-textarea"
                 aria-label="Describe the change you want to make"
@@ -275,32 +278,36 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 }}
                 placeholder={
                   isVibing
-                    ? "Keep typing — your request will be queued"
+                    ? "Add another request — it will run next"
                     : "Ask Pi about the app or describe a change…"
                 }
                 rows={1}
               />
               <div className="vibe-composer-footer">
-                <WorkspaceAttachmentButton
-                  disabled={isUploadingProjectFile}
-                  onFiles={(files) => void handleUploadProjectFiles(files)}
-                />
-                <div className="vibe-composer-shortcuts" aria-hidden="true">
+                <div className="vibe-composer-left">
+                  <WorkspaceAttachmentButton
+                    disabled={isUploadingProjectFile}
+                    onFiles={(files) => void handleUploadProjectFiles(files)}
+                  />
                   {isVibing ? (
-                    <span>Next prompt queues automatically</span>
+                    <span className="vibe-composer-queue-status">
+                      <i aria-hidden="true" />
+                      Queues after current task
+                    </span>
                   ) : (
-                    <>
+                    <div className="vibe-composer-shortcuts" aria-hidden="true">
                       <kbd>↵</kbd>
                       <span>send</span>
                       <span className="vibe-composer-shortcuts-divider">·</span>
                       <kbd>⇧↵</kbd>
                       <span>new line</span>
-                    </>
+                    </div>
                   )}
                 </div>
                 <div className="vibe-composer-right">
                   {isVibing ? (
                     <Button
+                      className="vibe-composer-stop"
                       variant="secondary"
                       type="button"
                       onClick={cancelVibe}
@@ -308,6 +315,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                       title="Stop generation"
                     >
                       <Square size={15} aria-hidden="true" />
+                      <span>Stop</span>
                     </Button>
                   ) : null}
                   <Button
@@ -317,6 +325,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     onClick={() => void handleVibeChat()}
                     disabled={!promptDraft.trim()}
                     aria-label={isVibing ? "Queue prompt" : "Send prompt"}
+                    title={isVibing ? "Queue prompt" : "Send prompt"}
                   >
                     <Send size={16} />
                   </Button>
@@ -328,11 +337,10 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <VibePaneResizer resize={paneResize} />
         <div className="vibe-live-preview-panel">
           {vibeTab === "preview" && isPreviewAuthorized ? (
-            <iframe
-              key={vibePreviewKey}
-              title="Live preview"
+            <WorkspacePreviewFrame
+              key={`${selectedProject.id}:${vibePreviewKey}`}
+              previewKey={vibePreviewKey}
               src={previewSrc}
-              className="vibe-live-iframe"
             />
           ) : vibeTab === "preview" ? (
             <div className="hz-db-empty" role="status">
