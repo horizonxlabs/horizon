@@ -5,6 +5,47 @@ import { resourceKeyForProject } from "./resource-ports";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { workspaceVolumeName } from "./workspace-lifecycle";
 import type { ProjectDeletionFence } from "../project-lifecycle";
+import type { WorkspaceRuntimeCache } from "./runtime-cache";
+
+export function createWorkspaceDeletion(
+  deps: WorkspaceOrchestratorDeps,
+  cache: WorkspaceRuntimeCache,
+  llmKeyIds: Map<string, string>
+) {
+  return async (projectId: string, fence?: ProjectDeletionFence): Promise<void> => {
+    // Deletion is a local mutation even before recovery has published its durable runtime.
+    cache.invalidate(projectId);
+    try {
+      await fence?.assertCurrent();
+      const cached = cache.records.get(projectId);
+      const durable = cached
+        ? undefined
+        : (await deps.runtimeRecords?.list())?.find(
+            (snapshot) => snapshot.record.projectId === projectId
+          );
+      await fence?.assertCurrent();
+      const record = cached ?? durable?.record;
+      if (!record) return;
+      await deleteWorkspaceResources({
+        record,
+        deps,
+        llmGatewayKeyId: durable?.llmGatewayKeyId ?? llmKeyIds.get(projectId),
+        runtimeRecords: deps.runtimeRecords,
+        fence
+      });
+      cache.delete(projectId);
+      llmKeyIds.delete(projectId);
+      try {
+        deps.onAudit?.({ action: "workspace.deleted", projectId });
+      } catch {
+        // Completed cleanup remains successful even when audit transport is unavailable.
+      }
+    } finally {
+      // Also reject captures begun during a lookup, an idempotent miss, or a failed cleanup.
+      cache.invalidate(projectId);
+    }
+  };
+}
 
 export async function deleteWorkspaceResources(input: {
   record: WorkspaceContainerRecord;

@@ -11,8 +11,7 @@ import {
   workspaceVolumeLabels,
   workspaceVolumeName
 } from "./workspace-lifecycle";
-import { deleteWorkspaceResources } from "./workspace-deletion";
-import type { ProjectDeletionFence } from "../project-lifecycle";
+import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
@@ -358,26 +357,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return next;
     },
 
-    async deleteWorkspace(projectId: string, fence?: ProjectDeletionFence): Promise<void> {
-      const record = records.get(projectId);
-      if (!record) {
-        return;
-      }
-      await deleteWorkspaceResources({
-        record,
-        deps,
-        llmGatewayKeyId: llmKeyIds.get(projectId),
-        runtimeRecords,
-        fence
-      });
-      cache.delete(projectId);
-      llmKeyIds.delete(projectId);
-      try {
-        audit({ action: "workspace.deleted", projectId });
-      } catch {
-        // Cleanup has completed; audit transport failure must not make a retry target live resources.
-      }
-    },
+    deleteWorkspace: createWorkspaceDeletion(deps, cache, llmKeyIds),
 
     async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {
       const stopped: string[] = [];

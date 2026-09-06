@@ -104,6 +104,43 @@ const scenarios = [
   }
 ];
 
+for (const lookupFails of [false, true]) {
+  test(`absent workspace deletion invalidates overlapping recovery on ${lookupFails ? "lookup failure" : "an idempotent miss"}`, async () => {
+    const fixture = await createFixture({ ready: false });
+    let capture;
+    fixture.deps.warmPool.reconcile = async (beginRecovery) => {
+      capture = beginRecovery;
+    };
+    await fixture.orchestrator.reconcileWarmPool();
+    const beforeLookup = capture(project.projectId);
+    let duringLookup;
+    const list = fixture.deps.runtimeRecords.list;
+    fixture.deps.runtimeRecords.list = async () => {
+      beforeLookup.publish(stale);
+      assert.equal(fixture.orchestrator.getWorkspace(project.projectId), null);
+      duringLookup = capture(project.projectId);
+      if (lookupFails) throw new Error("runtime lookup unavailable");
+      return [];
+    };
+    try {
+      const deletion = fixture.orchestrator.deleteWorkspace(project.projectId);
+      if (lookupFails) await assert.rejects(deletion, /runtime lookup unavailable/);
+      else await deletion;
+      duringLookup.publish(stale);
+      beforeLookup.publish(stale);
+      assert.equal(fixture.orchestrator.getWorkspace(project.projectId), null);
+      assert.equal(fixture.snapshots.size, 0);
+      assert.deepEqual(fixture.localCleanup, []);
+      fixture.deps.runtimeRecords.list = list;
+      await fixture.orchestrator.deleteWorkspace(project.projectId);
+      assert.equal(fixture.orchestrator.getWorkspace(project.projectId), null);
+    } finally {
+      beforeLookup.release();
+      duringLookup?.release();
+    }
+  });
+}
+
 for (const scenario of scenarios) {
   test(`${scenario.name} prevents an older recovery from replacing local runtime identity`, async () => {
     const fixture = await createFixture({ ready: scenario.ready, failure: scenario.failure });

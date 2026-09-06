@@ -96,6 +96,8 @@ and persisted before the claim is retired. Existing durable runtimes retain thei
 state; redundant claims never turn a stopped workspace back into a cached running workspace.
 Recovery publishes only if the project's local runtime cache has not changed since recovery began,
 so a delayed successful database response cannot overwrite a later reattach, stop, or deletion.
+Deletion invalidates pending cache publications even when no runtime is cached, and loads any
+durable runtime to remove its physical resources and gateway key before the project metadata cascade.
 A contended project remains protected for a later sweep. Missing, unhealthy, or mismatched handoffs
 are cleaned only after their abandoned final container is removed, so it cannot pin the warm volume.
 Failed cleanup retries also acquire the project lease. Generic orphan deletion acquires that lease

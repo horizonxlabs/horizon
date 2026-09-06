@@ -24,6 +24,10 @@ export function createWorkspaceRuntimeCache() {
   return {
     records: records as ReadonlyMap<string, WorkspaceContainerRecord>,
     set,
+    invalidate(projectId: string) {
+      revisionFor(projectId).value = ++sequence;
+      forgetDeleted(projectId);
+    },
     delete(projectId: string) {
       revisionFor(projectId).value = ++sequence;
       records.delete(projectId);
