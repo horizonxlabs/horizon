@@ -73,6 +73,9 @@ async function main() {
   // and sample business data are explicit local-demo opt-ins.
   await seedKeycloakProvider();
   await seedDesignSystemSkill();
+  // Operational migrations must run in every environment, including production where
+  // demo project seeding is intentionally disabled.
+  await seedImageGeneration(prisma);
   if (process.env.EVCP_SEED_DEMO_PROJECT !== "1") return;
 
   await prisma.platformGroup.upsert({
@@ -277,8 +280,6 @@ async function main() {
       }
     });
   }
-  await seedImageGeneration(prisma);
-
   await prisma.aiQuota.upsert({
     where: { scope: "organization" },
     update: {
