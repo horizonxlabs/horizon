@@ -281,6 +281,9 @@ test("Workspace keeps an accessible conversation restore control after collapse"
 
   const collapse = renderer.root.findByProps({ "aria-label": "Collapse conversation panel" });
   await act(async () => collapse.props.onClick({ stopPropagation() {} }));
+  const collapsedLayout = renderer.root.find(
+    (node) => node.props.className === "vibe-live-body is-chat-collapsed"
+  );
   const expand = renderer.root
     .findAllByProps({ "aria-label": "Expand conversation panel" })
     .find((node) => node.type === "button");
@@ -292,6 +295,7 @@ test("Workspace keeps an accessible conversation restore control after collapse"
     separator.findAllByProps({ "aria-label": "Expand conversation panel" }).length,
     0
   );
+  assert.ok(collapsedLayout);
   assert.ok(expand);
 
   await act(async () => expand.props.onClick({ stopPropagation() {} }));

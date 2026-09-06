@@ -133,7 +133,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       />
       <WorkspaceMobileNav active={mobileView} onSelect={selectMobileView} />
       <div
-        className={`vibe-live-body${paneResize.isChatCollapsed ? "is-chat-collapsed" : ""}`}
+        className={`vibe-live-body${paneResize.isChatCollapsed ? " is-chat-collapsed" : ""}`}
         data-workspace-view={mobileView ?? "supporting"}
         ref={paneResize.splitViewRef}
       >
