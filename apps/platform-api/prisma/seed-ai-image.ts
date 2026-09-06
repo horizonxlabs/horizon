@@ -11,10 +11,26 @@ export async function seedImageGeneration(prisma: PrismaClient): Promise<void> {
   const currentRoute = await prisma.aiScenarioRoute.findUnique({
     where: { scenario: "image_generation" }
   });
-  if (currentRoute && currentRoute.primaryProviderId !== IMAGE_PROVIDER_ID) return;
-
   const providers = await prisma.aiProvider.findMany();
   const keys = await prisma.aiApiKey.findMany();
+  const configuredProvider = currentRoute
+    ? providers.find((provider) => provider.id === currentRoute.primaryProviderId)
+    : undefined;
+  const hasUsableConfiguredRoute =
+    configuredProvider &&
+    configuredProvider.status === "active" &&
+    ["google", "openai"].includes(configuredProvider.adapter) &&
+    configuredProvider.models.includes(currentRoute?.primaryModel ?? "") &&
+    keys.some(
+      (key) => key.providerId === configuredProvider.id && key.status === "active"
+    );
+  if (
+    currentRoute &&
+    currentRoute.primaryProviderId !== IMAGE_PROVIDER_ID &&
+    hasUsableConfiguredRoute
+  )
+    return;
+
   const sourceProvider = providers.find(
     (provider) =>
       provider.id !== IMAGE_PROVIDER_ID &&
