@@ -149,3 +149,18 @@ test("Auto and Build prompts both anchor the model to app/page.tsx as the live p
   assert.match(buildPrompt, /preview homepage is app\/page\.tsx/i);
   assert.match(buildPrompt, /core or primary feature.*put it directly in app\/page\.tsx/is);
 });
+
+test("Build and Auto prompts require concise user-visible progress between tool phases", () => {
+  const input = {
+    template: { name: "nextjs-base", lockedFiles: [], files: [] },
+    contextFiles: [],
+    rollingSummary: null
+  };
+
+  for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
+    assert.match(prompt, /Before the first tool call.*brief.*user-visible update/is);
+    assert.match(prompt, /moving to a new phase.*inspect.*edit.*verify/is);
+    assert.match(prompt, /do not reveal.*chain-of-thought|Never reveal.*chain-of-thought/is);
+    assert.match(prompt, /Do not narrate every tool call.*group related operations/is);
+  }
+});

@@ -1,6 +1,7 @@
 import type { WorkspaceChatTurnPart, WorkspaceChatToolPart } from "@evcp/types";
+import { GitCommitHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
-import { VibeActionRow } from "./VibeActionRow";
+import { VibeActionSummary } from "./VibeActionSummary";
 import { VibeMarkdown } from "./VibeMarkdown";
 import { VibeReasoning } from "./VibeReasoning";
 import type { VibeAction } from "./vibe-actions";
@@ -15,6 +16,11 @@ type Props = {
   imageBase?: string;
   hideFailureDetails?: boolean;
 };
+
+type NonToolTurnPart = Exclude<WorkspaceChatTurnPart, { type: "tool" }>;
+type TimelineSegment =
+  | { id: string; type: "activity"; tools: WorkspaceChatToolPart[] }
+  | { id: string; type: "part"; part: NonToolTurnPart; sourceIndex: number };
 
 function toAction(id: string, tool: WorkspaceChatToolPart): VibeAction {
   return {
@@ -68,6 +74,25 @@ function legacyParts(legacy: Props["legacy"]): WorkspaceChatTurnPart[] {
   return parts;
 }
 
+// Keep commentary in its original stream position. Only adjacent tool calls belong to the
+// same Activity card; a new assistant update starts a new, independently expandable phase.
+function segmentParts(parts: WorkspaceChatTurnPart[]): TimelineSegment[] {
+  const segments: TimelineSegment[] = [];
+  for (const [sourceIndex, part] of parts.entries()) {
+    const previous = segments.at(-1);
+    if (part.type === "tool" && previous?.type === "activity") {
+      previous.tools.push(part.tool);
+      continue;
+    }
+    if (part.type === "tool") {
+      segments.push({ id: `activity-${part.id}`, type: "activity", tools: [part.tool] });
+      continue;
+    }
+    segments.push({ id: part.id, type: "part", part, sourceIndex });
+  }
+  return segments;
+}
+
 export function VibeTurnTimeline({
   parts: persistedParts,
   legacy,
@@ -78,15 +103,25 @@ export function VibeTurnTimeline({
   const parts = (persistedParts?.length ? persistedParts : legacyParts(legacy))
     .slice()
     .sort((a, b) => a.sequence - b.sequence);
+  const segments = segmentParts(parts);
   return (
     <div className="vibe-turn-timeline" aria-label="Agent activity">
-      {parts.map((part, index) => {
+      {segments.map((segment) => {
+        if (segment.type === "activity") {
+          return (
+            <VibeActionSummary
+              key={segment.id}
+              actions={segment.tools.map((tool) => toAction(tool.callId, tool))}
+            />
+          );
+        }
+        const { part, sourceIndex } = segment;
         if (part.type === "reasoning") {
           return (
             <VibeReasoning
               key={part.id}
               reasoning={part.text}
-              live={live && index === parts.length - 1}
+              live={live && sourceIndex === parts.length - 1}
             />
           );
         }
@@ -96,7 +131,7 @@ export function VibeTurnTimeline({
           return (
             <div key={part.id} className="vibe-message-text">
               <VibeMarkdown text={stripQuestions(stripSuggestions(text))} imageBase={imageBase} />
-              {live && index === parts.length - 1 && (
+              {live && sourceIndex === parts.length - 1 && (
                 <span className="vibe-cursor-blink" aria-hidden="true">
                   ▋
                 </span>
@@ -104,13 +139,15 @@ export function VibeTurnTimeline({
             </div>
           );
         }
-        if (part.type === "tool") {
-          return <VibeActionRow key={part.id} action={toAction(part.tool.callId, part.tool)} />;
-        }
         if (part.type === "commit") {
           return (
-            <div key={part.id} className="vibe-commit-chip">
-              ⑂ committed {part.sha.slice(0, 8)} — restore it from History
+            <div
+              key={part.id}
+              className="vibe-commit-status"
+              title={`Commit ${part.sha.slice(0, 8)}`}
+            >
+              <GitCommitHorizontal size={14} aria-hidden="true" />
+              <span>Saved to project history</span>
             </div>
           );
         }

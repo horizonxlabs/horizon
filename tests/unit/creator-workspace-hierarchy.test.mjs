@@ -112,7 +112,7 @@ test("Workspace announces sandbox preparation instead of showing an unlabelled b
   assert.match(html, /Your workspace will be ready shortly\./);
 });
 
-test("completed technical actions are closed while active work stays expanded", () => {
+test("completed Activity details are closed while active work stays expanded", () => {
   const completed = renderToStaticMarkup(
     React.createElement(VibeActionSummary, {
       actions: [{ id: "done-1", type: "edit", label: "app.tsx", status: "done", body: "saved" }]
@@ -120,7 +120,8 @@ test("completed technical actions are closed while active work stays expanded", 
   );
   assert.match(completed, /<details[^>]*class="vibe-technical-details"/);
   assert.doesNotMatch(completed, /<details[^>]*open/);
-  assert.match(completed, /1 completed technical action/);
+  assert.match(completed, />Activity</);
+  assert.match(completed, /Edited project files · 1 step completed/);
   assert.match(completed, /app\.tsx/);
   const active = renderToStaticMarkup(
     React.createElement(VibeActionSummary, {
@@ -136,7 +137,7 @@ test("completed technical actions are closed while active work stays expanded", 
     })
   );
   assert.match(active, /<details[^>]*open/);
-  assert.match(active, />Working</);
+  assert.match(active, /Edited project files · Working/);
   assert.match(active, /dashboard\.tsx/);
   assert.match(active, /live command output/);
 });

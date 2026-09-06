@@ -1,5 +1,15 @@
+import {
+  Circle,
+  Database,
+  FilePlus2,
+  FolderOpen,
+  Image,
+  PencilLine,
+  Search,
+  Terminal
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { actionLineCount, vibeActionIcon, vibeActionVerb, type VibeAction } from "./vibe-actions";
+import { actionLineCount, vibeActionVerb, type VibeAction } from "./vibe-actions";
 
 export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
   const [open, setOpen] = useState(false);
@@ -10,6 +20,22 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
   const statusClass = running ? "running" : failed ? "failed" : "complete";
   const isDiff = action.find !== undefined || action.replace !== undefined;
   const lineCount = actionLineCount(action);
+  const ActionIcon =
+    action.type === "read"
+      ? Search
+      : action.type === "list"
+        ? FolderOpen
+        : action.type === "file"
+          ? FilePlus2
+          : action.type === "edit"
+            ? PencilLine
+            : action.type === "shell"
+              ? Terminal
+              : action.type === "migration"
+                ? Database
+                : action.type === "image"
+                  ? Image
+                  : Circle;
 
   return (
     <div className={`vibe-action-row vibe-action-row-${statusClass}`}>
@@ -19,9 +45,10 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
         className="vibe-action-summary"
         aria-expanded={hasBody ? expanded : undefined}
       >
-        <span aria-hidden>{vibeActionIcon(action.type)}</span>
+        <span className="vibe-action-icon" aria-hidden="true">
+          <ActionIcon size={14} strokeWidth={1.8} />
+        </span>
         <span className={`vibe-action-verb ${running ? "vibe-shimmer" : ""}`.trim()}>
-          {running ? "" : failed ? "✗ " : "✓ "}
           {vibeActionVerb(action.type, action.status)}
         </span>
         <span className="vibe-action-label">{action.label}</span>

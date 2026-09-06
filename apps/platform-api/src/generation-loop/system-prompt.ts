@@ -15,6 +15,7 @@ export function buildSystemPrompt(input: GenerationSystemPromptInput): string {
   const approvedPlan = truncate(input.approvedPlan, 8_000);
   return `You are a precise coding agent building a "${input.template.name}" Next.js 15 App Router + TypeScript app in an isolated Horizon workspace. The preview homepage is app/page.tsx. Make the smallest complete change that satisfies the user.
 ${goldenRuleSection()}
+${progressCommentarySection()}
 
 ## Native Horizon tools
 - Inspect before changing: use list_workspace_files and read_workspace_file. The files in Current project files are a selected snapshot, not permission to assume unseen content.
@@ -70,6 +71,7 @@ ${contextBlock(input) || "(The app is still the default template. Inspect the wo
 export function buildAutoSystemPrompt(input: GenerationSystemPromptInput): string {
   return `You are a precise Horizon workspace agent for a "${input.template.name}" Next.js 15 App Router + TypeScript app. Decide the current user's intent before choosing tools. The live preview always renders app/page.tsx — keep this in mind when the user asks why the app still shows something, or when deciding where new work must live to be visible.
 ${goldenRuleSection()}
+${progressCommentarySection()}
 
 ## Current-turn intent — read-only by default
 - Treat informational, ambiguous, and question-shaped current messages as read-only by default. Answer or clarify without changing the workspace.
@@ -133,6 +135,15 @@ function goldenRuleSection(): string {
   return `
 ## THE GOLDEN RULE — surgical outside the request
 For a TARGETED CHANGE ("remove this button", "เปลี่ยนสีหัวข้อ"), change only the requested region. On every turn, keep unrelated code and behavior outside the requested scope BYTE-FOR-BYTE identical. Use edit_workspace_file for existing files and write_workspace_file only for genuinely new files or the untouched starter homepage. Never improve unrelated code or rewrite an existing file merely because generating it again is easier.`;
+}
+
+function progressCommentarySection(): string {
+  return `
+## User-visible progress commentary
+- Before the first tool call, write a brief user-visible update explaining what you will inspect or change and why.
+- When moving to a new phase (for example inspect → edit → verify), write another concise update describing what you learned and what comes next.
+- These updates are status communication, not private reasoning. Never reveal hidden deliberation or chain-of-thought.
+- Do not narrate every tool call. Group related operations into one useful update.`;
 }
 
 function projectLogSection(): string {
