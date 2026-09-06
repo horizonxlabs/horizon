@@ -366,8 +366,14 @@ test("creator publish HTTP routes resolve persisted sessions after API restart",
     assert.equal(decision.status, 200);
 
     const review = await request(`/projects/${projectId}/publish/review`);
-    assert.equal(review.status, 422);
-    assert.doesNotMatch(JSON.stringify(await review.json()), /Unknown mock user/);
+    assert.equal(review.status, 200);
+    const reviewPayload = await review.json();
+    assert.equal(reviewPayload.ok, true);
+    assert.equal(
+      reviewPayload.data.checklist.some((item) => item.key === "prd_baseline"),
+      false
+    );
+    assert.doesNotMatch(JSON.stringify(reviewPayload), /Unknown mock user/);
   } finally {
     await app.close();
   }
