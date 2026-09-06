@@ -94,6 +94,8 @@ Startup and periodic reconciliation decide recovery or cleanup while holding the
 provisioning lease. A healthy final container whose credentials match its claiming slot is recovered
 and persisted before the claim is retired. Existing durable runtimes retain their Docker-hydrated
 state; redundant claims never turn a stopped workspace back into a cached running workspace.
+Recovery publishes only if the project's local runtime cache has not changed since recovery began,
+so a delayed successful database response cannot overwrite a later reattach, stop, or deletion.
 A contended project remains protected for a later sweep. Missing, unhealthy, or mismatched handoffs
 are cleaned only after their abandoned final container is removed, so it cannot pin the warm volume.
 Failed cleanup retries also acquire the project lease. Generic orphan deletion acquires that lease

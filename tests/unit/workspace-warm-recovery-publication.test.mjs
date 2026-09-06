@@ -101,3 +101,51 @@ test(
     }
   }
 );
+
+test(
+  "a delayed successful recovery renewal cannot overwrite a successor reattach and stop",
+  { timeout: 5_000 },
+  async () => {
+    const fixture = await createCrashedWarmStartupFixture();
+    const replica = fixture.createReplica();
+    const execute = fixture.persistence.client.$executeRawUnsafe;
+    const entered = deferred();
+    const resume = deferred();
+    let paused = false;
+    fixture.persistence.client.$executeRawUnsafe = async (...args) => {
+      const result = await execute(...args);
+      if (
+        !paused &&
+        result === 1 &&
+        args[0].trimStart().startsWith("UPDATE") &&
+        args[1] === "prj_crash" &&
+        fixture.persistence.records.has("prj_crash")
+      ) {
+        paused = true;
+        entered.resolve();
+        await resume.promise;
+      }
+      return result;
+    };
+    const stale = assert.rejects(replica.boot(), /lease is no longer owned/);
+    await entered.promise;
+    try {
+      fixture.persistence.advance(1_001);
+      await replica.orchestrator.provisionWorkspace({ projectId: "prj_crash", slug: "newer-slug" });
+      await replica.orchestrator.stopWorkspace("prj_crash");
+      resume.resolve();
+      await stale;
+      const cached = replica.orchestrator.getWorkspace("prj_crash");
+      const [durable] = await fixture.runtimeRecords.list();
+      assert.equal(cached.state, "idle");
+      assert.equal(cached.slug, "newer-slug");
+      assert.equal(cached.state, durable.record.state);
+      assert.equal(cached.slug, durable.record.slug);
+      assert.equal(cached.resourceKey, durable.record.resourceKey);
+      assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash"))?.running, false);
+    } finally {
+      resume.resolve();
+      await stale;
+    }
+  }
+);

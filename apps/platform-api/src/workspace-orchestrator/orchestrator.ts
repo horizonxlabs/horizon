@@ -17,6 +17,7 @@ import { physicalResourceKey } from "./warm-pool-config";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
+import { createWorkspaceRuntimeCache } from "./runtime-cache";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -32,7 +33,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const s3Endpoint = deps.s3Endpoint ?? "http://minio:9000";
   const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
 
-  const records = new Map<string, WorkspaceContainerRecord>();
+  const cache = createWorkspaceRuntimeCache();
+  const records = cache.records;
   const llmKeyIds = new Map<string, string>();
   const provisioning = new Map<string, Promise<WorkspaceContainerRecord>>();
   let runtimeRecords = deps.runtimeRecords;
@@ -41,7 +43,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const now = () => new Date().toISOString();
   const save = (record: WorkspaceContainerRecord): WorkspaceContainerRecord => {
     const next = { ...record, updatedAt: now() };
-    records.set(record.projectId, next);
+    cache.set(next);
     return next;
   };
 
@@ -162,7 +164,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       },
       async removeFailedClaim(projectId, runtimeWriteAttempted) {
         if (runtimeWriteAttempted) await leases.remove(projectId);
-        records.delete(projectId);
+        cache.delete(projectId);
         llmKeyIds.delete(projectId);
       }
     }
@@ -251,7 +253,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   return {
-    ...createWarmPoolLifecycle(deps, records, llmKeyIds),
+    ...createWarmPoolLifecycle(deps, cache, llmKeyIds),
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
       deps.runtimeRecords = store;
@@ -266,7 +268,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
                   .catch(() => null)
               )?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
-        records.set(record.projectId, record);
+        cache.set(record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
       }
     },
@@ -305,7 +307,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       const operation = leases
         .run(input.projectId, async (snapshot) => {
           if (snapshot) {
-            records.set(input.projectId, {
+            cache.set({
               ...snapshot.record,
               state: snapshot.record.state === "provisioning" ? "failed" : snapshot.record.state
             });
@@ -368,7 +370,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         runtimeRecords,
         fence
       });
-      records.delete(projectId);
+      cache.delete(projectId);
       llmKeyIds.delete(projectId);
       try {
         audit({ action: "workspace.deleted", projectId });
