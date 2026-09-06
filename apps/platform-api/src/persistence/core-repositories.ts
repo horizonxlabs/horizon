@@ -238,8 +238,8 @@ export class CoreRepositoryBackedService {
     return this.repositories.projects.listForActor(actor);
   }
 
-  deleteProject(actor: PlatformUser, projectId: string): Promise<void> {
-    return this.repositories.projects.deleteForActor(actor, projectId);
+  deleteProject(actor: PlatformUser, projectId: string, fence?: import("../project-lifecycle").ProjectDeletionFence): Promise<void> {
+    return this.repositories.projects.deleteForActor(actor, projectId, fence);
   }
 
   recordAudit(

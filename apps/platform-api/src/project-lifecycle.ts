@@ -47,6 +47,8 @@ export interface ProjectMutationLeaseControl extends ProjectMutationFence {
 
 export interface ProjectDeletionFence {
   readonly epoch: number;
+  readonly ownerId?: string;
+  readonly workspaceToken?: string;
   assertCurrent(): Promise<void>;
 }
 
@@ -227,7 +229,7 @@ export function createProjectLifecycleCoordinator(input: {
             if (drainDelay === null) break;
             await sleep(Math.max(1, Math.min(pollIntervalMs, drainDelay)));
           }
-          const fence: ProjectDeletionFence = { epoch, assertCurrent };
+          const fence: ProjectDeletionFence = { epoch, ownerId, assertCurrent };
           await fence.assertCurrent();
           const result = await operation(fence);
           await fence.assertCurrent();

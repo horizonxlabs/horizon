@@ -24,11 +24,15 @@ export function ProviderCard({
   return (
     <article className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
       <header className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
+        {/* min-w-0 lets this column actually shrink (flex min-width:auto otherwise keeps the
+            long baseUrl at intrinsic width and pushes the badges outside the card). */}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <strong className="text-sm font-semibold text-body">{provider.name}</strong>
-          <span className="truncate text-xs text-muted">{provider.baseUrl}</span>
+          <span className="truncate text-xs text-muted" title={provider.baseUrl}>
+            {provider.baseUrl}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Badge>{provider.adapter}</Badge>
           <Badge tone={isActive ? "success" : "warning"}>{provider.status}</Badge>
         </div>

@@ -35,6 +35,7 @@ export type PublishedSubdomainRegistryEntry = {
   projectId: string;
   routePath: string;
   subdomain: string;
+  visibility: "public" | "restricted";
 };
 
 function firstHeader(value: string | string[] | undefined): string {
@@ -120,7 +121,9 @@ export function proxyPublishedDeployment(input: {
     return;
   }
   const payload =
-    typeof input.request.body === "string" ? input.request.body : JSON.stringify(input.request.body);
+    typeof input.request.body === "string"
+      ? input.request.body
+      : JSON.stringify(input.request.body);
   proxyRequest.setHeader("content-type", "application/json");
   proxyRequest.setHeader("content-length", Buffer.byteLength(payload));
   proxyRequest.write(payload);
@@ -128,7 +131,12 @@ export function proxyPublishedDeployment(input: {
 }
 
 function resourceKeyFromRoute(routePath: string): string | null {
-  return routePath.trim().replace(/\/$/, "").match(/^\/apps\/([a-zA-Z0-9_-]+)$/)?.[1] ?? null;
+  return (
+    routePath
+      .trim()
+      .replace(/\/$/, "")
+      .match(/^\/apps\/([a-zA-Z0-9_-]+)$/)?.[1] ?? null
+  );
 }
 
 export function registerPublishedSubdomainHttpRoutes(input: {
@@ -138,9 +146,7 @@ export function registerPublishedSubdomainHttpRoutes(input: {
   launchGrantStore?: LaunchGrantStore;
   baseDomain: string;
   secureCookie: boolean;
-  resolvePublishedSubdomain(
-    subdomain: string
-  ): Promise<PublishedSubdomainRegistryEntry | null>;
+  resolvePublishedSubdomain(subdomain: string): Promise<PublishedSubdomainRegistryEntry | null>;
   resolvePublishAuth(headers: HeaderBag): Promise<WorkspaceAuthContext | null>;
   canAccessDeployment(auth: WorkspaceAuthContext, projectId: string): Promise<boolean>;
   rehydrateDeployment(resourceKey: string, environment: "production"): Promise<unknown>;
@@ -173,14 +179,18 @@ export function registerPublishedSubdomainHttpRoutes(input: {
       response.status(503).json({ error: "app_unavailable" });
       return;
     }
-    const auth = await input.resolvePublishAuth(appTokenAuthorizationHeaders(request.headers ?? {}));
-    if (!auth) {
-      response.status(401).json({ error: "unauthorized" });
-      return;
-    }
-    if (!(await input.canAccessDeployment(auth, deployment.projectId))) {
-      response.status(403).json({ error: "forbidden" });
-      return;
+    if (resolved.registryEntry.visibility !== "public") {
+      const auth = await input.resolvePublishAuth(
+        appTokenAuthorizationHeaders(request.headers ?? {})
+      );
+      if (!auth) {
+        response.status(401).json({ error: "unauthorized" });
+        return;
+      }
+      if (!(await input.canAccessDeployment(auth, deployment.projectId))) {
+        response.status(403).json({ error: "forbidden" });
+        return;
+      }
     }
     proxyPublishedDeployment({
       nodeHttp: input.nodeHttp,

@@ -6,18 +6,18 @@ import { buildDevContainerSpec } from "./docker-engine";
 import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 import {
-  cleanupOrphanWorkspaceResources,
   waitForPreviewReady,
   workspaceSecretEntries,
   workspaceVolumeLabels,
   workspaceVolumeName
 } from "./workspace-lifecycle";
-import {
-  persistWorkspaceSecrets,
-  provisionIndependentWorkspaceResources
-} from "./workspace-provisioning";
-import { deleteWorkspaceResources } from "./workspace-deletion";
-import type { ProjectDeletionFence } from "../project-lifecycle";
+import { createWorkspaceDeletion } from "./workspace-deletion";
+import { physicalResourceKey } from "./warm-pool-config";
+import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
+import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
+import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
+import { createWorkspaceRuntimeCache } from "./runtime-cache";
+import { runWorkspaceProjectDeletion } from "./project-deletion-ownership";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -33,47 +33,53 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   const s3Endpoint = deps.s3Endpoint ?? "http://minio:9000";
   const audit = (event: WorkspaceAuditEvent) => deps.onAudit?.(event);
 
-  const records = new Map<string, WorkspaceContainerRecord>();
+  const cache = createWorkspaceRuntimeCache();
+  const records = cache.records;
   const llmKeyIds = new Map<string, string>();
+  const provisioning = new Map<string, Promise<WorkspaceContainerRecord>>();
   let runtimeRecords = deps.runtimeRecords;
+  const leases = createProvisioningLeaseCoordinator(() => runtimeRecords, deps.docker);
 
   const now = () => new Date().toISOString();
   const save = (record: WorkspaceContainerRecord): WorkspaceContainerRecord => {
     const next = { ...record, updatedAt: now() };
-    records.set(record.projectId, next);
+    cache.set(next);
     return next;
   };
 
   const persist = async (record: WorkspaceContainerRecord): Promise<void> => {
-    await runtimeRecords?.save({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
+    await leases.persist({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
   };
 
-  const buildWorkspaceSpec = async (projectId: string, resourceKey: string) =>
+  const buildWorkspaceSpec = async (projectId: string, logicalKey: string, physicalKey: string) =>
     buildDevContainerSpec({
       projectId,
-      slug: resourceKey,
+      slug: logicalKey,
       image,
       env: {
         ...(await deps.secrets.resolveEnv(projectId)),
-        EVCP_PREVIEW_BASE: `/preview/${resourceKey}`
+        EVCP_PREVIEW_BASE: `/preview/${logicalKey}`
       },
       cpuCores,
       memoryMb,
       network,
-      workspaceVolume: workspaceVolumeName(resourceKey)
+      workspaceVolume: workspaceVolumeName(physicalKey)
     });
 
   const recoverExistingWorkspace = async (
     existing: WorkspaceContainerRecord,
-    input: { projectId: string; slug: string },
-    resourceKey: string
+    input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
-    const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
+    const physicalKey = physicalResourceKey(existing);
+    const logicalKey = resourceKeyForProject(input.projectId);
+    await leases.adoptSecrets(input.projectId, deps.secrets);
+    const found = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
       const recovered = save({
         ...existing,
+        resourceKey: physicalKey,
         slug: input.slug,
         state: "running",
         containerId: found.containerId,
@@ -97,16 +103,17 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       );
     }
     await deps.docker.ensureVolume(
-      workspaceVolumeName(resourceKey),
+      workspaceVolumeName(physicalKey),
       workspaceVolumeLabels(input.projectId)
     );
     const { containerId } = await deps.docker.createContainer(
-      await buildWorkspaceSpec(input.projectId, resourceKey)
+      await buildWorkspaceSpec(input.projectId, logicalKey, physicalKey)
     );
     await deps.docker.startContainer(containerId);
     await waitForPreviewReady(deps.docker, containerId);
     const recovered = save({
       ...existing,
+      resourceKey: physicalKey,
       slug: input.slug,
       state: "running",
       containerId,
@@ -130,9 +137,126 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     return record;
   };
 
+  const auditPoolEvent = (event: WorkspaceAuditEvent): void => {
+    try {
+      audit(event);
+    } catch {
+      // Observability cannot invalidate durable ownership or prevent cold fallback.
+    }
+  };
+
+  const refillWarmPool = (): void => {
+    void Promise.resolve()
+      .then(() => deps.warmPool?.ensureCapacity())
+      .catch(() => undefined);
+  };
+
+  const { provisionClaimedWorkspace, provisionColdWorkspace } = createWorkspaceProvisioning(
+    deps,
+    { image, network, cpuCores, memoryMb, databaseName, postgresHost, s3Endpoint },
+    {
+      save,
+      persist,
+      assertOwnership: leases.assertOwned,
+      secretAttempt: leases.secretAttempt,
+      rememberLlmKey: (projectId, keyId) => {
+        llmKeyIds.set(projectId, keyId);
+      },
+      async removeFailedClaim(projectId, runtimeWriteAttempted) {
+        if (runtimeWriteAttempted) await leases.remove(projectId);
+        cache.delete(projectId);
+        llmKeyIds.delete(projectId);
+      }
+    }
+  );
+
+  const provisionWorkspaceOnce = async (input: {
+    projectId: string;
+    slug: string;
+  }): Promise<WorkspaceContainerRecord> => {
+    // Immutable id-derived resource names prevent project renames from orphaning infrastructure.
+    const resourceKey = resourceKeyForProject(input.projectId);
+    const existing = records.get(input.projectId);
+    if (existing?.state === "archived") return existing;
+    if (existing && existing.state !== "failed") return recoverExistingWorkspace(existing, input);
+
+    // After API restart, reattach to durable Docker resources instead of provisioning duplicates.
+    const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
+    if (found) {
+      if (!found.running) {
+        await deps.docker.startContainer(found.containerId).catch(() => undefined);
+      }
+      await waitForPreviewReady(deps.docker, found.containerId);
+      const env = Object.fromEntries(workspaceSecretEntries(found.env));
+      const recoveredClaim = await deps.warmPool?.recoverClaim(input.projectId, env);
+      // Restore managed values from the original container runtime environment if they were not persisted.
+      await deps.secrets.replaceForProvisioning(
+        input.projectId,
+        env,
+        leases.secretAttempt(input.projectId)
+      );
+      const healed = save({
+        id: `ws-${resourceKey}`,
+        projectId: input.projectId,
+        slug: input.slug,
+        resourceKey: recoveredClaim?.resourceKey ?? resourceKey,
+        state: "running",
+        containerId: found.containerId,
+        cpuCores,
+        memoryMb,
+        lastActivityAt: now(),
+        lastError: undefined,
+        createdAt: now(),
+        updatedAt: now()
+      });
+      if (recoveredClaim) llmKeyIds.set(input.projectId, recoveredClaim.llmGatewayKeyId);
+      await persist(healed);
+      if (recoveredClaim) {
+        await deps.warmPool!.completeClaim(recoveredClaim.slotId);
+        refillWarmPool();
+      }
+      audit({
+        action: "workspace.reattached",
+        projectId: input.projectId,
+        metadata: { slug: input.slug }
+      });
+      return healed;
+    }
+
+    const assertProjectOwned = () => leases.assertOwned(input.projectId);
+    await assertProjectOwned();
+    const allocation = await deps.warmPool?.claim(input.projectId, assertProjectOwned);
+    if (allocation) {
+      try {
+        const record = await provisionClaimedWorkspace(input, allocation);
+        auditPoolEvent({
+          action: "workspace.pool_claimed",
+          projectId: input.projectId,
+          metadata: { slotId: allocation.slotId }
+        });
+        refillWarmPool();
+        return record;
+      } catch (error) {
+        await assertProjectOwned();
+        await deps.warmPool!.failClaim(allocation.slotId, error, assertProjectOwned);
+        auditPoolEvent({
+          action: "workspace.pool_claim_failed",
+          projectId: input.projectId,
+          metadata: { slotId: allocation.slotId }
+        });
+        refillWarmPool();
+      }
+    } else if (deps.warmPool) {
+      auditPoolEvent({ action: "workspace.pool_cold_fallback", projectId: input.projectId });
+    }
+    return provisionColdWorkspace(input);
+  };
+
   return {
+    ...createWarmPoolLifecycle(deps, cache, llmKeyIds),
     async hydrateRuntimeRecords(store: WorkspaceRuntimeRecordStore): Promise<void> {
       runtimeRecords = store;
+      deps.runtimeRecords = store;
       for (const snapshot of await store.list()) {
         // Reconcile persisted state with Docker so a stack restart cannot leave preview stuck at 503.
         const live =
@@ -144,21 +268,9 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
                   .catch(() => null)
               )?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
-        records.set(record.projectId, record);
+        cache.set(record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
       }
-    },
-    async cleanupOrphanContainers(): Promise<string[]> {
-      return cleanupOrphanWorkspaceResources({
-        docker: deps.docker,
-        activeProjectIds: new Set(records.keys()),
-        onRemoved: ({ projectId, containerName, volumeName }) =>
-          audit({
-            action: "workspace.orphan_removed",
-            projectId,
-            metadata: { containerName, volumeName }
-          })
-      });
     },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
@@ -186,138 +298,28 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       }
     },
 
-    async provisionWorkspace(input: {
+    provisionWorkspace(input: {
       projectId: string;
       slug: string;
     }): Promise<WorkspaceContainerRecord> {
-      // Immutable id-derived resource names prevent project renames from orphaning infrastructure.
-      const resourceKey = resourceKeyForProject(input.projectId);
-      const existing = records.get(input.projectId);
-      if (existing && existing.state !== "failed") {
-        if (existing.state === "archived") return existing;
-        return recoverExistingWorkspace(existing, input, resourceKey);
-      }
-
-      // After API restart, reattach to durable Docker resources instead of provisioning duplicates.
-      const found = await deps.docker.inspectContainer(`evcp-ws-${resourceKey}`);
-      if (found) {
-        if (!found.running) {
-          await deps.docker.startContainer(found.containerId).catch(() => undefined);
-        }
-        await waitForPreviewReady(deps.docker, found.containerId);
-        // The original container already contains the encrypted-at-rest secrets in its runtime
-        // environment. Restore the managed values when a restart happened before they were
-        // persisted (or from an older deployment that did not persist them yet).
-        for (const [name, value] of workspaceSecretEntries(found.env)) {
-          await deps.secrets.put(input.projectId, name, value);
-        }
-        const healed = save({
-          id: `ws-${resourceKey}`,
-          projectId: input.projectId,
-          slug: input.slug,
-          state: "running",
-          containerId: found.containerId,
-          cpuCores,
-          memoryMb,
-          lastActivityAt: now(),
-          lastError: undefined,
-          createdAt: now(),
-          updatedAt: now()
-        });
-        await persist(healed);
-        audit({
-          action: "workspace.reattached",
-          projectId: input.projectId,
-          metadata: { slug: input.slug }
-        });
-        return healed;
-      }
-
-      let record: WorkspaceContainerRecord = save({
-        id: `ws-${resourceKey}`,
-        projectId: input.projectId,
-        slug: input.slug,
-        state: "provisioning",
-        containerId: null,
-        cpuCores,
-        memoryMb,
-        lastActivityAt: now(),
-        lastError: undefined,
-        createdAt: now(),
-        updatedAt: now()
-      });
-      await persist(record);
-
-      const rollbacks: Array<() => Promise<void>> = [];
-      try {
-        const volumeName = workspaceVolumeName(resourceKey);
-        const {
-          pg,
-          bucket,
-          llmKey,
-          rollbacks: resourceRollbacks
-        } = await provisionIndependentWorkspaceResources(deps, {
-          projectId: input.projectId,
-          resourceKey,
-          volumeName
-        });
-        rollbacks.push(...resourceRollbacks);
-        llmKeyIds.set(input.projectId, llmKey.keyId);
-
-        rollbacks.push(() => deps.secrets.removeAll(input.projectId));
-        await persistWorkspaceSecrets(deps, input.projectId, {
-          DATABASE_URL: `postgresql://${pg.roleName}:${pg.password}@${postgresHost}/${databaseName}?schema=${pg.schemaName}`,
-          S3_ENDPOINT: s3Endpoint,
-          S3_BUCKET: bucket.bucket,
-          S3_ACCESS_KEY: bucket.accessKey,
-          S3_SECRET_KEY: bucket.secretKey,
-          LLM_GATEWAY_KEY: llmKey.key
-        });
-        const { containerId } = await deps.docker.createContainer(
-          await buildWorkspaceSpec(input.projectId, resourceKey)
-        );
-        rollbacks.push(() => deps.docker.removeContainer(containerId));
-        await deps.docker.startContainer(containerId);
-        await waitForPreviewReady(deps.docker, containerId);
-
-        assertTransition(record.state, "running");
-        record = save({
-          ...record,
-          state: "running",
-          containerId,
-          lastActivityAt: now(),
-          lastError: undefined
-        });
-        await persist(record);
-        audit({
-          action: "workspace.provisioned",
-          projectId: input.projectId,
-          metadata: { slug: input.slug }
-        });
-        return record;
-      } catch (error) {
-        for (const rollback of rollbacks.reverse()) {
-          try {
-            await rollback();
-          } catch {
-            // best-effort rollback; ignore secondary failures
+      const existing = provisioning.get(input.projectId);
+      if (existing) return existing;
+      const operation = leases
+        .run(input.projectId, async (snapshot) => {
+          if (snapshot) {
+            cache.set({
+              ...snapshot.record,
+              state: snapshot.record.state === "provisioning" ? "failed" : snapshot.record.state
+            });
+            if (snapshot.llmGatewayKeyId) llmKeyIds.set(input.projectId, snapshot.llmGatewayKeyId);
           }
-        }
-        assertTransition(record.state, "failed");
-        record = save({
-          ...record,
-          state: "failed",
-          containerId: null,
-          lastError: (error as Error).message
+          return provisionWorkspaceOnce(input);
+        })
+        .finally(() => {
+          if (provisioning.get(input.projectId) === operation) provisioning.delete(input.projectId);
         });
-        await persist(record);
-        audit({
-          action: "workspace.provision_failed",
-          projectId: input.projectId,
-          metadata: { slug: input.slug, error: (error as Error).message }
-        });
-        throw error;
-      }
+      provisioning.set(input.projectId, operation);
+      return operation;
     },
 
     async stopWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
@@ -333,11 +335,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
-      const next = await recoverExistingWorkspace(
-        record,
-        { projectId, slug: record.slug },
-        resourceKeyForProject(projectId)
-      );
+      const next = await recoverExistingWorkspace(record, { projectId, slug: record.slug });
       audit({ action: "workspace.started", projectId });
       return next;
     },
@@ -349,32 +347,23 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         await deps.docker.stopContainer(record.containerId).catch(() => undefined);
         await deps.docker.removeContainer(record.containerId);
       }
-      const next = save({ ...record, state: "archived", containerId: null });
+      const next = save({
+        ...record,
+        resourceKey: physicalResourceKey(record),
+        state: "archived",
+        containerId: null
+      });
       await persist(next);
       audit({ action: "workspace.archived", projectId });
       return next;
     },
 
-    async deleteWorkspace(projectId: string, fence?: ProjectDeletionFence): Promise<void> {
-      const record = records.get(projectId);
-      if (!record) {
-        return;
-      }
-      await deleteWorkspaceResources({
-        record,
-        deps,
-        llmGatewayKeyId: llmKeyIds.get(projectId),
-        runtimeRecords,
-        fence
-      });
-      records.delete(projectId);
-      llmKeyIds.delete(projectId);
-      try {
-        audit({ action: "workspace.deleted", projectId });
-      } catch {
-        // Cleanup has completed; audit transport failure must not make a retry target live resources.
-      }
-    },
+    deleteWorkspace: createWorkspaceDeletion(deps, cache, llmKeyIds),
+    runProjectDeletion: <T>(
+      projectId: string,
+      fence: import("../project-lifecycle").ProjectDeletionFence | undefined,
+      operation: (fence: import("../project-lifecycle").ProjectDeletionFence) => Promise<T>
+    ) => runWorkspaceProjectDeletion(deps, projectId, fence, operation),
 
     async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {
       const stopped: string[] = [];

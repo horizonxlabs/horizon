@@ -6,7 +6,8 @@ export const SCENARIOS: readonly AiScenarioDto[] = [
   "frontend_coding",
   "backend_coding",
   "review",
-  "documentation"
+  "documentation",
+  "image_generation"
 ] as const;
 
 export const QUOTA_SCOPES: readonly AiQuotaDto["scope"][] = [

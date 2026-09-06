@@ -12,6 +12,8 @@ const { createProjectSecretStore } =
   await import("../../apps/platform-api/src/workspace-orchestrator/secret-store.ts");
 const { createMemoryDockerEngine } =
   await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
+const { registerWorkspaceResourceIdentityCases } =
+  await import("./workspace-orchestrator-resource-identity-cases.mjs");
 
 function createDeps(overrides = {}) {
   const executedSql = [];
@@ -44,6 +46,8 @@ function createRuntimeRecordStore() {
   };
 }
 
+registerWorkspaceResourceIdentityCases({ createDeps, createRuntimeRecordStore });
+
 test("provisionWorkspace creates schema, bucket, llm key, secrets and running container", async () => {
   const { deps, executedSql, audits } = createDeps();
   const orchestrator = createWorkspaceOrchestrator(deps);
@@ -55,6 +59,7 @@ test("provisionWorkspace creates schema, bucket, llm key, secrets and running co
   assert.equal(record.state, "running");
   assert.equal(record.slug, "leave-tracker");
   assert.equal(record.id, "ws-prj-leave-tracker");
+  assert.equal(record.resourceKey, "prj-leave-tracker");
   assert.ok(record.containerId);
   assert.ok(executedSql.some((sql) => sql.includes("CREATE SCHEMA")));
   assert.ok(executedSql.some((sql) => sql.includes("app_prj_leave_tracker")));
@@ -158,6 +163,10 @@ test("provisioning fails before Docker when encrypted secret persistence is unav
         upsert: async () => {
           throw new Error("secret persistence unavailable");
         },
+        replaceProvisioning: async () => {
+          throw new Error("secret persistence unavailable");
+        },
+        deleteProvisioning: async () => {},
         deleteAll: async () => {}
       }
     })

@@ -60,8 +60,8 @@ export type AppStoreRegistryEntryDto = {
   name?: string;
   route?: string;
   status: "published";
-  visibility?: "restricted";
-  accessMode?: "membership_or_invite";
+  visibility?: "public" | "restricted";
+  accessMode?: "public" | "membership_or_invite";
   roleKeys?: string[];
   ownerUserId?: string;
   deploymentId?: string;

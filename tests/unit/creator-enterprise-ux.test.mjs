@@ -189,8 +189,9 @@ test("Creator shell uses English provisioning feedback and omits duplicate page 
     })
   );
 
-  assert.match(html, /Preparing workspace/);
-  assert.match(html, /Starting this project&#x27;s sandbox\. This may take a moment\./);
+  assert.match(html, /Preparing sandbox/);
+  assert.match(html, /Starting a secure container for Leave Management/);
+  assert.match(html, /Your workspace will be ready shortly\./);
   assert.equal((html.match(/Publish &amp; Registry/g) ?? []).length, 1);
 });
 
@@ -286,7 +287,9 @@ test("Project dashboard renders English details, actions, and an English-locale 
 
 test("Publish renders five accessible ready stages and an enabled primary action", () => {
   const manifest = {
-    appId: "app-1", manifestVersion: "3", app: { slug: "ops", route: "/apps/ops" },
+    appId: "app-1",
+    manifestVersion: "3",
+    app: { slug: "ops", route: "/apps/ops" },
     frontend: { checkpointId: "cp-3", version: "3", checksum: "sha", routes: ["/"] },
     auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
     roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]

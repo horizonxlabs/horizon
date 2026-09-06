@@ -9,16 +9,27 @@ interface ProvisionedWorkspaceResources {
   rollbacks: Rollback[];
 }
 
-async function rollbackCompleted(rollbacks: Rollback[]): Promise<void> {
+async function rollbackCompleted(
+  rollbacks: Rollback[],
+  assertOwnership?: () => Promise<void>
+): Promise<void> {
   for (const rollback of rollbacks.reverse()) {
+    await assertOwnership?.();
     await rollback().catch(() => undefined);
   }
 }
 
 export async function provisionIndependentWorkspaceResources(
   deps: WorkspaceOrchestratorDeps,
-  input: { projectId: string; resourceKey: string; volumeName: string }
+  input: {
+    projectId: string;
+    resourceKey: string;
+    volumeName: string;
+    volumeLabels?: Record<string, string>;
+    assertOwnership?: () => Promise<void>;
+  }
 ): Promise<ProvisionedWorkspaceResources> {
+  await input.assertOwnership?.();
   const results = await Promise.allSettled([
     deps.postgres.provisionSchema(input.resourceKey),
     deps.objectStorage.provisionBucket(input.resourceKey),
@@ -26,11 +37,14 @@ export async function provisionIndependentWorkspaceResources(
       projectId: input.projectId,
       slug: input.resourceKey
     }),
-    deps.docker.ensureVolume(input.volumeName, {
-      "evcp.managed": "true",
-      "evcp.project-id": input.projectId,
-      "evcp.kind": "workspace-data"
-    })
+    deps.docker.ensureVolume(
+      input.volumeName,
+      input.volumeLabels ?? {
+        "evcp.managed": "true",
+        "evcp.project-id": input.projectId,
+        "evcp.kind": "workspace-data"
+      }
+    )
   ] as const);
 
   const rollbacks: Rollback[] = [];
@@ -50,7 +64,7 @@ export async function provisionIndependentWorkspaceResources(
 
   const failure = results.find((result) => result.status === "rejected");
   if (failure?.status === "rejected") {
-    await rollbackCompleted(rollbacks);
+    await rollbackCompleted(rollbacks, input.assertOwnership);
     throw failure.reason;
   }
 

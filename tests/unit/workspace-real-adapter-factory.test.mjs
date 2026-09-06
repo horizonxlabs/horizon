@@ -7,6 +7,48 @@ const {
   createDefaultWorkspaceOrchestrator
 } = await import("../../apps/platform-api/src/workspace-orchestrator/factory.ts");
 
+test("real factory offers deferred pool construction and memory mode stays unattached", async () => {
+  let buildPool;
+  const memory = createDefaultWorkspaceOrchestrator({
+    env: {},
+    onWarmPoolFactory: (factory) => {
+      buildPool = factory;
+    }
+  });
+  assert.equal(buildPool, undefined);
+  assert.equal((await memory.getWarmPoolStatus()).target, 0);
+  const real = createDefaultWorkspaceOrchestrator({
+    env: {
+      EVCP_WORKSPACE_REAL_ADAPTERS: "1",
+      EVCP_WORKSPACE_WARM_POOL_SIZE: "2",
+      EVCP_LITELLM_BASE_URL: "http://litellm:4000",
+      EVCP_LITELLM_MASTER_KEY: "sk-master",
+      EVCP_WORKSPACE_SECRET_KEY: "0".repeat(64),
+      MINIO_ROOT_USER: "root",
+      MINIO_ROOT_PASSWORD: "root-secret"
+    },
+    onWarmPoolFactory: (factory) => {
+      buildPool = factory;
+    }
+  });
+  assert.equal(typeof buildPool, "function");
+  assert.equal((await real.getWarmPoolStatus()).target, 0);
+  real.configureWarmPool(
+    buildPool({
+      async list() {
+        return [];
+      }
+    })
+  );
+  assert.deepEqual(await real.getWarmPoolStatus(), {
+    target: 2,
+    preparing: 0,
+    ready: 0,
+    claiming: 0,
+    failed: 0
+  });
+});
+
 test("adapter mode defaults to memory and flips to real via env", () => {
   assert.equal(resolveWorkspaceAdapterMode({}), "memory");
   assert.equal(resolveWorkspaceAdapterMode({ EVCP_WORKSPACE_REAL_ADAPTERS: "1" }), "real");

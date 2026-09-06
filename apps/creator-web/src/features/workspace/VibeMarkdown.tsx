@@ -5,9 +5,31 @@ import { Fragment, type ReactNode } from "react";
 // fence or `**` just renders as plain text until it closes. Supports fenced code blocks, inline
 // code, bold, italic, links, headings (#/##/###), and bullet/ordered lists.
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*]+?\*)|(\[[^\]]+?\]\([^)]+?\))/g;
+const INLINE = /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*]+?\*)|(!\[[^\]]*?\]\([^)]+?\))|(\[[^\]]+?\]\([^)]+?\))/g;
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
+// Generated-image markdown (the agent's recap emits ![alt](public/generated/x.png)) becomes a
+// same-origin preview thumbnail. STRICT allowlist: only a single [A-Za-z0-9._-] filename under
+// generated/ with a .png suffix — no schemes, no traversal, no percent-escapes — so no
+// external, data:, or javascript: URL can ever reach an <img src>. Anything else stays text.
+const GENERATED_IMAGE_URL = /^(?:\/|public\/)?generated\/([A-Za-z0-9_-][A-Za-z0-9._-]*\.png)$/;
+
+function generatedImage(token: string, key: string, imageBase?: string): ReactNode | null {
+  const parsed = /^!\[([^\]]*?)\]\(([^)]+?)\)$/.exec(token);
+  if (!parsed || !imageBase) return null;
+  const fileName = GENERATED_IMAGE_URL.exec(parsed[2].trim())?.[1];
+  if (!fileName || fileName.includes("..")) return null;
+  return (
+    <img
+      key={key}
+      className="vibe-md-img"
+      src={`${imageBase}/generated/${fileName}`}
+      alt={parsed[1]}
+      loading="lazy"
+    />
+  );
+}
+
+function renderInline(text: string, keyPrefix: string, imageBase?: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   let i = 0;
@@ -27,6 +49,8 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
     } else if (token.startsWith("*")) {
       nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
+    } else if (token.startsWith("!")) {
+      nodes.push(generatedImage(token, key, imageBase) ?? token);
     } else {
       const link = /\[([^\]]+?)\]\(([^)]+?)\)/.exec(token);
       nodes.push(
@@ -45,12 +69,12 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-function paragraph(lines: string[], key: number): ReactNode {
+function paragraph(lines: string[], key: number, imageBase?: string): ReactNode {
   return (
     <p key={key} className="vibe-md-p">
       {lines.map((line, index) => (
         <Fragment key={index}>
-          {renderInline(line, `p${key}-${index}`)}
+          {renderInline(line, `p${key}-${index}`, imageBase)}
           {index < lines.length - 1 ? <br /> : null}
         </Fragment>
       ))}
@@ -62,7 +86,7 @@ const isListLine = (line: string) => /^\s*([-*]|\d+\.)\s+/.test(line);
 const isHeading = (line: string) => /^(#{1,3})\s+/.test(line);
 const isFence = (line: string) => line.trimStart().startsWith("```");
 
-export function VibeMarkdown({ text }: { text: string }): ReactNode {
+export function VibeMarkdown({ text, imageBase }: { text: string; imageBase?: string }): ReactNode {
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -91,7 +115,7 @@ export function VibeMarkdown({ text }: { text: string }): ReactNode {
       const level = heading[1].length;
       blocks.push(
         <div key={key++} className={`vibe-md-h vibe-md-h${level}`}>
-          {renderInline(heading[2], `h${key}`)}
+          {renderInline(heading[2], `h${key}`, imageBase)}
         </div>
       );
       i += 1;
@@ -103,7 +127,9 @@ export function VibeMarkdown({ text }: { text: string }): ReactNode {
       const items: ReactNode[] = [];
       while (i < lines.length && isListLine(lines[i])) {
         const content = lines[i].replace(/^\s*([-*]|\d+\.)\s+/, "");
-        items.push(<li key={items.length}>{renderInline(content, `li${key}-${items.length}`)}</li>);
+        items.push(
+          <li key={items.length}>{renderInline(content, `li${key}-${items.length}`, imageBase)}</li>
+        );
         i += 1;
       }
       blocks.push(
@@ -136,7 +162,7 @@ export function VibeMarkdown({ text }: { text: string }): ReactNode {
       para.push(lines[i]);
       i += 1;
     }
-    blocks.push(paragraph(para, key++));
+    blocks.push(paragraph(para, key++, imageBase));
   }
   return <>{blocks}</>;
 }

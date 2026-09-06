@@ -17,7 +17,7 @@ import type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storef
 export type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
 import type { AppStorePublishInput, PublishAccessUrlConfigDto } from "./publish-subdomain";
 export { RESERVED_SUBDOMAINS, buildSubdomainUrl, normalizeSubdomainSuggestion, subdomainFromHostname, validateSubdomainLabel } from "./publish-subdomain";
-export type { AppStorePublishInput, PublishAccessUrlConfigDto, SubdomainValidation } from "./publish-subdomain";
+export type * from "./publish-subdomain";
 
 export type ApiSuccess<T> = {
   ok: true;

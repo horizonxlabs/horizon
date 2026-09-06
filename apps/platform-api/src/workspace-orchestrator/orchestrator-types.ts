@@ -4,6 +4,7 @@ import type { PostgresProvisioner } from "./postgres-provisioner";
 import type { LlmGatewayAdmin, ObjectStorageProvisioner } from "./resource-ports";
 import type { ProjectSecretStore } from "./secret-store";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
+import type { WorkspaceWarmPool } from "./warm-pool";
 
 export interface WorkspaceAuditEvent {
   action: string;
@@ -26,6 +27,7 @@ export interface WorkspaceOrchestratorDeps {
   s3Endpoint?: string;
   onAudit?: (event: WorkspaceAuditEvent) => void;
   runtimeRecords?: WorkspaceRuntimeRecordStore;
+  warmPool?: WorkspaceWarmPool;
 }
 
 export type { WorkspaceContainerRecord };

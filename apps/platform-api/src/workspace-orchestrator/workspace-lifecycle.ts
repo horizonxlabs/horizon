@@ -1,7 +1,7 @@
 import type { DockerEngine } from "./docker-engine";
 import { resourceKeyForProject } from "./resource-ports";
 
-const MANAGED_WORKSPACE_SECRET_NAMES = new Set([
+export const MANAGED_WORKSPACE_SECRET_NAMES: ReadonlySet<string> = new Set([
   "DATABASE_URL",
   "LLM_GATEWAY_KEY",
   "S3_ENDPOINT",
@@ -33,6 +33,18 @@ export function workspaceVolumeLabels(projectId: string): Record<string, string>
   };
 }
 
+export function workspaceWarmResourceLabels(slotId: string): Record<string, string> {
+  return {
+    "evcp.managed": "true",
+    "evcp.kind": "workspace-warm",
+    "evcp.warm-slot-id": slotId
+  };
+}
+
+export function workspaceWarmVolumeLabels(slotId: string): Record<string, string> {
+  return workspaceWarmResourceLabels(slotId);
+}
+
 export async function waitForPreviewReady(
   docker: Pick<DockerEngine, "execInContainer">,
   containerId: string
@@ -47,28 +59,65 @@ export async function waitForPreviewReady(
   }
 }
 
+export type ProjectOrphanCleanup = (
+  projectId: string,
+  operation: (assertOwned: () => Promise<void>) => Promise<void>
+) => Promise<void>;
+
 export async function cleanupOrphanWorkspaceResources(input: {
   docker: DockerEngine;
   activeProjectIds: ReadonlySet<string>;
+  activeWarmSlotIds?: ReadonlySet<string>;
+  activeResourceKeys?: ReadonlySet<string>;
+  isWarmResourceOwned?: (resourceKey: string) => Promise<boolean>;
+  cleanupProject?: ProjectOrphanCleanup;
   onRemoved?: (event: { projectId: string; containerName?: string; volumeName?: string }) => void;
 }): Promise<string[]> {
   const removed: string[] = [];
+  const cleanupProject =
+    input.cleanupProject ?? (async (_projectId, operation) => operation(async () => {}));
+  const activeVolumes = new Set([...(input.activeResourceKeys ?? [])].map(workspaceVolumeName));
   for (const container of await input.docker.listManagedContainers()) {
+    if (container.labels["evcp.kind"] === "workspace-warm" && !container.labels["evcp.env"]) {
+      if (input.activeWarmSlotIds?.has(container.labels["evcp.warm-slot-id"] ?? "")) continue;
+      const key = container.name.match(/^evcp-ws-([a-z0-9-]+)$/)?.[1];
+      if (!key || !input.isWarmResourceOwned || (await input.isWarmResourceOwned(key))) continue;
+      await input.docker.removeContainer(container.containerId);
+      removed.push(container.name);
+      continue;
+    }
     const projectId = container.labels["evcp.project-id"];
     const isDevelopmentWorkspace =
       container.name.startsWith("evcp-ws-") && !container.labels["evcp.env"];
     if (!isDevelopmentWorkspace || !projectId || input.activeProjectIds.has(projectId)) continue;
-    if (container.running) {
-      await input.docker.stopContainer(container.containerId).catch(() => undefined);
-    }
-    await input.docker.removeContainer(container.containerId);
-    removed.push(container.name);
-    const volumeName = workspaceVolumeName(resourceKeyForProject(projectId));
-    await input.docker.removeVolume(volumeName).catch(() => undefined);
-    removed.push(volumeName);
-    input.onRemoved?.({ projectId, containerName: container.name, volumeName });
+    await cleanupProject(projectId, async (assertOwned) => {
+      await assertOwned();
+      const current = await input.docker.inspectContainer(container.name);
+      if (!current || current.containerId !== container.containerId) return;
+      if (current.running) {
+        await assertOwned();
+        await input.docker.stopContainer(container.containerId).catch(() => undefined);
+      }
+      await assertOwned();
+      await input.docker.removeContainer(container.containerId);
+      removed.push(container.name);
+      const volumeName = workspaceVolumeName(resourceKeyForProject(projectId));
+      await assertOwned();
+      await input.docker.removeVolume(volumeName).catch(() => undefined);
+      removed.push(volumeName);
+      input.onRemoved?.({ projectId, containerName: container.name, volumeName });
+    });
   }
   for (const volume of await input.docker.listManagedVolumes()) {
+    if (activeVolumes.has(volume.name)) continue;
+    if (volume.labels["evcp.kind"] === "workspace-warm" && !volume.labels["evcp.env"]) {
+      if (input.activeWarmSlotIds?.has(volume.labels["evcp.warm-slot-id"] ?? "")) continue;
+      const key = volume.name.match(/^evcp-ws-([a-z0-9-]+)-data$/)?.[1];
+      if (!key || !input.isWarmResourceOwned || (await input.isWarmResourceOwned(key))) continue;
+      await input.docker.removeVolume(volume.name);
+      removed.push(volume.name);
+      continue;
+    }
     const projectId = volume.labels["evcp.project-id"];
     const isDevelopmentWorkspace =
       volume.labels["evcp.kind"] === "workspace-data" && !volume.labels["evcp.env"];
@@ -79,9 +128,12 @@ export async function cleanupOrphanWorkspaceResources(input: {
       removed.includes(volume.name)
     )
       continue;
-    await input.docker.removeVolume(volume.name);
-    removed.push(volume.name);
-    input.onRemoved?.({ projectId, volumeName: volume.name });
+    await cleanupProject(projectId, async (assertOwned) => {
+      await assertOwned();
+      await input.docker.removeVolume(volume.name);
+      removed.push(volume.name);
+      input.onRemoved?.({ projectId, volumeName: volume.name });
+    });
   }
   return removed;
 }

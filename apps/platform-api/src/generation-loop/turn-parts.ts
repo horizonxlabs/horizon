@@ -88,7 +88,8 @@ function fallbackToolPresentation(actionType: WorkspaceChatToolPart["actionType"
     edit: "Edit workspace file",
     shell: "Run workspace command",
     migration: "Prepare database migration",
-    skill: "Load governed skill"
+    skill: "Load governed skill",
+    image: "Generate image"
   } as const;
   const label = labels[actionType];
   return { label, inputSummary: `${label} requested` };

@@ -59,6 +59,14 @@ enum GuardrailRuleType {
   policy
 }
 
+enum WorkspaceWarmSlotState {
+  preparing
+  ready
+  claiming
+  cleaning
+  failed
+}
+
 model PlatformUser {
   id          String              @id
   email       String              @unique
@@ -190,6 +198,7 @@ model Project {
   frontendCheckpoints FrontendCheckpoint[]
   workspaceMigrationRecords WorkspaceMigrationRecord[]
   workspaceRuntimeRecord WorkspaceRuntimeRecord?
+  workspaceProvisioningLease WorkspaceProvisioningLease?
   appInvitations AppInvitation[]
   appAccessRequests AppAccessRequest[]
   appManifests AppManifest[]
@@ -771,6 +780,7 @@ model WorkspaceCodeCheckpoint {
 model WorkspaceRuntimeRecord {
   id                String   @id
   projectId         String   @unique @map("project_id")
+  resourceKey       String   @map("resource_key")
   slug              String
   state             String
   containerId       String?  @map("container_id")
@@ -785,6 +795,49 @@ model WorkspaceRuntimeRecord {
 
   @@index([state, lastActivityAt])
   @@map("workspace_runtime_records")
+}
+
+model WorkspaceProvisioningLease {
+  projectId String   @id @map("project_id")
+  token     String
+  expiresAt DateTime @map("expires_at")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_provisioning_leases")
+}
+
+model WorkspaceWarmSlot {
+  id              String    @id
+  resourceKey     String    @unique @map("resource_key")
+  state           WorkspaceWarmSlotState
+  containerId     String?   @map("container_id")
+  llmGatewayKeyId String?   @map("llm_gateway_key_id")
+  secretPayload   String?   @map("secret_payload")
+  claimProjectId  String?   @unique @map("claim_project_id")
+  operationOwner  String?   @map("operation_owner")
+  operationExpiresAt DateTime? @map("operation_expires_at")
+  lastError       String?   @map("last_error")
+  retryAfter      DateTime? @map("retry_after")
+  failureCount    Int       @default(0) @map("failure_count")
+  readyAt         DateTime? @map("ready_at")
+  claimedAt       DateTime? @map("claimed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([state, createdAt])
+  @@index([operationExpiresAt])
+  @@map("workspace_warm_slots")
+}
+
+// Deliberately no slot FK: a retired generation must survive slot rotation/deletion.
+model WorkspaceWarmPreparation {
+  resourceKey    String   @id @map("resource_key")
+  slotId         String   @map("slot_id")
+  operationOwner String   @map("operation_owner")
+  settled        Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("workspace_warm_preparations")
 }
 
 model ChatMessage {

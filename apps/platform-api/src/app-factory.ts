@@ -17,11 +17,12 @@ import { createDefaultGenerationService } from "./generation-loop/factory";
 import { createGovernedContextResolver, createPlatformBugAuditor } from "./generation-loop/governed-context";
 import { createMemoryMigrationStore } from "./generation-loop/migration-store";
 import { createPrismaWorkspaceMigrationStore } from "./persistence/workspace-migration-repository";
-import { createPrismaWorkspaceRuntimeRecordStore } from "./persistence/workspace-runtime-repository";
+import { initializeWorkspaceRuntime } from "./workspace-orchestrator/runtime-startup";
+import type { WorkspaceWarmPoolFactory } from "./workspace-orchestrator/factory";
 import { registerWorkspaceFilesRoute } from "./generation-loop/workspace-files-route";
 import { resolveWorkspaceAgentMode } from "./workspace-agent-mode";
 import { registerKeycloakUserManagementRoutes, type KeycloakUserService } from "./keycloak/routes";
-import { startIdleSweep } from "./workspace-orchestrator/idle-sweep";
+import { startWorkspaceSweeps } from "./workspace-orchestrator/workspace-sweeps";
 import { createHash } from "node:crypto";
 import * as nodeHttp from "node:http";
 import { createPlatformApiServices, PermissionError, ValidationError, type AuthResolution, type PlatformApiServices, type PlatformProject, type PlatformUser } from "./platform-services";
@@ -120,8 +121,9 @@ export function resolveCorePersistenceMode(env: RuntimeEnv = process.env): CoreP
 export async function createRuntimePlatformApiServices(env: RuntimeEnv = process.env): Promise<PersistenceAwarePlatformApiServices> {
   const publishAccessUrlConfig = resolvePublishAccessUrlConfig(env);
   const mode = resolveCorePersistenceMode(env);
+  let warmPoolFactory: WorkspaceWarmPoolFactory | undefined;
   const services: PersistenceAwarePlatformApiServices = {
-    ...createPlatformApiServices({ publishAccessUrlConfig }),
+    ...createPlatformApiServices({ publishAccessUrlConfig, workspace: { env, onWarmPoolFactory: (factory) => { warmPoolFactory = factory; } } }),
     publishAccessUrlConfig,
     ...(mode === "memory" ? { launchGrantStore: new MemoryLaunchGrantStore() } : {})
   };
@@ -156,8 +158,8 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
-  await services.workspaceOrchestrator.hydrateRuntimeRecords(await createPrismaWorkspaceRuntimeRecordStore(env.DATABASE_URL));
-  await services.workspaceOrchestrator.cleanupOrphanContainers();
+  (services as PersistenceAwarePlatformApiServices).projectLifecycle = createProjectLifecycleCoordinator({ store: createPrismaProjectLifecycleStore(client as never) });
+  await initializeWorkspaceRuntime(services.workspaceOrchestrator, env.DATABASE_URL, warmPoolFactory);
   const { client: aiClient, service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL, productionAiSecretStore);
   const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(env.DATABASE_URL);
   const { service: prdPersistence } = await createPrismaPrdPersistence(env.DATABASE_URL);
@@ -165,7 +167,6 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL, publishAccessUrlConfig);
   const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
   const projectFileUploadUrlIssuer = resolveProjectFileUploadUrlIssuer(env);
-  (services as PersistenceAwarePlatformApiServices).projectLifecycle = createProjectLifecycleCoordinator({ store: createPrismaProjectLifecycleStore(client as never) });
   return {
     ...services,
     corePersistence: service,
@@ -523,7 +524,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       const cleanup = services.projectResourceCleanup ?? ((id: string, fence) => deletePersistedProjectResources(id, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, undefined, fence));
       const lifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
-      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle });
+      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle, workspace: services.workspaceOrchestrator });
       return { status: HttpStatus.OK, body: success(data) };
     }
 
@@ -2348,10 +2349,10 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     },
     canAccessDeployment: (auth, projectId) => canAccessPublishedDeployment(auth, projectId, services.publishStorePersistence),
     preflightPublishedSubdomain: (input) => preflightPublishedSubdomain(services, input),
-    persistPublishedDeployment: ({ headers, projectId, deployment, subdomain }) =>
+    persistPublishedDeployment: ({ headers, projectId, deployment, subdomain, visibility }) =>
       executePlatformApiRequestAsync(
         services,
-        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain })
+        createInternalPublishPersistenceRequest({ headers, projectId, deployment, subdomain, visibility })
       ),
     launchGrantStore: services.launchGrantStore,
     subdomainBaseDomain: publishAccessUrlConfig.baseDomain,
@@ -2360,7 +2361,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       if (!services.publishStorePersistence) return null;
       const entry = await services.publishStorePersistence.resolvePublishedSubdomain(subdomain);
       return entry?.subdomain
-        ? { appSlug: entry.slug, projectId: entry.projectId, routePath: entry.route, subdomain: entry.subdomain }
+        ? { appSlug: entry.slug, projectId: entry.projectId, routePath: entry.route, subdomain: entry.subdomain, visibility: entry.visibility }
         : null;
     },
     resolveAppLaunch: async ({ headers, appSlug }) => {
@@ -2375,7 +2376,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
         projectId: detail.projectId,
         routePath: detail.route,
         subdomain: detail.subdomain,
-        subdomainUrl: detail.subdomainUrl
+        subdomainUrl: detail.subdomainUrl, visibility: detail.accessMode === "public" ? "public" : "restricted"
       };
     },
     recordAudit: recordPublishAudit,
@@ -3306,9 +3307,7 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   }
 }
 
-export function startWorkspaceIdleSweep(services: PersistenceAwarePlatformApiServices, opts: { intervalMs?: number } = {}): { stop(): void } {
-  return startIdleSweep(services.workspaceOrchestrator, opts);
-}
+export { startWorkspaceIdleSweep } from "./workspace-orchestrator/workspace-sweeps";
 
 export async function createPlatformApiApp(services: PersistenceAwarePlatformApiServices = createPlatformApiServices()): Promise<INestApplication> {
   const app = await NestFactory.create(PlatformApiModule, {
@@ -3321,7 +3320,7 @@ export async function createPlatformApiApp(services: PersistenceAwarePlatformApi
     credentials: true
   });
   await registerPlatformRoutes(app, services);
-  startWorkspaceIdleSweep(services);
+  app.get(PlatformApiModule).registerWorkspaceSweeps(startWorkspaceSweeps(services));
 
   return app;
 }

@@ -3,6 +3,7 @@ import {
   failure,
   success,
   validateSubdomainLabel,
+  type AppStoreVisibility,
   type PublishAccessUrlConfigDto
 } from "@evcp/api-client";
 import type { WorkspaceDeployment } from "@evcp/types";
@@ -41,12 +42,17 @@ export function createInternalPublishPersistenceRequest(input: {
   projectId: string;
   deployment: WorkspaceDeployment;
   subdomain?: string;
+  visibility?: AppStoreVisibility;
 }): PlatformRequest {
   const request: InternalPublishPersistenceRequest = {
     method: "POST",
     path: `/projects/${input.projectId}/publish`,
     headers: input.headers,
-    body: { runtimeDeployment: input.deployment, subdomain: input.subdomain }
+    body: {
+      runtimeDeployment: input.deployment,
+      subdomain: input.subdomain,
+      visibility: input.visibility
+    }
   };
   Object.defineProperty(request, INTERNAL_PUBLISH_PERSISTENCE, { value: true });
   return request;
@@ -74,6 +80,28 @@ function validateRequestedSubdomain(
           body: failure(validation.code, validation.message)
         }
       };
+}
+
+function validateRequestedVisibility(
+  value: unknown,
+  preserveExisting = false
+):
+  | { ok: true; visibility: AppStoreVisibility | undefined }
+  | { ok: false; response: PlatformResponse } {
+  if (value === undefined) {
+    return { ok: true, visibility: preserveExisting ? undefined : "restricted" };
+  }
+  if (value === "restricted") {
+    return { ok: true, visibility: "restricted" };
+  }
+  if (value === "public") return { ok: true, visibility: "public" };
+  return {
+    ok: false,
+    response: {
+      status: HttpStatus.BAD_REQUEST,
+      body: failure("VISIBILITY_INVALID", "Visibility must be public or restricted.")
+    }
+  };
 }
 
 function subdomainConflictResponse(error: unknown): PlatformResponse | null {
@@ -235,6 +263,11 @@ export async function handlePersistedPublishApiRequest(
   }
   const runtimeDeployment = request.body?.runtimeDeployment as never;
   const requestedSubdomain = request.body?.subdomain;
+  const visibilityValidation = validateRequestedVisibility(
+    request.body?.visibility,
+    isInternalPublishPersistenceRequest(request)
+  );
+  if (!visibilityValidation.ok) return visibilityValidation.response;
   const validation =
     isInternalPublishPersistenceRequest(request) && requestedSubdomain === undefined
       ? undefined
@@ -251,7 +284,8 @@ export async function handlePersistedPublishApiRequest(
       baseline,
       preview,
       runtimeDeployment,
-      subdomain: validation?.subdomain
+      subdomain: validation?.subdomain,
+      visibility: visibilityValidation.visibility
     });
   } catch (error) {
     const conflict = subdomainConflictResponse(error);
@@ -324,6 +358,11 @@ export function handleLegacyPublishApiRequest(
   const publishMatch = request.path.match(/^\/projects\/([^/]+)\/publish$/);
   if (request.method !== "POST" || !publishMatch) return null;
   const requestedSubdomain = request.body?.subdomain;
+  const visibilityValidation = validateRequestedVisibility(
+    request.body?.visibility,
+    isInternalPublishPersistenceRequest(request)
+  );
+  if (!visibilityValidation.ok) return visibilityValidation.response;
   const validation =
     isInternalPublishPersistenceRequest(request) && requestedSubdomain === undefined
       ? undefined
@@ -335,7 +374,8 @@ export function handleLegacyPublishApiRequest(
       status: HttpStatus.CREATED,
       body: success(
         services.publish.publishApp(actor, publishMatch[1], {
-          subdomain: validation?.subdomain
+          subdomain: validation?.subdomain,
+          visibility: visibilityValidation.visibility
         })
       )
     };

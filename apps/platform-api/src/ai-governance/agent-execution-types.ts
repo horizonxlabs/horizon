@@ -8,6 +8,7 @@ export type AgentToolCallBlock = {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  thoughtSignature?: string;
 };
 
 export type AgentRoundMessage =

@@ -3,6 +3,8 @@ import type { CreateProjectInput, PlatformProject, PlatformUser } from "../platf
 import { PermissionError, ValidationError } from "../platform-services";
 import type { CorePersistenceClient } from "./core-repositories";
 import { mapProject } from "./core-repositories";
+import type { ProjectDeletionFence } from "../project-lifecycle";
+import { deleteProjectCascade } from "./project-deletion-persistence";
 
 export class ProjectRepository {
   constructor(private readonly client: CorePersistenceClient) {}
@@ -42,13 +44,17 @@ export class ProjectRepository {
     return mapProject(record);
   }
 
-  async deleteForActor(actor: PlatformUser, projectId: string): Promise<void> {
+  async deleteForActor(
+    actor: PlatformUser,
+    projectId: string,
+    fence?: ProjectDeletionFence
+  ): Promise<void> {
     const project = (await this.listForActor(actor)).find(
       (candidate) => candidate.id === projectId
     );
     if (!project || (actor.role !== "admin" && project.ownerUserId !== actor.id)) {
       throw new PermissionError(`Role ${actor.role} cannot delete project ${projectId}`);
     }
-    await this.client.project.delete({ where: { id: projectId } });
+    await deleteProjectCascade(this.client, projectId, fence);
   }
 }

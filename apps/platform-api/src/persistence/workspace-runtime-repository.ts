@@ -1,8 +1,17 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
+import {
+  WorkspaceProvisioningLeaseRepository,
+  type WorkspaceProvisioningLeaseClient,
+  type WorkspaceProvisioningLeaseStore
+} from "./workspace-provisioning-lease-repository";
 
-export type WorkspaceRuntimeSnapshot = { record: WorkspaceContainerRecord; llmGatewayKeyId?: string };
+export type WorkspaceRuntimeSnapshot = {
+  record: WorkspaceContainerRecord;
+  llmGatewayKeyId?: string;
+};
 
 export interface WorkspaceRuntimeRecordStore {
+  provisioningLeases?: WorkspaceProvisioningLeaseStore;
   list(): Promise<WorkspaceRuntimeSnapshot[]>;
   save(snapshot: WorkspaceRuntimeSnapshot): Promise<void>;
   remove(projectId: string): Promise<void>;
@@ -11,6 +20,9 @@ export interface WorkspaceRuntimeRecordStore {
 type RuntimeRecord = WorkspaceContainerRecord & { llmGatewayKeyId?: string | null };
 
 export interface WorkspaceRuntimePersistenceClient {
+  $executeRawUnsafe?: WorkspaceProvisioningLeaseClient["$executeRawUnsafe"];
+  $queryRawUnsafe?: WorkspaceProvisioningLeaseClient["$queryRawUnsafe"];
+  $transaction?: WorkspaceProvisioningLeaseClient["$transaction"];
   workspaceRuntimeRecord: {
     findMany(args: { orderBy: { updatedAt: "asc" } }): Promise<RuntimeRecord[]>;
     upsert(args: {
@@ -23,10 +35,20 @@ export interface WorkspaceRuntimePersistenceClient {
 }
 
 export class WorkspaceRuntimeRepositoryBackedStore implements WorkspaceRuntimeRecordStore {
-  constructor(private readonly client: WorkspaceRuntimePersistenceClient) {}
+  readonly provisioningLeases?: WorkspaceProvisioningLeaseStore;
+
+  constructor(private readonly client: WorkspaceRuntimePersistenceClient) {
+    if (client.$executeRawUnsafe && client.$queryRawUnsafe && client.$transaction) {
+      this.provisioningLeases = new WorkspaceProvisioningLeaseRepository(
+        client as WorkspaceProvisioningLeaseClient
+      );
+    }
+  }
 
   async list(): Promise<WorkspaceRuntimeSnapshot[]> {
-    return (await this.client.workspaceRuntimeRecord.findMany({ orderBy: { updatedAt: "asc" } })).map((item) => ({
+    return (
+      await this.client.workspaceRuntimeRecord.findMany({ orderBy: { updatedAt: "asc" } })
+    ).map((item) => ({
       record: toRecord(item),
       ...(item.llmGatewayKeyId ? { llmGatewayKeyId: item.llmGatewayKeyId } : {})
     }));
@@ -47,9 +69,13 @@ export class WorkspaceRuntimeRepositoryBackedStore implements WorkspaceRuntimeRe
   }
 }
 
-export async function createPrismaWorkspaceRuntimeRecordStore(databaseUrl = process.env.DATABASE_URL): Promise<WorkspaceRuntimeRecordStore> {
+export async function createPrismaWorkspaceRuntimeRecordStore(
+  databaseUrl = process.env.DATABASE_URL
+): Promise<WorkspaceRuntimeRecordStore> {
   const { PrismaClient } = await import("@prisma/client");
-  const client = new PrismaClient(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined) as unknown as WorkspaceRuntimePersistenceClient;
+  const client = new PrismaClient(
+    databaseUrl ? { datasources: { db: { url: databaseUrl } } } : undefined
+  ) as unknown as WorkspaceRuntimePersistenceClient;
   return new WorkspaceRuntimeRepositoryBackedStore(client);
 }
 
@@ -64,4 +90,6 @@ function toRecord(record: RuntimeRecord): WorkspaceContainerRecord {
   };
 }
 
-function toIso(value: string | Date): string { return value instanceof Date ? value.toISOString() : value; }
+function toIso(value: string | Date): string {
+  return value instanceof Date ? value.toISOString() : value;
+}

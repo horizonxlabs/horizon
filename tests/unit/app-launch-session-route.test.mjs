@@ -95,6 +95,36 @@ test("app launch session issues a trusted subdomain launch URL without setting a
   });
 });
 
+test("public app launch returns the subdomain directly without minting an access grant", async () => {
+  const request = fixture({
+    registryEntry: {
+      appSlug: "sales-app",
+      projectId: "prj-sales",
+      routePath: "/apps/prj-sales",
+      subdomain: "sales",
+      subdomainUrl: "https://sales.apps.example.test",
+      visibility: "public"
+    },
+    launchGrantStore: {
+      async create() {
+        assert.fail("public app launch must not mint a bearer grant");
+      },
+      async consume() {
+        assert.fail("not used by launch session creation");
+      }
+    }
+  });
+
+  await request.run();
+
+  assert.equal(request.result().status, 200);
+  assert.equal(request.result().headers["Set-Cookie"], undefined);
+  assert.deepEqual(request.result().body.data, {
+    authorized: true,
+    launchUrl: "https://sales.apps.example.test"
+  });
+});
+
 test("app launch session preserves the scoped bearer cookie and path launch URL for legacy registry entries", async () => {
   const request = fixture();
   await request.run();

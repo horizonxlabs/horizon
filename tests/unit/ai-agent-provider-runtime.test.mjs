@@ -48,8 +48,16 @@ async function createRuntimeExecutor(adapter, fetcher) {
         baseUrl:
           adapter === "anthropic"
             ? "https://api.anthropic.example.test/v1"
-            : "https://gateway.example.test/v1",
-        models: [adapter === "anthropic" ? "claude-test" : "gpt-test"],
+            : adapter === "google"
+              ? "https://generativelanguage.googleapis.com/v1beta"
+              : "https://gateway.example.test/v1",
+        models: [
+          adapter === "anthropic"
+            ? "claude-test"
+            : adapter === "google"
+              ? "gemini-test"
+              : "gpt-test"
+        ],
         status: "active",
         createdAt: new Date("2026-08-14T00:00:00.000Z")
       }
@@ -76,7 +84,12 @@ async function createRuntimeExecutor(adapter, fetcher) {
         id: `route_${adapter}`,
         scenario: "frontend_coding",
         primaryProviderId: `provider_${adapter}`,
-        primaryModel: adapter === "anthropic" ? "claude-test" : "gpt-test",
+        primaryModel:
+          adapter === "anthropic"
+            ? "claude-test"
+            : adapter === "google"
+              ? "gemini-test"
+              : "gpt-test",
         createdAt: new Date("2026-08-14T00:00:00.000Z")
       }
     ]
@@ -151,6 +164,101 @@ test("runtime streams OpenAI-compatible native text, thinking, and tool calls", 
   );
   assert.equal(result.usage.totalTokens, 21);
   assert.equal(result.evidence.costUsd, 0.003);
+});
+
+test("Gemini text providers use Google's OpenAI-compatible chat endpoint", async () => {
+  let request;
+  const stream = [
+    'data: {"choices":[{"delta":{"content":"Gemini ready"}}],"usage":{"total_tokens":9}}',
+    "",
+    "data: [DONE]",
+    ""
+  ].join("\n");
+  const executor = await createRuntimeExecutor("google", async (url, init) => {
+    request = {
+      url: String(url),
+      headers: new Headers(init.headers),
+      body: JSON.parse(String(init.body))
+    };
+    return new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  });
+
+  const result = await executor.executeAgentRound(
+    actor,
+    roundInput({ requestId: "round-runtime-google" })
+  );
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(
+    request.url,
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+  );
+  assert.equal(request.headers.get("authorization"), "Bearer google-secret");
+  assert.equal(request.body.model, "gemini-test");
+  assert.equal(result.message.content[0].text, "Gemini ready");
+});
+
+test("Gemini agent rounds preserve thought signatures across tool calls", async () => {
+  const requests = [];
+  let invocation = 0;
+  const executor = await createRuntimeExecutor("google", async (_url, init) => {
+    requests.push(JSON.parse(String(init.body)));
+    invocation += 1;
+    const stream =
+      invocation === 1
+        ? [
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-gemini-1","type":"function","function":{"name":"read_workspace_file","arguments":"{\\"path\\":\\"app/page.tsx\\"}"}}]}}]}',
+            "",
+            'data: {"choices":[{"delta":{"extra_content":{"google":{"thought_signature":"signature-A"}}},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n")
+        : [
+            'data: {"choices":[{"delta":{"content":"Done"}}],"usage":{"prompt_tokens":12,"completion_tokens":1,"total_tokens":13}}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n");
+    return new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  });
+
+  const first = await executor.executeAgentRound(
+    actor,
+    roundInput({ requestId: "round-runtime-google-signature-1" })
+  );
+  const toolCall = first.message.content.find((block) => block.type === "toolCall");
+  assert.equal(toolCall.thoughtSignature, "signature-A");
+
+  const second = await executor.executeAgentRound(
+    actor,
+    roundInput({
+      requestId: "round-runtime-google-signature-2",
+      messages: [
+        { role: "user", content: "Read the current page", timestamp: 1 },
+        first.message,
+        {
+          role: "toolResult",
+          toolCallId: "call-gemini-1",
+          toolName: "read_workspace_file",
+          content: [{ type: "text", text: "export default function Page() {}" }],
+          isError: false,
+          timestamp: 3
+        }
+      ]
+    })
+  );
+
+  assert.equal(second.status, "succeeded");
+  assert.deepEqual(requests[1].messages[2].tool_calls[0].extra_content, {
+    google: { thought_signature: "signature-A" }
+  });
 });
 
 test("runtime streams Anthropic native tool calls into the same contract", async () => {

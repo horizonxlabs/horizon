@@ -183,7 +183,7 @@ export function createDockerMinioIdentityAdmin(
     typeof config === "string"
       ? ""
       : `mc alias set ${alias} http://127.0.0.1:9000 $(printf %s ${Buffer.from(config.adminAccessKey).toString("base64")} | base64 -d) $(printf %s ${Buffer.from(config.adminSecretKey).toString("base64")} | base64 -d) >/dev/null && `;
-  const exec = async (script: string) => {
+  const exec = async (script: string, absentCode?: string) => {
     const container = await docker.inspectContainer(containerName);
     if (!container?.running) throw new Error(`MinIO container '${containerName}' is not running`);
     const result = await docker.execInContainer(container.containerId, [
@@ -191,6 +191,13 @@ export function createDockerMinioIdentityAdmin(
       "-c",
       `${aliasPrefix}${script}`
     ]);
+    if (result.exitCode !== 0 && absentCode) {
+      try {
+        const payload = JSON.parse(result.stdout);
+        if (payload?.status === "error" && payload.error?.type === "fatal" &&
+            payload.error.cause?.error?.Code === absentCode) return;
+      } catch { /* Unstructured command errors remain failures. */ }
+    }
     if (result.exitCode !== 0)
       throw new Error(`MinIO identity command failed: ${result.stderr.trim()}`);
   };
@@ -226,9 +233,9 @@ export function createDockerMinioIdentityAdmin(
       }
     },
     async release({ accessKey, policyName }) {
-      await exec(
-        `mc admin policy detach ${alias} ${policyName} --user ${accessKey} >/dev/null 2>&1 || true; mc admin user remove ${alias} ${accessKey} >/dev/null 2>&1 || true; mc admin policy remove ${alias} ${policyName} >/dev/null 2>&1 || true`
-      );
+      // Removing the user also removes its policy mapping. Classify each command separately.
+      await exec(`mc --json admin user remove ${alias} ${accessKey}`, "XMinioAdminNoSuchUser");
+      await exec(`mc --json admin policy remove ${alias} ${policyName}`, "XMinioAdminNoSuchPolicy");
     }
   };
 }
@@ -272,7 +279,10 @@ export function createMinioObjectStorageProvisioner(opts: MinioProvisionerOption
       await opts.identityAdmin?.release({ bucket, ...identity });
       const exists = await client.bucketExists(bucket);
       if (exists) {
-        await client.removeBucket(bucket);
+        try { await client.removeBucket(bucket); }
+        catch (error) {
+          if ((error as { code?: string }).code !== "NoSuchBucket") throw error;
+        }
       }
     }
   };

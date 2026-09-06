@@ -1,13 +1,16 @@
 import { SectionCard } from "@evcp/ui";
+import type { AppStoreVisibility } from "@evcp/api-client";
 import type { Ref } from "react";
 
 export type PublishAccessUrlCardProps = {
   value: string;
   previewUrl: string;
+  visibility: AppStoreVisibility;
   error?: string;
   disabled?: boolean;
   inputRef?: Ref<HTMLInputElement>;
   onChange(value: string): void;
+  onVisibilityChange(value: AppStoreVisibility): void;
 };
 
 const SUBDOMAIN_INPUT_ID = "creator-publish-subdomain";
@@ -17,10 +20,12 @@ const SUBDOMAIN_ERROR_ID = "creator-publish-subdomain-error";
 export function PublishAccessUrlCard({
   value,
   previewUrl,
+  visibility,
   error,
   disabled = false,
   inputRef,
-  onChange
+  onChange,
+  onVisibilityChange
 }: PublishAccessUrlCardProps) {
   const describedBy = error ? `${SUBDOMAIN_HINT_ID} ${SUBDOMAIN_ERROR_ID}` : SUBDOMAIN_HINT_ID;
 
@@ -31,6 +36,38 @@ export function PublishAccessUrlCard({
       title="Choose how people open this app"
     >
       <div className="creator-access-url-options">
+        <fieldset className="creator-access-url-option creator-access-visibility">
+          <legend>Who can access</legend>
+          <label className="creator-access-url-option-heading">
+            <input
+              type="radio"
+              name="creator-publish-visibility"
+              value="public"
+              checked={visibility === "public"}
+              onChange={() => onVisibilityChange("public")}
+              disabled={disabled}
+            />
+            <span>
+              <strong>Public</strong>
+              <small>Anyone with the link can open the app without signing in.</small>
+            </span>
+          </label>
+          <label className="creator-access-url-option-heading">
+            <input
+              type="radio"
+              name="creator-publish-visibility"
+              value="restricted"
+              checked={visibility === "restricted"}
+              onChange={() => onVisibilityChange("restricted")}
+              disabled={disabled}
+            />
+            <span>
+              <strong>Restricted</strong>
+              <small>Only signed-in members and invited users can open the app.</small>
+            </span>
+          </label>
+        </fieldset>
+
         <div className="creator-access-url-option is-selected">
           <label className="creator-access-url-option-heading">
             <input

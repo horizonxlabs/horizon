@@ -51,6 +51,8 @@ interface LlmVirtualKeyInput {
 export interface LlmGatewayAdmin {
   createVirtualKey(input: LlmVirtualKeyInput): Promise<{ keyId: string; key: string }>;
   revokeVirtualKey(keyId: string): Promise<void>;
+  /** Retire a generation even when its create response (and key ID) was lost. */
+  revokeVirtualKeysForResource(resourceKey: string): Promise<void>;
 }
 
 export function createMemoryLlmGatewayAdmin(): LlmGatewayAdmin & {
@@ -75,6 +77,11 @@ export function createMemoryLlmGatewayAdmin(): LlmGatewayAdmin & {
       const entry = state.keys.find((item) => item.keyId === keyId);
       if (entry) {
         entry.revoked = true;
+      }
+    },
+    async revokeVirtualKeysForResource(resourceKey) {
+      for (const entry of state.keys) {
+        if (entry.slug === resourceKey) entry.revoked = true;
       }
     }
   };
@@ -113,9 +120,31 @@ export function createLiteLlmGatewayAdmin(opts: {
         headers,
         body: JSON.stringify({ keys: [keyId] })
       });
-      if (!response.ok) {
+      if (!response.ok && !(await isConfirmedLiteLlmKeyAbsence(response))) {
         throw new Error(`litellm key revoke failed (${response.status})`);
+      }
+    },
+    async revokeVirtualKeysForResource(resourceKey) {
+      const response = await fetchImpl(`${opts.baseUrl}/key/delete`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ key_aliases: [bucketNameFor(resourceKey)] })
+      });
+      if (!response.ok && !(await isConfirmedLiteLlmKeyAbsence(response))) {
+        throw new Error(`litellm generation key revoke failed (${response.status})`);
       }
     }
   };
+}
+
+async function isConfirmedLiteLlmKeyAbsence(response: Response): Promise<boolean> {
+  if (response.status !== 404) return false;
+  const payload = await response.json().catch(() => null);
+  // Exact upstream delete_verification_tokens / ProxyException contract, not arbitrary 404s.
+  return (
+    payload?.error?.message === "{'error': 'No keys found'}" &&
+    payload.error.type === "internal_server_error" &&
+    payload.error.param === "None" &&
+    payload.error.code === "404"
+  );
 }

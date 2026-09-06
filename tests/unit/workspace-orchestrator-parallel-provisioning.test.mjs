@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
+import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
 
 const { createWorkspaceOrchestrator } =
   await import("../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts");
@@ -34,6 +35,83 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("same-project cold provisioning shares one promise and permits retry after rejection", async () => {
+  const deps = createDeps();
+  const provisionSchema = deps.postgres.provisionSchema.bind(deps.postgres);
+  let attempts = 0;
+  deps.postgres.provisionSchema = async (...args) => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("first provisioning failed");
+    return provisionSchema(...args);
+  };
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  const input = { projectId: "prj_shared_cold", slug: "shared-cold" };
+  const first = orchestrator.provisionWorkspace(input);
+  const second = orchestrator.provisionWorkspace(input);
+  const results = await Promise.allSettled([first, second]);
+  assert.equal(first, second);
+  assert.equal(results[0].status, "rejected");
+  assert.equal(results[1].status, "rejected");
+  assert.equal(attempts, 1);
+  assert.equal((await orchestrator.provisionWorkspace(input)).state, "running");
+  assert.equal(attempts, 2);
+});
+
+test("a cold provisioner that loses its lease cannot roll back resources or secrets owned by its successor", async () => {
+  const fixture = createRuntimeLeaseFixture();
+  const store = fixture.createStore();
+  const release = deferred();
+  const started = deferred();
+  const cleanups = [];
+  const deps = createDeps({ runtimeRecords: store });
+  deps.postgres.provisionSchema = async () => {
+    started.resolve();
+    await release.promise;
+    throw new Error("expired worker's database request failed");
+  };
+  deps.objectStorage.releaseBucket = async () => {
+    cleanups.push("bucket");
+  };
+  deps.llmGateway.revokeVirtualKey = async () => {
+    cleanups.push("key");
+  };
+  deps.docker.removeVolume = async () => {
+    cleanups.push("volume");
+  };
+  deps.secrets.removeAll = async () => {
+    cleanups.push("secrets");
+  };
+  const orchestrator = createWorkspaceOrchestrator(deps);
+  const pending = orchestrator.provisionWorkspace({
+    projectId: "prj_stale_cold",
+    slug: "stale-cold"
+  });
+  await started.promise;
+  fixture.advance(300_000);
+  assert.equal(
+    await store.provisioningLeases.acquire("prj_stale_cold", "successor", 300_000),
+    "acquired"
+  );
+  const winner = {
+    ...(await store.list())[0],
+    record: {
+      ...(await store.list())[0].record,
+      state: "running",
+      containerId: "successor-container"
+    }
+  };
+  await store.provisioningLeases.save(winner, "successor", 300_000);
+  await deps.secrets.put("prj_stale_cold", "LLM_GATEWAY_KEY", "successor-secret");
+  release.resolve();
+  await assert.rejects(pending, /lease is no longer owned/);
+  assert.deepEqual(cleanups, []);
+  assert.equal((await store.list())[0].record.containerId, "successor-container");
+  assert.equal(
+    (await deps.secrets.resolveEnv("prj_stale_cold")).LLM_GATEWAY_KEY,
+    "successor-secret"
+  );
+});
 
 test("provisionWorkspace starts independent infrastructure work in parallel", async () => {
   const release = deferred();
@@ -94,15 +172,15 @@ test("provisionWorkspace starts independent infrastructure work in parallel", as
   assert.equal((await provisioning).state, "running");
 });
 
-test("provisionWorkspace persists independent encrypted secrets in parallel", async () => {
+test("provisionWorkspace submits all six encrypted secrets as one atomic attempt", async () => {
   const release = deferred();
   const started = new Set();
   const deps = createDeps();
-  const put = deps.secrets.put.bind(deps.secrets);
-  deps.secrets.put = async (projectId, name, value) => {
-    started.add(name);
+  const replace = deps.secrets.replaceForProvisioning.bind(deps.secrets);
+  deps.secrets.replaceForProvisioning = async (projectId, env, attempt) => {
+    for (const name of Object.keys(env)) started.add(name);
     await release.promise;
-    return put(projectId, name, value);
+    return replace(projectId, env, attempt);
   };
   const orchestrator = createWorkspaceOrchestrator(deps);
 

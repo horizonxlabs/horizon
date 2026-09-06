@@ -1,12 +1,16 @@
 # Runbook: Enable Real Workspace Provisioning
 
-Turns on real per-project provisioning — `provisionWorkspace` creates a real Postgres schema+role, a real MinIO bucket, and boots a real dev container (`evcp-ws-<slug>`) from the `evcp/workspace-next:1` image. Delivered by Plan 6.
+Turns on real workspace provisioning. A cold allocation creates a Postgres schema and role,
+MinIO bucket and scoped identity, LiteLLM key, and workspace container. A warm allocation reuses
+prepared physical resources; its final container and preview URL use the logical project key.
 
-## Prerequisites (already in place)
+## Prerequisites
 
-- Running compose stack: `evcp-postgres`, `evcp-redis`, `evcp-minio` (healthy).
-- `docker/.env` provides `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_WORKSPACE_SECRET_KEY`.
+- Running compose stack: healthy PostgreSQL, Redis, MinIO, and LiteLLM services.
+- The deployment environment provides `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_WORKSPACE_SECRET_KEY`, `EVCP_LITELLM_BASE_URL`, and `EVCP_LITELLM_MASTER_KEY`.
 - `docker/docker-compose.yml` `platform-api` service now sets `EVCP_WORKSPACE_REAL_ADAPTERS: "1"` plus `EVCP_PG_*` / `EVCP_S3_*` and mounts `/var/run/docker.sock`.
+- Apply all checked-in Prisma migrations through the deployment pipeline before starting the
+  updated API, including `20260905050000_workspace_warm_preparation_intents`.
 
 ## 1. Build the workspace dev image
 
@@ -19,7 +23,8 @@ docker images | grep workspace-next   # expect evcp/workspace-next   1
 
 ## 2. Recreate platform-api so it picks up the socket mount + real-adapter env
 
-> The currently-running `evcp-platform-api` container predates the docker-socket mount and the new env, so it must be **recreated** (not just restarted). This briefly interrupts the API.
+Recreate `platform-api` after changing its adapter configuration or Docker socket mount so those
+settings take effect. This briefly interrupts the API.
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
@@ -29,35 +34,195 @@ Confirm real mode is active:
 
 ```bash
 docker logs evcp-platform-api 2>&1 | grep "real-adapter mode"
-# expect: [workspace] real-adapter mode: Docker=real, Postgres=real (postgres), MinIO=real (minio), LiteLLM=memory-stub ...
+# expect: [workspace] real-adapter mode: Docker=real, Postgres=real (postgres), MinIO=real (minio), LiteLLM=real.
 ```
 
-(LiteLLM stays a memory stub until Plan 7 starts the litellm service — provisioning is not blocked by it.)
+Real mode requires `EVCP_LITELLM_BASE_URL` and `EVCP_LITELLM_MASTER_KEY`, alongside the
+PostgreSQL, MinIO, and workspace encryption configuration. It does not substitute a gateway stub.
 
-## 3. Verify end-to-end (live)
+## 3. Configure and observe the workspace warm pool
 
-Run the full-provision integration test inside the recreated container (it has the socket, env, and network):
+Real-adapter deployments keep `EVCP_WORKSPACE_WARM_POOL_SIZE=3` prepared slots by default. A
+slot includes its own schema, bucket, gateway key, initialized volume, and running workspace
+process, so project creation can claim it without waiting for those resources to be created.
+
+- Set a whole number from `0` through `20`. `3` is the default and `20` is the hard safety limit.
+- Set `EVCP_WORKSPACE_WARM_POOL_SIZE=0` to disable warm claims on the next API start; every new
+  project then uses the existing cold-provisioning path. Startup reconciliation drains unclaimed
+  ready and recoverable slots through the normal cleanup fences, releasing their warm resources.
+  A slot with live preparation/cleanup ownership waits for its lease to expire before a safe drain
+  retry on the periodic warm-pool sweep. Assigned project runtimes are never deleted. This is the
+  operational rollback switch for the pool.
+- Budget for every configured warm process in addition to active project workspaces. With the
+  example `EVCP_WORKSPACE_CPU=2` and `EVCP_WORKSPACE_MEM_MB=2048`, the default pool reserves up
+  to 6 CPU cores and 6144 MiB while all three slots are running. Size the host and Docker limits
+  accordingly before increasing the value.
+
+Change the value in the deployment environment (or `.env` for local Compose), then recreate the
+API so startup reads it:
 
 ```bash
-docker exec -e EVCP_PROVISION_LIVE=1 -e EVCP_TEST_SEED=$RANDOM evcp-platform-api \
-  sh -lc 'cd /workspace && node --import tsx --test tests/integration/provision-full-live.test.mjs'
-# expect: a real schema + bucket + evcp-ws-<slug> container created, then cleaned up
+docker compose -f docker/docker-compose.yml up -d --force-recreate platform-api
 ```
 
-Or exercise the real API path (member-gated — needs a valid session header):
+Observe durable slot state without reading encrypted credential payloads:
+
+```bash
+docker compose -f docker/docker-compose.yml exec postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT state, count(*) FROM workspace_warm_slots GROUP BY state ORDER BY state;"'
+
+docker ps -a --filter 'label=evcp.kind=workspace-warm' \
+  --format 'table {{.Names}}\t{{.Status}}\t{{.Label "evcp.warm-slot-id"}}'
+docker volume ls --filter 'label=evcp.kind=workspace-warm'
+```
+
+For a successful warm claim, audit storage records `workspace.pool_claimed`; when no ready slot is
+available, it records `workspace.pool_cold_fallback` and provision continues immediately on the
+cold path. Confirm that behavior with aggregate audit data only:
+
+```bash
+docker compose -f docker/docker-compose.yml exec postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT action, count(*) FROM audit_logs WHERE action IN (\$warm\$workspace.pool_claimed\$warm\$, \$warm\$workspace.pool_cold_fallback\$warm\$) GROUP BY action ORDER BY action;"'
+```
+
+Neither command should query or print `secret_payload`; credentials remain encrypted at rest and
+must not be copied into Docker labels, logs, or audit metadata.
+
+Startup and periodic reconciliation decide recovery or cleanup while holding the same project
+provisioning lease. A healthy final container whose credentials match its claiming slot is recovered
+and persisted before the claim is retired. Existing durable runtimes retain their Docker-hydrated
+state; redundant claims never turn a stopped workspace back into a cached running workspace.
+Recovery publishes only if the project's local runtime cache has not changed since recovery began,
+so a delayed successful database response cannot overwrite a later reattach, stop, or deletion.
+Deletion invalidates pending cache publications even when no runtime is cached, and loads any
+durable runtime to remove its physical resources and gateway key before the project metadata cascade.
+A contended project remains protected for a later sweep. Missing, unhealthy, or mismatched handoffs
+are cleaned only after their abandoned final container is removed, so it cannot pin the warm volume.
+Failed cleanup retries also acquire the project lease. Generic orphan deletion acquires that lease
+and refreshes runtime/claim ownership immediately before deleting a project container or volume.
+Secret/runtime persistence failures stop startup before cleanup; restore the dependency and retry,
+without deleting the claiming row. Recovery also runs with a zero target to preserve completed handoffs.
+
+Preparation records its physical key and slot operation token in `workspace_warm_preparations`
+before dispatching external creates. Late responses are compensated using their original resource
+identifiers; retry generations use fresh keys. Retirement sweeps use the exact container/volume,
+schema, bucket, and gateway alias, and never clean a current slot or assigned runtime this way.
+The gateway must support `/key/delete` with `key_aliases` (the same `proj-<resourceKey>` alias sent
+when creating the key). Verify that capability against the deployed LiteLLM version during the
+live smoke; the local adapter contract alone is not evidence of live gateway compatibility.
+Alias cleanup accepts only LiteLLM's exact confirmed `No keys found` 404 envelope as successful
+absence; authentication, malformed responses, transport errors, and unrelated 404s remain failures.
+
+A crash or lost create response leaves `settled=false`. These non-secret intents are deliberately
+retained and retried, even after a successful cleanup, because a remote operation could commit
+later. Inspect aggregate counts with `SELECT settled, count(*) FROM workspace_warm_preparations
+GROUP BY settled;`. Persistent growth requires investigating failed adapters; do not bulk-delete
+these rows, which would discard cleanup ownership. Automatic garbage collection of ambiguous
+intents requires a provider-confirmed completion boundary and is not implemented.
+
+## 4. Verify end-to-end (live)
+
+The cold and warm smoke tests are opt-in. Without opt-in they each report one skip and perform
+no provisioning or database connections:
+
+```bash
+node --import tsx --test tests/integration/provision-full-live.test.mjs
+node --import tsx --test tests/integration/workspace-warm-pool-live.test.mjs
+```
+
+For an actual run, use a checkout with dependencies installed, the Docker socket mounted at
+`/var/run/docker.sock`, and access to PostgreSQL, MinIO, and LiteLLM. The configured workspace
+image must exist on that daemon, and the workspace network must reach the service hostnames.
+
+Export a dedicated live-test environment before running the commands below:
+
+- `EVCP_WORKSPACE_LIVE_DATABASE_URL`: admin connection URL for a disposable database, separate
+  from the running platform. Use its `public` schema; no API or other live test may use this
+  database during the test. The fixture refuses pre-existing warm slots, workspace runtimes, or
+  preparation intents from an earlier run.
+- `POSTGRES_DB`: that same disposable database name. `EVCP_PG_HOST` and `EVCP_PG_PORT` must
+  identify this PostgreSQL service from inside workspace containers.
+- `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `EVCP_S3_HOST`, `EVCP_S3_PORT`, optional
+  `EVCP_S3_ADMIN_HOST`/`EVCP_S3_SSL`, and `EVCP_MINIO_CONTAINER_NAME` configure real scoped
+  bucket provisioning. The MinIO container needs `mc` for identity administration.
+- `EVCP_LITELLM_BASE_URL`, `EVCP_LITELLM_MASTER_KEY`, and the 64-hex-character
+  `EVCP_WORKSPACE_SECRET_KEY` are required. Load credentials from the deployment's secret
+  handling mechanism; never include their values in test reports.
+- `EVCP_WORKSPACE_IMAGE` and `EVCP_WORKSPACE_NETWORK` select the existing image/network
+  (defaults: `evcp/workspace-next:1` and `evcp-internal`).
+
+Apply the checked-in migrations only to that disposable database, then run the two tests
+separately. The cold smoke explicitly uses target zero; the warm smoke uses target one regardless
+of the deployment's configured pool size.
+
+```bash
+DATABASE_URL="$EVCP_WORKSPACE_LIVE_DATABASE_URL" \
+  pnpm --filter @evcp/platform-api exec prisma migrate deploy --schema prisma/schema.prisma
+
+EVCP_PROVISION_LIVE=1 EVCP_WORKSPACE_REAL_ADAPTERS=1 \
+  node --import tsx --test tests/integration/provision-full-live.test.mjs
+
+EVCP_WARM_POOL_LIVE=1 EVCP_WORKSPACE_REAL_ADAPTERS=1 \
+  node --import tsx --test tests/integration/workspace-warm-pool-live.test.mjs
+```
+
+The warm smoke must report a healthy claim with `schemas=0 buckets=0 keys=0` created on the
+request path, then one ready replacement. It holds the asynchronous refill at the test boundary
+until the claim and logical preview URL are verified, so refill activity cannot hide an extra
+request-time creation. It then releases and awaits the refill requested by the orchestrator.
+It uses the real Prisma slot/runtime repositories and encrypted PostgreSQL secret persistence.
+
+An `after()` hook is registered before fixture setup. It joins provisioning and waits for the
+pool's idle boundary, including refills scheduled internally after claim failure, before deleting
+the project workspace and every remaining anonymous resource created by this run. It verifies schema/bucket/
+container/volume absence and successful key revocation, retires the fixture rows, and disconnects
+Prisma. Cleanup failures fail the test. The disposable database itself is retained. Record the
+actual pass/failure output and cleanup diagnostic; a skipped test is not live deployment evidence.
+Cleanup also exercises exact-alias gateway revocation. Ambiguous preparation intents fail cleanup
+verification and remain in the disposable database for subsequent operator-controlled sweeps.
+Container-absence failures report only the container name and a boolean; Docker environment
+objects must never be included in assertion output.
+
+To exercise the deployed API itself, use a disposable project and a valid session header. Replace
+`<project-key>` with the project ID after replacing underscores with hyphens:
 
 ```bash
 curl -sS -X POST http://localhost:3100/projects/<projectId>/workspace/provision \
   -H "authorization: <valid session>" -H "content-type: application/json" \
   -d '{"projectId":"<projectId>","slug":"<slug>"}'
-docker ps --format '{{.Names}}' | grep evcp-ws-<slug>          # container running
+docker ps --format '{{.Names}}' | grep evcp-ws-<project-key>
 curl -sS -H "authorization: <valid session>" \
-  http://localhost:3100/preview/<slug>/ -o /dev/null -w "%{http_code}\n"   # 200/3xx (502 = dev server still booting; retry)
+  http://localhost:3100/preview/<project-key>/ -o /dev/null -w "%{http_code}\n"
 ```
 
-## Rollback (disable real mode)
+## 5. Post-deploy smoke checks
+
+Run the live provisioning checks above, then use a disposable project in Creator to confirm the
+full lifecycle:
+
+1. Create the project and open Workspace; verify that provision completes and the preview serves.
+2. Submit a small governed generation request; verify the generated file/diff and refreshed
+   preview.
+3. Publish the project and open the resulting application URL.
+4. Delete the disposable project; verify its project workspace container, volume, schema, and
+   bucket are removed, while any remaining warm-slot counts stay at the configured target.
+
+If a claim falls back cold during the smoke, it is safe to continue; inspect the aggregate state
+and audit queries above to distinguish temporary refill from a persistent preparation failure.
+
+## Rollback (disable real mode or the warm pool)
 
 Set `EVCP_WORKSPACE_REAL_ADAPTERS: "0"` in `docker/docker-compose.yml` and recreate `platform-api`. The orchestrator falls back to the in-memory adapter path.
+
+To retain real workspaces but stop prewarming, instead set
+`EVCP_WORKSPACE_WARM_POOL_SIZE=0` in the deployment environment and recreate `platform-api`.
+New projects take the cold path immediately after that startup. During its startup reconciliation,
+the API drains unclaimed ready or recoverable warm slots; slots protected by an active operation
+lease are drained only after that lease safely expires and a later periodic sweep can take cleanup
+ownership. Existing project workspaces continue to run and are not part of the drain until the
+value is raised again.
 
 ## Notes
 

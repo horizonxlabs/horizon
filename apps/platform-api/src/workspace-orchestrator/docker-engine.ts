@@ -1,6 +1,7 @@
 import type { EnvironmentName } from "@evcp/types";
 import { assertValidProjectSlug } from "./postgres-provisioner";
 import type { TarFile } from "./tar-inject";
+import { workspaceWarmResourceLabels } from "./workspace-lifecycle";
 
 export interface DevContainerSpec {
   name: string;
@@ -59,6 +60,35 @@ export function buildDevContainerSpec(input: {
     },
     exposedPort: 3000,
     publishPorts: false
+  };
+}
+
+export function workspaceWarmContainerLabels(slotId: string): Record<string, string> {
+  return workspaceWarmResourceLabels(slotId);
+}
+
+export function buildWarmContainerSpec(input: {
+  slotId: string;
+  resourceKey: string;
+  image: string;
+  env: Record<string, string>;
+  cpuCores: number;
+  memoryMb: number;
+  network: string;
+  workspaceVolume: string;
+}): DevContainerSpec {
+  const spec = buildDevContainerSpec({
+    slug: input.resourceKey,
+    image: input.image,
+    env: input.env,
+    cpuCores: input.cpuCores,
+    memoryMb: input.memoryMb,
+    network: input.network,
+    workspaceVolume: input.workspaceVolume
+  });
+  return {
+    ...spec,
+    labels: { ...spec.labels, ...workspaceWarmContainerLabels(input.slotId) }
   };
 }
 
@@ -245,7 +275,6 @@ export function createMemoryDockerEngine(): DockerEngine & {
       find(containerId).status = "stopped";
     },
     async removeContainer(containerId) {
-      find(containerId);
       state.containers = state.containers.filter((item) => item.containerId !== containerId);
     },
     async inspectContainer(name) {

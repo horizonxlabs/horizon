@@ -57,6 +57,17 @@ test("platform-api can reach docker socket and litellm", () => {
   assert.match(joined, /EVCP_WORKSPACE_IMAGE/);
 });
 
+test("real workspace deployments configure a three-slot warm pool", () => {
+  assert.equal(
+    compose.services["platform-api"].environment.EVCP_WORKSPACE_WARM_POOL_SIZE,
+    "${EVCP_WORKSPACE_WARM_POOL_SIZE:-3}"
+  );
+  assert.equal(
+    releaseCompose.services["platform-api"].environment.EVCP_WORKSPACE_WARM_POOL_SIZE,
+    "${EVCP_WORKSPACE_WARM_POOL_SIZE:-3}"
+  );
+});
+
 test("development and release compose leave Pi cumulative token caps opt-in", () => {
   for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
     const joined = environmentEntries(api).join("\n");
@@ -64,6 +75,16 @@ test("development and release compose leave Pi cumulative token caps opt-in", ()
     assert.doesNotMatch(joined, /EVCP_PI_MAX_TURN_TOKENS/);
     assert.match(joined, /EVCP_PI_MODEL_ROUND_TIMEOUT_MS=.*:-300000/);
     assert.match(joined, /EVCP_PI_TURN_TIMEOUT_MS=.*:-1800000/);
+  }
+});
+
+test("development and release compose expose image generation runtime limits", () => {
+  for (const api of [compose.services["platform-api"], releaseCompose.services["platform-api"]]) {
+    const joined = environmentEntries(api).join("\n");
+    assert.match(joined, /EVCP_AI_IMAGE_TIMEOUT_MS=.*:-60000/);
+    assert.match(joined, /EVCP_PI_MAX_IMAGE_CALLS=.*:-4/);
+    assert.match(joined, /EVCP_PI_IMAGE_MAX_BYTES=.*:-4194304/);
+    assert.doesNotMatch(joined, /EVCP_AI_IMAGE_TOKEN_EQUIVALENT/);
   }
 });
 
