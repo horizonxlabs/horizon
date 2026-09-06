@@ -203,6 +203,21 @@ export function registerPublishedSubdomainHttpRoutes(input: {
       response.status(404).json({ error: "app_not_found" });
       return;
     }
+    const requestedBrowserPath = browserPath(request.originalUrl);
+    const requestedPathname = requestedBrowserPath.split(/[?#]/, 1)[0];
+    if (
+      requestedPathname === resolved.registryEntry.routePath ||
+      requestedPathname === `${resolved.registryEntry.routePath}/`
+    ) {
+      const canonicalBrowserPath = publishedSubdomainBrowserLocation(
+        requestedBrowserPath,
+        resolved.registryEntry.routePath
+      );
+      response.statusCode = 308;
+      response.setHeader("Location", canonicalBrowserPath);
+      response.end();
+      return;
+    }
     const deployment = await resolveAppsTarget(
       input.deployments,
       resolved.resourceKey,

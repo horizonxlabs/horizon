@@ -152,3 +152,54 @@ test("published-subdomain redirects never expose the internal app base path", ()
   assert.equal(response.statusCode, 308);
   assert.equal(response.headers.location, "/agenda/?day=1");
 });
+
+test("an incoming legacy app path redirects to the canonical subdomain root", async () => {
+  const handlers = new Map();
+  const requests = [];
+  await registerPublishedSubdomainHttpRoutes({
+    rawApp: {
+      all(path, handler) {
+        handlers.set(path, handler);
+      }
+    },
+    nodeHttp: nodeHttpCapture(requests, () => ({
+      statusCode: 200,
+      headers: {},
+      pipe(response) {
+        response.end();
+      }
+    })),
+    deployments: healthyDeployments(),
+    baseDomain: "localhost",
+    secureCookie: false,
+    resolvePublishedSubdomain: async () => ({
+      appSlug: "sales-app",
+      projectId: PROJECT_ID,
+      routePath: `/apps/${RESOURCE_KEY}`,
+      subdomain: "sales",
+      visibility: "public"
+    }),
+    resolvePublishAuth: async () => null,
+    canAccessDeployment: async () => false,
+    async rehydrateDeployment() {
+      return null;
+    }
+  });
+  const response = responseCapture();
+
+  await handlers.get("/__subdomain/*splat")(
+    {
+      params: { splat: ["apps", RESOURCE_KEY] },
+      method: "GET",
+      headers: { host: "sales.localhost:9800" },
+      url: `/__subdomain/apps/${RESOURCE_KEY}`,
+      originalUrl: `/__subdomain/apps/${RESOURCE_KEY}`,
+      on() {}
+    },
+    response
+  );
+
+  assert.equal(response.statusCode, 308);
+  assert.equal(response.headers.Location, "/");
+  assert.equal(requests.length, 0);
+});
