@@ -30,7 +30,7 @@ export async function cleanupWarmSlotResources(
     try {
       await operation();
     } catch (error) {
-      if (!isAlreadyAbsentError(error)) failures.push(error);
+      failures.push(error);
     }
   };
   if (slot.containerId) {
@@ -50,9 +50,4 @@ export async function cleanupWarmSlotResources(
   if (failures.length > 0) {
     throw new AggregateError(failures, "warm workspace resource cleanup failed");
   }
-}
-
-function isAlreadyAbsentError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unknown container|no such|not found|\b404\b/i.test(message);
 }

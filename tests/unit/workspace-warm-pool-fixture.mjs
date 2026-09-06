@@ -225,7 +225,7 @@ function createMemoryWarmSlotStore(now) {
       try {
         const current = [...slots.values()].filter(
           (slot) =>
-            slot.state === "preparing" || slot.state === "ready" || slot.state === "cleaning"
+            ["preparing", "ready", "cleaning", "failed"].includes(slot.state)
         ).length;
         const missing = Math.max(0, targetSize - current);
         const reserved = [];

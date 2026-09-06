@@ -52,6 +52,7 @@ export function createWarmPoolLifecycle(
           ...activeRecords.map((record) => record.projectId)
         ]),
         activeWarmSlotIds,
+        isWarmResourceOwned: (key) => deps.warmPool?.isResourceOwned(key) ?? Promise.resolve(true),
         activeResourceKeys: new Set(activeRecords.map(physicalResourceKey)),
         cleanupProject,
         onRemoved: ({ projectId, containerName, volumeName }) =>

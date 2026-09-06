@@ -38,6 +38,8 @@ export interface WorkspaceWarmPool {
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
   getClaimProjectIds(): Promise<ReadonlySet<string>>;
+  isResourceOwned(resourceKey: string): Promise<boolean>;
+  deleteProjectClaims(projectId: string, assertOwned: () => Promise<void>): Promise<void>;
 }
 export interface WarmPoolStatus {
   target: number;
@@ -116,7 +118,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
           projectLeases && slot.claimProjectId
             ? await projectLeases.acquire(slot.claimProjectId, ownerId, operationLeaseMs)
             : undefined;
-        if (projectAcquisition === "contended") continue;
+        if (projectAcquisition === "contended" || projectAcquisition === "deleting_project")
+          continue;
         const projectOwnership =
           projectAcquisition === "acquired" && projectLeases
             ? maintainWorkspaceCleanupProjectLease({
@@ -177,14 +180,11 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       }
     }
 
-    const slots = await options.store.list();
-    // Due retries contended on project ownership still consume their durable capacity lineage.
-    const blockedFailures = slots.filter((slot) => slot.state === "failed").length;
-    const reservableTarget = Math.max(0, options.targetSize - blockedFailures);
-    const candidates = Array.from({ length: reservableTarget }, createSlotIdentity);
+    // The reservation transaction counts every retry lineage against the full target.
+    const candidates = Array.from({ length: options.targetSize }, createSlotIdentity);
     const ownerId = createOperationOwner();
     const reserved = await options.store.reservePreparing(
-      reservableTarget,
+      options.targetSize,
       candidates,
       operationLease(ownerId)
     );
@@ -211,6 +211,27 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   };
 
   const pool: WorkspaceWarmPool = {
+    async deleteProjectClaims(projectId, assertOwned) {
+      for (const slot of await options.store.list()) {
+        if (slot.claimProjectId !== projectId) continue;
+        await assertOwned();
+        await pool.failClaim(slot.id, new Error("project deleting"), assertOwned);
+      }
+      if ((await options.store.list()).some((slot) => slot.claimProjectId === projectId))
+        throw new Error("Project warm claim cleanup remains pending");
+    },
+    async isResourceOwned(resourceKey) {
+      if ((await options.store.list()).some((slot) => slot.resourceKey === resourceKey))
+        return true;
+      if (
+        (await options.store.preparations.list()).some(
+          (intent) => intent.resourceKey === resourceKey
+        )
+      )
+        return true;
+      // Claim completion saves runtime ownership before removing its slot/journal.
+      return (await durableRuntimeKeys()).has(resourceKey);
+    },
     ensureCapacity,
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
     waitForIdle: work.waitForIdle,

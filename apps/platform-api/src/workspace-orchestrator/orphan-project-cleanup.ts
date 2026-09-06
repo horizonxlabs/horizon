@@ -14,7 +14,7 @@ export function createOrphanProjectCleanup(
     const token = randomUUID();
     const leaseMs = 5 * 60_000;
     const acquisition = await leases.acquire(projectId, token, leaseMs);
-    if (acquisition === "contended") return;
+    if (acquisition === "contended" || acquisition === "deleting_project") return;
     const ownership =
       acquisition === "acquired"
         ? maintainWorkspaceCleanupProjectLease({ leases, projectId, token, leaseMs })

@@ -5,6 +5,7 @@ import type {
 } from "../persistence/workspace-runtime-repository";
 import type { WorkspaceProvisioningLeaseStore } from "../persistence/workspace-provisioning-lease-repository";
 import type { ProjectSecretStore, ProvisioningSecretAttempt } from "./secret-store";
+import { ProjectDeletionInProgressError } from "../project-lifecycle";
 
 const LEASE_TTL_MS = 5 * 60_000;
 const localLeaseStores = new WeakMap<object, WorkspaceProvisioningLeaseStore>();
@@ -110,6 +111,7 @@ export function createProvisioningLeaseCoordinator(
       if (acquisition === "missing_project") {
         throw new Error(`workspace project '${projectId}' no longer exists`);
       }
+      if (acquisition === "deleting_project") throw new ProjectDeletionInProgressError(projectId);
       const owner = { token, leases, lost: false };
       active.set(projectId, owner);
       const heartbeat = setInterval(() => {

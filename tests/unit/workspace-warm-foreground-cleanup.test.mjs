@@ -114,7 +114,7 @@ test(
     const execute = fixture.persistence.client.$executeRawUnsafe;
     let acquisitions = 0;
     fixture.persistence.client.$executeRawUnsafe = async (...args) => {
-      if (args[0].trimStart().startsWith("INSERT INTO")) acquisitions += 1;
+      if (args[0].includes('INSERT INTO "workspace_provisioning_leases"')) acquisitions += 1;
       return execute(...args);
     };
     const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, warmPool: fixture.pool });

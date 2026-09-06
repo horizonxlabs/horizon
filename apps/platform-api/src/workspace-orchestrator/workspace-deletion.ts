@@ -18,21 +18,29 @@ export function createWorkspaceDeletion(
     try {
       await fence?.assertCurrent();
       const cached = cache.records.get(projectId);
-      const durable = cached
-        ? undefined
-        : (await deps.runtimeRecords?.list())?.find(
-            (snapshot) => snapshot.record.projectId === projectId
-          );
+      const durable =
+        cached && !fence?.workspaceToken
+          ? undefined
+          : (await deps.runtimeRecords?.list())?.find(
+              (snapshot) => snapshot.record.projectId === projectId
+            );
       await fence?.assertCurrent();
-      const record = cached ?? durable?.record;
-      if (!record) return;
-      await deleteWorkspaceResources({
-        record,
-        deps,
-        llmGatewayKeyId: durable?.llmGatewayKeyId ?? llmKeyIds.get(projectId),
-        runtimeRecords: deps.runtimeRecords,
-        fence
-      });
+      const record = durable?.record ?? cached;
+      if (record)
+        await deleteWorkspaceResources({
+          record,
+          deps,
+          llmGatewayKeyId: durable?.llmGatewayKeyId ?? llmKeyIds.get(projectId),
+          runtimeRecords: deps.runtimeRecords,
+          fence
+        });
+      if (fence?.workspaceToken)
+        await deps.warmPool?.deleteProjectClaims(projectId, () => fence.assertCurrent());
+      if (!record && fence?.workspaceToken) {
+        await fence.assertCurrent();
+        await deps.secrets.removeAll(projectId);
+        await fence.assertCurrent();
+      }
       cache.delete(projectId);
       llmKeyIds.delete(projectId);
       try {

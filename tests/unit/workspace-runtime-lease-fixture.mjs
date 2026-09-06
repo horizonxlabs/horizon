@@ -4,6 +4,7 @@ export function createRuntimeLeaseFixture() {
   const records = new Map();
   const leases = new Map();
   const missingProjects = new Set();
+  const lifecycleStates = new Map();
   let now = 0;
   let tail = Promise.resolve();
   const client = {
@@ -23,6 +24,10 @@ export function createRuntimeLeaseFixture() {
       }
     },
     async $executeRawUnsafe(sql, projectId, token, ttlMs) {
+      if (sql.includes("INSERT INTO project_lifecycle_states")) {
+        if (!lifecycleStates.has(projectId)) lifecycleStates.set(projectId, { status: "active", epoch: 0, mutation_epoch: 0 });
+        return 1;
+      }
       const current = leases.get(projectId);
       if (sql.trimStart().startsWith("INSERT INTO")) {
         if (missingProjects.has(projectId)) {
@@ -57,6 +62,8 @@ export function createRuntimeLeaseFixture() {
       throw new Error(`unexpected lease query: ${sql}`);
     },
     async $queryRawUnsafe(sql, projectId) {
+      if (sql.includes('FROM "projects"')) return [{ present: !missingProjects.has(projectId) }];
+      if (sql.includes("FROM project_lifecycle_states")) return [lifecycleStates.get(projectId)];
       if (!/SELECT EXISTS/.test(sql)) throw new Error(`unexpected lease query: ${sql}`);
       return [{ active: (leases.get(projectId)?.expiresAt ?? 0) > now }];
     },
@@ -77,6 +84,7 @@ export function createRuntimeLeaseFixture() {
   return {
     records,
     leases,
+    lifecycleStates,
     client,
     get now() {
       return now;

@@ -237,7 +237,8 @@ test("orphan cleanup preserves durable warm slots and removes unowned warm resou
   const removed = await cleanupOrphanWorkspaceResources({
     docker: fixture.docker,
     activeProjectIds: new Set(),
-    activeWarmSlotIds: new Set(["warm_slot_1"])
+    activeWarmSlotIds: new Set(["warm_slot_1"]),
+    isWarmResourceOwned: (key) => fixture.pool.isResourceOwned(key)
   });
   assert.deepEqual(removed, ["evcp-ws-warm-orphan", "evcp-ws-warm-orphan-data"]);
   assert.equal(fixture.docker.state.containers.length, 1);

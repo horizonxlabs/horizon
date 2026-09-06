@@ -17,6 +17,7 @@ import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 import { createWorkspaceRuntimeCache } from "./runtime-cache";
+import { runWorkspaceProjectDeletion } from "./project-deletion-ownership";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -358,6 +359,11 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     },
 
     deleteWorkspace: createWorkspaceDeletion(deps, cache, llmKeyIds),
+    runProjectDeletion: <T>(
+      projectId: string,
+      fence: import("../project-lifecycle").ProjectDeletionFence | undefined,
+      operation: (fence: import("../project-lifecycle").ProjectDeletionFence) => Promise<T>
+    ) => runWorkspaceProjectDeletion(deps, projectId, fence, operation),
 
     async stopIdleWorkspaces(nowDate: Date = new Date()): Promise<string[]> {
       const stopped: string[] = [];

@@ -31,7 +31,7 @@ type WarmSlotRecord = Omit<
 type WarmSlotModel = {
   findMany(args: { orderBy: { createdAt: "asc" } }): Promise<WarmSlotRecord[]>;
   count(args: {
-    where: { state: { in: Array<"preparing" | "ready" | "cleaning"> } };
+    where: { state: { in: Array<"preparing" | "ready" | "cleaning" | "failed"> } };
   }): Promise<number>;
   create(args: {
     data: {
@@ -124,7 +124,7 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
     return this.client.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(RESERVE_CAPACITY_LOCK_SQL);
       const currentCapacity = await transaction.workspaceWarmSlot.count({
-        where: { state: { in: ["preparing", "ready", "cleaning"] } }
+        where: { state: { in: ["preparing", "ready", "cleaning", "failed"] } }
       });
       const missing = Math.max(0, targetSize - currentCapacity);
       const reserved: WarmWorkspaceSlot[] = [];

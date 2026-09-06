@@ -158,6 +158,7 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   }
 
   const { client, service } = await createPrismaCorePersistence(env.DATABASE_URL);
+  (services as PersistenceAwarePlatformApiServices).projectLifecycle = createProjectLifecycleCoordinator({ store: createPrismaProjectLifecycleStore(client as never) });
   await initializeWorkspaceRuntime(services.workspaceOrchestrator, env.DATABASE_URL, warmPoolFactory);
   const { client: aiClient, service: aiGovernancePersistence } = await createPrismaAiGovernancePersistence(env.DATABASE_URL, productionAiSecretStore);
   const { service: businessSettingsPersistence } = await createPrismaBusinessSettingsPersistence(env.DATABASE_URL);
@@ -166,7 +167,6 @@ export async function createRuntimePlatformApiServices(env: RuntimeEnv = process
   const { service: publishStorePersistence } = await createPrismaPublishStorePersistence(env.DATABASE_URL, publishAccessUrlConfig);
   const { service: generatedRuntimePersistence } = await createPrismaGeneratedRuntimePersistence(env.DATABASE_URL);
   const projectFileUploadUrlIssuer = resolveProjectFileUploadUrlIssuer(env);
-  (services as PersistenceAwarePlatformApiServices).projectLifecycle = createProjectLifecycleCoordinator({ store: createPrismaProjectLifecycleStore(client as never) });
   return {
     ...services,
     corePersistence: service,
@@ -524,7 +524,7 @@ async function executePlatformApiRequestAsyncInternal(services: PersistenceAware
       const user = (await resolvePersistenceAuth(services, request.headers ?? {})).user;
       const cleanup = services.projectResourceCleanup ?? ((id: string, fence) => deletePersistedProjectResources(id, { workspace: services.workspaceOrchestrator, files: services.projectFilePersistence, storage: services.projectFileUploadUrlIssuer }, undefined, fence));
       const lifecycle = services.projectLifecycle ??= createProjectLifecycleCoordinator();
-      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle });
+      const data = await deletePersistedProject({ actor: user, encodedProjectId: projectDeleteMatch[1], persistence: corePersistence, cleanup, lifecycle, workspace: services.workspaceOrchestrator });
       return { status: HttpStatus.OK, body: success(data) };
     }
 

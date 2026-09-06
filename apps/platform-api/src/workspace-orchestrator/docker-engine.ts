@@ -275,7 +275,6 @@ export function createMemoryDockerEngine(): DockerEngine & {
       find(containerId).status = "stopped";
     },
     async removeContainer(containerId) {
-      find(containerId);
       state.containers = state.containers.filter((item) => item.containerId !== containerId);
     },
     async inspectContainer(name) {

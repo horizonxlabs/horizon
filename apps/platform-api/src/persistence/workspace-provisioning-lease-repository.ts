@@ -2,12 +2,19 @@ import type {
   WorkspaceRuntimePersistenceClient,
   WorkspaceRuntimeSnapshot
 } from "./workspace-runtime-repository";
+import { lockProjectLifecycleState } from "./prisma-project-lifecycle-store";
+
+export interface WorkspaceDeletionAuthority {
+  ownerId: string;
+  epoch: number;
+}
 
 export interface WorkspaceProvisioningLeaseStore {
   acquire(
     projectId: string,
     token: string,
-    ttlMs: number
+    ttlMs: number,
+    deletion?: WorkspaceDeletionAuthority
   ): Promise<WorkspaceProvisioningLeaseAcquisition>;
   renew(projectId: string, token: string, ttlMs: number): Promise<boolean>;
   save(snapshot: WorkspaceRuntimeSnapshot, token: string, ttlMs: number): Promise<boolean>;
@@ -17,9 +24,7 @@ export interface WorkspaceProvisioningLeaseStore {
 }
 
 export type WorkspaceProvisioningLeaseAcquisition =
-  | "acquired"
-  | "contended"
-  | "missing_project";
+  "acquired" | "contended" | "deleting_project" | "missing_project";
 
 interface LeaseTransactionClient {
   workspaceRuntimeRecord: WorkspaceRuntimePersistenceClient["workspaceRuntimeRecord"];
@@ -56,12 +61,32 @@ export class WorkspaceProvisioningLeaseRepository implements WorkspaceProvisioni
   async acquire(
     projectId: string,
     token: string,
-    ttlMs: number
+    ttlMs: number,
+    deletion?: WorkspaceDeletionAuthority
   ): Promise<WorkspaceProvisioningLeaseAcquisition> {
     try {
-      return (await this.client.$executeRawUnsafe(ACQUIRE_SQL, projectId, token, ttlMs)) === 1
-        ? "acquired"
-        : "contended";
+      return await this.client.$transaction(async (transaction) => {
+        const state = await lockProjectLifecycleState(transaction, projectId);
+        const allowed = deletion
+          ? state.status === "deleting" &&
+            state.epoch === deletion.epoch &&
+            state.deletion_owner_id === deletion.ownerId &&
+            state.deletion_lease_current
+          : state.status === "active";
+        if (!allowed) {
+          const [project] = await transaction.$queryRawUnsafe<Array<{ present: boolean }>>(
+            'SELECT EXISTS (SELECT 1 FROM "projects" WHERE "id" = $1) AS "present"',
+            projectId
+          );
+          // A tombstone survives cascade. Only confirmed row absence permits orphan cleanup.
+          if (typeof project?.present !== "boolean")
+            throw new Error("workspace project presence lookup failed");
+          return project.present ? "deleting_project" : "missing_project";
+        }
+        return (await transaction.$executeRawUnsafe(ACQUIRE_SQL, projectId, token, ttlMs)) === 1
+          ? "acquired"
+          : "contended";
+      });
     } catch (error) {
       if (isMissingProjectForeignKeyError(error)) return "missing_project";
       throw error;

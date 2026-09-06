@@ -120,7 +120,7 @@ export function createLiteLlmGatewayAdmin(opts: {
         headers,
         body: JSON.stringify({ keys: [keyId] })
       });
-      if (!response.ok) {
+      if (!response.ok && !(await isConfirmedLiteLlmKeyAbsence(response))) {
         throw new Error(`litellm key revoke failed (${response.status})`);
       }
     },

@@ -2,6 +2,7 @@ import { PermissionError, type PlatformUser } from "./platform-services";
 import type { CoreRepositoryBackedService } from "./persistence/core-repositories";
 import type { PlatformRequest, HeaderBag } from "./platform-http-types";
 import type { ProjectDeletionFence, ProjectLifecycleCoordinator } from "./project-lifecycle";
+import type { WorkspaceOrchestrator } from "./workspace-orchestrator/orchestrator";
 
 export async function deleteProjectResources(cleanups: Array<() => Promise<void>>): Promise<void> {
   const failures: Error[] = [];
@@ -31,6 +32,7 @@ export async function deletePersistedProject(input: {
   persistence: CoreRepositoryBackedService;
   cleanup: (projectId: string, fence?: ProjectDeletionFence) => Promise<void>;
   lifecycle?: ProjectLifecycleCoordinator;
+  workspace?: Pick<WorkspaceOrchestrator, "runProjectDeletion">;
 }): Promise<{ id: string; deleted: true }> {
   const projectId = decodeURIComponent(input.encodedProjectId);
   const project = (await input.persistence.listProjects(input.actor)).find(
@@ -50,7 +52,7 @@ export async function deletePersistedProject(input: {
     await fence?.assertCurrent();
     await input.cleanup(projectId, fence);
     await fence?.assertCurrent();
-    await input.persistence.deleteProject(input.actor, projectId);
+    await input.persistence.deleteProject(input.actor, projectId, fence);
     await input.persistence
       .recordAudit({
         actorId: input.actor.id,
@@ -62,7 +64,9 @@ export async function deletePersistedProject(input: {
       .catch(() => undefined);
     return { id: projectId, deleted: true as const };
   };
-  return input.lifecycle ? input.lifecycle.runDeletion(projectId, remove) : remove();
+  const coordinated = (fence?: ProjectDeletionFence) =>
+    input.workspace ? input.workspace.runProjectDeletion(projectId, fence, remove) : remove(fence);
+  return input.lifecycle ? input.lifecycle.runDeletion(projectId, coordinated) : coordinated();
 }
 
 export function registerProjectDeletionRoute(

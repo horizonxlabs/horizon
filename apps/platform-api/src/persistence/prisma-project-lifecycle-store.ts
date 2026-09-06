@@ -17,7 +17,7 @@ type LifecycleRow = {
   deletion_lease_current: boolean;
 };
 
-async function lockState(client: QueryClient, projectId: string): Promise<LifecycleRow> {
+export async function lockProjectLifecycleState(client: QueryClient, projectId: string): Promise<LifecycleRow> {
   await client.$executeRawUnsafe(
     `INSERT INTO project_lifecycle_states
        (project_id, status, epoch, mutation_epoch, updated_at)
@@ -47,7 +47,7 @@ export function createPrismaProjectLifecycleStore(
   return {
     async acquireMutationLease({ projectId, leaseId, durationMs }) {
       return client.$transaction(async (transaction) => {
-        const state = await lockState(transaction, projectId);
+        const state = await lockProjectLifecycleState(transaction, projectId);
         if (state.status !== "active") return { acquired: false };
         const epoch = state.mutation_epoch + 1;
         await transaction.$executeRawUnsafe(
@@ -115,7 +115,7 @@ export function createPrismaProjectLifecycleStore(
     },
     async beginDeletion({ projectId, ownerId, durationMs }) {
       return client.$transaction(async (transaction): Promise<DeletionLeaseResult> => {
-        const state = await lockState(transaction, projectId);
+        const state = await lockProjectLifecycleState(transaction, projectId);
         if (state.status === "deleted") return { status: "deleted" };
         if (
           state.status === "deleting" && state.deletion_owner_id !== null &&

@@ -74,7 +74,7 @@ export async function reconcileWorkspaceWarmPool(options: {
       slot.claimProjectId && projectLeases
         ? await projectLeases.acquire(slot.claimProjectId, ownerId, options.operationLeaseMs)
         : undefined;
-    if (projectLeaseAcquisition === "contended") {
+    if (projectLeaseAcquisition === "contended" || projectLeaseAcquisition === "deleting_project") {
       totals.preserved += 1;
       continue;
     }
