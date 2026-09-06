@@ -11,6 +11,7 @@ import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupWarmSlotResources } from "./warm-pool-cleanup";
 import {
   defaultWarmSlotIdentity,
+  maintainWorkspaceCleanupProjectLease,
   warmSlotOperationLease,
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
@@ -19,7 +20,6 @@ import { createWarmPoolWorkTracker } from "./warm-pool-work";
 import { recoverWarmClaim } from "./warm-pool-claim-recovery";
 import { prepareWarmSlot } from "./warm-pool-preparation";
 import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
-import { recoverStartupWarmClaims } from "./warm-pool-startup-recovery";
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
@@ -28,10 +28,9 @@ export interface WorkspaceWarmPool {
   waitForIdle(): Promise<void>;
   claim(projectId: string): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
-  recoverClaims(): ReturnType<typeof recoverStartupWarmClaims>;
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown): Promise<void>;
-  reconcile(): Promise<void>;
+  reconcile(): ReturnType<typeof reconcileWorkspaceWarmPool>;
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
   getClaimProjectIds(): Promise<ReadonlySet<string>>;
@@ -61,7 +60,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const createOperationOwner = options.createOperationOwner ?? randomUUID;
   const operationLeaseMs = options.operationLeaseMs ?? OPERATION_LEASE_MS;
   let inFlightEnsure: Promise<void> | null = null;
-  let inFlightReconcile: Promise<void> | null = null;
+  let inFlightReconcile: ReturnType<typeof reconcileWorkspaceWarmPool> | null = null;
   const work = createWarmPoolWorkTracker();
 
   const slotCounts = async () => {
@@ -106,54 +105,77 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     for (const slot of observed) {
       if (isWarmSlotRetryable(slot, now())) {
         const ownerId = createOperationOwner();
-        const owned = await options.store.acquireCleanup(
-          slot.id,
-          slot.state,
-          operationLease(ownerId)
-        );
-        if (!owned) continue;
-        await withMaintainedWarmSlotOperationLease(
-          { store: options.store, slotId: owned.id, ownerId, now, leaseMs: operationLeaseMs },
-          async (ownership) => {
-            try {
-              const runtimeKeys = await durableRuntimeKeys();
-              if (!runtimeKeys.has(owned.resourceKey)) {
-                await cleanupSlotResources(owned, ownership.assertOwned);
+        const projectLeases = slot.claimProjectId
+          ? options.deps.runtimeRecords?.provisioningLeases
+          : undefined;
+        const projectAcquisition =
+          projectLeases && slot.claimProjectId
+            ? await projectLeases.acquire(slot.claimProjectId, ownerId, operationLeaseMs)
+            : undefined;
+        if (projectAcquisition === "contended") continue;
+        const projectOwnership =
+          projectAcquisition === "acquired" && projectLeases
+            ? maintainWorkspaceCleanupProjectLease({
+                leases: projectLeases,
+                projectId: slot.claimProjectId!,
+                token: ownerId,
+                leaseMs: operationLeaseMs
+              })
+            : undefined;
+        try {
+          const owned = await options.store.acquireCleanup(
+            slot.id,
+            slot.state,
+            operationLease(ownerId)
+          );
+          if (!owned) continue;
+          await withMaintainedWarmSlotOperationLease(
+            { store: options.store, slotId: owned.id, ownerId, now, leaseMs: operationLeaseMs },
+            async (ownership) => {
+              try {
+                const runtimeKeys = await durableRuntimeKeys();
+                if (!runtimeKeys.has(owned.resourceKey)) {
+                  await cleanupSlotResources(owned, async () => {
+                    await projectOwnership?.assertOwned();
+                    await ownership.assertOwned();
+                  });
+                }
+                if (options.targetSize === 0) {
+                  await options.store.remove(owned.id, ownerId);
+                  return;
+                }
+                const retried = await options.store.retryPreparing(
+                  owned.id,
+                  createSlotIdentity().resourceKey,
+                  operationLease(ownerId)
+                );
+                if (retried) retries.push({ slot: retried, ownerId });
+              } catch {
+                const failureCount = owned.failureCount + 1;
+                await options.store.markFailed(
+                  owned.id,
+                  {
+                    lastError: "cleanup_error",
+                    failureCount,
+                    retryAfter: new Date(now().getTime() + retryDelayMs(failureCount)).toISOString()
+                  },
+                  operationLease(ownerId)
+                );
               }
-              if (options.targetSize === 0) {
-                await options.store.remove(owned.id, ownerId);
-                return;
-              }
-              const retried = await options.store.retryPreparing(
-                owned.id,
-                createSlotIdentity().resourceKey,
-                operationLease(ownerId)
-              );
-              if (retried) retries.push({ slot: retried, ownerId });
-            } catch {
-              const failureCount = owned.failureCount + 1;
-              await options.store.markFailed(
-                owned.id,
-                {
-                  lastError: "cleanup_error",
-                  failureCount,
-                  retryAfter: new Date(now().getTime() + retryDelayMs(failureCount)).toISOString()
-                },
-                operationLease(ownerId)
-              );
             }
+          );
+        } finally {
+          projectOwnership?.stop();
+          if (projectAcquisition === "acquired") {
+            await projectLeases!.release(slot.claimProjectId!, ownerId).catch(() => undefined);
           }
-        );
+        }
       }
     }
 
     const slots = await options.store.list();
-    const blockedFailures = slots.filter(
-      (slot) =>
-        slot.state === "failed" &&
-        slot.retryAfter !== null &&
-        new Date(slot.retryAfter).getTime() > now().getTime()
-    ).length;
+    // Due retries contended on project ownership still consume their durable capacity lineage.
+    const blockedFailures = slots.filter((slot) => slot.state === "failed").length;
     const reservableTarget = Math.max(0, options.targetSize - blockedFailures);
     const candidates = Array.from({ length: reservableTarget }, createSlotIdentity);
     const ownerId = createOperationOwner();
@@ -187,8 +209,6 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   const pool: WorkspaceWarmPool = {
     ensureCapacity,
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
-    recoverClaims: () =>
-      work.track(recoverStartupWarmClaims({ ...options, now, operationLeaseMs })),
     waitForIdle: work.waitForIdle,
     async getStatus() {
       return countSlots(await options.store.list(), options.targetSize);
@@ -279,8 +299,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       return work.track(tracked);
     }
   };
-  async function reconcileOnce(): Promise<void> {
-    await reconcileWorkspaceWarmPool({
+  async function reconcileOnce(): ReturnType<typeof reconcileWorkspaceWarmPool> {
+    const recovered = await reconcileWorkspaceWarmPool({
       ...options,
       now,
       operationLeaseMs,
@@ -289,6 +309,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       retryDelayMs
     });
     await reconcileRetiredWarmPreparations(options);
+    return recovered;
   }
 
   async function durableRuntimeKeys(): Promise<Set<string>> {

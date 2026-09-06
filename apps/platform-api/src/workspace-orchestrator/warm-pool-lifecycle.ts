@@ -3,25 +3,24 @@ import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceWarmPool, WarmPoolStatus } from "./warm-pool";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupOrphanWorkspaceResources } from "./workspace-lifecycle";
+import { createOrphanProjectCleanup } from "./orphan-project-cleanup";
 
 export function createWarmPoolLifecycle(
   deps: WorkspaceOrchestratorDeps,
   records: Map<string, WorkspaceContainerRecord>,
   llmKeyIds: Map<string, string>
 ) {
+  const cleanupProject = createOrphanProjectCleanup(deps, records);
   return {
     configureWarmPool(pool: WorkspaceWarmPool): void {
       deps.warmPool = pool;
     },
-    async recoverWarmClaims(): Promise<void> {
-      for (const snapshot of (await deps.warmPool?.recoverClaims()) ?? []) {
+    async reconcileWarmPool(): Promise<void> {
+      for (const snapshot of (await deps.warmPool?.reconcile()) ?? []) {
         records.set(snapshot.record.projectId, snapshot.record);
         if (snapshot.llmGatewayKeyId)
           llmKeyIds.set(snapshot.record.projectId, snapshot.llmGatewayKeyId);
       }
-    },
-    async reconcileWarmPool(): Promise<void> {
-      await deps.warmPool?.reconcile();
     },
     async ensureWarmPoolCapacity(): Promise<void> {
       await deps.warmPool?.ensureCapacity();
@@ -48,6 +47,7 @@ export function createWarmPoolLifecycle(
         ]),
         activeWarmSlotIds,
         activeResourceKeys: new Set(activeRecords.map(physicalResourceKey)),
+        cleanupProject,
         onRemoved: ({ projectId, containerName, volumeName }) =>
           deps.onAudit?.({
             action: "workspace.orphan_removed",

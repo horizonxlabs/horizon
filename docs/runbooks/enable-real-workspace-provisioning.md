@@ -90,13 +90,16 @@ docker compose -f docker/docker-compose.yml exec postgres \
 Neither command should query or print `secret_payload`; credentials remain encrypted at rest and
 must not be copied into Docker labels, logs, or audit metadata.
 
-Before destructive startup reconciliation, the API recovers healthy final project containers
-whose warm claim survived a crash. Matching prepared credentials establish their physical
-identity; project leases fence secret/runtime persistence before normal reconciliation retires
-the claim. A contended project remains protected and is retried by the periodic sweep. Missing,
-unhealthy, or mismatched handoffs continue through fenced cleanup. Secret/runtime persistence
-failures stop startup before cleanup; restore the dependency and retry startup, without deleting
-the claiming row. This recovery also runs with a zero pool target to preserve completed handoffs.
+Startup and periodic reconciliation decide recovery or cleanup while holding the same project
+provisioning lease. A healthy final container whose credentials match its claiming slot is recovered
+and persisted before the claim is retired. Existing durable runtimes retain their Docker-hydrated
+state; redundant claims never turn a stopped workspace back into a cached running workspace.
+A contended project remains protected for a later sweep. Missing, unhealthy, or mismatched handoffs
+are cleaned only after their abandoned final container is removed, so it cannot pin the warm volume.
+Failed cleanup retries also acquire the project lease. Generic orphan deletion acquires that lease
+and refreshes runtime/claim ownership immediately before deleting a project container or volume.
+Secret/runtime persistence failures stop startup before cleanup; restore the dependency and retry,
+without deleting the claiming row. Recovery also runs with a zero target to preserve completed handoffs.
 
 Preparation records its physical key and slot operation token in `workspace_warm_preparations`
 before dispatching external creates. Late responses are compensated using their original resource

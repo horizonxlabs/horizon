@@ -169,14 +169,13 @@ test("expired preparation ownership allows exactly one reconciler to clean", asy
 });
 
 test("reconcile rechecks runtime ownership after acquiring cleanup ownership", async () => {
-  let reads = 0;
+  let assigned = false;
   const fixture = createWarmPoolFixture({
     targetSize: 1,
     runtimeRecords: {
       provisioningLeases: availableProjectLeases,
       async list() {
-        reads += 1;
-        return reads === 1
+        return !assigned
           ? []
           : [{ record: { projectId: "project-1", resourceKey: "warm-resource-1" } }];
       }
@@ -184,10 +183,15 @@ test("reconcile rechecks runtime ownership after acquiring cleanup ownership", a
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
+  fixture.store.acquireCleanup = async (...args) => {
+    const owned = await acquireCleanup(...args);
+    if (owned) assigned = true;
+    return owned;
+  };
 
   await fixture.createPool().reconcile();
 
-  assert.equal(reads, 2);
   assert.deepEqual(await fixture.store.list(), []);
   assert.deepEqual(fixture.releasedSchemas, []);
   assert.equal(fixture.docker.state.containers.length, 1);

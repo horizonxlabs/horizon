@@ -16,7 +16,6 @@ export async function initializeWorkspaceRuntime(
   if (poolFactory) {
     orchestrator.configureWarmPool(poolFactory(await persistence.createWarmSlotStore(databaseUrl)));
   }
-  await orchestrator.recoverWarmClaims();
   await orchestrator.reconcileWarmPool();
   await orchestrator.cleanupOrphanContainers();
   void orchestrator.ensureWarmPoolCapacity().catch(() => undefined);

@@ -59,14 +59,22 @@ export async function waitForPreviewReady(
   }
 }
 
+export type ProjectOrphanCleanup = (
+  projectId: string,
+  operation: (assertOwned: () => Promise<void>) => Promise<void>
+) => Promise<void>;
+
 export async function cleanupOrphanWorkspaceResources(input: {
   docker: DockerEngine;
   activeProjectIds: ReadonlySet<string>;
   activeWarmSlotIds?: ReadonlySet<string>;
   activeResourceKeys?: ReadonlySet<string>;
+  cleanupProject?: ProjectOrphanCleanup;
   onRemoved?: (event: { projectId: string; containerName?: string; volumeName?: string }) => void;
 }): Promise<string[]> {
   const removed: string[] = [];
+  const cleanupProject =
+    input.cleanupProject ?? (async (_projectId, operation) => operation(async () => {}));
   const activeVolumes = new Set([...(input.activeResourceKeys ?? [])].map(workspaceVolumeName));
   for (const container of await input.docker.listManagedContainers()) {
     if (container.labels["evcp.kind"] === "workspace-warm" && !container.labels["evcp.env"]) {
@@ -79,15 +87,23 @@ export async function cleanupOrphanWorkspaceResources(input: {
     const isDevelopmentWorkspace =
       container.name.startsWith("evcp-ws-") && !container.labels["evcp.env"];
     if (!isDevelopmentWorkspace || !projectId || input.activeProjectIds.has(projectId)) continue;
-    if (container.running) {
-      await input.docker.stopContainer(container.containerId).catch(() => undefined);
-    }
-    await input.docker.removeContainer(container.containerId);
-    removed.push(container.name);
-    const volumeName = workspaceVolumeName(resourceKeyForProject(projectId));
-    await input.docker.removeVolume(volumeName).catch(() => undefined);
-    removed.push(volumeName);
-    input.onRemoved?.({ projectId, containerName: container.name, volumeName });
+    await cleanupProject(projectId, async (assertOwned) => {
+      await assertOwned();
+      const current = await input.docker.inspectContainer(container.name);
+      if (!current || current.containerId !== container.containerId) return;
+      if (current.running) {
+        await assertOwned();
+        await input.docker.stopContainer(container.containerId).catch(() => undefined);
+      }
+      await assertOwned();
+      await input.docker.removeContainer(container.containerId);
+      removed.push(container.name);
+      const volumeName = workspaceVolumeName(resourceKeyForProject(projectId));
+      await assertOwned();
+      await input.docker.removeVolume(volumeName).catch(() => undefined);
+      removed.push(volumeName);
+      input.onRemoved?.({ projectId, containerName: container.name, volumeName });
+    });
   }
   for (const volume of await input.docker.listManagedVolumes()) {
     if (activeVolumes.has(volume.name)) continue;
@@ -107,9 +123,12 @@ export async function cleanupOrphanWorkspaceResources(input: {
       removed.includes(volume.name)
     )
       continue;
-    await input.docker.removeVolume(volume.name);
-    removed.push(volume.name);
-    input.onRemoved?.({ projectId, volumeName: volume.name });
+    await cleanupProject(projectId, async (assertOwned) => {
+      await assertOwned();
+      await input.docker.removeVolume(volume.name);
+      removed.push(volume.name);
+      input.onRemoved?.({ projectId, volumeName: volume.name });
+    });
   }
   return removed;
 }

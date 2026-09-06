@@ -56,6 +56,13 @@ function localLeases(
   return leases;
 }
 
+export function resolveWorkspaceProvisioningLeases(
+  store: WorkspaceRuntimeRecordStore | undefined,
+  memoryScope: object
+): WorkspaceProvisioningLeaseStore {
+  return store?.provisioningLeases ?? localLeases(store ?? memoryScope, store);
+}
+
 export function createProvisioningLeaseCoordinator(
   getStore: () => WorkspaceRuntimeRecordStore | undefined,
   memoryScope: object
@@ -93,7 +100,7 @@ export function createProvisioningLeaseCoordinator(
       operation: (snapshot?: WorkspaceRuntimeSnapshot) => Promise<T>
     ): Promise<T> {
       const store = getStore();
-      const leases = store?.provisioningLeases ?? localLeases(store ?? memoryScope, store);
+      const leases = resolveWorkspaceProvisioningLeases(store, memoryScope);
       const token = randomUUID();
       let acquisition = await leases.acquire(projectId, token, LEASE_TTL_MS);
       while (acquisition === "contended") {

@@ -6,6 +6,9 @@ import type {
 } from "./warm-pool-types";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import { physicalResourceKey } from "./warm-pool-config";
+import type { WorkspaceRuntimeSnapshot } from "../persistence/workspace-runtime-repository";
+import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
+import { recoverOwnedWarmClaim } from "./warm-pool-startup-recovery";
 import { waitForPreviewReady } from "./workspace-lifecycle";
 import {
   maintainWorkspaceCleanupProjectLease,
@@ -15,6 +18,7 @@ import {
 export async function reconcileWorkspaceWarmPool(options: {
   store: WorkspaceWarmSlotStore;
   deps: WorkspaceOrchestratorDeps;
+  codec: WarmPoolSecretCodec;
   targetSize: number;
   now: () => Date;
   operationLeaseMs: number;
@@ -24,7 +28,8 @@ export async function reconcileWorkspaceWarmPool(options: {
     assertOwned?: () => Promise<void>
   ) => Promise<void>;
   retryDelayMs: (failureCount: number) => number;
-}): Promise<void> {
+}): Promise<WorkspaceRuntimeSnapshot[]> {
+  const recovered: WorkspaceRuntimeSnapshot[] = [];
   const containers = await options.deps.docker.listManagedContainers();
   let runtimeKeys = await durableRuntimeKeys(options.deps);
   const slots = await options.store.list();
@@ -84,6 +89,23 @@ export async function reconcileWorkspaceWarmPool(options: {
           })
         : undefined;
     try {
+      if (projectOwnership) {
+        const current = (await options.store.list()).find(({ id }) => id === slot.id);
+        if (
+          !current ||
+          current.resourceKey !== slot.resourceKey ||
+          current.claimProjectId !== slot.claimProjectId ||
+          current.state !== slot.state
+        ) {
+          totals.preserved += 1;
+          continue;
+        }
+        const snapshot = await recoverOwnedWarmClaim(options, current, {
+          token: ownerId,
+          assertOwned: projectOwnership.assertOwned
+        });
+        if (snapshot) recovered.push(snapshot);
+      }
       const acquired = await options.store.acquireCleanup(
         slot.id,
         slot.state,
@@ -162,6 +184,7 @@ export async function reconcileWorkspaceWarmPool(options: {
   } catch {
     // Audit delivery must not invalidate completed reconciliation.
   }
+  return recovered;
 }
 
 async function durableRuntimeKeys(deps: WorkspaceOrchestratorDeps): Promise<Set<string>> {

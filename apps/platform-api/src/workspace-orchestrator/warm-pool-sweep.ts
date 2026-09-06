@@ -1,7 +1,7 @@
 import type { WorkspaceWarmPool } from "./warm-pool";
 
 export function startWarmPoolSweep(
-  pool: Pick<WorkspaceWarmPool, "reconcile" | "ensureCapacity">,
+  pool: Pick<WorkspaceWarmPool, "ensureCapacity"> & { reconcile(): Promise<unknown> },
   opts: { intervalMs?: number; onError?: (error: unknown) => void } = {}
 ): { stop(): void } {
   let running = false;
