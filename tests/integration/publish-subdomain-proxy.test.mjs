@@ -197,7 +197,7 @@ test("a published-subdomain browser root proxies through the generated app base 
   );
 
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].path, "/apps/rk-sales/");
+  assert.equal(requests[0].path, "/apps/rk-sales");
 });
 
 test("generated base-path assets remain compatible and container headers exclude credentials", async () => {

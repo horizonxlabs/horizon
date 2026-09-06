@@ -75,8 +75,31 @@ export function publishedSubdomainProxyPath(originalUrl: string, routePath: stri
   const pathname = queryIndex >= 0 ? requested.slice(0, queryIndex) : requested;
   const query = queryIndex >= 0 ? requested.slice(queryIndex) : "";
   if (pathname === routePath || pathname.startsWith(`${routePath}/`)) return requested;
-  const suffix = pathname === "/" ? "/" : pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (pathname === "/") return `${routePath}${query}`;
+  const suffix = pathname.startsWith("/") ? pathname : `/${pathname}`;
   return `${routePath}${suffix}${query}`;
+}
+
+function publishedSubdomainBrowserLocation(location: string, routePath: string): string {
+  const normalizedRoute = routePath.replace(/\/$/, "");
+  const stripRoute = (value: string) => {
+    if (value === normalizedRoute || value === `${normalizedRoute}/`) return "/";
+    if (value.startsWith(`${normalizedRoute}/`)) return value.slice(normalizedRoute.length);
+    if (value.startsWith(`${normalizedRoute}?`) || value.startsWith(`${normalizedRoute}#`)) {
+      return `/${value.slice(normalizedRoute.length)}`;
+    }
+    return value;
+  };
+
+  if (location.startsWith("/")) return stripRoute(location);
+  try {
+    const absolute = new URL(location);
+    const routedLocation = `${absolute.pathname}${absolute.search}${absolute.hash}`;
+    const publicLocation = stripRoute(routedLocation);
+    return publicLocation === routedLocation ? location : publicLocation;
+  } catch {
+    return location;
+  }
 }
 
 export function proxyPublishedDeployment(input: {
@@ -85,8 +108,10 @@ export function proxyPublishedDeployment(input: {
   response: RawResponse;
   upstream: string;
   path: string;
+  browserRoutePrefixToStrip?: string;
 }): void {
   const target = new URL(input.upstream);
+  const browserRoutePrefixToStrip = input.browserRoutePrefixToStrip;
   const forwardHeaders: HeaderBag = { ...input.request.headers, host: target.host };
   deleteCredentialHeaders(forwardHeaders);
   const proxyRequest = input.nodeHttp.request(
@@ -100,7 +125,16 @@ export function proxyPublishedDeployment(input: {
     (proxyResponse) => {
       input.response.statusCode = proxyResponse.statusCode ?? 502;
       for (const [key, value] of Object.entries(proxyResponse.headers)) {
-        if (value !== undefined) input.response.setHeader(key, value as string | string[]);
+        if (value === undefined) continue;
+        const publicValue =
+          key.toLowerCase() === "location" && browserRoutePrefixToStrip
+            ? Array.isArray(value)
+              ? value.map((location) =>
+                  publishedSubdomainBrowserLocation(location, browserRoutePrefixToStrip)
+                )
+              : publishedSubdomainBrowserLocation(String(value), browserRoutePrefixToStrip)
+            : value;
+        input.response.setHeader(key, publicValue as string | string[]);
       }
       proxyResponse.pipe(input.response as unknown as NodeJS.WritableStream);
     }
@@ -197,7 +231,8 @@ export function registerPublishedSubdomainHttpRoutes(input: {
       request,
       response,
       upstream: deployment.upstream,
-      path: publishedSubdomainProxyPath(request.originalUrl, resolved.registryEntry.routePath)
+      path: publishedSubdomainProxyPath(request.originalUrl, resolved.registryEntry.routePath),
+      browserRoutePrefixToStrip: resolved.registryEntry.routePath
     });
   };
 
