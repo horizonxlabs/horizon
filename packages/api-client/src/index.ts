@@ -12,11 +12,17 @@ export type {
   StoreTicketResponse,
   StoreTicketTimelineEntryDto
 } from "./store-ticket-types";
-import { PlatformApiError } from "./platform-api-error";
+import { responseError } from "./platform-api-error";
 import type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
 export type { StorefrontAppCardDto, StorefrontAppDetailResponse } from "./storefront-types";
 import type { AppStorePublishInput, PublishAccessUrlConfigDto } from "./publish-subdomain";
-export { RESERVED_SUBDOMAINS, buildSubdomainUrl, normalizeSubdomainSuggestion, subdomainFromHostname, validateSubdomainLabel } from "./publish-subdomain";
+export {
+  RESERVED_SUBDOMAINS,
+  buildSubdomainUrl,
+  normalizeSubdomainSuggestion,
+  subdomainFromHostname,
+  validateSubdomainLabel
+} from "./publish-subdomain";
 export type * from "./publish-subdomain";
 
 export type ApiSuccess<T> = {
@@ -540,9 +546,12 @@ export class PlatformApiClient {
   }
 
   deleteProject(projectId: string): Promise<{ id: string; deleted: true }> {
-    return this.request<{ id: string; deleted: true }>(`/projects/${encodeURIComponent(projectId)}`, {
-      method: "DELETE"
-    });
+    return this.request<{ id: string; deleted: true }>(
+      `/projects/${encodeURIComponent(projectId)}`,
+      {
+        method: "DELETE"
+      }
+    );
   }
 
   generatePrdDraft(projectId: string): Promise<PrdVersionDto> {
@@ -953,15 +962,7 @@ export class PlatformApiClient {
     });
     const envelope = (await response.json()) as ApiResult<T>;
     if (!response.ok || !envelope.ok) {
-      const error = envelope.ok
-        ? { code: `HTTP_${response.status}`, message: response.statusText }
-        : envelope.error;
-      throw new PlatformApiError({
-        code: error.code,
-        message: error.message,
-        traceId: error.traceId,
-        status: response.status
-      });
+      throw responseError(envelope, response.status, response.statusText);
     }
     return { data: envelope.data, meta: envelope.meta };
   }
@@ -974,11 +975,7 @@ export class PlatformApiClient {
     });
     const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
-      const code = typeof body.error === "string" ? body.error : `HTTP_${response.status}`;
-      const failures = Array.isArray(body.failures) ? body.failures.join("; ") : undefined;
-      const message =
-        typeof body.message === "string" ? body.message : (failures ?? code.replace(/_/g, " "));
-      throw new PlatformApiError({ code, message, status: response.status });
+      throw responseError(body, response.status, response.statusText);
     }
     return body as T;
   }

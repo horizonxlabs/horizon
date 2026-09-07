@@ -1,6 +1,11 @@
 import { type WorkspaceAgentMode } from "@evcp/api-client";
 import { useEffect, useRef, useState } from "react";
-import { cancelActiveChatTurn, fetchActiveChatTurn, fetchChatHistory, type ActiveChatTurn } from "./chat-history";
+import {
+  cancelActiveChatTurn,
+  fetchActiveChatTurn,
+  fetchChatHistory,
+  type ActiveChatTurn
+} from "./chat-history";
 import { ensureVibeWorkspace, streamVibeChat } from "./api";
 import { enqueuePrompt, removeQueued, takeNext, type QueuedPrompt } from "./vibe-queue";
 import { mergeBugReports, type BugReport } from "./vibe-bugs";
@@ -15,12 +20,7 @@ type VibeChatOptions = {
   selectedAttachmentIds: string[];
 };
 
-export type WorkspaceOutcome =
-  | "Working"
-  | "Waiting for input"
-  | "Completed"
-  | "Stopped"
-  | "Failed";
+export type WorkspaceOutcome = "Working" | "Waiting for input" | "Completed" | "Stopped" | "Failed";
 
 export function workspaceOutcomeForEvent({
   type,
@@ -45,13 +45,14 @@ export function workspaceOutcomeForHistory(messages: VibeMessage[]): WorkspaceOu
   const latest = latestTurn.at(-1);
   if (!latest) return "";
   if (latest.role === "user") return "Working";
-  if (extractQuestions(latest.text).questions.length > 0) return "Waiting for input";
-  if (
-    latest.actions.some((action) => action.status === "failed") ||
-    /(?:^|\n)⚠️/.test(latest.text)
-  ) {
+  // A committed candidate can still have a finalization error; keep explicit turn failures.
+  if (latest.parts?.some((part) => part.type === "error") || /(?:^|\n)⚠️/.test(latest.text)) {
     return "Failed";
   }
+  if (extractQuestions(latest.text).questions.length > 0) return "Waiting for input";
+  // Validation and checkpointing supersede recovered tool attempts, not their history.
+  if (latest.commitSha) return "Completed";
+  if (latest.actions.some((action) => action.status === "failed")) return "Failed";
   if (latest.actions.some((action) => action.status === "running")) return "Working";
   return "Completed";
 }
@@ -125,21 +126,22 @@ export function useVibeChat({
         }
       }
     };
-    void Promise.all([fetchChatHistory(selectedProjectId), fetchActiveChatTurn(selectedProjectId)]).then(
-      ([restored, active]) => {
-        if (ignore || revision !== historyRevisionRef.current) return;
-        if (restored.length > 0) {
-          setVibeMessages(restored);
-          setVibeStatus(workspaceOutcomeForHistory(restored));
-        }
-        if (active) {
-          setVibeMessages(renderActiveTurn(restored, active));
-          setIsVibing(true);
-          setVibeStatus("Working");
-          poll = setInterval(() => void reconcile(), 1500);
-        }
+    void Promise.all([
+      fetchChatHistory(selectedProjectId),
+      fetchActiveChatTurn(selectedProjectId)
+    ]).then(([restored, active]) => {
+      if (ignore || revision !== historyRevisionRef.current) return;
+      if (restored.length > 0) {
+        setVibeMessages(restored);
+        setVibeStatus(workspaceOutcomeForHistory(restored));
       }
-    );
+      if (active) {
+        setVibeMessages(renderActiveTurn(restored, active));
+        setIsVibing(true);
+        setVibeStatus("Working");
+        poll = setInterval(() => void reconcile(), 1500);
+      }
+    });
     return () => {
       ignore = true;
       if (poll) clearInterval(poll);
@@ -228,17 +230,33 @@ export function useVibeChat({
             applyVibeEvent(message, type, data as Record<string, unknown>)
           );
           if (type === "action_start") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           } else if (type === "commit") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
             setVibePreviewKey((key) => key + 1);
           } else if (type === "error") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           } else if (type === "done") {
-            outcomeStatus = workspaceOutcomeForEvent({ type, current: outcomeStatus, assistantText });
+            outcomeStatus = workspaceOutcomeForEvent({
+              type,
+              current: outcomeStatus,
+              assistantText
+            });
             setVibeStatus(outcomeStatus);
           }
         },

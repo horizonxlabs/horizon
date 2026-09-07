@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-
 import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
+import { clearWorkspaceForSnapshotRestore } from "./workspace-snapshot-restore";
 
 export interface ContainerGitCommitter {
   prepare(containerId: string): Promise<string>;
@@ -366,7 +366,7 @@ export function createContainerGitCommitter(docker: DockerEngine): ContainerGitC
         "trap 'exit 2' HUP INT TERM",
         sanitizeRepository,
         'original_head="$(cat "$snapshot_dir/head")"',
-        `find /workspace -xdev -mindepth 1 \\( -path /workspace/.git -o -path /workspace/node_modules -o -path /workspace/.next -o -path '/workspace/.next-*' \\) -prune -o -exec rm -rf {} +`,
+        `env -u NODE_OPTIONS -u NODE_PATH node -e ${shSingleQuoted(clearWorkspaceForSnapshotRestore)} "$snapshot_dir/manifest"`,
         'tar -C /workspace -xf "$snapshot_dir/archive"',
         "cd /workspace",
         `${g} reset --mixed "$original_head" >/dev/null`,
