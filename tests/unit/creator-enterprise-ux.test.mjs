@@ -229,8 +229,11 @@ test("First-project fallback renders only the English empty state and creation w
   );
 
   assert.match(html, /Create your first project/);
-  assert.match(html, /Application type/);
   assert.match(html, /Business problem/);
+  assert.doesNotMatch(html, /Application type/);
+  assert.doesNotMatch(html, /Target department/);
+  assert.doesNotMatch(html, /Intended users/);
+  assert.doesNotMatch(html, /Data sensitivity/);
   assert.match(html, /Create project/);
   assert.doesNotMatch(html, /Recent projects|Search projects|Project list/);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);

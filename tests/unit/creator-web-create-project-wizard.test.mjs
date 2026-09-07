@@ -14,7 +14,7 @@ const form = {
   dataSensitivity: "internal"
 };
 
-test("CreateProjectWizard renders primitive controls (Field/Input/Textarea/Button) without throwing", () => {
+test("CreateProjectWizard asks only for the project name and business problem", () => {
   const html = renderToStaticMarkup(
     React.createElement(CreateProjectWizard, {
       form,
@@ -26,11 +26,18 @@ test("CreateProjectWizard renders primitive controls (Field/Input/Textarea/Butto
     })
   );
   assert.match(html, />Create project</);
-  assert.match(html, /Project history remains available for later PRD review/);
   assert.match(html, /<textarea/);
   assert.match(html, /focus:ring-primary-soft/);
   assert.match(html, /Project name/);
-  assert.match(html, /Data sensitivity/);
+  assert.match(html, /Business problem/);
+  assert.doesNotMatch(html, /Application type/);
+  assert.doesNotMatch(html, /Target department/);
+  assert.doesNotMatch(html, /Intended users/);
+  assert.doesNotMatch(html, /Data sensitivity/);
+  assert.doesNotMatch(html, /Complete the project details to prepare the first workspace draft/);
+  assert.doesNotMatch(html, /The project opens in its workspace after creation/);
+  assert.doesNotMatch(html, /Horizon uses the business problem to prepare the first draft/);
+  assert.doesNotMatch(html, /Project history remains available for later PRD review/);
 });
 
 test("CreateProjectWizard keeps backend failures behind technical details", () => {

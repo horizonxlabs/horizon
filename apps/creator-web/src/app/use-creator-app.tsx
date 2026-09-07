@@ -40,9 +40,7 @@ export function useCreatorApp({ onLogout }: { onLogout?: () => void }) {
   const [isCreateProjectDialogOpen, setIsCreateProjectDialogOpen] = useState(false);
   const [createProjectForm, setCreateProjectForm] =
     useState<CreateProjectFormState>(initialCreateProjectForm);
-  const [createProjectMessage, setCreateProjectMessage] = useState(
-    "Complete the project details to prepare the first workspace draft."
-  );
+  const [createProjectMessage, setCreateProjectMessage] = useState("");
   const [createProjectTechnicalDetails, setCreateProjectTechnicalDetails] = useState<string>();
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const projectRuntimeGuardRef = useRef(createCreatorProjectRuntimeGuard());

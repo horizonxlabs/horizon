@@ -1,6 +1,6 @@
 import { WandSparkles } from "lucide-react";
 import type { FormEvent } from "react";
-import { Button, DecisionPanel, Field, Input, Select, Textarea } from "@evcp/ui";
+import { Button, Field, Input, Textarea } from "@evcp/ui";
 import type { CreateProjectFormState } from "@/shared/types";
 import { CreatorStatusMessage } from "@/shared";
 
@@ -48,20 +48,6 @@ export function CreateProjectWizard({
               onChange={(event) => onField("name", event.target.value)}
             />
           </Field>
-          <Field label="Application type" htmlFor="cpw-app-type">
-            <Input
-              id="cpw-app-type"
-              value={form.appType}
-              onChange={(event) => onField("appType", event.target.value)}
-            />
-          </Field>
-          <Field label="Target department" htmlFor="cpw-dept">
-            <Input
-              id="cpw-dept"
-              value={form.targetDepartment}
-              onChange={(event) => onField("targetDepartment", event.target.value)}
-            />
-          </Field>
           <div className="creator-project-form-wide">
             <Field label="Business problem" htmlFor="cpw-problem">
               <Textarea
@@ -73,42 +59,12 @@ export function CreateProjectWizard({
               />
             </Field>
           </div>
-          <Field label="Intended users" htmlFor="cpw-users">
-            <Input
-              id="cpw-users"
-              value={form.intendedUsers}
-              onChange={(event) => onField("intendedUsers", event.target.value)}
-            />
-          </Field>
-          <Field label="Data sensitivity" htmlFor="cpw-sensitivity">
-            <Select
-              id="cpw-sensitivity"
-              value={form.dataSensitivity}
-              onChange={(event) => onField("dataSensitivity", event.target.value)}
-            >
-              <option value="internal">Internal</option>
-              <option value="confidential">Confidential</option>
-              <option value="restricted">Restricted</option>
-              <option value="public">Public</option>
-            </Select>
-          </Field>
         </div>
         {technicalDetails ? (
           <CreatorStatusMessage tone="danger" technicalDetails={technicalDetails}>
             <strong>{message}</strong>
           </CreatorStatusMessage>
-        ) : (
-          <DecisionPanel
-            tone="info"
-            badge={isCreating ? "Creating" : "Ready"}
-            title={message}
-            lines={[
-              "The project opens in its workspace after creation.",
-              "Horizon uses the business problem to prepare the first draft.",
-              "Project history remains available for later PRD review."
-            ]}
-          />
-        )}
+        ) : null}
         <footer>
           <Button variant="secondary" type="button" onClick={onClose} disabled={isCreating}>
             Cancel
