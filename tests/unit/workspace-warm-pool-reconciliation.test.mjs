@@ -211,16 +211,18 @@ test("concurrent reconciliation calls collapse into one pass", async () => {
   );
 });
 
-test("orphan cleanup preserves warm-labeled volumes transferred to durable runtimes", async () => {
+test("orphan cleanup preserves warm-labelled resources transferred to a durable runtime", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   await fixture.pool.ensureCapacity();
   const removed = await cleanupOrphanWorkspaceResources({
     docker: fixture.docker,
     activeProjectIds: new Set(["project-1"]),
     activeWarmSlotIds: new Set(),
-    activeResourceKeys: new Set(["warm-resource-1"])
+    activeResourceKeys: new Set(["warm-resource-1"]),
+    isWarmResourceOwned: async () => false
   });
-  assert.equal(removed.includes("evcp-ws-warm-resource-1-data"), false);
+  assert.deepEqual(removed, []);
+  assert.equal(fixture.docker.state.containers.length, 1);
   assert.equal(fixture.docker.state.volumes.length, 1);
 });
 

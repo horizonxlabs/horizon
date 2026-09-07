@@ -76,12 +76,18 @@ export async function cleanupOrphanWorkspaceResources(input: {
   const removed: string[] = [];
   const cleanupProject =
     input.cleanupProject ?? (async (_projectId, operation) => operation(async () => {}));
-  const activeVolumes = new Set([...(input.activeResourceKeys ?? [])].map(workspaceVolumeName));
+  const activeResourceKeys = input.activeResourceKeys ?? new Set<string>();
   for (const container of await input.docker.listManagedContainers()) {
+    const resourceKey = container.name.match(/^evcp-ws-([a-z0-9-]+)$/)?.[1];
+    if (resourceKey && activeResourceKeys.has(resourceKey)) continue;
     if (container.labels["evcp.kind"] === "workspace-warm" && !container.labels["evcp.env"]) {
       if (input.activeWarmSlotIds?.has(container.labels["evcp.warm-slot-id"] ?? "")) continue;
-      const key = container.name.match(/^evcp-ws-([a-z0-9-]+)$/)?.[1];
-      if (!key || !input.isWarmResourceOwned || (await input.isWarmResourceOwned(key))) continue;
+      if (
+        !resourceKey ||
+        !input.isWarmResourceOwned ||
+        (await input.isWarmResourceOwned(resourceKey))
+      )
+        continue;
       await input.docker.removeContainer(container.containerId);
       removed.push(container.name);
       continue;
@@ -109,11 +115,16 @@ export async function cleanupOrphanWorkspaceResources(input: {
     });
   }
   for (const volume of await input.docker.listManagedVolumes()) {
-    if (activeVolumes.has(volume.name)) continue;
+    const resourceKey = volume.name.match(/^evcp-ws-([a-z0-9-]+)-data$/)?.[1];
+    if (resourceKey && activeResourceKeys.has(resourceKey)) continue;
     if (volume.labels["evcp.kind"] === "workspace-warm" && !volume.labels["evcp.env"]) {
       if (input.activeWarmSlotIds?.has(volume.labels["evcp.warm-slot-id"] ?? "")) continue;
-      const key = volume.name.match(/^evcp-ws-([a-z0-9-]+)-data$/)?.[1];
-      if (!key || !input.isWarmResourceOwned || (await input.isWarmResourceOwned(key))) continue;
+      if (
+        !resourceKey ||
+        !input.isWarmResourceOwned ||
+        (await input.isWarmResourceOwned(resourceKey))
+      )
+        continue;
       await input.docker.removeVolume(volume.name);
       removed.push(volume.name);
       continue;
