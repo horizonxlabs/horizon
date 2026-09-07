@@ -143,12 +143,12 @@ test("Sprint 4 API smoke blocks guardrail prompt before preview update", () => {
   assert.equal(response.body.data.preview.version, "preview-0000");
 });
 
-test("Sprint 4 Creator workspace UI exposes one Auto Pi composer and existing workspace tools", () => {
+test("Sprint 4 Creator workspace UI exposes one Horizon composer and existing workspace tools", () => {
   const creatorSource = readAllSourceFiles("apps/creator-web/src");
 
   for (const text of [
-    "Create and understand your app with Pi",
-    "Ask Pi about the app or describe a change. Files change only when your request asks for it.",
+    "Create and understand your app with Horizon",
+    "Ask Horizon about the app or describe a change. Files change only when your request asks for it.",
     "Preview",
     "Code",
     "Database",

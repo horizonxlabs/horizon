@@ -147,10 +147,12 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           <div className="vibe-live-thread" ref={threadRef} onScroll={handleThreadScroll}>
             {vibeMessages.length === 0 && !isVibing && !vibeTechnicalDetails && (
               <div className="vibe-live-empty">
-                <div className="vibe-live-empty-title">Create and understand your app with Pi</div>
+                <div className="vibe-live-empty-title">
+                  Create and understand your app with Horizon
+                </div>
                 <p>
                   {
-                    "Ask Pi about the app or describe a change. Files change only when your request asks for it."
+                    "Ask Horizon about the app or describe a change. Files change only when your request asks for it."
                   }
                 </p>
               </div>
@@ -273,7 +275,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 placeholder={
                   isVibing
                     ? "Add another request — it will run next"
-                    : "Ask Pi about the app or describe a change…"
+                    : "Ask Horizon about the app or describe a change…"
                 }
                 rows={1}
               />

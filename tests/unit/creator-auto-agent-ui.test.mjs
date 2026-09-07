@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("Creator exposes one Auto Pi composer without persistent Plan Build state", async () => {
+test("Creator exposes one Horizon composer without persistent Plan Build state", async () => {
   const page = await readFile("apps/creator-web/src/features/workspace/WorkspacePage.tsx", "utf8");
   const hook = await readFile("apps/creator-web/src/features/workspace/use-vibe-chat.ts", "utf8");
   const workspace = await readFile(
@@ -39,11 +39,13 @@ test("Creator exposes one Auto Pi composer without persistent Plan Build state",
   assert.doesNotMatch(hook, /Provisioning workspace…/);
   assert.doesNotMatch(hook, /"AI is working…"/);
   assert.match(stream, /mode:\s*"build"/);
-  assert.match(page, /Create and understand your app with Pi/);
+  assert.match(page, /Create and understand your app with Horizon/);
   assert.match(
     page,
-    /Ask Pi about the app or describe a change\. Files change only when your request asks for it\./
+    /Ask Horizon about the app or describe a change\. Files change only when your request asks for it\./
   );
+  assert.match(page, /Ask Horizon about the app or describe a change…/);
+  assert.doesNotMatch(page, /Ask Pi/);
   assert.match(page, /Stop generation/);
   assert.match(page, /Send prompt/);
   assert.doesNotMatch(styles, /\.vibe-mode-(?:switch|option)/);
