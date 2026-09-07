@@ -22,6 +22,16 @@ type TimelineSegment =
   | { id: string; type: "activity"; tools: WorkspaceChatToolPart[] }
   | { id: string; type: "part"; part: NonToolTurnPart; sourceIndex: number };
 
+function InlineLoader(): ReactNode {
+  return (
+    <span className="vibe-inline-loader" role="status" aria-label="Pi is working">
+      <i className="vibe-inline-dot" aria-hidden="true" />
+      <i className="vibe-inline-dot" aria-hidden="true" />
+      <i className="vibe-inline-dot" aria-hidden="true" />
+    </span>
+  );
+}
+
 function toAction(id: string, tool: WorkspaceChatToolPart): VibeAction {
   return {
     id,
@@ -133,11 +143,7 @@ export function VibeTurnTimeline({
           return (
             <div key={part.id} className="vibe-message-text">
               <VibeMarkdown text={stripQuestions(stripSuggestions(text))} imageBase={imageBase} />
-              {live && sourceIndex === parts.length - 1 && (
-                <span className="vibe-cursor-blink" aria-hidden="true">
-                  ▋
-                </span>
-              )}
+              {live && sourceIndex === parts.length - 1 && <InlineLoader />}
             </div>
           );
         }
@@ -160,11 +166,7 @@ export function VibeTurnTimeline({
           </div>
         );
       })}
-      {live && parts.length === 0 && (
-        <span className="vibe-cursor-blink" aria-label="Pi is working">
-          ▋
-        </span>
-      )}
+      {live && parts.length === 0 && <InlineLoader />}
     </div>
   );
 }

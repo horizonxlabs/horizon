@@ -248,23 +248,24 @@ test("WorkspacePage offers an accessible stop control during generation", () => 
 // Regression: the blinking cursor was gated on `!message.text`, so it vanished forever the
 // instant the first token landed — a long, still-streaming response then looked finished
 // with no loading affordance at all for the rest of its own generation.
-test("WorkspacePage keeps the loading cursor lit only while a turn is still streaming", () => {
+test("WorkspacePage renders one font-independent loader only while a turn is streaming", () => {
   const messages = [
     { id: "a-1", role: "assistant", text: "Building the dashboard now…", actions: [] }
   ];
   const streaming = renderWithHook((app) =>
     React.createElement(WorkspacePage, { app: { ...app, isVibing: true, vibeMessages: messages } })
   );
-  assert.match(streaming, /vibe-cursor-blink/);
+  assert.match(streaming, /vibe-inline-loader/);
   assert.equal(
-    streaming.match(/vibe-cursor-blink/g)?.length,
+    streaming.match(/vibe-inline-loader/g)?.length,
     1,
-    "a streaming assistant turn must render exactly one loading cursor"
+    "a streaming assistant turn must render exactly one loading indicator"
   );
+  assert.doesNotMatch(streaming, /▋/, "the loader must not depend on a font-rendered block glyph");
   const done = renderWithHook((app) =>
     React.createElement(WorkspacePage, { app: { ...app, isVibing: false, vibeMessages: messages } })
   );
-  assert.doesNotMatch(done, /vibe-cursor-blink/);
+  assert.doesNotMatch(done, /vibe-inline-loader/);
 });
 
 test("UsersPage visibly presents access decision feedback with alert semantics", () => {

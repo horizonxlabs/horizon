@@ -4450,18 +4450,30 @@ th {
   }
 }
 
-.vibe-cursor-blink {
-  animation: vibe-cursor-blink 1s step-end infinite;
+.vibe-inline-loader {
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+  min-height: 18px;
+  padding: 0 2px;
+  vertical-align: middle;
 }
 
-@keyframes vibe-cursor-blink {
-  from,
-  to {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
+.vibe-inline-dot {
+  animation: vibe-working-wave 1.2s ease-in-out infinite;
+  background: var(--evcp-color-primary, #4f46e5);
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  width: 5px;
+}
+
+.vibe-inline-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.vibe-inline-dot:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
 .vibe-live-tabs {
@@ -5698,7 +5710,7 @@ body.vibe-is-resizing * {
 
 @media (prefers-reduced-motion: reduce) {
   .vibe-live-shell .vibe-live-status-dot,
-  .vibe-live-shell .vibe-cursor-blink,
+  .vibe-live-shell .vibe-inline-dot,
   .vibe-live-shell .vibe-shimmer,
   .vibe-working-icon,
   .vibe-working-dot {
