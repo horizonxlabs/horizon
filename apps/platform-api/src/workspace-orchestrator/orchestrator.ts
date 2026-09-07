@@ -13,7 +13,7 @@ import {
 } from "./workspace-lifecycle";
 import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
-import { inspectWorkspaceContainer, workspacePreviewBase } from "./runtime-location";
+import { inspectWorkspaceContainer, resolveWorkspacePreviewLocation, workspacePreviewBase } from "./runtime-location";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
@@ -277,6 +277,14 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
 
     findWorkspaceByResourceKey(resourceKey: string): WorkspaceContainerRecord | null {
       return cache.findByResourceKey(resourceKey);
+    },
+
+    findWorkspaceByPreviewKey(previewKey: string): WorkspaceContainerRecord | null {
+      return cache.findByResourceKey(previewKey) ?? [...records.values()].find((record) => resourceKeyForProject(record.projectId) === previewKey) ?? null;
+    },
+
+    async resolvePreviewLocation(projectId: string) {
+      return resolveWorkspacePreviewLocation(deps.docker, mustGet(projectId));
     },
 
     async listSecretNames(projectId: string): Promise<string[]> {

@@ -104,6 +104,14 @@ test("preview target authorizes the logical project behind a physical runtime ke
   const activity = [];
   const orchestrator = {
     findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    findWorkspaceByPreviewKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-warm-resource-1",
+        previewKey: "warm-resource-1",
+        previewBase: "/preview/warm-resource-1"
+      };
+    },
     getWorkspace: () => null,
     async wakeWorkspace() {},
     markActivity: (projectId) => activity.push(projectId)
@@ -122,4 +130,39 @@ test("preview target authorizes the logical project behind a physical runtime ke
     status: 404
   });
   assert.deepEqual(activity, ["prj_alpha"]);
+});
+
+test("preview target keeps an exact-id legacy runtime on its logical preview path", async () => {
+  const legacyRecord = {
+    projectId: "prj_alpha",
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  const orchestrator = {
+    findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? legacyRecord : null),
+    findWorkspaceByPreviewKey: (key) => (key === "warm-resource-1" ? legacyRecord : null),
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-prj-alpha",
+        previewKey: "prj-alpha",
+        previewBase: "/preview/prj-alpha"
+      };
+    },
+    getWorkspace: () => null,
+    async wakeWorkspace() {},
+    markActivity() {}
+  };
+
+  assert.deepEqual(
+    await resolvePreviewTarget(
+      orchestrator,
+      { userId: "u-creator", roles: ["creator"], projectIds: ["prj_alpha"] },
+      "warm-resource-1"
+    ),
+    {
+      ok: true,
+      upstream: "http://evcp-ws-prj-alpha:3000",
+      previewBase: "/preview/prj-alpha"
+    }
+  );
 });

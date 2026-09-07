@@ -60,7 +60,6 @@ import { readKeycloakConfig } from "./keycloak/config";
 import { KeycloakAdminClient } from "./keycloak/admin-client";
 import * as fs from "node:fs";
 import { renderPreviewUnavailableHtml } from "./workspace-orchestrator/preview-unavailable-page";
-import { workspacePhysicalKey } from "./workspace-orchestrator/runtime-location";
 import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrdPersistenceClient, type PrdRepositoryBackedService } from "./persistence/prd-repositories";
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
 import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
@@ -74,6 +73,17 @@ import { createProjectLifecycleCoordinator, runProjectMutationRequest, type Proj
 import { createPrismaProjectLifecycleStore } from "./persistence/prisma-project-lifecycle-store";
 import { resolvePersistenceUser, resolvePreviewProxyDecision, resolveWorkspaceAuth, wantsPreviewJson } from "./preview-proxy-decision";
 export { resolvePreviewProxyDecision, wantsPreviewJson } from "./preview-proxy-decision";
+export function rewritePreviewForwardPath(
+  originalUrl: string,
+  requestKey: string,
+  previewBase: string | undefined
+): string {
+  const requestBase = `/preview/${encodeURIComponent(requestKey)}`;
+  if (!previewBase || previewBase === requestBase || !originalUrl.startsWith(requestBase)) {
+    return originalUrl;
+  }
+  return `${previewBase}${originalUrl.slice(requestBase.length)}`;
+}
 type HttpRequest = { headers: HeaderBag; body?: Record<string, unknown>; params?: Record<string, string> };
 type HttpResponse = {
   status: (code: number) => HttpResponse;
@@ -2204,7 +2214,11 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       return;
     }
     const target = new URL(decision.upstream);
-    const forwardPath = req.originalUrl || "/";
+    const forwardPath = rewritePreviewForwardPath(
+      req.originalUrl || "/",
+      slug,
+      decision.previewBase
+    );
     const forwardHeaders: Record<string, string | string[] | undefined> = {
       ...req.headers,
       host: target.host
@@ -2936,9 +2950,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     authorize: async (headers, projectId) => {
       const actor = await resolvePersistenceUser(services, headers);
       const project = await resolvePersistenceProject(services, actor, projectId);
-      const runtime = services.workspaceOrchestrator.getWorkspace(project.id);
-      if (!runtime) throw new Error("workspace runtime is unavailable");
-      return { previewKey: workspacePhysicalKey(runtime) };
+      const location = await services.workspaceOrchestrator.resolvePreviewLocation(project.id);
+      if (!location) throw new Error("workspace runtime is unavailable");
+      return { previewKey: location.previewKey };
     },
     secureCookie: process.env.NODE_ENV === "production"
   });

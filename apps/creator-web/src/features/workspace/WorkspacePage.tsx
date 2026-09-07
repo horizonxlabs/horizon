@@ -81,7 +81,8 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   }, [vibeMessages, isVibing, vibeStatus]);
   const previewAuth = usePreviewAuthorization({
     projectId: selectedProject.id,
-    previewKey: vibePreviewKey
+    previewKey: vibePreviewKey,
+    runtimeReady: !app.isEnteringWorkspace
   });
   const previewSrc = previewAuth.previewKey
     ? `/preview/${encodeURIComponent(previewAuth.previewKey)}`

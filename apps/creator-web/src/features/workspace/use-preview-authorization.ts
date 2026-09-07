@@ -4,7 +4,11 @@ import { createCreatorPlatformClient } from "@/shared/creator-client";
 // Owns the preview-session authorization lifecycle (extracted from WorkspacePage for the
 // size ratchet): re-authorizes per project/preview-refresh/retry and reports whether the
 // iframe may render. The keepalive guard keeps the cookie fresh afterwards.
-export function usePreviewAuthorization(input: { projectId: string; previewKey: number }) {
+export function usePreviewAuthorization(input: {
+  projectId: string;
+  previewKey: number;
+  runtimeReady: boolean;
+}) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const [previewKey, setPreviewKey] = useState("");
@@ -27,7 +31,7 @@ export function usePreviewAuthorization(input: { projectId: string; previewKey: 
     return () => {
       active = false;
     };
-  }, [input.projectId, input.previewKey, attempt]);
+  }, [input.projectId, input.previewKey, input.runtimeReady, attempt]);
 
   return {
     state,

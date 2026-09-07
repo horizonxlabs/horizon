@@ -5,8 +5,8 @@ process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
 
 const { createPlatformApiServices } =
   await import("../../apps/platform-api/src/platform-services.ts");
-const { resolvePreviewProxyDecision, renderPreviewUnavailableHtml, wantsPreviewJson } =
-  await import("../../apps/platform-api/src/app-factory.ts");
+const appFactory = await import("../../apps/platform-api/src/app-factory.ts");
+const { resolvePreviewProxyDecision, renderPreviewUnavailableHtml, wantsPreviewJson } = appFactory;
 
 const CREATOR = { "x-mock-user-email": "creator@company.com" };
 
@@ -37,6 +37,14 @@ test("preview proxy authorizes physical runtime keys through their owning projec
   };
   services.workspaceOrchestrator = {
     findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    findWorkspaceByPreviewKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-warm-resource-1",
+        previewKey: "warm-resource-1",
+        previewBase: "/preview/warm-resource-1"
+      };
+    },
     getWorkspace: () => null,
     async wakeWorkspace() {},
     markActivity() {}
@@ -69,4 +77,15 @@ test("preview fallback renders a browser-friendly loading page instead of raw JS
   assert.match(html, /Starting workspace preview/);
   assert.match(html, /refresh/);
   assert.doesNotMatch(html, /preview_upstream_unreachable/);
+});
+
+test("legacy physical preview requests forward through the attached logical base", () => {
+  assert.equal(
+    appFactory.rewritePreviewForwardPath(
+      "/preview/warm-resource-1/api/health?probe=1",
+      "warm-resource-1",
+      "/preview/prj-alpha"
+    ),
+    "/preview/prj-alpha/api/health?probe=1"
+  );
 });

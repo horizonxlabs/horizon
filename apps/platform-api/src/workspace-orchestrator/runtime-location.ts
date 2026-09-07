@@ -20,6 +20,44 @@ export function workspacePreviewBase(
   return `/preview/${workspacePhysicalKey(record)}`;
 }
 
+export type WorkspacePreviewLocation = {
+  containerName: string;
+  previewKey: string;
+  previewBase: string;
+};
+
+export async function resolveWorkspacePreviewLocation(
+  docker: Pick<DockerEngine, "inspectContainer">,
+  record: Pick<WorkspaceContainerRecord, "projectId" | "resourceKey" | "containerId">
+): Promise<WorkspacePreviewLocation | null> {
+  if (!record.containerId) return null;
+  const physicalKey = workspacePhysicalKey(record);
+  const logicalKey = resourceKeyForProject(record.projectId);
+  const exactRuntime = (container: { containerId: string; env: string[] } | null) =>
+    container?.containerId === record.containerId;
+  const hasPreviewBase = (container: { env: string[] }, previewKey: string) =>
+    container.env.includes(`EVCP_PREVIEW_BASE=/preview/${previewKey}`);
+  const physicalName = workspaceContainerName(record);
+  const physical = await docker.inspectContainer(physicalName);
+  if (physical && exactRuntime(physical) && hasPreviewBase(physical, physicalKey)) {
+    return {
+      containerName: physicalName,
+      previewKey: physicalKey,
+      previewBase: `/preview/${physicalKey}`
+    };
+  }
+  if (physicalKey === logicalKey) return null;
+
+  const legacyName = `evcp-ws-${logicalKey}`;
+  const legacy = await docker.inspectContainer(legacyName);
+  if (!legacy || !exactRuntime(legacy) || !hasPreviewBase(legacy, logicalKey)) return null;
+  return {
+    containerName: legacyName,
+    previewKey: logicalKey,
+    previewBase: `/preview/${logicalKey}`
+  };
+}
+
 export async function inspectWorkspaceContainer(
   docker: Pick<DockerEngine, "inspectContainer">,
   record: Pick<WorkspaceContainerRecord, "projectId" | "resourceKey" | "containerId">

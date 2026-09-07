@@ -28,7 +28,7 @@ const { act, create } = requireFromStore("react-test-renderer");
 const { WorkspacePage } =
   await import("../../apps/creator-web/src/features/workspace/WorkspacePage.tsx");
 
-function app() {
+function app(overrides = {}) {
   return {
     selectedProject: { id: "prj_alpha", name: "Alpha", appType: "Internal app" },
     currentPrdVersion: undefined,
@@ -56,7 +56,8 @@ function app() {
     bugReports: [],
     addBugReport() {},
     dismissBugReport() {},
-    reloadChatHistory() {}
+    reloadChatHistory() {},
+    ...overrides
   };
 }
 
@@ -74,6 +75,53 @@ test("Workspace renders its iframe with the server-authorized physical preview k
       await Promise.resolve();
     });
 
+    assert.equal(renderer.root.findByType("iframe").props.src, "/preview/warm-resource-1");
+  } finally {
+    await act(async () => renderer?.unmount());
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("Workspace retries preview authorization once when provisioning finishes", async () => {
+  const previousFetch = globalThis.fetch;
+  let authorizations = 0;
+  globalThis.fetch = async () => {
+    authorizations += 1;
+    return authorizations === 1
+      ? new Response(JSON.stringify({ ok: false, error: { code: "FORBIDDEN" } }), { status: 403 })
+      : new Response(
+          JSON.stringify({ ok: true, data: { authorized: true, previewKey: "warm-resource-1" } }),
+          { status: 200 }
+        );
+  };
+  let renderer;
+  try {
+    function Harness() {
+      const [isEnteringWorkspace, setIsEnteringWorkspace] = React.useState(true);
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(WorkspacePage, { app: app({ isEnteringWorkspace }) }),
+        React.createElement(
+          "button",
+          { "aria-label": "complete provisioning", onClick: () => setIsEnteringWorkspace(false) },
+          "ready"
+        )
+      );
+    }
+    await act(async () => {
+      renderer = create(React.createElement(Harness));
+      await Promise.resolve();
+    });
+    assert.equal(authorizations, 1);
+    assert.equal(renderer.root.findAllByType("iframe").length, 0);
+
+    await act(async () => {
+      renderer.root.findByProps({ "aria-label": "complete provisioning" }).props.onClick();
+      await Promise.resolve();
+    });
+
+    assert.equal(authorizations, 2);
     assert.equal(renderer.root.findByType("iframe").props.src, "/preview/warm-resource-1");
   } finally {
     await act(async () => renderer?.unmount());

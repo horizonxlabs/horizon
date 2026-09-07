@@ -1,5 +1,4 @@
 import type { WorkspaceOrchestrator } from "./orchestrator";
-import { workspaceContainerName } from "./runtime-location";
 import type { PlatformUser } from "../platform-services";
 
 export interface WorkspaceAuthContext {
@@ -81,7 +80,7 @@ export function createWorkspaceRoutes(deps: { orchestrator: WorkspaceOrchestrato
 }
 
 export type PreviewResolution =
-  | { ok: true; upstream: string }
+  | { ok: true; upstream: string; previewBase?: string }
   | { ok: false; status: 401 | 403 | 404 | 503 };
 
 export async function resolvePreviewTarget(
@@ -93,7 +92,7 @@ export async function resolvePreviewTarget(
   if (!auth) {
     return { ok: false, status: 401 };
   }
-  const record = orchestrator.findWorkspaceByResourceKey(key);
+  const record = orchestrator.findWorkspaceByPreviewKey(key);
   if (!record) {
     return { ok: false, status: 404 };
   }
@@ -105,6 +104,12 @@ export async function resolvePreviewTarget(
   } else if (record.state !== "running") {
     return { ok: false, status: 503 };
   }
+  const location = await orchestrator.resolvePreviewLocation(record.projectId);
+  if (!location) return { ok: false, status: 503 };
   orchestrator.markActivity(record.projectId);
-  return { ok: true, upstream: `http://${workspaceContainerName(record)}:3000` };
+  return {
+    ok: true,
+    upstream: `http://${location.containerName}:3000`,
+    ...(location.previewBase === `/preview/${key}` ? {} : { previewBase: location.previewBase })
+  };
 }
