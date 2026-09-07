@@ -19,14 +19,21 @@ const successorLease = {
 for (const implementation of ["repository", "memory"]) {
   test(`${implementation} retry response keeps its own generation after a successor takes over`, async () => {
     const client = new DeterministicWarmSlotPersistenceClient();
-    const store = implementation === "repository"
-      ? new WorkspaceWarmSlotRepositoryBackedStore(client)
-      : createWarmPoolFixture({ targetSize: 1 }).store;
+    const store =
+      implementation === "repository"
+        ? new WorkspaceWarmSlotRepositoryBackedStore(client)
+        : createWarmPoolFixture({ targetSize: 1 }).store;
     await store.createPreparing({ id: "lineage", resourceKey: "original-resource" });
     await store.markFailed("lineage", {
-      lastError: "preview_unhealthy", failureCount: 3, retryAfter: firstLease.now
+      lastError: "preview_unhealthy",
+      failureCount: 3,
+      retryAfter: firstLease.now
     });
-    await store.acquireCleanup("lineage", "failed", firstLease);
+    await store.acquireCleanup(
+      "lineage",
+      { state: "failed", resourceKey: "original-resource" },
+      firstLease
+    );
     const transitionCompleted = Promise.withResolvers();
     const releaseResponse = Promise.withResolvers();
     if (implementation === "repository") {
@@ -50,7 +57,11 @@ for (const implementation of ["repository", "memory"]) {
     const delayedResponse = store.retryPreparing("lineage", "first-resource", firstLease);
     await transitionCompleted.promise;
     try {
-      await store.acquireCleanup("lineage", "preparing", successorLease);
+      await store.acquireCleanup(
+        "lineage",
+        { state: "preparing", resourceKey: "first-resource" },
+        successorLease
+      );
       await store.retryPreparing("lineage", "successor-resource", successorLease);
       releaseResponse.resolve();
       const first = await delayedResponse;

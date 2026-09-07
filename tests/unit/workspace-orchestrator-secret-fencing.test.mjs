@@ -14,6 +14,132 @@ function deferred() {
   return { promise, resolve };
 }
 
+test("a delayed runtime commit response cannot retire a hot slot after lease takeover", async () => {
+  const fixture = await createFixture();
+  const runtime = createRuntimeLeaseFixture();
+  const store = runtime.createStore();
+  const save = store.provisioningLeases.save.bind(store.provisioningLeases);
+  store.provisioningLeases.save = async (...args) => {
+    const saved = await save(...args);
+    runtime.advance(300_001);
+    assert.equal(
+      await store.provisioningLeases.acquire("prj_delayed", "successor", 300_000),
+      "acquired"
+    );
+    return saved;
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_delayed", slug: "delayed" }),
+    /lease is no longer owned/
+  );
+  assert.equal((await fixture.prepared.store.list())[0].state, "claiming");
+  assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+  assert.equal(
+    (await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+    true
+  );
+  assert.equal(fixture.order.includes("complete"), false);
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+  assert.deepEqual(fixture.coldCalls, []);
+});
+
+test("a delayed completed handoff cannot publish after losing its project lease", async () => {
+  const fixture = await createFixture();
+  const runtime = createRuntimeLeaseFixture();
+  const store = runtime.createStore();
+  const complete = fixture.deps.warmPool.completeClaim;
+  fixture.deps.warmPool.completeClaim = async (...args) => {
+    await complete(...args);
+    runtime.advance(300_001);
+    assert.equal(
+      await store.provisioningLeases.acquire("prj_delayed", "successor", 300_000),
+      "acquired"
+    );
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_delayed", slug: "delayed" }),
+    /lease is no longer owned/
+  );
+  assert.equal(orchestrator.getWorkspace("prj_delayed"), null);
+  assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+  assert.deepEqual(fixture.prepared.releasedSchemas, []);
+});
+
+test("a transient ownership check after retirement cannot roll back the durable hot runtime", async () => {
+  const fixture = await createFixture();
+  const runtime = createRuntimeLeaseFixture();
+  const store = runtime.createStore();
+  const complete = fixture.deps.warmPool.completeClaim;
+  const renew = store.provisioningLeases.renew.bind(store.provisioningLeases);
+  let failRenewal = false;
+  fixture.deps.warmPool.completeClaim = async (...args) => {
+    await complete(...args);
+    failRenewal = true;
+  };
+  store.provisioningLeases.renew = async (...args) => {
+    if (failRenewal) {
+      failRenewal = false;
+      throw new Error("ownership lookup unavailable");
+    }
+    return renew(...args);
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_delayed", slug: "delayed" })
+  );
+  assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+  assert.deepEqual(fixture.coldCalls, []);
+});
+
+test("a transient initial rollback ownership failure preserves the durable warm allocation", async () => {
+  const fixture = await createFixture();
+  const runtime = createRuntimeLeaseFixture();
+  const store = runtime.createStore();
+  const renew = store.provisioningLeases.renew.bind(store.provisioningLeases);
+  let failRollbackOwnership = false;
+  let preparedSecrets;
+  fixture.deps.warmPool.completeClaim = async () => {
+    assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+    preparedSecrets = await fixture.deps.secrets.resolveEnv("prj_rollback");
+    assert.equal(Object.keys(preparedSecrets).length, 6);
+    failRollbackOwnership = true;
+    throw new Error("claim retirement unavailable");
+  };
+  store.provisioningLeases.renew = async (...args) => {
+    if (failRollbackOwnership) {
+      failRollbackOwnership = false;
+      throw new Error("rollback ownership lookup unavailable");
+    }
+    return renew(...args);
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_rollback", slug: "rollback" }),
+    /warm workspace claim rollback is unsafe or incomplete/
+  );
+  assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+  assert.equal(
+    JSON.stringify(await fixture.deps.secrets.resolveEnv("prj_rollback")) ===
+      JSON.stringify(preparedSecrets),
+    true
+  );
+  assert.equal((await fixture.prepared.store.list())[0].state, "claiming");
+  assert.equal(
+    (await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+    true
+  );
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+  assert.equal(fixture.order.includes("fail"), false);
+  assert.deepEqual(fixture.prepared.releasedSchemas, []);
+  assert.deepEqual(fixture.prepared.releasedBuckets, []);
+  assert.deepEqual(fixture.prepared.revokedKeys, []);
+  assert.deepEqual(fixture.coldCalls, []);
+});
+
 for (const { mode, mutation } of [
   { mode: "warm", mutation: "delete" },
   { mode: "warm", mutation: "write" },
@@ -38,6 +164,8 @@ for (const { mode, mutation } of [
       persistence: sql.persistence
     });
     fixture.deps.secrets = secrets;
+    fixture.prepared.deps.runtimeRecords = firstStore;
+    fixture.prepared.deps.secrets = secrets;
     let paused = false;
     sql.beforeQuery = async (statement) => {
       const target =

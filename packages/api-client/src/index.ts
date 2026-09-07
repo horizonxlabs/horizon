@@ -670,8 +670,8 @@ export class PlatformApiClient {
     );
   }
 
-  authorizeWorkspacePreview(projectId: string): Promise<{ authorized: true }> {
-    return this.request<{ authorized: true }>(
+  authorizeWorkspacePreview(projectId: string): Promise<{ authorized: true; previewKey: string }> {
+    return this.request<{ authorized: true; previewKey: string }>(
       `/projects/${encodeURIComponent(projectId)}/workspace/preview-session`,
       { method: "POST" }
     );

@@ -123,8 +123,9 @@ export async function prepareWarmSlot(
     const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
     let lastError = errorCategory;
     try {
-      await cleanupWarmSlotResources(deps, ownedSlot, ownership.assertOwned);
-      cleanupComplete = true;
+      cleanupComplete =
+        (await cleanupWarmSlotResources(deps, ownedSlot, ownership.assertOwned)) === "cleaned";
+      if (!cleanupComplete) lastError = "cleanup_error";
     } catch {
       lastError = "cleanup_error";
     }

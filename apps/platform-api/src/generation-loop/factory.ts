@@ -5,6 +5,7 @@ import type { DockerEngine } from "../workspace-orchestrator/docker-engine";
 import { createDockerSocketEngine } from "../workspace-orchestrator/docker-socket-engine";
 import { resolveWorkspaceAdapterMode } from "../workspace-orchestrator/factory";
 import type { WorkspaceOrchestrator } from "../workspace-orchestrator/orchestrator";
+import { resolveWorkspacePreviewLocation } from "../workspace-orchestrator/runtime-location";
 import { loadGoldenTemplate } from "../workspace-orchestrator/template";
 import { createActionRunner } from "./action-runner";
 import { createMemoryChatHistoryStore, type ChatHistoryStore } from "./chat-history-store";
@@ -111,7 +112,11 @@ export async function createDefaultGenerationService(opts: {
       // Self-heal the host filesystem quirk documented on
       // isWorkspaceNodeModulesAccessError and retry once before giving up — this is not a
       // real syntax error and shouldn't cost the model a feedback round or a rollback.
-      await docker.execInContainer(containerId, ["sh", "-c", WORKSPACE_NODE_MODULES_REPAIR_COMMAND]);
+      await docker.execInContainer(containerId, [
+        "sh",
+        "-c",
+        WORKSPACE_NODE_MODULES_REPAIR_COMMAND
+      ]);
       return run();
     },
     readWorkspaceFiles: (containerId) => fileBrowserReader.read(containerId),
@@ -157,8 +162,27 @@ export async function createDefaultGenerationService(opts: {
     templateLockedFiles: template.lockedFiles,
     probeRuntime: async (projectId: string): Promise<{ status: number; errors: string[] }> => {
       const workspace = opts.orchestrator.getWorkspace(projectId);
-      if (!workspace?.containerId) return { status: 0, errors: [] };
-      return probeWorkspaceRuntime(docker, workspace.containerId, projectId.replaceAll("_", "-"));
+      const unavailable = { status: 0, errors: [] };
+      if (!workspace?.containerId || workspace.state !== "running") return unavailable;
+      const { containerId, resourceKey } = workspace;
+      try {
+        const location = await resolveWorkspacePreviewLocation(docker, workspace);
+        if (!location) return unavailable;
+        const container = await docker.inspectContainer(location.containerName);
+        const current = opts.orchestrator.getWorkspace(projectId);
+        if (
+          !container?.running ||
+          container.containerId !== containerId ||
+          current?.state !== "running" ||
+          current.containerId !== containerId ||
+          current.resourceKey !== resourceKey
+        )
+          return unavailable;
+        return probeWorkspaceRuntime(docker, containerId, location.previewKey);
+      } catch {
+        // Unavailable or untrusted infrastructure is not an application runtime bug.
+        return unavailable;
+      }
     }
   };
 }

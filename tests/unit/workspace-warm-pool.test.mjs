@@ -83,6 +83,21 @@ test("a slot is ready only after preview health succeeds", async () => {
   assert.equal(fixture.audits.at(-1).metadata.failedCount, 1);
 });
 
+test("prepares the physical preview path before marking a warm slot ready", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  const markReady = fixture.store.markReady.bind(fixture.store);
+  let readinessCommandAtReady;
+  fixture.store.markReady = async (...args) => {
+    readinessCommandAtReady = fixture.previewProbeCommands.at(-1);
+    return markReady(...args);
+  };
+
+  await fixture.pool.ensureCapacity();
+
+  assert.deepEqual(readinessCommandAtReady?.slice(0, 2), ["sh", "-c"]);
+  assert.match(readinessCommandAtReady?.at(-1) ?? "", /\$\{EVCP_PREVIEW_BASE:-\}\/api\/health/);
+});
+
 test("preparation failure applies bounded exponential retry", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1, previewExitCode: 1 });
 

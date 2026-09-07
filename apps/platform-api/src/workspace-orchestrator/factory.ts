@@ -131,6 +131,7 @@ export function createDefaultWorkspaceOrchestrator(
     const orchestrator = createWorkspaceOrchestrator(deps);
     opts.onWarmPoolFactory?.((store) =>
       createWorkspaceWarmPool({
+        env,
         targetSize,
         store,
         deps,

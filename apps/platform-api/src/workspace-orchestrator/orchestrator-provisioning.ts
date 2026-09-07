@@ -1,12 +1,14 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
-import type { WarmWorkspaceAllocation } from "./warm-pool-types";
+import type { WarmWorkspaceAllocation, WarmWorkspaceClaimTimings } from "./warm-pool-types";
+import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import type { ProvisioningSecretAttempt } from "./secret-store";
 import { assertTransition } from "./state";
 import { resourceKeyForProject } from "./resource-ports";
 import { buildDevContainerSpec } from "./docker-engine";
 import { waitForPreviewReady, workspaceVolumeName } from "./workspace-lifecycle";
 import { provisionIndependentWorkspaceResources } from "./workspace-provisioning";
+import { isWarmContainerCompatible } from "./warm-container-compatibility";
 
 interface ProvisioningState {
   save(record: WorkspaceContainerRecord): WorkspaceContainerRecord;
@@ -54,40 +56,34 @@ export function createWorkspaceProvisioning(
   const provisionClaimedWorkspace = async (
     input: { projectId: string; slug: string },
     allocation: WarmWorkspaceAllocation
-  ): Promise<WorkspaceContainerRecord> => {
+  ): Promise<{ record: WorkspaceContainerRecord; timings: WarmWorkspaceClaimTimings }> => {
+    const startedAt = performance.now();
     const logicalKey = resourceKeyForProject(input.projectId);
     const attempt = state.secretAttempt(input.projectId);
-    let containerId: string | undefined;
     let runtimeWriteAttempted = false;
+    let claimCompleted = false;
     try {
       await state.assertOwnership(input.projectId);
-      await deps.docker.stopContainer(allocation.containerId);
-      await deps.docker.removeContainer(allocation.containerId);
-      await state.assertOwnership(input.projectId);
-      const created = await deps.docker.createContainer(
-        buildDevContainerSpec({
-          projectId: input.projectId,
-          slug: logicalKey,
-          image,
-          env: { ...allocation.env, EVCP_PREVIEW_BASE: `/preview/${logicalKey}` },
-          cpuCores,
-          memoryMb,
-          network,
-          workspaceVolume: workspaceVolumeName(allocation.resourceKey)
-        })
-      );
-      containerId = created.containerId;
-      await deps.docker.startContainer(containerId);
-      await waitForPreviewReady(deps.docker, containerId);
+      const found = await deps.docker.inspectContainer(`evcp-ws-${allocation.resourceKey}`);
+      if (
+        !found?.running ||
+        found.containerId !== allocation.containerId ||
+        !isWarmContainerCompatible(found, allocation.resourceKey, image)
+      ) {
+        throw new Error("claimed warm workspace is unavailable");
+      }
+      await waitForPreviewReady(deps.docker, found.containerId);
+      const healthyAt = performance.now();
       await state.assertOwnership(input.projectId);
       await deps.secrets.replaceForProvisioning(input.projectId, allocation.env, attempt);
+      const secretsAt = performance.now();
       const record: WorkspaceContainerRecord = {
         id: `ws-${logicalKey}`,
         projectId: input.projectId,
         slug: input.slug,
         resourceKey: allocation.resourceKey,
         state: "running",
-        containerId,
+        containerId: found.containerId,
         cpuCores,
         memoryMb,
         lastActivityAt: now(),
@@ -98,15 +94,35 @@ export function createWorkspaceProvisioning(
       state.rememberLlmKey(input.projectId, allocation.llmGatewayKeyId);
       runtimeWriteAttempted = true;
       await persist(record);
+      const persistedAt = performance.now();
+      await state.assertOwnership(input.projectId);
       await deps.warmPool!.completeClaim(allocation.slotId);
-      return save(record);
+      claimCompleted = true;
+      await state.assertOwnership(input.projectId);
+      const completedAt = performance.now();
+      return {
+        record: save(record),
+        timings: {
+          healthMs: healthyAt - startedAt,
+          secretsMs: secretsAt - healthyAt,
+          runtimeMs: persistedAt - secretsAt,
+          completeMs: completedAt - persistedAt,
+          totalMs: completedAt - startedAt
+        }
+      };
     } catch (error) {
-      await state.assertOwnership(input.projectId);
+      if (error instanceof WarmWorkspaceClaimRollbackError) throw error;
+      if (claimCompleted) throw new WarmWorkspaceClaimRollbackError();
       // The pool exclusively owns schema, bucket, key, volume, and anonymous-container cleanup.
-      if (containerId) await deps.docker.removeContainer(containerId).catch(() => undefined);
-      await state.assertOwnership(input.projectId);
-      await deps.secrets.removeProvisioning(input.projectId, attempt.token).catch(() => undefined);
-      await state.removeFailedClaim(input.projectId, runtimeWriteAttempted);
+      try {
+        await state.assertOwnership(input.projectId);
+        await deps.secrets.removeProvisioning(input.projectId, attempt.token);
+        await state.assertOwnership(input.projectId);
+        await state.removeFailedClaim(input.projectId, runtimeWriteAttempted);
+      } catch {
+        // Keep the claim and allocation recoverable until project persistence can be rolled back.
+        throw new WarmWorkspaceClaimRollbackError();
+      }
       throw error;
     }
   };

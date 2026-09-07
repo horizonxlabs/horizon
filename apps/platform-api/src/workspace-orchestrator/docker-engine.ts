@@ -80,7 +80,10 @@ export function buildWarmContainerSpec(input: {
   const spec = buildDevContainerSpec({
     slug: input.resourceKey,
     image: input.image,
-    env: input.env,
+    env: {
+      ...input.env,
+      EVCP_PREVIEW_BASE: `/preview/${input.resourceKey}`
+    },
     cpuCores: input.cpuCores,
     memoryMb: input.memoryMb,
     network: input.network,

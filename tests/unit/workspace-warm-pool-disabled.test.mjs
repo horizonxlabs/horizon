@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
 import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
+import { seedCompleteOwnedSecrets } from "./workspace-warm-owned-repair-fixture.mjs";
 import {
   workspaceVolumeName,
   workspaceWarmResourceLabels
@@ -33,6 +34,7 @@ test("zero target drains unclaimed ready slots without deleting assigned runtime
     secretPayload: "assigned-secret"
   });
   await fixture.store.claim("project-live");
+  await seedCompleteOwnedSecrets(fixture, "project-live");
   await runtimeStore.save({
     record: {
       id: "ws-project-live",

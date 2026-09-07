@@ -33,7 +33,14 @@ export function createWarmPoolLifecycle(
     },
     async getWarmPoolStatus(): Promise<WarmPoolStatus> {
       return (
-        deps.warmPool?.getStatus() ?? { target: 0, preparing: 0, ready: 0, claiming: 0, failed: 0 }
+        deps.warmPool?.getStatus() ?? {
+          target: 0,
+          preparing: 0,
+          ready: 0,
+          claiming: 0,
+          failed: 0,
+          staleImage: 0
+        }
       );
     },
     async cleanupOrphanContainers(): Promise<string[]> {

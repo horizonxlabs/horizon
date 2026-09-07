@@ -15,6 +15,9 @@ function fakeEngine() {
     },
     async updateServiceImage(name, image) {
       updates.push({ name, image });
+    },
+    async updateService(name, update) {
+      updates.push({ name, ...update });
     }
   };
 }
@@ -86,4 +89,23 @@ test("updateToVersion bumps every app service and does platform-api LAST", async
   assert.equal(names[names.length - 1], "evcp_platform-api");
   assert.ok(engine.updates.every((u) => u.image.endsWith(":v2")));
   assert.ok(engine.updates.some((u) => u.image === "repo/evcp-workspace-next:v2"));
+  assert.deepEqual(engine.updates.at(-1), {
+    name: "evcp_platform-api",
+    image: "repo/evcp-platform-api:v2",
+    envPatch: {
+      EVCP_VERSION: "v2",
+      EVCP_WORKSPACE_IMAGE: "repo/evcp-workspace-next:v2"
+    }
+  });
+  assert.equal(engine.updates.length, 5);
+});
+
+test("a failed application update prevents the platform restart", async () => {
+  const engine = fakeEngine();
+  engine.updateServiceImage = async () => {
+    throw new Error("update failed");
+  };
+  const service = createSystemUpdateService({ engine, env: { EVCP_IMAGE_REPOSITORY: "repo" } });
+  await assert.rejects(() => service.updateToVersion("v2"), /update failed/);
+  assert.deepEqual(engine.updates, []);
 });

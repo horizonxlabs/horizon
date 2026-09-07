@@ -14,7 +14,8 @@ import {
 import { createWorkspaceOrchestrator } from "../../apps/platform-api/src/workspace-orchestrator/orchestrator.ts";
 import {
   createPgClientPostgresProvisioner,
-  schemaNameFor
+  schemaNameFor,
+  roleNameFor
 } from "../../apps/platform-api/src/workspace-orchestrator/postgres-provisioner.ts";
 import {
   createPgRunSql,
@@ -36,6 +37,25 @@ import {
 } from "./workspace-live-assertions.mjs";
 import { waitForWorkspaceLiveIdle } from "./workspace-live-idle.mjs";
 import { reconcileRetiredWarmPreparations } from "../../apps/platform-api/src/workspace-orchestrator/warm-pool-retirement.ts";
+
+// Wrap the actual adapter calls; never replace their external effects with counters.
+export function instrumentWorkspaceLifecycle(docker) {
+  const counts = { createContainer: 0, startContainer: 0, stopContainer: 0, removeContainer: 0 };
+  for (const name of Object.keys(counts)) {
+    const operation = docker[name].bind(docker);
+    docker[name] = (...args) => {
+      counts[name] += 1;
+      return operation(...args);
+    };
+  }
+  return {
+    snapshot: () => ({ ...counts }),
+    since: (before) =>
+      Object.fromEntries(
+        Object.entries(counts).map(([name, count]) => [name, count - before[name]])
+      )
+  };
+}
 
 export async function createWorkspaceLiveFixture(
   context,
@@ -76,6 +96,8 @@ export async function createWorkspaceLiveFixture(
   const resourceKeys = new Set();
   const slotIds = new Set();
   const keyIds = new Set();
+  const keyResourceKeys = new Map();
+  const activeIdentities = new Set();
   const containerNames = new Set();
   const pendingRefills = new Set();
   const pendingProvisions = new Set();
@@ -161,6 +183,7 @@ export async function createWorkspaceLiveFixture(
 
   await assertLiveWorkspaceDatabaseEmpty(store, client.workspaceRuntimeRecord);
   const docker = createDockerSocketEngine();
+  const dockerMetrics = instrumentWorkspaceLifecycle(docker);
   const createContainer = docker.createContainer.bind(docker);
   docker.createContainer = async (spec) => {
     containerNames.add(spec.name);
@@ -177,13 +200,23 @@ export async function createWorkspaceLiveFixture(
   const postgres = createPgClientPostgresProvisioner(
     createPgRunSql({ connectionString: databaseUrl })
   );
+  const identityAdmin = createDockerMinioIdentityAdmin(docker, {
+    containerName: env.EVCP_MINIO_CONTAINER_NAME ?? "evcp-minio",
+    adminAccessKey: env.MINIO_ROOT_USER,
+    adminSecretKey: env.MINIO_ROOT_PASSWORD
+  });
   const objectStorage = createMinioObjectStorageProvisioner({
     ...storageOptions,
-    identityAdmin: createDockerMinioIdentityAdmin(docker, {
-      containerName: env.EVCP_MINIO_CONTAINER_NAME ?? "evcp-minio",
-      adminAccessKey: env.MINIO_ROOT_USER,
-      adminSecretKey: env.MINIO_ROOT_PASSWORD
-    })
+    identityAdmin: {
+      async provision(input) {
+        activeIdentities.add(input.bucket);
+        return identityAdmin.provision(input);
+      },
+      async release(input) {
+        await identityAdmin.release(input);
+        activeIdentities.delete(input.bucket);
+      }
+    }
   });
   const llmGateway = createLiteLlmGatewayAdmin({
     baseUrl: env.EVCP_LITELLM_BASE_URL,
@@ -207,6 +240,7 @@ export async function createWorkspaceLiveFixture(
     calls.keys += 1;
     const key = await createKey(input);
     keyIds.add(key.keyId);
+    keyResourceKeys.set(key.keyId, input.slug);
     return key;
   };
   const revokeKey = llmGateway.revokeVirtualKey.bind(llmGateway);
@@ -230,9 +264,12 @@ export async function createWorkspaceLiveFixture(
   };
   fixture = {
     projectId,
+    ownerId,
     projectKey,
     store,
     docker,
+    dockerMetrics,
+    image: deps.image ?? "evcp/workspace-next:1",
     calls,
     audits,
     get orchestrator() {
@@ -251,29 +288,54 @@ export async function createWorkspaceLiveFixture(
       await Promise.all(pendingRefills);
       await pool.waitForIdle();
     },
-    async assertResourcesRemoved() {
+    async assertResourcesRemoved({ resourceKey } = {}) {
+      const targets = resourceKey ? [resourceKey] : [...resourceKeys];
       const query = createPgQuery({ connectionString: databaseUrl });
-      for (const key of resourceKeys) {
+      for (const key of targets) {
         const schema = await query(
           "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1",
           [schemaNameFor(key)]
         );
         assert.equal(schema.rowCount, 0, "test schema must be removed");
+        const role = await query("SELECT 1 FROM pg_roles WHERE rolname = $1", [roleNameFor(key)]);
+        assert.equal(role.rowCount, 0, "test database role must be removed");
         assert.equal(
           await minio.bucketExists(bucketNameFor(key)),
           false,
           "test bucket must be removed"
         );
+        assert.equal(
+          activeIdentities.has(bucketNameFor(key)),
+          false,
+          "scoped MinIO user and policy must be removed successfully"
+        );
       }
-      for (const name of containerNames) await assertLiveContainerAbsent(docker, name);
+      const names = resourceKey ? [`evcp-ws-${resourceKey}`] : [...containerNames];
+      for (const name of names) await assertLiveContainerAbsent(docker, name);
       const volumes = await docker.listManagedVolumes();
       assert.equal(
-        volumes.some((volume) =>
-          [...resourceKeys].some((key) => volume.name === workspaceVolumeName(key))
-        ),
+        volumes.some((volume) => targets.some((key) => volume.name === workspaceVolumeName(key))),
         false
       );
-      assert.equal(keyIds.size, 0, "every created gateway key must be revoked successfully");
+      assert.equal(
+        [...keyIds].some((id) => targets.includes(keyResourceKeys.get(id))),
+        false,
+        "every created gateway key must be revoked successfully"
+      );
+      assert.deepEqual(
+        await secrets.listNames(projectId),
+        [],
+        "project credentials must be removed"
+      );
+      const persistedSecrets = await query("SELECT 1 FROM project_secrets WHERE project_id = $1", [
+        projectId
+      ]);
+      assert.equal(persistedSecrets.rowCount, 0, "persisted project credentials must be removed");
+      assert.equal(
+        (await deps.runtimeRecords.list()).some(({ record }) => record.projectId === projectId),
+        false,
+        "project runtime ownership must be removed"
+      );
     }
   };
   await secrets.hydrate();

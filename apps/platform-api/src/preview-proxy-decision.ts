@@ -31,7 +31,7 @@ export async function resolvePreviewProxyDecision(
   services: PersistenceAuthServices,
   headers: HeaderBag,
   slug: string
-): Promise<{ status: number } | { upstream: string }> {
+): Promise<{ status: number } | { upstream: string; previewBase?: string }> {
   let auth: WorkspaceAuthContext | null = null;
   try {
     auth = await resolveWorkspaceAuth(services, headers ?? {});
@@ -39,7 +39,9 @@ export async function resolvePreviewProxyDecision(
     auth = null;
   }
   const resolution = await resolvePreviewTarget(services.workspaceOrchestrator, auth, slug);
-  return resolution.ok ? { upstream: resolution.upstream } : { status: resolution.status };
+  return resolution.ok
+    ? { upstream: resolution.upstream, ...(resolution.previewBase ? { previewBase: resolution.previewBase } : {}) }
+    : { status: resolution.status };
 }
 
 export function wantsPreviewJson(headers: HeaderBag): boolean {

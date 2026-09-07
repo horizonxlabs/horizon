@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { buildDevContainerSpec, createMemoryDockerEngine } =
+const { buildDevContainerSpec, buildWarmContainerSpec, createMemoryDockerEngine } =
   await import("../../apps/platform-api/src/workspace-orchestrator/docker-engine.ts");
 
 const baseInput = {
@@ -35,6 +35,25 @@ test("builds a locked-down dev container spec", () => {
   assert.ok(spec.env.includes("DATABASE_URL=postgresql://x"));
   assert.equal(spec.labels["evcp.project-slug"], "leave-tracker");
   assert.equal(spec.labels["evcp.project-id"], "prj_leave_tracker");
+});
+
+test("builds an anonymous warm container with its immutable physical preview base", () => {
+  const env = { DATABASE_URL: "postgresql://warm" };
+  const spec = buildWarmContainerSpec({
+    slotId: "warm_1",
+    resourceKey: "warm-resource-1",
+    image: "evcp/workspace-next:1",
+    env,
+    cpuCores: 1,
+    memoryMb: 2048,
+    network: "evcp-internal",
+    workspaceVolume: "evcp-ws-warm-resource-1-data"
+  });
+
+  assert.ok(spec.env.includes("EVCP_PREVIEW_BASE=/preview/warm-resource-1"));
+  assert.equal(spec.name, "evcp-ws-warm-resource-1");
+  assert.deepEqual(env, { DATABASE_URL: "postgresql://warm" });
+  assert.equal(spec.labels["evcp.project-id"], undefined);
 });
 
 test("memory docker engine tracks lifecycle", async () => {

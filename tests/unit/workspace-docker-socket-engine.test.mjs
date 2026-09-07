@@ -1,5 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createSwarmServiceEngine } from "../../apps/platform-api/src/workspace-orchestrator/swarm-service-engine.ts";
+
+test("release service update atomically merges image and environment using one inspected version", async () => {
+  const calls = [];
+  const engine = createSwarmServiceEngine({
+    request: async (input) => {
+      calls.push(input);
+      return {
+        status: 200,
+        json: async () => ({
+          Version: { Index: 42 },
+          Spec: {
+            Name: "evcp_platform-api",
+            Labels: { managed: "true" },
+            TaskTemplate: {
+              ForceUpdate: 6,
+              ContainerSpec: {
+                Image: "repo/evcp-platform-api:v1",
+                Env: [
+                  "EVCP_VERSION=v1",
+                  "DATABASE_URL=postgres://secret=a",
+                  "EVCP_WORKSPACE_IMAGE=repo/evcp-workspace-next:v1"
+                ],
+                Mounts: [{ Type: "bind", Source: "/data", Target: "/data" }]
+              }
+            }
+          }
+        })
+      };
+    }
+  });
+  assert.equal(typeof engine.updateService, "function", "atomic service update must exist");
+  await engine.updateService("evcp_platform-api", {
+    image: "repo/evcp-platform-api:v2",
+    envPatch: {
+      EVCP_VERSION: "v2",
+      EVCP_WORKSPACE_IMAGE: "repo/evcp-workspace-next:v2",
+      EXTRA: "new"
+    }
+  });
+  assert.deepEqual(
+    calls.map(({ method, path }) => ({ method, path })),
+    [
+      { method: "GET", path: "/services/evcp_platform-api" },
+      { method: "POST", path: "/services/evcp_platform-api/update?version=42" }
+    ]
+  );
+  assert.deepEqual(calls[1].body, {
+    Name: "evcp_platform-api",
+    Labels: { managed: "true" },
+    TaskTemplate: {
+      ForceUpdate: 7,
+      ContainerSpec: {
+        Image: "repo/evcp-platform-api:v2",
+        Env: [
+          "EVCP_VERSION=v2",
+          "DATABASE_URL=postgres://secret=a",
+          "EVCP_WORKSPACE_IMAGE=repo/evcp-workspace-next:v2",
+          "EXTRA=new"
+        ],
+        Mounts: [{ Type: "bind", Source: "/data", Target: "/data" }]
+      }
+    }
+  });
+});
 
 const { createDockerSocketEngine, buildCreateContainerBody } =
   await import("../../apps/platform-api/src/workspace-orchestrator/docker-socket-engine.ts");

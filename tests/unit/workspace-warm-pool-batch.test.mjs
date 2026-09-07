@@ -63,7 +63,7 @@ test(
     });
     const cleanup = async () => {
       for (const slot of await fixture.store.list()) {
-        await cleanupWarmSlotResources(fixture.deps, slot);
+        assert.equal(await cleanupWarmSlotResources(fixture.deps, slot), "cleaned");
         await fixture.store.remove(slot.id);
       }
     };

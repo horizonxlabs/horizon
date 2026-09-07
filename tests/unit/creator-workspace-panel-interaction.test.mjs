@@ -142,7 +142,7 @@ test("authorized Preview keeps visible sandbox progress until the iframe has loa
   globalThis.fetch = async () => ({
     ok: true,
     status: 200,
-    json: async () => ({ ok: true, data: { authorized: true } })
+    json: async () => ({ ok: true, data: { authorized: true, previewKey: "project-1" } })
   });
   let renderer;
   try {

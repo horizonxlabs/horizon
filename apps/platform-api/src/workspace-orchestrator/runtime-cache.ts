@@ -1,4 +1,5 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
+import { workspacePhysicalKey } from "./runtime-location";
 
 /** Local publication ordering is independent of asynchronous database lease responses. */
 export function createWorkspaceRuntimeCache() {
@@ -24,6 +25,12 @@ export function createWorkspaceRuntimeCache() {
   return {
     records: records as ReadonlyMap<string, WorkspaceContainerRecord>,
     set,
+    findByResourceKey(resourceKey: string): WorkspaceContainerRecord | null {
+      for (const record of records.values()) {
+        if (workspacePhysicalKey(record) === resourceKey) return record;
+      }
+      return null;
+    },
     invalidate(projectId: string) {
       revisionFor(projectId).value = ++sequence;
       forgetDeleted(projectId);

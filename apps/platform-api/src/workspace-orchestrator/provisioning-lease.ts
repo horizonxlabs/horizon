@@ -92,9 +92,14 @@ export function createProvisioningLeaseCoordinator(
   return {
     assertOwned,
     secretAttempt,
-    async adoptSecrets(projectId: string, secrets: ProjectSecretStore): Promise<void> {
+    async adoptSecrets(
+      projectId: string,
+      secrets: ProjectSecretStore,
+      repair?: (attempt: ProvisioningSecretAttempt) => Promise<void>
+    ): Promise<void> {
       if (!active.has(projectId)) return;
       await secrets.adoptProvisioning(projectId, secretAttempt(projectId));
+      await repair?.(secretAttempt(projectId));
     },
     async run<T>(
       projectId: string,

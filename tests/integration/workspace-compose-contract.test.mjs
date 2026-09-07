@@ -135,6 +135,28 @@ test("release compose pulls workspace image and disables dev auth bridge", () =>
   assert.match(joined, /EVCP_ALLOW_SIMULATE_LOGIN=0/);
 });
 
+test("release API, runtime image, and image-cache job resolve to the same selected release", () => {
+  const api = releaseCompose.services["platform-api"];
+  for (const version of ["v1.2.3", "v1.2.4-rc.1"]) {
+    const values = { EVCP_IMAGE_REPOSITORY: "registry.example/evcp", EVCP_VERSION: version };
+    const resolve = (value) =>
+      value.replace(/\$\{([A-Z_]+):\?[^}]*\}/g, (_match, name) => {
+        assert.ok(Object.hasOwn(values, name), `unexpected required release variable ${name}`);
+        return values[name];
+      });
+    assert.equal(resolve(api.image), `registry.example/evcp/evcp-platform-api:${version}`);
+    assert.equal(resolve(api.environment.EVCP_VERSION), version);
+    assert.equal(
+      resolve(api.environment.EVCP_WORKSPACE_IMAGE),
+      `registry.example/evcp/evcp-workspace-next:${version}`
+    );
+    assert.equal(
+      resolve(releaseCompose.services["workspace-next-image"].image),
+      `registry.example/evcp/evcp-workspace-next:${version}`
+    );
+  }
+});
+
 test("release ingress is the only published network boundary and supports domain TLS", () => {
   for (const name of [
     "postgres",

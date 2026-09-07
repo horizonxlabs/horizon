@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
 import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
+import { seedCompleteOwnedSecrets } from "./workspace-warm-owned-repair-fixture.mjs";
 import {
   cleanupOrphanWorkspaceResources,
   workspaceWarmResourceLabels
@@ -129,6 +130,7 @@ test("expired claim ownership allows exactly one reconciler to clean", async () 
   await fixture.pool.ensureCapacity();
   await runtimeStore.provisioningLeases.acquire("project-1", "crashed-owner", 1_000);
   await fixture.pool.claim("project-1");
+  fixture.previewExitCode = 1;
   runtime.advance(1_001);
 
   await Promise.all([fixture.pool.reconcile(), fixture.createPool().reconcile()]);
@@ -183,6 +185,8 @@ test("reconcile rechecks runtime ownership after acquiring cleanup ownership", a
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  await seedCompleteOwnedSecrets(fixture, "project-1");
+  fixture.previewExitCode = 1;
   const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
   fixture.store.acquireCleanup = async (...args) => {
     const owned = await acquireCleanup(...args);
@@ -209,16 +213,18 @@ test("concurrent reconciliation calls collapse into one pass", async () => {
   );
 });
 
-test("orphan cleanup preserves warm-labeled volumes transferred to durable runtimes", async () => {
+test("orphan cleanup preserves warm-labelled resources transferred to a durable runtime", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 1 });
   await fixture.pool.ensureCapacity();
   const removed = await cleanupOrphanWorkspaceResources({
     docker: fixture.docker,
     activeProjectIds: new Set(["project-1"]),
     activeWarmSlotIds: new Set(),
-    activeResourceKeys: new Set(["warm-resource-1"])
+    activeResourceKeys: new Set(["warm-resource-1"]),
+    isWarmResourceOwned: async () => false
   });
-  assert.equal(removed.includes("evcp-ws-warm-resource-1-data"), false);
+  assert.deepEqual(removed, []);
+  assert.equal(fixture.docker.state.containers.length, 1);
   assert.equal(fixture.docker.state.volumes.length, 1);
 });
 
@@ -266,6 +272,7 @@ test("reconcile emits one aggregate audit with no slot identifiers or credential
         ready: 0,
         claiming: 1,
         failed: 0,
+        staleImage: 0,
         preserved: 0,
         retired: 0,
         cleaned: 1,
@@ -351,6 +358,7 @@ test("reconcile retires a claim owned by a durable runtime without physical clea
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  await seedCompleteOwnedSecrets(fixture, "project-1");
   await fixture.createPool().reconcile();
   assert.deepEqual(await fixture.store.list(), []);
   assert.deepEqual(fixture.releasedSchemas, []);

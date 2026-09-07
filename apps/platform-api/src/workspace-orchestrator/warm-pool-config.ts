@@ -1,5 +1,5 @@
 import type { WorkspaceContainerRecord } from "@evcp/types";
-import { resourceKeyForProject } from "./resource-ports";
+import { workspacePhysicalKey } from "./runtime-location";
 
 export function resolveWorkspaceWarmPoolSize(
   env: Record<string, string | undefined>,
@@ -18,5 +18,5 @@ export function resolveWorkspaceWarmPoolSize(
 }
 
 export function physicalResourceKey(record: WorkspaceContainerRecord): string {
-  return record.resourceKey ?? resourceKeyForProject(record.projectId);
+  return workspacePhysicalKey(record);
 }

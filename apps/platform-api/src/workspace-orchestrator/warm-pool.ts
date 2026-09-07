@@ -2,11 +2,17 @@ import { randomUUID } from "node:crypto";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type {
   WarmWorkspaceAllocation,
+  WarmPoolStatus,
   WarmWorkspaceSlot,
   WorkspaceWarmSlotStore
 } from "./warm-pool-types";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
-import { countSlots, reconcileWorkspaceWarmPool } from "./warm-pool-reconciliation";
+import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
+import {
+  countSlots,
+  countStaleWarmImages,
+  reconcileWorkspaceWarmPool
+} from "./warm-pool-reconciliation";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupWarmSlotResources } from "./warm-pool-cleanup";
 import {
@@ -15,12 +21,14 @@ import {
   warmSlotOperationLease,
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
-import { isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
+import { isProjectClaimConflict, isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
 import { createWarmPoolWorkTracker } from "./warm-pool-work";
 import { recoverWarmClaim } from "./warm-pool-claim-recovery";
 import type { WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { prepareWarmSlot } from "./warm-pool-preparation";
 import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
+import { repairOwnedWarmSecrets, repairProjectWarmSecrets } from "./warm-pool-owned-repair";
+import type { ProvisioningSecretAttempt } from "./secret-store";
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
@@ -32,6 +40,8 @@ export interface WorkspaceWarmPool {
     assertProjectOwned: () => Promise<void>
   ): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
+  repairOwnedClaim(projectId: string, ownership: ProvisioningSecretAttempt): Promise<void>;
+  /** Retire only after the caller has persisted runtime ownership under its project lease. */
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown, assertProjectOwned: () => Promise<void>): Promise<void>;
   reconcile(publishRecovered?: WarmRecoveryPublisher): Promise<void>;
@@ -41,13 +51,7 @@ export interface WorkspaceWarmPool {
   isResourceOwned(resourceKey: string): Promise<boolean>;
   deleteProjectClaims(projectId: string, assertOwned: () => Promise<void>): Promise<void>;
 }
-export interface WarmPoolStatus {
-  target: number;
-  preparing: number;
-  ready: number;
-  claiming: number;
-  failed: number;
-}
+export type { WarmPoolStatus } from "./warm-pool-types";
 
 export interface WorkspaceWarmPoolOptions {
   targetSize: number;
@@ -58,9 +62,17 @@ export interface WorkspaceWarmPoolOptions {
   createSlotIdentity?: () => Pick<WarmWorkspaceSlot, "id" | "resourceKey">;
   createOperationOwner?: () => string;
   operationLeaseMs?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): WorkspaceWarmPool {
+  const platformVersion = (options.env ?? process.env).EVCP_VERSION;
+  const workspaceImage = (options.deps.image ?? "evcp/workspace-next:1").split("@", 1)[0]!;
+  const separator = workspaceImage.lastIndexOf(":");
+  const workspaceVersion =
+    separator > workspaceImage.lastIndexOf("/") ? workspaceImage.slice(separator + 1) : undefined;
+  if (platformVersion && workspaceVersion && platformVersion !== workspaceVersion)
+    console.warn("[workspace] configured platform and workspace image tags differ");
   const now = options.now ?? (() => new Date());
   const createSlotIdentity = options.createSlotIdentity ?? defaultWarmSlotIdentity;
   const createOperationOwner = options.createOperationOwner ?? randomUUID;
@@ -130,23 +142,31 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
               })
             : undefined;
         try {
-          const owned = await options.store.acquireCleanup(
-            slot.id,
-            slot.state,
-            operationLease(ownerId)
-          );
+          const owned = await options.store.acquireCleanup(slot.id, slot, operationLease(ownerId));
           if (!owned) continue;
           await withMaintainedWarmSlotOperationLease(
             { store: options.store, slotId: owned.id, ownerId, now, leaseMs: operationLeaseMs },
             async (ownership) => {
               try {
                 const runtimeKeys = await durableRuntimeKeys();
-                if (!runtimeKeys.has(owned.resourceKey)) {
-                  await cleanupSlotResources(owned, async () => {
-                    await projectOwnership?.assertOwned();
-                    await ownership.assertOwned();
+                if (runtimeKeys.has(owned.resourceKey)) {
+                  const repair = await repairOwnedWarmSecrets(options, owned, {
+                    token: ownerId,
+                    assertOwned: async () => {
+                      await projectOwnership?.assertOwned();
+                      await ownership.assertOwned();
+                    }
                   });
+                  if (repair === "preserve") return;
+                  await ownership.assertOwned();
+                  await options.store.remove(owned.id, ownerId);
+                  return;
                 }
+                const cleanup = await cleanupSlotResources(owned, async () => {
+                  await projectOwnership?.assertOwned();
+                  await ownership.assertOwned();
+                });
+                if (cleanup === "preserved") throw new WarmWorkspaceClaimRollbackError();
                 if (options.targetSize === 0) {
                   await options.store.remove(owned.id, ownerId);
                   return;
@@ -234,9 +254,12 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     },
     ensureCapacity,
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
+    repairOwnedClaim: (projectId, ownership) =>
+      repairProjectWarmSecrets(options, projectId, ownership),
     waitForIdle: work.waitForIdle,
     async getStatus() {
-      return countSlots(await options.store.list(), options.targetSize);
+      const slots = await options.store.list();
+      return countSlots(slots, options.targetSize, await countStaleWarmImages(slots, options.deps));
     },
     async getActiveSlotIds() {
       return new Set((await options.store.list()).map((slot) => slot.id));
@@ -288,7 +311,18 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       }
     },
     async completeClaim(slotId) {
-      await options.store.remove(slotId);
+      try {
+        await options.store.remove(slotId);
+      } catch (error) {
+        // A committed deletion with a lost response must not roll back its new runtime owner.
+        let remaining: WarmWorkspaceSlot[];
+        try {
+          remaining = await options.store.list();
+        } catch {
+          throw new WarmWorkspaceClaimRollbackError();
+        }
+        if (remaining.some((slot) => slot.id === slotId)) throw error;
+      }
     },
     async failClaim(slotId, _error, assertProjectOwned) {
       const slot = (await options.store.list()).find((candidate) => candidate.id === slotId);
@@ -296,16 +330,21 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       const failureCount = slot.failureCount + 1;
       const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
       const ownerId = createOperationOwner();
-      const owned = await options.store.acquireCleanup(slotId, slot.state, operationLease(ownerId));
+      const owned = await options.store.acquireCleanup(slotId, slot, operationLease(ownerId));
       if (!owned) return;
       await withMaintainedWarmSlotOperationLease(
         { store: options.store, slotId, ownerId, now, leaseMs: operationLeaseMs },
         async (ownership) => {
           try {
-            await cleanupSlotResources(owned, async () => {
+            await assertProjectOwned();
+            await ownership.assertOwned();
+            if ((await durableRuntimeKeys()).has(owned.resourceKey))
+              throw new WarmWorkspaceClaimRollbackError();
+            const cleanup = await cleanupSlotResources(owned, async () => {
               await assertProjectOwned();
               await ownership.assertOwned();
             });
+            if (cleanup === "preserved") throw new WarmWorkspaceClaimRollbackError();
             await options.store.remove(slotId, ownerId);
           } catch {
             await options.store.markFailed(
@@ -350,14 +389,4 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   }
 
   return pool;
-}
-
-function isProjectClaimConflict(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const failure = error as { code?: string; meta?: { target?: unknown }; constraint?: string };
-  return (
-    (failure.code === "P2002" &&
-      /claim_project_id|claimProjectId/.test(JSON.stringify(failure.meta?.target) ?? "")) ||
-    (failure.code === "23505" && failure.constraint === "workspace_warm_slots_claim_project_id_key")
-  );
 }

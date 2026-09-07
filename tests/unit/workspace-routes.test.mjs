@@ -92,3 +92,77 @@ test("preview target resolves for members, wakes idle workspaces, rejects others
     status: 404
   });
 });
+
+test("preview target authorizes the logical project behind a physical runtime key", async () => {
+  const warmRecord = {
+    projectId: "prj_alpha",
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  const creator = { userId: "u-creator", roles: ["creator"], projectIds: ["prj_alpha"] };
+  const outsider = { userId: "u-outsider", roles: ["creator"], projectIds: [] };
+  const activity = [];
+  const orchestrator = {
+    findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    findWorkspaceByPreviewKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-warm-resource-1",
+        previewKey: "warm-resource-1",
+        previewBase: "/preview/warm-resource-1"
+      };
+    },
+    getWorkspace: () => null,
+    async wakeWorkspace() {},
+    markActivity: (projectId) => activity.push(projectId)
+  };
+
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "warm-resource-1"), {
+    ok: true,
+    upstream: "http://evcp-ws-warm-resource-1:3000"
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, outsider, "warm-resource-1"), {
+    ok: false,
+    status: 403
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "missing-resource"), {
+    ok: false,
+    status: 404
+  });
+  assert.deepEqual(activity, ["prj_alpha"]);
+});
+
+test("preview target keeps an exact-id legacy runtime on its logical preview path", async () => {
+  const legacyRecord = {
+    projectId: "prj_alpha",
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  const orchestrator = {
+    findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? legacyRecord : null),
+    findWorkspaceByPreviewKey: (key) => (key === "warm-resource-1" ? legacyRecord : null),
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-prj-alpha",
+        previewKey: "prj-alpha",
+        previewBase: "/preview/prj-alpha"
+      };
+    },
+    getWorkspace: () => null,
+    async wakeWorkspace() {},
+    markActivity() {}
+  };
+
+  assert.deepEqual(
+    await resolvePreviewTarget(
+      orchestrator,
+      { userId: "u-creator", roles: ["creator"], projectIds: ["prj_alpha"] },
+      "warm-resource-1"
+    ),
+    {
+      ok: true,
+      upstream: "http://evcp-ws-prj-alpha:3000",
+      previewBase: "/preview/prj-alpha"
+    }
+  );
+});

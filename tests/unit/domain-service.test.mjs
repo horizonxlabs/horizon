@@ -1,6 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDomainService, InvalidDomain } from "../../apps/platform-api/src/system/domain-service.ts";
+import {
+  createDomainService,
+  InvalidDomain
+} from "../../apps/platform-api/src/system/domain-service.ts";
+import { createSwarmServiceEngine } from "../../apps/platform-api/src/workspace-orchestrator/swarm-service-engine.ts";
+
+test("domain updates preserve release image and release environment through the engine env wrapper", async () => {
+  const posts = [];
+  const engine = createSwarmServiceEngine({
+    request: async ({ method, path, body }) => {
+      if (method === "POST") posts.push({ path, body });
+      return {
+        status: 200,
+        json: async () => ({
+          Version: { Index: 8 },
+          Spec: {
+            TaskTemplate: {
+              ContainerSpec: {
+                Image: "repo/service:v2",
+                Env: [
+                  "EVCP_VERSION=v2",
+                  "EVCP_WORKSPACE_IMAGE=repo/evcp-workspace-next:v2",
+                  "SECRET=value=with=equals"
+                ]
+              }
+            }
+          }
+        })
+      };
+    }
+  });
+  await makeService({ engine }).service.setDomain("app.example.com");
+  await new Promise(setImmediate);
+  assert.equal(posts.length, 3);
+  for (const { path, body } of posts) {
+    assert.match(path, /update\?version=8$/);
+    assert.equal(body.TaskTemplate.ContainerSpec.Image, "repo/service:v2");
+    assert.ok(body.TaskTemplate.ContainerSpec.Env.includes("EVCP_VERSION=v2"));
+    assert.ok(
+      body.TaskTemplate.ContainerSpec.Env.includes(
+        "EVCP_WORKSPACE_IMAGE=repo/evcp-workspace-next:v2"
+      )
+    );
+    assert.ok(body.TaskTemplate.ContainerSpec.Env.includes("SECRET=value=with=equals"));
+  }
+  assert.match(posts.at(-1).path, /evcp_platform-api/);
+});
 
 function fakeEngine() {
   const calls = [];
@@ -95,7 +141,10 @@ test("setDomain writes a domain.env with the full domain-carrying var set and no
   assert.match(content, /(^|\n)EVCP_STORE_WEB_URL=https:\/\/app\.example\.com($|\n)/);
   assert.match(content, /(^|\n)EVCP_S3_PUBLIC_URL=https:\/\/storage\.app\.example\.com($|\n)/);
   assert.match(content, /(^|\n)KEYCLOAK_PUBLIC_URL=https:\/\/app\.example\.com\/auth($|\n)/);
-  assert.match(content, /(^|\n)KEYCLOAK_ISSUER_URL=https:\/\/app\.example\.com\/auth\/realms\/evcp($|\n)/);
+  assert.match(
+    content,
+    /(^|\n)KEYCLOAK_ISSUER_URL=https:\/\/app\.example\.com\/auth\/realms\/evcp($|\n)/
+  );
   assert.doesNotMatch(content.toLowerCase(), /secret|password|token/);
 });
 
@@ -144,7 +193,9 @@ test("setDomain rolls evcp_caddy, evcp_keycloak, then evcp_platform-api LAST and
 });
 
 test("getDomainStatus reflects the persisted domain and current env", async () => {
-  const { service } = makeService({ env: { EVCP_PUBLIC_API_URL: "http://x", EVCP_CADDY_ADDRESS: ":80" } });
+  const { service } = makeService({
+    env: { EVCP_PUBLIC_API_URL: "http://x", EVCP_CADDY_ADDRESS: ":80" }
+  });
   const before = await service.getDomainStatus();
   assert.equal(before.domain, null);
 

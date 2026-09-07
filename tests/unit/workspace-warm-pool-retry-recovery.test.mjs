@@ -11,7 +11,11 @@ for (const implementation of ["repository", "memory"]) {
       targetSize: 1,
       previewExitCode: 1,
       ...(implementation === "repository"
-        ? { store: new WorkspaceWarmSlotRepositoryBackedStore(new DeterministicWarmSlotPersistenceClient()) }
+        ? {
+            store: new WorkspaceWarmSlotRepositoryBackedStore(
+              new DeterministicWarmSlotPersistenceClient()
+            )
+          }
         : {})
     });
     await fixture.pool.ensureCapacity();
@@ -21,13 +25,17 @@ for (const implementation of ["repository", "memory"]) {
       now: failed.retryAfter,
       expiresAt: "2026-09-05T00:00:06.000Z"
     };
-    await fixture.store.acquireCleanup(failed.id, "failed", retryLease);
+    await fixture.store.acquireCleanup(failed.id, failed, retryLease);
     await fixture.store.retryPreparing(failed.id, "crashed-generation-resource", retryLease);
-    const cleanup = await fixture.store.acquireCleanup(failed.id, "preparing", {
-      ownerId: "crashed-cleaner",
-      now: "2026-09-05T00:00:06.001Z",
-      expiresAt: "2026-09-05T00:00:07.000Z"
-    });
+    const cleanup = await fixture.store.acquireCleanup(
+      failed.id,
+      { state: "preparing", resourceKey: "crashed-generation-resource" },
+      {
+        ownerId: "crashed-cleaner",
+        now: "2026-09-05T00:00:06.001Z",
+        expiresAt: "2026-09-05T00:00:07.000Z"
+      }
+    );
     assert.equal(cleanup.retryAfter, null);
     const recovering = fixture.createPool();
     fixture.setNow(new Date("2026-09-05T00:00:06.500Z"));
@@ -55,7 +63,11 @@ for (const implementation of ["repository", "memory"]) {
       previewExitCode: 1,
       operationLeaseMs: 1_000,
       ...(implementation === "repository"
-        ? { store: new WorkspaceWarmSlotRepositoryBackedStore(new DeterministicWarmSlotPersistenceClient()) }
+        ? {
+            store: new WorkspaceWarmSlotRepositoryBackedStore(
+              new DeterministicWarmSlotPersistenceClient()
+            )
+          }
         : {})
     });
     await fixture.pool.ensureCapacity();

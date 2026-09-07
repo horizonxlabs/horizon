@@ -124,6 +124,7 @@ function cloneRow(row) {
 
 function matchesWhere(row, where) {
   if (!row) return false;
+  if (where.resourceKey !== undefined && row.resourceKey !== where.resourceKey) return false;
   if (where.state && row.state !== where.state) return false;
   if (where.operationOwner && row.operationOwner !== where.operationOwner) return false;
   if (where.operationExpiresAt?.gt && !(row.operationExpiresAt > where.operationExpiresAt.gt)) {

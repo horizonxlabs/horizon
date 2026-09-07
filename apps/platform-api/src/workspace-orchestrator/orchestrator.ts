@@ -2,7 +2,7 @@ import type { WorkspaceContainerRecord } from "@evcp/types";
 import { assertTransition } from "./state";
 import { schemaNameFor, roleNameFor } from "./postgres-provisioner";
 import { resourceKeyForProject } from "./resource-ports";
-import { buildDevContainerSpec } from "./docker-engine";
+import { buildWorkspaceRecoverySpec } from "./workspace-recreation";
 import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 import {
@@ -13,7 +13,9 @@ import {
 } from "./workspace-lifecycle";
 import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
+import { inspectWorkspaceContainer, resolveWorkspacePreviewLocation } from "./runtime-location";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
+import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 import { createWorkspaceRuntimeCache } from "./runtime-cache";
@@ -51,29 +53,24 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     await leases.persist({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
   };
 
-  const buildWorkspaceSpec = async (projectId: string, logicalKey: string, physicalKey: string) =>
-    buildDevContainerSpec({
-      projectId,
-      slug: logicalKey,
+  const buildWorkspaceSpec = async (record: WorkspaceContainerRecord) =>
+    buildWorkspaceRecoverySpec(record, await deps.secrets.resolveEnv(record.projectId), {
       image,
-      env: {
-        ...(await deps.secrets.resolveEnv(projectId)),
-        EVCP_PREVIEW_BASE: `/preview/${logicalKey}`
-      },
       cpuCores,
       memoryMb,
-      network,
-      workspaceVolume: workspaceVolumeName(physicalKey)
+      network
     });
-
   const recoverExistingWorkspace = async (
     existing: WorkspaceContainerRecord,
     input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
     const physicalKey = physicalResourceKey(existing);
-    const logicalKey = resourceKeyForProject(input.projectId);
-    await leases.adoptSecrets(input.projectId, deps.secrets);
-    const found = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
+    await leases.adoptSecrets(
+      input.projectId,
+      deps.secrets,
+      (attempt) => deps.warmPool?.repairOwnedClaim?.(input.projectId, attempt) ?? Promise.resolve()
+    );
+    const found = await inspectWorkspaceContainer(deps.docker, existing);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
@@ -106,9 +103,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       workspaceVolumeName(physicalKey),
       workspaceVolumeLabels(input.projectId)
     );
-    const { containerId } = await deps.docker.createContainer(
-      await buildWorkspaceSpec(input.projectId, logicalKey, physicalKey)
-    );
+    const { containerId } = await deps.docker.createContainer(await buildWorkspaceSpec(existing));
     await deps.docker.startContainer(containerId);
     await waitForPreviewReady(deps.docker, containerId);
     const recovered = save({
@@ -228,16 +223,17 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     const allocation = await deps.warmPool?.claim(input.projectId, assertProjectOwned);
     if (allocation) {
       try {
-        const record = await provisionClaimedWorkspace(input, allocation);
+        const { record, timings } = await provisionClaimedWorkspace(input, allocation);
         auditPoolEvent({
           action: "workspace.pool_claimed",
           projectId: input.projectId,
-          metadata: { slotId: allocation.slotId }
+          metadata: { slotId: allocation.slotId, ...timings }
         });
         refillWarmPool();
         return record;
       } catch (error) {
         await assertProjectOwned();
+        if (error instanceof WarmWorkspaceClaimRollbackError) throw error;
         await deps.warmPool!.failClaim(allocation.slotId, error, assertProjectOwned);
         auditPoolEvent({
           action: "workspace.pool_claim_failed",
@@ -258,15 +254,14 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       runtimeRecords = store;
       deps.runtimeRecords = store;
       for (const snapshot of await store.list()) {
-        // Reconcile persisted state with Docker so a stack restart cannot leave preview stuck at 503.
+        // A missing/replaced container must go through wake to health-check and persist its ID.
+        const found =
+          snapshot.record.state === "running"
+            ? await inspectWorkspaceContainer(deps.docker, snapshot.record).catch(() => null)
+            : null;
         const live =
-          snapshot.record.state !== "running" || !snapshot.record.containerId
-            ? true
-            : ((
-                await deps.docker
-                  .inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`)
-                  .catch(() => null)
-              )?.running ?? false);
+          snapshot.record.state !== "running" ||
+          (found?.running && found.containerId === snapshot.record.containerId);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
         cache.set(record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
@@ -274,6 +269,24 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     },
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
+    },
+
+    findWorkspaceByResourceKey(resourceKey: string): WorkspaceContainerRecord | null {
+      return cache.findByResourceKey(resourceKey);
+    },
+
+    findWorkspaceByPreviewKey(previewKey: string): WorkspaceContainerRecord | null {
+      return (
+        cache.findByResourceKey(previewKey) ??
+        [...records.values()].find(
+          (record) => resourceKeyForProject(record.projectId) === previewKey
+        ) ??
+        null
+      );
+    },
+
+    async resolvePreviewLocation(projectId: string) {
+      return resolveWorkspacePreviewLocation(deps.docker, mustGet(projectId));
     },
 
     async listSecretNames(projectId: string): Promise<string[]> {
@@ -335,7 +348,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
-      const next = await recoverExistingWorkspace(record, { projectId, slug: record.slug });
+      const next = await this.provisionWorkspace({ projectId, slug: record.slug });
       audit({ action: "workspace.started", projectId });
       return next;
     },
@@ -343,9 +356,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async archiveWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "archived");
-      if (record.containerId) {
-        await deps.docker.stopContainer(record.containerId).catch(() => undefined);
-        await deps.docker.removeContainer(record.containerId);
+      const container = await inspectWorkspaceContainer(deps.docker, record);
+      if (container) {
+        await deps.docker.stopContainer(container.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(container.containerId);
       }
       const next = save({
         ...record,

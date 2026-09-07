@@ -2,7 +2,8 @@
 
 Turns on real workspace provisioning. A cold allocation creates a Postgres schema and role,
 MinIO bucket and scoped identity, LiteLLM key, and workspace container. A warm allocation reuses
-prepared physical resources; its final container and preview URL use the logical project key.
+prepared physical resources, including the same running container. Its container and preview URL
+use the runtime's physical `resourceKey`; authorization always checks the owning logical project ID.
 
 ## Prerequisites
 
@@ -124,8 +125,9 @@ intents requires a provider-confirmed completion boundary and is not implemented
 
 ## 4. Verify end-to-end (live)
 
-The cold and warm smoke tests are opt-in. Without opt-in they each report one skip and perform
-no provisioning or database connections:
+The real Docker cold and warm smoke tests are opt-in. Without opt-in each real case reports one
+skip and performs no external provisioning or database connections. The warm file also executes
+a local contract case against the real orchestrator, pool, and authorization resolver with memory adapters:
 
 ```bash
 node --import tsx --test tests/integration/provision-full-live.test.mjs
@@ -154,7 +156,7 @@ Export a dedicated live-test environment before running the commands below:
   (defaults: `evcp/workspace-next:1` and `evcp-internal`).
 
 Apply the checked-in migrations only to that disposable database, then run the two tests
-separately. The cold smoke explicitly uses target zero; the warm smoke uses target one regardless
+separately. The cold smoke explicitly uses target zero; the warm smoke uses target three regardless
 of the deployment's configured pool size.
 
 ```bash
@@ -168,11 +170,26 @@ EVCP_WARM_POOL_LIVE=1 EVCP_WORKSPACE_REAL_ADAPTERS=1 \
   node --import tsx --test tests/integration/workspace-warm-pool-live.test.mjs
 ```
 
-The warm smoke must report a healthy claim with `schemas=0 buckets=0 keys=0` created on the
-request path, then one ready replacement. It holds the asynchronous refill at the test boundary
-until the claim and logical preview URL are verified, so refill activity cannot hide an extra
-request-time creation. It then releases and awaits the refill requested by the orchestrator.
-It uses the real Prisma slot/runtime repositories and encrypted PostgreSQL secret persistence.
+The warm smoke requires three ready containers using `EVCP_WORKSPACE_IMAGE`. It measures from
+the provision call through project-membership authorization and a successful `/api/health`
+request at `/preview/<runtime.resourceKey>`, with a strict elapsed budget below 3000 ms. Docker
+adapter create/start/stop/remove deltas must all be zero, as must schema/bucket/key creation.
+The container ID must already belong to a ready slot. It holds asynchronous refill at the fixture
+boundary until those assertions finish, then releases and awaits the orchestrator's scheduled
+refill back to three matching-image slots. A claimed allocation is never recycled into the pool.
+
+The case passes the logical project ID and a Creator actor to the production generation service.
+A deterministic model-round fixture requests the real `write_workspace_file`, `edit_workspace_file`,
+and allowlisted `run_workspace_command` (`npm run build`) tools. Production container resolution,
+path/command policies, action runner, snapshot/validation/commit lifecycle, and Docker execution
+remain active. The build uses the production disposable validation tree. Observed Docker targets
+must all equal the claimed physical container ID. The production file browser reads the marker
+using the logical project ID before and after stop/wake, and preview must remain healthy.
+After deletion it verifies container, volume, schema, database role, bucket, successful scoped
+MinIO user/policy removal and LiteLLM key revocation, and cleared runtime/secret persistence before
+fixture teardown. The live route resolver receives a test authenticated membership context; this
+does not measure a browser session, public ingress, OIDC, or an upstream model provider. Verify those separately in Creator below.
+It uses real Prisma repositories and encrypted PostgreSQL secret persistence.
 
 An `after()` hook is registered before fixture setup. It joins provisioning and waits for the
 pool's idle boundary, including refills scheduled internally after claim failure, before deleting
@@ -185,16 +202,18 @@ verification and remain in the disposable database for subsequent operator-contr
 Container-absence failures report only the container name and a boolean; Docker environment
 objects must never be included in assertion output.
 
-To exercise the deployed API itself, use a disposable project and a valid session header. Replace
-`<project-key>` with the project ID after replacing underscores with hyphens:
+To exercise deployed ingress and session cookies, create a disposable project in Creator and open
+Workspace. Read its `resourceKey` from the workspace response (or the explicit runtime query
+below); do not derive it from the project ID. Use Creator's authenticated preview-session request
+and confirm the response's `previewKey` agrees. The cookie must be HttpOnly, SameSite=Strict,
+Secure on HTTPS, and scoped to `/preview/<resourceKey>`.
 
 ```bash
-curl -sS -X POST http://localhost:3100/projects/<projectId>/workspace/provision \
-  -H "authorization: <valid session>" -H "content-type: application/json" \
-  -d '{"projectId":"<projectId>","slug":"<slug>"}'
-docker ps --format '{{.Names}}' | grep evcp-ws-<project-key>
-curl -sS -H "authorization: <valid session>" \
-  http://localhost:3100/preview/<project-key>/ -o /dev/null -w "%{http_code}\n"
+docker compose -f docker/docker-compose.yml exec postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT project_id, resource_key, container_id, state FROM workspace_runtime_records;"'
+docker ps --filter label=evcp.managed=true \
+  --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}'
 ```
 
 ## 5. Post-deploy smoke checks
@@ -202,15 +221,21 @@ curl -sS -H "authorization: <valid session>" \
 Run the live provisioning checks above, then use a disposable project in Creator to confirm the
 full lifecycle:
 
-1. Create the project and open Workspace; verify that provision completes and the preview serves.
+1. Confirm three ready matching-image slots. Record their container IDs and start times before
+   creating the project. Create it and open Workspace; the authorized preview must be usable in
+   less than three seconds. The claimed container ID and start time must match the prior snapshot;
+   no create/start/stop/remove may occur for that allocation during claim. Background refill may
+   create a different anonymous container. Confirm the pool returns to three ready slots.
 2. Submit a small governed generation request; verify the generated file/diff and refreshed
    preview.
 3. Publish the project and open the resulting application URL.
 4. Delete the disposable project; verify its project workspace container, volume, schema, and
    bucket are removed, while any remaining warm-slot counts stay at the configured target.
 
-If a claim falls back cold during the smoke, it is safe to continue; inspect the aggregate state
-and audit queries above to distinguish temporary refill from a persistent preparation failure.
+A cold fallback remains supported, but it does not pass hot-handoff acceptance. Inspect the
+aggregate state and audit queries above, restore three healthy matching-image slots, and repeat.
+For Swarm release alignment, safe configuration inspection, and rollback commands, see
+[Swarm deployment](../operations/swarm-deploy.md#verify-hot-workspace-handoff).
 
 ## Rollback (disable real mode or the warm pool)
 

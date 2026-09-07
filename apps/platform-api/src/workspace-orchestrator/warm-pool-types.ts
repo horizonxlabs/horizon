@@ -1,5 +1,14 @@
 export type WarmWorkspaceSlotState = "preparing" | "ready" | "claiming" | "cleaning" | "failed";
 
+export interface WarmPoolStatus {
+  target: number;
+  preparing: number;
+  ready: number;
+  claiming: number;
+  failed: number;
+  staleImage: number;
+}
+
 export interface WarmWorkspaceSlot {
   id: string;
   resourceKey: string;
@@ -31,6 +40,21 @@ export interface WarmWorkspaceAllocation {
   containerId: string;
   llmGatewayKeyId: string;
   env: Record<string, string>;
+}
+
+export interface WarmWorkspaceClaimTimings {
+  healthMs: number;
+  secretsMs: number;
+  runtimeMs: number;
+  completeMs: number;
+  totalMs: number;
+}
+
+/** Preserve durable ownership when rollback cannot safely return the allocation to its slot. */
+export class WarmWorkspaceClaimRollbackError extends Error {
+  constructor() {
+    super("warm workspace claim rollback is unsafe or incomplete");
+  }
 }
 
 /** Non-secret intent retained independently of the slot's retry/claim lifecycle. */
@@ -81,9 +105,10 @@ export interface WorkspaceWarmSlotStore {
     lease?: WarmSlotOperationLease
   ): Promise<boolean>;
   renewOperation(id: string, lease: WarmSlotOperationLease): Promise<boolean>;
+  /** Atomically fence the observed state and physical generation against retry successors. */
   acquireCleanup(
     id: string,
-    expectedState: WarmWorkspaceSlotState,
+    expected: Pick<WarmWorkspaceSlot, "state" | "resourceKey">,
     lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot | null>;
   retryPreparing(
