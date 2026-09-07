@@ -66,7 +66,7 @@ test("live cleanup waits for a blocked refill scheduled inside corrupt-envelope 
     async () => {
       cleanupStarted = true;
       for (const slot of await fixture.store.list()) {
-        await cleanupWarmSlotResources(fixture.deps, slot);
+        assert.equal(await cleanupWarmSlotResources(fixture.deps, slot), "cleaned");
         await fixture.store.remove(slot.id);
       }
     }

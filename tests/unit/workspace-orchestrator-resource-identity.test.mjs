@@ -127,7 +127,14 @@ for (const claimProjectId of [null, "prj_alpha"]) {
       ...fixture.docker.state.containers[0].spec,
       name: "evcp-ws-prj-alpha"
     });
-    await cleanupWarmSlotResources(fixture.deps, { ...slot, containerId: null, claimProjectId });
+    assert.equal(
+      await cleanupWarmSlotResources(fixture.deps, {
+        ...slot,
+        containerId: null,
+        claimProjectId
+      }),
+      "cleaned"
+    );
     assert.equal(
       (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) === null,
       true,
@@ -142,7 +149,13 @@ for (const claimProjectId of [null, "prj_alpha"]) {
 
 test("cleanup preserves a physical allocation held by any durable runtime owner", async () => {
   const fixture = await assignedWorkspace();
-  await cleanupWarmSlotResources(fixture.deps, { ...fixture.slot, claimProjectId: "prj_other" });
+  assert.equal(
+    await cleanupWarmSlotResources(fixture.deps, {
+      ...fixture.slot,
+      claimProjectId: "prj_other"
+    }),
+    "preserved"
+  );
   assert.equal(
     (await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1")) !== null,
     true
@@ -231,8 +244,7 @@ for (const identity of ["resourceKey", "containerId"]) {
       return found;
     };
     const cleanup = cleanupWarmSlotResources(fixture.deps, { ...slot, containerId: null });
-    if (identity === "containerId") await assert.rejects(cleanup, /conflicting durable ownership/);
-    else await cleanup;
+    assert.equal(await cleanup, "preserved");
     assert.equal(fixture.docker.state.containers.length, 1);
     assert.equal(fixture.docker.state.volumes.length, 1);
     assert.deepEqual(fixture.releasedSchemas, []);

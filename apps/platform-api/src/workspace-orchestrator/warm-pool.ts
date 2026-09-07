@@ -21,7 +21,7 @@ import {
   warmSlotOperationLease,
   withMaintainedWarmSlotOperationLease
 } from "./warm-pool-operation-lease";
-import { isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
+import { isProjectClaimConflict, isWarmSlotRetryable, retryDelayMs } from "./warm-pool-retry";
 import { createWarmPoolWorkTracker } from "./warm-pool-work";
 import { recoverWarmClaim } from "./warm-pool-claim-recovery";
 import type { WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
@@ -162,10 +162,11 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
                   await options.store.remove(owned.id, ownerId);
                   return;
                 }
-                await cleanupSlotResources(owned, async () => {
+                const cleanup = await cleanupSlotResources(owned, async () => {
                   await projectOwnership?.assertOwned();
                   await ownership.assertOwned();
                 });
+                if (cleanup === "preserved") throw new WarmWorkspaceClaimRollbackError();
                 if (options.targetSize === 0) {
                   await options.store.remove(owned.id, ownerId);
                   return;
@@ -339,10 +340,11 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
             await ownership.assertOwned();
             if ((await durableRuntimeKeys()).has(owned.resourceKey))
               throw new WarmWorkspaceClaimRollbackError();
-            await cleanupSlotResources(owned, async () => {
+            const cleanup = await cleanupSlotResources(owned, async () => {
               await assertProjectOwned();
               await ownership.assertOwned();
             });
+            if (cleanup === "preserved") throw new WarmWorkspaceClaimRollbackError();
             await options.store.remove(slotId, ownerId);
           } catch {
             await options.store.markFailed(
@@ -387,14 +389,4 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
   }
 
   return pool;
-}
-
-function isProjectClaimConflict(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const failure = error as { code?: string; meta?: { target?: unknown }; constraint?: string };
-  return (
-    (failure.code === "P2002" &&
-      /claim_project_id|claimProjectId/.test(JSON.stringify(failure.meta?.target) ?? "")) ||
-    (failure.code === "23505" && failure.constraint === "workspace_warm_slots_claim_project_id_key")
-  );
 }

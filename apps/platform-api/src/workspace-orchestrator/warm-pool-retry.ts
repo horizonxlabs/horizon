@@ -3,6 +3,16 @@ import type { WarmWorkspaceSlot } from "./warm-pool-types";
 const INITIAL_RETRY_DELAY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 5 * 60_000;
 
+export function isProjectClaimConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const failure = error as { code?: string; meta?: { target?: unknown }; constraint?: string };
+  return (
+    (failure.code === "P2002" &&
+      /claim_project_id|claimProjectId/.test(JSON.stringify(failure.meta?.target) ?? "")) ||
+    (failure.code === "23505" && failure.constraint === "workspace_warm_slots_claim_project_id_key")
+  );
+}
+
 export function retryDelayMs(failureCount: number): number {
   return Math.min(INITIAL_RETRY_DELAY_MS * 2 ** Math.max(0, failureCount - 1), MAX_RETRY_DELAY_MS);
 }

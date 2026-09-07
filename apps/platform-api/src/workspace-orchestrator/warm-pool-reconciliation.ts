@@ -10,6 +10,7 @@ import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
 import { recoverOwnedWarmClaim, type WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { waitForPreviewReady } from "./workspace-lifecycle";
 import { repairOwnedWarmSecrets } from "./warm-pool-owned-repair";
+import type { WarmSlotCleanupOutcome } from "./warm-pool-cleanup";
 import {
   maintainWorkspaceCleanupProjectLease,
   withMaintainedWarmSlotOperationLease
@@ -27,7 +28,7 @@ export async function reconcileWorkspaceWarmPool(options: {
   cleanupSlotResources: (
     slot: WarmWorkspaceSlot,
     assertOwned?: () => Promise<void>
-  ) => Promise<void>;
+  ) => Promise<WarmSlotCleanupOutcome>;
   retryDelayMs: (failureCount: number) => number;
 }): Promise<void> {
   const containers = await options.deps.docker.listManagedContainers();
@@ -182,7 +183,9 @@ export async function reconcileWorkspaceWarmPool(options: {
             return;
           }
           try {
-            await options.cleanupSlotResources(ownedSlot, assertOwned);
+            const cleanup = await options.cleanupSlotResources(ownedSlot, assertOwned);
+            if (cleanup === "preserved")
+              throw new Error("warm workspace cleanup deferred for durable ownership");
             await options.store.remove(ownedSlot.id, ownerId);
             totals.cleaned += 1;
           } catch {
