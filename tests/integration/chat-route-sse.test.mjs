@@ -398,14 +398,14 @@ test("client disconnect preserves the active generation turn for a refreshed Cre
       {
         callId: "call-active-1",
         actionType: "file",
-        label: "Write workspace file",
+        label: "app/page.tsx",
         inputSummary: "Write workspace file requested",
         startedAt: "timestamp",
         status: "running"
       }
     );
     assert.match(active.body.parts[1].tool.startedAt, /^\d{4}-\d{2}-\d{2}T/);
-    assert.doesNotMatch(JSON.stringify(active.body.parts), /app\/page\.tsx/);
+    assert.match(JSON.stringify(active.body.parts), /app\/page\.tsx/);
     resolveTurn();
   } finally {
     server.close();

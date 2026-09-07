@@ -135,13 +135,20 @@
 <body id="keycloak-bg" class="${properties.kcBodyClass!}" data-page-id="login-${pageId}">
   <div class="horizon-auth-shell">
     <aside class="horizon-brand-panel" aria-label="Horizon">
-      <span class="horizon-brand-lockup horizon-wordmark" role="img" aria-label="Horizon">
-        <img src="${url.resourcesPath}/img/horizon-mark.png" alt="" class="horizon-brand-mark">
-        <span class="horizon-brand-name">Horizon</span>
+      <span class="horizon-brand-badge">
+        <span class="horizon-brand-lockup horizon-wordmark" role="img" aria-label="Horizon">
+          <img src="${url.resourcesPath}/img/horizon-mark.png" alt="" class="horizon-brand-mark">
+          <span class="horizon-brand-name">Horizon</span>
+        </span>
       </span>
       <div class="horizon-brand-copy">
         <h2>Build securely.<br>Move with clarity.</h2>
         <p>One governed workspace for internal applications.</p>
+        <ul class="horizon-benefits" aria-label="Platform benefits">
+          <li>Governed by default</li>
+          <li>Ready for your enterprise</li>
+          <li>From idea to production</li>
+        </ul>
       </div>
       <p class="horizon-platform-name">Enterprise Vibe Coding Platform</p>
     </aside>

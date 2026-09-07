@@ -5494,7 +5494,23 @@ body.vibe-is-resizing * {
 }
 
 .vibe-action-diff {
+  display: grid;
+  gap: 2px;
   line-height: 1.5;
+}
+
+.vibe-action-diff-heading {
+  color: var(--evcp-color-muted);
+  font-family: var(--evcp-font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.vibe-action-diff-heading:first-child {
+  margin-top: 0;
 }
 
 .vibe-action-error,
@@ -5568,13 +5584,17 @@ body.vibe-is-resizing * {
 }
 
 .vibe-action-rollup-title {
+  flex: 0 0 auto;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .vibe-action-rollup-meta {
   color: var(--evcp-color-muted);
+  flex: 1 1 auto;
   font-size: 11px;
   margin-left: auto;
+  min-width: 0;
 }
 
 @keyframes vibe-activity-spin {

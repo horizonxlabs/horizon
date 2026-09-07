@@ -29,6 +29,8 @@ function toAction(id: string, tool: WorkspaceChatToolPart): VibeAction {
     label: tool.label,
     status: tool.status === "pending" || tool.status === "running" ? "running" : tool.status,
     body: tool.progress ?? ("result" in tool ? tool.result : undefined),
+    find: "find" in tool ? tool.find : undefined,
+    replace: "replace" in tool ? tool.replace : undefined,
     error: tool.status === "failed" ? tool.error : undefined
   };
 }

@@ -32,7 +32,17 @@ test("admin user page exposes Keycloak lifecycle actions", async () => {
 
   // The redesigned UI wires those hook actions to real controls: creation, editing,
   // enable/disable, reset password, role change, and pagination.
-  for (const label of ["Add user", "Create user", "Manage", "Save profile", "Disable", "Enable", "Reset password", "Save role", "Next"])
+  for (const label of [
+    "Add user",
+    "Create user",
+    "Manage",
+    "Save profile",
+    "Disable",
+    "Enable",
+    "Reset password",
+    "Save role",
+    "Next"
+  ])
     assert.match(uiSource, new RegExp(label));
 
   assert.match(hookSource, /keycloak\.list\(\{ first: page \* pageSize, max: pageSize \}\)/);
@@ -53,4 +63,22 @@ test("simulate login is disabled unless explicitly enabled", async () => {
   const source = await readFile("apps/platform-api/src/app-factory.ts", "utf8");
   assert.match(source, /EVCP_ALLOW_SIMULATE_LOGIN \?\? "0"/);
   assert.match(source, /!== "1"/);
+});
+
+test("the Keycloak login theme follows the compact Horizon application auth design", async () => {
+  const [template, styles] = await Promise.all([
+    readFile("apps/platform-api/keycloak/themes/horizon/login/template.ftl", "utf8"),
+    readFile(
+      "apps/platform-api/keycloak/themes/horizon/login/resources/css/horizon-login.css",
+      "utf8"
+    )
+  ]);
+
+  assert.match(template, /horizon-brand-badge/);
+  assert.match(template, /horizon-benefits/);
+  assert.match(template, /Governed by default/);
+  assert.match(styles, /\.horizon-brand-badge[\s\S]*background:\s*#ffffff/);
+  assert.match(styles, /\.horizon-auth-shell[\s\S]*width:\s*min\(884px/);
+  assert.match(styles, /border-radius:\s*10px/);
+  assert.match(styles, /@media \(max-width:\s*767px\)/);
 });

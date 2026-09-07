@@ -25,7 +25,9 @@ function isValidToolPart(part) {
     );
   }
   if (part.status === "failed") {
-    return typeof part.endedAt === "string" && typeof part.error === "string" && !("result" in part);
+    return (
+      typeof part.endedAt === "string" && typeof part.error === "string" && !("result" in part)
+    );
   }
   return false;
 }
@@ -173,7 +175,7 @@ test("reduceTurnPart preserves event order and replaces tool progress snapshots"
       tool: {
         callId: "tool-1",
         actionType: "file",
-        label: "Write workspace file",
+        label: "Read route",
         inputSummary: "Write workspace file requested",
         startedAt: "2026-08-22T10:00:00.000Z",
         endedAt: "2026-08-22T10:00:01.000Z",
@@ -216,7 +218,7 @@ test("reduceTurnPart records failed actions without result fields", () => {
     tool: {
       callId: "tool-1",
       actionType: "shell",
-      label: "Run workspace command",
+      label: "Run tests",
       inputSummary: "Run workspace command requested",
       startedAt: "2026-08-22T10:00:00.000Z",
       endedAt: "2026-08-22T10:00:01.000Z",
@@ -224,6 +226,32 @@ test("reduceTurnPart records failed actions without result fields", () => {
       error: "exit 1"
     }
   });
+});
+
+test("reduceTurnPart preserves bounded edit before/after details for history", () => {
+  const afterStart = reduceTurnPart([], {
+    type: "action_start",
+    actionId: "tool-edit",
+    actionType: "edit",
+    label: "app/page.tsx",
+    inputSummary: "Edit app/page.tsx",
+    startedAt: "2026-09-07T00:00:00.000Z"
+  });
+  const parts = reduceTurnPart(afterStart, {
+    type: "action_result",
+    actionId: "tool-edit",
+    actionType: "edit",
+    label: "app/page.tsx",
+    ok: true,
+    find: "before",
+    replace: "after",
+    endedAt: "2026-09-07T00:00:01.000Z"
+  });
+
+  assert.equal(parts[0].tool.label, "app/page.tsx");
+  assert.equal(parts[0].tool.inputSummary, "Edit app/page.tsx");
+  assert.equal(parts[0].tool.find, "before");
+  assert.equal(parts[0].tool.replace, "after");
 });
 
 test("reduceTurnPart coalesces adjacent deltas into bounded durable content", () => {
@@ -251,7 +279,11 @@ test("reduceTurnPart coalesces adjacent deltas into bounded durable content", ()
   const oversizedDelta = reduceTurnPart([], { type: "token", content: "y".repeat(9_000) });
 
   assert.deepEqual(
-    afterLaterText.map((part) => [part.type, part.sequence, part.type === "text" || part.type === "reasoning" ? part.text : ""]),
+    afterLaterText.map((part) => [
+      part.type,
+      part.sequence,
+      part.type === "text" || part.type === "reasoning" ? part.text : ""
+    ]),
     [
       ["text", 1, "Hello world"],
       ["reasoning", 2, "Inspecting the route"],
@@ -290,7 +322,11 @@ test("reduceTurnPart bounds and redacts error and commit display data", () => {
     assert.doesNotMatch(errorParts[0].message, /password|private/);
   }
   assert.deepEqual(
-    withInvalidCommit.map((part) => [part.type, part.sequence, part.type === "commit" ? part.sha : ""]),
+    withInvalidCommit.map((part) => [
+      part.type,
+      part.sequence,
+      part.type === "commit" ? part.sha : ""
+    ]),
     [
       ["error", 1, ""],
       ["commit", 2, "a".repeat(64)],

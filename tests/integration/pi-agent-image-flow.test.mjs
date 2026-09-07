@@ -85,9 +85,9 @@ test("a generate_image turn writes real bytes, commits them, and keeps the recap
   assert.ok(start, "expected an image action_start");
   const done = events.find((event) => event.type === "action_result" && event.actionType === "image");
   assert.equal(done.ok, true, done.error);
-  // SSE labels are generic presentations since the turn-parts redesign; the concrete
-  // path is asserted below via the workspace bytes and the recap markdown.
-  assert.equal(done.label, "Generate image");
+  // Creator activity names the generated asset so users can connect the action to
+  // the workspace bytes and recap markdown asserted below.
+  assert.equal(done.label, "public/generated/hero-tractor.png");
 
   // governed executor received a per-call requestId and the exact prompt
   assert.equal(imageRequests.length, 1);

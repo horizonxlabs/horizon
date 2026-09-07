@@ -132,6 +132,46 @@ test("a completed assistant turn groups its tools into one collapsed Activity ca
   assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /✓ |✗ /);
 });
 
+test("an edit Activity shows the target file and its before/after change", async () => {
+  const message = {
+    id: "a-edit-detail",
+    role: "assistant",
+    text: "",
+    actions: [],
+    parts: [
+      {
+        id: "tool-edit-detail",
+        type: "tool",
+        sequence: 0,
+        tool: {
+          callId: "edit-detail-1",
+          actionType: "edit",
+          label: "app/page.tsx",
+          inputSummary: "Edit app/page.tsx",
+          startedAt: "2026-09-07T00:00:00.000Z",
+          endedAt: "2026-09-07T00:00:01.000Z",
+          status: "done",
+          find: "const title = 'Old';",
+          replace: "const title = 'New';"
+        }
+      }
+    ]
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(React.createElement(WorkspacePage, { app: appFor([message]) }));
+  });
+
+  const action = renderer.root.findByProps({ className: "vibe-action-summary" });
+  await act(async () => action.props.onClick());
+  const rendered = JSON.stringify(renderer.toJSON());
+  assert.match(rendered, /app\/page\.tsx/);
+  assert.match(rendered, /Before/);
+  assert.match(rendered, /const title = 'Old';/);
+  assert.match(rendered, /After/);
+  assert.match(rendered, /const title = 'New';/);
+});
+
 test("assistant commentary stays interleaved with separate contiguous Activity groups", async () => {
   const toolPart = (id, sequence, actionType, label) => ({
     id,
@@ -285,9 +325,7 @@ test("a failed Activity card exposes its error-state class", async () => {
     );
   });
 
-  assert.ok(
-    renderer.root.findByProps({ className: "vibe-technical-details has-failed" })
-  );
+  assert.ok(renderer.root.findByProps({ className: "vibe-technical-details has-failed" }));
 });
 
 test("a commit is presented as project history status instead of raw console output", async () => {

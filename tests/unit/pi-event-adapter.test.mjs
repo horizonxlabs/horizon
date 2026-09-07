@@ -37,13 +37,13 @@ test("maps native tool lifecycle with stable Pi call IDs", () => {
       type: "action_start",
       actionId: "call-7",
       actionType: "edit",
-      label: "Edit workspace file",
-      inputSummary: "Edit workspace file requested",
+      label: "app/private.ts",
+      inputSummary: "Edit app/private.ts",
       startedAt: "timestamp"
     }
   );
   assert.match(start.startedAt, /^\d{4}-\d{2}-\d{2}T/);
-  assert.doesNotMatch(JSON.stringify(start), /private|secret|replacement/);
+  assert.doesNotMatch(JSON.stringify(start), /secret|replacement/);
 
   const [update] = adaptPiEvent({
     type: "tool_execution_update",
@@ -81,14 +81,15 @@ test("maps native tool lifecycle with stable Pi call IDs", () => {
       type: "action_result",
       actionId: "call-7",
       actionType: "edit",
-      label: "Edit workspace file",
+      label: "app/private.ts",
       ok: true,
-      body: "Workspace file updated",
+      find: "secret",
+      replace: "replacement",
       endedAt: "timestamp"
     }
   );
   assert.match(result.endedAt, /^\d{4}-\d{2}-\d{2}T/);
-  assert.doesNotMatch(JSON.stringify(result), /private|secret|replacement|source/);
+  assert.doesNotMatch(JSON.stringify(result), /full private source result/);
 });
 
 test("maps all Horizon tools and sanitized failures", () => {

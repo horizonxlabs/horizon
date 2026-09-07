@@ -318,12 +318,12 @@ test("Build mode coordinates native Pi tool and outer transaction in order", asy
       {
         callId: "call-write",
         actionType: "file",
-        label: "Write workspace file",
-        inputSummary: "Write workspace file requested",
+        label: "app/page.tsx",
+        inputSummary: "Write app/page.tsx",
         startedAt: "timestamp",
         endedAt: "timestamp",
         status: "done",
-        result: "Workspace file updated"
+        result: "Updated app/page.tsx"
       }
     );
   }

@@ -21,7 +21,10 @@ export type VibeMessage = {
 
 // The build turn produced when a Creator approves a plan-mode plan: re-send the original request in
 // build mode, carrying the approved plan text so the AI implements exactly it.
-export function buildApproveTurn(sourcePrompt: string, planText: string): {
+export function buildApproveTurn(
+  sourcePrompt: string,
+  planText: string
+): {
   prompt: string;
   mode: "build";
   approvedPlan: string;
@@ -45,10 +48,7 @@ export function applyVibeEvent(
         ? data
         : "";
 
-  const appendPart = (
-    type: "reasoning" | "text",
-    text: string
-  ): WorkspaceChatTurnPart[] => {
+  const appendPart = (type: "reasoning" | "text", text: string): WorkspaceChatTurnPart[] => {
     const parts = message.parts ?? [];
     const last = parts.at(-1);
     if (last?.type === type) {
@@ -68,7 +68,7 @@ export function applyVibeEvent(
       label: field("label"),
       callId: actionId,
       inputSummary: field("inputSummary") || "Tool requested",
-      ...((current?.type === "tool" ? current.tool : {})),
+      ...(current?.type === "tool" ? current.tool : {}),
       ...patch
     } as WorkspaceChatToolPart;
     const part: WorkspaceChatTurnPart = {
@@ -77,7 +77,9 @@ export function applyVibeEvent(
       sequence: current?.sequence ?? parts.length,
       tool
     };
-    return index >= 0 ? parts.map((item, itemIndex) => (itemIndex === index ? part : item)) : [...parts, part];
+    return index >= 0
+      ? parts.map((item, itemIndex) => (itemIndex === index ? part : item))
+      : [...parts, part];
   };
 
   if (type === "token") {
@@ -148,6 +150,8 @@ export function applyVibeEvent(
       parts: appendOrUpdateToolPart(id, {
         status: ok ? "done" : "failed",
         result: ok ? field("body") || undefined : undefined,
+        find: field("find") || undefined,
+        replace: field("replace") || undefined,
         error: ok ? undefined : field("error") || field("body") || "Tool failed",
         endedAt: new Date().toISOString()
       })
@@ -159,7 +163,15 @@ export function applyVibeEvent(
     return {
       ...message,
       commitSha: field("sha"),
-      parts: [...parts, { id: `live-commit-${parts.length}`, type: "commit", sequence: parts.length, sha: field("sha") }]
+      parts: [
+        ...parts,
+        {
+          id: `live-commit-${parts.length}`,
+          type: "commit",
+          sequence: parts.length,
+          sha: field("sha")
+        }
+      ]
     };
   }
 
@@ -169,7 +181,10 @@ export function applyVibeEvent(
     return {
       ...message,
       text: message.text + `\n\n⚠️ ${error}`,
-      parts: [...parts, { id: `live-error-${parts.length}`, type: "error", sequence: parts.length, message: error }]
+      parts: [
+        ...parts,
+        { id: `live-error-${parts.length}`, type: "error", sequence: parts.length, message: error }
+      ]
     };
   }
 

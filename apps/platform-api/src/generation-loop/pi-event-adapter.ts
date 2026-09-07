@@ -94,13 +94,14 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
     const actionType = actionTypeFor(event.toolName);
     if (!actionType) return [];
     const presentation = toolPresentation(actionType);
+    const target = toolTarget(event.toolName, event.args);
     return [
       {
         type: "action_start",
         actionId: event.toolCallId,
         actionType,
-        label: presentation.label,
-        inputSummary: presentation.inputSummary,
+        label: target ?? presentation.label,
+        inputSummary: target ? `${actionVerb(actionType)} ${target}` : presentation.inputSummary,
         startedAt: new Date().toISOString()
       }
     ];
@@ -116,6 +117,10 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
     const actionType = actionTypeFor(event.toolName) ?? details?.actionType;
     if (!actionType) return [];
     const presentation = toolPresentation(actionType);
+    const label =
+      details?.label && actionType !== "shell"
+        ? clipUtf8(safeToolError(details.label), MAX_TOOL_EVENT_SUMMARY_BYTES)
+        : presentation.label;
     const failureSummary =
       actionType === "image" && details?.error
         ? `${presentation.failureSummary}: ${safeToolError(details.error)}`
@@ -125,9 +130,24 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
         type: "action_result",
         actionId: event.toolCallId,
         actionType,
-        label: presentation.label,
+        label,
         ok: details?.ok === true && !event.isError,
-        ...(details?.ok === true && !event.isError ? { body: presentation.successSummary } : {}),
+        ...(details?.ok === true && !event.isError
+          ? actionType === "edit"
+            ? {
+                find: displayDetail(details?.find),
+                replace: displayDetail(details?.replace)
+              }
+            : {
+                body:
+                  label === presentation.label
+                    ? presentation.successSummary
+                    : `${completedVerb(actionType)} ${label}`
+              }
+          : {}),
+        ...(actionType === "edit" && (!details?.ok || event.isError)
+          ? { find: displayDetail(details?.find), replace: displayDetail(details?.replace) }
+          : {}),
         ...(!details?.ok || event.isError ? { error: failureSummary } : {}),
         endedAt: new Date().toISOString()
       }
@@ -140,6 +160,61 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
     return [{ type: "error", message: safeToolError(event.errorMessage) }];
   }
   return [];
+}
+
+function displayDetail(value: string | undefined): string | undefined {
+  return value === undefined
+    ? undefined
+    : clipUtf8(safeToolError(value), MAX_TOOL_EVENT_SUMMARY_BYTES);
+}
+
+function toolTarget(toolName: string, args: unknown): string | undefined {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return undefined;
+  const values = args as Record<string, unknown>;
+  const candidate =
+    toolName === "list_workspace_files"
+      ? values.prefix
+      : toolName === "propose_database_migration" || toolName === "load_governed_skill"
+        ? values.name
+        : toolName === "run_workspace_command" || toolName === "generate_image"
+          ? undefined
+          : values.path;
+  if (typeof candidate !== "string" || !candidate.trim()) return undefined;
+  return clipUtf8(safeToolError(candidate.trim()), MAX_TOOL_EVENT_SUMMARY_BYTES);
+}
+
+function actionVerb(actionType: ActionActionType): string {
+  return actionType === "read"
+    ? "Read"
+    : actionType === "list"
+      ? "List"
+      : actionType === "file"
+        ? "Write"
+        : actionType === "edit"
+          ? "Edit"
+          : actionType === "migration"
+            ? "Prepare"
+            : actionType === "skill"
+              ? "Load"
+              : "Run";
+}
+
+function completedVerb(actionType: ActionActionType): string {
+  return actionType === "read"
+    ? "Read"
+    : actionType === "list"
+      ? "Listed"
+      : actionType === "file"
+        ? "Updated"
+        : actionType === "shell"
+          ? "Completed"
+          : actionType === "migration"
+            ? "Prepared"
+            : actionType === "skill"
+              ? "Loaded"
+              : actionType === "image"
+                ? "Generated"
+                : "Updated";
 }
 
 function actionTypeFor(toolName: string) {

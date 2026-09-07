@@ -133,7 +133,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
       />
       <WorkspaceMobileNav active={mobileView} onSelect={selectMobileView} />
       <div
-        className={`vibe-live-body${paneResize.isChatCollapsed ? " is-chat-collapsed" : ""}`}
+        className={["vibe-live-body", paneResize.isChatCollapsed ? "is-chat-collapsed" : ""]
+          .filter(Boolean)
+          .join(" ")}
         data-workspace-view={mobileView ?? "supporting"}
         ref={paneResize.splitViewRef}
       >
@@ -179,14 +181,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     }
                   />
                   {!message.parts?.length && <VibeActionSummary actions={message.actions} />}
-                  {isVibing &&
-                    messageIndex === vibeMessages.length - 1 &&
-                    (message.text || !message.reasoning) &&
-                    !message.parts?.length && (
-                      <span className="vibe-cursor-blink" aria-hidden="true">
-                        ▋
-                      </span>
-                    )}
                   {messageIndex === vibeMessages.length - 1 && !isVibing && (
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}

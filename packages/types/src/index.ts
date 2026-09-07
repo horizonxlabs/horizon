@@ -148,6 +148,8 @@ export type WorkspaceChatToolPart =
       status: "done";
       progress?: string;
       result?: string;
+      find?: string;
+      replace?: string;
     }
   | {
       callId: string;
@@ -159,6 +161,8 @@ export type WorkspaceChatToolPart =
       status: "failed";
       progress?: string;
       error: string;
+      find?: string;
+      replace?: string;
     };
 
 export interface WorkspaceChatMessage {

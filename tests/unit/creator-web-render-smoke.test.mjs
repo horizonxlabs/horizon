@@ -256,6 +256,11 @@ test("WorkspacePage keeps the loading cursor lit only while a turn is still stre
     React.createElement(WorkspacePage, { app: { ...app, isVibing: true, vibeMessages: messages } })
   );
   assert.match(streaming, /vibe-cursor-blink/);
+  assert.equal(
+    streaming.match(/vibe-cursor-blink/g)?.length,
+    1,
+    "a streaming assistant turn must render exactly one loading cursor"
+  );
   const done = renderWithHook((app) =>
     React.createElement(WorkspacePage, { app: { ...app, isVibing: false, vibeMessages: messages } })
   );

@@ -66,15 +66,17 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
           {action.error && <pre className="vibe-action-error">{action.error}</pre>}
           {isDiff ? (
             <pre className="vibe-action-diff">
+              <span className="vibe-action-diff-heading">Before</span>
               {(action.find ?? "").split("\n").map((line, i) => (
-                <div className="vibe-action-diff-remove" key={`f${i}`}>
+                <span className="vibe-action-diff-remove" key={`f${i}`}>
                   - {line}
-                </div>
+                </span>
               ))}
+              <span className="vibe-action-diff-heading">After</span>
               {(action.replace ?? "").split("\n").map((line, i) => (
-                <div className="vibe-action-diff-add" key={`r${i}`}>
+                <span className="vibe-action-diff-add" key={`r${i}`}>
                   + {line}
-                </div>
+                </span>
               ))}
             </pre>
           ) : (

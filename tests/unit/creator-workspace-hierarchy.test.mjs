@@ -345,6 +345,10 @@ test("rendered Workspace controls use semantic targets covered by the narrow-scr
     )?.[1] ?? "";
   assert.match(restoreTargetRules, /min-height:\s*44px/);
   assert.match(restoreTargetRules, /min-width:\s*44px/);
+  assert.match(
+    css,
+    /\.vibe-action-rollup-title\s*\{[\s\S]*?flex:\s*0 0 auto;[\s\S]*?white-space:\s*nowrap;/
+  );
 });
 
 test("Workspace responsive CSS selects one narrow panel and disables progress motion", async () => {

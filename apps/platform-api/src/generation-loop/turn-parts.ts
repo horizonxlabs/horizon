@@ -118,7 +118,7 @@ export function reduceTurnPart(
           callId: event.actionId,
           actionType: event.actionType,
           ...presentation,
-          label: presentation.label,
+          label: clippedDisplayText(event.label || presentation.label, MAX_TOOL_PART_TEXT_BYTES),
           inputSummary: clippedDisplayText(
             event.inputSummary ?? presentation.inputSummary,
             MAX_TOOL_PART_TEXT_BYTES
@@ -142,8 +142,8 @@ export function reduceTurnPart(
       const shared = {
         callId: event.actionId,
         actionType: event.actionType,
-        ...fallbackToolPresentation(event.actionType),
-        label: fallbackToolPresentation(event.actionType).label,
+        label: tool.label,
+        inputSummary: tool.inputSummary,
         startedAt: tool.startedAt,
         endedAt: event.endedAt ?? new Date().toISOString(),
         ...(tool.progress === undefined ? {} : { progress: tool.progress })
@@ -154,13 +154,28 @@ export function reduceTurnPart(
           status: "done",
           ...(event.body === undefined
             ? {}
-            : { result: clippedDisplayText(event.body, MAX_TOOL_PART_TEXT_BYTES) })
+            : { result: clippedDisplayText(event.body, MAX_TOOL_PART_TEXT_BYTES) }),
+          ...(event.find === undefined
+            ? {}
+            : { find: clippedDisplayText(event.find, MAX_TOOL_PART_TEXT_BYTES) }),
+          ...(event.replace === undefined
+            ? {}
+            : { replace: clippedDisplayText(event.replace, MAX_TOOL_PART_TEXT_BYTES) })
         };
       }
       return {
         ...shared,
         status: "failed",
-        error: clippedDisplayText(event.error ?? event.body ?? "Tool execution failed", MAX_TOOL_PART_TEXT_BYTES)
+        error: clippedDisplayText(
+          event.error ?? event.body ?? "Tool execution failed",
+          MAX_TOOL_PART_TEXT_BYTES
+        ),
+        ...(event.find === undefined
+          ? {}
+          : { find: clippedDisplayText(event.find, MAX_TOOL_PART_TEXT_BYTES) }),
+        ...(event.replace === undefined
+          ? {}
+          : { replace: clippedDisplayText(event.replace, MAX_TOOL_PART_TEXT_BYTES) })
       };
     });
   }
