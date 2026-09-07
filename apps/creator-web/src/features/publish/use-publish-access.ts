@@ -2,7 +2,8 @@ import {
   normalizeSubdomainSuggestion,
   PlatformApiError,
   type AppStorePublishInput,
-  type AppInvitationInput, type AppAccessSnapshotResponse,
+  type AppInvitationInput,
+  type AppAccessSnapshotResponse,
   type AppStoreRegistryEntryDto,
   type PublishResultResponse,
   type PublishReviewResponse,
@@ -36,8 +37,9 @@ export function usePublishAccess({
     "loading"
   );
   const [publishReview, setPublishReview] = useState<PublishReviewResponse | undefined>(undefined);
-  const [publishReadinessState, setPublishReadinessState] =
-    useState<"loading" | "ready" | "unavailable">("loading");
+  const [publishReadinessState, setPublishReadinessState] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
   const [publishResult, setPublishResult] = useState<PublishResultResponse | undefined>(undefined);
   const [registryEntries, setRegistryEntries] = useState<AppStoreRegistryEntryDto[]>([]);
   const [runtimeDeployments, setRuntimeDeployments] = useState<WorkspaceDeploymentDto[]>([]);
@@ -93,7 +95,6 @@ export function usePublishAccess({
     runtimeDeployments,
     visibleRegistryEntry
   });
-
   function resetPublishAccess() {
     publishRefreshId.current += 1;
     requestGuard.reset();
@@ -309,7 +310,6 @@ export function usePublishAccess({
     accessDecisionRequests.current.set(requestId, requestRecord);
     return request;
   }
-
   function clearPublishSubdomainError() {
     setPublishSubdomainError(undefined);
   }
@@ -324,6 +324,7 @@ export function usePublishAccess({
     };
     setPublishSubdomainError(undefined);
     setIsPublishingProject(true);
+    setPublishFeedback("Publishing project. Building and checking the deployment…", "info");
     try {
       const client = clientFactory();
       const result = await client.publishProject(selectedProject.id, publishInput);
@@ -358,7 +359,6 @@ export function usePublishAccess({
       if (requestGuard.isCurrent(guard)) setIsPublishingProject(false);
     }
   }
-
   return {
     appAccessSnapshot,
     setAppAccessSnapshot,
