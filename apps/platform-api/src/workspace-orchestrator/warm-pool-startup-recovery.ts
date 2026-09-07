@@ -3,13 +3,10 @@ import type { WorkspaceWarmPoolOptions } from "./warm-pool";
 import type { WarmWorkspaceSlot } from "./warm-pool-types";
 import type { ProvisioningSecretAttempt } from "./secret-store";
 import { resourceKeyForProject } from "./resource-ports";
-import {
-  workspaceContainerName,
-  workspacePhysicalKey,
-  workspacePreviewBase
-} from "./runtime-location";
+import { workspaceContainerName, workspacePhysicalKey } from "./runtime-location";
 import { WorkspaceCleanupProjectLeaseLostError } from "./warm-pool-operation-lease";
 import { waitForPreviewReady, workspaceSecretEntries } from "./workspace-lifecycle";
+import { isWarmContainerCompatible } from "./warm-container-compatibility";
 
 /** Capture local state before recovery I/O, then conditionally publish inside the project lease. */
 export type WarmRecoveryPublisher = (projectId: string) => {
@@ -60,8 +57,10 @@ export async function recoverOwnedWarmClaim(
     );
     if (!found?.running) return;
     if (
-      !found.env.includes(
-        `EVCP_PREVIEW_BASE=${workspacePreviewBase({ projectId, resourceKey: slot.resourceKey })}`
+      !isWarmContainerCompatible(
+        found,
+        slot.resourceKey,
+        options.deps.image ?? "evcp/workspace-next:1"
       )
     )
       return;

@@ -8,6 +8,7 @@ import { resourceKeyForProject } from "./resource-ports";
 import { buildDevContainerSpec } from "./docker-engine";
 import { waitForPreviewReady, workspaceVolumeName } from "./workspace-lifecycle";
 import { provisionIndependentWorkspaceResources } from "./workspace-provisioning";
+import { isWarmContainerCompatible } from "./warm-container-compatibility";
 
 interface ProvisioningState {
   save(record: WorkspaceContainerRecord): WorkspaceContainerRecord;
@@ -64,7 +65,11 @@ export function createWorkspaceProvisioning(
     try {
       await state.assertOwnership(input.projectId);
       const found = await deps.docker.inspectContainer(`evcp-ws-${allocation.resourceKey}`);
-      if (!found?.running || found.containerId !== allocation.containerId) {
+      if (
+        !found?.running ||
+        found.containerId !== allocation.containerId ||
+        !isWarmContainerCompatible(found, allocation.resourceKey, image)
+      ) {
         throw new Error("claimed warm workspace is unavailable");
       }
       await waitForPreviewReady(deps.docker, found.containerId);
