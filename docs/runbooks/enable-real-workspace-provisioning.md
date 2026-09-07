@@ -178,12 +178,17 @@ The container ID must already belong to a ready slot. It holds asynchronous refi
 boundary until those assertions finish, then releases and awaits the orchestrator's scheduled
 refill back to three matching-image slots. A claimed allocation is never recycled into the pool.
 
-The case edits a file, executes a command that reads it, stops/wakes the workspace, checks that
-the edit persists and preview is healthy, and confirms the same physical container throughout.
+The case passes the logical project ID and a Creator actor to the production generation service.
+A deterministic model-round fixture requests the real `write_workspace_file`, `edit_workspace_file`,
+and allowlisted `run_workspace_command` (`npm run build`) tools. Production container resolution,
+path/command policies, action runner, snapshot/validation/commit lifecycle, and Docker execution
+remain active. The build uses the production disposable validation tree. Observed Docker targets
+must all equal the claimed physical container ID. The production file browser reads the marker
+using the logical project ID before and after stop/wake, and preview must remain healthy.
 After deletion it verifies container, volume, schema, database role, bucket, successful scoped
 MinIO user/policy removal and LiteLLM key revocation, and cleared runtime/secret persistence before
 fixture teardown. The live route resolver receives a test authenticated membership context; this
-does not measure a browser session, public ingress, or OIDC. Verify those separately in Creator below.
+does not measure a browser session, public ingress, OIDC, or an upstream model provider. Verify those separately in Creator below.
 It uses real Prisma repositories and encrypted PostgreSQL secret persistence.
 
 An `after()` hook is registered before fixture setup. It joins provisioning and waits for the

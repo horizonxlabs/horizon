@@ -264,6 +264,7 @@ export async function createWorkspaceLiveFixture(
   };
   fixture = {
     projectId,
+    ownerId,
     projectKey,
     store,
     docker,

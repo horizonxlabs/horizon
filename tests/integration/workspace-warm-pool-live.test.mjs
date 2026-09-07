@@ -4,6 +4,7 @@ import test from "node:test";
 import * as liveFixture from "./workspace-live-fixture.mjs";
 import { createFixture } from "../unit/workspace-orchestrator-warm-fixture.mjs";
 import { resolvePreviewTarget } from "../../apps/platform-api/src/workspace-orchestrator/routes.ts";
+import * as acceptanceActions from "./workspace-hot-actions.mjs";
 
 const noLifecycleCalls = {
   createContainer: 0,
@@ -11,6 +12,49 @@ const noLifecycleCalls = {
   stopContainer: 0,
   removeContainer: 0
 };
+
+test("contract: production generation resolves logical ownership for file edits and allowed commands", async () => {
+  const fixture = await createFixture();
+  const record = await fixture.orchestrator.provisionWorkspace({
+    projectId: "prj_actions",
+    slug: "actions"
+  });
+  const docker = fixture.prepared.docker;
+  const files = new Map();
+  const inspect = docker.inspectContainer.bind(docker);
+  docker.execInContainer = async (containerId, command) => {
+    assert.equal(
+      (await inspect("evcp-ws-warm-resource-1"))?.containerId,
+      containerId,
+      "generation must address the claimed physical container"
+    );
+    const script = command.at(-1);
+    let stdout = "";
+    const write = script.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d > '([^']+)'/);
+    if (write) files.set(write[2], Buffer.from(write[1], "base64").toString("utf8"));
+    else if (script.includes("===EVCPFILE:"))
+      stdout = [...files].map(([path, content]) => `===EVCPFILE:${path}===\n${content}\n`).join("");
+    else if (script.startsWith("base64 <"))
+      stdout = Buffer.from(files.get("public/hot-handoff-acceptance.md") ?? "").toString("base64");
+    else if (script.startsWith("wc -c <")) stdout = "-1";
+    else if (script.includes("comparison_tree=")) stdout = "true";
+    else if (script.includes("commit --no-verify -q -m")) stdout = "a".repeat(40);
+    return { stdout, stderr: "", exitCode: 0 };
+  };
+  docker.execInContainerStream = async (id, command, onChunk) => {
+    const result = await docker.execInContainer(id, command);
+    onChunk(result.stdout);
+    return { exitCode: result.exitCode };
+  };
+  const actions = await acceptanceActions.runHotWorkspaceActions({
+    orchestrator: fixture.orchestrator,
+    docker,
+    projectId: record.projectId,
+    actor: { id: "owner", email: "owner@workspace-live.invalid", name: "Owner", role: "creator" },
+    expectedContainerId: record.containerId
+  });
+  await actions.assertFilePersists();
+});
 
 test("contract: hot claim preserves its running allocation and logical ownership through deletion", async () => {
   const fixture = await createFixture();
@@ -130,7 +174,7 @@ test(
       audits.some((event) => event.action === "workspace.pool_cold_fallback"),
       false
     );
-    const auth = { userId: "live-owner", roles: [], projectIds: [projectId] };
+    const auth = { userId: fixture.ownerId, roles: [], projectIds: [projectId] };
     const resolution = await resolvePreviewTarget(orchestrator, auth, record.resourceKey);
     assert.equal(resolution.ok, true);
     assert.equal(resolution.upstream, `http://evcp-ws-${record.resourceKey}:3000`);
@@ -193,23 +237,19 @@ test(
       ),
       { ok: false, status: 403 }
     );
-    const edit = await docker.execInContainer(orchestrator.getWorkspace(projectId).containerId, [
-      "node",
-      "-e",
-      "require('node:fs').writeFileSync('/workspace/hot-handoff-acceptance.txt', 'hot handoff edit\\n')"
-    ]);
-    assert.equal(edit.exitCode, 0, "workspace file edit must succeed");
-    await assertSameContainer();
-    const command = [
-      "node",
-      "-e",
-      "process.exit(require('node:fs').readFileSync('/workspace/hot-handoff-acceptance.txt', 'utf8') === 'hot handoff edit\\n' ? 0 : 1)"
-    ];
-    assert.equal(
-      (await docker.execInContainer(orchestrator.getWorkspace(projectId).containerId, command))
-        .exitCode,
-      0
-    );
+    const actions = await acceptanceActions.runHotWorkspaceActions({
+      orchestrator,
+      docker,
+      projectId,
+      actor: {
+        id: auth.userId,
+        email: "owner@workspace-live.invalid",
+        name: "Live owner",
+        role: "creator"
+      },
+      expectedContainerId: prepared.containerId
+    });
+    await actions.assertFilePersists();
     await assertSameContainer();
     const beforeStop = dockerMetrics.snapshot();
     await orchestrator.stopWorkspace(projectId);
@@ -221,11 +261,7 @@ test(
       stopContainer: 1,
       startContainer: 1
     });
-    assert.equal(
-      (await docker.execInContainer(record.containerId, command)).exitCode,
-      0,
-      "file edit survives stop/wake"
-    );
+    await actions.assertFilePersists();
     assert.equal(
       (
         await docker.execInContainer(record.containerId, [
