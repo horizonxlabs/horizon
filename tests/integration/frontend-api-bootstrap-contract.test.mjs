@@ -245,7 +245,10 @@ test("Creator preview establishes an HttpOnly session without putting bearer tok
   assert.match(workspacePage, /usePreviewAuthorization/);
   assert.match(workspacePage, /previewAuth\.isAuthorized/);
   assert.match(previewAuthorizationHook, /authorizeWorkspacePreview/);
-  assert.match(previewAuthorizationHook, /\[input\.projectId, input\.previewKey, attempt\]/);
+  assert.match(
+    previewAuthorizationHook,
+    /\[input\.projectId, input\.previewKey, input\.runtimeReady, attempt\]/
+  );
   assert.match(apiClient, /authorizeWorkspacePreview\(projectId: string\)/);
   assert.match(apiClient, /workspace\/preview-session/);
   assert.match(appFactory, /registerPreviewSessionRoute/);
