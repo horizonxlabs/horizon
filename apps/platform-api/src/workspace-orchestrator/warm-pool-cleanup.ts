@@ -15,6 +15,22 @@ export async function cleanupWarmSlotResources(
   await assertOwned?.();
   if (assigned) return;
   const container = await deps.docker.inspectContainer(`evcp-ws-${slot.resourceKey}`);
+  // Recovery may exit on failed health after another project has durably acquired the container.
+  // Reauthorize here, using both physical identities, before any destructive resource operation.
+  await assertOwned?.();
+  const owners = (await deps.runtimeRecords?.list()) ?? [];
+  await assertOwned?.();
+  if (owners.some(({ record }) => physicalResourceKey(record) === slot.resourceKey)) return;
+  if (
+    owners.some(
+      ({ record }) =>
+        record.containerId &&
+        (record.containerId === container?.containerId || record.containerId === slot.containerId)
+    )
+  ) {
+    // Throwing keeps the slot quarantined (and orphan-protected), including on cleanup retries.
+    throw new Error("warm workspace container has conflicting durable ownership");
+  }
   const failures: unknown[] = [];
   const cleanup = async (operation: () => Promise<void>) => {
     try {

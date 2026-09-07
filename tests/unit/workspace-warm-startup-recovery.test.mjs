@@ -44,7 +44,12 @@ test("runtime startup recovers a completed warm handoff before reconcile or orph
   assert.deepEqual(await reloadedSecrets.resolveEnv("prj_alpha"), fixture.allocation.env);
 });
 
-for (const timing of ["before-recovery", "during-health", "container-only"]) {
+for (const timing of [
+  "before-recovery",
+  "during-health",
+  "container-only",
+  "container-owner-during-failed-health"
+]) {
   test(`recovery cannot import another project's physical allocation (${timing})`, async () => {
     const fixture = await createCrashedWarmStartupFixture({ projectId: "prj_alpha" });
     const owner = {
@@ -52,7 +57,7 @@ for (const timing of ["before-recovery", "during-health", "container-only"]) {
         id: "ws-prj-beta",
         projectId: "prj_beta",
         slug: "beta",
-        resourceKey: timing === "container-only" ? "warm-resource-other" : "warm-resource-1",
+        resourceKey: timing.startsWith("container") ? "warm-resource-other" : "warm-resource-1",
         state: "running",
         containerId: fixture.containerId,
         cpuCores: 1,
@@ -69,7 +74,7 @@ for (const timing of ["before-recovery", "during-health", "container-only"]) {
       }
       await fixture.runtimeRecords.save(owner);
     };
-    if (timing === "during-health") {
+    if (timing === "during-health" || timing === "container-owner-during-failed-health") {
       const exec = fixture.docker.execInContainer.bind(fixture.docker);
       let persisted = false;
       fixture.docker.execInContainer = async (...args) => {
@@ -77,6 +82,8 @@ for (const timing of ["before-recovery", "during-health", "container-only"]) {
           persisted = true;
           await persistOwner();
         }
+        if (timing === "container-owner-during-failed-health" && args[0] === fixture.containerId)
+          return { stdout: "", stderr: "unhealthy", exitCode: 1 };
         return exec(...args);
       };
     } else await persistOwner();
@@ -97,15 +104,31 @@ for (const timing of ["before-recovery", "during-health", "container-only"]) {
       true
     );
     assert.equal(
-      (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")).containerId,
+      (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"))?.containerId,
       fixture.containerId
     );
     assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")).running, true);
     assert.equal(
       (await fixture.store.list()).some(({ id }) => id === fixture.allocation.slotId),
-      timing === "container-only"
+      timing.startsWith("container")
     );
     await assertAllocationSurvives(fixture);
+    if (timing === "container-owner-during-failed-health") {
+      const quarantined = (await fixture.store.list()).find(
+        ({ id }) => id === fixture.allocation.slotId
+      );
+      assert.equal(quarantined.state, "failed");
+      fixture.setNow(new Date(quarantined.retryAfter));
+      await replica.pool.ensureCapacity();
+      assert.equal(
+        (await fixture.store.list()).find(({ id }) => id === fixture.allocation.slotId)
+          ?.resourceKey,
+        "warm-resource-1"
+      );
+      assert.deepEqual(await fixture.runtimeRecords.list(), [owner]);
+      assert.deepEqual(await fixture.deps.secrets.listNames("prj_alpha"), []);
+      await assertAllocationSurvives(fixture);
+    }
   });
 }
 

@@ -202,3 +202,41 @@ test("cleanup stops after a physical inspection when the allocation fence is los
   assert.deepEqual(fixture.releasedBuckets, []);
   assert.deepEqual(fixture.revokedKeys, []);
 });
+
+for (const identity of ["resourceKey", "containerId"]) {
+  test(`cleanup observes durable ${identity} ownership acquired during physical inspection`, async () => {
+    let snapshots = [];
+    const fixture = createWarmPoolFixture({
+      targetSize: 1,
+      runtimeRecords: {
+        async list() {
+          return snapshots;
+        }
+      }
+    });
+    await fixture.pool.ensureCapacity();
+    const [slot] = await fixture.store.list();
+    const inspect = fixture.docker.inspectContainer.bind(fixture.docker);
+    fixture.docker.inspectContainer = async (name) => {
+      const found = await inspect(name);
+      snapshots = [
+        {
+          record: {
+            projectId: "prj_beta",
+            resourceKey: identity === "resourceKey" ? "warm-resource-1" : "warm-resource-other",
+            containerId: found?.containerId
+          }
+        }
+      ];
+      return found;
+    };
+    const cleanup = cleanupWarmSlotResources(fixture.deps, { ...slot, containerId: null });
+    if (identity === "containerId") await assert.rejects(cleanup, /conflicting durable ownership/);
+    else await cleanup;
+    assert.equal(fixture.docker.state.containers.length, 1);
+    assert.equal(fixture.docker.state.volumes.length, 1);
+    assert.deepEqual(fixture.releasedSchemas, []);
+    assert.deepEqual(fixture.releasedBuckets, []);
+    assert.deepEqual(fixture.revokedKeys, []);
+  });
+}
