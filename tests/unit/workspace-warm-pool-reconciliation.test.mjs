@@ -270,6 +270,7 @@ test("reconcile emits one aggregate audit with no slot identifiers or credential
         ready: 0,
         claiming: 1,
         failed: 0,
+        staleImage: 0,
         preserved: 0,
         retired: 0,
         cleaned: 1,

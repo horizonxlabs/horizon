@@ -32,7 +32,7 @@ export async function reconcileWorkspaceWarmPool(options: {
   const containers = await options.deps.docker.listManagedContainers();
   let runtimeKeys = await durableRuntimeKeys(options.deps);
   const slots = await options.store.list();
-  const totals = { preserved: 0, retired: 0, cleaned: 0, cleanupFailed: 0 };
+  const totals = { preserved: 0, retired: 0, cleaned: 0, cleanupFailed: 0, staleImage: 0 };
   for (const slot of slots) {
     if (
       options.targetSize > 0 &&
@@ -45,13 +45,27 @@ export async function reconcileWorkspaceWarmPool(options: {
     }
     const container = containers.find(
       (candidate) =>
+        candidate.name === `evcp-ws-${slot.resourceKey}` &&
         candidate.labels["evcp.kind"] === "workspace-warm" &&
         candidate.labels["evcp.warm-slot-id"] === slot.id
     );
+    const unclaimed = slot.state === "ready" || slot.state === "preparing";
+    const inspected =
+      unclaimed && container ? await options.deps.docker.inspectContainer(container.name) : null;
+    const staleImage = Boolean(
+      inspected && inspected.image !== (options.deps.image ?? "evcp/workspace-next:1")
+    );
+    if (staleImage) totals.staleImage += 1;
+    // Durable allocations are no longer pool capacity to recycle, even after a release changes.
+    if (unclaimed && runtimeKeys.has(slot.resourceKey)) {
+      totals.preserved += 1;
+      continue;
+    }
     if (
       options.targetSize > 0 &&
       !runtimeKeys.has(slot.resourceKey) &&
       slot.state === "ready" &&
+      !staleImage &&
       container?.running
     ) {
       try {
@@ -208,12 +222,26 @@ function operationLease(
   };
 }
 
-export function countSlots(slots: WarmWorkspaceSlot[], target: number) {
+export function countSlots(slots: WarmWorkspaceSlot[], target: number, staleImage = 0) {
   return {
     target,
     preparing: slots.filter((slot) => slot.state === "preparing").length,
     ready: slots.filter((slot) => slot.state === "ready").length,
     claiming: slots.filter((slot) => slot.state === "claiming").length,
-    failed: slots.filter((slot) => slot.state === "failed").length
+    failed: slots.filter((slot) => slot.state === "failed").length,
+    staleImage
   };
+}
+
+export async function countStaleWarmImages(
+  slots: WarmWorkspaceSlot[],
+  deps: WorkspaceOrchestratorDeps
+): Promise<number> {
+  let stale = 0;
+  for (const slot of slots) {
+    if (slot.state !== "ready" && slot.state !== "preparing") continue;
+    const container = await deps.docker.inspectContainer(`evcp-ws-${slot.resourceKey}`);
+    if (container && container.image !== (deps.image ?? "evcp/workspace-next:1")) stale += 1;
+  }
+  return stale;
 }

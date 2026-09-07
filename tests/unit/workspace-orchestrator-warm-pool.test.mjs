@@ -343,7 +343,8 @@ test("orchestrator attaches a pool after construction and exposes aggregate stat
     preparing: 0,
     ready: 0,
     claiming: 0,
-    failed: 0
+    failed: 0,
+    staleImage: 0
   });
   orchestrator.configureWarmPool(fixture.prepared.pool);
   await orchestrator.ensureWarmPoolCapacity();
@@ -353,7 +354,8 @@ test("orchestrator attaches a pool after construction and exposes aggregate stat
     preparing: 0,
     ready: 1,
     claiming: 0,
-    failed: 0
+    failed: 0,
+    staleImage: 0
   });
   assert.deepEqual(await orchestrator.cleanupOrphanContainers(), []);
   const record = await orchestrator.provisionWorkspace({

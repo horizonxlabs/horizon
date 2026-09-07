@@ -1,5 +1,14 @@
 export type WarmWorkspaceSlotState = "preparing" | "ready" | "claiming" | "cleaning" | "failed";
 
+export interface WarmPoolStatus {
+  target: number;
+  preparing: number;
+  ready: number;
+  claiming: number;
+  failed: number;
+  staleImage: number;
+}
+
 export interface WarmWorkspaceSlot {
   id: string;
   resourceKey: string;

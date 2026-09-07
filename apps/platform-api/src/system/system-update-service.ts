@@ -49,7 +49,13 @@ export function createSystemUpdateService(deps: {
       }
       // Self last, fire-and-forget: this restarts platform-api, so do not await; the UI polls.
       void deps.engine
-        .updateServiceImage("evcp_platform-api", ref("evcp_platform-api"))
+        .updateService("evcp_platform-api", {
+          image: ref("evcp_platform-api"),
+          envPatch: {
+            EVCP_VERSION: targetTag,
+            EVCP_WORKSPACE_IMAGE: `${repo}/evcp-workspace-next:${targetTag}`
+          }
+        })
         .catch(() => {});
       return { accepted: true, targetVersion: targetTag };
     }

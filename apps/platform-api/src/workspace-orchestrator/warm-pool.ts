@@ -2,12 +2,17 @@ import { randomUUID } from "node:crypto";
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type {
   WarmWorkspaceAllocation,
+  WarmPoolStatus,
   WarmWorkspaceSlot,
   WorkspaceWarmSlotStore
 } from "./warm-pool-types";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
 import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
-import { countSlots, reconcileWorkspaceWarmPool } from "./warm-pool-reconciliation";
+import {
+  countSlots,
+  countStaleWarmImages,
+  reconcileWorkspaceWarmPool
+} from "./warm-pool-reconciliation";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupWarmSlotResources } from "./warm-pool-cleanup";
 import {
@@ -43,13 +48,7 @@ export interface WorkspaceWarmPool {
   isResourceOwned(resourceKey: string): Promise<boolean>;
   deleteProjectClaims(projectId: string, assertOwned: () => Promise<void>): Promise<void>;
 }
-export interface WarmPoolStatus {
-  target: number;
-  preparing: number;
-  ready: number;
-  claiming: number;
-  failed: number;
-}
+export type { WarmPoolStatus } from "./warm-pool-types";
 
 export interface WorkspaceWarmPoolOptions {
   targetSize: number;
@@ -60,9 +59,17 @@ export interface WorkspaceWarmPoolOptions {
   createSlotIdentity?: () => Pick<WarmWorkspaceSlot, "id" | "resourceKey">;
   createOperationOwner?: () => string;
   operationLeaseMs?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): WorkspaceWarmPool {
+  const platformVersion = (options.env ?? process.env).EVCP_VERSION;
+  const workspaceImage = (options.deps.image ?? "evcp/workspace-next:1").split("@", 1)[0]!;
+  const separator = workspaceImage.lastIndexOf(":");
+  const workspaceVersion =
+    separator > workspaceImage.lastIndexOf("/") ? workspaceImage.slice(separator + 1) : undefined;
+  if (platformVersion && workspaceVersion && platformVersion !== workspaceVersion)
+    console.warn("[workspace] configured platform and workspace image tags differ");
   const now = options.now ?? (() => new Date());
   const createSlotIdentity = options.createSlotIdentity ?? defaultWarmSlotIdentity;
   const createOperationOwner = options.createOperationOwner ?? randomUUID;
@@ -238,7 +245,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
     waitForIdle: work.waitForIdle,
     async getStatus() {
-      return countSlots(await options.store.list(), options.targetSize);
+      const slots = await options.store.list();
+      return countSlots(slots, options.targetSize, await countStaleWarmImages(slots, options.deps));
     },
     async getActiveSlotIds() {
       return new Set((await options.store.list()).map((slot) => slot.id));

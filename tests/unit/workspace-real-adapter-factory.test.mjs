@@ -45,7 +45,8 @@ test("real factory offers deferred pool construction and memory mode stays unatt
     preparing: 0,
     ready: 0,
     claiming: 0,
-    failed: 0
+    failed: 0,
+    staleImage: 0
   });
 });
 
