@@ -386,8 +386,4 @@ test("Workspace responsive CSS selects one narrow panel and disables progress mo
     /@media \(max-width: 899px\)[\s\S]*\.vibe-live-resizer\s*\{[\s\S]*display: none/
   );
   assert.match(css, /\.vibe-composer-textarea\s*\{[\s\S]*max-height:\s*180px[\s\S]*resize:\s*none/);
-  assert.match(
-    css,
-    /\.vibe-live-chat-panel\.has-workspace-failure \.vibe-live-thread\s*\{[\s\S]*flex:\s*0 1 auto/
-  );
 });

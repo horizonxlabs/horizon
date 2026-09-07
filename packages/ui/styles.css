@@ -4592,6 +4592,7 @@ th {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .vibe-live-body.is-chat-collapsed {
@@ -4701,11 +4702,6 @@ body.vibe-is-resizing * {
   min-height: 0;
   overflow-y: auto;
   padding: 22px 20px;
-}
-
-.vibe-live-chat-panel.has-workspace-failure .vibe-live-thread {
-  flex: 0 1 auto;
-  max-height: min(52vh, 520px);
 }
 
 .vibe-message-assistant:has(.vibe-turn-timeline:empty) {
@@ -5078,6 +5074,7 @@ body.vibe-is-resizing * {
 
 .vibe-live-composer-wrap {
   background: linear-gradient(180deg, transparent, var(--evcp-color-surface) 24%);
+  flex: 0 0 auto;
   padding: 8px 20px 20px;
 }
 
