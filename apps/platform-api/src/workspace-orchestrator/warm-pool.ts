@@ -6,6 +6,7 @@ import type {
   WorkspaceWarmSlotStore
 } from "./warm-pool-types";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
+import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { countSlots, reconcileWorkspaceWarmPool } from "./warm-pool-reconciliation";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupWarmSlotResources } from "./warm-pool-cleanup";
@@ -32,6 +33,7 @@ export interface WorkspaceWarmPool {
     assertProjectOwned: () => Promise<void>
   ): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
+  /** Retire only after the caller has persisted runtime ownership under its project lease. */
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown, assertProjectOwned: () => Promise<void>): Promise<void>;
   reconcile(publishRecovered?: WarmRecoveryPublisher): Promise<void>;
@@ -288,7 +290,18 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       }
     },
     async completeClaim(slotId) {
-      await options.store.remove(slotId);
+      try {
+        await options.store.remove(slotId);
+      } catch (error) {
+        // A committed deletion with a lost response must not roll back its new runtime owner.
+        let remaining: WarmWorkspaceSlot[];
+        try {
+          remaining = await options.store.list();
+        } catch {
+          throw new WarmWorkspaceClaimRollbackError();
+        }
+        if (remaining.some((slot) => slot.id === slotId)) throw error;
+      }
     },
     async failClaim(slotId, _error, assertProjectOwned) {
       const slot = (await options.store.list()).find((candidate) => candidate.id === slotId);

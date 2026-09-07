@@ -16,10 +16,11 @@ async function createFailedHandoffFixture() {
     persistence: createSecretSqlFixture(persistence).persistence
   });
   await fixture.pool.ensureCapacity();
+  const [ready] = await fixture.store.list();
   const execute = fixture.docker.execInContainer.bind(fixture.docker);
   let failed = false;
   fixture.docker.execInContainer = async (containerId, command) => {
-    if (!failed && containerId.includes("evcp-ws-prj-crash")) {
+    if (!failed && containerId === ready.containerId) {
       failed = true;
       return { stdout: "", stderr: "unhealthy", exitCode: 1 };
     }

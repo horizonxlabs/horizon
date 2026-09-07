@@ -4,18 +4,37 @@ import { createWorkspaceOrchestrator } from "../../apps/platform-api/src/workspa
 import { createFixture } from "./workspace-orchestrator-warm-fixture.mjs";
 import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
 
-test("a ready allocation uses the logical container and preview with prepared physical resources", async () => {
+test("a ready allocation transfers logical ownership without mutating its running container", async () => {
   const fixture = await createFixture();
+  const original = await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1");
+  const lifecycleCalls = [];
+  for (const operation of [
+    "stopContainer",
+    "removeContainer",
+    "createContainer",
+    "startContainer"
+  ]) {
+    const invoke = fixture.deps.docker[operation].bind(fixture.deps.docker);
+    fixture.deps.docker[operation] = async (...args) => {
+      lifecycleCalls.push(operation);
+      return invoke(...args);
+    };
+  }
+  const lifecycleBefore = lifecycleCalls.length;
   const record = await fixture.orchestrator.provisionWorkspace({
     projectId: "prj_new",
     slug: "new"
   });
   assert.equal(record.state, "running");
   assert.equal(record.resourceKey, "warm-resource-1");
+  assert.equal(record.containerId, original.containerId);
+  assert.deepEqual(lifecycleCalls.slice(lifecycleBefore), []);
+  assert.equal(record.projectId, "prj_new");
+  assert.equal(record.id, "ws-prj-new");
   assert.deepEqual(fixture.coldCalls, []);
   const [container] = fixture.prepared.docker.state.containers;
-  assert.equal(container.spec.name, "evcp-ws-prj-new");
-  assert.ok(container.spec.env.includes("EVCP_PREVIEW_BASE=/preview/prj-new"));
+  assert.equal(container.spec.name, "evcp-ws-warm-resource-1");
+  assert.ok(container.spec.env.includes("EVCP_PREVIEW_BASE=/preview/warm-resource-1"));
   assert.equal(container.spec.hostConfig.Mounts[0].Source, "evcp-ws-warm-resource-1-data");
   assert.equal((await fixture.orchestrator.resolveEnv("prj_new")).LLM_GATEWAY_KEY, "llm-secret-1");
   assert.equal(fixture.snapshots.get("prj_new").llmGatewayKeyId, "key-1");
@@ -42,7 +61,33 @@ test("an empty pool immediately falls back cold and emits a sanitized fallback e
   assert.equal(fixture.order.includes("refill"), false);
 });
 
-for (const failure of ["start", "health", "secret", "persist", "complete"]) {
+test("the claimed audit contains only the slot identity and finite monotonic phase durations", async () => {
+  const fixture = await createFixture();
+  await fixture.orchestrator.provisionWorkspace({ projectId: "prj_timing", slug: "timing" });
+  const metadata = fixture.events.find(
+    ({ action }) => action === "workspace.pool_claimed"
+  ).metadata;
+  assert.deepEqual(Object.keys(metadata).sort(), [
+    "completeMs",
+    "healthMs",
+    "runtimeMs",
+    "secretsMs",
+    "slotId",
+    "totalMs"
+  ]);
+  assert.equal(metadata.slotId, fixture.slot.id);
+  for (const phase of ["healthMs", "secretsMs", "runtimeMs", "completeMs", "totalMs"]) {
+    assert.equal(typeof metadata[phase], "number");
+    assert.ok(Number.isFinite(metadata[phase]) && metadata[phase] >= 0);
+    assert.ok(metadata[phase] <= metadata.totalMs);
+  }
+  assert.doesNotMatch(
+    JSON.stringify(fixture.events),
+    /pg-secret|storage-secret|llm-secret|secretPayload|DATABASE_URL/
+  );
+});
+
+for (const failure of ["health", "secret", "persist", "complete"]) {
   test(`a ${failure} handoff failure destroys slot resources once before cold fallback`, async () => {
     const fixture = await createFixture({ failure });
     const record = await fixture.orchestrator.provisionWorkspace({
@@ -68,6 +113,28 @@ for (const failure of ["start", "health", "secret", "persist", "complete"]) {
     assert.ok(fixture.order.indexOf("fail") < fixture.order.indexOf("refill"));
     assert.equal(fixture.events[0].action, "workspace.pool_claim_failed");
     assert.doesNotMatch(JSON.stringify(fixture.events), /pg-secret|storage-secret|llm-secret/);
+  });
+}
+
+for (const unavailable of ["missing", "stopped", "mismatched"]) {
+  test(`a ${unavailable} physical warm container is rejected before cold fallback`, async () => {
+    const fixture = await createFixture();
+    const inspect = fixture.deps.docker.inspectContainer.bind(fixture.deps.docker);
+    fixture.deps.docker.inspectContainer = async (name) => {
+      const found = await inspect(name);
+      if (name !== "evcp-ws-warm-resource-1" || !found) return found;
+      if (unavailable === "missing") return null;
+      if (unavailable === "stopped") return { ...found, running: false };
+      return { ...found, containerId: "another-container" };
+    };
+    const record = await fixture.orchestrator.provisionWorkspace({
+      projectId: "prj_retry",
+      slug: "retry"
+    });
+    assert.equal(record.resourceKey, "prj-retry");
+    assert.deepEqual(fixture.prepared.releasedSchemas, ["warm-resource-1"]);
+    assert.equal(fixture.events[0].action, "workspace.pool_claim_failed");
+    assert.ok(fixture.order.indexOf("remove-secrets") < fixture.order.indexOf("fail"));
   });
 }
 
@@ -104,6 +171,28 @@ test("same-project callers share a promise and claim only one warm slot", async 
   assert.equal(results[0], results[1]);
   assert.equal(fixture.order.filter((step) => step === "claim").length, 1);
   assert.deepEqual(fixture.coldCalls, []);
+});
+
+test("physical recovery never adopts a legacy-name container with a different persisted ID", async () => {
+  const fixture = await createFixture();
+  await fixture.orchestrator.provisionWorkspace({ projectId: "prj_recover", slug: "recover" });
+  const inspect = fixture.deps.docker.inspectContainer.bind(fixture.deps.docker);
+  let legacyInspections = 0;
+  fixture.deps.docker.inspectContainer = async (name) => {
+    if (name === "evcp-ws-warm-resource-1") return null;
+    if (name === "evcp-ws-prj-recover") {
+      legacyInspections += 1;
+      return { containerId: "unrelated-container", running: true, env: [] };
+    }
+    return inspect(name);
+  };
+  const record = await fixture.orchestrator.provisionWorkspace({
+    projectId: "prj_recover",
+    slug: "recover"
+  });
+  assert.equal(legacyInspections, 1);
+  assert.notEqual(record.containerId, "unrelated-container");
+  assert.equal(record.resourceKey, "warm-resource-1");
 });
 
 test("two replicas preserve the durable warm winner without cold provisioning or secret rollback", async () => {
@@ -149,6 +238,8 @@ test("two replicas preserve the durable warm winner without cold provisioning or
     ["warm-resource-1", "warm-resource-1"]
   );
   assert.equal(fixture.prepared.docker.state.containers.length, 1);
+  assert.equal(results[0].value.containerId, fixture.slot.containerId);
+  assert.equal(results[1].value.containerId, fixture.slot.containerId);
   assert.equal(persistence.records.get("prj_race").state, "running");
   assert.equal(persistence.records.get("prj_race").resourceKey, "warm-resource-1");
   assert.equal((await fixture.deps.secrets.resolveEnv("prj_race")).LLM_GATEWAY_KEY, "llm-secret-1");

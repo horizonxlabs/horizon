@@ -33,6 +33,21 @@ export interface WarmWorkspaceAllocation {
   env: Record<string, string>;
 }
 
+export interface WarmWorkspaceClaimTimings {
+  healthMs: number;
+  secretsMs: number;
+  runtimeMs: number;
+  completeMs: number;
+  totalMs: number;
+}
+
+/** Preserve durable ownership when rollback cannot safely return the allocation to its slot. */
+export class WarmWorkspaceClaimRollbackError extends Error {
+  constructor() {
+    super("warm workspace claim rollback is unsafe or incomplete");
+  }
+}
+
 /** Non-secret intent retained independently of the slot's retry/claim lifecycle. */
 export interface WarmPreparationIntent {
   resourceKey: string;

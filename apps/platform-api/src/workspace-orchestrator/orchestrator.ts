@@ -13,7 +13,9 @@ import {
 } from "./workspace-lifecycle";
 import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
+import { workspaceContainerName } from "./runtime-location";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
+import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 import { createWorkspaceRuntimeCache } from "./runtime-cache";
@@ -73,7 +75,12 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     const physicalKey = physicalResourceKey(existing);
     const logicalKey = resourceKeyForProject(input.projectId);
     await leases.adoptSecrets(input.projectId, deps.secrets);
-    const found = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
+    let found = await deps.docker.inspectContainer(workspaceContainerName(existing));
+    if (!found && existing.containerId && physicalKey !== logicalKey) {
+      // Pre-hot allocations used a logical name; only the persisted container may be adopted.
+      const legacy = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
+      if (legacy?.containerId === existing.containerId) found = legacy;
+    }
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
@@ -228,16 +235,17 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     const allocation = await deps.warmPool?.claim(input.projectId, assertProjectOwned);
     if (allocation) {
       try {
-        const record = await provisionClaimedWorkspace(input, allocation);
+        const { record, timings } = await provisionClaimedWorkspace(input, allocation);
         auditPoolEvent({
           action: "workspace.pool_claimed",
           projectId: input.projectId,
-          metadata: { slotId: allocation.slotId }
+          metadata: { slotId: allocation.slotId, ...timings }
         });
         refillWarmPool();
         return record;
       } catch (error) {
         await assertProjectOwned();
+        if (error instanceof WarmWorkspaceClaimRollbackError) throw error;
         await deps.warmPool!.failClaim(allocation.slotId, error, assertProjectOwned);
         auditPoolEvent({
           action: "workspace.pool_claim_failed",
