@@ -26,6 +26,7 @@ ${progressCommentarySection()}
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Use generate_image to create AI images for the app (see Generated images below).
 - Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
+${workspaceCheckGuidance(input.template)}
 
 ## Generated images — make key screens look real, within a hard cap
 - WHEN: a hero/landing section, a brand/product showcase, or a large empty visual that would otherwise ship as a gray placeholder deserves ONE generated image. Decorative filler, icons, and repeated list thumbnails do NOT. Prefer 1-2 strong images per turn; the per-turn cap is small and further calls fail.
@@ -93,6 +94,7 @@ ${progressCommentarySection()}
   - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.
   - If the current message imperatively requests an improvement, make a substantial visible improvement within that named scope while protecting everything outside it.
 - When a governed skill matches either path, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
+${workspaceCheckGuidance(input.template)}
 
 ## Implementation constraints when mutation is authorized
 - Preserve existing features unless the current message explicitly removes them.
@@ -206,6 +208,26 @@ function dataMockFirstSection(): string {
 Until the user explicitly asks to connect or sync a real database, do NOT emit migration actions and do not add pg, database routes, or server-side database access. Use createStore<T> from lib/mock-data.ts with precise row types and realistic seeds. Mention once that the data is mock and can be connected later.
 
 When the user explicitly requests real database sync, derive the schema and seed rows from the mock types already proven in the UI. Call propose_database_migration once per bounded migration, add app/api route handlers using pg and DATABASE_URL, and change client data access to fetch those routes through NEXT_PUBLIC_BASE_PATH. Never use Prisma, SQLite, or client-side database credentials.`;
+}
+
+function workspaceCheckGuidance(template: GoldenTemplate): string {
+  const manifest = template.files?.find((file) => file.path === "package.json");
+  let scripts: Record<string, unknown> = {};
+  try {
+    scripts = JSON.parse(manifest?.content ?? "{}").scripts ?? {};
+  } catch {
+    // Without a valid manifest, do not advertise checks that may not exist.
+  }
+  const commands = ["build", "test", "typecheck", "lint"]
+    .filter((name) => typeof scripts[name] === "string" && scripts[name])
+    .map((name) => `npm run ${name}`);
+  return `
+## Workspace inspection and checks
+- File tools can access only app/, components/, lib/, and public/. Root files such as template.json and package.json cannot be read with read_workspace_file; use the supplied template information instead.
+- Available template check commands: ${commands.join(", ") || "none declared"}.
+- Do not guess missing test, typecheck, or lint scripts. When mutation is authorized, use command "npm" with args ["run", "build"] if build is listed above. Horizon also validates changed code before committing it.
+- If a check fails, use its error output to repair the cause. Do not repeat the same failed check unchanged or try reading inaccessible root files. Finish once the requested work and available validation are complete.
+`;
 }
 
 function lockedFiles(template: GoldenTemplate): string {

@@ -4,26 +4,46 @@ import test from "node:test";
 import { resolvePiAgentLimits } from "../../apps/platform-api/src/generation-loop/pi-limits.ts";
 
 test("Pi gives slow local-model rounds the same default deadline as governed completions", () => {
+  const previousRounds = process.env.EVCP_PI_MAX_MODEL_ROUNDS;
   const previous = process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
   const previousTurn = process.env.EVCP_PI_TURN_TIMEOUT_MS;
   const previousTokenBudget = process.env.EVCP_PI_MAX_TURN_TOKENS;
   delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
   delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
   delete process.env.EVCP_PI_MAX_TURN_TOKENS;
+  delete process.env.EVCP_PI_MAX_MODEL_ROUNDS;
 
   try {
     const limits = resolvePiAgentLimits();
-    assert.equal(limits.maxModelRounds, 20);
+    assert.equal(limits.maxModelRounds, 48);
     assert.equal(limits.modelRoundTimeoutMs, 300_000);
     assert.equal(limits.turnTimeoutMs, 1_800_000);
     assert.equal(limits.maxTurnTokens, undefined);
   } finally {
+    if (previousRounds === undefined) delete process.env.EVCP_PI_MAX_MODEL_ROUNDS;
+    else process.env.EVCP_PI_MAX_MODEL_ROUNDS = previousRounds;
     if (previous === undefined) delete process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS;
     else process.env.EVCP_PI_MODEL_ROUND_TIMEOUT_MS = previous;
     if (previousTurn === undefined) delete process.env.EVCP_PI_TURN_TIMEOUT_MS;
     else process.env.EVCP_PI_TURN_TIMEOUT_MS = previousTurn;
     if (previousTokenBudget === undefined) delete process.env.EVCP_PI_MAX_TURN_TOKENS;
     else process.env.EVCP_PI_MAX_TURN_TOKENS = previousTokenBudget;
+  }
+});
+
+test("Pi preserves explicit model-round budgets and clamps them at the hard maximum", () => {
+  const previous = process.env.EVCP_PI_MAX_MODEL_ROUNDS;
+  try {
+    process.env.EVCP_PI_MAX_MODEL_ROUNDS = "20";
+    assert.equal(resolvePiAgentLimits().maxModelRounds, 20);
+    assert.equal(resolvePiAgentLimits({ maxModelRounds: 8 }).maxModelRounds, 8);
+    process.env.EVCP_PI_MAX_MODEL_ROUNDS = "999";
+    assert.equal(resolvePiAgentLimits().maxModelRounds, 64);
+    process.env.EVCP_PI_MAX_MODEL_ROUNDS = "invalid";
+    assert.equal(resolvePiAgentLimits().maxModelRounds, 48);
+  } finally {
+    if (previous === undefined) delete process.env.EVCP_PI_MAX_MODEL_ROUNDS;
+    else process.env.EVCP_PI_MAX_MODEL_ROUNDS = previous;
   }
 });
 

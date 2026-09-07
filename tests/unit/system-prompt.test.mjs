@@ -1,9 +1,43 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { loadGoldenTemplate } from "../../apps/platform-api/src/workspace-orchestrator/template.ts";
 import {
   buildAutoSystemPrompt,
   buildSystemPrompt
 } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
+
+test("Build and Auto identify actual template checks and readable roots before tool use", () => {
+  const template = loadGoldenTemplate();
+  for (const build of [buildSystemPrompt, buildAutoSystemPrompt]) {
+    const prompt = build({ template, contextFiles: [], rollingSummary: null });
+    assert.match(prompt, /Available template check commands: npm run build\./);
+    assert.match(prompt, /Do not guess missing test, typecheck, or lint scripts/);
+    assert.match(prompt, /template\.json and package\.json cannot be read/);
+    assert.match(prompt, /app\/, components\/, lib\/, and public\//);
+  }
+});
+
+test("template check guidance includes configured optional checks only", () => {
+  const template = {
+    name: "custom",
+    lockedFiles: [],
+    files: [
+      {
+        path: "package.json",
+        content: JSON.stringify({
+          scripts: {
+            build: "next build",
+            typecheck: "tsc --noEmit",
+            dev: "next dev"
+          }
+        })
+      }
+    ]
+  };
+  const prompt = buildSystemPrompt({ template, contextFiles: [], rollingSummary: null });
+  assert.match(prompt, /Available template check commands: npm run build, npm run typecheck\./);
+  assert.doesNotMatch(prompt, /npm run dev/);
+});
 
 test("system prompt lists locked files and embeds context file contents and rolling summary", () => {
   const template = {

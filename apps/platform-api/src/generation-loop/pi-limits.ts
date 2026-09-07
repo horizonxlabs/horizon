@@ -17,13 +17,11 @@ export type PiAgentLimits = PiAgentToolLimits & {
 };
 
 const defaults: PiAgentLimits = {
-  // Pi uses one governed model round per tool-response cycle. A normal continuation can
-  // legitimately need to inspect several prior files, write several components, then
-  // finish its response and pass workspace validation. Twelve rounds truncated that
-  // healthy path during real Creator builds and rolled back all successful writes.
-  // Keep a firm cap (and the separate token, tool-call, reasoning, and time budgets),
-  // but leave sufficient room for a multi-file continuation to reach finalization.
-  maxModelRounds: 20,
+  // Each serial tool call consumes a model round. Allow the full 40-call tool budget
+  // plus a final answer and bounded repair feedback; a 20-round cap aborted valid
+  // multi-file turns before validation and rolled back their successful writes.
+  // Tool, reasoning, and time budgets continue to bound the work independently.
+  maxModelRounds: 48,
   modelRoundTimeoutMs: 300_000,
   maxToolCalls: 40,
   shellTimeoutMs: 120_000,
@@ -130,7 +128,8 @@ function optionalLimit(
   const raw = override ?? process.env[environmentName];
   if (raw === undefined || raw === "") return undefined;
   const candidate = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(candidate) || !Number.isInteger(candidate) || candidate < 1) return undefined;
+  if (!Number.isFinite(candidate) || !Number.isInteger(candidate) || candidate < 1)
+    return undefined;
   return Math.min(candidate, maximum);
 }
 
