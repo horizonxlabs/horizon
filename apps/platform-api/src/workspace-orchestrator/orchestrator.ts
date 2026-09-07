@@ -276,6 +276,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       return records.get(projectId) ?? null;
     },
 
+    findWorkspaceByResourceKey(resourceKey: string): WorkspaceContainerRecord | null {
+      return cache.findByResourceKey(resourceKey);
+    },
+
     async listSecretNames(projectId: string): Promise<string[]> {
       return deps.secrets.listNames(projectId);
     },

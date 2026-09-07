@@ -89,3 +89,13 @@ test("a released or differently scoped recovery cannot publish", () => {
   assert.equal(recovery.publish(running), false);
   assert.equal(cache.records.size, 0);
 });
+
+test("resource lookup finds warm and legacy records by physical resource key", () => {
+  const cache = createWorkspaceRuntimeCache();
+  cache.set(running);
+  cache.set({ ...running, projectId: "prj_legacy", resourceKey: undefined });
+
+  assert.equal(cache.findByResourceKey("warm-current")?.projectId, "prj_cache");
+  assert.equal(cache.findByResourceKey("prj-legacy")?.projectId, "prj_legacy");
+  assert.equal(cache.findByResourceKey("missing"), null);
+});
