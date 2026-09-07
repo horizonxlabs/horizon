@@ -79,13 +79,13 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     const el = threadRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [vibeMessages, isVibing, vibeStatus]);
-  // Preview is addressed by the id-derived resource key (matches the container name), not the
-  // public slug, so it survives a rename. Project ids never contain hyphens.
-  const previewSrc = `/preview/${selectedProject.id.replaceAll("_", "-")}`;
   const previewAuth = usePreviewAuthorization({
     projectId: selectedProject.id,
     previewKey: vibePreviewKey
   });
+  const previewSrc = previewAuth.previewKey
+    ? `/preview/${encodeURIComponent(previewAuth.previewKey)}`
+    : "";
   const isPreviewAuthorized = previewAuth.isAuthorized;
   const liveLines = turnLineTotal(vibeMessages.at(-1)?.actions ?? []);
   const quickMessages = buildQuickMessages({
@@ -103,7 +103,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   });
   usePreviewGuards({
     projectId: selectedProject.id,
-    enabled: previewAuth.state === "ready",
+    enabled: isPreviewAuthorized,
     onBug: addBugReport
   });
   const selectTab = (tab: typeof vibeTab) => {
@@ -334,7 +334,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         <div className="vibe-live-preview-panel">
           {vibeTab === "preview" && isPreviewAuthorized ? (
             <WorkspacePreviewFrame
-              key={`${selectedProject.id}:${vibePreviewKey}`}
+              key={vibePreviewKey}
               previewKey={vibePreviewKey}
               src={previewSrc}
             />

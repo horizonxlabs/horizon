@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+
+process.env.EVCP_ALLOW_SIMULATE_LOGIN = "1";
+
 const { createPlatformApiServices } =
   await import("../../apps/platform-api/src/platform-services.ts");
 const { resolvePreviewProxyDecision, renderPreviewUnavailableHtml, wantsPreviewJson } =
@@ -20,6 +23,38 @@ test("preview decision: 401 unauth, 404 unknown slug, upstream for member", asyn
   });
   assert.deepEqual(await resolvePreviewProxyDecision(services, CREATOR, key), {
     upstream: `http://evcp-ws-${key}:3000`
+  });
+});
+
+test("preview proxy authorizes physical runtime keys through their owning project", async () => {
+  const services = createPlatformApiServices();
+  const creator = services.auth.resolveCurrentUser(CREATOR);
+  const projectId = services.projects.listProjects(creator)[0].id;
+  const warmRecord = {
+    projectId,
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  services.workspaceOrchestrator = {
+    findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    getWorkspace: () => null,
+    async wakeWorkspace() {},
+    markActivity() {}
+  };
+
+  assert.deepEqual(await resolvePreviewProxyDecision(services, CREATOR, "warm-resource-1"), {
+    upstream: "http://evcp-ws-warm-resource-1:3000"
+  });
+  assert.deepEqual(
+    await resolvePreviewProxyDecision(
+      services,
+      { "x-mock-user-email": "user@company.com" },
+      "warm-resource-1"
+    ),
+    { status: 403 }
+  );
+  assert.deepEqual(await resolvePreviewProxyDecision(services, CREATOR, "missing-resource"), {
+    status: 404
   });
 });
 

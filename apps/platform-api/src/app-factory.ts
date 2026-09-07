@@ -60,6 +60,7 @@ import { readKeycloakConfig } from "./keycloak/config";
 import { KeycloakAdminClient } from "./keycloak/admin-client";
 import * as fs from "node:fs";
 import { renderPreviewUnavailableHtml } from "./workspace-orchestrator/preview-unavailable-page";
+import { workspacePhysicalKey } from "./workspace-orchestrator/runtime-location";
 import { createPrdRepositoryBackedService, createPrismaPrdPersistence, MemoryPrdPersistenceClient, type PrdRepositoryBackedService } from "./persistence/prd-repositories";
 import { createPrismaWorkspacePersistence, createWorkspaceRepositoryBackedService, MemoryWorkspacePersistenceClient, type WorkspaceRepositoryBackedService } from "./persistence/workspace-repositories";
 import { createPrismaPublishStorePersistence, createPublishStoreRepositoryBackedService, MemoryPublishStorePersistenceClient, type PublishStoreRepositoryBackedService } from "./persistence/publish-store-repositories";
@@ -2935,7 +2936,9 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
     authorize: async (headers, projectId) => {
       const actor = await resolvePersistenceUser(services, headers);
       const project = await resolvePersistenceProject(services, actor, projectId);
-      return { previewKey: project.id.replaceAll("_", "-") };
+      const runtime = services.workspaceOrchestrator.getWorkspace(project.id);
+      if (!runtime) throw new Error("workspace runtime is unavailable");
+      return { previewKey: workspacePhysicalKey(runtime) };
     },
     secureCookie: process.env.NODE_ENV === "production"
   });

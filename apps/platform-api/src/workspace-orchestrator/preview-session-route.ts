@@ -38,7 +38,7 @@ export function registerPreviewSessionRoute(input: {
         "Set-Cookie",
         `evcp_preview_token=${encodeURIComponent(token)}; Path=/preview/${previewKey}; HttpOnly; SameSite=Strict; Max-Age=900${input.secureCookie ? "; Secure" : ""}`
       );
-      response.status(200).json(success({ authorized: true }));
+      response.status(200).json(success({ authorized: true, previewKey }));
     } catch {
       response.status(403).json(failure("FORBIDDEN", "Preview session is unavailable"));
     }

@@ -92,3 +92,34 @@ test("preview target resolves for members, wakes idle workspaces, rejects others
     status: 404
   });
 });
+
+test("preview target authorizes the logical project behind a physical runtime key", async () => {
+  const warmRecord = {
+    projectId: "prj_alpha",
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  const creator = { userId: "u-creator", roles: ["creator"], projectIds: ["prj_alpha"] };
+  const outsider = { userId: "u-outsider", roles: ["creator"], projectIds: [] };
+  const activity = [];
+  const orchestrator = {
+    findWorkspaceByResourceKey: (key) => (key === "warm-resource-1" ? warmRecord : null),
+    getWorkspace: () => null,
+    async wakeWorkspace() {},
+    markActivity: (projectId) => activity.push(projectId)
+  };
+
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "warm-resource-1"), {
+    ok: true,
+    upstream: "http://evcp-ws-warm-resource-1:3000"
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, outsider, "warm-resource-1"), {
+    ok: false,
+    status: 403
+  });
+  assert.deepEqual(await resolvePreviewTarget(orchestrator, creator, "missing-resource"), {
+    ok: false,
+    status: 404
+  });
+  assert.deepEqual(activity, ["prj_alpha"]);
+});

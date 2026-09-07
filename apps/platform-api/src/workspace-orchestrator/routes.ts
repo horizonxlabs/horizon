@@ -1,5 +1,5 @@
 import type { WorkspaceOrchestrator } from "./orchestrator";
-import { resourceKeyForProject } from "./resource-ports";
+import { workspaceContainerName } from "./runtime-location";
 import type { PlatformUser } from "../platform-services";
 
 export interface WorkspaceAuthContext {
@@ -87,28 +87,18 @@ export type PreviewResolution =
 export async function resolvePreviewTarget(
   orchestrator: WorkspaceOrchestrator,
   auth: WorkspaceAuthContext | null,
-  // The preview path segment is the id-derived resource key (e.g. `prj-team-time-off`), not the
-  // public slug — so a rename never changes a project's preview URL.
+  // The preview path segment is the immutable physical runtime key, never the public slug.
   key: string
 ): Promise<PreviewResolution> {
   if (!auth) {
     return { ok: false, status: 401 };
   }
-  // find the caller's workspace whose id-derived key matches
-  let record: ReturnType<WorkspaceOrchestrator["getWorkspace"]> = null;
-  for (const projectId of auth.projectIds) {
-    if (resourceKeyForProject(projectId) !== key) continue;
-    const candidate = orchestrator.getWorkspace(projectId);
-    if (candidate) {
-      record = candidate;
-      break;
-    }
-  }
+  const record = orchestrator.findWorkspaceByResourceKey(key);
   if (!record) {
-    // Not one of the caller's workspaces: 403 if it exists at all (someone else's), else 404. The
-    // project id is recoverable from the key because project ids never contain hyphens.
-    const anyWorkspace = orchestrator.getWorkspace(key.replaceAll("-", "_"));
-    return anyWorkspace ? { ok: false, status: 403 } : { ok: false, status: 404 };
+    return { ok: false, status: 404 };
+  }
+  if (!isMember(auth, record.projectId)) {
+    return { ok: false, status: 403 };
   }
   if (record.state === "idle") {
     await orchestrator.wakeWorkspace(record.projectId);
@@ -116,5 +106,5 @@ export async function resolvePreviewTarget(
     return { ok: false, status: 503 };
   }
   orchestrator.markActivity(record.projectId);
-  return { ok: true, upstream: `http://evcp-ws-${key}:3000` };
+  return { ok: true, upstream: `http://${workspaceContainerName(record)}:3000` };
 }
