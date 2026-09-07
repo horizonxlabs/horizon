@@ -14,39 +14,44 @@ export async function repairOwnedWarmSecrets(
   options: Pick<WorkspaceWarmPoolOptions, "deps" | "codec">,
   slot: WarmWorkspaceSlot,
   ownership: ProvisioningSecretAttempt
-): Promise<void> {
+): Promise<"verified" | "preserve"> {
   const { deps } = options;
   const projectId = slot.claimProjectId;
-  if (!projectId || !deps.runtimeRecords) return;
+  if (!projectId || !deps.runtimeRecords) return "preserve";
   await ownership.assertOwned();
-  const snapshots = await deps.runtimeRecords.list();
-  const owner = snapshots.find(
-    ({ record }) =>
-      record.projectId === projectId && workspacePhysicalKey(record) === slot.resourceKey
-  );
-  if (!owner) return;
+  const readOwner = async () => {
+    const owners = (await deps.runtimeRecords!.list()).filter(
+      ({ record }) =>
+        workspacePhysicalKey(record) === slot.resourceKey ||
+        (slot.containerId && record.containerId === slot.containerId)
+    );
+    return owners.length === 1 &&
+      owners[0].record.projectId === projectId &&
+      workspacePhysicalKey(owners[0].record) === slot.resourceKey
+      ? owners[0]
+      : undefined;
+  };
+  const owner = await readOwner();
+  // A different logical owner cannot authorize importing or discarding this claimant's bundle.
+  if (!owner) return "preserve";
   try {
     await deps.secrets.adoptProvisioning(projectId, ownership);
     const current = await deps.secrets.resolveEnv(projectId);
     const names = [...MANAGED_WORKSPACE_SECRET_NAMES];
     // Complete bundles may contain valid newer rotations. They must never be replaced by preparation.
     if (names.every((name) => current[name])) {
+      if (!(await readOwner())) return "preserve";
       await ownership.assertOwned();
-      return;
+      return "verified";
     }
     const assertRuntimeOwner = async () => {
       await ownership.assertOwned();
-      const owners = (await deps.runtimeRecords!.list()).filter(
-        ({ record }) =>
-          workspacePhysicalKey(record) === slot.resourceKey ||
-          (slot.containerId && record.containerId === slot.containerId)
-      );
+      const currentOwner = await readOwner();
       if (
-        owners.length !== 1 ||
-        owners[0].record.projectId !== projectId ||
-        owners[0].record.state !== "running" ||
-        owners[0].record.containerId !== slot.containerId ||
-        owners[0].llmGatewayKeyId !== slot.llmGatewayKeyId
+        !currentOwner ||
+        currentOwner.record.state !== "running" ||
+        currentOwner.record.containerId !== slot.containerId ||
+        currentOwner.llmGatewayKeyId !== slot.llmGatewayKeyId
       )
         throw new Error("runtime ownership changed");
       await ownership.assertOwned();
@@ -78,6 +83,7 @@ export async function repairOwnedWarmSecrets(
     await assertRuntimeOwner();
     await deps.secrets.repairForProvisioning(projectId, prepared, ownership);
     await assertRuntimeOwner();
+    return "verified";
   } catch {
     // Keep the slot, container, and encrypted bundle available for a fenced retry, with no values exposed.
     throw new Error("owned warm workspace secret repair is incomplete; retry reconciliation");
@@ -92,5 +98,6 @@ export async function repairProjectWarmSecrets(
   const slot = (await options.store.list()).find(
     (candidate) => candidate.claimProjectId === projectId
   );
-  if (slot) await repairOwnedWarmSecrets(options, slot, ownership);
+  if (slot && (await repairOwnedWarmSecrets(options, slot, ownership)) === "preserve")
+    throw new Error("owned warm workspace secret repair is incomplete; retry reconciliation");
 }

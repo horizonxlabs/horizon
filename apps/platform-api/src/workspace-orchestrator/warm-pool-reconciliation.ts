@@ -162,15 +162,20 @@ export async function reconcileWorkspaceWarmPool(options: {
           runtimeKeys = await durableRuntimeKeys(options.deps);
           await assertOwned();
           if (runtimeKeys.has(ownedSlot.resourceKey)) {
-            if (projectOwnership)
-              await repairOwnedWarmSecrets(
+            if (
+              !projectOwnership ||
+              (await repairOwnedWarmSecrets(
                 options,
                 { ...ownedSlot, state: slot.state },
                 {
                   token: ownerId,
                   assertOwned
                 }
-              );
+              )) === "preserve"
+            ) {
+              totals.preserved += 1;
+              return;
+            }
             await assertOwned();
             await options.store.remove(ownedSlot.id, ownerId);
             totals.retired += 1;

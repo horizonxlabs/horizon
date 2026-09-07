@@ -110,7 +110,7 @@ for (const timing of [
     assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")).running, true);
     assert.equal(
       (await fixture.store.list()).some(({ id }) => id === fixture.allocation.slotId),
-      timing.startsWith("container")
+      true
     );
     await assertAllocationSurvives(fixture);
     if (timing === "container-owner-during-failed-health") {

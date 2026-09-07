@@ -150,13 +150,14 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
               try {
                 const runtimeKeys = await durableRuntimeKeys();
                 if (runtimeKeys.has(owned.resourceKey)) {
-                  await repairOwnedWarmSecrets(options, owned, {
+                  const repair = await repairOwnedWarmSecrets(options, owned, {
                     token: ownerId,
                     assertOwned: async () => {
                       await projectOwnership?.assertOwned();
                       await ownership.assertOwned();
                     }
                   });
+                  if (repair === "preserve") return;
                   await ownership.assertOwned();
                   await options.store.remove(owned.id, ownerId);
                   return;

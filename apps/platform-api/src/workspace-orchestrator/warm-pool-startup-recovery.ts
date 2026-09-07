@@ -48,9 +48,11 @@ export async function recoverOwnedWarmClaim(
   try {
     const existing = await existingOwnership();
     if (existing) {
-      if (existing === "assigned") await repairOwnedWarmSecrets(options, slot, ownership);
       // Retirement must not overwrite the orchestrator's Docker-hydrated state with stored state.
-      return existing === "preserve" ? "preserve" : undefined;
+      return existing === "preserve" ||
+        (await repairOwnedWarmSecrets(options, slot, ownership)) === "preserve"
+        ? "preserve"
+        : undefined;
     }
     if (slot.state !== "claiming" || !slot.secretPayload || !slot.llmGatewayKeyId) return;
     const logicalKey = resourceKeyForProject(projectId);
@@ -89,8 +91,10 @@ export async function recoverOwnedWarmClaim(
     const currentOwner = await existingOwnership(found.containerId);
     await ownership.assertOwned();
     if (currentOwner) {
-      if (currentOwner === "assigned") await repairOwnedWarmSecrets(options, slot, ownership);
-      return currentOwner === "preserve" ? "preserve" : undefined;
+      return currentOwner === "preserve" ||
+        (await repairOwnedWarmSecrets(options, slot, ownership)) === "preserve"
+        ? "preserve"
+        : undefined;
     }
     await options.deps.secrets.replaceForProvisioning(projectId, env, ownership);
     const timestamp = options.now().toISOString();

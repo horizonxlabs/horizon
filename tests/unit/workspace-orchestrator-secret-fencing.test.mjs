@@ -164,6 +164,8 @@ for (const { mode, mutation } of [
       persistence: sql.persistence
     });
     fixture.deps.secrets = secrets;
+    fixture.prepared.deps.runtimeRecords = firstStore;
+    fixture.prepared.deps.secrets = secrets;
     let paused = false;
     sql.beforeQuery = async (statement) => {
       const target =

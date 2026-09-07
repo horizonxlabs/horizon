@@ -68,14 +68,15 @@ test("recovery preserves a claimed physical allocation when the final container 
   );
 });
 
-test("recovery keeps cold resource identity when an unrelated stale warm claim exists", async () => {
+test("recovery keeps cold identity and preserves unmatched warm preparation for safe retry", async () => {
   const persistence = createRuntimeLeaseFixture();
   const runtimeRecords = persistence.createStore();
   const fixture = createWarmPoolFixture({ targetSize: 1, runtimeRecords });
   fixture.deps.secrets = createProjectSecretStore({ encryptionKeyHex: "2".repeat(64) });
   await fixture.pool.ensureCapacity();
   await runtimeRecords.provisioningLeases.acquire("prj_cold", "crashed-owner", 1_000);
-  await fixture.pool.claim("prj_cold");
+  const allocation = await fixture.pool.claim("prj_cold");
+  const prepared = (await fixture.store.list()).find(({ id }) => id === allocation.slotId);
   persistence.advance(1_001);
   const initial = createWorkspaceOrchestrator({ ...fixture.deps, warmPool: fixture.pool });
   await initial.provisionWorkspace({ projectId: "prj_cold", slug: "cold" });
@@ -87,9 +88,12 @@ test("recovery keeps cold resource identity when an unrelated stale warm claim e
 
   assert.equal(record.resourceKey, "prj-cold");
   await fixture.pool.reconcile();
-  assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
-  assert.deepEqual(fixture.releasedBuckets, ["warm-resource-1"]);
-  assert.deepEqual(fixture.revokedKeys, ["key-1"]);
+  assert.deepEqual(fixture.releasedSchemas, []);
+  assert.deepEqual(fixture.releasedBuckets, []);
+  assert.deepEqual(fixture.revokedKeys, []);
+  const retained = (await fixture.store.list()).find(({ id }) => id === allocation.slotId);
+  assert.equal(retained?.secretPayload === prepared.secretPayload, true);
+  assert.ok(await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"));
   assert.ok(await fixture.docker.inspectContainer("evcp-ws-prj-cold"));
   assert.ok(
     (await fixture.docker.listManagedVolumes()).some(
