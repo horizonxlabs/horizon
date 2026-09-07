@@ -44,6 +44,71 @@ test("runtime startup recovers a completed warm handoff before reconcile or orph
   assert.deepEqual(await reloadedSecrets.resolveEnv("prj_alpha"), fixture.allocation.env);
 });
 
+for (const timing of ["before-recovery", "during-health", "container-only"]) {
+  test(`recovery cannot import another project's physical allocation (${timing})`, async () => {
+    const fixture = await createCrashedWarmStartupFixture({ projectId: "prj_alpha" });
+    const owner = {
+      record: {
+        id: "ws-prj-beta",
+        projectId: "prj_beta",
+        slug: "beta",
+        resourceKey: timing === "container-only" ? "warm-resource-other" : "warm-resource-1",
+        state: "running",
+        containerId: fixture.containerId,
+        cpuCores: 1,
+        memoryMb: 2048,
+        createdAt: "2026-09-05T00:00:00.000Z",
+        updatedAt: "2026-09-05T00:00:00.000Z",
+        lastActivityAt: "2026-09-05T00:00:00.000Z"
+      },
+      llmGatewayKeyId: "key-1"
+    };
+    const persistOwner = async () => {
+      for (const [name, value] of Object.entries(fixture.allocation.env)) {
+        await fixture.deps.secrets.put("prj_beta", name, value);
+      }
+      await fixture.runtimeRecords.save(owner);
+    };
+    if (timing === "during-health") {
+      const exec = fixture.docker.execInContainer.bind(fixture.docker);
+      let persisted = false;
+      fixture.docker.execInContainer = async (...args) => {
+        if (!persisted && args[0] === fixture.containerId) {
+          persisted = true;
+          await persistOwner();
+        }
+        return exec(...args);
+      };
+    } else await persistOwner();
+
+    const replica = fixture.createReplica();
+    await replica.boot();
+    const snapshots = await fixture.runtimeRecords.list();
+    assert.deepEqual(
+      snapshots.map(({ record }) => record.projectId),
+      ["prj_beta"]
+    );
+    assert.deepEqual(snapshots, [owner]);
+    assert.deepEqual(await fixture.deps.secrets.listNames("prj_alpha"), []);
+    assert.equal(replica.orchestrator.getWorkspace("prj_alpha"), null);
+    const ownerEnv = await fixture.deps.secrets.resolveEnv("prj_beta");
+    assert.equal(
+      Object.entries(fixture.allocation.env).every(([name, value]) => ownerEnv[name] === value),
+      true
+    );
+    assert.equal(
+      (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")).containerId,
+      fixture.containerId
+    );
+    assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")).running, true);
+    assert.equal(
+      (await fixture.store.list()).some(({ id }) => id === fixture.allocation.slotId),
+      timing === "container-only"
+    );
+    await assertAllocationSurvives(fixture);
+  });
+}
+
 for (const failure of [
   "missing",
   "unhealthy",

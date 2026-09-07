@@ -258,12 +258,14 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       runtimeRecords = store;
       deps.runtimeRecords = store;
       for (const snapshot of await store.list()) {
-        // Reconcile persisted state with Docker so a stack restart cannot leave preview stuck at 503.
+        // A missing/replaced container must go through wake to health-check and persist its ID.
+        const found =
+          snapshot.record.state === "running"
+            ? await inspectWorkspaceContainer(deps.docker, snapshot.record).catch(() => null)
+            : null;
         const live =
-          snapshot.record.state !== "running" || !snapshot.record.containerId
-            ? true
-            : ((await inspectWorkspaceContainer(deps.docker, snapshot.record).catch(() => null))
-                ?.running ?? false);
+          snapshot.record.state !== "running" ||
+          (found?.running && found.containerId === snapshot.record.containerId);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
         cache.set(record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);

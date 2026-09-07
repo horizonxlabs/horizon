@@ -99,12 +99,16 @@ export async function reconcileWorkspaceWarmPool(options: {
           totals.preserved += 1;
           continue;
         }
-        await recoverOwnedWarmClaim(
+        const recovery = await recoverOwnedWarmClaim(
           options,
           current,
           { token: ownerId, assertOwned: projectOwnership.assertOwned },
           options.publishRecovered
         );
+        if (recovery === "preserve") {
+          totals.preserved += 1;
+          continue;
+        }
       }
       const acquired = await options.store.acquireCleanup(
         slot.id,

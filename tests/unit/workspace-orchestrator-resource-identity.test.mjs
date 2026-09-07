@@ -25,6 +25,37 @@ test("hydration preserves a running assigned physical container", async () => {
   assert.equal(hydrated.projectId, "prj_alpha");
 });
 
+test("restart after physical replacement repairs the container ID before downstream lifecycle use", async () => {
+  const fixture = await assignedWorkspace();
+  const spec = fixture.deps.docker.state.containers[0].spec;
+  await fixture.deps.docker.removeContainer(fixture.record.containerId);
+  await fixture.deps.docker.createContainer({ ...spec, name: "evcp-ws-unrelated" });
+  const replacement = await fixture.deps.docker.createContainer(spec);
+  await fixture.deps.docker.startContainer(replacement.containerId);
+  assert.notEqual(replacement.containerId, fixture.record.containerId);
+
+  const restarted = createWorkspaceOrchestrator(fixture.deps);
+  await restarted.hydrateRuntimeRecords(fixture.deps.runtimeRecords);
+  assert.equal(
+    restarted.getWorkspace("prj_alpha").state,
+    "idle",
+    "preview must trigger wake repair"
+  );
+  const repaired = await restarted.wakeWorkspace("prj_alpha");
+  assert.equal(repaired.containerId, replacement.containerId);
+  assert.equal(fixture.snapshots.get("prj_alpha").record.containerId, replacement.containerId);
+  assert.equal(
+    restarted.findWorkspaceByResourceKey("warm-resource-1").containerId,
+    replacement.containerId
+  );
+  await restarted.stopWorkspace("prj_alpha");
+  assert.equal(
+    (await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1")).running,
+    false
+  );
+  assert.deepEqual(fixture.coldCalls, []);
+});
+
 test("wake recreates the assigned physical container and preview base on its existing volume", async () => {
   const fixture = await assignedWorkspace();
   await fixture.orchestrator.stopWorkspace("prj_alpha");

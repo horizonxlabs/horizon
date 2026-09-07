@@ -3,7 +3,11 @@ import type { WorkspaceWarmPoolOptions } from "./warm-pool";
 import type { WarmWorkspaceSlot } from "./warm-pool-types";
 import type { ProvisioningSecretAttempt } from "./secret-store";
 import { resourceKeyForProject } from "./resource-ports";
-import { workspaceContainerName, workspacePreviewBase } from "./runtime-location";
+import {
+  workspaceContainerName,
+  workspacePhysicalKey,
+  workspacePreviewBase
+} from "./runtime-location";
 import { WorkspaceCleanupProjectLeaseLostError } from "./warm-pool-operation-lease";
 import { waitForPreviewReady, workspaceSecretEntries } from "./workspace-lifecycle";
 
@@ -19,19 +23,35 @@ export async function recoverOwnedWarmClaim(
   slot: WarmWorkspaceSlot,
   ownership: ProvisioningSecretAttempt,
   publishRecovered?: WarmRecoveryPublisher
-): Promise<void> {
+): Promise<"preserve" | void> {
   const runtimeRecords = options.deps.runtimeRecords;
   const leases = runtimeRecords?.provisioningLeases;
   const projectId = slot.claimProjectId;
   if (!runtimeRecords || !leases || !projectId) return;
   const publication = publishRecovered?.(projectId);
+  const existingOwnership = async (containerId = slot.containerId) => {
+    const snapshots = await runtimeRecords.list();
+    // Conflicting container metadata cannot safely be retired: keep the slot's orphan protection.
+    if (
+      containerId &&
+      snapshots.some(
+        ({ record }) =>
+          record.containerId === containerId && workspacePhysicalKey(record) !== slot.resourceKey
+      )
+    )
+      return "preserve";
+    return snapshots.some(
+      ({ record }) =>
+        record.projectId === projectId || workspacePhysicalKey(record) === slot.resourceKey
+    )
+      ? "assigned"
+      : undefined;
+  };
   try {
-    const existing = (await runtimeRecords.list()).find(
-      ({ record }) => record.projectId === projectId
-    );
+    const existing = await existingOwnership();
     if (existing) {
       // Retirement must not overwrite the orchestrator's Docker-hydrated state with stored state.
-      return;
+      return existing === "preserve" ? "preserve" : undefined;
     }
     if (slot.state !== "claiming" || !slot.secretPayload || !slot.llmGatewayKeyId) return;
     const logicalKey = resourceKeyForProject(projectId);
@@ -64,6 +84,10 @@ export async function recoverOwnedWarmClaim(
       return;
     }
     await ownership.assertOwned();
+    // Health I/O can outlive the initial inventory. Recheck physical ownership before importing secrets.
+    const currentOwner = await existingOwnership(found.containerId);
+    await ownership.assertOwned();
+    if (currentOwner) return currentOwner === "preserve" ? "preserve" : undefined;
     await options.deps.secrets.replaceForProvisioning(projectId, env, ownership);
     const timestamp = options.now().toISOString();
     const snapshot: WorkspaceRuntimeSnapshot = {
