@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createWarmPoolFixture } from "./workspace-warm-pool-fixture.mjs";
 import { createRuntimeLeaseFixture } from "./workspace-runtime-lease-fixture.mjs";
+import { seedCompleteOwnedSecrets } from "./workspace-warm-owned-repair-fixture.mjs";
 import {
   cleanupOrphanWorkspaceResources,
   workspaceWarmResourceLabels
@@ -184,6 +185,7 @@ test("reconcile rechecks runtime ownership after acquiring cleanup ownership", a
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  await seedCompleteOwnedSecrets(fixture, "project-1");
   fixture.previewExitCode = 1;
   const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
   fixture.store.acquireCleanup = async (...args) => {
@@ -356,6 +358,7 @@ test("reconcile retires a claim owned by a durable runtime without physical clea
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  await seedCompleteOwnedSecrets(fixture, "project-1");
   await fixture.createPool().reconcile();
   assert.deepEqual(await fixture.store.list(), []);
   assert.deepEqual(fixture.releasedSchemas, []);

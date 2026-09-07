@@ -27,6 +27,8 @@ import { recoverWarmClaim } from "./warm-pool-claim-recovery";
 import type { WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { prepareWarmSlot } from "./warm-pool-preparation";
 import { reconcileRetiredWarmPreparations } from "./warm-pool-retirement";
+import { repairOwnedWarmSecrets, repairProjectWarmSecrets } from "./warm-pool-owned-repair";
+import type { ProvisioningSecretAttempt } from "./secret-store";
 const OPERATION_LEASE_MS = 5 * 60_000;
 
 export interface WorkspaceWarmPool {
@@ -38,6 +40,7 @@ export interface WorkspaceWarmPool {
     assertProjectOwned: () => Promise<void>
   ): Promise<WarmWorkspaceAllocation | null>;
   recoverClaim(projectId: string, env: Record<string, string>): ReturnType<typeof recoverWarmClaim>;
+  repairOwnedClaim(projectId: string, ownership: ProvisioningSecretAttempt): Promise<void>;
   /** Retire only after the caller has persisted runtime ownership under its project lease. */
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown, assertProjectOwned: () => Promise<void>): Promise<void>;
@@ -146,12 +149,22 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
             async (ownership) => {
               try {
                 const runtimeKeys = await durableRuntimeKeys();
-                if (!runtimeKeys.has(owned.resourceKey)) {
-                  await cleanupSlotResources(owned, async () => {
-                    await projectOwnership?.assertOwned();
-                    await ownership.assertOwned();
+                if (runtimeKeys.has(owned.resourceKey)) {
+                  await repairOwnedWarmSecrets(options, owned, {
+                    token: ownerId,
+                    assertOwned: async () => {
+                      await projectOwnership?.assertOwned();
+                      await ownership.assertOwned();
+                    }
                   });
+                  await ownership.assertOwned();
+                  await options.store.remove(owned.id, ownerId);
+                  return;
                 }
+                await cleanupSlotResources(owned, async () => {
+                  await projectOwnership?.assertOwned();
+                  await ownership.assertOwned();
+                });
                 if (options.targetSize === 0) {
                   await options.store.remove(owned.id, ownerId);
                   return;
@@ -239,6 +252,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
     },
     ensureCapacity,
     recoverClaim: (projectId, env) => recoverWarmClaim(options, projectId, env),
+    repairOwnedClaim: (projectId, ownership) =>
+      repairProjectWarmSecrets(options, projectId, ownership),
     waitForIdle: work.waitForIdle,
     async getStatus() {
       const slots = await options.store.list();
@@ -319,6 +334,10 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         { store: options.store, slotId, ownerId, now, leaseMs: operationLeaseMs },
         async (ownership) => {
           try {
+            await assertProjectOwned();
+            await ownership.assertOwned();
+            if ((await durableRuntimeKeys()).has(owned.resourceKey))
+              throw new WarmWorkspaceClaimRollbackError();
             await cleanupSlotResources(owned, async () => {
               await assertProjectOwned();
               await ownership.assertOwned();

@@ -30,6 +30,11 @@ export interface ProjectSecretStore {
   ): Promise<void>;
   removeProvisioning(projectId: string, token: string): Promise<void>;
   adoptProvisioning(projectId: string, attempt: ProvisioningSecretAttempt): Promise<void>;
+  repairForProvisioning(
+    projectId: string,
+    env: Record<string, string>,
+    attempt: ProvisioningSecretAttempt
+  ): Promise<void>;
   /** Load persisted (encrypted) secrets from the at-rest store into memory. Awaited at startup. */
   hydrate(): Promise<void>;
 }
@@ -185,6 +190,59 @@ export function createProjectSecretStore(opts: {
           if (mayWrite(projectId, row.name, revision)) bucketFor(projectId).set(row.name, row);
         }
       });
+    },
+    async repairForProvisioning(projectId, env, attempt) {
+      await attempt.assertOwned();
+      await refreshProject(projectId);
+      const names = [...MANAGED_WORKSPACE_SECRET_NAMES];
+      if (
+        names.some((name) => !env[name]) ||
+        Object.keys(env).some((name) => !MANAGED_WORKSPACE_SECRET_NAMES.has(name))
+      )
+        throw new Error("managed secret repair requires a complete verified bundle");
+      const bucket = bucketFor(projectId);
+      if (names.every((name) => bucket.has(name) && decrypt(bucket.get(name)!))) {
+        await attempt.assertOwned();
+        return;
+      }
+      const expected = names.flatMap((name) =>
+        bucket.has(name) ? [{ projectId, ...bucket.get(name)! }] : []
+      );
+      if (expected.some((row) => decrypt(row) !== env[row.name]))
+        throw new Error("partial managed secrets require reconciliation");
+      const revision = beginMutation(
+        projectId,
+        names.filter((name) => !bucket.has(name))
+      );
+      const rows = names.map((name) => ({
+        projectId,
+        name,
+        ...encrypt(env[name]),
+        rotatedAt: null,
+        createdAt: new Date().toISOString(),
+        provisioningToken: attempt.token
+      }));
+      if (persistence) {
+        if (
+          !persistence.repairProvisioning ||
+          !(await persistence.repairProvisioning(projectId, attempt.token, rows, expected))
+        )
+          throw new Error("managed secret repair lost ownership or changed concurrently");
+        await attempt.assertOwned();
+        await refreshProject(projectId);
+      } else {
+        await attempt.assertOwned();
+        if (revisions.get(projectId) !== revision)
+          throw new Error("managed secrets changed during repair");
+        for (const row of rows) if (!bucket.has(row.name)) bucket.set(row.name, row);
+        revisions.set(projectId, revision + 1);
+      }
+      if (
+        !names.every(
+          (name) => bucketFor(projectId).has(name) && decrypt(bucketFor(projectId).get(name)!)
+        )
+      )
+        throw new Error("managed secret repair is incomplete");
     },
     async adoptProvisioning(projectId, attempt) {
       await attempt.assertOwned();

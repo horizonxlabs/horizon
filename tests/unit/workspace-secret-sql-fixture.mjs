@@ -21,6 +21,7 @@ export function createSecretSqlFixture(runtime) {
     if (sql.includes("INSERT INTO project_secrets")) {
       if (params.length === 8) assert.equal(inTransaction, true);
       const [project_id, name, ciphertext, iv, auth_tag, rotated_at, created_at, token] = params;
+      if (sql.includes("DO NOTHING") && rows.has(`${project_id}/${name}`)) return result([], 0);
       rows.set(`${project_id}/${name}`, {
         project_id,
         name,
@@ -55,7 +56,16 @@ export function createSecretSqlFixture(runtime) {
       return result([], count);
     }
     if (sql.includes("FROM project_secrets"))
-      return result([...rows.values()].map((row) => structuredClone(row)));
+      return result(
+        [...rows.values()]
+          .filter(
+            (row) =>
+              !sql.includes("WHERE project_id") ||
+              (row.project_id === params[0] &&
+                (!sql.includes("ANY") || params[1].includes(row.name)))
+          )
+          .map((row) => structuredClone(row))
+      );
     throw new Error(`unexpected secret query: ${sql}`);
   };
   fixture.persistence = createSqlSecretPersistence(execute, async (operation) => {

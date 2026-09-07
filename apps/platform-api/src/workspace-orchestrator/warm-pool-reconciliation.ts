@@ -9,6 +9,7 @@ import { physicalResourceKey } from "./warm-pool-config";
 import type { WarmPoolSecretCodec } from "./warm-pool-secret-codec";
 import { recoverOwnedWarmClaim, type WarmRecoveryPublisher } from "./warm-pool-startup-recovery";
 import { waitForPreviewReady } from "./workspace-lifecycle";
+import { repairOwnedWarmSecrets } from "./warm-pool-owned-repair";
 import {
   maintainWorkspaceCleanupProjectLease,
   withMaintainedWarmSlotOperationLease
@@ -161,6 +162,16 @@ export async function reconcileWorkspaceWarmPool(options: {
           runtimeKeys = await durableRuntimeKeys(options.deps);
           await assertOwned();
           if (runtimeKeys.has(ownedSlot.resourceKey)) {
+            if (projectOwnership)
+              await repairOwnedWarmSecrets(
+                options,
+                { ...ownedSlot, state: slot.state },
+                {
+                  token: ownerId,
+                  assertOwned
+                }
+              );
+            await assertOwned();
             await options.store.remove(ownedSlot.id, ownerId);
             totals.retired += 1;
             return;

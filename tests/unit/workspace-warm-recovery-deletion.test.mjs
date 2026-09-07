@@ -25,7 +25,9 @@ async function pauseRecoveryRenewal(fixture, replica, expectFailure = true) {
     return result;
   };
   const boot = replica.boot();
-  const recovery = expectFailure ? assert.rejects(boot, /lease is no longer owned/) : boot;
+  const recovery = expectFailure
+    ? assert.rejects(boot, expectFailure === true ? /lease is no longer owned/ : expectFailure)
+    : boot;
   await entered.promise;
   return { recovery, resume };
 }
@@ -106,7 +108,11 @@ test(
   async () => {
     const fixture = await createCrashedWarmStartupFixture();
     const replica = fixture.createReplica();
-    const { recovery, resume } = await pauseRecoveryRenewal(fixture, replica, false);
+    const { recovery, resume } = await pauseRecoveryRenewal(
+      fixture,
+      replica,
+      /secret repair is incomplete; retry reconciliation/
+    );
     const releaseSchema = fixture.deps.postgres.releaseSchema;
     fixture.deps.postgres.releaseSchema = async () => {
       throw new Error("schema unavailable");

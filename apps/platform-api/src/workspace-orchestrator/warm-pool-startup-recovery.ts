@@ -7,6 +7,7 @@ import { workspaceContainerName, workspacePhysicalKey } from "./runtime-location
 import { WorkspaceCleanupProjectLeaseLostError } from "./warm-pool-operation-lease";
 import { waitForPreviewReady, workspaceSecretEntries } from "./workspace-lifecycle";
 import { isWarmContainerCompatible } from "./warm-container-compatibility";
+import { repairOwnedWarmSecrets } from "./warm-pool-owned-repair";
 
 /** Capture local state before recovery I/O, then conditionally publish inside the project lease. */
 export type WarmRecoveryPublisher = (projectId: string) => {
@@ -47,6 +48,7 @@ export async function recoverOwnedWarmClaim(
   try {
     const existing = await existingOwnership();
     if (existing) {
+      if (existing === "assigned") await repairOwnedWarmSecrets(options, slot, ownership);
       // Retirement must not overwrite the orchestrator's Docker-hydrated state with stored state.
       return existing === "preserve" ? "preserve" : undefined;
     }
@@ -86,7 +88,10 @@ export async function recoverOwnedWarmClaim(
     // Health I/O can outlive the initial inventory. Recheck physical ownership before importing secrets.
     const currentOwner = await existingOwnership(found.containerId);
     await ownership.assertOwned();
-    if (currentOwner) return currentOwner === "preserve" ? "preserve" : undefined;
+    if (currentOwner) {
+      if (currentOwner === "assigned") await repairOwnedWarmSecrets(options, slot, ownership);
+      return currentOwner === "preserve" ? "preserve" : undefined;
+    }
     await options.deps.secrets.replaceForProvisioning(projectId, env, ownership);
     const timestamp = options.now().toISOString();
     const snapshot: WorkspaceRuntimeSnapshot = {

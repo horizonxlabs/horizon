@@ -2,7 +2,7 @@ import type { WorkspaceContainerRecord } from "@evcp/types";
 import { assertTransition } from "./state";
 import { schemaNameFor, roleNameFor } from "./postgres-provisioner";
 import { resourceKeyForProject } from "./resource-ports";
-import { buildDevContainerSpec } from "./docker-engine";
+import { buildWorkspaceRecoverySpec } from "./workspace-recreation";
 import type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WorkspaceRuntimeRecordStore } from "../persistence/workspace-runtime-repository";
 import {
@@ -13,7 +13,7 @@ import {
 } from "./workspace-lifecycle";
 import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
-import { inspectWorkspaceContainer, resolveWorkspacePreviewLocation, workspacePreviewBase } from "./runtime-location";
+import { inspectWorkspaceContainer, resolveWorkspacePreviewLocation } from "./runtime-location";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
@@ -54,26 +54,22 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
   };
 
   const buildWorkspaceSpec = async (record: WorkspaceContainerRecord) =>
-    buildDevContainerSpec({
-      projectId: record.projectId,
-      slug: physicalResourceKey(record),
+    buildWorkspaceRecoverySpec(record, await deps.secrets.resolveEnv(record.projectId), {
       image,
-      env: {
-        ...(await deps.secrets.resolveEnv(record.projectId)),
-        EVCP_PREVIEW_BASE: workspacePreviewBase(record)
-      },
       cpuCores,
       memoryMb,
-      network,
-      workspaceVolume: workspaceVolumeName(physicalResourceKey(record))
+      network
     });
-
   const recoverExistingWorkspace = async (
     existing: WorkspaceContainerRecord,
     input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
     const physicalKey = physicalResourceKey(existing);
-    await leases.adoptSecrets(input.projectId, deps.secrets);
+    await leases.adoptSecrets(
+      input.projectId,
+      deps.secrets,
+      (attempt) => deps.warmPool?.repairOwnedClaim?.(input.projectId, attempt) ?? Promise.resolve()
+    );
     const found = await inspectWorkspaceContainer(deps.docker, existing);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
@@ -280,7 +276,13 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     },
 
     findWorkspaceByPreviewKey(previewKey: string): WorkspaceContainerRecord | null {
-      return cache.findByResourceKey(previewKey) ?? [...records.values()].find((record) => resourceKeyForProject(record.projectId) === previewKey) ?? null;
+      return (
+        cache.findByResourceKey(previewKey) ??
+        [...records.values()].find(
+          (record) => resourceKeyForProject(record.projectId) === previewKey
+        ) ??
+        null
+      );
     },
 
     async resolvePreviewLocation(projectId: string) {
@@ -346,7 +348,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async wakeWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "running");
-      const next = await recoverExistingWorkspace(record, { projectId, slug: record.slug });
+      const next = await this.provisionWorkspace({ projectId, slug: record.slug });
       audit({ action: "workspace.started", projectId });
       return next;
     },
