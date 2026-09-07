@@ -23,7 +23,7 @@ export function createWarmPoolFixture({
   const releasedBuckets = [];
   const revokedKeys = [];
   const audits = [];
-  const previewProbePaths = [];
+  const previewProbeCommands = [];
   let prepareAttempts = 0;
   let nextId = readySlots + 1;
   let remainingCleanupFailures = cleanupFailure ? 1 : 0;
@@ -52,7 +52,7 @@ export function createWarmPoolFixture({
     releasedBuckets,
     revokedKeys,
     audits,
-    previewProbePaths,
+    previewProbeCommands,
     createPool: undefined,
     get prepareAttempts() {
       return prepareAttempts;
@@ -72,11 +72,7 @@ export function createWarmPoolFixture({
   docker.execInContainer = async (containerId, command) => {
     await execInContainer(containerId, command);
     if (command.join(" ").includes("/api/health")) {
-      const container = docker.state.containers.find((item) => item.containerId === containerId);
-      const previewBase = container?.spec.env
-        .find((entry) => entry.startsWith("EVCP_PREVIEW_BASE="))
-        ?.slice("EVCP_PREVIEW_BASE=".length);
-      previewProbePaths.push(`${previewBase ?? ""}/api/health`);
+      previewProbeCommands.push([...command]);
     }
     return {
       stdout: "",
