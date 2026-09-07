@@ -108,9 +108,9 @@ export function createWorkspaceProvisioning(
     } catch (error) {
       if (error instanceof WarmWorkspaceClaimRollbackError) throw error;
       if (claimCompleted) throw new WarmWorkspaceClaimRollbackError();
-      await state.assertOwnership(input.projectId);
       // The pool exclusively owns schema, bucket, key, volume, and anonymous-container cleanup.
       try {
+        await state.assertOwnership(input.projectId);
         await deps.secrets.removeProvisioning(input.projectId, attempt.token);
         await state.assertOwnership(input.projectId);
         await state.removeFailedClaim(input.projectId, runtimeWriteAttempted);

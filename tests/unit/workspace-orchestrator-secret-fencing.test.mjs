@@ -95,6 +95,51 @@ test("a transient ownership check after retirement cannot roll back the durable 
   assert.deepEqual(fixture.coldCalls, []);
 });
 
+test("a transient initial rollback ownership failure preserves the durable warm allocation", async () => {
+  const fixture = await createFixture();
+  const runtime = createRuntimeLeaseFixture();
+  const store = runtime.createStore();
+  const renew = store.provisioningLeases.renew.bind(store.provisioningLeases);
+  let failRollbackOwnership = false;
+  let preparedSecrets;
+  fixture.deps.warmPool.completeClaim = async () => {
+    assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+    preparedSecrets = await fixture.deps.secrets.resolveEnv("prj_rollback");
+    assert.equal(Object.keys(preparedSecrets).length, 6);
+    failRollbackOwnership = true;
+    throw new Error("claim retirement unavailable");
+  };
+  store.provisioningLeases.renew = async (...args) => {
+    if (failRollbackOwnership) {
+      failRollbackOwnership = false;
+      throw new Error("rollback ownership lookup unavailable");
+    }
+    return renew(...args);
+  };
+  const orchestrator = createWorkspaceOrchestrator({ ...fixture.deps, runtimeRecords: store });
+  await assert.rejects(
+    orchestrator.provisionWorkspace({ projectId: "prj_rollback", slug: "rollback" }),
+    /warm workspace claim rollback is unsafe or incomplete/
+  );
+  assert.equal((await store.list())[0].record.containerId, fixture.slot.containerId);
+  assert.equal(
+    JSON.stringify(await fixture.deps.secrets.resolveEnv("prj_rollback")) ===
+      JSON.stringify(preparedSecrets),
+    true
+  );
+  assert.equal((await fixture.prepared.store.list())[0].state, "claiming");
+  assert.equal(
+    (await fixture.deps.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+    true
+  );
+  assert.equal(fixture.order.includes("remove-secrets"), false);
+  assert.equal(fixture.order.includes("fail"), false);
+  assert.deepEqual(fixture.prepared.releasedSchemas, []);
+  assert.deepEqual(fixture.prepared.releasedBuckets, []);
+  assert.deepEqual(fixture.prepared.revokedKeys, []);
+  assert.deepEqual(fixture.coldCalls, []);
+});
+
 for (const { mode, mutation } of [
   { mode: "warm", mutation: "delete" },
   { mode: "warm", mutation: "write" },
