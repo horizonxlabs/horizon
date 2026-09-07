@@ -256,7 +256,7 @@ test("restoreSnapshot verifies token ownership and restores the protected archiv
   const script = docker.calls[0].cmd.join(" ");
   assert.match(script, /active\.lock/);
   assert.match(script, /snapshot metadata is missing/);
-  assert.match(script, /find \/workspace/);
+  assert.match(script, /clear\("\/workspace"\)/);
   assert.match(script, /tar -C \/workspace -xf "\$snapshot_dir\/archive"/);
   assert.match(script, /chmod "\$entry_mode"/);
   assert.match(script, /reset --mixed/);

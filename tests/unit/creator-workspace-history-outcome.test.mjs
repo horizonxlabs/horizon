@@ -23,6 +23,8 @@ const requireFromStore = createRequire(
 const { act, create } = requireFromStore("react-test-renderer");
 const { useVibeChat } =
   await import("../../apps/creator-web/src/features/workspace/use-vibe-chat.ts");
+const { deriveWorkspaceFailure } =
+  await import("../../apps/creator-web/src/features/workspace/workspace-failure.ts");
 
 function deferred() {
   let resolve;
@@ -83,6 +85,66 @@ test("loading persisted history renders the pending-question outcome", async () 
   assert.equal(latest.vibeStatus, "Waiting for input");
   assert.equal(renderer.root.findByType("output").children.join(""), "Waiting for input");
   await act(async () => renderer.unmount());
+});
+
+test("reloading a committed turn keeps recovered tool failures in history without failing the workspace", async () => {
+  globalThis.fetch = async (input) =>
+    String(input).endsWith("/chat/active")
+      ? new Response(JSON.stringify({ active: false }))
+      : historyResponse([
+          { id: "u-db", role: "user", content: "Connect the database", actions: [] },
+          {
+            id: "a-db",
+            role: "assistant",
+            content: "Build validated",
+            commitSha: "a464ba21cd3770ae3938feb461dd6a86aabf85e6",
+            actions: [
+              { id: "write", type: "file", label: "app/page.tsx", ok: false },
+              { id: "edit", type: "edit", label: "app/page.tsx", ok: true },
+              { id: "build", type: "shell", label: "Build", ok: true }
+            ],
+            parts: [
+              {
+                id: "write",
+                type: "tool",
+                sequence: 0,
+                tool: {
+                  callId: "write",
+                  actionType: "file",
+                  label: "app/page.tsx",
+                  status: "failed",
+                  error: "Workspace file update failed"
+                }
+              }
+            ]
+          }
+        ]);
+  let latest;
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        React.createElement(HookHarness, {
+          onValue(value) {
+            latest = value;
+          }
+        })
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    assert.equal(latest.vibeStatus, "Completed");
+    assert.equal(latest.vibeMessages.at(-1).actions[0].status, "failed");
+    assert.equal(
+      deriveWorkspaceFailure({
+        messages: latest.vibeMessages,
+        status: latest.vibeStatus,
+        technicalDetails: latest.vibeTechnicalDetails
+      }),
+      undefined
+    );
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+  }
 });
 
 test("a delayed history response cannot replace a newer live turn or regress Working", async () => {

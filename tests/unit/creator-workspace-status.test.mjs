@@ -74,3 +74,33 @@ test("persisted Workspace history derives waiting, failed, working, and complete
   );
   assert.equal(outcome([]), "");
 });
+
+test("a preserved commit does not hide an explicit turn failure", () => {
+  const assistant = {
+    id: "a1",
+    role: "assistant",
+    text: "Build validated",
+    actions: [],
+    commitSha: "a464ba21cd3770ae3938feb461dd6a86aabf85e6"
+  };
+  assert.equal(
+    vibeChat.workspaceOutcomeForHistory([
+      {
+        ...assistant,
+        parts: [
+          { id: "error-1", type: "error", sequence: 2, message: "Migration finalization failed" }
+        ]
+      }
+    ]),
+    "Failed"
+  );
+  assert.equal(
+    vibeChat.workspaceOutcomeForHistory([
+      {
+        ...assistant,
+        text: "Build validated\n⚠️ Migration finalization failed"
+      }
+    ]),
+    "Failed"
+  );
+});
