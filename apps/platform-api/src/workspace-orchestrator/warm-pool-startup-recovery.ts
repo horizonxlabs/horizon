@@ -3,6 +3,7 @@ import type { WorkspaceWarmPoolOptions } from "./warm-pool";
 import type { WarmWorkspaceSlot } from "./warm-pool-types";
 import type { ProvisioningSecretAttempt } from "./secret-store";
 import { resourceKeyForProject } from "./resource-ports";
+import { workspaceContainerName, workspacePreviewBase } from "./runtime-location";
 import { WorkspaceCleanupProjectLeaseLostError } from "./warm-pool-operation-lease";
 import { waitForPreviewReady, workspaceSecretEntries } from "./workspace-lifecycle";
 
@@ -34,8 +35,16 @@ export async function recoverOwnedWarmClaim(
     }
     if (slot.state !== "claiming" || !slot.secretPayload || !slot.llmGatewayKeyId) return;
     const logicalKey = resourceKeyForProject(projectId);
-    const found = await options.deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
+    const found = await options.deps.docker.inspectContainer(
+      workspaceContainerName({ projectId, resourceKey: slot.resourceKey })
+    );
     if (!found?.running) return;
+    if (
+      !found.env.includes(
+        `EVCP_PREVIEW_BASE=${workspacePreviewBase({ projectId, resourceKey: slot.resourceKey })}`
+      )
+    )
+      return;
     const env = Object.fromEntries(workspaceSecretEntries(found.env));
     let prepared: Record<string, string>;
     try {

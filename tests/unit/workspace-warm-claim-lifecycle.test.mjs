@@ -157,7 +157,7 @@ test("expiry after a contended startup recovery cannot turn a healthy handoff in
   };
   await fixture.createReplica().boot();
   assert.equal(expired, true);
-  assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash")) !== null, true);
+  assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) !== null, true);
   assert.deepEqual(fixture.releasedSchemas, []);
   assert.deepEqual(fixture.releasedBuckets, []);
   assert.deepEqual(fixture.revokedKeys, []);
@@ -176,14 +176,14 @@ test("periodic claim cleanup removes an unhealthy final container before releasi
   fixture.docker.removeVolume = async (name) => {
     if (
       name === "evcp-ws-warm-resource-1-data" &&
-      (await fixture.docker.inspectContainer("evcp-ws-prj-crash"))
+      (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"))
     ) {
       throw new Error("volume is in use by the final project container");
     }
     return removeVolume(name);
   };
   await fixture.createReplica().pool.reconcile();
-  assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash")) === null, true);
+  assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) === null, true);
   assert.equal(
     (await fixture.docker.listManagedVolumes()).some(
       ({ name }) => name === "evcp-ws-warm-resource-1-data"
@@ -218,11 +218,11 @@ test("failed final-container removal stays durable and its retry cannot bypass a
   fixture.setNow(new Date(failed.retryAfter));
   await fixture.runtimeRecords.provisioningLeases.acquire("prj_crash", "live-owner", 10_000);
   await fixture.createReplica().pool.ensureCapacity();
-  assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash")) !== null, true);
+  assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) !== null, true);
   assert.deepEqual(fixture.releasedSchemas, []);
   fixture.persistence.advance(10_001);
   await fixture.createReplica().pool.ensureCapacity();
-  assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash")) === null, true);
+  assert.equal((await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) === null, true);
   assert.equal((await fixture.store.list())[0].state, "ready");
   assert.deepEqual(fixture.releasedSchemas, ["warm-resource-1"]);
 });

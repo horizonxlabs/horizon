@@ -5,7 +5,7 @@ import { createProjectSecretStore } from "../../apps/platform-api/src/workspace-
 import { startWorkspaceSweeps } from "../../apps/platform-api/src/workspace-orchestrator/workspace-sweeps.ts";
 
 async function assertAllocationSurvives(fixture) {
-  assert.ok(await fixture.docker.inspectContainer("evcp-ws-prj-crash"));
+  assert.ok(await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"));
   assert.equal(
     (await fixture.docker.listManagedVolumes()).some(
       ({ name }) => name === "evcp-ws-warm-resource-1-data"
@@ -18,7 +18,7 @@ async function assertAllocationSurvives(fixture) {
 }
 
 test("runtime startup recovers a completed warm handoff before reconcile or orphan cleanup", async () => {
-  const fixture = await createCrashedWarmStartupFixture();
+  const fixture = await createCrashedWarmStartupFixture({ projectId: "prj_alpha" });
   const replica = fixture.createReplica();
   await replica.boot();
 
@@ -26,9 +26,9 @@ test("runtime startup recovers a completed warm handoff before reconcile or orph
   assert.equal(snapshot?.record.resourceKey, "warm-resource-1");
   assert.equal(snapshot.record.containerId, fixture.containerId);
   assert.equal(snapshot.llmGatewayKeyId, "key-1");
-  assert.equal(replica.orchestrator.getWorkspace("prj_crash").state, "running");
+  assert.equal(replica.orchestrator.getWorkspace("prj_alpha").state, "running");
   assert.equal(
-    (await replica.orchestrator.resolveEnv("prj_crash")).LLM_GATEWAY_KEY,
+    (await replica.orchestrator.resolveEnv("prj_alpha")).LLM_GATEWAY_KEY,
     "llm-secret-1"
   );
   assert.equal(
@@ -41,13 +41,24 @@ test("runtime startup recovers a completed warm handoff before reconcile or orph
     persistence: fixture.secretSql.persistence
   });
   await reloadedSecrets.hydrate();
-  assert.deepEqual(await reloadedSecrets.resolveEnv("prj_crash"), fixture.allocation.env);
+  assert.deepEqual(await reloadedSecrets.resolveEnv("prj_alpha"), fixture.allocation.env);
 });
 
-for (const failure of ["missing", "unhealthy", "mismatched", "missing-project"]) {
+for (const failure of [
+  "missing",
+  "unhealthy",
+  "mismatched",
+  "wrong-preview-base",
+  "missing-project"
+]) {
   test(`startup leaves ${failure} handoffs to fenced cleanup`, async () => {
     const fixture = await createCrashedWarmStartupFixture({
-      envOverrides: failure === "mismatched" ? { LLM_GATEWAY_KEY: "unrelated-key" } : {}
+      envOverrides:
+        failure === "mismatched"
+          ? { LLM_GATEWAY_KEY: "unrelated-key" }
+          : failure === "wrong-preview-base"
+            ? { EVCP_PREVIEW_BASE: "/preview/prj-crash" }
+            : {}
     });
     if (failure === "missing") await fixture.docker.removeContainer(fixture.containerId);
     if (failure === "missing-project") fixture.persistence.deleteProject("prj_crash");
@@ -61,7 +72,7 @@ for (const failure of ["missing", "unhealthy", "mismatched", "missing-project"])
     await fixture.createReplica().boot();
     assert.deepEqual(await fixture.runtimeRecords.list(), []);
     assert.deepEqual(await fixture.deps.secrets.resolveEnv("prj_crash"), {});
-    assert.equal(await fixture.docker.inspectContainer("evcp-ws-prj-crash"), null);
+    assert.equal(await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"), null);
     assert.equal(
       (await fixture.store.list()).some(({ id }) => id === fixture.allocation.slotId),
       false

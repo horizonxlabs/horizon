@@ -35,7 +35,10 @@ test(
     assert.equal(cached.state, durable.record.state);
     assert.equal(cached.slug, durable.record.slug);
     assert.equal(cached.resourceKey, durable.record.resourceKey);
-    assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash"))?.running, false);
+    assert.equal(
+      (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+      false
+    );
   }
 );
 
@@ -94,7 +97,10 @@ test(
       assert.equal(cached.slug, "newer-slug");
       assert.equal(cached.state, durable.record.state);
       assert.equal(cached.slug, durable.record.slug);
-      assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash"))?.running, false);
+      assert.equal(
+        (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+        false
+      );
     } finally {
       resume.resolve();
       await stale;
@@ -142,7 +148,10 @@ test(
       assert.equal(cached.state, durable.record.state);
       assert.equal(cached.slug, durable.record.slug);
       assert.equal(cached.resourceKey, durable.record.resourceKey);
-      assert.equal((await fixture.docker.inspectContainer("evcp-ws-prj-crash"))?.running, false);
+      assert.equal(
+        (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1"))?.running,
+        false
+      );
     } finally {
       resume.resolve();
       await stale;

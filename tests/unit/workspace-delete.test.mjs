@@ -39,7 +39,7 @@ function makeOrchestrator(runtimeRecords) {
   return { orchestrator: createWorkspaceOrchestrator(deps), deps, audits: released };
 }
 
-test("delete uses the logical container identity and persisted physical resource key", async () => {
+test("delete supports a pre-hot logical container only with its persisted container ID", async () => {
   const releasedSchemas = [];
   const removedVolumes = [];
   const { orchestrator, deps } = makeOrchestrator();

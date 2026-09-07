@@ -69,6 +69,7 @@ test("a claiming cleanup lease excludes project provisioning at the slot-cleanup
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  fixture.previewExitCode = 1;
   const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
   let projectLeaseOutcome;
   fixture.store.acquireCleanup = async (...args) => {
@@ -100,6 +101,7 @@ test("claiming cleanup renews its project lease throughout destructive work", as
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  fixture.previewExitCode = 1;
   const removeContainer = fixture.docker.removeContainer;
   let cleanupStarted;
   let releaseCleanup;

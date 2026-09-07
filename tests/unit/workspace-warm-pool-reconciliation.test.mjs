@@ -129,6 +129,7 @@ test("expired claim ownership allows exactly one reconciler to clean", async () 
   await fixture.pool.ensureCapacity();
   await runtimeStore.provisioningLeases.acquire("project-1", "crashed-owner", 1_000);
   await fixture.pool.claim("project-1");
+  fixture.previewExitCode = 1;
   runtime.advance(1_001);
 
   await Promise.all([fixture.pool.reconcile(), fixture.createPool().reconcile()]);
@@ -183,6 +184,7 @@ test("reconcile rechecks runtime ownership after acquiring cleanup ownership", a
   });
   await fixture.pool.ensureCapacity();
   await fixture.pool.claim("project-1");
+  fixture.previewExitCode = 1;
   const acquireCleanup = fixture.store.acquireCleanup.bind(fixture.store);
   fixture.store.acquireCleanup = async (...args) => {
     const owned = await acquireCleanup(...args);

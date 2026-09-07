@@ -13,7 +13,7 @@ import {
 } from "./workspace-lifecycle";
 import { createWorkspaceDeletion } from "./workspace-deletion";
 import { physicalResourceKey } from "./warm-pool-config";
-import { workspaceContainerName } from "./runtime-location";
+import { inspectWorkspaceContainer, workspacePreviewBase } from "./runtime-location";
 import { createWorkspaceProvisioning } from "./orchestrator-provisioning";
 import { WarmWorkspaceClaimRollbackError } from "./warm-pool-types";
 import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
@@ -53,19 +53,19 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     await leases.persist({ record, llmGatewayKeyId: llmKeyIds.get(record.projectId) });
   };
 
-  const buildWorkspaceSpec = async (projectId: string, logicalKey: string, physicalKey: string) =>
+  const buildWorkspaceSpec = async (record: WorkspaceContainerRecord) =>
     buildDevContainerSpec({
-      projectId,
-      slug: logicalKey,
+      projectId: record.projectId,
+      slug: physicalResourceKey(record),
       image,
       env: {
-        ...(await deps.secrets.resolveEnv(projectId)),
-        EVCP_PREVIEW_BASE: `/preview/${logicalKey}`
+        ...(await deps.secrets.resolveEnv(record.projectId)),
+        EVCP_PREVIEW_BASE: workspacePreviewBase(record)
       },
       cpuCores,
       memoryMb,
       network,
-      workspaceVolume: workspaceVolumeName(physicalKey)
+      workspaceVolume: workspaceVolumeName(physicalResourceKey(record))
     });
 
   const recoverExistingWorkspace = async (
@@ -73,14 +73,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     input: { projectId: string; slug: string }
   ): Promise<WorkspaceContainerRecord> => {
     const physicalKey = physicalResourceKey(existing);
-    const logicalKey = resourceKeyForProject(input.projectId);
     await leases.adoptSecrets(input.projectId, deps.secrets);
-    let found = await deps.docker.inspectContainer(workspaceContainerName(existing));
-    if (!found && existing.containerId && physicalKey !== logicalKey) {
-      // Pre-hot allocations used a logical name; only the persisted container may be adopted.
-      const legacy = await deps.docker.inspectContainer(`evcp-ws-${logicalKey}`);
-      if (legacy?.containerId === existing.containerId) found = legacy;
-    }
+    const found = await inspectWorkspaceContainer(deps.docker, existing);
     if (found) {
       if (!found.running) await deps.docker.startContainer(found.containerId);
       await waitForPreviewReady(deps.docker, found.containerId);
@@ -113,9 +107,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       workspaceVolumeName(physicalKey),
       workspaceVolumeLabels(input.projectId)
     );
-    const { containerId } = await deps.docker.createContainer(
-      await buildWorkspaceSpec(input.projectId, logicalKey, physicalKey)
-    );
+    const { containerId } = await deps.docker.createContainer(await buildWorkspaceSpec(existing));
     await deps.docker.startContainer(containerId);
     await waitForPreviewReady(deps.docker, containerId);
     const recovered = save({
@@ -270,11 +262,8 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         const live =
           snapshot.record.state !== "running" || !snapshot.record.containerId
             ? true
-            : ((
-                await deps.docker
-                  .inspectContainer(`evcp-ws-${resourceKeyForProject(snapshot.record.projectId)}`)
-                  .catch(() => null)
-              )?.running ?? false);
+            : ((await inspectWorkspaceContainer(deps.docker, snapshot.record).catch(() => null))
+                ?.running ?? false);
         const record = live ? snapshot.record : { ...snapshot.record, state: "idle" as const };
         cache.set(record);
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
@@ -355,9 +344,10 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
     async archiveWorkspace(projectId: string): Promise<WorkspaceContainerRecord> {
       const record = mustGet(projectId);
       assertTransition(record.state, "archived");
-      if (record.containerId) {
-        await deps.docker.stopContainer(record.containerId).catch(() => undefined);
-        await deps.docker.removeContainer(record.containerId);
+      const container = await inspectWorkspaceContainer(deps.docker, record);
+      if (container) {
+        await deps.docker.stopContainer(container.containerId).catch(() => undefined);
+        await deps.docker.removeContainer(container.containerId);
       }
       const next = save({
         ...record,

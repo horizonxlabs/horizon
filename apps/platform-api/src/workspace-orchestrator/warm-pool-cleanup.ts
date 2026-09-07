@@ -1,30 +1,20 @@
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type { WarmWorkspaceSlot } from "./warm-pool-types";
 import { workspaceVolumeName } from "./workspace-lifecycle";
-import { resourceKeyForProject } from "./resource-ports";
+import { physicalResourceKey } from "./warm-pool-config";
 
 export async function cleanupWarmSlotResources(
   deps: WorkspaceOrchestratorDeps,
   slot: WarmWorkspaceSlot,
   assertOwned?: () => Promise<void>
 ): Promise<void> {
-  if (slot.claimProjectId) {
-    await assertOwned?.();
-    const assigned = ((await deps.runtimeRecords?.list()) ?? []).some(
-      ({ record }) => record.projectId === slot.claimProjectId
-    );
-    await assertOwned?.();
-    if (!assigned) {
-      const final = await deps.docker.inspectContainer(
-        `evcp-ws-${resourceKeyForProject(slot.claimProjectId)}`
-      );
-      if (final) {
-        await assertOwned?.();
-        // Even a stopped final container pins the warm volume until its reference is removed.
-        await deps.docker.removeContainer(final.containerId);
-      }
-    }
-  }
+  await assertOwned?.();
+  const assigned = ((await deps.runtimeRecords?.list()) ?? []).some(
+    ({ record }) => physicalResourceKey(record) === slot.resourceKey
+  );
+  await assertOwned?.();
+  if (assigned) return;
+  const container = await deps.docker.inspectContainer(`evcp-ws-${slot.resourceKey}`);
   const failures: unknown[] = [];
   const cleanup = async (operation: () => Promise<void>) => {
     try {
@@ -33,9 +23,10 @@ export async function cleanupWarmSlotResources(
       failures.push(error);
     }
   };
-  if (slot.containerId) {
+  if (container) {
     await assertOwned?.();
-    await cleanup(() => deps.docker.removeContainer(slot.containerId!));
+    // A live or stopped container still owns its mounts and credentials until removal succeeds.
+    await deps.docker.removeContainer(container.containerId);
   }
   await assertOwned?.();
   const operations: Array<() => Promise<void>> = [

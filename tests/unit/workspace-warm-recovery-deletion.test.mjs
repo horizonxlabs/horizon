@@ -32,7 +32,7 @@ async function pauseRecoveryRenewal(fixture, replica, expectFailure = true) {
 
 async function resourceAbsence(fixture, replica) {
   return {
-    container: (await fixture.docker.inspectContainer("evcp-ws-prj-crash")) === null,
+    container: (await fixture.docker.inspectContainer("evcp-ws-warm-resource-1")) === null,
     volume: !fixture.docker.state.volumes.some(
       (volume) => volume.name === "evcp-ws-warm-resource-1-data"
     ),
