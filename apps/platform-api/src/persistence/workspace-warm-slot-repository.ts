@@ -47,6 +47,7 @@ type WarmSlotModel = {
     where: {
       id: string;
       state?: WarmWorkspaceSlotState;
+      resourceKey?: string;
       operationOwner?: string;
       operationExpiresAt?: { gt?: Date };
       OR?: Array<{ operationExpiresAt: null } | { operationExpiresAt: { lte: Date } }>;
@@ -218,13 +219,14 @@ export class WorkspaceWarmSlotRepositoryBackedStore implements WorkspaceWarmSlot
 
   async acquireCleanup(
     id: string,
-    expectedState: WarmWorkspaceSlotState,
+    expected: Pick<WarmWorkspaceSlot, "state" | "resourceKey">,
     lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot | null> {
     const acquired = await this.client.workspaceWarmSlot.updateMany({
       where: {
         id,
-        state: expectedState,
+        state: expected.state,
+        resourceKey: expected.resourceKey,
         OR: [{ operationExpiresAt: null }, { operationExpiresAt: { lte: new Date(lease.now) } }]
       },
       data: {

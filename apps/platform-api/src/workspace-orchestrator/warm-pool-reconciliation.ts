@@ -126,7 +126,7 @@ export async function reconcileWorkspaceWarmPool(options: {
       }
       const acquired = await options.store.acquireCleanup(
         slot.id,
-        slot.state,
+        slot,
         operationLease(options, ownerId)
       );
       if (!acquired) {

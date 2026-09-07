@@ -228,9 +228,8 @@ function createMemoryWarmSlotStore(now) {
       });
       await previous;
       try {
-        const current = [...slots.values()].filter(
-          (slot) =>
-            ["preparing", "ready", "cleaning", "failed"].includes(slot.state)
+        const current = [...slots.values()].filter((slot) =>
+          ["preparing", "ready", "cleaning", "failed"].includes(slot.state)
         ).length;
         const missing = Math.max(0, targetSize - current);
         const reserved = [];
@@ -282,11 +281,12 @@ function createMemoryWarmSlotStore(now) {
       Object.assign(slot, { operationExpiresAt: lease.expiresAt, updatedAt: iso() });
       return true;
     },
-    async acquireCleanup(id, expectedState, lease) {
+    async acquireCleanup(id, expected, lease) {
       const slot = slots.get(id);
       if (
         !slot ||
-        slot.state !== expectedState ||
+        slot.state !== expected.state ||
+        slot.resourceKey !== expected.resourceKey ||
         (slot.operationExpiresAt !== null &&
           new Date(slot.operationExpiresAt).getTime() > new Date(lease.now).getTime())
       ) {

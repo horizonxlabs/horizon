@@ -48,7 +48,7 @@ test("a manager resumes an expired retry cleanup without a zero-history replacem
   await fixture.pool.ensureCapacity();
   const [failed] = await fixture.store.list();
   fixture.setNow(new Date(failed.retryAfter));
-  await fixture.store.acquireCleanup(failed.id, "failed", {
+  await fixture.store.acquireCleanup(failed.id, failed, {
     ownerId: "crashed-manager",
     now: failed.retryAfter,
     expiresAt: "2026-09-05T00:05:00.000Z"
@@ -75,7 +75,7 @@ test("periodic reconciliation preserves an expired retry preparation for recover
     now: failed.retryAfter,
     expiresAt: "2026-09-05T00:05:00.000Z"
   };
-  await fixture.store.acquireCleanup(failed.id, "failed", retryLease);
+  await fixture.store.acquireCleanup(failed.id, failed, retryLease);
   await fixture.store.retryPreparing(failed.id, "retry-preparation-resource", retryLease);
   fixture.setNow(new Date("2026-09-05T00:05:00.001Z"));
   const recoveringManager = fixture.createPool();
@@ -103,20 +103,24 @@ test("a delayed stale cleaner cannot delete a successor retry generation", async
   const resumeStaleDeletes = Promise.withResolvers();
   let staleDeleteCount = 0;
   let pauseStaleDeletes = true;
-  const pauseFirstCleanup = (operation) => async (...args) => {
-    if (pauseStaleDeletes) {
-      staleDeleteCount += 1;
-      if (staleDeleteCount === 4) staleDeletesStarted.resolve();
-      await resumeStaleDeletes.promise;
-    }
-    return operation(...args);
-  };
+  const pauseFirstCleanup =
+    (operation) =>
+    async (...args) => {
+      if (pauseStaleDeletes) {
+        staleDeleteCount += 1;
+        if (staleDeleteCount === 4) staleDeletesStarted.resolve();
+        await resumeStaleDeletes.promise;
+      }
+      return operation(...args);
+    };
   fixture.deps.postgres.releaseSchema = pauseFirstCleanup(fixture.deps.postgres.releaseSchema);
   fixture.deps.objectStorage.releaseBucket = pauseFirstCleanup(
     fixture.deps.objectStorage.releaseBucket
   );
   fixture.docker.removeVolume = pauseFirstCleanup(fixture.docker.removeVolume);
-  fixture.deps.llmGateway.revokeVirtualKey = pauseFirstCleanup(fixture.deps.llmGateway.revokeVirtualKey);
+  fixture.deps.llmGateway.revokeVirtualKey = pauseFirstCleanup(
+    fixture.deps.llmGateway.revokeVirtualKey
+  );
 
   const staleRetry = fixture.pool.ensureCapacity();
   await staleDeletesStarted.promise;

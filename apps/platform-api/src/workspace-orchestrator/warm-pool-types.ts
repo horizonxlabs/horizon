@@ -105,9 +105,10 @@ export interface WorkspaceWarmSlotStore {
     lease?: WarmSlotOperationLease
   ): Promise<boolean>;
   renewOperation(id: string, lease: WarmSlotOperationLease): Promise<boolean>;
+  /** Atomically fence the observed state and physical generation against retry successors. */
   acquireCleanup(
     id: string,
-    expectedState: WarmWorkspaceSlotState,
+    expected: Pick<WarmWorkspaceSlot, "state" | "resourceKey">,
     lease: WarmSlotOperationLease
   ): Promise<WarmWorkspaceSlot | null>;
   retryPreparing(

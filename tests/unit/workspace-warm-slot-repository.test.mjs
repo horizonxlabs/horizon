@@ -89,43 +89,63 @@ test("cleanup ownership is acquired by exactly one repository after operation ex
   });
 
   assert.equal(
-    await second.acquireCleanup(slotFixture.id, "preparing", {
-      ownerId: "early-cleaner",
-      now: "2026-09-05T00:04:59.999Z",
-      expiresAt: "2026-09-05T00:09:59.999Z"
-    }),
+    await second.acquireCleanup(
+      slotFixture.id,
+      { ...slotFixture, state: "preparing" },
+      {
+        ownerId: "early-cleaner",
+        now: "2026-09-05T00:04:59.999Z",
+        expiresAt: "2026-09-05T00:09:59.999Z"
+      }
+    ),
     null
   );
   const owners = await Promise.all([
-    first.acquireCleanup(slotFixture.id, "preparing", {
-      ownerId: "cleaner-one",
-      now: "2026-09-05T00:05:00.001Z",
-      expiresAt: "2026-09-05T00:10:00.001Z"
-    }),
-    second.acquireCleanup(slotFixture.id, "preparing", {
-      ownerId: "cleaner-two",
-      now: "2026-09-05T00:05:00.001Z",
-      expiresAt: "2026-09-05T00:10:00.001Z"
-    })
+    first.acquireCleanup(
+      slotFixture.id,
+      { ...slotFixture, state: "preparing" },
+      {
+        ownerId: "cleaner-one",
+        now: "2026-09-05T00:05:00.001Z",
+        expiresAt: "2026-09-05T00:10:00.001Z"
+      }
+    ),
+    second.acquireCleanup(
+      slotFixture.id,
+      { ...slotFixture, state: "preparing" },
+      {
+        ownerId: "cleaner-two",
+        now: "2026-09-05T00:05:00.001Z",
+        expiresAt: "2026-09-05T00:10:00.001Z"
+      }
+    )
   ]);
 
   assert.equal(owners.filter(Boolean).length, 1);
   assert.equal(owners.find(Boolean).state, "cleaning");
   assert.equal(
-    await second.acquireCleanup(slotFixture.id, "preparing", {
-      ownerId: "wrong-resumer",
-      now: "2026-09-05T00:10:00.002Z",
-      expiresAt: "2026-09-05T00:15:00.002Z"
-    }),
+    await second.acquireCleanup(
+      slotFixture.id,
+      { ...slotFixture, state: "preparing" },
+      {
+        ownerId: "wrong-resumer",
+        now: "2026-09-05T00:10:00.002Z",
+        expiresAt: "2026-09-05T00:15:00.002Z"
+      }
+    ),
     null
   );
   assert.equal(
     (
-      await second.acquireCleanup(slotFixture.id, "cleaning", {
-        ownerId: "cleaning-resumer",
-        now: "2026-09-05T00:10:00.002Z",
-        expiresAt: "2026-09-05T00:15:00.002Z"
-      })
+      await second.acquireCleanup(
+        slotFixture.id,
+        { ...slotFixture, state: "cleaning" },
+        {
+          ownerId: "cleaning-resumer",
+          now: "2026-09-05T00:10:00.002Z",
+          expiresAt: "2026-09-05T00:15:00.002Z"
+        }
+      )
     ).state,
     "cleaning"
   );
@@ -136,25 +156,28 @@ test("repository retains retry history while cleanup occupies capacity and resta
   const store = new WorkspaceWarmSlotRepositoryBackedStore(client);
   await store.createPreparing(slotFixture, operationLease);
   await store.markReady(slotFixture.id, readyPatch, operationLease);
-  await store.markFailed(
-    slotFixture.id,
-    {
-      lastError: "preview_unhealthy",
-      failureCount: 3,
-      retryAfter: "2026-09-05T00:05:00.000Z"
-    }
-  );
+  await store.markFailed(slotFixture.id, {
+    lastError: "preview_unhealthy",
+    failureCount: 3,
+    retryAfter: "2026-09-05T00:05:00.000Z"
+  });
   const retryLease = {
     ownerId: "retry-owner",
     now: "2026-09-05T00:05:00.000Z",
     expiresAt: "2026-09-05T00:10:00.000Z"
   };
-  await store.acquireCleanup(slotFixture.id, "failed", retryLease);
+  await store.acquireCleanup(slotFixture.id, { ...slotFixture, state: "failed" }, retryLease);
 
-  const concurrentReservation = await store.reservePreparing(1, [
-    { id: "replacement", resourceKey: "replacement-resource" }
-  ], retryLease);
-  const retrying = await store.retryPreparing(slotFixture.id, "retry-generation-resource", retryLease);
+  const concurrentReservation = await store.reservePreparing(
+    1,
+    [{ id: "replacement", resourceKey: "replacement-resource" }],
+    retryLease
+  );
+  const retrying = await store.retryPreparing(
+    slotFixture.id,
+    "retry-generation-resource",
+    retryLease
+  );
 
   assert.deepEqual(concurrentReservation, []);
   assert.equal(retrying.id, slotFixture.id);
@@ -170,8 +193,7 @@ test("repository retains retry history while cleanup occupies capacity and resta
 test("warm-slot Prisma schema uniquely identifies resources and indexes claim candidates", async () => {
   const schema = await readFile(schemaUrl, "utf8");
   const model = schema.match(/model WorkspaceWarmSlot \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  const states =
-    schema.match(/enum WorkspaceWarmSlotState \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const states = schema.match(/enum WorkspaceWarmSlotState \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   assert.match(model, /resourceKey\s+String\s+@unique\s+@map\("resource_key"\)/);
   assert.match(model, /state\s+WorkspaceWarmSlotState/);

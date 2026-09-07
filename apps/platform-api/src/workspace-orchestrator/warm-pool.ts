@@ -139,11 +139,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
               })
             : undefined;
         try {
-          const owned = await options.store.acquireCleanup(
-            slot.id,
-            slot.state,
-            operationLease(ownerId)
-          );
+          const owned = await options.store.acquireCleanup(slot.id, slot, operationLease(ownerId));
           if (!owned) continue;
           await withMaintainedWarmSlotOperationLease(
             { store: options.store, slotId: owned.id, ownerId, now, leaseMs: operationLeaseMs },
@@ -317,7 +313,7 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       const failureCount = slot.failureCount + 1;
       const retryAfter = new Date(now().getTime() + retryDelayMs(failureCount)).toISOString();
       const ownerId = createOperationOwner();
-      const owned = await options.store.acquireCleanup(slotId, slot.state, operationLease(ownerId));
+      const owned = await options.store.acquireCleanup(slotId, slot, operationLease(ownerId));
       if (!owned) return;
       await withMaintainedWarmSlotOperationLease(
         { store: options.store, slotId, ownerId, now, leaseMs: operationLeaseMs },

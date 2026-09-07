@@ -81,17 +81,21 @@ test("zero-target sweep retries expired claiming and cleaning slots", async (t) 
   });
   await fixture.store.claim("project-cleaning");
   runtime.deleteProject("project-cleaning");
-  await fixture.store.acquireCleanup("cleaning-slot", "claiming", {
-    ownerId: "live-cleaner",
-    now: start.toISOString(),
-    expiresAt: afterLeaseExpiry.toISOString()
-  });
+  await fixture.store.acquireCleanup(
+    "cleaning-slot",
+    { state: "claiming", resourceKey: "cleaning-resource" },
+    {
+      ownerId: "live-cleaner",
+      now: start.toISOString(),
+      expiresAt: afterLeaseExpiry.toISOString()
+    }
+  );
 
   await fixture.pool.reconcile();
-  assert.deepEqual(
-    (await fixture.store.list()).map((slot) => slot.state).sort(),
-    ["claiming", "cleaning"]
-  );
+  assert.deepEqual((await fixture.store.list()).map((slot) => slot.state).sort(), [
+    "claiming",
+    "cleaning"
+  ]);
 
   const sweep = startWarmPoolSweep(fixture.pool, { intervalMs: 10 });
   t.after(() => sweep.stop());
