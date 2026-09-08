@@ -11,6 +11,8 @@ import {
   type ToolDefinition
 } from "@earendil-works/pi-coding-agent";
 
+import { selectRecentPiHistory } from "./pi-context-memory";
+
 const SESSION_CWD = "/horizon-workspace";
 const PLAN_TOOL_NAMES = [
   "read_workspace_file",
@@ -33,8 +35,7 @@ export async function createHorizonPiSession(
   input: CreateHorizonPiSessionInput
 ): Promise<AgentSession> {
   const sessionManager = SessionManager.inMemory(SESSION_CWD, { id: `pi_${input.turnId}` });
-  for (const message of input.messages) {
-    if (message.id === input.currentMessageId || message.role === "system") continue;
+  for (const message of selectRecentPiHistory(input.messages, input.currentMessageId)) {
     sessionManager.appendMessage(toPiMessage(message, input.model));
   }
 

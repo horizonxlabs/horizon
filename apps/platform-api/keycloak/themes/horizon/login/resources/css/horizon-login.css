@@ -346,23 +346,65 @@ body#keycloak-bg {
 
 .horizon-auth-panel .pf-v5-c-input-group,
 .horizon-auth-panel .pf-c-input-group {
+  display: flex;
   align-items: stretch;
+  width: 100%;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group:hover,
+.horizon-auth-panel .pf-c-input-group:hover {
+  border-color: #94a3b8;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group:focus-within,
+.horizon-auth-panel .pf-c-input-group:focus-within {
+  border-color: var(--horizon-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.horizon-auth-panel .pf-v5-c-input-group .pf-v5-c-form-control,
+.horizon-auth-panel .pf-v5-c-input-group .pf-c-form-control,
+.horizon-auth-panel .pf-c-input-group .pf-v5-c-form-control,
+.horizon-auth-panel .pf-c-input-group .pf-c-form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .horizon-auth-panel .pf-v5-c-input-group input,
 .horizon-auth-panel .pf-c-input-group input {
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 42px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .horizon-auth-panel .pf-v5-c-input-group button,
 .horizon-auth-panel .pf-c-input-group button,
 .horizon-auth-panel .pf-v5-c-button.pf-m-control,
 .horizon-auth-panel .pf-c-button.pf-m-control {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
   min-width: 44px;
   min-height: 44px;
-  border-color: #cbd5e1;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--horizon-border);
+  border-radius: 0;
   color: var(--horizon-muted);
   background: #ffffff;
+  box-shadow: none;
 }
 
 .horizon-auth-panel .pf-v5-c-input-group button:hover,
@@ -371,6 +413,15 @@ body#keycloak-bg {
 .horizon-auth-panel .pf-c-button.pf-m-control:hover {
   color: var(--horizon-primary-strong);
   background: #eff6ff;
+}
+
+.horizon-auth-panel .pf-v5-c-input-group :is(input, button):focus-visible,
+.horizon-auth-panel .pf-c-input-group :is(input, button):focus-visible {
+  outline: 0;
+}
+
+.horizon-auth-panel .kc-form-options {
+  margin-top: 8px;
 }
 
 .horizon-auth-panel button,

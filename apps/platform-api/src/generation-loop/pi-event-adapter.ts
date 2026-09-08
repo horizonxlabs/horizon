@@ -109,7 +109,16 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
   if (event.type === "tool_execution_update") {
     const actionType = actionTypeFor(event.toolName);
     return actionType
-      ? [{ type: "action_chunk", actionId: event.toolCallId, content: "Tool is running" }]
+      ? [
+          {
+            type: "action_chunk",
+            actionId: event.toolCallId,
+            content:
+              actionType === "shell"
+                ? toolResultText(event.partialResult) || "Command is running"
+                : "Tool is running"
+          }
+        ]
       : [];
   }
   if (event.type === "tool_execution_end") {
@@ -138,12 +147,19 @@ export function adaptPiEvent(event: AgentSessionEvent): ChatStreamEvent[] {
                 find: displayDetail(details?.find),
                 replace: displayDetail(details?.replace)
               }
-            : {
-                body:
-                  label === presentation.label
-                    ? presentation.successSummary
-                    : `${completedVerb(actionType)} ${label}`
-              }
+            : actionType === "shell"
+              ? {
+                  body:
+                    displayDetail(details?.body) ||
+                    toolResultText(event.result) ||
+                    presentation.successSummary
+                }
+              : {
+                  body:
+                    label === presentation.label
+                      ? presentation.successSummary
+                      : `${completedVerb(actionType)} ${label}`
+                }
           : {}),
         ...(actionType === "edit" && (!details?.ok || event.isError)
           ? { find: displayDetail(details?.find), replace: displayDetail(details?.replace) }
@@ -176,11 +192,40 @@ function toolTarget(toolName: string, args: unknown): string | undefined {
       ? values.prefix
       : toolName === "propose_database_migration" || toolName === "load_governed_skill"
         ? values.name
-        : toolName === "run_workspace_command" || toolName === "generate_image"
-          ? undefined
-          : values.path;
+        : toolName === "run_workspace_command"
+          ? shellCommandTarget(values)
+          : toolName === "generate_image"
+            ? undefined
+            : values.path;
   if (typeof candidate !== "string" || !candidate.trim()) return undefined;
   return clipUtf8(safeToolError(candidate.trim()), MAX_TOOL_EVENT_SUMMARY_BYTES);
+}
+
+function shellCommandTarget(values: Record<string, unknown>): string | undefined {
+  if (typeof values.command !== "string" || !values.command.trim()) return undefined;
+  const args = Array.isArray(values.args)
+    ? values.args.filter((value): value is string => typeof value === "string")
+    : [];
+  return [values.command.trim(), ...args].join(" ");
+}
+
+function toolResultText(result: unknown): string {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return "";
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return "";
+  const text = content
+    .filter((item): item is { type: "text"; text: string } =>
+      Boolean(
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        (item as { type?: unknown }).type === "text" &&
+        typeof (item as { text?: unknown }).text === "string"
+      )
+    )
+    .map((item) => item.text)
+    .join("");
+  return clipUtf8(safeToolError(text), MAX_TOOL_EVENT_SUMMARY_BYTES);
 }
 
 function actionVerb(actionType: ActionActionType): string {

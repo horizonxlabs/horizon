@@ -5,7 +5,7 @@ const MAX_FILE_CHARS = 12000;
 const MAX_WORKSPACE_FILE_CHARS = 120000;
 
 export interface ContainerFileReader {
-  read(containerId: string): Promise<Array<{ path: string; content: string }>>;
+  read(containerId: string, paths?: string[]): Promise<Array<{ path: string; content: string }>>;
 }
 
 export interface WorkspaceFileBrowserReader {
@@ -35,13 +35,21 @@ function parseMarkedFiles(
 // One exec call emits every file delimited by a marker, which we then split back apart.
 export function createContainerFileReader(docker: DockerEngine): ContainerFileReader {
   return {
-    async read(containerId: string): Promise<Array<{ path: string; content: string }>> {
+    async read(
+      containerId: string,
+      paths?: string[]
+    ): Promise<Array<{ path: string; content: string }>> {
+      const safePaths = paths?.filter(isSafeContextPath);
+      const fileSource = safePaths?.length
+        ? safePaths.map((path) => `'${path}'`).join(" ")
+        : "$(find app lib components -type f \\( -name '*.tsx' -o -name '*.ts' -o -name '*.css' -o -name '*.jsx' -o -name '*.js' \\) 2>/dev/null | grep -v node_modules | grep -v '.next' | head -8)";
       const script = [
         "cd /workspace 2>/dev/null || exit 0",
         // app and lib first: their handful of files (page, layout, mock-data, utils) must make
         // the cap before the ten-file ui kit exhausts it — the model needs the page + data layer
         // contents most; the kit's existence comes from the file tree + prompt contract.
-        "for f in $(find app lib components -type f \\( -name '*.tsx' -o -name '*.ts' -o -name '*.css' -o -name '*.jsx' -o -name '*.js' \\) 2>/dev/null | grep -v node_modules | grep -v '.next' | head -8); do",
+        `for f in ${fileSource}; do`,
+        '  [ -f "$f" ] || continue;',
         `  echo "${MARKER}$f===";`,
         '  cat "$f";',
         '  echo "";',
@@ -66,6 +74,14 @@ export function createContainerFileReader(docker: DockerEngine): ContainerFileRe
       return parseMarkedFiles(stdout, MAX_FILE_CHARS);
     }
   };
+}
+
+function isSafeContextPath(path: string): boolean {
+  return (
+    /^(?:app|lib|components)\/[A-Za-z0-9._/-]+$/.test(path) &&
+    !path.split("/").includes("..") &&
+    /\.(?:tsx?|jsx?|css)$/.test(path)
+  );
 }
 
 // Every workspace file PATH (no contents, no cap) for the system prompt's file tree — the

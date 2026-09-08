@@ -82,3 +82,33 @@ test("the Keycloak login theme follows the compact Horizon application auth desi
   assert.match(styles, /border-radius:\s*10px/);
   assert.match(styles, /@media \(max-width:\s*767px\)/);
 });
+
+test("the Keycloak password field presents its visibility control as one unified input", async () => {
+  const styles = await readFile(
+    "apps/platform-api/keycloak/themes/horizon/login/resources/css/horizon-login.css",
+    "utf8"
+  );
+
+  const unifiedField = styles.match(
+    /\.horizon-auth-panel \.pf-v5-c-input-group,\s*\.horizon-auth-panel \.pf-c-input-group\s*\{([^}]*)\}/
+  )?.[1];
+  assert.ok(unifiedField, "password input group must have a shared visual container");
+  assert.match(unifiedField, /border:\s*1px solid #cbd5e1;/);
+  assert.match(unifiedField, /border-radius:\s*10px;/);
+  assert.match(unifiedField, /overflow:\s*hidden;/);
+
+  const focusState = styles.match(
+    /\.horizon-auth-panel \.pf-v5-c-input-group:focus-within,\s*\.horizon-auth-panel \.pf-c-input-group:focus-within\s*\{([^}]*)\}/
+  )?.[1];
+  assert.ok(focusState, "password input group must expose a unified focus state");
+  assert.match(focusState, /border-color:\s*var\(--horizon-primary\);/);
+  assert.match(focusState, /box-shadow:\s*0 0 0 3px rgba\(37, 99, 235, 0\.16\);/);
+
+  const visibilityControl = styles.match(
+    /\.horizon-auth-panel \.pf-v5-c-input-group button,[\s\S]*?\.horizon-auth-panel \.pf-c-button\.pf-m-control\s*\{([^}]*)\}/
+  )?.[1];
+  assert.ok(visibilityControl, "password visibility control must join the input container");
+  assert.match(visibilityControl, /border:\s*0;/);
+  assert.match(visibilityControl, /border-left:\s*1px solid var\(--horizon-border\);/);
+  assert.match(visibilityControl, /border-radius:\s*0;/);
+});

@@ -18,7 +18,7 @@ ${goldenRuleSection()}
 ${progressCommentarySection()}
 
 ## Native Horizon tools
-- Inspect before changing: use list_workspace_files and read_workspace_file. The files in Current project files are a selected snapshot, not permission to assume unseen content.
+- Files under Current project files are already inspected, authoritative snapshots for this turn. Use list_workspace_files or read_workspace_file only for a relevant file that is absent or explicitly marked truncated.
 - Use edit_workspace_file for one unique replacement in an existing file. Split distant changes into separate edits.
 - Use write_workspace_file for new files only. Never use placeholders or omitted sections in complete file content.
 - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. To add a dependency (equivalent to npm install package-name), call it with command "npm" and args ["install", "package-name"]. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
@@ -26,6 +26,7 @@ ${progressCommentarySection()}
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Use generate_image to create AI images for the app (see Generated images below).
 - Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
+- Horizon runs final validation after tool work. Run a build yourself only to diagnose or verify a concrete failure; do not duplicate the final validation preemptively.
 ${workspaceCheckGuidance(input.template)}
 
 ## Generated images — make key screens look real, within a hard cap
@@ -85,6 +86,7 @@ ${progressCommentarySection()}
 
 ## Horizon tools
 - Read-only requests may use only list_workspace_files, read_workspace_file, and load_governed_skill as needed.
+- Files under Current project files are already inspected, authoritative snapshots for this turn. Read them again only when absent or explicitly truncated.
 - The following mutation guidance applies only when the current message explicitly requests mutation:
   - Inspect relevant files before changing them and preserve unrelated code and behavior.
   - Use edit_workspace_file for narrow changes. Use write_workspace_file only for a new file or a necessary cohesive replacement of a small inspected file.
@@ -92,6 +94,7 @@ ${progressCommentarySection()}
   - Use propose_database_migration only when the current message explicitly requests real-database synchronization.
   - generate_image (only when mutation is authorized): at most 1-2 images for hero/showcase visuals, always to public/generated/<name>.png, referenced via \${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/generated/<name>.png (a bare /generated/... 404s), and echo ![alt](public/generated/<name>.png) in the recap. If not configured, continue without images.
   - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.
+  - Horizon runs final validation after tool work. Run a build yourself only to diagnose or verify a concrete failure; do not duplicate the final validation preemptively.
   - If the current message imperatively requests an improvement, make a substantial visible improvement within that named scope while protecting everything outside it.
 - When a governed skill matches either path, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 ${workspaceCheckGuidance(input.template)}

@@ -92,6 +92,65 @@ test("maps native tool lifecycle with stable Pi call IDs", () => {
   assert.doesNotMatch(JSON.stringify(result), /full private source result/);
 });
 
+test("maps shell command and live output into inspectable activity events", () => {
+  const [start] = adaptPiEvent({
+    type: "tool_execution_start",
+    toolCallId: "call-shell",
+    toolName: "run_workspace_command",
+    args: { command: "pnpm", args: ["run", "build"] }
+  });
+  assert.deepEqual(
+    { ...start, startedAt: "timestamp" },
+    {
+      type: "action_start",
+      actionId: "call-shell",
+      actionType: "shell",
+      label: "pnpm run build",
+      inputSummary: "Run pnpm run build",
+      startedAt: "timestamp"
+    }
+  );
+
+  const [update] = adaptPiEvent({
+    type: "tool_execution_update",
+    toolCallId: "call-shell",
+    toolName: "run_workspace_command",
+    args: { command: "pnpm", args: ["run", "build"] },
+    partialResult: {
+      content: [{ type: "text", text: "vite building...\n✓ built" }],
+      details: {
+        actionId: "call-shell",
+        actionType: "shell",
+        label: "pnpm",
+        ok: true
+      }
+    }
+  });
+  assert.deepEqual(update, {
+    type: "action_chunk",
+    actionId: "call-shell",
+    content: "vite building...\n✓ built"
+  });
+
+  const [result] = adaptPiEvent({
+    type: "tool_execution_end",
+    toolCallId: "call-shell",
+    toolName: "run_workspace_command",
+    result: {
+      content: [{ type: "text", text: "vite building...\n✓ built" }],
+      details: {
+        actionId: "call-shell",
+        actionType: "shell",
+        label: "pnpm",
+        ok: true
+      }
+    },
+    isError: false
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.body, "vite building...\n✓ built");
+});
+
 test("maps all Horizon tools and sanitized failures", () => {
   const expected = {
     read_workspace_file: "read",

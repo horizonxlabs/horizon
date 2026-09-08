@@ -19,7 +19,10 @@ export interface GenerationServiceDeps {
   actionRunner: ActionRunner;
   template: GoldenTemplate;
   getContainerId: (projectId: string) => string;
-  readContextFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;
+  readContextFiles?: (
+    containerId: string,
+    paths?: string[]
+  ) => Promise<Array<{ path: string; content: string }>>;
   listWorkspaceTree?: (containerId: string) => Promise<string[]>;
   checkFileSyntax?: (containerId: string, path: string) => Promise<string>;
   readWorkspaceFiles?: (containerId: string) => Promise<Array<{ path: string; content: string }>>;

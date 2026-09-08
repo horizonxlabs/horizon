@@ -46,7 +46,7 @@ test("Pi model rounds run through Horizon governance with unique evidence IDs", 
       };
     }
   };
-  const { modelRuntime, model } = await createHorizonPiRuntime({
+  const { modelRuntime, model, roundCount } = await createHorizonPiRuntime({
     executor,
     actor,
     projectId: "p1",
@@ -85,6 +85,7 @@ test("Pi model rounds run through Horizon governance with unique evidence IDs", 
     "done"
   ]);
   assert.equal(model.provider, "horizon-governed");
+  assert.equal(roundCount(), 2);
   assert.equal(JSON.stringify(model).includes("primary-secret"), false);
 });
 

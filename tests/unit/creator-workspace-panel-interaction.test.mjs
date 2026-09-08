@@ -270,7 +270,11 @@ test("Workspace failure recovery retries the latest user request", async () => {
     .findAllByType("button")
     .find((button) => button.children.includes("Retry access"));
   await act(async () => retry.props.onClick());
-  assert.deepEqual(submissions, ["Build the first preview"]);
+  assert.equal(submissions.length, 1);
+  assert.match(submissions[0], /Retry the previous request after this error/);
+  assert.match(submissions[0], /Original request:\nBuild the first preview/);
+  assert.match(submissions[0], /Latest error:\nVault secret operation failed \(403\)/);
+  assert.match(submissions[0], /diagnose the error, apply a safe fix, and continue/i);
 });
 
 test("Workspace keeps an accessible conversation restore control after collapse", async () => {
@@ -291,10 +295,7 @@ test("Workspace keeps an accessible conversation restore control after collapse"
 
   // Interactive controls nested inside role=separator are hidden from the accessibility tree.
   // The restore button must remain a sibling so it is both visible and keyboard reachable.
-  assert.equal(
-    separator.findAllByProps({ "aria-label": "Expand conversation panel" }).length,
-    0
-  );
+  assert.equal(separator.findAllByProps({ "aria-label": "Expand conversation panel" }).length, 0);
   assert.ok(collapsedLayout);
   assert.ok(expand);
 

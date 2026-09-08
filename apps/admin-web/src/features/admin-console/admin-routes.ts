@@ -1,6 +1,5 @@
 export type AdminPage =
   | "dashboard"
-  | "services"
   | "ai-providers"
   | "guardrails"
   | "knowledge"
@@ -14,8 +13,9 @@ export type AdminPage =
   | "not-found";
 
 const ADMIN_PATHS: Record<string, AdminPage> = {
+  "/": "dashboard",
   "/admin": "dashboard",
-  "/admin/services": "services",
+  "/admin/services": "dashboard",
   "/admin/ai-providers": "ai-providers",
   "/admin/guardrails": "guardrails",
   "/admin/knowledge": "knowledge",

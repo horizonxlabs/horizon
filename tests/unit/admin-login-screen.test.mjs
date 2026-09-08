@@ -12,7 +12,8 @@ const adminSource = readFileSync(
   "utf8"
 );
 const uiStyles = readFileSync("packages/ui/styles.css", "utf8");
-const { AdminLoginScreen } = await import("../../apps/admin-web/src/login-screen.tsx");
+const { AdminLoginScreen, adminLoginReturnTo } =
+  await import("../../apps/admin-web/src/login-screen.tsx");
 
 function renderLogin() {
   return renderToStaticMarkup(React.createElement(AdminLoginScreen, { onLoggedIn() {} }));
@@ -42,6 +43,14 @@ test("Admin login exposes the Keycloak redirect entry point", () => {
   assert.match(html, /aria-label="Admin login"/);
   assert.match(html, /Continue with Keycloak/);
   assert.match(loginSource, /window\.location\.assign\(startAdminKeycloakLogin\(returnTo\)\)/);
+});
+
+test("Admin login returns to the admin dashboard when started from the site root", () => {
+  assert.equal(typeof adminLoginReturnTo, "function");
+  assert.equal(
+    adminLoginReturnTo({ origin: "https://dash.gethorizon.org" }),
+    "https://dash.gethorizon.org/admin"
+  );
 });
 
 test("Admin login keeps credentials and Keycloak tokens out of browser code", () => {

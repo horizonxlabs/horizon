@@ -27,6 +27,8 @@ globalThis.fetch ??= async () => ({
 
 const { WorkspacePage } =
   await import("../../apps/creator-web/src/features/workspace/WorkspacePage.tsx");
+const { buildWorkspaceRetryPrompt } =
+  await import("../../apps/creator-web/src/features/workspace/workspace-failure.ts");
 
 test("Workspace turns a persisted Vault failure into an actionable recovery state", () => {
   const app = {
@@ -84,4 +86,20 @@ test("Workspace turns a persisted Vault failure into an actionable recovery stat
   assert.equal((html.match(/Vault secret operation failed \(403\)/g) ?? []).length, 1);
   assert.doesNotMatch(html, /Suggested next/);
   assert.match(html, /vibe-live-chat-panel has-workspace-failure/);
+  assert.match(html, /vibe-workspace-recovery-card/);
+  assert.match(html, /vibe-workspace-recovery-actions/);
+  assert.doesNotMatch(html, /creator-state-error/);
+});
+
+test("Workspace retry prompt keeps intent and redacts credentials from the latest error", () => {
+  const prompt = buildWorkspaceRetryPrompt({
+    retryPrompt: "Connect the app to Gemini",
+    technicalDetails:
+      "Provider failed: api_key=test-provider-key token=secret-token password=hunter2"
+  });
+
+  assert.match(prompt, /Original request:\nConnect the app to Gemini/);
+  assert.match(prompt, /Latest error:\nProvider failed/);
+  assert.doesNotMatch(prompt, /test-provider-key|secret-token|hunter2/);
+  assert.equal((prompt.match(/\[REDACTED\]/g) ?? []).length, 3);
 });

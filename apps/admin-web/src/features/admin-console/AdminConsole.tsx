@@ -118,11 +118,7 @@ export function AdminConsole({ publishingPage }: { publishingPage: ReactNode }) 
         lines={["Choose a destination from the administration navigation."]}
       />
     ) : (
-      <OperationsDashboard
-        client={client}
-        ai={ai}
-        page={page === "services" ? "services" : "dashboard"}
-      />
+      <OperationsDashboard client={client} ai={ai} />
     );
   return (
     <AdminRoutes
@@ -183,12 +179,10 @@ export function AdminConsole({ publishingPage }: { publishingPage: ReactNode }) 
 
 function OperationsDashboard({
   client,
-  ai,
-  page
+  ai
 }: {
   client: ReturnType<typeof createAdminPlatformClient> | undefined;
   ai: ReturnType<typeof useAiGovernance>;
-  page: "dashboard" | "services";
 }) {
   const operations = useProductionObservability(client);
   const kpis = [
@@ -246,10 +240,7 @@ function OperationsDashboard({
           status: status === "failed" ? "down" : status
         }))}
       />
-      <SectionCard
-        eyebrow="Operations"
-        title={page === "services" ? "Service health" : "Production evidence"}
-      >
+      <SectionCard eyebrow="Operations" title="Production evidence">
         <DataTable
           columns={[
             { key: "name", label: "Service" },

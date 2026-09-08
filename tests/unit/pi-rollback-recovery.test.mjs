@@ -66,9 +66,12 @@ test("rollback failure retains the recovery snapshot and emits an operator warni
   const error = events.find((event) => event.type === "error");
   assert.match(error?.message ?? "", /snapshot recovery is required/i);
   assert.match((await service.history("p1")).at(-1).content, /operator.*protected recovery/i);
-  assert.deepEqual(audits.at(-1), {
-    action: "workspace_snapshot_recovery_required",
-    projectId: "p1",
-    metadata: { ok: false, reason: "rollback_failed" }
-  });
+  assert.deepEqual(
+    audits.find((event) => event.action === "workspace_snapshot_recovery_required"),
+    {
+      action: "workspace_snapshot_recovery_required",
+      projectId: "p1",
+      metadata: { ok: false, reason: "rollback_failed" }
+    }
+  );
 });

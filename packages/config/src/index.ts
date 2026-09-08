@@ -3,7 +3,6 @@ import type { NavItem, Surface } from "@evcp/types";
 export const navigation: Record<Surface, NavItem[]> = {
   admin: [
     { label: "Dashboard", route: "/admin", icon: "dashboard" },
-    { label: "Services", route: "/admin/services", icon: "services" },
     { label: "AI Providers", route: "/admin/ai-providers", icon: "ai" },
     { label: "Guardrails", route: "/admin/guardrails", icon: "shield" },
     { label: "Knowledge & Skills", route: "/admin/knowledge", icon: "prd" },

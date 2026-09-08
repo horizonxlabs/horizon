@@ -9,7 +9,11 @@ const BRAND_POINTS = [
 ];
 
 /** Begin the server-brokered OIDC flow. No Keycloak credential or token is handled in the browser. */
-export function beginAdminKeycloakLogin(returnTo = window.location.href): void {
+export function adminLoginReturnTo(location: Pick<Location, "origin"> = window.location): string {
+  return `${location.origin}/admin`;
+}
+
+export function beginAdminKeycloakLogin(returnTo = adminLoginReturnTo()): void {
   window.location.assign(startAdminKeycloakLogin(returnTo));
 }
 

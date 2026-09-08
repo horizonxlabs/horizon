@@ -96,7 +96,7 @@ export async function createDefaultGenerationService(opts: {
     }),
     template,
     getContainerId: (projectId) => workspaceContainerId(opts.orchestrator, projectId),
-    readContextFiles: (containerId) => fileReader.read(containerId),
+    readContextFiles: (containerId, paths) => fileReader.read(containerId, paths),
     listWorkspaceTree: (containerId) => listWorkspaceTree(docker, containerId),
     checkFileSyntax: async (containerId, path) => {
       const run = async () => {

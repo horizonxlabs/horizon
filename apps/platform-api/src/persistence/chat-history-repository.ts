@@ -40,7 +40,8 @@ export interface ChatHistoryPersistenceClient {
     }): Promise<{ count: number }>;
     findMany(args: {
       where: { projectId: string };
-      orderBy: { createdAt: "asc" };
+      orderBy: { createdAt: "asc" | "desc" };
+      take?: number;
     }): Promise<ChatMessageRecord[]>;
   };
   chatSummary: {
@@ -129,6 +130,16 @@ export class ChatHistoryRepositoryBackedStore implements ChatHistoryStore {
       orderBy: { createdAt: "asc" }
     });
     return records.map(toWorkspaceChatMessage);
+  }
+
+  async listRecentMessages(projectId: string, limit: number): Promise<WorkspaceChatMessage[]> {
+    if (limit <= 0) return [];
+    const records = await this.client.chatMessage.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    return records.reverse().map(toWorkspaceChatMessage);
   }
 
   async putSummary(summary: WorkspaceChatSummary): Promise<void> {

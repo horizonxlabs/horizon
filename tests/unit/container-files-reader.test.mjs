@@ -14,7 +14,7 @@ test("reader parses CRLF marker output into LF file contents", async () => {
     "===EVCPFILE:app/page.tsx===\r\n" +
     "\r\n" +
     "export default function Home() {\r\n" +
-    '  return <h1>Hi</h1>;\r\n' +
+    "  return <h1>Hi</h1>;\r\n" +
     "}\r\n" +
     "\r\n" +
     "===EVCPFILE:lib/db.ts===\r\n" +
@@ -40,6 +40,28 @@ test("reader returns [] (never throws) when the exec fails", async () => {
     }
   };
   assert.deepEqual(await createContainerFileReader(docker).read("cid"), []);
+});
+
+test("reader loads only validated paths selected from the workspace tree", async () => {
+  let observedScript = "";
+  const docker = {
+    async execInContainer(_containerId, cmd) {
+      observedScript = cmd[2];
+      return { stdout: "", stderr: "", exitCode: 0 };
+    }
+  };
+
+  await createContainerFileReader(docker).read("cid", [
+    "app/reports/page.tsx",
+    "lib/mock-data.ts",
+    "../escape.ts",
+    "app/page.tsx; touch /tmp/bad"
+  ]);
+
+  assert.match(observedScript, /app\/reports\/page\.tsx/);
+  assert.match(observedScript, /lib\/mock-data\.ts/);
+  assert.doesNotMatch(observedScript, /escape\.ts|touch \/tmp\/bad/);
+  assert.doesNotMatch(observedScript, /find app lib components|head -8/);
 });
 
 test("workspace file browser reader scans beyond the AI context cap", async () => {

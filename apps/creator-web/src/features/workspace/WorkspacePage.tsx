@@ -26,7 +26,7 @@ import { currentWorkspaceTurnStart } from "./workspace-turn";
 import { WorkspaceWakeOverlay } from "./WorkspaceWakeOverlay";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkspacePreviewFrame } from "./WorkspacePreviewFrame";
-import { deriveWorkspaceFailure } from "./workspace-failure";
+import { buildWorkspaceRetryPrompt, deriveWorkspaceFailure } from "./workspace-failure";
 import type { useCreatorApp } from "@/app/use-creator-app";
 
 // react-data-grid (and its CSS) is client-only; lazy-load it so importing WorkspacePage in
@@ -206,9 +206,9 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
             <WorkspaceRequestFailure
               failure={workspaceFailure}
               onRetry={() => {
-                if (workspaceFailure?.retryPrompt) {
-                  void handleVibeChat({ prompt: workspaceFailure.retryPrompt });
-                }
+                if (!workspaceFailure) return;
+                const prompt = buildWorkspaceRetryPrompt(workspaceFailure);
+                if (prompt) return handleVibeChat({ prompt });
               }}
             />
           </div>

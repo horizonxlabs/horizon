@@ -29,6 +29,10 @@ test("appends messages in order and lists them per project", async () => {
   assert.equal(messages.length, 2);
   assert.equal(messages[1].content, "hello");
   assert.equal((await store.listMessages("other-project")).length, 0);
+  assert.deepEqual(
+    (await store.listRecentMessages("p1", 1)).map(({ id }) => id),
+    ["m2"]
+  );
 });
 
 test("re-appending a message ID updates it in place without changing history order", async () => {

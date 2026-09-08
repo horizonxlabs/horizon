@@ -56,6 +56,23 @@ test("action_start: is idempotent for an actionId that already exists", () => {
   assert.deepEqual(result.actions, existing);
 });
 
+test("action_chunk replaces the live shell output with the latest accumulated snapshot", () => {
+  let message = baseMessage({
+    actions: [{ id: "a1", type: "shell", label: "pnpm test", status: "running" }]
+  });
+  message = applyVibeEvent(message, "action_chunk", {
+    actionId: "a1",
+    content: "first line\n"
+  });
+  message = applyVibeEvent(message, "action_chunk", {
+    actionId: "a1",
+    content: "first line\nsecond line\n"
+  });
+
+  assert.equal(message.actions[0].body, "first line\nsecond line\n");
+  assert.equal(message.parts[0].tool.progress, "first line\nsecond line\n");
+});
+
 test("action_result ok=true: upserts a done action with find/replace patch", () => {
   const existing = [{ id: "a1", type: "edit", label: "Editing", status: "running" }];
   const message = baseMessage({ actions: existing });

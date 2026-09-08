@@ -115,6 +115,28 @@ test("write, edit, and direct command tools delegate bound actions", async () =>
   assert.match(updates[0].content[0].text, /streamed output/);
 });
 
+test("command tool updates expose bounded accumulated output snapshots", async () => {
+  const { tools } = fixture({
+    actionRunner: {
+      async runAction(input) {
+        input.onShellOutput?.("first line\n");
+        input.onShellOutput?.("second line\n");
+        return { ok: true, stdout: "first line\nsecond line\n" };
+      }
+    }
+  });
+  const updates = [];
+
+  await execute(tools, "run_workspace_command", { command: "pnpm", args: ["test"] }, (update) =>
+    updates.push(update)
+  );
+
+  assert.deepEqual(
+    updates.map((update) => update.content[0].text),
+    ["first line\n", "first line\nsecond line\n"]
+  );
+});
+
 test("whole-file writes to existing unlocked files reach the action runner drift guard", async () => {
   const { tools, actionRunnerCalls } = fixture();
 

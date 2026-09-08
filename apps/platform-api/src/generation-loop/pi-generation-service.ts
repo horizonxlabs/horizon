@@ -6,7 +6,6 @@ import type {
 } from "@evcp/types";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 
-import { selectContextFiles } from "./context-selector";
 import { createAssistantChatMessage, createUserChatMessage } from "./generation-message-factory";
 import type { GenerationService, PiGenerationServiceDeps } from "./generation-service-types";
 import type { ChatStreamEvent } from "./generation-types";
@@ -25,13 +24,14 @@ import { persistPiTurnErrorAssistant } from "./pi-turn-error-persistence";
 import * as turnFeedback from "./pi-turn-feedback";
 import { finalizePiCandidate } from "./pi-turn-finalization";
 import { releasePiTurnSnapshot } from "./pi-turn-snapshot-lifecycle";
+import { preparePiTurnContext } from "./pi-turn-context";
+import { recordPiTurnObservability } from "./pi-turn-observability";
 import type { HorizonPiToolDetails } from "./pi-tools";
 import { createPiTurnTools } from "./pi-turn-tools";
-import { buildAutoSystemPrompt, buildPlanSystemPrompt, buildSystemPrompt } from "./system-prompt";
 import type { RunnableAction } from "./action-runner-types";
-import { filterAgentWorkspaceFiles, safeToolError } from "./pi-tool-policy";
+import { safeToolError } from "./pi-tool-policy";
 import { restoreWorkspaceCommit } from "./workspace-restore";
-import { assertFileLimits, collectPiWriteIssues } from "./turn-checks";
+import { collectPiWriteIssues } from "./turn-checks";
 import { reduceTurnPart } from "./turn-parts";
 
 export function createPiGenerationService(deps: PiGenerationServiceDeps): GenerationService {
@@ -74,39 +74,17 @@ async function* runLockedTurn(
   const userMessage = createUserChatMessage(input.projectId, input.prompt, mode);
   await input.assertCurrent?.();
   await deps.chatHistory.appendMessage(userMessage);
-  const history = await deps.chatHistory.listMessages(input.projectId);
-  const containerId = deps.getContainerId(input.projectId);
-  const governed = deps.resolveGovernedContext
-    ? await deps.resolveGovernedContext({
-        actor: input.actor,
-        projectId: input.projectId,
-        scenario: "frontend_coding"
-      })
-    : { availableSkills: [], skillInstructions: {}, knowledgeExcerpts: [] };
-  const liveFiles = filterAgentWorkspaceFiles(
-    deps.readContextFiles ? await deps.readContextFiles(containerId) : []
-  );
-  const fileTree = deps.listWorkspaceTree ? await deps.listWorkspaceTree(containerId) : [];
-  assertFileLimits(liveFiles, limits.maxFileBytes);
-  const contextFiles = liveFiles.length
-    ? liveFiles
-    : selectContextFiles(deps.template, input.prompt);
-  const systemInput = {
-    template: deps.template,
-    contextFiles,
-    fileTree,
-    rollingSummary: (await deps.chatHistory.getSummary(input.projectId))?.summary ?? null,
-    availableSkills: governed.availableSkills,
-    knowledgeExcerpts: governed.knowledgeExcerpts,
-    productSpec: governed.productSpec,
-    approvedPlan: input.approvedPlan
-  };
-  const systemPrompt =
-    mode === "plan"
-      ? buildPlanSystemPrompt(systemInput)
-      : mode === "auto"
-        ? buildAutoSystemPrompt(systemInput)
-        : buildSystemPrompt(systemInput);
+  const { containerId, contextFileCount, governed, history, historyMessages, systemPrompt } =
+    await preparePiTurnContext({
+      deps,
+      projectId: input.projectId,
+      prompt: input.prompt,
+      actor: input.actor,
+      mode,
+      currentMessage: userMessage,
+      approvedPlan: input.approvedPlan,
+      maxFileBytes: limits.maxFileBytes
+    });
   const mutationCapable = mode !== "plan";
   const timeoutSignal = AbortSignal.timeout(limits.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
@@ -132,6 +110,10 @@ async function* runLockedTurn(
   let irreversibleFinalizationMayHaveTakenEffect = false;
   let commitEventEmitted = false;
   let rollbackRecoveryRequired = false;
+  let modelRoundCount = () => 0;
+  let currentToolCallCount = () => 0;
+  let compactionCount = 0;
+  let turnStatus: "succeeded" | "failed" = "failed";
 
   function trackTurnEvent(event: ChatStreamEvent): ChatStreamEvent {
     turnParts = reduceTurnPart(turnParts, event);
@@ -154,7 +136,7 @@ async function* runLockedTurn(
       }
     }
     signal.throwIfAborted();
-    const { modelRuntime, model } = await createHorizonPiRuntime({
+    const runtime = await createHorizonPiRuntime({
       executor: deps.governedAiExecutor,
       actor: input.actor,
       projectId: input.projectId,
@@ -163,6 +145,8 @@ async function* runLockedTurn(
       maxModelRounds: limits.maxModelRounds,
       modelRoundTimeoutMs: limits.modelRoundTimeoutMs
     });
+    const { modelRuntime, model } = runtime;
+    modelRoundCount = runtime.roundCount;
     const { tools, toolCallCount } = createPiTurnTools({
       deps,
       actor: input.actor,
@@ -174,6 +158,7 @@ async function* runLockedTurn(
       migrations,
       turnId: userMessage.id
     });
+    currentToolCallCount = toolCallCount;
     session = await createHorizonPiSession({
       modelRuntime,
       model,
@@ -324,6 +309,7 @@ async function* runLockedTurn(
       await input.assertCurrent?.();
       await deps.chatHistory.appendMessage(assistant);
     }
+    turnStatus = "succeeded";
   } catch (error) {
     await session?.abort().catch(() => undefined);
     let errorMessage = safeToolError(error);
@@ -371,6 +357,18 @@ async function* runLockedTurn(
     if (preservedCommitEvent) yield preservedCommitEvent;
     yield errorMessage === initialErrorMessage ? errorEvent : { type: "error", message: errorMessage };
   } finally {
+    await recordPiTurnObservability({
+      deps,
+      projectId: input.projectId,
+      status: turnStatus,
+      modelRounds: modelRoundCount(),
+      toolCalls: currentToolCallCount(),
+      compactions: compactionCount,
+      promptTokens,
+      completionTokens,
+      contextFiles: contextFileCount,
+      historyMessages
+    });
     if (snapshotLeaseTimer) clearInterval(snapshotLeaseTimer);
     if (!rollbackRecoveryRequired) {
       await releasePiTurnSnapshot(deps, input.projectId, containerId, preparedSnapshotToken);
@@ -389,6 +387,7 @@ async function* runLockedTurn(
       currentAssistantDeltaText = "";
       currentRoundReasoningChars = 0;
     }
+    if (event.type === "compaction_start") compactionCount += 1;
     const delta = assistantTextDelta(event);
     if (delta) {
       assistantText += delta;

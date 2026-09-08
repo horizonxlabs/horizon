@@ -1,4 +1,4 @@
-import { DataTable, DecisionPanel, PageHeader, SectionCard } from "@evcp/ui";
+import { DataTable, PageHeader, SectionCard } from "@evcp/ui";
 import { domainRequestRows } from "@/features/publish-governance";
 
 export function DomainReadinessPage() {
@@ -8,12 +8,6 @@ export function DomainReadinessPage() {
         eyebrow="Publishing governance"
         title="Domains"
         description="Review domain-routing approval evidence before an application is exposed."
-      />
-      <DecisionPanel
-        tone="info"
-        badge="Readiness evidence"
-        title="Static domain approval evidence"
-        lines={["These exported records are readiness evidence, not live domain or DNS settings."]}
       />
       <SectionCard eyebrow="Readiness evidence" title="Domain request approvals">
         <DataTable

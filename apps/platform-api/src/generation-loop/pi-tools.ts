@@ -143,8 +143,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
         result.content = [
           {
             type: "text",
-            text:
-              "Build validation passed. Continue any remaining requested work, including database migrations and API wiring, before sending the final response."
+            text: "Build validation passed. Continue any remaining requested work, including database migrations and API wiring, before sending the final response."
           }
         ];
       }
@@ -220,6 +219,7 @@ async function runAction(
     ...(action.type === "file" ? { body: action.content } : {}),
     ...(action.type === "edit" ? { find: action.find, replace: action.replace } : {})
   };
+  let streamedOutput = "";
   const result = await context.actionRunner.runAction({
     containerId: context.containerId,
     projectId: context.projectId,
@@ -228,11 +228,13 @@ async function runAction(
     signal: context.signal,
     timeoutMs,
     maxOutputBytes: context.limits.maxToolOutputBytes,
-    onShellOutput: (chunk) =>
+    onShellOutput: (chunk) => {
+      streamedOutput = clipUtf8(streamedOutput + chunk, context.limits.maxToolOutputBytes);
       onUpdate?.({
-        content: [{ type: "text", text: clipUtf8(chunk, context.limits.maxToolOutputBytes) }],
+        content: [{ type: "text", text: streamedOutput }],
         details
-      })
+      });
+    }
   });
   if (!result.ok) {
     // details already carries the attempted find/replace (edit) or body (file write) — return it
@@ -242,7 +244,14 @@ async function runAction(
     return failure(action.id, action.type, details.label, context, details, result.error);
   }
   const text = action.type === "shell" ? result.stdout : "ok";
-  return success(action.id, action.type, details.label, context, details, text);
+  return success(
+    action.id,
+    action.type,
+    details.label,
+    context,
+    action.type === "shell" ? { ...details, body: text } : details,
+    text
+  );
 }
 
 async function workspaceFiles(

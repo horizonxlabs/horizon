@@ -80,7 +80,16 @@ export function VibeActionRow({ action }: { action: VibeAction }): ReactNode {
               ))}
             </pre>
           ) : (
-            action.body && <pre className="vibe-action-body">{action.body}</pre>
+            <>
+              {action.type === "shell" && (
+                <pre className="vibe-action-command">$ {action.label}</pre>
+              )}
+              {action.body ? (
+                <pre className="vibe-action-body">{action.body}</pre>
+              ) : action.type === "shell" && running ? (
+                <span className="vibe-action-output-pending">Waiting for output…</span>
+              ) : null}
+            </>
           )}
         </div>
       )}

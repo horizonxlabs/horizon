@@ -3,6 +3,7 @@ import type { WorkspaceChatMessage, WorkspaceChatSummary } from "@evcp/types";
 export interface ChatHistoryStore {
   appendMessage(message: WorkspaceChatMessage): Promise<void>;
   listMessages(projectId: string): Promise<WorkspaceChatMessage[]>;
+  listRecentMessages(projectId: string, limit: number): Promise<WorkspaceChatMessage[]>;
   putSummary(summary: WorkspaceChatSummary): Promise<void>;
   getSummary(projectId: string): Promise<WorkspaceChatSummary | null>;
 }
@@ -33,6 +34,9 @@ export function createMemoryChatHistoryStore(): ChatHistoryStore {
     },
     async listMessages(projectId) {
       return [...(messagesByProject.get(projectId) ?? [])];
+    },
+    async listRecentMessages(projectId, limit) {
+      return [...(messagesByProject.get(projectId) ?? [])].slice(-Math.max(0, limit));
     },
     async putSummary(summary) {
       summaryByProject.set(summary.projectId, summary);

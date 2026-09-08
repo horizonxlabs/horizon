@@ -36,7 +36,7 @@ export type CreateHorizonPiRuntimeInput = {
 
 export async function createHorizonPiRuntime(
   input: CreateHorizonPiRuntimeInput
-): Promise<{ modelRuntime: ModelRuntime; model: Model<string> }> {
+): Promise<{ modelRuntime: ModelRuntime; model: Model<string>; roundCount(): number }> {
   if (!Number.isInteger(input.maxModelRounds) || input.maxModelRounds < 1) {
     throw new Error("Pi maxModelRounds must be a positive integer");
   }
@@ -93,7 +93,7 @@ export async function createHorizonPiRuntime(
     refreshOnCreate: false
   });
   modelRuntime.registerNativeProvider(provider);
-  return { modelRuntime, model };
+  return { modelRuntime, model, roundCount: () => roundNumber };
 }
 
 async function produceRound(
@@ -140,7 +140,8 @@ async function produceRound(
       state.onEvent
     );
     if ((result.status !== "succeeded" && result.status !== "fallback") || !result.message) {
-      const roundTimedOut = roundTimeoutSignal?.aborted === true && options?.signal?.aborted !== true;
+      const roundTimedOut =
+        roundTimeoutSignal?.aborted === true && options?.signal?.aborted !== true;
       const aborted =
         !roundTimedOut &&
         (options?.signal?.aborted === true || result.evidence.failureReason === "aborted");

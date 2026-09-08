@@ -263,8 +263,8 @@ test("Admin and Creator shells render separate page branches instead of one comb
   assert.match(adminConsoleSource, /adminPageFromPath/);
   assert.match(adminConsoleSource, /OperationsDashboard/);
   assert.match(adminConsoleSource, /AppShell/);
+  assert.doesNotMatch(adminConsoleSource, /page === "services"/);
   for (const branch of [
-    'page === "services"',
     'page === "ai-providers"',
     'page === "guardrails"',
     'page === "audit-logs"',

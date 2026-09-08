@@ -31,6 +31,22 @@ test("prompt exposes only bounded native Horizon workspace tools", () => {
   assert.match(prompt, /Never use node, npx, git.*exec\/dlx\/x.*arbitrary package scripts/is);
 });
 
+test("prompt treats embedded context as inspected and avoids duplicate final validation", () => {
+  const prompt = buildSystemPrompt({
+    template: { name: "nextjs-base", lockedFiles: [], files: [] },
+    contextFiles: [{ path: "app/page.tsx", content: "export default function Page() {}" }],
+    rollingSummary: null
+  });
+
+  assert.match(prompt, /Current project files.*already inspected/is);
+  assert.match(prompt, /Horizon runs final validation/i);
+  assert.match(prompt, /run.*build.*only.*diagnos/is);
+  assert.doesNotMatch(
+    prompt,
+    /Inspect before changing: use list_workspace_files and read_workspace_file/
+  );
+});
+
 test("context file contents prioritize app and lib before the large ui kit", async () => {
   let seen = "";
   const docker = {

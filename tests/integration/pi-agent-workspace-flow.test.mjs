@@ -139,11 +139,9 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
       productSpec: "Build a governed sales pipeline."
     }),
     onAudit(event) {
-      lifecycle.push(
-        event.action === "workspace_snapshot_release"
-          ? `audit:snapshot-release:${event.metadata.ok}`
-          : `audit:${event.metadata.toolName}`
-      );
+      if (event.action === "workspace_snapshot_release") lifecycle.push(`audit:snapshot-release:${event.metadata.ok}`);
+      else if (event.action === "pi_turn") lifecycle.push(`audit:pi-turn:${event.metadata.status}:${event.metadata.modelRounds}`);
+      else lifecycle.push(`audit:${event.metadata.toolName}`);
     },
     limits: {
       maxModelRounds: 8,
@@ -200,6 +198,7 @@ test("native Pi tools preserve Creator SSE and the outer build transaction", asy
     "migrate:batch",
     "checkpoint",
     "append:assistant",
+    "audit:pi-turn:succeeded:7",
     "audit:snapshot-release:true"
   ]);
   assert.match(files.get("app/page.tsx"), /Pipeline/);

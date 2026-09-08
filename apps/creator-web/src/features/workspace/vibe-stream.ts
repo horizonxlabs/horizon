@@ -120,9 +120,7 @@ export function applyVibeEvent(
     const content = field("content");
     return {
       ...message,
-      actions: message.actions.map((a) =>
-        a.id === id ? { ...a, body: (a.body ?? "") + content } : a
-      ),
+      actions: message.actions.map((a) => (a.id === id ? { ...a, body: content } : a)),
       parts: appendOrUpdateToolPart(id, { status: "running", progress: content })
     };
   }
