@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const REFRESH_TOKEN_REUSE_GRACE_SECONDS = 30;
 
 export type PlatformSessionSubject = {
   id: string;
@@ -51,7 +52,7 @@ export interface PlatformSessionRepository {
 type AccessPayload = { typ: "evcp.platform.session"; sid: string; jti: string; sub: string; email: string; iat: number; exp: number };
 
 export class PlatformSessionError extends Error {
-  constructor(readonly code: "invalid_session" | "expired_session" | "revoked_session" | "invalid_refresh_token" | "refresh_token_reused") {
+  constructor(readonly code: "invalid_session" | "expired_session" | "revoked_session" | "invalid_refresh_token" | "refresh_token_race" | "refresh_token_reused") {
     super(code);
   }
 }
@@ -86,6 +87,14 @@ export class PlatformSessionService {
     const existing = await this.repository.findByRefreshTokenHash(this.hash(refreshToken));
     if (!existing || !existing.refreshExpiresAt) throw new PlatformSessionError("invalid_refresh_token");
     if (existing.replacedBySessionId) {
+      const rotatedAt = existing.lastUsedAt?.getTime();
+      const elapsedSinceRotation = rotatedAt === undefined ? undefined : this.now().getTime() - rotatedAt;
+      if (
+        elapsedSinceRotation !== undefined &&
+        elapsedSinceRotation >= 0 &&
+        elapsedSinceRotation <= REFRESH_TOKEN_REUSE_GRACE_SECONDS * 1000
+      )
+        throw new PlatformSessionError("refresh_token_race");
       await this.repository.revokeSessionFamily(existing.sessionFamilyId, "refresh_token_reused");
       throw new PlatformSessionError("refresh_token_reused");
     }

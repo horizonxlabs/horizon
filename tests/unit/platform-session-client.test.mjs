@@ -70,6 +70,36 @@ test("session-aware fetch coordinates refresh across browser tabs", async () => 
   assert.equal(sessions.getToken(), "new");
 });
 
+test("a losing concurrent refresh never clears the session rotated by another browser context", async () => {
+  const values = new Map();
+  const storageView = () => ({ getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) });
+  const firstStorage = storageView();
+  const secondStorage = storageView();
+  const sessions = createPlatformSessionStore(firstStorage);
+  sessions.saveSession({ token: "old", expiresAt: new Date(Date.now() + 1_000).toISOString(), refreshToken: "refresh", refreshExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+  let refreshCalls = 0;
+  let ended = 0;
+  const fetcher = async (url) => {
+    if (!String(url).endsWith("/auth/refresh")) return json({ ok: true, data: {} });
+    refreshCalls += 1;
+    if (refreshCalls === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return json({ ok: true, data: { token: "new", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), refreshToken: "new-refresh", refreshExpiresAt: new Date(Date.now() + 3_600_000).toISOString() } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    return new Response(JSON.stringify({ ok: false }), { status: 401 });
+  };
+  const first = createSessionAwareFetch({ baseUrl: "https://api.example.test", storage: firstStorage, fetcher, lockManager: null });
+  const second = createSessionAwareFetch({ baseUrl: "https://api.example.test", storage: secondStorage, fetcher, lockManager: null, onSessionEnded: () => { ended += 1; } });
+
+  await Promise.all([first("https://api.example.test/projects"), second("https://api.example.test/current-user")]);
+
+  assert.equal(refreshCalls, 2);
+  assert.equal(sessions.getToken(), "new");
+  assert.equal(sessions.getRefreshToken(), "new-refresh");
+  assert.equal(ended, 0);
+});
+
 test("session-aware client clears local credentials when refresh is rejected", async () => {
   const storage = memoryStorage();
   createPlatformSessionStore(storage).saveSession({ token: "old", expiresAt: new Date(Date.now() - 1).toISOString(), refreshToken: "refresh", refreshExpiresAt: new Date(Date.now() + 3_600_000).toISOString() });

@@ -63,6 +63,15 @@ export function createSessionAwareFetch(options: SessionAwareFetchOptions): type
         });
         const payload = (await response.json().catch(() => undefined)) as RefreshResponse | undefined;
         if (!response.ok || !payload || !payload.ok || !payload.data?.token || !payload.data.refreshToken) {
+          // Another browser context can win the refresh race even when Web Locks are unavailable.
+          // Never let the losing response erase the newer token pair it already persisted.
+          const latestAccessToken = sessions.getToken();
+          const latestRefreshToken = sessions.getRefreshToken();
+          if (
+            (latestAccessToken && latestAccessToken !== staleAccessToken) ||
+            (latestRefreshToken && latestRefreshToken !== refreshToken)
+          )
+            return true;
           if (response.status === 400 || response.status === 401) endSession();
           return false;
         }
