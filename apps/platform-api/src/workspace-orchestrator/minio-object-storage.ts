@@ -161,11 +161,30 @@ export interface MinioIdentityAdmin {
   release(input: { bucket: string; accessKey: string; policyName: string }): Promise<void>;
 }
 
+function stripTerminalCsiSequences(output: string): string {
+  let clean = "";
+  for (let index = 0; index < output.length;) {
+    if (output.charCodeAt(index) !== 0x1b || output[index + 1] !== "[") {
+      clean += output[index];
+      index += 1;
+      continue;
+    }
+    index += 2;
+    while (index < output.length) {
+      const code = output.charCodeAt(index);
+      index += 1;
+      if (code >= 0x40 && code <= 0x7e) break;
+    }
+  }
+  return clean;
+}
+
 function parseMinioJsonOutput(output: string): unknown {
-  const start = output.indexOf("{");
-  const end = output.lastIndexOf("}");
+  const clean = stripTerminalCsiSequences(output);
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
   if (start < 0 || end < start) throw new Error("MinIO response did not contain JSON");
-  return JSON.parse(output.slice(start, end + 1));
+  return JSON.parse(clean.slice(start, end + 1));
 }
 
 function identityFor(slug: string) {

@@ -54,3 +54,22 @@ test("MinIO identity cleanup accepts exact absence wrapped by Docker TTY control
   );
   assert.equal(call, 2);
 });
+
+test("MinIO identity cleanup accepts exact absence with ANSI colors inside the JSON", async () => {
+  const colorize = (code) =>
+    `\u001b[35;5R{"\u001b[34;1mstatus\u001b[0m":"\u001b[31merror\u001b[0m","error":{"type":"fatal","cause":{"error":{"Code":"${code}"}}}}\u001b[0m`;
+  const responses = [
+    colorize("XMinioAdminNoSuchUser"),
+    colorize("XMinioAdminNoSuchPolicy")
+  ];
+  let call = 0;
+  const admin = createDockerMinioIdentityAdmin({
+    inspectContainer: async () => ({ containerId: "minio", running: true }),
+    execInContainer: async () => ({ stdout: responses[call++], stderr: "", exitCode: 1 })
+  });
+
+  await assert.doesNotReject(() =>
+    admin.release({ bucket: "proj-old", accessKey: "old-user", policyName: "old-policy" })
+  );
+  assert.equal(call, 2);
+});
