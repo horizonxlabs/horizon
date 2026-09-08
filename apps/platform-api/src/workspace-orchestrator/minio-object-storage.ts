@@ -161,6 +161,13 @@ export interface MinioIdentityAdmin {
   release(input: { bucket: string; accessKey: string; policyName: string }): Promise<void>;
 }
 
+function parseMinioJsonOutput(output: string): unknown {
+  const start = output.indexOf("{");
+  const end = output.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("MinIO response did not contain JSON");
+  return JSON.parse(output.slice(start, end + 1));
+}
+
 function identityFor(slug: string) {
   const suffix = createHash("sha256").update(slug).digest("hex").slice(0, 16);
   return { accessKey: `evcp-${suffix}`, policyName: `evcp-${suffix}` };
@@ -193,7 +200,10 @@ export function createDockerMinioIdentityAdmin(
     ]);
     if (result.exitCode !== 0 && absentCode) {
       try {
-        const payload = JSON.parse(result.stdout);
+        const payload = parseMinioJsonOutput(result.stdout) as {
+          status?: string;
+          error?: { type?: string; cause?: { error?: { Code?: string } } };
+        };
         if (payload?.status === "error" && payload.error?.type === "fatal" &&
             payload.error.cause?.error?.Code === absentCode) return;
       } catch { /* Unstructured command errors remain failures. */ }

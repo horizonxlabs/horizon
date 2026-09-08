@@ -35,3 +35,22 @@ for (const code of ["AccessDenied", "NotFound", "XMinioAdminNoSuchUser"]) {
     else await assert.rejects(cleanup);
   });
 }
+
+test("MinIO identity cleanup accepts exact absence wrapped by Docker TTY control sequences", async () => {
+  const responses = ["XMinioAdminNoSuchUser", "XMinioAdminNoSuchPolicy"].map((code) =>
+    `\u001b[35;5R${JSON.stringify({
+      status: "error",
+      error: { type: "fatal", cause: { error: { Code: code } } }
+    })}\u001b[0m`
+  );
+  let call = 0;
+  const admin = createDockerMinioIdentityAdmin({
+    inspectContainer: async () => ({ containerId: "minio", running: true }),
+    execInContainer: async () => ({ stdout: responses[call++], stderr: "", exitCode: 1 })
+  });
+
+  await assert.doesNotReject(() =>
+    admin.release({ bucket: "proj-old", accessKey: "old-user", policyName: "old-policy" })
+  );
+  assert.equal(call, 2);
+});
