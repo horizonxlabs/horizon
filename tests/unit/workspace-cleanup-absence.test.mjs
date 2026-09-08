@@ -92,6 +92,17 @@ for (const [operation, id, message] of [
   });
 }
 
+test("Docker volume cleanup accepts the Engine not-found contract used in production", async () => {
+  const docker = createDockerSocketEngine({
+    request: async () => ({
+      status: 404,
+      json: async () => ({ message: "volume old-volume not found" })
+    })
+  });
+
+  await assert.doesNotReject(() => docker.removeVolume("old-volume"));
+});
+
 test("memory Docker repeated container removal succeeds", async () => {
   await assert.doesNotReject(() => createMemoryDockerEngine().removeContainer("already-absent"));
 });

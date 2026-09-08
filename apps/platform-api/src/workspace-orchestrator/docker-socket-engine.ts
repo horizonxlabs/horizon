@@ -18,9 +18,10 @@ export type DockerRequestFn = (input: {
   contentType?: string;
 }) => Promise<DockerRequestResult>;
 
-async function isAbsent(result: DockerRequestResult, message: string): Promise<boolean> {
+async function isAbsent(result: DockerRequestResult, messages: readonly string[]): Promise<boolean> {
   if (result.status !== 404) return false;
-  return (await result.json().catch(() => null))?.message === message;
+  const message = (await result.json().catch(() => null))?.message;
+  return typeof message === "string" && messages.includes(message);
 }
 
 export function buildCreateContainerBody(spec: DevContainerSpec): Record<string, unknown> {
@@ -139,7 +140,10 @@ export function createDockerSocketEngine(
         method: "DELETE",
         path: `/volumes/${encodeURIComponent(name)}?force=false`
       });
-      if (!(await isAbsent(result, `get ${name}: no such volume`)))
+      if (!(await isAbsent(result, [
+        `get ${name}: no such volume`,
+        `volume ${name} not found`
+      ])))
         await expect("volume-remove", result, [204]);
     },
     async listManagedVolumes() {
@@ -187,7 +191,7 @@ export function createDockerSocketEngine(
         method: "DELETE",
         path: `/containers/${containerId}?force=true`
       });
-      if (!(await isAbsent(result, `No such container: ${containerId}`)))
+      if (!(await isAbsent(result, [`No such container: ${containerId}`])))
         await expect("remove", result, [204]);
     },
     async inspectContainer(name) {
