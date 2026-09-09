@@ -264,6 +264,12 @@ deploy_stack() {
   # shellcheck disable=SC1090
   [ -f "${STACK_ENV_DIR}/domain.env" ] && . "${STACK_ENV_DIR}/domain.env"
   set +a
+
+  # platform-api creates development and warm-pool containers directly through the host Docker
+  # socket. Swarm may start platform-api before the replicated image-preload job has completed,
+  # which makes those first allocations fail with "No such image". Pull the exact immutable
+  # workspace version before replacing the API so warm capacity is available from first startup.
+  docker pull "${EVCP_IMAGE_REPOSITORY}/evcp-workspace-next:${EVCP_VERSION}" >/dev/null
   # shellcheck disable=SC2086
   docker stack deploy $args
 }

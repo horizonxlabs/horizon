@@ -112,6 +112,24 @@ test("deploy_stack sources domain.env (if present) after stack.env, inside the e
   assert.ok(setDashA >= 0 && setPlusA > domainEnvIdx, "domain.env must be sourced inside the `set -a` ... `set +a` export block");
 });
 
+test("deploy_stack pulls the workspace image before replacing the API", () => {
+  const script = readFileSync(SCRIPT_PATH, "utf8");
+  const deployStackBody = script.slice(
+    script.indexOf("deploy_stack() {"),
+    script.indexOf("\n}", script.indexOf("deploy_stack() {"))
+  );
+
+  const pullIndex = deployStackBody.indexOf(
+    'docker pull "${EVCP_IMAGE_REPOSITORY}/evcp-workspace-next:${EVCP_VERSION}"'
+  );
+  const deployIndex = deployStackBody.indexOf("docker stack deploy $args");
+  assert.ok(pullIndex >= 0, "deploy_stack must preload the exact workspace image version");
+  assert.ok(
+    deployIndex > pullIndex,
+    "the workspace image must exist locally before platform-api can allocate warm containers"
+  );
+});
+
 test("unseal reads only the raw Docker service log payload", () => {
   const script = readFileSync(SCRIPT_PATH, "utf8");
   const unsealBody = script.slice(script.indexOf("cmd_unseal() {"), script.indexOf("\n}", script.indexOf("cmd_unseal() {")));
