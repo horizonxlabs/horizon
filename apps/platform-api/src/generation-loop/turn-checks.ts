@@ -44,11 +44,12 @@ export function findMissingImports(
   return missing;
 }
 
-// Single-file, resolution-free tsc: pure syntax + local semantics in ~1-2s. Module
-// resolution stays the build validator's job (this must never false-positive on aliases).
+// A resolution-free check must also skip semantic checking: --noResolve omits Node's
+// ambient declarations, so valid process.env references otherwise fail with TS2580.
+// --noCheck still reports syntax errors; the full project build validates all types.
 export function buildSyntaxCheckCommand(path: string): string {
   if (!SAFE_PATH.test(path)) throw new Error(`unsafe workspace path: ${path}`);
-  return `cd /workspace && ./node_modules/.bin/tsc --noEmit --noResolve --skipLibCheck --allowJs --jsx preserve --module esnext --target es2022 --moduleResolution bundler '${path}' 2>&1 | head -20`;
+  return `cd /workspace && ./node_modules/.bin/tsc --noEmit --noResolve --noCheck --skipLibCheck --allowJs --jsx preserve --module esnext --target es2022 --moduleResolution bundler '${path}' 2>&1 | head -20`;
 }
 
 // Observed in production (self-hosted Docker Desktop for Mac): the container's
