@@ -9,6 +9,10 @@ export interface WarmPoolStatus {
   staleImage: number;
 }
 
+export interface WarmPoolReconcileOptions {
+  includeRetiredPreparations?: boolean;
+}
+
 export interface WarmWorkspaceSlot {
   id: string;
   resourceKey: string;

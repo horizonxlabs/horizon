@@ -20,8 +20,8 @@ test("runtime startup fills warm-pool capacity before slow orphan cleanup", asyn
     configureWarmPool(pool) {
       calls.push(["configure", pool]);
     },
-    async reconcileWarmPool() {
-      calls.push(["reconcile"]);
+    async reconcileWarmPool(options) {
+      calls.push(["reconcile", options]);
       await reconcile.promise;
     },
     async cleanupOrphanContainers() {
@@ -51,11 +51,11 @@ test("runtime startup fills warm-pool capacity before slow orphan cleanup", asyn
   assert.deepEqual(calls, [
     ["hydrate", runtimeStore],
     ["configure", pool],
-    ["reconcile"]
+    ["reconcile", { includeRetiredPreparations: false }]
   ]);
   reconcile.resolve();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(calls.slice(-2), [["capacity"], ["cleanup"]]);
+  assert.deepEqual(calls.slice(-3), [["capacity"], ["reconcile", undefined], ["cleanup"]]);
 });
 
 test("runtime startup can await maintenance for deterministic recovery", async () => {
@@ -67,8 +67,8 @@ test("runtime startup can await maintenance for deterministic recovery", async (
     configureWarmPool() {
       calls.push("configure");
     },
-    async reconcileWarmPool() {
-      calls.push("reconcile");
+    async reconcileWarmPool(options) {
+      calls.push(["reconcile", options]);
     },
     async cleanupOrphanContainers() {
       calls.push("cleanup");
@@ -89,5 +89,12 @@ test("runtime startup can await maintenance for deterministic recovery", async (
     { awaitMaintenance: true }
   );
 
-  assert.deepEqual(calls, ["hydrate", "configure", "reconcile", "capacity", "cleanup"]);
+  assert.deepEqual(calls, [
+    "hydrate",
+    "configure",
+    ["reconcile", { includeRetiredPreparations: false }],
+    "capacity",
+    ["reconcile", undefined],
+    "cleanup"
+  ]);
 });

@@ -3,6 +3,7 @@ import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
 import type {
   WarmWorkspaceAllocation,
   WarmPoolStatus,
+  WarmPoolReconcileOptions,
   WarmWorkspaceSlot,
   WorkspaceWarmSlotStore
 } from "./warm-pool-types";
@@ -44,7 +45,10 @@ export interface WorkspaceWarmPool {
   /** Retire only after the caller has persisted runtime ownership under its project lease. */
   completeClaim(slotId: string): Promise<void>;
   failClaim(slotId: string, error: unknown, assertProjectOwned: () => Promise<void>): Promise<void>;
-  reconcile(publishRecovered?: WarmRecoveryPublisher): Promise<void>;
+  reconcile(
+    publishRecovered?: WarmRecoveryPublisher,
+    options?: WarmPoolReconcileOptions
+  ): Promise<void>;
   getStatus(): Promise<WarmPoolStatus>;
   getActiveSlotIds(): Promise<ReadonlySet<string>>;
   getClaimProjectIds(): Promise<ReadonlySet<string>>;
@@ -52,7 +56,7 @@ export interface WorkspaceWarmPool {
   deleteProjectClaims(projectId: string, assertOwned: () => Promise<void>): Promise<void>;
 }
 export type { WarmPoolStatus } from "./warm-pool-types";
-
+export type { WarmPoolReconcileOptions } from "./warm-pool-types";
 export interface WorkspaceWarmPoolOptions {
   targetSize: number;
   store: WorkspaceWarmSlotStore;
@@ -356,9 +360,9 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
         }
       );
     },
-    reconcile(publishRecovered) {
+    reconcile(publishRecovered, reconcileOptions) {
       if (inFlightReconcile) return inFlightReconcile;
-      const reconcile = () => reconcileOnce(publishRecovered);
+      const reconcile = () => reconcileOnce(publishRecovered, reconcileOptions);
       const operation = inFlightEnsure ? inFlightEnsure.then(reconcile) : reconcile();
       const tracked = operation.finally(() => {
         if (inFlightReconcile === tracked) inFlightReconcile = null;
@@ -367,7 +371,10 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       return work.track(tracked);
     }
   };
-  async function reconcileOnce(publishRecovered?: WarmRecoveryPublisher): Promise<void> {
+  async function reconcileOnce(
+    publishRecovered?: WarmRecoveryPublisher,
+    reconcileOptions: WarmPoolReconcileOptions = {}
+  ): Promise<void> {
     await reconcileWorkspaceWarmPool({
       ...options,
       now,
@@ -377,7 +384,8 @@ export function createWorkspaceWarmPool(options: WorkspaceWarmPoolOptions): Work
       cleanupSlotResources,
       retryDelayMs
     });
-    await reconcileRetiredWarmPreparations(options);
+    if (reconcileOptions.includeRetiredPreparations !== false)
+      await reconcileRetiredWarmPreparations(options);
   }
 
   async function durableRuntimeKeys(): Promise<Set<string>> {

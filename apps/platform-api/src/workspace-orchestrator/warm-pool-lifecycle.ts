@@ -1,5 +1,9 @@
 import type { WorkspaceOrchestratorDeps } from "./orchestrator-types";
-import type { WorkspaceWarmPool, WarmPoolStatus } from "./warm-pool";
+import type {
+  WorkspaceWarmPool,
+  WarmPoolStatus,
+  WarmPoolReconcileOptions
+} from "./warm-pool";
 import type { WorkspaceRuntimeCache } from "./runtime-cache";
 import { physicalResourceKey } from "./warm-pool-config";
 import { cleanupOrphanWorkspaceResources } from "./workspace-lifecycle";
@@ -16,17 +20,20 @@ export function createWarmPoolLifecycle(
     configureWarmPool(pool: WorkspaceWarmPool): void {
       deps.warmPool = pool;
     },
-    async reconcileWarmPool(): Promise<void> {
-      await deps.warmPool?.reconcile((projectId) => {
-        const publication = cache.capture(projectId);
-        return {
-          publish(snapshot) {
-            if (publication.publish(snapshot.record) && snapshot.llmGatewayKeyId)
-              llmKeyIds.set(projectId, snapshot.llmGatewayKeyId);
-          },
-          release: publication.release
-        };
-      });
+    async reconcileWarmPool(options?: WarmPoolReconcileOptions): Promise<void> {
+      await deps.warmPool?.reconcile(
+        (projectId) => {
+          const publication = cache.capture(projectId);
+          return {
+            publish(snapshot) {
+              if (publication.publish(snapshot.record) && snapshot.llmGatewayKeyId)
+                llmKeyIds.set(projectId, snapshot.llmGatewayKeyId);
+            },
+            release: publication.release
+          };
+        },
+        options
+      );
     },
     async ensureWarmPoolCapacity(): Promise<void> {
       await deps.warmPool?.ensureCapacity();

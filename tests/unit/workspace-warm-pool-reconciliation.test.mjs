@@ -8,6 +8,24 @@ import {
   workspaceWarmResourceLabels
 } from "../../apps/platform-api/src/workspace-orchestrator/workspace-lifecycle.ts";
 
+test("capacity-only reconciliation skips retired preparation cleanup", async () => {
+  const fixture = createWarmPoolFixture({ targetSize: 1 });
+  await fixture.store.preparations.create({
+    resourceKey: "retired-preparation",
+    slotId: "retired-slot",
+    operationOwner: "retired-owner"
+  });
+  let cleanupCalls = 0;
+  fixture.deps.postgres.releaseSchema = async () => {
+    cleanupCalls += 1;
+  };
+
+  await fixture.pool.reconcile(undefined, { includeRetiredPreparations: false });
+
+  assert.equal(cleanupCalls, 0);
+  assert.equal((await fixture.store.preparations.list()).length, 1);
+});
+
 test("reconcile persists a discovered container owner for a later refill cleanup retry", async () => {
   const fixture = createWarmPoolFixture({ targetSize: 0 });
   await fixture.store.createPreparing({ id: "slot-1", resourceKey: "warm-stale" });
