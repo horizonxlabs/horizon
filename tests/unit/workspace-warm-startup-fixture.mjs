@@ -46,7 +46,7 @@ export async function createCrashedWarmStartupFixture({
           await initializeWorkspaceRuntime(orchestrator, undefined, () => pool, {
             createRuntimeRecordStore: async () => runtimeRecords,
             createWarmSlotStore: async () => fixture.store
-          });
+          }, { awaitMaintenance: true });
           await pool.waitForIdle();
         }
       };

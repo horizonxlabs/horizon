@@ -66,7 +66,7 @@ export async function createRetainedRuntimeFixture() {
           await initializeWorkspaceRuntime(recovered, undefined, () => pool, {
             createRuntimeRecordStore: async () => runtimeRecords,
             createWarmSlotStore: async () => fixture.store
-          });
+          }, { awaitMaintenance: true });
           await pool.waitForIdle();
         }
       };
