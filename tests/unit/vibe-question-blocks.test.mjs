@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSystemPrompt } from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
+import {
+  buildSystemPrompt,
+  buildAutoSystemPrompt
+} from "../../apps/platform-api/src/generation-loop/system-prompt.ts";
 
-const { extractQuestions, stripQuestions, buildQuestionAnswerMessage } = await import(
-  "../../apps/creator-web/src/features/workspace/vibe-questions.ts"
-);
+const { extractQuestions, stripQuestions, buildQuestionAnswerMessage } =
+  await import("../../apps/creator-web/src/features/workspace/vibe-questions.ts");
 
 const REPLY = [
   "ก่อนสร้าง ผมขอถาม 2 ข้อครับ",
@@ -36,14 +38,14 @@ test("extractQuestions parses batched question blocks with options", () => {
   assert.equal(stripQuestions(REPLY), text);
 });
 
-test("blocks without at least two options are ignored, and questions cap at three", () => {
+test("blocks without at least two options are ignored, and questions cap at four", () => {
   const one = "<question>\nถามอะไรดี?\n- ตัวเลือกเดียว\n</question>";
   assert.deepEqual(extractQuestions(one).questions, []);
   const many = Array.from(
     { length: 5 },
     (_, i) => `<question>\nคำถาม ${i}?\n- ก\n- ข\n</question>`
   ).join("\n");
-  assert.equal(extractQuestions(many).questions.length, 3);
+  assert.equal(extractQuestions(many).questions.length, 4);
 });
 
 test("answers submit as one combined message", () => {
@@ -53,18 +55,37 @@ test("answers submit as one combined message", () => {
   ]);
   assert.equal(
     message,
-    "การอนุมัติใบลามีกี่ขั้น?: 2 ขั้น (หัวหน้าทีม + HR)\nพนักงานดูวันลาคงเหลือของคนอื่นได้ไหม?: ได้เฉพาะหัวหน้า"
+    "Continue the current request using these answers. Keep the same scope and mode:\n\nการอนุมัติใบลามีกี่ขั้น?: 2 ขั้น (หัวหน้าทีม + HR)\nพนักงานดูวันลาคงเหลือของคนอื่นได้ไหม?: ได้เฉพาะหัวหน้า"
   );
 });
 
-test("prompt teaches batched dropdown questions but forbids them on the first build", () => {
-  const prompt = buildSystemPrompt({
+test("Build and Auto ask one to four scope questions before implementation, then wait", () => {
+  const input = {
+    template: { name: "nextjs-base", lockedFiles: [], files: [] },
+    contextFiles: [],
+    rollingSummary: null
+  };
+  for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
+    assert.match(prompt, /including the first build/);
+    assert.match(prompt, /1–4 concise questions/);
+    assert.match(prompt, /Stop after asking and wait/);
+    assert.match(prompt, /Do not call mutation tools/);
+    assert.match(prompt, /Do not ask again for the same scope/);
+    assert.match(prompt, /2–5 concrete options/);
+    assert.match(prompt, /automatically appends.*Other/);
+    assert.match(prompt, /<question>/);
+    assert.doesNotMatch(prompt, /first build, never ask/);
+  }
+});
+
+test("Auto recognizes submitted answers only as continuation of the pending scoped request", () => {
+  const prompt = buildAutoSystemPrompt({
     template: { name: "nextjs-base", lockedFiles: [], files: [] },
     contextFiles: [],
     rollingSummary: null
   });
-  assert.match(prompt, /<question>/);
-  assert.match(prompt, /first build.*never ask|never ask.*first build/i);
-  assert.match(prompt, /assume/i);
-  assert.match(prompt, /dropdown/i);
+  assert.match(prompt, /Continue the current request using these answers/);
+  assert.match(prompt, /immediately preceding clarification/);
+  assert.match(prompt, /Informational answers remain read-only/);
+  assert.match(prompt, /never revive unrelated prior requests/);
 });

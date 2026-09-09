@@ -130,6 +130,9 @@ test("PublishPage uses semantic progress and error feedback", () => {
   );
   assert.match(publishing, /Publishing…/);
   assert.match(publishing, /disabled/);
+  assert.match(publishing, /Building &amp; deploying your app/);
+  assert.doesNotMatch(publishing, /No published deployment yet/);
+  assert.doesNotMatch(publishing, /All readiness requirements are complete/);
 
   const failed = renderToStaticMarkup(
     React.createElement(PublishPage, {

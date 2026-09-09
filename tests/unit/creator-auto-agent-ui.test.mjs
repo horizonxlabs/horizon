@@ -17,7 +17,12 @@ test("Creator exposes one Horizon composer without persistent Plan Build state",
   const styles = await readFile("packages/ui/styles.css", "utf8");
 
   assert.doesNotMatch(page, /MODE_OPTIONS|Workspace mode|Plan with AI|Build with AI/);
-  assert.doesNotMatch(page, /handleVibeChat\(\{[^}]*mode:/s);
+  // Question answers preserve a legacy Plan turn; the ordinary composer stays Auto.
+  assert.match(page, /mode: message\.isPlan \? "plan" : "auto"/);
+  assert.doesNotMatch(
+    page.replace(/mode: message\.isPlan \? "plan" : "auto"/, ""),
+    /handleVibeChat\(\{[^}]*mode:/s
+  );
   assert.doesNotMatch(
     workspace,
     /localStorage|readWorkspaceMode|persistWorkspaceMode|workspaceMode/

@@ -10,18 +10,16 @@ import {
   FileCheck2,
   Link2,
   LockKeyhole,
+  LoaderCircle,
   MonitorCheck,
   Store
 } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
-import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { CreatorStatusMessage } from "@/shared";
 import { useEffect, useRef, useState } from "react";
 import { PublishAccessUrlCard } from "./PublishAccessUrlCard";
-
-function readableStatus(value: string): string {
-  return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+import { PublishDeploymentCard } from "./PublishDeploymentCard";
 
 type ReadinessStage = "manifest" | "route" | "permissions" | "preview" | "registry";
 
@@ -212,7 +210,7 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
           ? `Resolve ${failedChecks.length} readiness ${failedChecks.length === 1 ? "requirement" : "requirements"} before publishing.`
           : "Resolve the remaining readiness requirements before publishing.";
   const statusTone =
-    resolvedReadinessState === "loading"
+    isPublishingProject || resolvedReadinessState === "loading"
       ? "info"
       : !canPublish
         ? "warning"
@@ -258,7 +256,11 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
                 disabled={isPublishingProject || !canSubmitPublish}
                 aria-busy={isPublishingProject || undefined}
               >
-                <Store size={16} aria-hidden="true" />
+                {isPublishingProject ? (
+                  <LoaderCircle size={16} className="creator-state-spinner" aria-hidden="true" />
+                ) : (
+                  <Store size={16} aria-hidden="true" />
+                )}
                 {isPublishingProject ? "Publishing…" : "Publish to App Store"}
               </Button>
             }
@@ -292,7 +294,9 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
             </ol>
 
             <CreatorStatusMessage tone={statusTone} technicalDetails={statusTechnicalDetails}>
-              {canPublish ? (
+              {isPublishingProject ? (
+                "Publishing project. Building and checking the deployment…"
+              ) : canPublish ? (
                 publishMessageTone === "danger" || publishResult ? (
                   publishMessage
                 ) : (
@@ -325,46 +329,10 @@ export function PublishPage({ app }: { app: ReturnType<typeof useCreatorApp> }) 
             </CreatorStatusMessage>
           </SectionCard>
 
-          <SectionCard eyebrow="Published output" title="Latest deployment">
-            {visibleDeployment ? (
-              <div className="creator-published-output">
-                <CheckCircle2 size={20} aria-hidden="true" />
-                <div>
-                  <strong>{readableStatus(visibleDeployment.status)}</strong>
-                  <span>
-                    {readableStatus(visibleDeployment.environment)} · Manifest version{" "}
-                    {visibleDeployment.manifestVersion}
-                  </span>
-                  <small title={visibleDeployment.id}>Deployment {visibleDeployment.id}</small>
-                  {visibleDeployment.subdomainUrl ? (
-                    <span className="creator-published-url">
-                      <strong>Primary access URL</strong>
-                      <a
-                        href={visibleDeployment.subdomainUrl}
-                        title={visibleDeployment.subdomainUrl}
-                      >
-                        {visibleDeployment.subdomainUrl}
-                      </a>
-                    </span>
-                  ) : null}
-                  {visibleDeployment.route ? (
-                    <span className="creator-published-url">
-                      <strong>Fallback path</strong>
-                      <a href={visibleDeployment.route} title={visibleDeployment.route}>
-                        {visibleDeployment.route}
-                      </a>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <CreatorState
-                kind="empty"
-                title="No published deployment yet"
-                description="A deployment record will appear here after the first successful publish."
-              />
-            )}
-          </SectionCard>
+          <PublishDeploymentCard
+            isPublishing={isPublishingProject}
+            deployment={visibleDeployment}
+          />
         </section>
       }
     />

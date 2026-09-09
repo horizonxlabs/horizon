@@ -7091,6 +7091,49 @@ body.vibe-is-resizing * {
   padding: 12px;
 }
 
+.creator-publish-progress {
+  display: grid;
+  justify-items: center;
+  gap: var(--evcp-space-3);
+  padding: var(--evcp-space-4) var(--evcp-space-3);
+  border: 1px solid var(--evcp-color-border-soft);
+  border-radius: var(--evcp-radius-control);
+  background: var(--evcp-color-surface-muted);
+  text-align: center;
+}
+
+.creator-publish-progress-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--evcp-color-primary-soft);
+  color: var(--evcp-color-primary);
+}
+
+.creator-publish-progress strong {
+  color: var(--evcp-color-text);
+  font-size: 16px;
+}
+
+.creator-publish-progress p,
+.creator-publish-progress-note {
+  margin: 0;
+  color: var(--evcp-color-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.creator-publish-progress-note {
+  padding-top: var(--evcp-space-3);
+  border-top: 1px solid var(--evcp-color-border-soft);
+}
+
+.creator-published-open {
+  margin: var(--evcp-space-2) 0;
+}
+
 .creator-published-output > div {
   display: grid;
   gap: 3px;

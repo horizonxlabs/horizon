@@ -188,18 +188,28 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                     <VibeQuestionBlock
                       questions={extractQuestions(message.text).questions}
                       disabled={isVibing}
-                      onSubmit={(answer) => void handleVibeChat({ prompt: answer })}
+                      onSubmit={(answer) =>
+                        void handleVibeChat({
+                          prompt: answer,
+                          mode: message.isPlan ? "plan" : "auto"
+                        })
+                      }
                     />
                   )}
-                  {message.isPlan && message.text && !isVibing && (
-                    <Button
-                      variant="primary"
-                      type="button"
-                      onClick={() => approveAndImplement(message.sourcePrompt ?? "", message.text)}
-                    >
-                      Approve &amp; implement
-                    </Button>
-                  )}
+                  {message.isPlan &&
+                    message.text &&
+                    !isVibing &&
+                    !extractQuestions(message.text).questions.length && (
+                      <Button
+                        variant="primary"
+                        type="button"
+                        onClick={() =>
+                          approveAndImplement(message.sourcePrompt ?? "", message.text)
+                        }
+                      >
+                        Approve &amp; implement
+                      </Button>
+                    )}
                 </div>
               )
             )}

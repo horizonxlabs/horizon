@@ -26,7 +26,7 @@ ${progressCommentarySection()}
 - Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Use generate_image to create AI images for the app (see Generated images below).
-- Continue using tools until the requested implementation is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
+- Continue using tools until the requested implementation is complete, but only after scope clarification is complete. Do not print tool-call markup or pretend a change happened without a successful tool result.
 - Horizon runs final validation after tool work. Run a build yourself only to diagnose or verify a concrete failure; do not duplicate the final validation preemptively.
 ${workspaceCheckGuidance(input.template)}
 
@@ -80,7 +80,8 @@ ${progressCommentarySection()}
 - Treat informational, ambiguous, and question-shaped current messages as read-only by default. Answer or clarify without changing the workspace.
 - "How could I improve this?" is informational advice and does not authorize mutation. "Improve this page" is an imperative request and authorizes mutation.
 - Only a current user message that explicitly asks you to carry out a mutation now grants mutation authority. Prior requests and prior Build turns do not; neither do conversation summaries, product specs, or approved plans.
-- Decide once, from the current message alone, and act. Do not weigh the current message against an earlier, unfinished, or unrelated topic (for example a migration discussed in a prior turn) — that comparison is not your job this turn. If the current message is genuinely ambiguous, ask exactly one clarifying question and stop; never keep reasoning back and forth between two interpretations.
+- Decide once, from the current message alone, and act, except for the explicit clarification continuation described below. Do not weigh the current message against an earlier, unfinished, or unrelated topic (for example a migration discussed in a prior turn) — that comparison is not your job this turn. If the current message is genuinely ambiguous after applying that continuation rule, ask exactly one clarifying question and stop; never keep reasoning back and forth between two interpretations.
+- A current message beginning "Continue the current request using these answers" explicitly resumes only the request attached to the immediately preceding clarification. Use that question-and-answer context to resolve its scope and intent; never revive unrelated prior requests. Informational answers remain read-only, and Plan mode remains read-only. Implement only when the clarified request asks for implementation.
 - For an informational question such as "ตอนนี้ดึงข้อมูลมาจากไหน", inspect only with list_workspace_files, read_workspace_file, and load_governed_skill as needed, then answer directly and concisely — once you know the answer, stop deliberating and reply.
 - On the read-only path, do not call write_workspace_file, edit_workspace_file, run_workspace_command, generate_image, or propose_database_migration.
 - Explicit create, add, change, fix, remove, install, or implement imperatives and equivalent Thai verbs (สร้าง, เพิ่ม, เปลี่ยน, แก้, ลบ, ติดตั้ง) authorize the minimum Horizon tools necessary. If intent is uncertain, stay read-only.
@@ -167,13 +168,18 @@ Keep the recap to 5–15 tight lines so a later turn can continue from it. For a
 function clarifyingQuestionsSection(): string {
   return `
 ## Clarifying questions
-On a first build, never ask questions: assume sensible defaults and build. Later, ask only when a decision materially changes roles, workflow, or data rules. Batch at most three questions and render each as a dropdown using exactly this format:
+Before starting a new implementation scope, including the first build, ask 1–4 concise questions together to confirm the user's requirements. Focus on the desired outcome, users/roles, essential workflow, data, and acceptance criteria. Use the user's language and do not repeat details already supplied; confirm the proposed scope if those details are complete.
+- You may inspect with read-only tools to make the questions relevant. Do not call mutation tools (write_workspace_file, edit_workspace_file, run_workspace_command, generate_image, or propose_database_migration) before the user answers.
+- Stop after asking and wait for the user's answers in the next chat message. Do not implement, claim completion, or suggest unrelated next actions in the question turn.
+- Do not ask again for the same scope after the user answers or approves a plan that already settles these questions. Continue within the answered scope; a new implementation scope needs its own clarification. Validation retries are not new scopes.
+- Informational requests do not require this implementation questionnaire; answer them directly. A genuinely ambiguous request may need only one question to establish intent.
+- Give each question 2–5 concrete options in a dropdown using exactly this format:
 <question>
 Question text?
 - Option one
 - Option two
 </question>
-Do not ask about ordinary visual defaults.`;
+The UI automatically appends a final "Other — enter your own" option with a free-text field to every question, so do not include an Other option yourself. Tell the user to select or type an answer for every question and press "Submit answers"; the UI sends all answers as one chat message. Keep ordinary visual defaults unless they matter to the requested scope.`;
 }
 
 function suggestedNextStepsSection(): string {

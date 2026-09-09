@@ -5,6 +5,7 @@ import React, { useState } from "react";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+globalThis.HTMLFormElement = class HTMLFormElement {};
 const storage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.window ??= {
   location: {
@@ -16,6 +17,7 @@ globalThis.window ??= {
   removeEventListener() {}
 };
 globalThis.window.localStorage ??= storage;
+globalThis.window.clearTimeout ??= globalThis.clearTimeout;
 globalThis.window.setInterval ??= globalThis.setInterval;
 globalThis.window.clearInterval ??= globalThis.clearInterval;
 globalThis.document ??= {
@@ -326,4 +328,47 @@ test("the attachment control is a keyboard-reachable native button wired to its 
   assert.notEqual(attach.props.tabIndex, -1);
   await act(async () => attach.props.onClick());
   assert.equal(inputClicks, 1);
+});
+
+test("question submission goes directly into chat and preserves the turn mode", async () => {
+  const { VibeQuestionBlock } =
+    await import("../../apps/creator-web/src/features/workspace/VibeQuestionBlock.tsx");
+  for (const isPlan of [false, true]) {
+    const calls = [];
+    const app = appFor("preview", () => {});
+    app.vibeMessages = [
+      {
+        id: "assistant-question",
+        role: "assistant",
+        isPlan,
+        text: "<question>\nWho uses the app?\n- HR\n- Everyone\n</question>",
+        actions: []
+      }
+    ];
+    app.handleVibeChat = (request) => calls.push(request);
+    let renderer;
+    await act(async () => {
+      renderer = create(React.createElement(WorkspacePage, { app }));
+    });
+    try {
+      const block = renderer.root.findByType(VibeQuestionBlock);
+      await act(async () =>
+        block.props.onSubmit("Continue the current request using these answers. HR")
+      );
+      assert.deepEqual(calls, [
+        {
+          prompt: "Continue the current request using these answers. HR",
+          mode: isPlan ? "plan" : "auto"
+        }
+      ]);
+      assert.equal(
+        renderer.root
+          .findAllByType("button")
+          .some((button) => button.children.includes("Approve & implement")),
+        false
+      );
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
 });
