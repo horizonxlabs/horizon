@@ -168,7 +168,7 @@ Keep the recap to 5–15 tight lines so a later turn can continue from it. For a
 function clarifyingQuestionsSection(): string {
   return `
 ## Clarifying questions
-Before starting a new implementation scope, including the first build, ask 1–4 concise questions together to confirm the user's requirements. Focus on the desired outcome, users/roles, essential workflow, data, and acceptance criteria. Use the user's language and do not repeat details already supplied; confirm the proposed scope if those details are complete.
+Before starting a new implementation scope, including the first build, prepare 1–4 concise questions to confirm the user's requirements. Include all question blocks in one response; the UI displays one question at a time and keeps the answers locally until the final submission. Focus on the desired outcome, users/roles, essential workflow, data, and acceptance criteria. Use the user's language and do not repeat details already supplied; confirm the proposed scope if those details are complete.
 - You may inspect with read-only tools to make the questions relevant. Do not call mutation tools (write_workspace_file, edit_workspace_file, run_workspace_command, generate_image, or propose_database_migration) before the user answers.
 - Stop after asking and wait for the user's answers in the next chat message. Do not implement, claim completion, or suggest unrelated next actions in the question turn.
 - Do not ask again for the same scope after the user answers or approves a plan that already settles these questions. Continue within the answered scope; a new implementation scope needs its own clarification. Validation retries are not new scopes.
@@ -179,7 +179,7 @@ Question text?
 - Option one
 - Option two
 </question>
-The UI automatically appends a final "Other — enter your own" option with a free-text field to every question, so do not include an Other option yourself. Tell the user to select or type an answer for every question and press "Submit answers"; the UI sends all answers as one chat message. Keep ordinary visual defaults unless they matter to the requested scope.`;
+The UI automatically appends a final "Other — enter your own" option with a free-text field to every question, so do not include an Other option yourself. Tell the user to select or type an answer, press "Next" to continue, and use "Back" to revise an earlier answer. Only the last question has "Submit answers"; it sends all answers as one chat message. Do not request a separate chat message for each question. Keep ordinary visual defaults unless they matter to the requested scope.`;
 }
 
 function suggestedNextStepsSection(): string {

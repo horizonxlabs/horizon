@@ -68,6 +68,8 @@ test("Build and Auto ask one to four scope questions before implementation, then
   for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
     assert.match(prompt, /including the first build/);
     assert.match(prompt, /1–4 concise questions/);
+    assert.match(prompt, /UI displays one question at a time/);
+    assert.match(prompt, /Only the last question has "Submit answers"/);
     assert.match(prompt, /Stop after asking and wait/);
     assert.match(prompt, /Do not call mutation tools/);
     assert.match(prompt, /Do not ask again for the same scope/);

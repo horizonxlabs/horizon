@@ -41,7 +41,7 @@ function prdApp(overrides = {}) {
     visibleVersionRows: [],
     currentPrdVersion: undefined,
     prdStatus: "empty",
-    prdMessage: "No AI project note yet.",
+    prdMessage: "No docs yet.",
     prdTechnicalDetails: undefined,
     prdErrorSource: undefined,
     prdFeedbackTone: undefined,
@@ -60,14 +60,14 @@ function renderPrd(overrides) {
 test("AI project notes use one semantic state for loading, empty, and unavailable outcomes", () => {
   const loading = renderPrd({ prdStatus: "loading" });
   assert.match(loading, /creator-state-loading/);
-  assert.match(loading, /Loading project notes/);
+  assert.match(loading, /Loading docs/);
   assert.doesNotMatch(loading, /Loading PRD state from Platform API/);
 
   const empty = renderPrd({ prdStatus: "empty" });
-  assert.match(empty, /creator-state-empty/);
-  assert.match(empty, /No AI project note yet/);
+  assert.match(empty, /creator-empty-state/);
+  assert.match(empty, /No docs yet/);
   assert.match(empty, /optional/i);
-  assert.equal((empty.match(/Generate AI Note/g) ?? []).length, 1);
+  assert.equal((empty.match(/Generate docs/g) ?? []).length, 1);
 
   const unavailable = renderPrd({
     prdStatus: "error",
@@ -84,17 +84,17 @@ test("AI project notes use one semantic state for loading, empty, and unavailabl
 test("AI note generation and saved feedback use semantic shared states", () => {
   const generating = renderPrd({ prdStatus: "empty", isGeneratingPrdDraft: true });
   assert.match(generating, /creator-state-loading/);
-  assert.match(generating, /Generating AI project note/);
+  assert.match(generating, /Generating docs/);
 
   const ready = renderPrd({
     prdStatus: "ready",
     currentPrdVersion: { id: "prd-1", version: "1.0", status: "baseline" },
-    prdMessage: "AI project note v1.0 saved.",
+    prdMessage: "Document v1.0 saved.",
     prdFeedbackTone: "success",
     visiblePrdSections: [{ key: "overview", order: "1", title: "Overview", body: "Ready" }]
   });
   assert.match(ready, /creator-status-message-success/);
-  assert.match(ready, /AI project note v1.0 saved/);
+  assert.match(ready, /Document v1.0 saved/);
   assert.doesNotMatch(ready, /Confirm Baseline/);
 });
 
@@ -128,5 +128,5 @@ test("PrdPage renders PRD section bodies as Markdown", () => {
 
 test("PrdPage offers API-backed optional note generation with the Button primitive", () => {
   const html = renderPrd({ prdStatus: "empty" });
-  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate AI Note<\/button>/);
+  assert.match(html, /<button[^>]*class="[^"]+"[^>]*>Generate docs<\/button>/);
 });

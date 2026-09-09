@@ -231,3 +231,44 @@ test("a failed live request keeps the service exception out of the chat transcri
   assert.doesNotMatch(JSON.stringify(latest.vibeMessages), /Chat request failed \(503\)/);
   await act(async () => renderer.unmount());
 });
+
+test("a successful streamed build keeps the preview refresh key for Next.js hot reload", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.endsWith("/chat/history")) return historyResponse([]);
+    if (url.endsWith("/chat/active")) return new Response(JSON.stringify({ active: false }));
+    if (url.endsWith("/workspace/container")) {
+      return new Response(JSON.stringify({ data: { workspace: { state: "running" } } }));
+    }
+    if (url.endsWith("/chat") && init.method === "POST") {
+      return new Response('event: commit\ndata: {"sha":"abc123"}\n\nevent: done\ndata: {}\n\n', {
+        headers: { "content-type": "text/event-stream" }
+      });
+    }
+    return new Response("", { status: 404 });
+  };
+  let latest;
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        React.createElement(HookHarness, {
+          onValue(value) {
+            latest = value;
+          }
+        })
+      );
+    });
+    const initialKey = latest.vibePreviewKey;
+    await act(async () => latest.handleVibeChat({ prompt: "Update the heading", mode: "auto" }));
+    assert.equal(latest.vibeMessages.at(-1).commitSha, "abc123");
+    assert.equal(latest.vibeStatus, "Completed");
+    assert.equal(latest.vibePreviewKey, initialKey);
+    await act(async () => latest.setVibePreviewKey((key) => key + 1));
+    assert.equal(latest.vibePreviewKey, initialKey + 1);
+  } finally {
+    await act(async () => renderer?.unmount());
+    globalThis.fetch = previousFetch;
+  }
+});

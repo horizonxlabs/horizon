@@ -1,7 +1,7 @@
 import { Send, Square } from "lucide-react";
 import { Button, Textarea } from "@evcp/ui";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { PublishDialog } from "@/features/publish";
+import { creatorPathForPage } from "@/app/routes";
 import { PromptQueue } from "./PromptQueue";
 import { BugReportBox } from "./BugReportBox";
 import { QuickMessages } from "./QuickMessages";
@@ -65,7 +65,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
     dismissBugReport,
     reloadChatHistory
   } = app;
-  const [showPublish, setShowPublish] = useState(false);
   const paneResize = useChatPaneResize();
   const [mobileView, setMobileView] = useState<WorkspaceView | null>("conversation");
   // Auto-scroll to the newest output, but never yank the user back down while they scroll up.
@@ -130,7 +129,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         isPreviewAuthorized={isPreviewAuthorized}
         onSelectTab={selectTab}
         onRefreshPreview={() => setVibePreviewKey((key) => key + 1)}
-        onPublish={() => setShowPublish(true)}
+        onPublish={() => app.onNavigate(creatorPathForPage(selectedProject.id, "publish"))}
       />
       <WorkspaceMobileNav active={mobileView} onSelect={selectMobileView} />
       <div
@@ -343,26 +342,39 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
         </div>
         <VibePaneResizer resize={paneResize} />
         <div className="vibe-live-preview-panel">
-          {vibeTab === "preview" && isPreviewAuthorized ? (
-            <WorkspacePreviewFrame
-              key={vibePreviewKey}
-              previewKey={vibePreviewKey}
-              src={previewSrc}
-            />
-          ) : vibeTab === "preview" ? (
-            <div className="hz-db-empty" role="status">
-              {previewAuth.state === "loading"
-                ? "Authorizing preview…"
-                : "Preview authorization failed."}
-              {previewAuth.state === "error" ? (
-                <Button variant="secondary" type="button" onClick={previewAuth.retry}>
-                  Retry preview
-                </Button>
-              ) : null}
-            </div>
-          ) : vibeTab === "database" ? (
+          <div className="vibe-live-preview-slot" hidden={vibeTab !== "preview"}>
+            {isPreviewAuthorized ? (
+              <WorkspacePreviewFrame
+                key={vibePreviewKey}
+                previewKey={vibePreviewKey}
+                src={previewSrc}
+              />
+            ) : (
+              <div className="hz-db-empty" role="status">
+                {previewAuth.state === "loading"
+                  ? "Authorizing preview…"
+                  : "Preview authorization failed."}
+                {previewAuth.state === "error" ? (
+                  <Button variant="secondary" type="button" onClick={previewAuth.retry}>
+                    Retry preview
+                  </Button>
+                ) : null}
+              </div>
+            )}
+          </div>
+          {vibeTab === "preview" ? null : vibeTab === "database" ? (
             <Suspense fallback={<div className="hz-db-empty">Loading database…</div>}>
-              <WorkspaceDatabasePanel projectId={selectedProject.id} />
+              <WorkspaceDatabasePanel
+                projectId={selectedProject.id}
+                onOpenChat={() => {
+                  paneResize.isChatCollapsedRef.current = false;
+                  paneResize.setIsChatCollapsed(false);
+                  setMobileView("conversation");
+                  requestAnimationFrame(() => {
+                    paneResize.splitViewRef.current?.querySelector("textarea")?.focus();
+                  });
+                }}
+              />
             </Suspense>
           ) : vibeTab === "prd" ? (
             <WorkspacePrdPanel app={app} />
@@ -381,9 +393,6 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
           )}
         </div>
       </div>
-      {showPublish ? (
-        <PublishDialog projectId={selectedProject.id} onClose={() => setShowPublish(false)} />
-      ) : null}
     </div>
   );
 }

@@ -57,28 +57,31 @@ function json(renderer) {
   return JSON.stringify(renderer.toJSON());
 }
 
-async function renderPanel(fetchImpl) {
+async function renderPanel(fetchImpl, props = {}) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = fetchImpl;
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(WorkspaceDatabasePanel, { projectId: "project-1" }), {
-      createNodeMock: (element) =>
-        element.type === "div"
-          ? {
-              clientHeight: 480,
-              clientWidth: 960,
-              addEventListener() {},
-              removeEventListener() {},
-              focus() {},
-              scrollHeight: 480,
-              scrollLeft: 0,
-              scrollTop: 0,
-              scrollWidth: 960,
-              querySelector: () => null
-            }
-          : null
-    });
+    renderer = create(
+      React.createElement(WorkspaceDatabasePanel, { projectId: "project-1", ...props }),
+      {
+        createNodeMock: (element) =>
+          element.type === "div"
+            ? {
+                clientHeight: 480,
+                clientWidth: 960,
+                addEventListener() {},
+                removeEventListener() {},
+                focus() {},
+                scrollHeight: 480,
+                scrollLeft: 0,
+                scrollTop: 0,
+                scrollWidth: 960,
+                querySelector: () => null
+              }
+            : null
+      }
+    );
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -354,5 +357,31 @@ test("narrow database selection controls expose a 44px checkbox hit target", asy
   } finally {
     await view.cleanup();
     globalThis.window.matchMedia = originalMatchMedia;
+  }
+});
+
+test("empty database opens chat only on request without creating tables or records", async () => {
+  let requests = 0;
+  let opened = 0;
+  const view = await renderPanel(
+    async () => {
+      requests++;
+      return response({ schema: "app_project_1", tables: [] });
+    },
+    { onOpenChat: () => opened++ }
+  );
+  try {
+    assert.equal(opened, 0);
+    const before = requests;
+    const button = view.renderer.root
+      .findAllByType("button")
+      .find((node) => node.children.includes("Design your database"));
+    assert.ok(button);
+    assert.equal(view.renderer.root.findByType("img").props.alt, "");
+    await act(async () => button.props.onClick());
+    assert.equal(opened, 1);
+    assert.equal(requests, before);
+  } finally {
+    await view.cleanup();
   }
 });

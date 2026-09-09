@@ -78,12 +78,7 @@ export function WorkspaceHeader({
           <span>Preview</span>
           <ArrowUpRight size={14} aria-hidden="true" />
         </a>
-        <Button
-          variant="primary"
-          type="button"
-          title="Publish to staging or production"
-          onClick={onPublish}
-        >
+        <Button variant="primary" type="button" title="Open publish settings" onClick={onPublish}>
           Publish
         </Button>
       </div>

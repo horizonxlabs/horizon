@@ -88,7 +88,7 @@ export function buildQuickMessages(context: QuickMessageContext): QuickMessage[]
       ? {
           id: "next-prd-improvement",
           label: `Improve ${shortProjectName}`,
-          prompt: `Implement the next highest-impact PRD improvement for ${projectName}. Use this product context: ${productContext}. Preserve current working behavior and verify the preview.`,
+          prompt: `Implement the next highest-impact improvement from the docs for ${projectName}. Use this product context: ${productContext}. Preserve current working behavior and verify the preview.`,
           intent: "product"
         }
       : {
@@ -99,8 +99,8 @@ export function buildQuickMessages(context: QuickMessageContext): QuickMessage[]
         },
     {
       id: "review-prd",
-      label: `Review ${shortProjectName} against PRD`,
-      prompt: `Review ${projectName} against the current PRD without changing files. Identify gaps and use this product context: ${productContext}`,
+      label: `Review ${shortProjectName} against Docs`,
+      prompt: `Review ${projectName} against the current docs without changing files. Identify gaps and use this product context: ${productContext}`,
       intent: "product"
     },
     ...(context.hasProjectFiles
@@ -108,7 +108,7 @@ export function buildQuickMessages(context: QuickMessageContext): QuickMessage[]
           {
             id: "use-project-files",
             label: "Improve with project files",
-            prompt: `Improve ${projectName} using the attached project files. Keep the implementation aligned with the current PRD and verify the preview.`,
+            prompt: `Improve ${projectName} using the attached project files. Keep the implementation aligned with the current docs and verify the preview.`,
             intent: "continue" as const
           }
         ]

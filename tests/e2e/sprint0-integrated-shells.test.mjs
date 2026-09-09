@@ -16,7 +16,7 @@ test("admin creator and store shells expose the expected sprint 0 user journeys"
   assert.match(creatorApp, /Opening latest project/);
   assert.doesNotMatch(creatorApp, /Recent projects/);
   assert.match(creatorApp, /SectionCard/);
-  assert.match(creatorApp, /AI Project Notes/);
+  assert.match(creatorApp, /Docs/);
   assert.match(storeApp, /My Apps/);
   assert.match(storeApp, /Available Apps/);
   assert.match(storeApp, /StorefrontSummary/);

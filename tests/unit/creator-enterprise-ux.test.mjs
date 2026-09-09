@@ -14,8 +14,7 @@ const { ProjectOverviewPage } =
   await import("../../apps/creator-web/src/features/project-overview/ProjectOverviewPage.tsx");
 const { ProjectsPage } =
   await import("../../apps/creator-web/src/features/projects/ProjectsPage.tsx");
-const { PublishPage } =
-  await import("../../apps/creator-web/src/features/publish/PublishPage.tsx");
+const { PublishPage } = await import("../../apps/creator-web/src/features/publish/PublishPage.tsx");
 const { AppShell, Button, DataTable } = await import("../../packages/ui/src/index.tsx");
 const { creatorPageCopy } = await import("../../apps/creator-web/src/app/routes.ts");
 const requireFromStore = createRequire(
@@ -123,22 +122,16 @@ test("authenticated Creator route copy is concise English", () => {
       "Build and refine the application through guided AI changes."
     ],
     prd: [
-      "Project Notes: Leave Management",
-      "Optional AI-generated context for the project. Notes never block building or publishing."
+      "Docs: Leave Management",
+      "Project goals, requirements, and decisions, organized with AI. Docs remain optional."
     ],
     database: ["Database", "Review project schema, tables, and records."],
     versions: [
       "Frontend Versions",
       "Review checkpoints and restore the frontend without changing backend data."
     ],
-    users: [
-      "Users & Roles",
-      "Manage members, invitations, access requests, and role permissions."
-    ],
-    publish: [
-      "Publish & Registry",
-      "Review readiness and register the application for end users."
-    ],
+    users: ["Users & Roles", "Manage members, invitations, access requests, and role permissions."],
+    publish: ["Publish & Registry", "Review readiness and register the application for end users."],
     deployments: [
       "Deployments",
       "Review deployment environments, versions, health, and timestamps."
@@ -297,18 +290,37 @@ test("Publish renders five accessible ready stages and an enabled primary action
     auth: { mode: "platform_auth_sdk", accessMode: "restricted" },
     roles: [{ key: "owner", name: "Owner", permissions: ["manage"] }]
   };
-  const html = renderToStaticMarkup(React.createElement(PublishPage, { app: {
-    creatorNavItems: [], bootstrap: { projects: [], userName: "Creator", status: "ready" },
-    creatorSessionControls: null, creatorPage: "publish", pageCopy: creatorPageCopy.publish,
-    selectedProject: { id: "ops", name: "Operations" }, creatorPageActions: null,
-    isCreateProjectDialogOpen: false, setIsCreateProjectDialogOpen() {}, isEnteringWorkspace: false,
-    onNavigate() {}, pathname: "/creator/projects/ops/publish", handlePublishProject() {},
-    isPublishingProject: false, accessLoadState: "ready", publishReadinessState: "ready",
-    publishReview: { manifest, checklist: [], ready: true }, publishResult: undefined,
-    visibleRegistryEntry: undefined, visiblePublishChecklist: [], visibleDeployment: undefined,
-    visiblePreview: { id: "preview-3", version: "3" }, publishMessage: "Ready",
-    publishMessageTone: "success", publishMessageTechnicalDetails: undefined
-  }}));
+  const html = renderToStaticMarkup(
+    React.createElement(PublishPage, {
+      app: {
+        creatorNavItems: [],
+        bootstrap: { projects: [], userName: "Creator", status: "ready" },
+        creatorSessionControls: null,
+        creatorPage: "publish",
+        pageCopy: creatorPageCopy.publish,
+        selectedProject: { id: "ops", name: "Operations" },
+        creatorPageActions: null,
+        isCreateProjectDialogOpen: false,
+        setIsCreateProjectDialogOpen() {},
+        isEnteringWorkspace: false,
+        onNavigate() {},
+        pathname: "/creator/projects/ops/publish",
+        handlePublishProject() {},
+        isPublishingProject: false,
+        accessLoadState: "ready",
+        publishReadinessState: "ready",
+        publishReview: { manifest, checklist: [], ready: true },
+        publishResult: undefined,
+        visibleRegistryEntry: undefined,
+        visiblePublishChecklist: [],
+        visibleDeployment: undefined,
+        visiblePreview: { id: "preview-3", version: "3" },
+        publishMessage: "Ready",
+        publishMessageTone: "success",
+        publishMessageTechnicalDetails: undefined
+      }
+    })
+  );
   assert.equal((html.match(/creator-readiness-item/g) ?? []).length, 5);
   for (const label of ["Manifest", "Route", "Permissions", "Preview", "Registry"])
     assert.match(html, new RegExp(`>${label}<`));
@@ -366,7 +378,6 @@ test("AppShell opens and closes the real mobile drawer with 44px controls", asyn
     assert.match(sidebar.props.className, /max-md:-translate-x-full/);
 
     await act(async () => openTrigger.props.onClick());
-
     openTrigger = findOpenTrigger();
     closeControl = findCloseControl();
     sidebar = renderer.root.findByType("aside");
@@ -375,7 +386,6 @@ test("AppShell opens and closes the real mobile drawer with 44px controls", asyn
     assert.match(sidebar.props.className, /max-md:translate-x-0/);
 
     await act(async () => closeControl.props.onClick());
-
     sidebar = renderer.root.findByType("aside");
     assert.match(sidebar.props.className, /max-md:-translate-x-full/);
   } finally {

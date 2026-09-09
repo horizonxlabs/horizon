@@ -31,11 +31,8 @@ test("Creator exposes one Horizon composer without persistent Plan Build state",
   assert.match(hook, /mode\s*=\s*overrides\?\.mode\s*\?\?\s*"auto"/);
   assert.match(hook, /if \(mode !== "plan"\) await ensureVibeWorkspace/);
   assert.match(hook, /enqueuePrompt\(queue, \{ prompt, mode \}\)/);
-  // Preview refresh is driven by commit evidence from the stream, not by the request mode.
-  assert.match(
-    hook,
-    /else if \(type === "commit"\) \{[\s\S]*?setVibePreviewKey\(\(key\) => key \+ 1\);[\s\S]*?\} else if \(type === "error"\)/
-  );
+  // Next.js owns live updates; stream commits must not force an iframe reload.
+  assert.doesNotMatch(hook, /setVibePreviewKey\(\(key\) => key \+ 1\)/);
   assert.doesNotMatch(hook, /if \(mode === "build"\) setVibePreviewKey/);
   // Outcome status is independent of the hidden request mode; detailed action evidence remains in
   // the streamed action collection rather than changing the header to implementation jargon.

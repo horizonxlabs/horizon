@@ -6,7 +6,7 @@ export type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 export const TAB_LABELS: Record<WorkspaceTab, string> = {
   preview: "Preview",
-  prd: "PRD",
+  prd: "Docs",
   code: "Code",
   database: "Database",
   history: "History"

@@ -103,7 +103,7 @@ test("mobile selection and desktop tabs keep the selected Workspace panel synchr
   assert.equal(workspaceBody().props["data-workspace-view"], "database");
 });
 
-test("PRD and History do not announce Preview as selected and Preview remains selectable", async () => {
+test("Docs and History do not announce Preview as selected and Preview remains selectable", async () => {
   function Harness() {
     const [vibeTab, setVibeTab] = useState("preview");
     return React.createElement(WorkspacePage, { app: appFor(vibeTab, setVibeTab) });
@@ -123,16 +123,15 @@ test("PRD and History do not announce Preview as selected and Preview remains se
       .filter((button) => button.props["aria-pressed"])
       .flatMap((button) => button.children);
 
-  await act(async () => tabNamed("PRD").props.onClick());
+  await act(async () => tabNamed("Docs").props.onClick());
   assert.deepEqual(pressedLabels(), []);
   assert.ok(renderer.root.findByProps({ className: "vibe-prd-panel" }));
 
   await act(async () => tabNamed("History").props.onClick());
   assert.deepEqual(pressedLabels(), []);
-  const historyStatus = renderer.root
-    .findAllByProps({ role: "status" })
-    .find((status) => status.children.join("").includes("No versions yet"));
-  assert.ok(historyStatus);
+  const historyStatus = renderer.root.findByProps({ className: "vibe-history-empty" });
+  assert.ok(historyStatus.findByProps({ role: "status" }));
+  assert.equal(historyStatus.findByType("h3").children.join(""), "No versions yet");
 
   const previewButton = switcherButtons().find((button) => button.children.includes("Preview"));
   await act(async () => previewButton.props.onClick());
@@ -367,6 +366,29 @@ test("question submission goes directly into chat and preserves the turn mode", 
           .some((button) => button.children.includes("Approve & implement")),
         false
       );
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
+test("Publish opens the selected project's publish page", async () => {
+  for (const id of ["prj_4754ba3fa20144fda6272bd815965c27", "project_2"]) {
+    const paths = [];
+    const app = appFor("preview", () => {});
+    app.selectedProject.id = id;
+    app.onNavigate = (path) => paths.push(path);
+    let renderer;
+    await act(async () => {
+      renderer = create(React.createElement(WorkspacePage, { app }));
+    });
+    try {
+      const button = renderer.root
+        .findAllByType("button")
+        .find((node) => node.children.includes("Publish"));
+      await act(async () => button.props.onClick());
+      assert.deepEqual(paths, [`/creator/projects/${id}/publish`]);
+      assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
     } finally {
       await act(async () => renderer.unmount());
     }

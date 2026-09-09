@@ -3,9 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const { executePlatformApiRequest } = await import("../../apps/platform-api/src/app-factory.ts");
-const { createPlatformApiServices } = await import(
-  "../../apps/platform-api/src/platform-services.ts"
-);
+const { createPlatformApiServices } =
+  await import("../../apps/platform-api/src/platform-services.ts");
 
 const adminHeaders = { "x-mock-user-email": "admin@company.com" };
 const creatorHeaders = { "x-mock-user-email": "creator@company.com" };
@@ -146,22 +145,17 @@ test("Creator UI exposes project creation and optional AI project notes", () => 
     "Create your first project",
     "Create project",
     "Create project wizard",
-    "AI Project Notes",
-    "Project Context",
-    "Project Note Versions",
-    "Generate AI Note"
+    "Docs",
+    "Project documentation",
+    "Document versions",
+    "Generate docs"
   ]) {
     assert.match(creatorSource, new RegExp(text));
   }
 
   assert.doesNotMatch(creatorSource, /สร้างด้วย AI/);
 
-  for (const component of [
-    "WorkflowRail",
-    "SectionCard",
-    "DataTable",
-    "DecisionPanel"
-  ]) {
+  for (const component of ["WorkflowRail", "SectionCard", "DataTable", "DecisionPanel"]) {
     assert.match(creatorSource, new RegExp(`\\b${component}\\b`));
   }
 });

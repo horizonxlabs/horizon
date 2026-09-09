@@ -1,4 +1,5 @@
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { WorkspaceDatabaseEmpty } from "./WorkspaceDatabaseEmpty";
 import { Button } from "@evcp/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,7 +20,13 @@ import {
   type ProjectDbSchema
 } from "./project-db";
 type Row = Record<string, unknown>;
-export default function WorkspaceDatabasePanel({ projectId }: { projectId: string }) {
+export default function WorkspaceDatabasePanel({
+  projectId,
+  onOpenChat
+}: {
+  projectId: string;
+  onOpenChat?: () => void;
+}) {
   const [schema, setSchema] = useState<ProjectDbSchema | undefined>(undefined);
   const [schemaError, setSchemaError] = useState<string | undefined>(undefined);
   const [activeTable, setActiveTable] = useState<string | undefined>(undefined);
@@ -251,15 +258,7 @@ export default function WorkspaceDatabasePanel({ projectId }: { projectId: strin
       />
     );
   }
-  if (schema.tables.length === 0) {
-    return (
-      <CreatorState
-        kind="empty"
-        title="No tables yet"
-        description="Create a database table in Workspace to start storing project records."
-      />
-    );
-  }
+  if (schema.tables.length === 0) return <WorkspaceDatabaseEmpty onOpenChat={onOpenChat} />;
 
   return (
     <div className="hz-db">

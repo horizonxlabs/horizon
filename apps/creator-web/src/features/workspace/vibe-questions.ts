@@ -1,6 +1,6 @@
 // Structured clarifying questions: the build prompt lets the model batch up to four
 // <question> blocks (first line = the question, then "- option" lines). They render as
-// dropdowns with an automatic "type it yourself" escape, and every answer submits back
+// one dropdown at a time with an automatic "type it yourself" escape, and every answer submits back
 // as ONE combined message — no ping-pong.
 
 export type VibeQuestion = { id: string; question: string; options: string[] };

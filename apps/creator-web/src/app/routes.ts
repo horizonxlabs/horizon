@@ -139,10 +139,10 @@ export const creatorPageCopy: Record<
     description: "Build and refine the application through guided AI changes."
   },
   prd: {
-    eyebrow: "AI Project Notes",
-    title: "Project Notes: Leave Management",
+    eyebrow: "Docs",
+    title: "Docs: Leave Management",
     description:
-      "Optional AI-generated context for the project. Notes never block building or publishing."
+      "Project goals, requirements, and decisions, organized with AI. Docs remain optional."
   },
   database: {
     eyebrow: "Project Data",

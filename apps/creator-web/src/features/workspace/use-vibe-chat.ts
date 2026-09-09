@@ -243,7 +243,7 @@ export function useVibeChat({
               assistantText
             });
             setVibeStatus(outcomeStatus);
-            setVibePreviewKey((key) => key + 1);
+            // Next.js hot reloads the committed files without resetting the live iframe.
           } else if (type === "error") {
             outcomeStatus = workspaceOutcomeForEvent({
               type,

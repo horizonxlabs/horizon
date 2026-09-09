@@ -1,19 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 export function WorkspacePreviewFrame({ previewKey, src }: { previewKey: number; src: string }) {
   const [loaded, setLoaded] = useState(false);
-  const frameRef = useRef<HTMLIFrameElement>(null);
-
-  const handleLoad = () => {
-    setLoaded(true);
-    try {
-      frameRef.current?.contentWindow?.addEventListener("beforeunload", () => setLoaded(false), {
-        once: true
-      });
-    } catch {
-      // The preview normally stays same-origin; a generated redirect may make it opaque.
-    }
-  };
+  // Show setup progress only for this frame's initial load. Next.js owns subsequent
+  // hot updates and navigation; the parent remounts only for an explicit refresh.
 
   return (
     <div className="vibe-live-preview-frame" aria-busy={!loaded || undefined}>
@@ -33,11 +23,10 @@ export function WorkspacePreviewFrame({ previewKey, src }: { previewKey: number;
       ) : null}
       <iframe
         key={previewKey}
-        ref={frameRef}
         title="Live preview"
         src={src}
         className="vibe-live-iframe"
-        onLoad={handleLoad}
+        onLoad={() => setLoaded(true)}
       />
     </div>
   );

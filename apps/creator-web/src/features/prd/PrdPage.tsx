@@ -3,6 +3,7 @@ import { CheckCircle2, Sparkles } from "lucide-react";
 import { CreatorShell } from "@/features/projects";
 import type { useCreatorApp } from "@/app/use-creator-app";
 import { CreatorState, CreatorStatusMessage } from "@/shared";
+import { CreatorEmptyState } from "@/shared/CreatorEmptyState";
 
 export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
   const {
@@ -26,24 +27,24 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
       content={
         <section className="ds-workbench creator-prd-workbench">
           <WorkflowRail
-            eyebrow="AI Notes"
+            eyebrow="Docs"
             title="Optional Context"
             steps={[
               { label: "Project context captured", icon: <CheckCircle2 size={16} /> },
               { label: "AI organizes the context", icon: <Sparkles size={16} /> },
-              { label: "Notes remain optional", icon: <CheckCircle2 size={16} /> }
+              { label: "Docs remain optional", icon: <CheckCircle2 size={16} /> }
             ]}
           />
           <div className="ds-main-stack">
-            <SectionCard eyebrow="AI Project Notes" title="Project Context">
+            <SectionCard eyebrow="Docs" title="Project documentation">
               {isGeneratingPrdDraft ? (
                 <CreatorState
                   kind="loading"
-                  title="Generating AI project note"
-                  description="AI is organizing the project context. This note is optional and never blocks publishing."
+                  title="Generating docs"
+                  description="Horizon is turning your project context into a document. You can keep building while it’s prepared."
                 />
               ) : prdStatus === "loading" ? (
-                <CreatorState kind="loading" title="Loading project notes" />
+                <CreatorState kind="loading" title="Loading docs" />
               ) : prdStatus === "error" ? (
                 <CreatorState
                   kind={prdErrorSource === "generation" ? "error" : "unavailable"}
@@ -51,7 +52,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   description={
                     prdErrorSource === "generation"
                       ? "No draft was created."
-                      : "Existing project notes are unchanged."
+                      : "Existing docs are unchanged."
                   }
                   action={
                     <Button
@@ -64,13 +65,12 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                   technicalDetails={prdTechnicalDetails}
                 />
               ) : prdStatus === "empty" ? (
-                <CreatorState
-                  kind="empty"
-                  title="No AI project note yet"
-                  description="This optional note helps AI remember project context. You can build and publish without it."
+                <CreatorEmptyState
+                  title="No docs yet"
+                  description="Keep your app’s goals, requirements, and decisions in one place. Generate a first draft from your project context whenever you’re ready."
                   action={
                     <Button variant="primary" onClick={() => void handleGeneratePrdDraft()}>
-                      Generate AI Note
+                      Generate docs
                     </Button>
                   }
                 />
@@ -101,9 +101,9 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
               )}
             </SectionCard>
             {prdStatus === "ready" ? (
-              <SectionCard eyebrow="History" title="Project Note Versions">
+              <SectionCard eyebrow="History" title="Document versions">
                 <DataTable
-                  ariaLabel="Project note version history"
+                  ariaLabel="Document version history"
                   columns={[
                     { key: "version", label: "Version" },
                     {
@@ -115,7 +115,7 @@ export function PrdPage({ app }: { app: ReturnType<typeof useCreatorApp> }) {
                     { key: "author", label: "Author" }
                   ]}
                   rows={visibleVersionRows}
-                  emptyMessage="No earlier project notes."
+                  emptyMessage="No earlier documents."
                 />
               </SectionCard>
             ) : null}

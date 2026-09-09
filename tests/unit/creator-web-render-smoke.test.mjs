@@ -113,7 +113,7 @@ const ROUTE_CASES = [
   ["projects", "/creator", /Opening latest project/],
   ["project", "/creator/projects/project-1/project", /Project: Project One/],
   ["workspace", "/creator/projects/project-1", /Workspace view/],
-  ["prd", "/creator/projects/project-1/prd", /Project Context/],
+  ["prd", "/creator/projects/project-1/prd", /Project documentation/],
   ["database", "/creator/projects/project-1/database", /Schema and records/],
   ["versions", "/creator/projects/project-1/versions", /Frontend versions/],
   ["users", "/creator/projects/project-1/users", /App users roles/],
