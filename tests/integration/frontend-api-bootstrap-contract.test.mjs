@@ -52,6 +52,10 @@ const creatorPublishPageSource = readFileSync(
   "apps/creator-web/src/features/publish/PublishPage.tsx",
   "utf8"
 );
+const creatorDeploymentCardSource = readFileSync(
+  "apps/creator-web/src/features/publish/PublishDeploymentCard.tsx",
+  "utf8"
+);
 const adminFeatureSource = readAllSourceFiles("apps/admin-web/src/features");
 const adminSource = `${adminAppSource}\n${adminRoutesSource}\n${adminClientSource}\n${adminConsoleSource}\n${adminFeatureSource}`;
 // The creator-web CreatorApp component was split across hooks/, pages/, and
@@ -194,8 +198,12 @@ test("Store and Creator fail closed instead of creating local success evidence",
     creatorPublishPageSource,
     /dep_leave_management_001|\/apps\/\$\{selectedProject\.id\}/
   );
-  assert.match(creatorPublishPageSource, /\{visibleDeployment \?/);
-  assert.match(creatorPublishPageSource, /kind="empty"/);
+  assert.match(
+    creatorPublishPageSource,
+    /<PublishDeploymentCard[^>]*deployment=\{visibleDeployment\}/s
+  );
+  assert.match(creatorDeploymentCardSource, /deployment && ready/);
+  assert.match(creatorDeploymentCardSource, /kind=\{deployment \? "unavailable" : "empty"\}/);
 });
 
 test("Admin operations and audit views use Platform API data and fail closed", () => {

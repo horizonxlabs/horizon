@@ -56,3 +56,9 @@ test("failed or pending deployments never offer a ready badge or launch link", (
     assert.doesNotMatch(html, /Your app is ready|Open app|href=/);
   }
 });
+
+test("a project without deployment evidence has no ready badge or launch link", () => {
+  const html = render(false, null);
+  assert.match(html, /No published deployment yet/);
+  assert.doesNotMatch(html, /Your app is ready|Open app|href=/);
+});
