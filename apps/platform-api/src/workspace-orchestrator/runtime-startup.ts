@@ -23,8 +23,11 @@ export async function initializeWorkspaceRuntime(
 
   const maintainRuntime = async () => {
     await orchestrator.reconcileWarmPool();
-    await orchestrator.cleanupOrphanContainers();
+    // Restore allocatable capacity before scanning and cleaning stale project
+    // resources. Orphan cleanup can include slow container health checks and must
+    // not leave new projects waiting for the standby pool to be replenished.
     await orchestrator.ensureWarmPoolCapacity();
+    await orchestrator.cleanupOrphanContainers();
   };
   if (options.awaitMaintenance) {
     await maintainRuntime();

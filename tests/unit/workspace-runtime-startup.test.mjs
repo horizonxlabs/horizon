@@ -10,7 +10,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-test("runtime startup does not wait for slow warm-pool maintenance", async () => {
+test("runtime startup fills warm-pool capacity before slow orphan cleanup", async () => {
   const reconcile = deferred();
   const calls = [];
   const orchestrator = {
@@ -55,7 +55,7 @@ test("runtime startup does not wait for slow warm-pool maintenance", async () =>
   ]);
   reconcile.resolve();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(calls.slice(-2), [["cleanup"], ["capacity"]]);
+  assert.deepEqual(calls.slice(-2), [["capacity"], ["cleanup"]]);
 });
 
 test("runtime startup can await maintenance for deterministic recovery", async () => {
@@ -89,5 +89,5 @@ test("runtime startup can await maintenance for deterministic recovery", async (
     { awaitMaintenance: true }
   );
 
-  assert.deepEqual(calls, ["hydrate", "configure", "reconcile", "cleanup", "capacity"]);
+  assert.deepEqual(calls, ["hydrate", "configure", "reconcile", "capacity", "cleanup"]);
 });
