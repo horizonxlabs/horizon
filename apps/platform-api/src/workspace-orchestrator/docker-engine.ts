@@ -244,6 +244,7 @@ export function createMemoryDockerEngine(): DockerEngine & {
     }>,
     removedImages: [] as string[]
   };
+  let containerSequence = 0;
   const find = (containerId: string) => {
     const container = state.containers.find((item) => item.containerId === containerId);
     if (!container) {
@@ -267,7 +268,8 @@ export function createMemoryDockerEngine(): DockerEngine & {
         .map((volume) => ({ name: volume.name, labels: { ...volume.labels } }));
     },
     async createContainer(spec) {
-      const containerId = `mem-${state.containers.length + 1}-${spec.name}`;
+      containerSequence += 1;
+      const containerId = `mem-${containerSequence}-${spec.name}`;
       state.containers.push({ containerId, spec, status: "created" });
       return { containerId };
     },

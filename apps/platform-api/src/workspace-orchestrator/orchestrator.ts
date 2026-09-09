@@ -20,6 +20,7 @@ import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 import { createWorkspaceRuntimeCache } from "./runtime-cache";
 import { runWorkspaceProjectDeletion } from "./project-deletion-ownership";
+import { reuseWorkspaceContainer } from "./workspace-runtime-recovery";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
 
@@ -70,16 +71,14 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       deps.secrets,
       (attempt) => deps.warmPool?.repairOwnedClaim?.(input.projectId, attempt) ?? Promise.resolve()
     );
-    const found = await inspectWorkspaceContainer(deps.docker, existing);
-    if (found) {
-      if (!found.running) await deps.docker.startContainer(found.containerId);
-      await waitForPreviewReady(deps.docker, found.containerId);
+    const reusable = await reuseWorkspaceContainer(deps.docker, existing, image);
+    if (reusable) {
       const recovered = save({
         ...existing,
         resourceKey: physicalKey,
         slug: input.slug,
         state: "running",
-        containerId: found.containerId,
+        containerId: reusable.containerId,
         lastActivityAt: now(),
         lastError: undefined
       });
@@ -87,7 +86,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
       audit({
         action: "workspace.recovered",
         projectId: input.projectId,
-        metadata: { slug: input.slug, mode: found.running ? "reattached" : "restarted" }
+        metadata: { slug: input.slug, mode: reusable.mode }
       });
       return recovered;
     }
