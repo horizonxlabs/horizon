@@ -29,6 +29,8 @@ const { WorkspacePage } =
   await import("../../apps/creator-web/src/features/workspace/WorkspacePage.tsx");
 const { buildWorkspaceRetryPrompt } =
   await import("../../apps/creator-web/src/features/workspace/workspace-failure.ts");
+const { deriveWorkspaceFailure } =
+  await import("../../apps/creator-web/src/features/workspace/workspace-failure.ts");
 
 test("Workspace turns a persisted Vault failure into an actionable recovery state", () => {
   const app = {
@@ -102,4 +104,46 @@ test("Workspace retry prompt keeps intent and redacts credentials from the lates
   assert.match(prompt, /Latest error:\nProvider failed/);
   assert.doesNotMatch(prompt, /test-provider-key|secret-token|hunter2/);
   assert.equal((prompt.match(/\[REDACTED\]/g) ?? []).length, 3);
+});
+
+test("Workspace retry prompt preserves the first request instead of nesting retry diagnostics", () => {
+  const firstRetry = buildWorkspaceRetryPrompt({
+    retryPrompt: "Create a Suzuki landing page",
+    technicalDetails: "docker engine exec-create failed (409): container is not running"
+  });
+  const secondRetry = buildWorkspaceRetryPrompt({
+    retryPrompt: firstRetry,
+    technicalDetails: "Vault secret operation failed (503)"
+  });
+
+  assert.match(secondRetry, /Original request:\nCreate a Suzuki landing page/);
+  assert.match(secondRetry, /Latest error:\nVault secret operation failed \(503\)/);
+  assert.equal(
+    (secondRetry.match(/Retry the previous request after this error\./g) ?? []).length,
+    1
+  );
+  assert.doesNotMatch(secondRetry, /docker engine exec-create failed/);
+});
+
+test("Temporary Vault 503 is presented as recoverable infrastructure, not missing credentials", () => {
+  const failure = deriveWorkspaceFailure({
+    status: "Failed",
+    messages: [
+      { role: "user", text: "Create a Suzuki landing page" },
+      {
+        role: "assistant",
+        parts: [
+          {
+            id: "error-503",
+            type: "error",
+            sequence: 0,
+            message: "Vault secret operation failed (503)"
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(failure?.title, "Workspace service is recovering");
+  assert.equal(failure?.retryLabel, "Try again");
 });

@@ -20,6 +20,8 @@ const SECRET_ASSIGNMENT =
   /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret)(\s*[:=]\s*)(["']?)([^\s"'&,;]+)/gi;
 const BEARER_TOKEN = /\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi;
 const MAX_RETRY_CONTEXT_LENGTH = 4_000;
+const RETRY_REQUEST =
+  /^Retry the previous request after this error\.\n\nOriginal request:\n([\s\S]*?)\n\nLatest error:\n/;
 
 function redactRetryContext(value: string): string {
   return value
@@ -35,7 +37,8 @@ export function buildWorkspaceRetryPrompt({
   technicalDetails
 }: Pick<WorkspaceFailure, "retryPrompt" | "technicalDetails">): string | undefined {
   if (!retryPrompt?.trim() || !technicalDetails.trim()) return undefined;
-  const originalRequest = redactRetryContext(retryPrompt.trim());
+  const priorRetry = retryPrompt.trim().match(RETRY_REQUEST);
+  const originalRequest = redactRetryContext((priorRetry?.[1] ?? retryPrompt).trim());
   const latestError = redactRetryContext(technicalDetails.trim());
   return [
     "Retry the previous request after this error.",
@@ -100,6 +103,19 @@ export function deriveWorkspaceFailure({
     .slice()
     .reverse()
     .find((message) => message.role === "user")?.text;
+
+  if (
+    /\b(?:408|429|500|502|503|504)\b|container(?:\s+\[[^\]]+\])?\s+is not running/i.test(details)
+  ) {
+    return {
+      title: "Workspace service is recovering",
+      description:
+        "A temporary workspace dependency was unavailable. Horizon will reconnect before continuing your request.",
+      retryLabel: "Try again",
+      retryPrompt,
+      technicalDetails: details
+    };
+  }
 
   if (/vault|secret|credential|403/i.test(details)) {
     return {

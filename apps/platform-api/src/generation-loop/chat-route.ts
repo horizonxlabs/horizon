@@ -6,9 +6,14 @@ import { resolveWorkspaceAgentMode } from "../workspace-agent-mode";
 import { createErrorTag, isPlatformFile, type ErrorTag } from "./error-tags";
 import type { GenerationService } from "./generation-service-types";
 import type { ChatStreamEvent } from "./generation-types";
+import { collectPostTurnTags } from "./post-turn-tags";
 import { reduceTurnPart } from "./turn-parts";
+import { runTurnWithStartupRecovery } from "./turn-startup-recovery";
 
-type ReplayableTurnEvent = ChatStreamEvent | { type: "prd_version"; id: string; version: string; changeSummary: string } | { type: "bug_report"; bugs: unknown[] };
+type ReplayableTurnEvent =
+  | ChatStreamEvent
+  | { type: "prd_version"; id: string; version: string; changeSummary: string }
+  | { type: "bug_report"; bugs: unknown[] };
 
 type ActiveTurn = {
   projectId: string;
@@ -43,33 +48,15 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function collectPostTurnTags(
-  service: {
-    probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
-    templateLockedFiles?: string[];
-  },
-  projectId: string,
-  turnErrors: string[]
-): Promise<ErrorTag[]> {
-  const tags = turnErrors.filter(Boolean).map((message) => createErrorTag("build", message));
-  const probe = await service.probeRuntime?.(projectId).catch(() => undefined);
-  for (const message of probe?.errors ?? []) {
-    const file = message.match(/(?:\.\/)?((?:app|components|lib)\/[\w./-]+)/)?.[1];
-    const tag = createErrorTag("runtime", message, file);
-    if (file && isPlatformFile(file, service.templateLockedFiles ?? [])) tag.platformBug = true;
-    tags.push(tag);
-  }
-  return tags;
-}
-
 export function createChatSseHandler(deps: {
   generationService: GenerationService & {
     // Optional diagnostic surface used to populate the user-controlled Bug Report box.
     probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
     templateLockedFiles?: string[];
   };
-  resolveAuth: (req: IncomingMessage) =>
-    WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
+  resolveAuth: (
+    req: IncomingMessage
+  ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
   resolveAttachmentContext?: (
     req: IncomingMessage,
     projectId: string,
@@ -160,15 +147,18 @@ export function createChatSseHandler(deps: {
         const turnErrors: string[] = [];
         let generationDone = false;
         let committed = false;
-        await deps.prepareWorkspace?.(input.projectId);
-        for await (const event of deps.generationService.runTurn({
-          projectId: input.projectId,
-          prompt: input.prompt,
-          agentMode: input.agentMode as "auto" | "build" | "plan",
-          actor: input.actor,
-          approvedPlan: input.approvedPlan,
-          signal: controller.signal,
-          assertCurrent: input.mutation?.fence?.assertCurrent
+        for await (const event of runTurnWithStartupRecovery({
+          prepare: async () => deps.prepareWorkspace?.(input.projectId),
+          run: () =>
+            deps.generationService.runTurn({
+              projectId: input.projectId,
+              prompt: input.prompt,
+              agentMode: input.agentMode as "auto" | "build" | "plan",
+              actor: input.actor,
+              approvedPlan: input.approvedPlan,
+              signal: controller.signal,
+              assertCurrent: input.mutation?.fence?.assertCurrent
+            })
         })) {
           if (event.type === "done") {
             generationDone = true;
@@ -186,16 +176,24 @@ export function createChatSseHandler(deps: {
           deps.recordPrdVersionFromPlan
         ) {
           try {
-            publish(
-              turn,
-              { type: "prd_version", ...(await deps.recordPrdVersionFromPlan(input.actor, input.projectId, input.approvedPlan)) }
-            );
+            publish(turn, {
+              type: "prd_version",
+              ...(await deps.recordPrdVersionFromPlan(
+                input.actor,
+                input.projectId,
+                input.approvedPlan
+              ))
+            });
           } catch {
             // Best effort metadata must never disturb a completed generation turn.
           }
         }
         if (committed) {
-          const tags = await collectPostTurnTags(deps.generationService, input.projectId, turnErrors);
+          const tags = await collectPostTurnTags(
+            deps.generationService,
+            input.projectId,
+            turnErrors
+          );
           for (const tag of tags) if (tag.platformBug) deps.onPlatformBug?.(input.projectId, tag);
           publish(turn, {
             type: "bug_report",

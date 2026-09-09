@@ -43,3 +43,52 @@ test("chat reconciles the workspace before starting a generation turn", async ()
     server.close();
   }
 });
+
+test("chat recovers once when a container disappears before the first generation event", async () => {
+  const order = [];
+  let attempts = 0;
+  const handler = createChatSseHandler({
+    resolveAuth: () => ({
+      userId: "u1",
+      roles: ["creator"],
+      projectIds: ["p1"],
+      actor: { id: "u1", email: "creator@example.test", name: "Creator", role: "creator" }
+    }),
+    prepareWorkspace: async (projectId) => order.push(`prepare:${projectId}`),
+    generationService: {
+      async history() {
+        return [];
+      },
+      async listWorkspaceFiles() {
+        return [];
+      },
+      async *runTurn() {
+        attempts += 1;
+        order.push(`turn:${attempts}`);
+        if (attempts === 1) {
+          throw new Error(
+            "docker engine exec-create failed (409): container [redacted] is not running"
+          );
+        }
+        yield { type: "done" };
+      }
+    }
+  });
+  const server = http.createServer((req, res) => void handler(req, res));
+  await new Promise((resolve) => server.listen(0, resolve));
+  try {
+    const port = server.address().port;
+    const response = await fetch(`http://127.0.0.1:${port}/projects/p1/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "build" })
+    });
+    const stream = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(order, ["prepare:p1", "turn:1", "prepare:p1", "turn:2"]);
+    assert.doesNotMatch(stream, /exec-create failed|event: error/);
+  } finally {
+    server.close();
+  }
+});
