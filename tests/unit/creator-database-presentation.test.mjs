@@ -378,6 +378,10 @@ test("empty database opens chat only on request without creating tables or recor
       .find((node) => node.children.includes("Design your database"));
     assert.ok(button);
     assert.equal(view.renderer.root.findByType("img").props.alt, "");
+    assert.equal(
+      view.renderer.root.findByType("img").props.src,
+      "/creator/horizon-empty-state.png"
+    );
     await act(async () => button.props.onClick());
     assert.equal(opened, 1);
     assert.equal(requests, before);

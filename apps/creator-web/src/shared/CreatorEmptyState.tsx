@@ -17,7 +17,7 @@ export function CreatorEmptyState({
     <div className="creator-empty-state">
       <img
         className="creator-empty-illustration"
-        src="/horizon-empty-state.png"
+        src="/creator/horizon-empty-state.png"
         width={240}
         height={240}
         alt=""
