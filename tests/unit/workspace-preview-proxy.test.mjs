@@ -47,6 +47,9 @@ test("preview proxy authorizes physical runtime keys through their owning projec
     },
     getWorkspace: () => null,
     async wakeWorkspace() {},
+    async provisionWorkspace() {
+      return warmRecord;
+    },
     markActivity() {}
   };
 

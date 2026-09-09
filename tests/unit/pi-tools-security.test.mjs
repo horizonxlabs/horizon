@@ -204,7 +204,7 @@ test("workspace paths allow Next.js dynamic-route segments", () => {
   }
 });
 
-test("Pi tool boundary permits only controlled installs and approved scripts", async () => {
+test("Pi tool boundary rejects dependency mutation and permits only approved checks", async () => {
   const { tools, calls } = securedFixture({
     limits: {
       maxToolCalls: 50,
@@ -213,31 +213,29 @@ test("Pi tool boundary permits only controlled installs and approved scripts", a
       shellTimeoutMs: 1_000
     }
   });
-  const valid = [
+  const rejected = [
     { command: "npm", args: ["install"] },
     { command: "npm", args: ["install", "--save-dev", "typescript@^5.9.0"] },
     { command: "npm", args: ["add", "@types/node@latest"] },
     { command: "pnpm", args: ["install"] },
-    { command: "pnpm", args: ["add", "-D", "vitest@3.2.4"] },
+    { command: "pnpm", args: ["add", "-D", "vitest@3.2.4"] }
+  ];
+  const valid = [
     { command: "npm", args: ["run", "build"] },
     { command: "npm", args: ["test"] },
     { command: "pnpm", args: ["typecheck"] },
     { command: "pnpm", args: ["run", "lint"] }
   ];
 
+  for (const params of rejected) {
+    const result = await run(tools, "run_workspace_command", params);
+    assert.equal(result.details.ok, false, JSON.stringify(params));
+  }
   for (const params of valid) {
     const result = await run(tools, "run_workspace_command", params);
     assert.equal(result.details.ok, true, JSON.stringify(params));
   }
   assert.equal(calls.length, valid.length);
-  assert.deepEqual(calls[0].action.args, ["install", "--ignore-scripts"]);
-  assert.deepEqual(calls[1].action.args, [
-    "install",
-    "--ignore-scripts",
-    "--save-dev",
-    "typescript@^5.9.0"
-  ]);
-  assert.deepEqual(calls[4].action.args, ["add", "--ignore-scripts", "-D", "vitest@3.2.4"]);
 });
 
 test("rejects transaction control, invalid migration names, aborts, and tool-budget overflow", async () => {

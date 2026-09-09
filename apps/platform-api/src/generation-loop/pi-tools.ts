@@ -116,7 +116,7 @@ export function createHorizonPiTools(context: HorizonPiToolContext): ToolDefinit
     context,
     "run_workspace_command",
     "Run workspace command",
-    "Install packages or run only the build, test, typecheck, or lint project script.",
+    "Run only the build, test, typecheck, or lint project script. Dependencies are preinstalled and read-only; install/add commands are rejected.",
     Type.Object(
       {
         command: Type.String(),

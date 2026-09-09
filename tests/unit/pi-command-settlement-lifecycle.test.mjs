@@ -15,7 +15,7 @@ async function drain(iterable) {
   return events;
 }
 
-function packageMutationExecutor() {
+function commandExecutor() {
   let round = 0;
   return {
     async executeAgentRound(_actor, input) {
@@ -29,9 +29,9 @@ function packageMutationExecutor() {
               ? [
                   {
                     type: "toolCall",
-                    id: "call-install",
+                    id: "call-build",
                     name: "run_workspace_command",
-                    arguments: { command: "pnpm", args: ["install"] }
+                    arguments: { command: "pnpm", args: ["run", "build"] }
                   }
                 ]
               : [{ type: "text", text: "Done" }],
@@ -44,7 +44,7 @@ function packageMutationExecutor() {
   };
 }
 
-test("aborted package mutation settles before snapshot restore and release advance", async () => {
+test("aborted workspace command settles before snapshot restore and release advance", async () => {
   const lifecycle = [];
   const controller = new AbortController();
   let resolveDocker;
@@ -80,7 +80,7 @@ test("aborted package mutation settles before snapshot restore and release advan
     migrations: createMemoryMigrationStore()
   });
   const service = createPiGenerationService({
-    governedAiExecutor: packageMutationExecutor(),
+    governedAiExecutor: commandExecutor(),
     chatHistory: createMemoryChatHistoryStore(),
     actionRunner,
     template: { name: "Web App", lockedFiles: [], files: [] },
@@ -110,7 +110,7 @@ test("aborted package mutation settles before snapshot restore and release advan
   const running = drain(
     service.runTurn({
       projectId: "p1",
-      prompt: "Install the package",
+      prompt: "Run the build",
       agentMode: "auto",
       actor,
       signal: controller.signal

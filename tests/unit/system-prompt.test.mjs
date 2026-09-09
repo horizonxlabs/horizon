@@ -68,7 +68,7 @@ test("omits the rolling summary section when there is no summary yet", () => {
   assert.doesNotMatch(prompt, /Conversation summary so far/);
 });
 
-test("Build and Auto prompts expose only the controlled package command boundary", () => {
+test("Build and Auto prompts protect the shared dependency runtime", () => {
   const input = {
     template: { name: "nextjs-base", lockedFiles: [], files: [] },
     contextFiles: [],
@@ -76,8 +76,9 @@ test("Build and Auto prompts expose only the controlled package command boundary
   };
 
   for (const prompt of [buildSystemPrompt(input), buildAutoSystemPrompt(input)]) {
-    assert.match(prompt, /npm or pnpm.*install\/add.*build, test, typecheck, or lint/is);
-    assert.match(prompt, /lifecycle scripts are disabled/i);
+    assert.match(prompt, /dependencies.*preinstalled.*read-only/is);
+    assert.match(prompt, /never run.*install.*add/is);
+    assert.match(prompt, /npm or pnpm.*build, test, typecheck, or lint/is);
     assert.match(prompt, /Never use node, npx, git.*exec\/dlx\/x.*arbitrary package scripts/is);
   }
 });

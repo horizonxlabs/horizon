@@ -112,6 +112,29 @@ test("deploy_stack sources domain.env (if present) after stack.env, inside the e
   assert.ok(setDashA >= 0 && setPlusA > domainEnvIdx, "domain.env must be sourced inside the `set -a` ... `set +a` export block");
 });
 
+test("unseal reads only the raw Docker service log payload", () => {
+  const script = readFileSync(SCRIPT_PATH, "utf8");
+  const unsealBody = script.slice(script.indexOf("cmd_unseal() {"), script.indexOf("\n}", script.indexOf("cmd_unseal() {")));
+
+  assert.match(
+    unsealBody,
+    /docker service logs --raw "\$helper"/,
+    "Docker Swarm log prefixes corrupt the base64 unseal key unless --raw is used"
+  );
+});
+
+test("version updates restore OpenBao readiness after the stack redeploy", () => {
+  const script = readFileSync(SCRIPT_PATH, "utf8");
+  const updateBody = script.slice(script.indexOf("cmd_update() {"), script.indexOf("\n}", script.indexOf("cmd_update() {")));
+
+  const deployIndex = updateBody.indexOf("deploy_stack");
+  const unsealIndex = updateBody.indexOf("cmd_unseal", deployIndex);
+  const successIndex = updateBody.indexOf("Updated EVCP_VERSION");
+  assert.ok(deployIndex >= 0, "update must deploy the stack");
+  assert.ok(unsealIndex > deployIndex, "update must unseal OpenBao after deploying the stack");
+  assert.ok(successIndex > unsealIndex, "update must not report success before OpenBao is unsealed");
+});
+
 // Regression: OpenBao's `-format=json` emits Go-indented `"key": "value"` (key + value on
 // one line). The extraction must read the VALUE, not the key, or the root token is lost.
 const BAO_INIT_JSON = [

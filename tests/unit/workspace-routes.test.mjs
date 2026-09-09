@@ -93,6 +93,38 @@ test("preview target resolves for members, wakes idle workspaces, rejects others
   });
 });
 
+test("preview target reconciles a stale running record before proxying", async () => {
+  const calls = [];
+  const record = {
+    projectId: "prj_alpha",
+    slug: "alpha",
+    resourceKey: "warm-resource-1",
+    state: "running"
+  };
+  const orchestrator = {
+    findWorkspaceByPreviewKey: () => record,
+    async provisionWorkspace(input) {
+      calls.push(input);
+      return record;
+    },
+    async resolvePreviewLocation() {
+      return {
+        containerName: "evcp-ws-warm-resource-1",
+        previewKey: "warm-resource-1",
+        previewBase: "/preview/warm-resource-1"
+      };
+    },
+    markActivity() {}
+  };
+  const result = await resolvePreviewTarget(
+    orchestrator,
+    { userId: "u-creator", roles: ["creator"], projectIds: ["prj_alpha"] },
+    "warm-resource-1"
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, [{ projectId: "prj_alpha", slug: "alpha" }]);
+});
+
 test("preview target authorizes the logical project behind a physical runtime key", async () => {
   const warmRecord = {
     projectId: "prj_alpha",
@@ -114,6 +146,9 @@ test("preview target authorizes the logical project behind a physical runtime ke
     },
     getWorkspace: () => null,
     async wakeWorkspace() {},
+    async provisionWorkspace() {
+      return warmRecord;
+    },
     markActivity: (projectId) => activity.push(projectId)
   };
 
@@ -150,6 +185,9 @@ test("preview target keeps an exact-id legacy runtime on its logical preview pat
     },
     getWorkspace: () => null,
     async wakeWorkspace() {},
+    async provisionWorkspace() {
+      return legacyRecord;
+    },
     markActivity() {}
   };
 

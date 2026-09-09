@@ -364,8 +364,8 @@ POLICY
 
 cmd_unseal() {
   require_docker
-  cid=$(openbao_container_id)
-  [ -n "$cid" ] || { echo "ERROR: openbao service is not running." >&2; exit 1; }
+  cid=$(wait_for_openbao_container) \
+    || { echo "ERROR: openbao service is not running." >&2; exit 1; }
 
   helper="${STACK_NAME}-unseal-helper"
   docker service rm "$helper" >/dev/null 2>&1 || true
@@ -378,7 +378,10 @@ cmd_unseal() {
   tries=0
   unseal_key=""
   while [ "$tries" -lt 30 ]; do
-    unseal_key=$(docker service logs "$helper" 2>/dev/null | tr -d '\r\n')
+    # Without --raw Docker prefixes each line with the Swarm task name. That prefix
+    # corrupts the base64 key and leaves OpenBao sealed after an otherwise-successful
+    # release update.
+    unseal_key=$(docker service logs --raw "$helper" 2>/dev/null | tr -d '\r\n')
     [ -n "$unseal_key" ] && break
     tries=$((tries + 1))
     sleep 1
@@ -479,6 +482,10 @@ cmd_update() {
   mv "$tmp_file" "$STACK_ENV_PATH"
 
   deploy_stack
+  # OpenBao uses Shamir sealing and can come back sealed if the stack update or a
+  # preceding host restart recreated its task. Restore credential availability
+  # before reporting the release update as complete.
+  cmd_unseal
   echo "Updated EVCP_VERSION to ${new_version} and redeployed."
 }
 

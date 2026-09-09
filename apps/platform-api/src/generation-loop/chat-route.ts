@@ -68,9 +68,8 @@ export function createChatSseHandler(deps: {
     probeRuntime?: (projectId: string) => Promise<{ status: number; errors: string[] }>;
     templateLockedFiles?: string[];
   };
-  resolveAuth: (
-    req: IncomingMessage
-  ) => WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
+  resolveAuth: (req: IncomingMessage) =>
+    WorkspaceAuthContext | null | Promise<WorkspaceAuthContext | null>;
   resolveAttachmentContext?: (
     req: IncomingMessage,
     projectId: string,
@@ -88,11 +87,11 @@ export function createChatSseHandler(deps: {
   onPlatformBug?: (projectId: string, tag: ErrorTag) => void;
   heartbeatIntervalMs?: number;
   lifecycle?: ProjectLifecycleCoordinator;
+  prepareWorkspace?: (projectId: string) => Promise<void>;
 }) {
   // A generation belongs to a project turn, not to the browser request that happened to start it.
   // Keeping the turn here lets a refreshed Creator UI discover and replay the active stream.
   const activeTurns = new Map<string, ActiveTurn>();
-
   function writeEvent(res: ServerResponse, event: ReplayableTurnEvent) {
     if (res.destroyed || res.writableEnded) return;
     try {
@@ -161,6 +160,7 @@ export function createChatSseHandler(deps: {
         const turnErrors: string[] = [];
         let generationDone = false;
         let committed = false;
+        await deps.prepareWorkspace?.(input.projectId);
         for await (const event of deps.generationService.runTurn({
           projectId: input.projectId,
           prompt: input.prompt,

@@ -2312,7 +2312,12 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       };
     },
     onPlatformBug: createPlatformBugAuditor(services.audit),
-    lifecycle: services.projectLifecycle ??= createProjectLifecycleCoordinator()
+    lifecycle: services.projectLifecycle ??= createProjectLifecycleCoordinator(),
+    prepareWorkspace: async (projectId) => {
+      const workspace = services.workspaceOrchestrator.getWorkspace(projectId);
+      if (!workspace) throw new Error(`no workspace found for project '${projectId}'`);
+      await services.workspaceOrchestrator.provisionWorkspace({ projectId, slug: workspace.slug });
+    }
   });
   rawApp.all("/projects/:projectId/chat", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);
   rawApp.all("/projects/:projectId/chat/history", chatSseHandler as unknown as Parameters<RawExpress["all"]>[1]);

@@ -21,7 +21,8 @@ ${progressCommentarySection()}
 - Files under Current project files are already inspected, authoritative snapshots for this turn. Use list_workspace_files or read_workspace_file only for a relevant file that is absent or explicitly marked truncated.
 - Use edit_workspace_file for one unique replacement in an existing file. Split distant changes into separate edits.
 - Use write_workspace_file for new files only. Never use placeholders or omitted sections in complete file content.
-- Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. To add a dependency (equivalent to npm install package-name), call it with command "npm" and args ["install", "package-name"]. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
+- Workspace dependencies are preinstalled in a shared read-only runtime. Never run npm/pnpm install or add. Use the available dependencies or implement the feature without a new package.
+- Use run_workspace_command only with npm or pnpm to run the build, test, typecheck, or lint script. Never use node, npx, git, general shell/file commands, install/add, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
 - Use propose_database_migration only during an explicitly requested real-database sync. Horizon validates and applies queued migrations after code validation.
 - When a governed skill matches, call load_governed_skill with its exact name before applying it. Never discover or load local Pi resources.
 - Use generate_image to create AI images for the app (see Generated images below).
@@ -90,7 +91,8 @@ ${progressCommentarySection()}
 - The following mutation guidance applies only when the current message explicitly requests mutation:
   - Inspect relevant files before changing them and preserve unrelated code and behavior.
   - Use edit_workspace_file for narrow changes. Use write_workspace_file only for a new file or a necessary cohesive replacement of a small inspected file.
-  - Use run_workspace_command only with npm or pnpm to install/add named packages or run the build, test, typecheck, or lint script. Package lifecycle scripts are disabled. Never use node, npx, git, general shell/file commands, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
+  - Workspace dependencies are preinstalled in a shared read-only runtime. Never run npm/pnpm install or add. Use the available dependencies or implement the feature without a new package.
+  - Use run_workspace_command only with npm or pnpm to run the build, test, typecheck, or lint script. Never use node, npx, git, general shell/file commands, install/add, exec/dlx/x, arbitrary package scripts, or yarn. Never write or edit package.json directly.
   - Use propose_database_migration only when the current message explicitly requests real-database synchronization.
   - generate_image (only when mutation is authorized): at most 1-2 images for hero/showcase visuals, always to public/generated/<name>.png, referenced via \${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/generated/<name>.png (a bare /generated/... 404s), and echo ![alt](public/generated/<name>.png) in the recap. If not configured, continue without images.
   - Implement no more than the smallest complete authorized change, validate it, and stop after successful validation.

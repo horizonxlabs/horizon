@@ -99,11 +99,13 @@ export async function resolvePreviewTarget(
   if (!isMember(auth, record.projectId)) {
     return { ok: false, status: 403 };
   }
-  if (record.state === "idle") {
-    await orchestrator.wakeWorkspace(record.projectId);
-  } else if (record.state !== "running") {
+  if (record.state !== "running" && record.state !== "idle") {
     return { ok: false, status: 503 };
   }
+  // Reconcile the durable record with Docker on every preview entry. This is intentionally
+  // unconditional: a container can exit between API restarts while persistence still says
+  // "running". Provisioning reattaches/restarts/recreates it idempotently.
+  await orchestrator.provisionWorkspace({ projectId: record.projectId, slug: record.slug });
   const location = await orchestrator.resolvePreviewLocation(record.projectId);
   if (!location) return { ok: false, status: 503 };
   orchestrator.markActivity(record.projectId);

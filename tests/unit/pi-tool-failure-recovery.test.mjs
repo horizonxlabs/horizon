@@ -57,7 +57,7 @@ test("one lingering tool failure gets a feedback round instead of discarding the
         };
       }
       if (modelRounds === 3) {
-        // Our explicit feedback round: the model now routes around the failure correctly.
+        // Our explicit feedback round: the model validates with an allowed check instead.
         return {
           status: "succeeded",
           message: {
@@ -65,9 +65,9 @@ test("one lingering tool failure gets a feedback round instead of discarding the
             content: [
               {
                 type: "toolCall",
-                id: "call-install",
+                id: "call-build",
                 name: "run_workspace_command",
-                arguments: { command: "npm", args: ["install", "lucide-react"] }
+                arguments: { command: "npm", args: ["run", "build"] }
               }
             ],
             timestamp: 3
@@ -98,7 +98,7 @@ test("one lingering tool failure gets a feedback round instead of discarding the
     service.runTurn({ projectId: "p1", prompt: "Build a dashboard", agentMode: "build", actor })
   );
 
-  assert.equal(modelRounds, 4);
+  assert.equal(modelRounds, 3);
   assert.equal(
     events.some((event) => event.type === "commit"),
     true

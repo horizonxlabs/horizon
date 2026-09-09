@@ -4,21 +4,6 @@ const PROJECT_ROOTS = ["app", "components", "lib", "public"] as const;
 const DIRECT_COMMANDS = new Set(["npm", "pnpm"]);
 const SHELL_META = /[;&|`$<>\n\r]/;
 const APPROVED_SCRIPTS = new Set(["build", "test", "typecheck", "lint"]);
-const PACKAGE_ACTIONS = new Set(["install", "add"]);
-const PACKAGE_OPTIONS = new Set([
-  "-D",
-  "--save-dev",
-  "-E",
-  "--save-exact",
-  "-P",
-  "--save-prod",
-  "-O",
-  "--save-optional",
-  "--no-save",
-  "--ignore-scripts",
-  "--frozen-lockfile"
-]);
-const PACKAGE_SPEC = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:@[a-z0-9*^~.+_-]+)?$/i;
 // Plain filenames, or a Next.js dynamic-route segment: [id], [...slug], [[...slug]].
 const SAFE_PROJECT_SEGMENT =
   /^(?:[A-Za-z0-9._@+-]+|\[\.\.\.[A-Za-z0-9_-]+\]|\[[A-Za-z0-9_-]+\]|\[\[\.\.\.[A-Za-z0-9_-]+\]\])$/;
@@ -101,9 +86,7 @@ export function assertSafeCommand(command: string, args: string[]): void {
 }
 
 export function hardenSafeCommandArgs(args: string[]): string[] {
-  return PACKAGE_ACTIONS.has(args[0]) && !args.includes("--ignore-scripts")
-    ? [args[0], "--ignore-scripts", ...args.slice(1)]
-    : [...args];
+  return [...args];
 }
 
 function targetsGitMetadata(value: string): boolean {
@@ -117,21 +100,9 @@ function assertSafePackageManagerInvocation(args: string[]): void {
   }
   if (APPROVED_SCRIPTS.has(action) && rest.length === 0) return;
   if (action === "run" && rest.length === 1 && APPROVED_SCRIPTS.has(rest[0])) return;
-  if (!PACKAGE_ACTIONS.has(action)) {
-    throw new Error("workspace package command is not allowlisted");
-  }
-
-  let packageCount = 0;
-  for (const argument of rest) {
-    if (PACKAGE_OPTIONS.has(argument)) continue;
-    if (!PACKAGE_SPEC.test(argument)) {
-      throw new Error("workspace package command contains an unsafe package or option");
-    }
-    packageCount += 1;
-  }
-  if (action === "add" && packageCount === 0) {
-    throw new Error("workspace package add command requires a package name");
-  }
+  throw new Error(
+    "workspace package command is not allowlisted; dependencies are preinstalled and read-only"
+  );
 }
 
 function hasControlCharacter(value: string): boolean {

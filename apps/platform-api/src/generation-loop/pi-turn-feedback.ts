@@ -27,7 +27,7 @@ export function buildToolFailureFeedback(details: HorizonPiToolDetails): string 
   return (
     `The "${details.label}" action failed: ${message}\n` +
     "Fix or work around this with the correct Horizon tool before finishing " +
-    "(for example, dependency changes go through run_workspace_command's npm/pnpm install, " +
-    "not a direct file write to package.json). Do not repeat the exact same failing action unchanged."
+    "using the preinstalled dependencies. Dependency install/add commands and direct package.json " +
+    "writes are unavailable. Do not repeat the exact same failing action unchanged."
   );
 }
