@@ -47,11 +47,14 @@ test("template files reference env vars, never literal secrets", () => {
   assert.ok(!/sk-[a-zA-Z0-9]{10,}/.test(all), "no literal keys in template");
 });
 
-test("starter homepage presents the AI prompt in a centered Tailwind layout", () => {
+test("starter homepage explains that Horizon AI is actively building the app", () => {
   const template = loadGoldenTemplate();
   const page = template.files.find((file) => file.path === "app/page.tsx");
   assert.ok(page, "starter homepage exists");
-  assert.match(page.content, /Your app starts here/);
+  assert.match(page.content, /Horizon AI is coding/i);
+  assert.match(page.content, /Your app will appear here soon/);
+  assert.match(page.content, /horizon-ai-coding-banner\.webp/);
+  assert.doesNotMatch(page.content, /Build a leave request app/);
   assert.match(page.content, /items-center justify-center/, "layout stays centered");
   assert.doesNotMatch(page.content, /style jsx/, "server-rendered starter page avoids styled-jsx");
   assert.doesNotMatch(page.content, /page\.module\.css/, "starter styles with Tailwind, not CSS modules");
