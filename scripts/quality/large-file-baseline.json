@@ -1,6 +1,6 @@
 {
   "apps/platform-api/src/platform-services.ts": 8409,
-  "apps/platform-api/src/app-factory.ts": 3327,
+  "apps/platform-api/src/app-factory.ts": 3314,
   "apps/platform-api/prisma/seed.ts": 2392,
   "apps/platform-api/src/persistence/publish-store-repositories.ts": 1372,
   "packages/api-client/src/index.ts": 1004,
