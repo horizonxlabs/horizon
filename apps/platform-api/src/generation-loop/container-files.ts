@@ -119,7 +119,7 @@ export async function probeWorkspaceRuntime(
   if (!/^[\w-]+$/.test(previewKey)) return { status: 0, errors: [] };
   const url = `http://127.0.0.1:3000/preview/${previewKey}`;
   const script = [
-    `status=$(wget -T 12 -q -O /tmp/evcp-probe --server-response '${url}' 2>&1 | awk '/^  HTTP\\//{code=$2} END{print code+0}')`,
+    `status=$(wget -T 45 -q -O /tmp/evcp-probe --server-response '${url}' 2>&1 | awk '/^  HTTP\\//{code=$2} END{print code+0}')`,
     'echo "STATUS:$status"',
     'if [ "$status" != "200" ]; then',
     "  grep -oE '(Error:|Module not found|Unhandled Runtime Error|Syntax Error)[^<]{0,220}' /tmp/evcp-probe 2>/dev/null | head -3 | sed 's/^/EXCERPT:/'",

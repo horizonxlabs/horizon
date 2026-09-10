@@ -21,15 +21,10 @@ WORKDIR /opt/evcp-template
 # has a runnable Next.js app before the AI writes anything.
 COPY templates/nextjs-base/ /opt/evcp-template/
 
-# Enable pnpm via corepack and install template dependencies.
-# No lockfile is committed for the template, so plain npm install is used
-# (pnpm install would fail without a lockfile in frozen-lockfile CI environments;
-# here we just need a working node_modules for the dev server).
-RUN corepack enable && npm install
-
-# Bake the install stamp the entrypoint checks, so a fresh no-copy workspace can reuse the
-# image-backed dependency tree without copying it into every project volume.
-RUN sh -c 'printf "%s" "$(cat package.json package-lock.json 2>/dev/null | cksum)" > node_modules/.evcp-install-stamp'
+# Pin the template graph across image releases; bake a dependency-only cache stamp.
+COPY docker/workspace-dependencies.cjs docker/workspace-dev.cjs /usr/local/lib/evcp/
+RUN corepack enable && npm ci --no-audit --no-fund
+RUN node /usr/local/lib/evcp/workspace-dependencies.cjs /opt/evcp-template
 
 # The project volume is mounted at /workspace with NoCopy. The entrypoint hydrates only the small
 # source/template files there and links this image-backed dependency tree for the common baseline.
@@ -41,6 +36,7 @@ WORKDIR /workspace
 COPY docker/workspace-entrypoint.sh /usr/local/bin/workspace-entrypoint
 RUN chmod 755 /usr/local/bin/workspace-entrypoint
 
+ENV EVCP_TURBOPACK_ROOT=/
 EXPOSE 3000
 
 CMD ["/usr/local/bin/workspace-entrypoint"]

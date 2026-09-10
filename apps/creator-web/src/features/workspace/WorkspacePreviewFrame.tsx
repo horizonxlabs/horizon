@@ -1,6 +1,15 @@
+import { PreviewStartupProgress } from "./PreviewStartupProgress";
 import { useState } from "react";
 
-export function WorkspacePreviewFrame({ previewKey, src }: { previewKey: number; src: string }) {
+export function WorkspacePreviewFrame({
+  previewKey,
+  src,
+  projectId
+}: {
+  previewKey: number;
+  src: string;
+  projectId: string;
+}) {
   const [loaded, setLoaded] = useState(false);
   // Show setup progress only for this frame's initial load. Next.js owns subsequent
   // hot updates and navigation; the parent remounts only for an explicit refresh.
@@ -16,8 +25,7 @@ export function WorkspacePreviewFrame({ previewKey, src }: { previewKey: number;
         >
           <div className="hz-loading-card">
             <span className="hz-spinner" aria-hidden="true" />
-            <strong>Preparing app preview</strong>
-            <span>Starting the secure sandbox. The preview will appear automatically.</span>
+            <PreviewStartupProgress projectId={projectId} />
           </div>
         </div>
       ) : null}

@@ -88,7 +88,9 @@ test("Workspace renders its iframe with the server-authorized physical preview k
 test("Workspace retries preview authorization once when provisioning finishes", async () => {
   const previousFetch = globalThis.fetch;
   let authorizations = 0;
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/startup"))
+      return new Response(JSON.stringify({ ok: true, data: { phase: "starting" } }));
     authorizations += 1;
     return authorizations === 1
       ? new Response(JSON.stringify({ ok: false, error: { code: "FORBIDDEN" } }), { status: 403 })
@@ -135,7 +137,9 @@ test("Workspace retries preview authorization once when provisioning finishes", 
 test("switching workspace tabs keeps the loaded iframe and does not authorize or load it again", async () => {
   const previousFetch = globalThis.fetch;
   let authorizations = 0;
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/startup"))
+      return new Response(JSON.stringify({ ok: true, data: { phase: "starting" } }));
     authorizations++;
     return new Response(JSON.stringify({ ok: true, data: { previewKey: "warm-resource-1" } }));
   };

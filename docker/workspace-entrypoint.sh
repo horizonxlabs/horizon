@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+# A restart must not report the previous process as ready.
+rm -f /tmp/evcp-preview-startup.json
+
 # A fresh workspace volume is mounted with Docker's NoCopy option. Hydrate only source and
 # configuration; node_modules remains in the immutable image and is linked below.
 template=/opt/evcp-template
@@ -70,19 +73,4 @@ for runtime_entry in /workspace/node_modules /workspace/.next /workspace/.next-*
   fi
 done
 
-exec su -s /bin/sh evcp -c '
-  cd /workspace
-  # The workspace volume keeps node_modules across stop/start, so skip npm install whenever
-  # the manifest is unchanged since the last successful install — a warm start then boots
-  # straight into next dev instead of spending tens of seconds re-resolving dependencies.
-  stamp=node_modules/.evcp-install-stamp
-  sum=$(cat package.json package-lock.json 2>/dev/null | cksum)
-  if [ "$(cat "$stamp" 2>/dev/null)" != "$sum" ]; then
-    # A changed manifest needs a project-private dependency tree. Replacing the baseline symlink
-    # keeps custom dependencies persistent without making every untouched project copy ~660 MB.
-    if [ -L node_modules ]; then rm node_modules; fi
-    npm install --no-audit --no-fund --prefer-offline >/dev/null 2>&1 &&
-      printf "%s" "$sum" > "$stamp" || true
-  fi
-  exec npm run dev -- --hostname 0.0.0.0 --port 3000 || exec npx next dev --hostname 0.0.0.0 --port 3000
-'
+exec su -s /bin/sh evcp -c 'cd /workspace && exec node /usr/local/lib/evcp/workspace-dev.cjs'

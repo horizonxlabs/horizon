@@ -117,7 +117,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
   const currentTurnStart = currentWorkspaceTurnStart(vibeMessages);
   return (
     <div className="vibe-live-shell" aria-busy={app.isEnteringWorkspace || undefined}>
-      {app.isEnteringWorkspace ? <WorkspaceWakeOverlay projectName={selectedProject.name} /> : null}
+      {app.isEnteringWorkspace ? <WorkspaceWakeOverlay projectId={selectedProject.id} /> : null}
       <WorkspaceHeader
         projectName={selectedProject.name}
         status={vibeStatus}
@@ -348,6 +348,7 @@ export function WorkspacePage({ app }: { app: ReturnType<typeof useCreatorApp> }
                 key={vibePreviewKey}
                 previewKey={vibePreviewKey}
                 src={previewSrc}
+                projectId={selectedProject.id}
               />
             ) : (
               <div className="hz-db-empty" role="status">

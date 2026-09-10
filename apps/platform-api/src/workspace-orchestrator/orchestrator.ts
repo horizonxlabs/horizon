@@ -20,10 +20,10 @@ import { createProvisioningLeaseCoordinator } from "./provisioning-lease";
 import { createWarmPoolLifecycle } from "./warm-pool-lifecycle";
 import { createWorkspaceRuntimeCache } from "./runtime-cache";
 import { runWorkspaceProjectDeletion } from "./project-deletion-ownership";
+import { readPreviewStartup } from "./preview-startup";
 import { reuseWorkspaceContainer } from "./workspace-runtime-recovery";
 
 export type { WorkspaceAuditEvent, WorkspaceOrchestratorDeps } from "./orchestrator-types";
-
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
@@ -266,6 +266,7 @@ export function createWorkspaceOrchestrator(deps: WorkspaceOrchestratorDeps) {
         if (snapshot.llmGatewayKeyId) llmKeyIds.set(record.projectId, snapshot.llmGatewayKeyId);
       }
     },
+    readPreviewStartup: (projectId: string) => readPreviewStartup(deps.docker, records.get(projectId)),
     getWorkspace(projectId: string): WorkspaceContainerRecord | null {
       return records.get(projectId) ?? null;
     },

@@ -107,9 +107,8 @@ test("Workspace announces sandbox preparation instead of showing an unlabelled b
 
   assert.match(html, /role="status"/);
   assert.match(html, /aria-live="polite"/);
-  assert.match(html, /Preparing sandbox/);
-  assert.match(html, /Starting a secure container for Project One/);
-  assert.match(html, /Your workspace will be ready shortly\./);
+  assert.match(html, /Preparing workspace/);
+  assert.match(html, /Restoring your project and its saved files/);
 });
 
 test("completed Activity details are closed while active work stays expanded", () => {

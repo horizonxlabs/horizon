@@ -7,6 +7,8 @@ const validationDistDir = process.env.EVCP_VALIDATION_DIST_DIR;
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The image-backed dependency symlink lives beside /workspace, under /opt.
+  turbopack: { root: process.env.EVCP_TURBOPACK_ROOT || __dirname },
   ...(validationDistDir ? { distDir: validationDistDir } : {}),
   ...(previewBase ? { basePath: previewBase, assetPrefix: previewBase } : {}),
   // Expose the base path to client code so fetches to same-app API routes resolve through the

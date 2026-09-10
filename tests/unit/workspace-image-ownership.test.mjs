@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const dockerfile = readFileSync("docker/workspace-next.Dockerfile", "utf8");
+const dependencies = readFileSync("docker/workspace-dependencies.cjs", "utf8");
 const entrypoint = readFileSync("docker/workspace-entrypoint.sh", "utf8");
 
 test("workspace image repairs mounted workspace ownership before dropping privileges", () => {
@@ -55,16 +56,16 @@ test("workspace image repairs mounted workspace ownership before dropping privil
 test("warm starts skip npm install via the manifest stamp", () => {
   // Baseline dependencies use the image stamp; customized dependency trees persist their own
   // matching stamp in the project volume.
-  assert.match(entrypoint, /node_modules\/\.evcp-install-stamp/);
-  assert.match(entrypoint, /cksum/);
-  assert.match(entrypoint, /npm install/);
+  assert.match(dependencies, /\.evcp-dependencies-v2/);
+  assert.match(dependencies, /fingerprint/);
+  assert.match(dependencies, /install/);
   // The image bakes a matching stamp so even the first boot skips the redundant install.
-  assert.match(dockerfile, /\.evcp-install-stamp/);
+  assert.match(dockerfile, /workspace-dependencies.cjs/);
 });
 
 test("fresh no-copy workspaces hydrate source without copying baseline node_modules", () => {
   assert.match(dockerfile, /WORKDIR \/opt\/evcp-template/);
-  assert.match(dockerfile, /npm install/);
+  assert.match(dockerfile, /npm ci/);
   assert.match(dockerfile, /WORKDIR \/workspace/);
   assert.match(entrypoint, /\/opt\/evcp-template/);
   assert.match(entrypoint, /--exclude=['"]?node_modules/);

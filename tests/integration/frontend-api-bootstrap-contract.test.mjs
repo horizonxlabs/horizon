@@ -259,7 +259,7 @@ test("Creator preview establishes an HttpOnly session without putting bearer tok
   );
   assert.match(apiClient, /authorizeWorkspacePreview\(projectId: string\)/);
   assert.match(apiClient, /workspace\/preview-session/);
-  assert.match(appFactory, /registerPreviewSessionRoute/);
+  assert.match(appFactory, /registerWorkspacePreviewHttp/);
   assert.doesNotMatch(appFactory, /queryToken/);
   assert.equal(existsSync(previewSessionRoutePath), true);
   const previewSessionRoute = readFileSync(previewSessionRoutePath, "utf8");

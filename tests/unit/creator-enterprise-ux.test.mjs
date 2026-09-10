@@ -182,9 +182,8 @@ test("Creator shell uses English provisioning feedback and omits duplicate page 
     })
   );
 
-  assert.match(html, /Preparing sandbox/);
-  assert.match(html, /Starting a secure container for Leave Management/);
-  assert.match(html, /Your workspace will be ready shortly\./);
+  assert.match(html, /Preparing workspace/);
+  assert.match(html, /Restoring your project and its saved files/);
   assert.equal((html.match(/Publish &amp; Registry/g) ?? []).length, 1);
 });
 

@@ -5,7 +5,7 @@ import type { INestApplication } from "@nestjs/common";
 import { failure, success, type PublishAccessUrlConfigDto } from "@evcp/api-client";
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
-import { registerPreviewSessionRoute } from "./workspace-orchestrator/preview-session-route";
+import { registerWorkspacePreviewHttp } from "./workspace-orchestrator/preview-http-routes";
 import { registerProjectDbRoutes } from "./project-database";
 import { createProjectDbAuditAdapter } from "./project-database-audit";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
@@ -2950,15 +2950,10 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
       })
     )
   );
-  registerPreviewSessionRoute({
-    routes,
-    authorize: async (headers, projectId) => {
-      const actor = await resolvePersistenceUser(services, headers);
-      const project = await resolvePersistenceProject(services, actor, projectId);
-      const location = await services.workspaceOrchestrator.resolvePreviewLocation(project.id);
-      if (!location) throw new Error("workspace runtime is unavailable");
-      return { previewKey: location.previewKey };
-    },
+  registerWorkspacePreviewHttp({
+    routes, orchestrator: services.workspaceOrchestrator,
+    authorizeProject: async (headers, projectId) =>
+      resolvePersistenceProject(services, await resolvePersistenceUser(services, headers), projectId),
     secureCookie: process.env.NODE_ENV === "production"
   });
   routes.post("/projects/:projectId/workspace/prompts", (request, response) =>

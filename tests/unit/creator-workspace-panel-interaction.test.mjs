@@ -140,10 +140,15 @@ test("Docs and History do not announce Preview as selected and Preview remains s
 
 test("authorized Preview keeps visible sandbox progress until the iframe has loaded", async () => {
   const previousFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({
+  globalThis.fetch = async (url) => ({
     ok: true,
     status: 200,
-    json: async () => ({ ok: true, data: { authorized: true, previewKey: "project-1" } })
+    json: async () => ({
+      ok: true,
+      data: String(url).endsWith("/startup")
+        ? { phase: "compiling" }
+        : { authorized: true, previewKey: "project-1" }
+    })
   });
   let renderer;
   try {
@@ -152,10 +157,9 @@ test("authorized Preview keeps visible sandbox progress until the iframe has loa
     });
 
     const iframe = renderer.root.findByType("iframe");
-    const loadingState = renderer.root.findByProps({ "data-preview-loading": true });
-    assert.ok(loadingState);
-    assert.match(JSON.stringify(renderer.toJSON()), /Preparing app preview/);
-    assert.match(JSON.stringify(renderer.toJSON()), /Starting the secure sandbox/);
+    assert.ok(renderer.root.findByProps({ "data-preview-loading": true }));
+    assert.match(JSON.stringify(renderer.toJSON()), /Compiling your app/);
+    assert.match(JSON.stringify(renderer.toJSON()), /Future edits update with Hot Reload/);
 
     await act(async () => iframe.props.onLoad());
     assert.equal(renderer.root.findAllByProps({ "data-preview-loading": true }).length, 0);

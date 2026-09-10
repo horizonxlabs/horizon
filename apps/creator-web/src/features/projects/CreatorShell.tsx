@@ -58,7 +58,7 @@ export function CreatorShell({
       currentPath={pathname}
       onNavigate={onNavigate}
     >
-      {isEnteringWorkspace ? <WorkspaceWakeOverlay projectName={selectedProject.name} /> : null}
+      {isEnteringWorkspace ? <WorkspaceWakeOverlay projectId={selectedProject.id} /> : null}
       {creatorPage === "workspace" || creatorPage === "projects" ? null : (
         <PageHeader
           tone="surface"

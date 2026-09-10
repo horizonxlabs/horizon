@@ -9,7 +9,10 @@ export async function reuseWorkspaceContainer(
   expectedImage: string
 ): Promise<{ containerId: string; mode: "reattached" | "restarted" } | null> {
   const found = await inspectWorkspaceContainer(docker, record);
-  if (found && found.image === expectedImage) {
+  // Healthy active sessions keep their compiled app across platform releases. Upgrade idle
+  // runtimes on their next start; operators can force an urgent image rollout explicitly.
+  const keepActive = found?.running && process.env.EVCP_WORKSPACE_FORCE_IMAGE_UPGRADE !== "1";
+  if (found && (found.image === expectedImage || keepActive)) {
     try {
       if (!found.running) await docker.startContainer(found.containerId);
       await waitForPreviewReady(docker, found.containerId);

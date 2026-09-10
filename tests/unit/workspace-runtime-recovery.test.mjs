@@ -17,9 +17,15 @@ function createFixture(image = "evcp/workspace-next:v1") {
   const audits = [];
   const snapshots = new Map();
   const runtimeRecords = {
-    async list() { return [...snapshots.values()]; },
-    async save(snapshot) { snapshots.set(snapshot.record.projectId, structuredClone(snapshot)); },
-    async remove(projectId) { snapshots.delete(projectId); }
+    async list() {
+      return [...snapshots.values()];
+    },
+    async save(snapshot) {
+      snapshots.set(snapshot.record.projectId, structuredClone(snapshot));
+    },
+    async remove(projectId) {
+      snapshots.delete(projectId);
+    }
   };
   const deps = {
     image,
@@ -37,7 +43,10 @@ function createFixture(image = "evcp/workspace-next:v1") {
 test("recovery recreates a stopped container that exits before preview readiness", async () => {
   const { deps, audits } = createFixture();
   const orchestrator = createWorkspaceOrchestrator(deps);
-  const first = await orchestrator.provisionWorkspace({ projectId: "prj-recover", slug: "recover" });
+  const first = await orchestrator.provisionWorkspace({
+    projectId: "prj-recover",
+    slug: "recover"
+  });
   await deps.docker.stopContainer(first.containerId);
   const execInContainer = deps.docker.execInContainer.bind(deps.docker);
   deps.docker.execInContainer = async (containerId, cmd) => {
@@ -48,24 +57,49 @@ test("recovery recreates a stopped container that exits before preview readiness
     return execInContainer(containerId, cmd);
   };
 
-  const recovered = await orchestrator.provisionWorkspace({ projectId: "prj-recover", slug: "recover" });
+  const recovered = await orchestrator.provisionWorkspace({
+    projectId: "prj-recover",
+    slug: "recover"
+  });
 
   assert.notEqual(recovered.containerId, first.containerId);
   assert.equal(deps.docker.state.containers.length, 1);
   assert.equal(deps.docker.state.containers[0].status, "running");
-  assert.ok(audits.some((event) => event.action === "workspace.recovered" && event.metadata?.mode === "recreated"));
+  assert.ok(
+    audits.some(
+      (event) => event.action === "workspace.recovered" && event.metadata?.mode === "recreated"
+    )
+  );
 });
 
-test("recovery replaces a runtime from an older workspace image", async () => {
+test("recovery upgrades an idle runtime from an older workspace image", async () => {
   const { deps, runtimeRecords } = createFixture();
   const firstOrchestrator = createWorkspaceOrchestrator(deps);
-  const first = await firstOrchestrator.provisionWorkspace({ projectId: "prj-recover", slug: "recover" });
+  const first = await firstOrchestrator.provisionWorkspace({
+    projectId: "prj-recover",
+    slug: "recover"
+  });
+  await firstOrchestrator.stopWorkspace("prj-recover");
   const upgraded = createWorkspaceOrchestrator({ ...deps, image: "evcp/workspace-next:v2" });
   await upgraded.hydrateRuntimeRecords(runtimeRecords);
 
-  const recovered = await upgraded.provisionWorkspace({ projectId: "prj-recover", slug: "recover" });
+  const recovered = await upgraded.provisionWorkspace({
+    projectId: "prj-recover",
+    slug: "recover"
+  });
 
   assert.notEqual(recovered.containerId, first.containerId);
   assert.equal(deps.docker.state.containers.length, 1);
   assert.equal(deps.docker.state.containers[0].spec.image, "evcp/workspace-next:v2");
+});
+
+test("opening an active project after platform deploy preserves its container and compile cache", async () => {
+  const { deps, runtimeRecords } = createFixture();
+  const original = createWorkspaceOrchestrator(deps);
+  const first = await original.provisionWorkspace({ projectId: "prj-active", slug: "active" });
+  const upgraded = createWorkspaceOrchestrator({ ...deps, image: "evcp/workspace-next:v2" });
+  await upgraded.hydrateRuntimeRecords(runtimeRecords);
+  const opened = await upgraded.provisionWorkspace({ projectId: "prj-active", slug: "active" });
+  assert.equal(opened.containerId, first.containerId);
+  assert.equal(deps.docker.state.containers[0].spec.image, "evcp/workspace-next:v1");
 });
