@@ -195,7 +195,7 @@ test("clarifying question controls use English without changing submitted answer
   const html = renderToStaticMarkup(
     React.createElement(VibeQuestionBlock, { questions, disabled: false, onSubmit() {} })
   );
-  assert.match(html, /Select…/);
+  assert.match(html, /Choose one answer/);
   assert.match(html, /Submit answers \(1\)/);
   assert.doesNotMatch(html, /[\u0E00-\u0E7F]/);
 });
@@ -327,7 +327,7 @@ test("rendered Workspace controls use semantic targets covered by the narrow-scr
     /<button[^>]*vibe-bug-fix/,
     /<button[^>]*vibe-bug-dismiss/,
     /<button[^>]*vibe-prompt-queue-remove/,
-    /<select/,
+    /<input[^>]*type="radio"/,
     /<textarea/
   ])
     assert.match(workspace, expectedControl);
@@ -336,7 +336,7 @@ test("rendered Workspace controls use semantic targets covered by the narrow-scr
   const css = await readFile("packages/ui/styles.css", "utf8");
   assert.match(
     css,
-    /\.vibe-live-shell\s+:is\(\s*button,\s*a\[href\],\s*summary,\s*select,\s*input:not\(\.vibe-composer-file-input\),\s*textarea\s*\)\s*\{[\s\S]*?min-block-size: 44px;[\s\S]*?min-inline-size: 44px;/
+    /\.vibe-live-shell\s+:is\(\s*button,\s*a\[href\],\s*summary,\s*select,\s*input:not\(\.vibe-composer-file-input\):not\(\[type="radio"\]\),\s*textarea,\s*\.vibe-question-choice\s*\)\s*\{[\s\S]*?min-block-size: 44px;[\s\S]*?min-inline-size: 44px;/
   );
   const restoreTargetRules =
     css.match(
@@ -366,7 +366,7 @@ test("Workspace responsive CSS selects one narrow panel and disables progress mo
   );
   assert.match(
     css,
-    /@media \(max-width: 899px\)[\s\S]*\.vibe-live-shell\s+:is\(\s*button,\s*a\[href\],\s*summary,\s*select,\s*input:not\(\.vibe-composer-file-input\),\s*textarea\s*\)[\s\S]*min-block-size: 44px[\s\S]*min-inline-size: 44px/
+    /@media \(max-width: 899px\)[\s\S]*\.vibe-live-shell\s+:is\(\s*button,\s*a\[href\],\s*summary,\s*select,\s*input:not\(\.vibe-composer-file-input\):not\(\[type="radio"\]\),\s*textarea,\s*\.vibe-question-choice\s*\)[\s\S]*min-block-size: 44px[\s\S]*min-inline-size: 44px/
   );
   assert.match(
     css,

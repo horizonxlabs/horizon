@@ -5306,15 +5306,151 @@ body.vibe-is-resizing * {
 }
 
 .vibe-question-progress {
+  align-items: center;
   color: var(--evcp-color-muted);
+  display: flex;
   font-size: 13px;
+  gap: var(--evcp-space-2);
+  justify-content: space-between;
   margin: 0;
 }
 
+.vibe-question-steps {
+  display: flex;
+  gap: 5px;
+}
+
+.vibe-question-steps > span {
+  background: var(--evcp-color-border);
+  border-radius: var(--evcp-radius-pill);
+  height: 4px;
+  width: 22px;
+}
+
+.vibe-question-steps > .is-complete {
+  background: var(--evcp-color-primary);
+}
+
+.vibe-question-fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.vibe-question-fieldset legend {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.6;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.vibe-question-fieldset legend:focus-visible {
+  outline: 2px solid var(--evcp-color-primary);
+  outline-offset: 4px;
+}
+
+.vibe-question-hint {
+  color: var(--evcp-color-muted);
+  font-size: 12px;
+  margin: 5px 0 var(--evcp-space-3);
+}
+
+.vibe-question-choices {
+  display: grid;
+  gap: var(--evcp-space-2);
+}
+
+.vibe-question-choice {
+  align-items: flex-start;
+  background: var(--evcp-color-surface);
+  border: 1px solid var(--evcp-color-border);
+  border-radius: var(--evcp-radius-control);
+  cursor: pointer;
+  display: flex;
+  font-size: 14px;
+  gap: 12px;
+  line-height: 1.6;
+  min-height: 48px;
+  overflow-wrap: anywhere;
+  padding: 13px 14px;
+}
+
+.vibe-question-choice:hover:not(:has(input:disabled)) {
+  border-color: var(--evcp-color-primary);
+}
+
+.vibe-question-choice:has(input:checked) {
+  background: color-mix(in srgb, var(--evcp-color-primary-soft) 45%, var(--evcp-color-surface));
+  border-color: var(--evcp-color-primary);
+  box-shadow: 0 0 0 1px var(--evcp-color-primary);
+}
+
+.vibe-question-choice:has(input:focus-visible) {
+  outline: 3px solid var(--evcp-color-primary-soft);
+  outline-offset: 3px;
+}
+
+.vibe-question-choice:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.vibe-question-radio {
+  display: grid;
+  flex: 0 0 18px;
+  height: 18px;
+  margin-top: 3px;
+  place-items: center;
+}
+
+.vibe-question-radio input {
+  appearance: none;
+  border: 1.5px solid var(--evcp-color-border);
+  border-radius: 50%;
+  cursor: inherit;
+  grid-area: 1 / 1;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  width: 18px;
+}
+
+.vibe-question-radio input:checked {
+  background: var(--evcp-color-primary);
+  border-color: var(--evcp-color-primary);
+}
+
+.vibe-question-radio svg {
+  color: var(--evcp-color-on-primary);
+  grid-area: 1 / 1;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.vibe-question-radio input:checked + svg {
+  visibility: visible;
+}
+
+.vibe-question-fieldset > input {
+  margin-top: var(--evcp-space-2);
+}
+
 .vibe-question-actions {
+  border-top: 1px solid var(--evcp-color-border);
   display: flex;
   flex-wrap: wrap;
   gap: var(--evcp-space-2);
+  justify-content: space-between;
+  padding-top: var(--evcp-space-3);
+}
+
+.vibe-question-submit-hint {
+  margin: 0;
+  text-align: center;
+  width: 100%;
 }
 
 .vibe-live-suggestions-head {
@@ -6018,7 +6154,15 @@ body.vibe-is-resizing * {
 
 @media (max-width: 899px) {
   .vibe-live-shell
-    :is(button, a[href], summary, select, input:not(.vibe-composer-file-input), textarea) {
+    :is(
+      button,
+      a[href],
+      summary,
+      select,
+      input:not(.vibe-composer-file-input):not([type="radio"]),
+      textarea,
+      .vibe-question-choice
+    ) {
     min-block-size: 44px;
     min-inline-size: 44px;
   }

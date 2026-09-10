@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Button, Field, Input, Select } from "@evcp/ui";
-import { Send } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { Button, Input } from "@evcp/ui";
+import { ArrowLeft, ArrowRight, Check, Send } from "lucide-react";
 import { buildQuestionAnswerMessage, type VibeQuestion } from "./vibe-questions";
 
 const OTHER = "__other__";
@@ -15,6 +15,8 @@ export function VibeQuestionBlock({
   disabled: boolean;
   onSubmit: (message: string) => void;
 }) {
+  const groupId = useId();
+  const heading = useRef<HTMLLegendElement>(null);
   const [step, setStep] = useState(0);
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [customs, setCustoms] = useState<Record<string, string>>({});
@@ -29,31 +31,49 @@ export function VibeQuestionBlock({
   const question = questions[index];
   const isLast = index === questions.length - 1;
   const allAnswered = questions.every((question) => answerFor(question).length > 0);
+  const moveTo = (next: number) => {
+    setStep(next);
+    heading.current?.focus();
+  };
 
   return (
     <div className="vibe-question-block" role="group" aria-label="Clarifying questions">
-      <p className="vibe-question-progress" role="status">
-        Question {index + 1} of {questions.length}
-      </p>
-      <Field key={question.id} label={question.question} htmlFor={`vq-${question.id}`}>
-        <Select
-          id={`vq-${question.id}`}
-          value={choices[question.id] ?? ""}
-          disabled={disabled}
-          onChange={(event) =>
-            setChoices((current) => ({ ...current, [question.id]: event.target.value }))
-          }
-        >
-          <option value="" disabled>
-            Select an answer…
-          </option>
-          {question.options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
+      <div className="vibe-question-progress">
+        <span role="status">
+          Question {index + 1} of {questions.length}
+        </span>
+        <span className="vibe-question-steps" aria-hidden="true">
+          {questions.map((item, position) => (
+            <span key={item.id} className={position <= index ? "is-complete" : undefined} />
           ))}
-          <option value={OTHER}>Other — enter your own</option>
-        </Select>
+        </span>
+      </div>
+      <fieldset className="vibe-question-fieldset" disabled={disabled}>
+        <legend ref={heading} tabIndex={-1}>
+          {question.question}
+        </legend>
+        <p className="vibe-question-hint" id={`${groupId}-hint`}>
+          Choose one answer
+        </p>
+        <div className="vibe-question-choices">
+          {[...question.options, OTHER].map((option, optionIndex) => (
+            <label className="vibe-question-choice" key={`${question.id}-${optionIndex}`}>
+              <span className="vibe-question-radio">
+                <input
+                  type="radio"
+                  name={`${groupId}-${question.id}`}
+                  value={option}
+                  checked={choices[question.id] === option}
+                  disabled={disabled}
+                  aria-describedby={`${groupId}-hint`}
+                  onChange={() => setChoices((current) => ({ ...current, [question.id]: option }))}
+                />
+                <Check size={12} aria-hidden="true" />
+              </span>
+              <span>{option === OTHER ? "Other — enter your own" : option}</span>
+            </label>
+          ))}
+        </div>
         {choices[question.id] === OTHER && (
           <Input
             aria-label={`Your answer: ${question.question}`}
@@ -65,15 +85,16 @@ export function VibeQuestionBlock({
             }
           />
         )}
-      </Field>
+      </fieldset>
       <div className="vibe-question-actions">
         <Button
           variant="secondary"
           size="sm"
           type="button"
           disabled={disabled || index === 0}
-          onClick={() => setStep(index - 1)}
+          onClick={() => moveTo(index - 1)}
         >
+          <ArrowLeft size={14} aria-hidden="true" />
           Back
         </Button>
         {isLast ? (
@@ -102,12 +123,16 @@ export function VibeQuestionBlock({
             size="sm"
             type="button"
             disabled={disabled || !answerFor(question)}
-            onClick={() => setStep(index + 1)}
+            onClick={() => moveTo(index + 1)}
           >
             Next
+            <ArrowRight size={14} aria-hidden="true" />
           </Button>
         )}
       </div>
+      <p className="vibe-question-hint vibe-question-submit-hint">
+        Answers are sent together when you select Submit answers.
+      </p>
     </div>
   );
 }

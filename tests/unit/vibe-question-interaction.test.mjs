@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import React from "react";
-import { Button, Select } from "../../packages/ui/src/index.tsx";
+import { Button } from "../../packages/ui/src/index.tsx";
 import { VibeQuestionBlock } from "../../apps/creator-web/src/features/workspace/VibeQuestionBlock.tsx";
 import { extractQuestions } from "../../apps/creator-web/src/features/workspace/vibe-questions.ts";
 
@@ -31,26 +31,40 @@ test("questions advance locally one at a time and submit only the completed batc
   const buttons = () => renderer.root.findAllByType(Button);
   const action = () => buttons().at(-1);
   const back = () => buttons()[0];
-  const select = () => renderer.root.findByType(Select);
-  const choose = async (value) => act(async () => select().props.onChange({ target: { value } }));
+  const radios = () => renderer.root.findAllByProps({ type: "radio" });
+  const selected = () => radios().find((radio) => radio.props.checked)?.props.value;
+  const choose = async (value) =>
+    act(async () =>
+      radios()
+        .find((radio) => radio.props.value === value)
+        .props.onChange()
+    );
   const click = async (button) => act(async () => button.props.onClick());
-  const custom = () => renderer.root.findByType("input");
+  const custom = () =>
+    renderer.root.findAllByType("input").find((input) => input.props.type !== "radio");
   const typeCustom = async (value) =>
     act(async () => custom().props.onChange({ target: { value } }));
   try {
     for (let i = 0; i < 4; i++) {
-      assert.equal(renderer.root.findAllByType(Select).length, 1);
-      assert.equal(select().props.id, `vq-q-${i}`);
+      assert.equal(renderer.root.findAllByType("select").length, 0);
+      assert.equal(renderer.root.findAllByType("fieldset").length, 1);
+      assert.equal(renderer.root.findByType("legend").children.join(""), `Scope ${i + 1}?`);
+      assert.equal(radios().length, 3);
+      assert.equal(new Set(radios().map((radio) => radio.props.name)).size, 1);
       assert.equal(
         renderer.root.findByProps({ role: "status" }).children.join(""),
         `Question ${i + 1} of 4`
       );
-      const last = React.Children.toArray(select().props.children).at(-1);
+      const last = radios().at(-1);
       assert.equal(last.props.value, "__other__");
-      assert.equal(last.props.children, "Other — enter your own");
+      assert.equal(
+        renderer.root.findAllByType("label").at(-1).findAllByType("span").at(-1).children.join(""),
+        "Other — enter your own"
+      );
       assert.equal(action().props.disabled, true);
       assert.equal(back().props.disabled, i === 0);
       await choose(i === 0 || i === 3 ? "__other__" : "Team");
+      assert.equal(radios().filter((radio) => radio.props.checked).length, 1);
       if (i === 0 || i === 3) {
         await typeCustom("   ");
         assert.equal(action().props.disabled, true);
@@ -59,13 +73,13 @@ test("questions advance locally one at a time and submit only the completed batc
       assert.equal(action().props.disabled, false);
       assert.deepEqual(messages, []);
       if (i < 3) {
-        assert.equal(action().props.children, "Next");
+        assert.ok(React.Children.toArray(action().props.children).includes("Next"));
         await click(action());
       }
     }
     // Revisit and edit an earlier answer, retaining both choices and custom text.
     for (let i = 0; i < 3; i++) await click(back());
-    assert.equal(select().props.value, "__other__");
+    assert.equal(selected(), "__other__");
     assert.equal(custom().props.value, "  Managers  ");
     await typeCustom("Team leads");
     await choose("Everyone");
@@ -84,7 +98,7 @@ test("questions advance locally one at a time and submit only the completed batc
       renderer.update(React.createElement(VibeQuestionBlock, { ...props, disabled: true }))
     );
     assert.ok(buttons().every((button) => button.props.disabled));
-    assert.equal(select().props.disabled, true);
+    assert.ok(radios().every((radio) => radio.props.disabled));
     assert.equal(custom().props.disabled, true);
     await act(async () => renderer.update(React.createElement(VibeQuestionBlock, props)));
     await click(action());
@@ -117,13 +131,43 @@ test("one question can submit directly after answering", async () => {
       "Question 1 of 1"
     );
     await act(async () =>
-      renderer.root.findByType(Select).props.onChange({ target: { value: "Everyone" } })
+      renderer.root.findByProps({ type: "radio", value: "Everyone" }).props.onChange()
     );
     assert.equal(action().props.disabled, false);
     assert.deepEqual(messages, []);
     await act(async () => action().props.onClick());
     assert.equal(messages.length, 1);
     assert.match(messages[0], /Scope 1\?: Everyone$/);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("separate chat question blocks have independent native radio groups", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      React.createElement(
+        React.Fragment,
+        null,
+        ...["first", "second"].map((key) =>
+          React.createElement(VibeQuestionBlock, {
+            key,
+            questions: questions.slice(0, 1),
+            disabled: false,
+            onSubmit() {}
+          })
+        )
+      )
+    );
+  });
+  try {
+    const blocks = renderer.root.findAllByType(VibeQuestionBlock);
+    const groups = blocks.map((block) => block.findAllByProps({ type: "radio" }));
+    assert.notEqual(groups[0][0].props.name, groups[1][0].props.name);
+    await act(async () => groups[0][0].props.onChange());
+    assert.equal(groups[0][0].props.checked, true);
+    assert.ok(groups[1].every((radio) => !radio.props.checked));
   } finally {
     await act(async () => renderer.unmount());
   }
