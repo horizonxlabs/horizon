@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
 import { once } from "node:events";
+import { createRequire } from "node:module";
 import { registerPreviewWebSocketProxy } from "../../apps/platform-api/src/workspace-orchestrator/preview-websocket-proxy.ts";
+
+const requireFromApi = createRequire(
+  new URL("../../apps/platform-api/package.json", import.meta.url)
+);
+requireFromApi("reflect-metadata");
+const { NestFactory } = requireFromApi("@nestjs/core");
+const { PlatformApiModule } = await import("../../apps/platform-api/src/platform-api.module.ts");
 
 async function harness(resolveDecision) {
   const requests = [];
@@ -190,6 +198,36 @@ test("unreachable workspace ends the handshake with a retryable error", async ()
     await client.until("HTTP/1.1 503");
   } finally {
     client.socket.destroy();
+    await fixture.close();
+  }
+});
+
+test("Nest shuts down with an open HMR connection before waiting for HTTP disposal", async () => {
+  const fixture = await harness();
+  const app = await NestFactory.create(PlatformApiModule, { logger: false });
+  const proxy = registerPreviewWebSocketProxy(app.getHttpServer(), async () => ({
+    upstream: `http://127.0.0.1:${fixture.upstream.address().port}`
+  }));
+  app.get(PlatformApiModule).registerWorkspaceSweeps([proxy]);
+  await app.listen(0, "127.0.0.1");
+  const client = connect(app.getHttpServer());
+  let timer;
+  let closing;
+  try {
+    await client.until("READY");
+    closing = app.close();
+    const closed = await Promise.race([
+      closing.then(() => true),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), 1500);
+      })
+    ]);
+    assert.equal(closed, true, "active preview sockets must not block server deployment");
+  } finally {
+    clearTimeout(timer);
+    client.socket.destroy();
+    proxy.stop();
+    await (closing ?? app.close());
     await fixture.close();
   }
 });
