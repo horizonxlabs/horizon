@@ -6,6 +6,8 @@ import { failure, success, type PublishAccessUrlConfigDto } from "@evcp/api-clie
 import { PlatformApiModule } from "./platform-api.module";
 import { createWorkspaceRoutes } from "./workspace-orchestrator/routes";
 import { registerWorkspacePreviewHttp } from "./workspace-orchestrator/preview-http-routes";
+import { registerPreviewWebSocketProxy } from "./workspace-orchestrator/preview-websocket-proxy";
+import { previewRequestHeaders, rewritePreviewForwardPath } from "./workspace-orchestrator/preview-proxy-support";
 import { registerProjectDbRoutes } from "./project-database";
 import { createProjectDbAuditAdapter } from "./project-database-audit";
 import { canAccessPublishedDeployment, registerPublishHttpRoutes } from "./publish/http-routes";
@@ -73,17 +75,7 @@ import { createProjectLifecycleCoordinator, runProjectMutationRequest, type Proj
 import { createPrismaProjectLifecycleStore } from "./persistence/prisma-project-lifecycle-store";
 import { resolvePersistenceUser, resolvePreviewProxyDecision, resolveWorkspaceAuth, wantsPreviewJson } from "./preview-proxy-decision";
 export { resolvePreviewProxyDecision, wantsPreviewJson } from "./preview-proxy-decision";
-export function rewritePreviewForwardPath(
-  originalUrl: string,
-  requestKey: string,
-  previewBase: string | undefined
-): string {
-  const requestBase = `/preview/${encodeURIComponent(requestKey)}`;
-  if (!previewBase || previewBase === requestBase || !originalUrl.startsWith(requestBase)) {
-    return originalUrl;
-  }
-  return `${previewBase}${originalUrl.slice(requestBase.length)}`;
-}
+export { rewritePreviewForwardPath } from "./workspace-orchestrator/preview-proxy-support";
 type HttpRequest = { headers: HeaderBag; body?: Record<string, unknown>; params?: Record<string, string> };
 type HttpResponse = {
   status: (code: number) => HttpResponse;
@@ -2206,9 +2198,8 @@ async function registerPlatformRoutes(app: INestApplication, services: Persisten
   };
   const previewHandler = async (req: PreviewReq, res: PreviewRes) => {
     const slug = String(req.params?.slug ?? "");
-    const cookieToken = String(req.headers.cookie ?? "").match(/(?:^|;\s*)evcp_preview_token=([^;]+)/)?.[1];
-    const previewHeaders = cookieToken ? { ...req.headers, authorization: `Bearer ${decodeURIComponent(cookieToken)}` } : req.headers;
-    const decision = await resolvePreviewProxyDecision(services, previewHeaders, slug);
+    const previewHeaders = previewRequestHeaders(req.headers);
+    const decision = previewHeaders ? await resolvePreviewProxyDecision(services, previewHeaders, slug) : { status: 401 };
     if ("status" in decision) {
       sendPreviewUnavailable(req, res, decision.status, "preview_unavailable");
       return;
@@ -3314,7 +3305,10 @@ export async function createPlatformApiApp(services: PersistenceAwarePlatformApi
     credentials: true
   });
   await registerPlatformRoutes(app, services);
-  app.get(PlatformApiModule).registerWorkspaceSweeps(startWorkspaceSweeps(services));
+  app.get(PlatformApiModule).registerWorkspaceSweeps([
+    registerPreviewWebSocketProxy(app.getHttpServer(), (headers, key) => resolvePreviewProxyDecision(services, headers, key)),
+    ...startWorkspaceSweeps(services)
+  ]);
 
   return app;
 }

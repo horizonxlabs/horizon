@@ -47,6 +47,30 @@ load/unmount and preserves the existing iframe when switching tabs. Statuses rep
 preparation, server startup, first compilation and browser asset loading; elapsed time alone
 never advances a stage.
 
+## Live updates after generation
+
+The API must forward WebSocket upgrades at `/preview/:key/_next/webpack-hmr`, including
+Turbopack connections. Express HTTP handlers alone serve the initial HTML but cannot carry
+the live update stream. That leaves the iframe on the template even after generation completes;
+manual refresh appears to fix it because that makes a new HTTP request.
+
+`preview-websocket-proxy.ts` registers on the actual Nest HTTP server. It resolves the same
+preview cookie and project authorization as HTTP, rejects cross-origin browser handshakes,
+rewrites physical preview keys to the attached base path, and strips platform credentials
+before opening the upstream connection. Live sockets close on application shutdown.
+The iframe stays mounted across tab changes and commits; no periodic full reload is needed.
+
+Regression command:
+
+```sh
+TSX_TSCONFIG_PATH=$PWD/tsconfig.test.json EVCP_ALLOW_SIMULATE_LOGIN=1 node --import tsx --test tests/unit/preview-websocket-proxy.test.mjs tests/unit/workspace-preview-proxy.test.mjs
+```
+
+Browser verification must go through `createPlatformApiApp`, not a substitute development
+proxy: load the template, replace the page, confirm it updates without refreshing, enter a
+draft, hide the iframe, run the isolated workspace build, edit again, and verify the new
+heading and original draft on returning to Preview.
+
 ## Validation
 
 Local Docker baseline, 1 CPU / 2 GiB, same fresh template image, sequential runs:
