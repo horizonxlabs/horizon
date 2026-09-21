@@ -191,12 +191,13 @@ End successful replies with 2–3 stage-aware lines formatted as <suggest>specif
 function designQualitySection(): string {
   return `
 ## Design quality — beautiful by default
-- Establish a clear typography hierarchy, generous spacing, responsive layout, and one restrained brand accent.
+- Simplicity is the luxury: fewer, larger, better-spaced elements always beat more boxes. Establish a clear typography hierarchy, generous whitespace, responsive layout, and one restrained brand accent.
+- Never add speculative UI the user did not request — no export, filters, settings, share, or extra toolbars "just in case". Every element must earn its place on the screen.
 - Prefer neutral surfaces, subtle borders, rounded cards, visible hover/focus/disabled states, and scroll containment for tables.
-- Prefer the dashboard kit: StatCard, PageHeader, EmptyState, Skeleton, AppShell, and AppShellNavItem. Customize these components instead of rebuilding basic controls.
+- Prefer the prebuilt kit: PageHeader, EmptyState, Skeleton, AppShell, and AppShellNavItem. Customize these components instead of rebuilding basic controls.
 - "Anuphan Variable" is the offline Thai/Latin sans. Use font-mono (JetBrains Mono) with tabular-nums for comparable KPI values, table amounts, and IDs.
 - Use EmptyState for zero-data views and Skeleton for loading rather than bare text.
-- Use believable localized copy and 8–15 varied seed records instead of lorem ipsum.
+- Use believable localized copy and 5–8 varied seed records instead of lorem ipsum.
 - Treat the current date supplied by the runtime as authoritative. Never present stale dates as upcoming events.
 - Sample or demo data must be clearly labeled. Do not invent prices, certifications, contact details, speakers, capacity, or availability and present them as verified facts.
 - Never claim that an email was sent, a registration was saved, or another side effect succeeded unless an implemented backend completed it. For mock-only flows, say that the submission was recorded locally for demonstration.
@@ -206,10 +207,13 @@ function designQualitySection(): string {
 
 function layoutRecipesSection(): string {
   return `
-## Layout recipes — pick by app shape
-- Dashboard / analytics: use AppShell with dark sidebar chrome and a bento grid. Start with 3–4 StatCards, then a two-column main zone with the primary chart or table spanning two columns and supporting lists beside it.
-- Management / CRUD app: use AppShell, PageHeader with the primary action, an Input/Select filter row, Table, and Dialog-based create/edit flows.
-- Form-centric flow: use a single max-w-xl column with one Card per section and one primary Button at the end. Never make a two-column form.
+## Layout — sidebar-first, lean by default
+- Every app EXCEPT a landing/marketing page lives inside AppShell: the dark sidebar is the app's map. List an AppShellNavItem for every section the finished app will need, but BUILD only the requested primary screen now — each unbuilt nav destination is a minimal route rendering a polished EmptyState that invites the user to ask Horizon to build it next. Build the spine, not the furniture.
+- Landing/marketing page: full-bleed hero (one generated image, large typography, generous whitespace), a few focused sections, ONE call to action.
+- Dashboard/analytics: StatCards only when measurement is the app's core purpose — then at most 3. Never add a KPI row to a CRUD or content app by default.
+- Management/CRUD: AppShell + PageHeader carrying THE primary action, a Table, and Dialog create/edit. Add filters only when the user asks or the data clearly demands them.
+- Form-centric flow: a single max-w-xl column inside the shell, one Card per step, one primary Button at the end. Never make a two-column form.
+- ONE primary Button per screen — the action the screen exists for. Everything else is ghost/secondary, an inline link, or removed.
 - Every screen needs EmptyState, Skeleton, and visible hover/selected states.`;
 }
 

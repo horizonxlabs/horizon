@@ -6,18 +6,24 @@ const { DESIGN_SYSTEM_SKILL } = await import(
   "../../apps/platform-api/src/ai-governance/design-system-skill.ts"
 );
 
-test("base prompt teaches layout recipes per app shape", () => {
+test("base prompt teaches sidebar-first, lean-by-default layout", () => {
   const prompt = buildSystemPrompt({
     template: { name: "nextjs-base", lockedFiles: [], files: [] },
     contextFiles: [],
     rollingSummary: null
   });
-  assert.match(prompt, /## Layout recipes/);
-  assert.match(prompt, /bento/i);
+  assert.match(prompt, /## Layout — sidebar-first/);
+  // the sidebar is the app's map: build the requested screen, stub the rest behind nav
+  assert.match(prompt, /spine, not the furniture/i);
+  assert.match(prompt, /ask Horizon to build it next/i);
   assert.match(prompt, /AppShell/);
   assert.match(prompt, /max-w-xl|single column/i);
   // dashboards default to the dark chrome the tokens were built for
   assert.match(prompt, /dark/i);
+  // KPI rows are no longer the default furniture of every app
+  assert.match(prompt, /only when measurement/i);
+  // bento is deep-playbook (design-system skill) material now, not the default recipe
+  assert.doesNotMatch(prompt, /bento/i);
 });
 
 test("design-system skill ships a deep playbook behind progressive disclosure", () => {

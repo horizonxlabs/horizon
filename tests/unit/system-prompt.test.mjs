@@ -165,7 +165,7 @@ test("Auto prompt carries the Golden Rule, suggest/question tags, and design gui
   assert.match(prompt, /<suggest>/);
   assert.match(prompt, /<question>/);
   assert.match(prompt, /Design quality/i);
-  assert.match(prompt, /Layout recipes/i);
+  assert.match(prompt, /Layout — sidebar-first/i);
   assert.match(prompt, /mock-data\.ts/);
 });
 
@@ -198,4 +198,16 @@ test("Build and Auto prompts require concise user-visible progress between tool 
     assert.match(prompt, /do not reveal.*chain-of-thought|Never reveal.*chain-of-thought/is);
     assert.match(prompt, /Do not narrate every tool call.*group related operations/is);
   }
+});
+
+// P1 lean redesign: one primary CTA per screen, no speculative buttons, 5-8 seed rows.
+test("prompts enforce one primary action per screen and lean seed data", () => {
+  const template = { name: "nextjs-base", lockedFiles: [], files: [] };
+  const buildPrompt = buildSystemPrompt({ template, contextFiles: [], rollingSummary: null });
+  assert.match(buildPrompt, /ONE primary Button per screen/i);
+  assert.match(buildPrompt, /export, filters, settings, share/i);
+  assert.match(buildPrompt, /5–8 varied seed records/);
+  assert.doesNotMatch(buildPrompt, /8–15/);
+  const autoPrompt = buildAutoSystemPrompt({ template, contextFiles: [], rollingSummary: null });
+  assert.match(autoPrompt, /ONE primary Button per screen/i);
 });
