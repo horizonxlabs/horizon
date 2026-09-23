@@ -23,9 +23,27 @@ concurrency:
 
 jobs:
   workflow-sanity:
-    runs-on: ubuntu-latest
+    # See the CI_RUNNER_LABELS note in ci.yml; the same repository variable drives both.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "linux"]') }}
     timeout-minutes: 10
     steps:
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          # actionlint shells out to shellcheck for every `run:` block, and silently skips that
+          # entire class of check when shellcheck is not on PATH. GitHub-hosted images ship it;
+          # a self-hosted host may not, and the failure mode is a green lint that quietly checks
+          # less than it did the day before. Fail loudly instead of degrading in silence.
+          missing=""
+          for tool in curl tar sha256sum shellcheck; do
+            command -v "${tool}" >/dev/null 2>&1 || missing="${missing} ${tool}"
+          done
+          if [ -n "${missing}" ]; then
+            echo "Runner is missing required tooling:${missing}" >&2
+            echo "See docs/operations/self-hosted-runners.md for the required host packages." >&2
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -33,36 +51,46 @@ jobs:
 
       - name: Fail on tabs in workflows
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import sys
-
-          bad = []
-          for path in sorted(Path(".github/workflows").glob("*.yml")):
-              if b"\t" in path.read_bytes():
-                  bad.append(str(path))
-
-          if bad:
-              print("Tabs found in workflow files:")
-              for path in bad:
-                  print(f"- {path}")
-              sys.exit(1)
-          PY
+          set -euo pipefail
+          # Implemented in shell rather than python3: GitHub-hosted images ship Python, but a
+          # self-hosted runner host only has what its operator installed.
+          if matches=$(grep -lF "$(printf '\t')" .github/workflows/*.yml); then
+            echo "Tabs found in workflow files:" >&2
+            while IFS= read -r file; do
+              echo "- ${file}" >&2
+            done <<<"${matches}"
+            exit 1
+          fi
 
       - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.10"
         run: |
           set -euo pipefail
-          version="1.7.10"
-          archive="actionlint_${version}_linux_amd64.tar.gz"
+          # Two self-hosted adjustments versus the GitHub-hosted original: the architecture is
+          # detected rather than assumed to be amd64, and the binary is unpacked into the
+          # per-job temp directory instead of being `sudo install`-ed into /usr/local/bin.
+          # Passwordless sudo is not guaranteed on a self-hosted host, and writing there would
+          # leave state behind on a machine shared with every other job.
+          case "$(uname -m)" in
+            x86_64) arch="amd64" ;;
+            aarch64 | arm64) arch="arm64" ;;
+            *) echo "unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz"
+          base="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          cd "${RUNNER_TEMP}"
           curl --retry 5 --retry-delay 2 --retry-all-errors -sSfL \
             -o "${archive}" \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
+            "${base}/${archive}"
           curl --retry 5 --retry-delay 2 --retry-all-errors -sSfL \
             -o checksums.txt \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_checksums.txt"
+            "${base}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
           grep " ${archive}$" checksums.txt | sha256sum -c -
-          tar -xzf "${archive}" actionlint
-          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${archive}" -C "${RUNNER_TEMP}/bin" actionlint
+          chmod 0755 "${RUNNER_TEMP}/bin/actionlint"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Lint workflows
         run: actionlint

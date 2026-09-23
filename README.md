@@ -182,6 +182,7 @@ pnpm check:changed --base origin/main
 
 - [Platform service design](./docs/architecture/platform-service-design.md)
 - [Private-server installation](./docs/operations/real-mvp-install.md)
+- [Self-hosted CI runners](./docs/operations/self-hosted-runners.md)
 - [AI provider secret-store runbook](./docs/operations/ai-secret-store.md)
 - [Pi agent verification runbook](./docs/runbooks/pi-agent-verification.md)
 - [Production candidate readiness](./docs/delivery/production-candidate-readiness.md)

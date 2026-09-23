@@ -20,7 +20,12 @@ env:
 jobs:
   quality:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-latest
+    # Runs on the organisation's self-hosted Linux runners. `self-hosted` and `linux` are labels
+    # GitHub applies automatically, so no custom label has to be configured on the runner host.
+    # The CI_RUNNER_LABELS repository variable overrides the set as a JSON array — set it to
+    # `["ubuntu-latest"]` from the repository settings to fall back to GitHub-hosted runners
+    # while the fleet is down, without editing this file.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "linux"]') }}
     timeout-minutes: 30
     steps:
       - name: Checkout

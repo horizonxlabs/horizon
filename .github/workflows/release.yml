@@ -26,7 +26,11 @@ env:
 jobs:
   quality:
     name: Build and test
-    runs-on: ubuntu-latest
+    # See the CI_RUNNER_LABELS note in ci.yml.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "linux"]') }}
+    # A self-hosted fleet is a shared, finite resource: without an explicit timeout a hung job
+    # holds a runner for GitHub's 6-hour default and starves every queued release.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -59,11 +63,42 @@ jobs:
 
   publish:
     name: Publish signed release
-    runs-on: ubuntu-latest
+    # Pinned to x64 separately from CI_RUNNER_LABELS. This job bakes the images that operators
+    # deploy to x86-64 private servers, and `docker build` without an explicit `platforms:`
+    # produces images for whatever the builder happens to be — an arm64 runner would publish
+    # arm64 images under the same tags and fail only at `docker run` on the customer's host.
+    # RELEASE_RUNNER_LABELS overrides the set as a JSON array.
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER_LABELS || '["self-hosted", "linux", "x64"]') }}
     needs: quality
+    timeout-minutes: 90
     env:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     steps:
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          # GitHub-hosted images ship docker, buildx and gh preinstalled; a self-hosted host only
+          # has what its operator installed. Check up front, because the alternative is finding
+          # out at the `gh release create` step after images are already pushed and signed.
+          missing=""
+          for tool in docker gh git; do
+            command -v "${tool}" >/dev/null 2>&1 || missing="${missing} ${tool}"
+          done
+          if [ -n "${missing}" ]; then
+            echo "Runner is missing required tooling:${missing}" >&2
+            echo "See docs/operations/self-hosted-runners.md for the required host packages." >&2
+            exit 1
+          fi
+          docker buildx version >/dev/null
+
+          # The x64 pin above is a scheduling hint, not a guarantee: the `x64` label can be
+          # applied by hand to a runner of any architecture. Assert the real one.
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "Release images must be built on x86-64, got $(uname -m)." >&2
+            echo "Re-point RELEASE_RUNNER_LABELS at an x86-64 runner." >&2
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
