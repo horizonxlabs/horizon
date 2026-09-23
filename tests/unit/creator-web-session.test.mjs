@@ -7,6 +7,7 @@ const {
   clearLoginSession,
   platformSessionToken,
   hasValidSession,
+  canEnterWorkspace,
   vibeAuthHeaders
 } = await import("../../apps/creator-web/src/shared/session.ts");
 
@@ -98,4 +99,65 @@ test("hasValidSession: returns false once the token has expired", async (t) => {
   });
 
   assert.equal(hasValidSession(), false);
+});
+
+test("canEnterWorkspace: true when the access token is still valid", async (t) => {
+  const originalWindow = globalThis.window;
+  const storage = createFakeStorage({
+    evcp_session: "tok_abc",
+    evcp_session_expires_at: new Date(Date.now() + 60_000).toISOString()
+  });
+  globalThis.window = { localStorage: storage };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  assert.equal(canEnterWorkspace(), true);
+});
+
+test("canEnterWorkspace: true when the access token expired but a valid refresh token remains", async (t) => {
+  const originalWindow = globalThis.window;
+  const storage = createFakeStorage({
+    evcp_session: "tok_abc",
+    evcp_session_expires_at: new Date(Date.now() - 60_000).toISOString(),
+    evcp_refresh_token: "refresh_abc",
+    evcp_refresh_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  });
+  globalThis.window = { localStorage: storage };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  assert.equal(canEnterWorkspace(), true);
+});
+
+test("canEnterWorkspace: false when both the access token and refresh token have expired", async (t) => {
+  const originalWindow = globalThis.window;
+  const storage = createFakeStorage({
+    evcp_session: "tok_abc",
+    evcp_session_expires_at: new Date(Date.now() - 60_000).toISOString(),
+    evcp_refresh_token: "refresh_abc",
+    evcp_refresh_expires_at: new Date(Date.now() - 1_000).toISOString()
+  });
+  globalThis.window = { localStorage: storage };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  assert.equal(canEnterWorkspace(), false);
+});
+
+test("canEnterWorkspace: false with no session at all", async (t) => {
+  const originalWindow = globalThis.window;
+  const storage = createFakeStorage();
+  globalThis.window = { localStorage: storage };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  assert.equal(canEnterWorkspace(), false);
 });

@@ -55,7 +55,7 @@ test("Creator consumes a Platform session handoff before its auth gate and Store
     readFile("apps/creator-web/src/app/CreatorApp.tsx", "utf8"),
     readFile("apps/app-store-pwa/src/features/storefront/platform-client.ts", "utf8")
   ]);
-  assert.match(creator, /consumeCreatorSessionHandoff\(\)[\s\S]*hasValidSession/);
+  assert.match(creator, /consumeCreatorSessionHandoff\(\)[\s\S]*canEnterWorkspace/);
   assert.doesNotMatch(store, /legacyUserEmail/);
 });
 

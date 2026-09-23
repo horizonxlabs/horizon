@@ -33,6 +33,23 @@ export function hasValidSession(): boolean {
   return true;
 }
 
+// The 15-minute access token expiring doesn't mean the session is over — a still-valid
+// refresh token (7-day lifetime) lets createSessionAwareFetch renew it transparently on
+// the next API call. Gating app entry on hasValidSession() alone forces a full re-login
+// on any reload that lands more than 15 idle minutes after the last token refresh.
+export function canEnterWorkspace(): boolean {
+  if (hasValidSession()) return true;
+  const store = createPlatformSessionStore(window.localStorage);
+  if (!store.getToken()) return false;
+  const refreshExpiresAt = store.getRefreshExpiresAt();
+  return Boolean(
+    store.getRefreshToken() &&
+      refreshExpiresAt &&
+      Number.isFinite(Date.parse(refreshExpiresAt)) &&
+      Date.parse(refreshExpiresAt) > Date.now()
+  );
+}
+
 // --- Live "vibe coding" via /chat SSE generation loop ---
 export function vibeAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "content-type": "application/json" };

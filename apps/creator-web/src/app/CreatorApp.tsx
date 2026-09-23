@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChangePasswordScreen, LoginScreen } from "@/features/authentication";
 import { CreatorRoutes } from "@/routes/CreatorRoutes";
-import { clearLoginSession, hasValidSession } from "@/shared/session";
+import { canEnterWorkspace, clearLoginSession } from "@/shared/session";
 import type { NativeLoginResult } from "@/shared/types";
 import { useCreatorApp } from "@/app/use-creator-app";
 import { consumeCreatorSessionHandoff } from "@/app/creator-app-helpers";
@@ -14,7 +14,7 @@ function CreatorWorkspaceApp({ onLogout }: { onLogout: () => void }) {
 export function CreatorApp() {
   consumeCreatorSessionHandoff();
   const [authStage, setAuthStage] = useState<"login" | "change-password" | "workspace">(
-    hasValidSession() ? "workspace" : "login"
+    canEnterWorkspace() ? "workspace" : "login"
   );
 
   function handleLoggedIn(_result: NativeLoginResult) {
