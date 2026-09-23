@@ -33,14 +33,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+
+      # pnpm is installed *after* Node so that setup-node's Node lands on PATH first. The
+      # self-hosted runner host carries an ancient node (pre-`node:` protocol) on PATH, and
+      # pnpm/action-setup's self-installer ran under it and died with
+      # "Cannot find module 'node:path'". Ordering is the fix; do not swap these back.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      # Replaces setup-node's `cache: pnpm`, which can no longer be used: that option resolves
+      # the store via `pnpm store path` and so requires pnpm to already be installed, which is
+      # exactly what the ordering above rules out.
+      - name: Resolve pnpm store path
+        id: pnpm_store
+        run: echo "path=$(pnpm store path --silent)" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm_store.outputs.path }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-pnpm-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

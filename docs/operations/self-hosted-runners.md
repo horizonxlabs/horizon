@@ -55,13 +55,19 @@ rather than failing halfway through.
 **All runners:** `git`, `curl`, `tar`, `sha256sum` (coreutils).
 
 Node.js and pnpm are **not** required on the host — `actions/setup-node` and
-`pnpm/action-setup` install them into the runner's tool cache per job.
+`pnpm/action-setup` install them per job. Neither are actionlint and shellcheck, which
+`workflow-sanity.yml` downloads itself.
 
-**Workflow-sanity runners additionally need `shellcheck`.** This one is easy to miss:
-actionlint shells out to shellcheck to lint every `run:` block, and *silently skips that
-entire class of check* when shellcheck is not on `PATH`. Without the explicit check the
-symptom is not a red build, it is a green one that quietly verifies less than it did on
-GitHub-hosted runners. The job fails loudly instead.
+**Do not leave an old Node.js on the runner's `PATH`.** The first self-hosted run failed
+here: the host carried a pre-`node:`-protocol Node, `pnpm/action-setup`'s self-installer
+ran under it, and the job died with `Cannot find module 'node:path'` before reaching any
+repository code. The workflows now run `actions/setup-node` *before* `pnpm/action-setup`
+so a known-good Node is on `PATH` first, but a stale system Node remains a trap for any
+step that shells out to `node` or `npm` directly.
+
+That ordering is also why the workflows no longer use `actions/setup-node`'s `cache: pnpm`
+option — it resolves the store with `pnpm store path` and therefore needs pnpm to already
+be installed. An explicit `actions/cache` step keyed on `pnpm-lock.yaml` replaces it.
 
 **Release runners additionally need `docker` (with the `buildx` plugin) and `gh`.** The
 runner user must be able to reach the Docker daemon — usually membership in the `docker`
@@ -71,7 +77,7 @@ hardware.
 On Debian/Ubuntu:
 
 ```bash
-sudo apt-get install -y git curl tar coreutils shellcheck gh
+sudo apt-get install -y git curl tar coreutils gh
 # docker + buildx per https://docs.docker.com/engine/install/
 sudo usermod -aG docker "$(whoami)"
 ```

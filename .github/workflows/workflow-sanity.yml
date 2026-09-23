@@ -30,12 +30,8 @@ jobs:
       - name: Verify runner prerequisites
         run: |
           set -euo pipefail
-          # actionlint shells out to shellcheck for every `run:` block, and silently skips that
-          # entire class of check when shellcheck is not on PATH. GitHub-hosted images ship it;
-          # a self-hosted host may not, and the failure mode is a green lint that quietly checks
-          # less than it did the day before. Fail loudly instead of degrading in silence.
           missing=""
-          for tool in curl tar sha256sum shellcheck; do
+          for tool in curl tar sha256sum; do
             command -v "${tool}" >/dev/null 2>&1 || missing="${missing} ${tool}"
           done
           if [ -n "${missing}" ]; then
@@ -61,6 +57,43 @@ jobs:
             done <<<"${matches}"
             exit 1
           fi
+
+      - name: Install shellcheck
+        env:
+          SHELLCHECK_VERSION: "0.11.0"
+        run: |
+          set -euo pipefail
+          # actionlint shells out to shellcheck to lint every `run:` block, and silently skips
+          # that entire class of check when shellcheck is not on PATH. The failure mode is not a
+          # red build but a green one quietly checking less than it did on GitHub-hosted
+          # runners, so shellcheck is installed here rather than assumed to exist on the host.
+          # The .tar.gz assets are used deliberately over the .tar.xz ones: xz is not present on
+          # every minimal Linux image, and gzip is.
+          #
+          # Upstream publishes no checksums file for these assets, so the digests are pinned
+          # below. Regenerate them when SHELLCHECK_VERSION changes.
+          case "$(uname -m)" in
+            x86_64)
+              arch="x86_64"
+              sha="b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
+              ;;
+            aarch64 | arm64)
+              arch="aarch64"
+              sha="68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc"
+              ;;
+            *) echo "unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          archive="shellcheck-v${SHELLCHECK_VERSION}.linux.${arch}.tar.gz"
+          cd "${RUNNER_TEMP}"
+          curl --retry 5 --retry-delay 2 --retry-all-errors -sSfL \
+            -o "${archive}" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/${archive}"
+          echo "${sha}  ${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${archive}" -C "${RUNNER_TEMP}/bin" --strip-components=1 \
+            "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          chmod 0755 "${RUNNER_TEMP}/bin/shellcheck"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Install actionlint
         env:
@@ -93,4 +126,9 @@ jobs:
           echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Lint workflows
-        run: actionlint
+        run: |
+          set -euo pipefail
+          # Guard against the silent-skip: if shellcheck is not resolvable at this point,
+          # actionlint would still exit 0 having linted no shell at all.
+          command -v shellcheck >/dev/null || { echo "shellcheck not on PATH" >&2; exit 1; }
+          actionlint
