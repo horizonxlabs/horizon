@@ -12,11 +12,10 @@ self-hosted default:
 | Variable | Default | Used by |
 | --- | --- | --- |
 | `CI_RUNNER_LABELS` | `["self-hosted", "linux"]` | CI quality gate, workflow sanity, release build-and-test |
-| `RELEASE_RUNNER_LABELS` | `["self-hosted", "linux", "x64"]` | Release publish (image build, sign, upload) |
+| `RELEASE_RUNNER_LABELS` | `["self-hosted", "linux"]` | Release publish (image build, sign, upload) |
 
-`self-hosted`, `linux` and `x64` are labels GitHub applies to every runner automatically
-based on its OS and architecture, so a plain runner registration matches with no custom
-label configuration.
+`self-hosted` and `linux` are labels GitHub applies to every runner automatically based on
+its OS, so a plain runner registration matches with no custom label configuration.
 
 Both variables take a **JSON array**. Set them under *Settings → Secrets and variables →
 Actions → Variables*:
@@ -33,18 +32,41 @@ commit, no PR and no review. Delete the variable to go back.
 A malformed value fails the job at startup with a `fromJSON` error — the value must be a
 JSON array, not a bare string.
 
-## Release builds must be x86-64
+## Release images are multi-arch
 
-`RELEASE_RUNNER_LABELS` is separate from `CI_RUNNER_LABELS` on purpose. The publish job
-builds the images operators deploy to x86-64 private servers, and `docker build` without
-an explicit `platforms:` produces images for whatever architecture the builder happens to
-be. An arm64 runner would publish arm64 images under the normal release tags, and the
-first sign of trouble would be an `exec format error` on the customer's host, long after
-the release was signed and announced.
+`RELEASE_RUNNER_LABELS` is separate from `CI_RUNNER_LABELS` so release capacity can be
+steered independently, but no architecture is pinned. Every build in the publish job
+declares `platforms: linux/amd64,linux/arm64`, so each image is pushed as a manifest list
+and `docker pull` on a deployment host resolves its own architecture.
 
-The `x64` label is only a scheduling hint — it can be applied by hand to a runner of any
-architecture — so the publish job also asserts `uname -m` before building and fails
-immediately if it is not `x86_64`.
+This replaced an earlier `x64` pin plus a `uname -m` assertion. The pin was the safe
+reading of one fact — `docker build` without an explicit `platforms:` produces images for
+whatever the builder happens to be, so an arm64 runner would have published arm64 images
+under the normal release tags and the first sign of trouble would have been an
+`exec format error` on the operator's host, long after the release was signed. Declaring
+both platforms removes the failure mode instead of scheduling around it, and it does not
+depend on knowing the deployment host's architecture. Releases through `v0.2.60` were
+implicitly amd64-only because that is what `ubuntu-latest` happened to be; arm64 is
+additive, and amd64 consumers see no change.
+
+Two consequences worth knowing before cutting a release:
+
+- **One platform is always emulated.** `docker/setup-qemu-action` registers binfmt handlers
+  for the non-native platform, and cross-built stages run several times slower than native
+  ones. The publish job's `timeout-minutes` is therefore 300, not 90. Six images, each
+  running `pnpm install` and a bundler under emulation, is the slow case.
+- **binfmt registration is host-wide.** On a runner whose Docker is a mounted socket, QEMU
+  handlers are installed on the daemon's host kernel, not in the job's namespace. That is
+  what makes the cross-build work, and it persists after the job.
+
+All four base images used by `docker/*.Dockerfile` publish both `linux/amd64` and
+`linux/arm64`, including the digest-pinned Keycloak base — verified with
+`docker buildx imagetools inspect`. Re-check that before pinning a new base digest, because
+a single-arch base silently breaks the arm64 half of every manifest list.
+
+If cross-building proves too slow in practice, the narrow fix is to set
+`RELEASE_RUNNER_LABELS` to `["ubuntu-latest"]` for the publish job only, leaving CI
+self-hosted.
 
 ## Required host packages
 

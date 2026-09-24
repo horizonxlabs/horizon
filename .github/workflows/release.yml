@@ -81,16 +81,20 @@ jobs:
 
   publish:
     name: Publish signed release
-    # Pinned to x64 separately from CI_RUNNER_LABELS. This job bakes the images that operators
-    # deploy to x86-64 private servers, and `docker build` without an explicit `platforms:`
-    # produces images for whatever the builder happens to be — an arm64 runner would publish
-    # arm64 images under the same tags and fail only at `docker run` on the customer's host.
-    # RELEASE_RUNNER_LABELS overrides the set as a JSON array.
-    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER_LABELS || '["self-hosted", "linux", "x64"]') }}
+    # Kept separate from CI_RUNNER_LABELS so release capacity can be steered independently.
+    # No architecture is pinned: every build below declares `platforms:` explicitly, so the
+    # published images no longer depend on what the builder happens to be.
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER_LABELS || '["self-hosted", "linux"]') }}
     needs: quality
-    timeout-minutes: 90
+    # One of the two platforms is always cross-built under emulation, several times slower
+    # than a native build. Six images need a wide ceiling.
+    timeout-minutes: 300
     env:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+      # Published as one manifest list per image, so `docker pull` on the deployment host
+      # resolves its own architecture. Releases through v0.2.60 were implicitly amd64-only,
+      # because that is what ubuntu-latest happened to be; arm64 is additive.
+      RELEASE_PLATFORMS: linux/amd64,linux/arm64
     steps:
       - name: Verify runner prerequisites
         run: |
@@ -108,14 +112,7 @@ jobs:
             exit 1
           fi
           docker buildx version >/dev/null
-
-          # The x64 pin above is a scheduling hint, not a guarantee: the `x64` label can be
-          # applied by hand to a runner of any architecture. Assert the real one.
-          if [ "$(uname -m)" != "x86_64" ]; then
-            echo "Release images must be built on x86-64, got $(uname -m)." >&2
-            echo "Re-point RELEASE_RUNNER_LABELS at an x86-64 runner." >&2
-            exit 1
-          fi
+          echo "Builder is $(uname -m); images are built for ${RELEASE_PLATFORMS}"
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -143,6 +140,10 @@ jobs:
           echo "version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
           echo "image_repository=${image_repository}" >> "${GITHUB_OUTPUT}"
 
+      # Registers emulation for whichever of RELEASE_PLATFORMS is not native to this runner.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -160,6 +161,7 @@ jobs:
           context: .
           file: docker/keycloak.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
@@ -175,6 +177,7 @@ jobs:
           context: .
           file: docker/platform-api.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
@@ -190,6 +193,7 @@ jobs:
           context: .
           file: docker/web-app.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
@@ -209,6 +213,7 @@ jobs:
           context: .
           file: docker/web-app.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
@@ -228,6 +233,7 @@ jobs:
           context: .
           file: docker/web-app.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
@@ -247,6 +253,7 @@ jobs:
           context: .
           file: docker/workspace-next.Dockerfile
           push: true
+          platforms: ${{ env.RELEASE_PLATFORMS }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
