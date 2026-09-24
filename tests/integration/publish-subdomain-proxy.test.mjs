@@ -67,24 +67,27 @@ function responseCapture() {
   };
 }
 
+// The Caddyfile is piped in on stdin rather than bind-mounted. A bind mount is resolved by
+// the Docker daemon against its own filesystem, so it breaks whenever the daemon does not
+// share a path with this process — notably on a self-hosted CI runner that is itself a
+// container with /var/run/docker.sock mounted in, which fails with "mounts denied: the path
+// ... is not shared from the host". Piping runs the same real `caddy adapt` and was verified
+// to produce byte-identical output for both Caddyfiles, with and without env overrides.
 function adaptCaddyfile(file, env = {}) {
-  const absoluteFile = resolve(file);
   const envArgs = Object.entries(env).flatMap(([name, value]) => ["-e", `${name}=${value}`]);
   const adapted = spawnSync(
     "docker",
     [
       "run",
       "--rm",
+      "-i",
       ...envArgs,
-      "-v",
-      `${absoluteFile}:/etc/caddy/Caddyfile:ro`,
       "caddy:2.8-alpine",
-      "caddy",
-      "adapt",
-      "--config",
-      "/etc/caddy/Caddyfile"
+      "sh",
+      "-c",
+      "cat > /tmp/Caddyfile && caddy adapt --config /tmp/Caddyfile --adapter caddyfile"
     ],
-    { encoding: "utf8" }
+    { encoding: "utf8", input: readFileSync(resolve(file), "utf8") }
   );
   assert.equal(adapted.status, 0, adapted.stderr);
   return JSON.parse(adapted.stdout);
