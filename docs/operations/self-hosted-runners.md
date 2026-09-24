@@ -99,6 +99,9 @@ The path /_work/horizon/horizon/docker/Caddyfile is not shared from the host
 and is not known to Docker.
 ```
 
+The same mismatch hits published ports: `docker run -p 127.0.0.1::5432` publishes on the
+daemon's host, so `127.0.0.1:<port>` inside the runner does not reach it.
+
 There are three ways out, in order of preference:
 
 1. Run the runner directly on a Linux host with a native Docker daemon, rather than in a
@@ -109,9 +112,23 @@ There are three ways out, in order of preference:
    Sharing. This is the weakest option — it is host-local configuration that no one else
    can reproduce.
 
-Do not "fix" this by making the affected tests skip when Docker is unavailable. They would
-then pass on a runner that cannot execute them at all, which converts a loud infrastructure
-failure into a quiet loss of coverage.
+### What was changed in the tests, and what was not
+
+The two Caddy tests were made portable rather than conditional: `adaptCaddyfile` pipes the
+config in on stdin instead of bind-mounting it, so they run everywhere and still fail on a
+real regression. No coverage was given up.
+
+`project-database-lock-live.test.mjs` could not be fixed that way — it opens two concurrent
+connections through the platform's own `pg-runner`, so routing it through `docker exec psql`
+would stop testing the code it exists to test. It instead distinguishes the two failure
+modes: if Postgres logs that it is ready but its port is unreachable, the test skips with
+that reason; if the container genuinely fails to boot, it still fails. Both branches were
+verified by mutation, along with the fact that it still *runs* where the daemon is local.
+
+**This is a real, if narrow, loss of coverage on socket-mounted runners.** That test does
+not execute there, and the skip is easy to miss in a green build. It is a deliberate
+trade to keep releases moving, not a fix — options 1 and 2 above remove the need for it.
+Do not extend the same pattern to other tests to make them go quiet.
 
 ## Housekeeping
 

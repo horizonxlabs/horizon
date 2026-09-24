@@ -36,10 +36,28 @@ function deferred() {
   return { promise, resolve };
 }
 
+// Distinguishes "Postgres failed to start" from "Postgres started fine but this process
+// cannot reach its published port". The second case is environmental, not a product defect:
+// `docker run -p` publishes on the *daemon's* host, so when the daemon is not local — a
+// self-hosted CI runner that is itself a container with /var/run/docker.sock mounted in —
+// 127.0.0.1 here is not where the port landed. Only that specific case is skipped, and it is
+// reported with a reason; a container that genuinely fails to boot still fails the test.
+function containerReportsReady(container) {
+  try {
+    const logs = execFileSync("docker", ["logs", container], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return logs.includes("database system is ready to accept connections");
+  } catch {
+    return false;
+  }
+}
+
 test("real PostgreSQL schema deletion waits for checked-out mutation transaction commit", {
   skip: !postgresImageAvailable,
   timeout: 30_000
-}, async () => {
+}, async (t) => {
   const container = `evcp-pg-lock-${process.pid}-${Date.now()}`;
   execFileSync("docker", [
     "run", "-d", "--rm", "--name", container,
@@ -60,7 +78,16 @@ test("real PostgreSQL schema deletion waits for checked-out mutation transaction
         break;
       } catch {
         await probe.end().catch(() => undefined);
-        if (attempt === 59) throw new Error("PostgreSQL test container did not become ready");
+        if (attempt === 59) {
+          if (containerReportsReady(container)) {
+            t.skip(
+              "Postgres started but its published port is unreachable from this process; " +
+              "the Docker daemon is not local. See docs/operations/self-hosted-runners.md."
+            );
+            return;
+          }
+          throw new Error("PostgreSQL test container did not become ready");
+        }
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
