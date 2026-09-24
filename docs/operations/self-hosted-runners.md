@@ -82,6 +82,37 @@ sudo apt-get install -y git curl tar coreutils gh
 sudo usermod -aG docker "$(whoami)"
 ```
 
+## The runner must be able to bind-mount its own workspace
+
+Parts of the integration suite shell out to `docker run -v <workspace path>:...` —
+`tests/integration/publish-subdomain-proxy.test.mjs` mounts `docker/Caddyfile` into a
+`caddy` image to adapt and assert the real routing config, and the live database tests
+start a real PostgreSQL.
+
+If the runner is a container with `/var/run/docker.sock` mounted in, those bind mounts
+resolve **on the daemon's host, not inside the runner container**, and the paths do not
+line up:
+
+```
+docker: Error response from daemon: mounts denied:
+The path /_work/horizon/horizon/docker/Caddyfile is not shared from the host
+and is not known to Docker.
+```
+
+There are three ways out, in order of preference:
+
+1. Run the runner directly on a Linux host with a native Docker daemon, rather than in a
+   socket-mounted container.
+2. Keep the socket mount, but make the runner's `_work` directory the *same absolute path*
+   on the host and in the container, so bind mounts resolve identically on both sides.
+3. On Docker Desktop, add the runner's `_work` path under Settings → Resources → File
+   Sharing. This is the weakest option — it is host-local configuration that no one else
+   can reproduce.
+
+Do not "fix" this by making the affected tests skip when Docker is unavailable. They would
+then pass on a runner that cannot execute them at all, which converts a loud infrastructure
+failure into a quiet loss of coverage.
+
 ## Housekeeping
 
 `actions/checkout` runs `git clean -ffdx` when a workspace already exists, so
