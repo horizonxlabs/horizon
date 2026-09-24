@@ -86,9 +86,10 @@ jobs:
     # published images no longer depend on what the builder happens to be.
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER_LABELS || '["self-hosted", "linux"]') }}
     needs: quality
-    # One of the two platforms is always cross-built under emulation, several times slower
-    # than a native build. Six images need a wide ceiling.
-    timeout-minutes: 300
+    # One of the two platforms is always cross-built under emulation. Measured on the
+    # self-hosted arm64 fleet, all six images build and push in ~13 minutes, so 90 leaves
+    # ample headroom; a wider ceiling only means a hung job holds a shared runner longer.
+    timeout-minutes: 90
     env:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
       # Published as one manifest list per image, so `docker pull` on the deployment host

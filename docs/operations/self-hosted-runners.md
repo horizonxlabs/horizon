@@ -52,9 +52,9 @@ additive, and amd64 consumers see no change.
 Two consequences worth knowing before cutting a release:
 
 - **One platform is always emulated.** `docker/setup-qemu-action` registers binfmt handlers
-  for the non-native platform, and cross-built stages run several times slower than native
-  ones. The publish job's `timeout-minutes` is therefore 300, not 90. Six images, each
-  running `pnpm install` and a bundler under emulation, is the slow case.
+  for the non-native platform, and cross-built stages run slower than native ones. Measured
+  on the arm64 fleet at `v0.2.62`, all six images still build and push in about 13 minutes,
+  so the publish job keeps a 90-minute ceiling. Re-measure before widening it.
 - **binfmt registration is host-wide.** On a runner whose Docker is a mounted socket, QEMU
   handlers are installed on the daemon's host kernel, not in the job's namespace. That is
   what makes the cross-build work, and it persists after the job.
