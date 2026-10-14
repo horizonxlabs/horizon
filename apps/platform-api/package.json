@@ -24,9 +24,9 @@
     "@nestjs/platform-express": "^11.2.1",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
-    "jose": "^6.2.9",
+    "jose": "^6.2.12",
     "minio": "^8.0.7",
-    "pg": "^8.23.0",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "redis": "^4.7.0",
     "rxjs": "^7.8.0"
